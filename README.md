@@ -1,8 +1,8 @@
 <p align="center">
    <a href="https://flow-like.com" target="_blank">
       <picture>
-         <source width=128 srcset="./apps/desktop/public/logo-big-dark.webp" media="(prefers-color-scheme: dark)">
-         <img width=128 src="./apps/desktop/public/logo-big.webp" alt="Icon">
+         <source width=200 srcset="./apps/desktop/public/icon-big-darkmode.webp" media="(prefers-color-scheme: dark)">
+         <img width=200 src="./apps/desktop/public/icon-big.webp" alt="Icon">
       </picture>
    </a>
 </p>
