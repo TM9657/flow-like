@@ -1,0 +1,52 @@
+[package]
+name = "flow-like-desktop"
+version = "0.0.2"
+description = "Flow-Like, Automation done with the press of a Button"
+authors = ["TM9657 GmbH"]
+repository = "https://github.com/TM9657/flow-like/"
+edition = "2021"
+homepage = "https://flow-like.com"
+categories = ["GenAI", "AI", "Productivity"]
+license-file = "LICENSE"
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "flow_like_dekstop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.1.1", features = ["macos-private-api"] }
+tauri-plugin-shell = "2.2.0"
+serde_json = "1.0.134"
+serde = { version = "1.0.217", features = ["derive", "rc"] }
+tauri-plugin-log = "2.2.0"
+tauri-plugin-notification = "2.2.0"
+window-vibrancy = "0.5.2"
+anyhow = "1.0.95"
+tokio = {version="1.42.0", features = ["full"] }
+sentry = {version="0.35.0", features = ["anyhow"] }
+tauri-plugin-dialog = "2.2.0"
+flow-like = { path = "../../../packages/core" }
+futures = "0.3.31"
+tauri-plugin-deep-link = "2"
+dashmap = "6.1.0"
+sentry-tracing = "0.36.0"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
+tracing = { version = "0.1.41", features = ["async-await", "attributes"] }
+dirs-next = "2.0.0"
+object_store = "0.11.2"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = "fat"
+opt-level = "z"
+strip = true
+
+[target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
+tauri-plugin-single-instance = { version = "2.0.0", features = ["deep-link"] }

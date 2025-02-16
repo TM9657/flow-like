@@ -1,0 +1,254 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FileMetadata",
+  "type": "object",
+  "required": [
+    "file_extension",
+    "file_name",
+    "file_path",
+    "file_size",
+    "mime_type"
+  ],
+  "properties": {
+    "access_time": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SystemTime"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "album": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "artist": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "author": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "bitrate": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "camera_make": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "camera_model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "creation_time": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SystemTime"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "creator": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "duration": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "file_extension": {
+      "type": "string"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_path": {
+      "type": "string"
+    },
+    "file_size": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "frame_rate": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "format": "float"
+    },
+    "genre": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "keywords": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "location": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "number",
+          "format": "double"
+        }
+      ],
+      "maxItems": 2,
+      "minItems": 2
+    },
+    "mime_type": {
+      "type": "string"
+    },
+    "modification_time": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SystemTime"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "orientation": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "pages": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "producer": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "resolution": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": [
+        {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      ],
+      "maxItems": 2,
+      "minItems": 2
+    },
+    "sample_rate": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "subject": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "title": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "track_number": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "track_title": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "year": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "int32"
+    }
+  },
+  "definitions": {
+    "SystemTime": {
+      "type": "object",
+      "required": [
+        "nanos_since_epoch",
+        "secs_since_epoch"
+      ],
+      "properties": {
+        "nanos_since_epoch": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "secs_since_epoch": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}
