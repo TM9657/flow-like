@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ImageEmbeddingModelParameters",
+  "type": "object",
+  "required": [
+    "languages",
+    "pooling",
+    "provider",
+    "vector_length"
+  ],
+  "properties": {
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "pooling": {
+      "$ref": "#/definitions/Pooling"
+    },
+    "provider": {
+      "$ref": "#/definitions/BitProviderModel"
+    },
+    "vector_length": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    }
+  },
+  "definitions": {
+    "BitProvider": {
+      "type": "string",
+      "enum": [
+        "Local",
+        "AzureOpenAI",
+        "Bedrock",
+        "OpenAI",
+        "Anthropic"
+      ]
+    },
+    "BitProviderModel": {
+      "type": "object",
+      "required": [
+        "provider_name"
+      ],
+      "properties": {
+        "model_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider_name": {
+          "$ref": "#/definitions/BitProvider"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Pooling": {
+      "type": "string",
+      "enum": [
+        "CLS",
+        "Mean",
+        "None"
+      ]
+    }
+  }
+}

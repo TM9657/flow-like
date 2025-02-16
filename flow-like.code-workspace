@@ -1,0 +1,25 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"cSpell.words": [
+			"cuid",
+			"gguf",
+			"lancedb",
+			"langchain",
+			"llamafiler",
+			"llms",
+			"multimodal",
+			"Pandoc",
+			"portpicker",
+			"tauri",
+			"Tauri",
+			"unlisten",
+			"Unlisten",
+			"vlms"
+		]
+	}
+}

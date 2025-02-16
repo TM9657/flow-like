@@ -1,0 +1,241 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Node",
+  "type": "object",
+  "required": [
+    "category",
+    "description",
+    "friendly_name",
+    "id",
+    "name",
+    "pins"
+  ],
+  "properties": {
+    "category": {
+      "type": "string"
+    },
+    "comment": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "coordinates": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": [
+        {
+          "type": "number",
+          "format": "float"
+        },
+        {
+          "type": "number",
+          "format": "float"
+        },
+        {
+          "type": "number",
+          "format": "float"
+        }
+      ],
+      "maxItems": 3,
+      "minItems": 3
+    },
+    "description": {
+      "type": "string"
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "friendly_name": {
+      "type": "string"
+    },
+    "icon": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "id": {
+      "type": "string"
+    },
+    "long_running": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "pins": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/Pin"
+      }
+    },
+    "scores": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/NodeScores"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "start": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    }
+  },
+  "definitions": {
+    "NodeScores": {
+      "description": "Node Scores. Each score ranges from 0 to 10. Node Scores. From 0 - 10 The higher the score, the worse the node is in this category: - Privacy: Higher score means less privacy. - Security: Higher score means less security. - Performance: Higher score means worse performance. - Governance: Higher score means less compliance with governance. - security: Assesses the node's resistance to attacks. - performance: Evaluates the node's efficiency and speed. - governance: Indicates the node's compliance with policies and regulations. The higher the score, the worse the node is in this category",
+      "type": "object",
+      "required": [
+        "governance",
+        "performance",
+        "privacy",
+        "security"
+      ],
+      "properties": {
+        "governance": {
+          "type": "integer",
+          "format": "int8"
+        },
+        "performance": {
+          "type": "integer",
+          "format": "int8"
+        },
+        "privacy": {
+          "type": "integer",
+          "format": "int8"
+        },
+        "security": {
+          "type": "integer",
+          "format": "int8"
+        }
+      }
+    },
+    "Pin": {
+      "type": "object",
+      "required": [
+        "connected_to",
+        "data_type",
+        "depends_on",
+        "description",
+        "friendly_name",
+        "id",
+        "index",
+        "name",
+        "pin_type",
+        "value_type"
+      ],
+      "properties": {
+        "connected_to": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "data_type": {
+          "$ref": "#/definitions/VariableType"
+        },
+        "default_value": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "description": {
+          "type": "string"
+        },
+        "friendly_name": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "name": {
+          "type": "string"
+        },
+        "pin_type": {
+          "$ref": "#/definitions/PinType"
+        },
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "valid_values": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "value_type": {
+          "$ref": "#/definitions/ValueType"
+        }
+      }
+    },
+    "PinType": {
+      "type": "string",
+      "enum": [
+        "Input",
+        "Output"
+      ]
+    },
+    "ValueType": {
+      "type": "string",
+      "enum": [
+        "Array",
+        "Normal",
+        "HashMap",
+        "HashSet"
+      ]
+    },
+    "VariableType": {
+      "type": "string",
+      "enum": [
+        "Execution",
+        "String",
+        "Integer",
+        "Float",
+        "Boolean",
+        "Date",
+        "PathBuf",
+        "Generic",
+        "Struct"
+      ]
+    }
+  }
+}

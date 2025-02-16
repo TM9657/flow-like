@@ -1,0 +1,346 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Response",
+  "type": "object",
+  "required": [
+    "choices",
+    "usage"
+  ],
+  "properties": {
+    "choices": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Choice"
+      }
+    },
+    "created": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "object": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "service_tier": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "system_fingerprint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "usage": {
+      "$ref": "#/definitions/Usage"
+    }
+  },
+  "definitions": {
+    "Choice": {
+      "type": "object",
+      "required": [
+        "finish_reason",
+        "index",
+        "message"
+      ],
+      "properties": {
+        "finish_reason": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "logprobs": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LogProbs"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "$ref": "#/definitions/ResponseMessage"
+        }
+      }
+    },
+    "CompletionTokenDetails": {
+      "type": "object",
+      "required": [
+        "accepted_prediction_tokens",
+        "audio_tokens",
+        "reasoning_tokens",
+        "rejected_prediction_tokens"
+      ],
+      "properties": {
+        "accepted_prediction_tokens": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "audio_tokens": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "reasoning_tokens": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "rejected_prediction_tokens": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "FunctionCall": {
+      "type": "object",
+      "required": [
+        "function",
+        "id"
+      ],
+      "properties": {
+        "function": {
+          "$ref": "#/definitions/ResponseFunction"
+        },
+        "id": {
+          "type": "string"
+        },
+        "index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "LogProbs": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/TokenLogProbs"
+          }
+        },
+        "refusal": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/TokenLogProbs"
+          }
+        }
+      }
+    },
+    "PromptTokenDetails": {
+      "type": "object",
+      "required": [
+        "audio_tokens",
+        "cached_tokens"
+      ],
+      "properties": {
+        "audio_tokens": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "cached_tokens": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ResponseFunction": {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ResponseMessage": {
+      "type": "object",
+      "required": [
+        "role"
+      ],
+      "properties": {
+        "content": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refusal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "type": "string"
+        },
+        "tool_calls": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FunctionCall"
+          }
+        }
+      }
+    },
+    "TokenLogProbs": {
+      "type": "object",
+      "required": [
+        "logprob",
+        "token"
+      ],
+      "properties": {
+        "bytes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        },
+        "logprob": {
+          "type": "number",
+          "format": "double"
+        },
+        "token": {
+          "type": "string"
+        },
+        "top_logprobs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/TopLogProbs"
+          }
+        }
+      }
+    },
+    "TopLogProbs": {
+      "type": "object",
+      "required": [
+        "logprob",
+        "token"
+      ],
+      "properties": {
+        "bytes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        },
+        "logprob": {
+          "type": "number",
+          "format": "double"
+        },
+        "token": {
+          "type": "string"
+        }
+      }
+    },
+    "Usage": {
+      "type": "object",
+      "required": [
+        "completion_tokens",
+        "prompt_tokens",
+        "total_tokens"
+      ],
+      "properties": {
+        "completion_tokens": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "completion_tokens_details": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CompletionTokenDetails"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prompt_tokens": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "prompt_tokens_details": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PromptTokenDetails"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total_tokens": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}

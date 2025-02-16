@@ -1,0 +1,67 @@
+name: "code audit"
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches: 
+      - dev
+
+# This is the example from the readme.
+# On each push to the `release` branch it will create or update a GitHub release, build your app, and upload the artifacts to the release.
+
+jobs:
+  code-audit:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: install bun
+        run: "npm install -g bun"
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
+          targets: ${{ matrix.os == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: install frontend dependencies
+        run: npm install --legacy-peer-deps
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run npm audit
+        run: npm audit --json > npm-audit-report.json
+
+      - name: Run Cargo Audit
+        run: cargo audit --json > cargo-audit-report.json
+
+      - name: Upload npm audit report
+        uses: actions/upload-artifact@v3
+        with:
+          name: npm-audit-report
+          path: npm-audit-report.json
+
+      - name: Upload cargo audit report
+        uses: actions/upload-artifact@v3
+        with:
+          name: cargo-audit-report
+          path: cargo-audit-report.json
+
+      

@@ -1,0 +1,130 @@
+use std::sync::Arc;
+
+use arrow::datatypes::FieldRef;
+use arrow_array::{RecordBatch, RecordBatchIterator};
+use arrow_schema::{DataType, Field};
+use serde::{Deserialize, Serialize};
+use serde_arrow::schema::{SchemaLike, TracingOptions};
+use serde_json::Value;
+
+pub fn value_to_record_batch(records: Vec<Value>) -> anyhow::Result<RecordBatch> {
+    // Determine Arrow schema
+    let mut fields: Vec<std::sync::Arc<arrow_schema::Field>> =
+        Vec::<FieldRef>::from_samples(&records, TracingOptions::new())?;
+
+    // we need to make sure the vector column is actually a vector!!
+    for field in &mut fields {
+        if field.name() == "vector" {
+            *field = Arc::new(Field::new(
+                "vector",
+                DataType::FixedSizeList(
+                    Arc::new(Field::new("item", DataType::Float32, true)),
+                    get_vector_dimension(&records)? as i32,
+                ),
+                true,
+            ));
+        }
+    }
+    //
+
+    // Build a record batch
+    let batch: RecordBatch = serde_arrow::to_record_batch(&fields, &records)?;
+    Ok(batch)
+}
+
+fn get_vector_dimension<T>(records: &[T]) -> anyhow::Result<i32>
+where
+    T: Serialize + for<'de> Deserialize<'de>,
+{
+    if records.is_empty() {
+        return Err(anyhow::anyhow!("No records to determine vector dimension"));
+    }
+    // Serialize the first record to JSON
+    let first_record = &records[0];
+    let serialized = serde_json::to_value(first_record)?;
+
+    // Check if the "vector" field exists and is a Vec<f32>
+    if let Some(map) = serialized.as_object() {
+        if let Some(Value::Array(vec)) = map.get("vector") {
+            if !vec.is_empty() {
+                // Determine the length of the vector
+                return Ok(vec.len() as i32);
+            }
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Unable to determine vector dimension from records"
+    ))
+}
+
+pub fn value_to_batch_iterator(
+    records: Vec<Value>,
+) -> anyhow::Result<
+    RecordBatchIterator<
+        std::iter::Map<
+            std::array::IntoIter<RecordBatch, 1>,
+            fn(RecordBatch) -> Result<RecordBatch, arrow_schema::ArrowError>,
+        >,
+    >,
+> {
+    // Determine Arrow schema
+    let batch = value_to_record_batch(records)?;
+    let schema = batch.schema();
+    let iterator: RecordBatchIterator<
+        std::iter::Map<
+            std::array::IntoIter<RecordBatch, 1>,
+            fn(RecordBatch) -> Result<RecordBatch, arrow_schema::ArrowError>,
+        >,
+    > = RecordBatchIterator::new([batch].into_iter().map(Ok), schema);
+
+    Ok(iterator)
+}
+
+pub fn record_batch_to_value(record_batch: &RecordBatch) -> anyhow::Result<Vec<Value>> {
+    let items = serde_arrow::from_record_batch(record_batch)?;
+    Ok(items)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Deserialize;
+
+    #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
+    struct TestStruct {
+        id: i32,
+        name: String,
+    }
+
+    #[test]
+    fn test_value_to_batchreader_and_back() -> anyhow::Result<()> {
+        // Mock data as JSON Values
+        let records = [
+            TestStruct {
+                id: 1,
+                name: "Alice".to_string(),
+            },
+            TestStruct {
+                id: 2,
+                name: "Bob".to_string(),
+            },
+        ];
+
+        let records = records
+            .iter()
+            .map(|r| serde_json::to_value(r).unwrap())
+            .collect::<Vec<Value>>();
+
+        // Convert JSON to RecordBatch
+        let record_batch = value_to_record_batch(records.clone())?;
+
+        // Convert RecordBatch back to JSON
+        let result = record_batch_to_value(&record_batch)?;
+
+        // Check that the original data and the result match
+        assert_eq!(records, result);
+
+        Ok(())
+    }
+}

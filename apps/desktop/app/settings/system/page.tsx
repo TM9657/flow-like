@@ -1,0 +1,19 @@
+"use client"
+import { ISystemInfo } from "@tm9657/flow-like-ui/types";
+import { humanFileSize } from "@tm9657/flow-like-ui/lib/utils";
+import { useInvoke } from "@tm9657/flow-like-ui";
+import { UseQueryResult } from "@tanstack/react-query";
+
+export default function SettingsPage() {
+    const systemInfo: UseQueryResult<ISystemInfo> = useInvoke("get_system_info", {})
+
+    return <main className="justify-start flex min-h-dvh flex-col items-center w-full pr-4">
+        <div className="flex flex-row items-center justify-between w-full max-w-screen-2xl">
+            <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">System Info</h1>
+        </div>
+        <br />
+        <p className="w-full"><b>Cores</b>: {systemInfo.data?.cores}</p>
+        <p className="w-full"><b>VRAM</b>: {humanFileSize(systemInfo.data?.vram ?? 0)}</p>
+        <p className="w-full"><b>RAM</b>: {humanFileSize(systemInfo.data?.ram ?? 0)}</p>
+    </main >
+}

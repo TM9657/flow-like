@@ -1,0 +1,254 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+    --card: 0 0% 95%;
+    --card-foreground: 0 0% 5%;
+    --popover: 0 0% 95%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 0 100% 63%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 90%;
+    --secondary-foreground: 0 0% 10%;
+    --tertiary: 23 100% 63%;
+    --tertiary-foreground: 0 0% 100%;
+    --muted: 0 20% 85%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 0 88% 92%;
+    --accent-foreground: 0 0% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 83%;
+    --input: 0 0% 90%;
+    --ring: 0 100% 63%;
+    --radius: 0.3rem;
+
+    --chart-1: 0 100% 63%;
+    --chart-2: 21 89% 67%;
+    --chart-3: 23 100% 63%;
+    --chart-4: 94 40% 67%;
+    --chart-5: 161 40% 44%;
+
+    --sidebar-background: var(--popover);
+    --sidebar-foreground: var(--popover-foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--accent-foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+  }
+
+  .dark {
+    --background: 0 0% 10%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 16%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 0 100% 63%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 73%;
+    --secondary-foreground: 0 0% 10%;
+    --tertiary: 23 100% 63%;
+    --tertiary-foreground: 0 0% 100%;
+    --muted: 0 0% 27%;
+    --muted-foreground: 0 0% 56%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 85.7% 97.3%;
+    --border: 0 0% 27%;
+    --input: 0 0% 27%;
+    --ring: 0 100% 63%;
+
+    --chart-1: 0 100% 63%;
+    --chart-2: 21 89% 67%;
+    --chart-3: 23 100% 63%;
+    --chart-4: 94 40% 67%;
+    --chart-5: 161 40% 44%;
+
+    --sidebar-background: var(--popover);
+    --sidebar-foreground: var(--popover-foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--accent-foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+
+    .shiki,
+    .shiki span {
+      color: var(--shiki-dark) !important;
+      background-color: var(--shiki-dark-bg) !important;
+      /* Optional, if you also want font styles */
+      font-style: var(--shiki-dark-font-style) !important;
+      font-weight: var(--shiki-dark-font-weight) !important;
+      text-decoration: var(--shiki-dark-text-decoration) !important;
+    }
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+  }
+   
+  *::-webkit-scrollbar-track {
+    background: hsl(var(--background) / 0.1);
+  }
+   
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--foreground) / 0.1);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.3);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  .icon {
+    fill: hsl(var(--foreground)) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .icon svg {
+    fill: hsl(var(--foreground)) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .icon path {
+    fill: hsl(var(--foreground)) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .icon text {
+    fill: hsl(var(--foreground)) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  pre[class*="shiki"][class*="shiki-themes"]  {
+    position: relative;
+    padding: 0.75rem;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 0.5rem;
+    border-color: hsl(var(--border));
+    border-width: 1px;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  [class*=language-] code .diff {
+    transition:background-color .5s;
+    margin:0 -24px;
+    padding:0 24px;
+    width:calc(100% + 48px);
+    display:inline-block
+  }
+
+  [class*=language-] code .diff:before {
+    position:absolute;
+    left:10px
+  }
+
+  [class*=language-] code .diff.remove {
+    background-color:var(--destructive) !important;
+    opacity:.7
+  }
+
+  .copy-code-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin-top: 0.5rem;
+    margin-right: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    border-color:  hsl(var(--accent-foreground));
+    border-width: 1px;
+    background-color: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    transition: all 0.2s;
+  }
+
+  .copy-code-button:hover {
+    border-color:  hsl(var(--accent));
+    background-color: hsl(var(--accent-foreground));
+    color: hsl(var(--accent));
+  }
+
+  h1{
+    letter-spacing: -.025em;
+    font-weight: 800;
+    font-size: 2.25rem;
+    line-height: 2.5rem;
+    scroll-margin: 5rem;
+  }
+
+  h2{
+    letter-spacing: -.025em;
+    font-weight: 600;
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+    scroll-margin: 5rem;
+  }
+
+  h3{
+    letter-spacing: -.025em;
+    font-weight: 600;
+    font-size: 1.5rem;
+    line-height: 2rem;
+    scroll-margin: 5rem;
+  }
+
+  h4{
+    letter-spacing: -.025em;
+    font-weight: 600;
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+    scroll-margin: 5rem;
+  }
+
+  p{
+    line-height: 1.75rem;
+  }
+
+  .invisible-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .highlight{
+    animation: highlight-anim 3s linear infinite;
+    background: linear-gradient(90deg, hsl(var(--primary)) 50%, hsl(var(--tertiary)) 75%, hsl(var(--primary)) 100%);
+    background-size: 200%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: 0 0 20px hsl(var(--primary, 0.1));
+  }
+
+  @keyframes highlight-anim {
+    0% {
+      background-position: 0;
+      text-shadow: 0 0 15px hsl(var(--primary, 0.1));
+    }
+    50% {
+        background-position: -200%;
+        text-shadow: 0 0 15px hsl(var(--tertiary, 0.1)); 
+    }
+    100% {
+        background-position: 0;
+        text-shadow: 0 0 15px hsl(var(--primary, 0.1));
+    }
+  }
+}

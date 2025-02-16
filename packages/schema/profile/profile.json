@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Profile",
+  "type": "object",
+  "required": [
+    "bits",
+    "created",
+    "description",
+    "name",
+    "thumbnail",
+    "updated"
+  ],
+  "properties": {
+    "bits": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "maxItems": 2,
+        "minItems": 2
+      }
+    },
+    "created": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "hub": {
+      "default": "",
+      "type": "string"
+    },
+    "hubs": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "id": {
+      "default": "ytlyt5y8yhglmep8ii20lkb5",
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "thumbnail": {
+      "type": "string"
+    },
+    "updated": {
+      "type": "string"
+    }
+  }
+}

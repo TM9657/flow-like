@@ -1,0 +1,176 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BitPack",
+  "type": "object",
+  "required": [
+    "bits"
+  ],
+  "properties": {
+    "bits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Bit"
+      }
+    }
+  },
+  "definitions": {
+    "Bit": {
+      "type": "object",
+      "required": [
+        "authors",
+        "created",
+        "dependencies",
+        "dependency_tree_hash",
+        "hash",
+        "hub",
+        "icon",
+        "id",
+        "license",
+        "meta",
+        "parameters",
+        "type",
+        "updated",
+        "version"
+      ],
+      "properties": {
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "created": {
+          "type": "string"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "dependency_tree_hash": {
+          "type": "string"
+        },
+        "download_link": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hash": {
+          "type": "string"
+        },
+        "hub": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "meta": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/BitMeta"
+          }
+        },
+        "parameters": true,
+        "repository": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "type": {
+          "$ref": "#/definitions/BitTypes"
+        },
+        "updated": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "BitMeta": {
+      "type": "object",
+      "required": [
+        "description",
+        "long_description",
+        "name",
+        "tags",
+        "use_case"
+      ],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "long_description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "use_case": {
+          "type": "string"
+        }
+      }
+    },
+    "BitTypes": {
+      "type": "string",
+      "enum": [
+        "Llm",
+        "Vlm",
+        "Embedding",
+        "ImageEmbedding",
+        "File",
+        "Media",
+        "Template",
+        "Tokenizer",
+        "TokenizerConfig",
+        "SpecialTokensMap",
+        "Config",
+        "Course",
+        "PreprocessorConfig",
+        "Projection",
+        "Project",
+        "Board",
+        "Other"
+      ]
+    }
+  }
+}

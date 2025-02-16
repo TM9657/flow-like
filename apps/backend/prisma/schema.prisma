@@ -1,0 +1,609 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model LandingPage {
+  id String @id
+
+  title String
+  description String
+  image String
+  link String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum SwimlaneType {
+  PROJECT
+  ARTICLE
+  CHAT
+  COURSE
+  QUERY
+}
+
+enum SwimlaneSize {
+  FULLSCREEN
+  HALFSCREEN
+  THIRDSCREEN
+  THIRDSCREEN_MULTIROW
+}
+
+model Swimlane {
+  id String @id
+
+  title String?
+  description String?
+
+  type SwimlaneType
+  size SwimlaneSize
+
+  items SwimlaneItem[]
+
+  // these are used to find items for the swimlane that are not fixed
+  tags String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SwimlaneItem {
+  id String @id
+
+  swimlane Swimlane @relation(fields: [swimlaneId], references: [id], onDelete: Cascade)
+  swimlaneId String
+
+  order Int
+
+  // This could be a link to a different page / article / ... depending on the Type of Swimlane
+  content Json?
+
+  bit Bit? @relation(fields: [bitId], references: [id], onDelete: Cascade)
+  bitId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+} 
+
+model Profile {
+  id String @id
+
+  path String?
+  name String
+  thumbnail String?
+  icon String?
+  description String?
+  interests String[]
+  tags String[]
+
+  bitIds String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Template {
+  id String @id
+
+  path String?
+  name String
+  description String?
+  tags String[]
+
+  bitId String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Node {
+  id String @id
+
+  name String
+  description String?
+  category String
+  icon String?
+
+  bitId String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BANNED
+}
+
+enum UserTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+model User {
+  id          String  @id
+  email       String  @unique
+  username    String  @unique
+  name        String
+  description String?
+  avatarUrl   String?
+
+  themes Json?
+  additionalInformation Json?
+
+  permission BigInt
+  acceptedTermsVersion String?
+  tutorialCompleted Boolean @default(false)
+
+  apiKeys UserApiKey[]
+  memberships Membership[]
+  comments    Comment[]
+  queue       JoinQueue[]
+  logs       ProviderInvocation[]
+  feedback    Feedback[]
+  assignedPublicationRequests PublicationRequest[]
+  publicationLogs PublicationLog[]
+  invitations Invitations[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Invitations {
+  id String @id
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserApiKey {
+  id String @id
+
+  name String
+  key String @unique
+  permissions BigInt @default(0)
+
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  validUntil DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+enum ProjectStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum ProjectVisibility {
+  PUBLIC
+  PUBLIC_REQUEST_TO_JOIN
+  PRIVATE
+  PROTOTYPE
+}
+
+model JoinQueue {
+  id String @id
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  comment String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, projectId])
+}
+
+model InviteLink {
+  id String @id
+
+  token String @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  countJoined Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Project {
+  id String @id
+
+  status     ProjectStatus
+  visibility ProjectVisibility
+
+  meta Meta[]
+
+  media String[]
+  queue JoinQueue[]
+  members Membership[]
+  bits    Bit[]
+  comments Comment[]
+  changelog String?
+
+  courses CourseConnection[]
+  inviteLinks InviteLink[]
+  invitations Invitations[]
+
+  feedback Feedback[]
+  publicationRequests PublicationRequest[]
+
+  defaultRole Role @relation("defaultForProject", fields: [defaultRoleId], references: [id])
+  defaultRoleId String @unique
+  ownerRole Role @relation("ownerForProject", fields: [ownerRoleId], references: [id])
+  ownerRoleId String @unique
+  roles Role[]
+
+  ratingSum   Int   @default(0)
+  ratingCount Int   @default(0)
+
+  price Int @default(0)
+  version Int
+
+  apiKeys ProjectApiKey[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+model ProjectApiKey {
+  id String @id
+
+  name String
+  description String?
+  key String @unique
+  permissions BigInt @default(0)
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  validUntil DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model Feedback {
+  id String @id
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId String?
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  context Json?
+  text String
+  rating Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model CourseConnection {
+  id String @id
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model Course {
+  id String @id
+
+  language String
+  meta Meta[]
+
+  connections CourseConnection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([language])
+}
+
+model Comment {
+  id String @id
+
+  text String
+  rating Int
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, projectId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model Membership {
+  id String @id
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  role   Role   @relation(fields: [roleId], references: [id])
+  roleId String
+
+  favorite Boolean @default(false)
+  favoritePosition Int?
+  pinned   Boolean @default(false)
+  pinnedPosition Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, projectId])
+  @@index([projectId, roleId])
+}
+
+model Role {
+  id String @id
+
+  name        String
+  description String?
+
+  attributes  String[]
+  permissions BigInt
+
+  memberships Membership[]
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String?
+
+  defaultForProject Project? @relation("defaultForProject")
+  ownerForProject Project? @relation("ownerForProject")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum BitType {
+  LLM
+  VLM
+  EMBEDDING
+  IMAGE_EMBEDDING
+  FILE
+  MEDIA
+  TEMPLATE
+  TOKENIZER
+  TOKENIZER_CONFIG
+  SPECIAL_TOKENS_MAP
+  CONFIG
+  PREPROCESSOR_CONFIG
+  PROJECTION
+  PROJECT
+  BOARD
+  OTHER
+}
+
+model Bit {
+  id String @id
+
+  private Boolean @default(true)
+  permissionAttributes String[]
+
+  type BitType
+  meta Meta[]
+  repository String?
+  downloadLink String?
+  fileName String?
+  hash String
+
+  size BigInt?
+  hub String
+
+  icon String?
+  thumbnail String?
+
+  version BigInt
+  license String?
+
+  dependencies Dependency[] 
+  dependencyTreeHash String
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  providerProxy ProviderProxy?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  featuredSwimlane SwimlaneItem[]
+
+  @@index([projectId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([private])
+  @@index([hash])
+  @@index([hub])
+}
+
+model Dependency {
+  id String @id
+
+  bit   Bit @relation(fields: [bitId], references: [id], onDelete: Cascade)
+  bitId String
+
+  dependencyId String
+  hub String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bitId])
+}
+
+model Meta {
+  id String @id
+
+  lang String
+
+  name String
+  description String?
+  longDescription String?
+  tags String[]
+
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String?
+
+  bit Bit? @relation(fields: [bitId], references: [id], onDelete: Cascade)
+  bitId String?
+
+  course Course? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, lang])
+  @@index([bitId, lang])
+  @@index([courseId, lang])
+  @@index([lang])
+}
+
+enum LLMProvider {
+  HuggingFace
+  OpenAI
+  Anthropic
+  AzureOpenAI
+  Google
+  IBM
+  X
+  Bedrock
+  Deepseek
+}
+
+model ProviderProxy {
+  id String @id
+
+  provider LLMProvider
+  modelId String @unique
+  version String?
+  endpoint String?
+  token String?
+
+  logs ProviderInvocation[]
+
+  bit Bit @relation(fields: [bitId], references: [id], onDelete: Cascade)
+  bitId String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProviderInvocation {
+  id String @id
+
+  proxy ProviderProxy @relation(fields: [proxyId], references: [id], onDelete: Cascade)
+  proxyId String
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId String?
+
+  inputToken String
+  outputToken String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum PublicationRequestStatus {
+  PENDING
+  ON_HOLD
+  ACCEPTED
+  REJECTED
+}
+
+model PublicationRequest {
+  id String @id
+
+  targetVisibility ProjectVisibility
+
+  approver User? @relation(fields: [approverId], references: [id], onDelete: SetNull)
+  approverId String?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  status PublicationRequestStatus
+
+  logs PublicationLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([projectId])
+  @@index([approverId])
+}
+
+model PublicationLog {
+  id String @id
+
+  request PublicationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  requestId String
+
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorId String?
+
+  message String?
+  visibility ProjectVisibility?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([requestId])
+}
+
+

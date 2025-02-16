@@ -1,0 +1,27 @@
+{
+  "name": "flow-like",
+  "private": true,
+  "version": "0.0.2",
+  "type": "module",
+  "scripts": {
+    "dev:desktop": "bun run --cwd ./apps/desktop dev:all",
+    "dev:backend": "bun run --cwd ./apps/backend dev",
+    "dev:website": "bun run --cwd ./apps/website dev",
+    "dev:docs": "bun run --cwd ./apps/docs dev",
+    "build:desktop": "bun run --cwd ./apps/desktop tauri build",
+    "postinstall": "cargo install cargo-license cargo-watch systemfd",
+    "version": "npm version patch -m \"Increment version to %s\"",
+    "bloat": "cargo bloat --release -n 10",
+    "bench": "cargo bench",
+    "fix": "next lint --fix && cargo clippy --fix && cargo fmt",
+    "schema": "bun run ./tools/generate-schema.ts",
+    "license": "cd src-tauri && cargo license -j > ./assets/licenses.json && cd .. && bunx license-report --output=json > src-tauri/assets/licenses-node.json && bun run ./tools/license-bundle.ts"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "devDependencies": {
+    "express": "^4.21.2"
+  }
+}
