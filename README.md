@@ -9,9 +9,9 @@
 
 <div align="center">
 
-[![Maintainability Rating](https://sonar.good-co.de/api/project_badges/measure?project=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131&metric=software_quality_maintainability_rating&token=sqb_51b8caa7fefeab1c16cae5e66aab49e4af22dd82)](https://sonar.good-co.de/dashboard?id=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131)
-[![Security Rating](https://sonar.good-co.de/api/project_badges/measure?project=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131&metric=software_quality_security_rating&token=sqb_51b8caa7fefeab1c16cae5e66aab49e4af22dd82)](https://sonar.good-co.de/dashboard?id=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131)
-[![Lines of Code](https://sonar.good-co.de/api/project_badges/measure?project=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131&metric=ncloc&token=sqb_51b8caa7fefeab1c16cae5e66aab49e4af22dd82)](https://sonar.good-co.de/dashboard?id=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131)
+[![Maintainability Rating](https://sonar.good-co.de/api/project_badges/measure?project=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131&metric=software_quality_maintainability_rating&token=sqb_0721b0d278bee3607fb07c23aafbff0183948062)](https://sonar.good-co.de/dashboard?id=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131)
+[![Security Rating](https://sonar.good-co.de/api/project_badges/measure?project=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131&metric=software_quality_security_rating&token=sqb_0721b0d278bee3607fb07c23aafbff0183948062)](https://sonar.good-co.de/dashboard?id=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131)
+[![Lines of Code](https://sonar.good-co.de/api/project_badges/measure?project=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131&metric=ncloc&token=sqb_0721b0d278bee3607fb07c23aafbff0183948062)](https://sonar.good-co.de/dashboard?id=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131)
 [![Translation](https://translation.good-co.de/widget/buttons/svg-badge.svg?native=1)](https://translation.good-co.de)
 
 [![Website](https://up.good-co.de/api/badge/1/uptime?labelPrefix=Website+)](https://up.good-co.de)
