@@ -53,13 +53,13 @@ jobs:
         run: cargo audit --json > cargo-audit-report.json
 
       - name: Upload npm audit report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: npm-audit-report
           path: npm-audit-report.json
 
       - name: Upload cargo audit report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cargo-audit-report
           path: cargo-audit-report.json

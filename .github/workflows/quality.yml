@@ -50,7 +50,7 @@ jobs:
         run: cargo clippy --message-format=json -- -D warnings > clippy-report.json
 
       - name: Upload Clippy Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: clippy-report
           path: clippy-report.json
@@ -59,7 +59,7 @@ jobs:
         run: bun run lint -- --format json > eslint-report.json
 
       - name: Upload ESLint Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: eslint-report
           path: eslint-report.json
