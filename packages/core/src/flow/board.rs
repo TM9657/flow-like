@@ -222,6 +222,8 @@ impl Board {
                 }
             }
         }
+
+        self.refs = refs;
     }
 
     pub fn fix_pins(&mut self) {
@@ -282,6 +284,7 @@ impl Board {
 
         for (node_id, pin_id) in node_pins_to_remove {
             if let Some(node) = self.nodes.get_mut(&node_id) {
+                println!("Node Pins to remove: {} {}", node_id, pin_id);
                 node.pins.remove(&pin_id);
             }
         }
@@ -290,6 +293,7 @@ impl Board {
             if let Some(node) = self.nodes.get_mut(&node_id) {
                 for (pin_id, connected_to) in pins {
                     if let Some(pin) = node.pins.get_mut(&pin_id) {
+                        println!("Node Pins connected to remove: {} {} {}", node_id, pin_id, connected_to);
                         pin.connected_to.remove(&connected_to);
                     }
                 }
@@ -300,11 +304,14 @@ impl Board {
             if let Some(node) = self.nodes.get_mut(&node_id) {
                 for (pin_id, depends_on) in pins {
                     if let Some(pin) = node.pins.get_mut(&pin_id) {
+                        println!("Node Pins depends on remove: {} {} {}", node_id, pin_id, depends_on);
                         pin.depends_on.remove(&depends_on);
                     }
                 }
             }
         }
+
+        self.cleanup();
     }
 
     pub fn get_pin_by_id(&self, pin_id: &str) -> Option<&Pin> {
@@ -385,7 +392,6 @@ impl Board {
         board.undo_stack = Vec::new();
         board.logic_nodes = HashMap::new();
         board.fix_pins();
-        board.cleanup();
         Ok(board)
     }
 }

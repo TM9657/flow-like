@@ -1,11 +1,10 @@
+use std::sync::Arc;
+
 use crate::{
     flow::{
-        execution::{
+        board::Board, execution::{
             context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel,
-        },
-        node::{Node, NodeLogic, NodeState},
-        utils::evaluate_pin_value,
-        variable::VariableType,
+        }, node::{Node, NodeLogic, NodeState}, pin::{PinOptions, ValueType}, utils::evaluate_pin_value, variable::VariableType
     },
     state::FlowLikeState,
 };
@@ -36,7 +35,8 @@ impl NodeLogic for LoopNode {
 
         node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
         node.add_input_pin("array", "Array", "Array to Loop", VariableType::Generic)
-            .set_value_type(crate::flow::pin::ValueType::Array);
+            .set_value_type(crate::flow::pin::ValueType::Array)
+            .set_options(PinOptions::new().set_enforce_generic_value_type(true).build());
 
         node.add_output_pin(
             "exec_out",
@@ -128,5 +128,24 @@ impl NodeLogic for LoopNode {
             NodeState::Error => return 0,
             _ => return 0,
         }
+    }
+
+    async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
+        let match_type = node.match_type("array", board.clone(), Some(ValueType::Array));
+
+        if match_type.is_err() {
+            eprintln!("Error: {:?}", match_type.err());
+        }
+
+        let match_type = node.match_type("value", board, Some(ValueType::Normal));
+
+        if match_type.is_err() {
+            eprintln!("Error: {:?}", match_type.err());
+        }
+
+        let array_pin = node.get_pin_by_name("array").unwrap();
+        if array_pin.data_type != VariableType::Generic {
+            node.get_pin_mut_by_name("value").unwrap().data_type = array_pin.data_type.clone();
+        } 
     }
 }

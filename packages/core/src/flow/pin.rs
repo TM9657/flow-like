@@ -46,6 +46,16 @@ impl PinOptions {
         self
     }
 
+    pub fn set_enforce_schema(&mut self, enforce_schema: bool) -> &mut Self {
+        self.enforce_schema = Some(enforce_schema);
+        self
+    }
+
+    pub fn set_enforce_generic_value_type(&mut self, enforce_generic_value_type: bool) -> &mut Self {
+        self.enforce_generic_value_type = Some(enforce_generic_value_type);
+        self
+    }
+
     pub fn build(&self) -> Self {
         self.clone()
     }

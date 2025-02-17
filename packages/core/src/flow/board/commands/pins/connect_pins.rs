@@ -176,7 +176,7 @@ pub fn connect_pins(
     });
 
     from_pin.connected_to.insert(to_pin.id.clone());
-
+    
     board.nodes.insert(from_node.id.clone(), from_node);
     board.nodes.insert(to_node.id.clone(), to_node);
     board.fix_pins();
@@ -216,6 +216,5 @@ pub fn disconnect_pins(
 
     board.nodes.insert(from_node.id.clone(), from_node);
     board.nodes.insert(to_node.id.clone(), to_node);
-
     Ok(())
 }
