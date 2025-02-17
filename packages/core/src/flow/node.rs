@@ -11,7 +11,7 @@ use crate::state::FlowLikeState;
 use super::{
     board::Board,
     execution::context::ExecutionContext,
-    pin::{Pin, PinType},
+    pin::{Pin, PinType, ValueType},
     variable::VariableType,
 };
 
@@ -191,6 +191,35 @@ impl Node {
 
     pub fn mut_scores(&mut self) -> &mut NodeScores {
         self.scores.as_mut().unwrap()
+    }
+
+    pub fn match_type(&mut self, pin_name: &str, board: Arc<Board>, value_type: Option<ValueType>) -> anyhow::Result<()> {
+        let pin = self.get_pin_by_name(pin_name).ok_or(anyhow::anyhow!("Pin not found"))?;
+        let mut nodes = pin.connected_to.clone();
+        if pin.pin_type == PinType::Input {
+            nodes = pin.depends_on.clone();
+        }
+
+        self.get_pin_mut_by_name(pin_name).unwrap().data_type = VariableType::Generic;
+        if let Some(value_type) = value_type {
+            self.get_pin_mut_by_name(pin_name).unwrap().value_type = value_type;
+        }
+
+        if let Some(first_node) = nodes.iter().next() {
+            let pin = board.get_pin_by_id(first_node);
+            let mutable_pin = self.get_pin_mut_by_name(pin_name).unwrap();
+
+            match pin {
+                Some(pin) => {
+                    mutable_pin.data_type = pin.data_type.clone();
+                }
+                None => {
+                    mutable_pin.depends_on.remove(first_node);
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 

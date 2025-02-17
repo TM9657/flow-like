@@ -78,7 +78,8 @@
         "Date",
         "PathBuf",
         "Generic",
-        "Struct"
+        "Struct",
+        "Byte"
       ]
     }
   }

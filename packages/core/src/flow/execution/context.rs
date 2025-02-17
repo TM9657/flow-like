@@ -2,15 +2,12 @@ use object_store::path::Path;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::{
-    collections::HashMap,
-    fs::File,
-    sync::{Arc, Weak},
+    any::Any, collections::HashMap, fs::File, sync::{Arc, Weak}
 };
 use tokio::sync::{Mutex, RwLock};
 
 use super::{
-    internal_pin::InternalPin, log::LogMessage, trace::Trace, CacheValue, InternalNode, LogLevel,
-    Run,
+    internal_pin::InternalPin, log::LogMessage, trace::Trace, Cacheable, InternalNode, LogLevel, Run
 };
 use crate::{
     flow::{
@@ -101,7 +98,7 @@ pub struct ExecutionContext {
     pub sub_traces: Vec<Trace>,
     pub app_state: Arc<Mutex<FlowLikeState>>,
     pub variables: Arc<Mutex<HashMap<String, Variable>>>,
-    pub cache: Arc<RwLock<HashMap<String, CacheValue>>>,
+    pub cache: Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
     pub stage: ExecutionStage,
     pub log_level: LogLevel,
     pub trace: Trace,
@@ -117,7 +114,7 @@ impl ExecutionContext {
         state: &Arc<Mutex<FlowLikeState>>,
         node: &Arc<Mutex<InternalNode>>,
         variables: &Arc<Mutex<HashMap<String, Variable>>>,
-        cache: &Arc<RwLock<HashMap<String, CacheValue>>>,
+        cache: &Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
         log_level: LogLevel,
         stage: ExecutionStage,
         profile: Arc<Profile>,
@@ -213,7 +210,7 @@ impl ExecutionContext {
         Err(anyhow::anyhow!("Variable not found"))
     }
 
-    pub async fn get_cache(&self, key: &str) -> Option<CacheValue> {
+    pub async fn get_cache(&self, key: &str) -> Option<Arc<dyn Cacheable>> {
         let cache = self.cache.read().await;
         if let Some(value) = cache.get(key) {
             return Some(value.clone());
@@ -222,7 +219,7 @@ impl ExecutionContext {
         None
     }
 
-    pub async fn set_cache(&self, key: &str, value: CacheValue) {
+    pub async fn set_cache(&self, key: &str, value: Arc<dyn Cacheable>) {
         let mut cache = self.cache.write().await;
         cache.insert(key.to_string(), value);
     }

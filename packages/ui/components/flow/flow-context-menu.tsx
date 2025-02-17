@@ -70,6 +70,7 @@ export function FlowContextMenu({ nodes, children, droppedPin, onNodePlace, onCo
             <div className='pr-1'>
                 <ScrollArea className="h-52 w-[calc(20rem-0.5rem)] border rounded-md">
                     {nodes && <FlowContextMenuNodes key={nodes.length + "__root"} items={(droppedPin && contextSensitive) ? [...nodes.filter(node => {
+                        if(node.name === "variable_set" || node.name === "variable_get") return false
                         const pins = Object.values(node.pins)
                         return pins.some(pin => (pin.data_type === droppedPin.data_type || droppedPin.data_type === "Generic" || pin.data_type === "Generic") && pin.pin_type !== droppedPin.pin_type && pin.value_type === droppedPin.value_type && (typeof droppedPin.schema === "undefined" || pin.schema === droppedPin.schema || typeof pin.schema === "undefined"))
                     })] : [...nodes]} filter={filter} onNodePlace={async (node) => onNodePlace(node)} />}

@@ -114,7 +114,7 @@ impl NodeLogic for SetVariable {
             }
         };
 
-        node.friendly_name = var_ref_variable.name.clone();
+        node.friendly_name = format!("Set {}", &var_ref_variable.name);
         let mut_value = match node.get_pin_mut_by_name("value") {
             Some(val) => val,
             None => {

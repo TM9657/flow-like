@@ -60,57 +60,16 @@ impl NodeLogic for TryTransformNode {
     }
 
     async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
-        let pin = match node.get_pin_by_name("type_out") {
-            Some(pin) => pin,
-            None => {
-                println!("Pin not found");
-                return;
-            }
-        };
+        let match_type = node.match_type("type_out", board.clone(), None);
 
-        let connected = pin.connected_to.clone();
-
-        let pin = match node.get_pin_by_name("type_in") {
-            Some(pin) => pin,
-            None => {
-                println!("Pin not found");
-                return;
-            }
-        };
-
-        let dependent = pin.depends_on.clone();
-
-        node.get_pin_mut_by_name("type_in").unwrap().data_type = VariableType::Generic;
-        node.get_pin_mut_by_name("type_out").unwrap().data_type = VariableType::Generic;
-
-        if let Some(first_dependent) = dependent.iter().next() {
-            let pin = board.get_pin_by_id(first_dependent);
-            let mutable_pin = node.get_pin_mut_by_name("type_in").unwrap();
-
-            match pin {
-                Some(pin) => {
-                    mutable_pin.data_type = pin.data_type.clone();
-                    mutable_pin.value_type = pin.value_type.clone();
-                }
-                None => {
-                    mutable_pin.depends_on.remove(first_dependent);
-                }
-            }
+        if match_type.is_err() {
+            eprintln!("Error: {:?}", match_type.err());
         }
 
-        if let Some(first_connected) = connected.iter().next() {
-            let pin = board.get_pin_by_id(first_connected);
-            let mutable_pin = node.get_pin_mut_by_name("type_out").unwrap();
+        let match_type = node.match_type("type_in", board, None);
 
-            match pin {
-                Some(pin) => {
-                    mutable_pin.data_type = pin.data_type.clone();
-                    mutable_pin.value_type = pin.value_type.clone();
-                }
-                None => {
-                    mutable_pin.connected_to.remove(first_connected);
-                }
-            }
+        if match_type.is_err() {
+            eprintln!("Error: {:?}", match_type.err());
         }
     }
 }

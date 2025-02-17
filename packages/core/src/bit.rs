@@ -59,7 +59,7 @@ pub struct BitProviderModel {
     pub version: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct BitModelPreference {
     pub cost_weight: Option<f32>,
     pub speed_weight: Option<f32>,
@@ -74,6 +74,12 @@ pub struct BitModelPreference {
     pub model_hint: Option<String>,
 }
 
+fn enforce_bound(weight: &mut Option<f32>) {
+    if let Some(w) = weight {
+        *w = w.clamp(0.0, 1.0);
+    }
+}
+
 impl BitModelPreference {
     fn normalize_weight(weight: &mut Option<f32>) {
         if let Some(w) = weight {
@@ -83,6 +89,19 @@ impl BitModelPreference {
                 *weight = Some(1.0);
             }
         }
+    }
+
+    pub fn enforce_bounds(&mut self) {
+        enforce_bound(&mut self.cost_weight);
+        enforce_bound(&mut self.speed_weight);
+        enforce_bound(&mut self.reasoning_weight);
+        enforce_bound(&mut self.creativity_weight);
+        enforce_bound(&mut self.factfulness_weight);
+        enforce_bound(&mut self.function_calling_weight);
+        enforce_bound(&mut self.safety_weight);
+        enforce_bound(&mut self.openness_weight);
+        enforce_bound(&mut self.multilinguality_weight);
+        enforce_bound(&mut self.coding_weight);
     }
 
     pub fn parse(&self) -> Self {

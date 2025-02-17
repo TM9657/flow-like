@@ -16,6 +16,7 @@ pub struct PinOptions {
     pub valid_values: Option<Vec<String>>,
     pub range: Option<(f64, f64)>,
     pub step: Option<f64>,
+    pub enforce_schema: Option<bool>,
 }
 
 impl PinOptions {
@@ -24,6 +25,7 @@ impl PinOptions {
             valid_values: None,
             range: None,
             step: None,
+            enforce_schema: None,
         }
     }
 
@@ -40,6 +42,10 @@ impl PinOptions {
     pub fn set_step(&mut self, step: f64) -> &mut Self {
         self.step = Some(step);
         self
+    }
+
+    pub fn build(&self) -> Self {
+        self.clone()
     }
 }
 
@@ -90,6 +96,11 @@ impl Pin {
 
     pub fn reset_schema(&mut self) -> &mut Self {
         self.schema = None;
+        self
+    }
+
+    pub fn set_options(&mut self, options: PinOptions) -> &mut Self {
+        self.options = Some(options);
         self
     }
 }

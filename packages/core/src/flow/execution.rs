@@ -8,6 +8,7 @@ use num_cpus;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::any::Any;
 use std::collections::BTreeMap;
 use std::time::Instant;
 use std::{
@@ -53,11 +54,7 @@ pub struct Run {
     pub log_level: LogLevel,
 }
 
-#[derive(Clone)]
-pub enum CacheValue {
-    Value(Value),
-    VectorDB(Arc<Mutex<dyn VectorStore>>),
-}
+pub trait Cacheable: Any + Send + Sync {}
 
 #[derive(Clone)]
 pub struct InternalRun {
@@ -66,7 +63,7 @@ pub struct InternalRun {
     pub dependencies: HashMap<String, Vec<Arc<Mutex<InternalNode>>>>,
     pub pins: HashMap<String, Arc<Mutex<InternalPin>>>,
     pub variables: Arc<Mutex<HashMap<String, Variable>>>,
-    pub cache: Arc<RwLock<HashMap<String, CacheValue>>>,
+    pub cache: Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
     pub profile: Arc<Profile>,
     pub sender: tokio::sync::mpsc::Sender<FlowLikeEvent>,
 
@@ -491,7 +488,7 @@ async fn step_core(
     handler: &Arc<Mutex<FlowLikeState>>,
     run: &Arc<Mutex<Run>>,
     variables: &Arc<Mutex<HashMap<String, Variable>>>,
-    cache: &Arc<RwLock<HashMap<String, CacheValue>>>,
+    cache: &Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
     log_level: LogLevel,
     stage: ExecutionStage,
     dependencies: &HashMap<String, Vec<Arc<Mutex<InternalNode>>>>,
