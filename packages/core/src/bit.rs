@@ -522,8 +522,8 @@ impl Bit {
 
         if metadata.is_ok() {
             let file = from_compressed::<BitPack>(bits_store.clone(), cache_dir.clone()).await;
-            if file.is_ok() {
-                return file.unwrap();
+            if let Ok(file) = file {
+                return file;
             }
         }
 

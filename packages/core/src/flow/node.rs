@@ -23,17 +23,14 @@ pub enum NodeState {
     Error,
 }
 
-/// Node Scores. Each score ranges from 0 to 10.
-/// Node Scores. From 0 - 10
-/// The higher the score, the worse the node is in this category:
-/// - Privacy: Higher score means less privacy.
-/// - Security: Higher score means less security.
-/// - Performance: Higher score means worse performance.
-/// - Governance: Higher score means less compliance with governance.
-/// - security: Assesses the node's resistance to attacks.
-/// - performance: Evaluates the node's efficiency and speed.
-/// - governance: Indicates the node's compliance with policies and regulations.
-/// The higher the score, the worse the node is in this category
+/// Represents quality metrics for a node, with scores ranging from 0 to 10.
+/// Higher scores indicate worse performance in each category.
+///
+/// # Score Categories
+/// * `privacy` - Measures data protection and confidentiality level
+/// * `security` - Assesses resistance against potential attacks
+/// * `performance` - Evaluates computational efficiency and speed
+/// * `governance` - Indicates compliance with policies and regulations
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct NodeScores {
     pub privacy: i8,

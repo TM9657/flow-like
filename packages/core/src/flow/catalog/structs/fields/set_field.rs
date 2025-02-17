@@ -56,32 +56,16 @@ impl NodeLogic for SetStructFieldNode {
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
-        context.log_message("Initiating", crate::flow::execution::LogLevel::Debug);
         let mut old_struct = context
             .evaluate_pin::<HashMap<String, serde_json::Value>>("struct_in")
             .await?;
-        context.log_message("Got Struct", crate::flow::execution::LogLevel::Debug);
         let field = context.evaluate_pin::<String>("field").await?;
-        context.log_message(
-            &format!("Got Field: {}", field),
-            crate::flow::execution::LogLevel::Debug,
-        );
         let value = context.evaluate_pin::<serde_json::Value>("value").await?;
-        context.log_message(
-            &format!("Got Value: {:?}", value),
-            crate::flow::execution::LogLevel::Debug,
-        );
         old_struct.insert(field, value);
-        context.log_message(
-            &format!("Inserted Value: {:?}", old_struct),
-            crate::flow::execution::LogLevel::Debug,
-        );
         context
             .set_pin_value("struct_out", serde_json::json!(old_struct))
             .await?;
-        context.log_message("Set output struct", crate::flow::execution::LogLevel::Debug);
         context.activate_exec_pin("exec_out").await?;
-        context.log_message("Set Exec Out", crate::flow::execution::LogLevel::Debug);
         return Ok(());
     }
 

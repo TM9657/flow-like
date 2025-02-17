@@ -3,6 +3,7 @@ use flow_like::{
     state::FlowLikeState,
     utils::http::HTTPClient,
 };
+use object_store::ObjectStore;
 use std::{collections::HashMap, sync::Arc};
 use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
@@ -60,6 +61,32 @@ impl TauriFlowLikeState {
             .ok_or(anyhow::anyhow!("Run not found"))?
             .clone();
         Ok((run, flow_like_state))
+    }
+
+    pub async fn get_project_store(app_handle: &AppHandle) -> anyhow::Result<Arc<dyn ObjectStore>> {
+        let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
+        let project_store = flow_like_state
+            .lock()
+            .await
+            .config
+            .read()
+            .await
+            .project_store
+            .clone();
+        Ok(project_store)
+    }
+
+    pub async fn get_bits_store(app_handle: &AppHandle) -> anyhow::Result<Arc<dyn ObjectStore>> {
+        let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
+        let project_store = flow_like_state
+            .lock()
+            .await
+            .config
+            .read()
+            .await
+            .bits_store
+            .clone();
+        Ok(project_store)
     }
 }
 
