@@ -64,7 +64,10 @@ impl NodeLogic for GetVariable {
         let value_pin = context.get_pin_by_name("value").await?;
         let value = variable.get_value();
 
-        context.log_message(&format!("Got Value: {}", value.lock().await), crate::flow::execution::LogLevel::Debug);
+        context.log_message(
+            &format!("Got Value: {}", value.lock().await),
+            crate::flow::execution::LogLevel::Debug,
+        );
 
         value_pin.lock().await.set_pin_by_ref(value).await;
         Ok(())

@@ -20,6 +20,12 @@ pub struct PinOptions {
     pub enforce_generic_value_type: Option<bool>,
 }
 
+impl Default for PinOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PinOptions {
     pub fn new() -> Self {
         PinOptions {
@@ -51,7 +57,10 @@ impl PinOptions {
         self
     }
 
-    pub fn set_enforce_generic_value_type(&mut self, enforce_generic_value_type: bool) -> &mut Self {
+    pub fn set_enforce_generic_value_type(
+        &mut self,
+        enforce_generic_value_type: bool,
+    ) -> &mut Self {
         self.enforce_generic_value_type = Some(enforce_generic_value_type);
         self
     }

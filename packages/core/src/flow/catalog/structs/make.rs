@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     flow::{
@@ -30,19 +30,16 @@ impl NodeLogic for MakeStructNode {
         );
         node.add_icon("/flow/icons/struct.svg");
 
-        node.add_output_pin(
-            "struct",
-            "Struct",
-            "Struct Output",
-            VariableType::Struct,
-        );
+        node.add_output_pin("struct", "Struct", "Struct Output", VariableType::Struct);
 
         return node;
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let empty_struct: HashMap<String, serde_json::Value> = HashMap::new();
-        context.set_pin_value("struct", serde_json::json!(empty_struct)).await?;
+        context
+            .set_pin_value("struct", serde_json::json!(empty_struct))
+            .await?;
 
         return Ok(());
     }

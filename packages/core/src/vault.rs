@@ -213,7 +213,14 @@ impl Vault {
 
     pub async fn save(&self) -> anyhow::Result<()> {
         if let Some(app_state) = &self.app_state {
-            let store = app_state.lock().await.config.read().await.project_store.clone();
+            let store = app_state
+                .lock()
+                .await
+                .config
+                .read()
+                .await
+                .project_store
+                .clone();
             let registry_guard = app_state.lock().await;
             let registry = registry_guard.board_registry.lock().await;
 

@@ -144,7 +144,7 @@ pub async fn create_vault_board(
     board.description = description;
     board.variables.insert(variable.id.clone(), variable);
     board.save(None).await?;
-    
+
     Ok(())
 }
 

@@ -2,11 +2,13 @@ use std::sync::Arc;
 
 use crate::{
     flow::{
-        board::Board, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::VariableType
+        board::Board,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
-use ahash::HashMap;
 use async_trait::async_trait;
 
 #[derive(Default)]
@@ -30,14 +32,15 @@ impl NodeLogic for ToBytesNode {
         node.add_icon("/flow/icons/convert.svg");
 
         node.add_input_pin("value", "Value", "Input Value", VariableType::Generic);
-        node.add_input_pin("pretty", "Pretty?", "Should the struct be pretty printed?", VariableType::Boolean);
-    
-        node.add_output_pin(
-            "bytes",
-            "Bytes",
-            "Output Bytes",
-            VariableType::Byte,
-        ).set_value_type(crate::flow::pin::ValueType::Array);
+        node.add_input_pin(
+            "pretty",
+            "Pretty?",
+            "Should the struct be pretty printed?",
+            VariableType::Boolean,
+        );
+
+        node.add_output_pin("bytes", "Bytes", "Output Bytes", VariableType::Byte)
+            .set_value_type(crate::flow::pin::ValueType::Array);
 
         return node;
     }
@@ -50,7 +53,9 @@ impl NodeLogic for ToBytesNode {
         } else {
             serde_json::to_vec(&value)?
         };
-        context.set_pin_value("bytes", serde_json::json!(bytes)).await?;
+        context
+            .set_pin_value("bytes", serde_json::json!(bytes))
+            .await?;
         Ok(())
     }
 

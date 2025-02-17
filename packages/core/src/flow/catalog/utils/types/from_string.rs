@@ -2,11 +2,14 @@ use std::sync::Arc;
 
 use crate::{
     flow::{
-        board::Board, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::VariableType
+        board::Board,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::ValueType,
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
-use ahash::HashMap;
 use async_trait::async_trait;
 
 #[derive(Default)]
@@ -36,7 +39,12 @@ impl NodeLogic for FromStringNode {
             VariableType::String,
         );
 
-        node.add_output_pin("value", "Value", "Value of the Generic", VariableType::Generic);
+        node.add_output_pin(
+            "value",
+            "Value",
+            "Value of the Generic",
+            VariableType::Generic,
+        );
         return node;
     }
 
@@ -52,8 +60,8 @@ impl NodeLogic for FromStringNode {
         let var_type = node.get_pin_by_name("type").unwrap().default_value.clone();
 
         if let Some(var_type) = var_type {
-            let parsed : serde_json::Value = serde_json::from_slice(&var_type).unwrap();
-            let parsed : String = serde_json::from_value(parsed).unwrap();
+            let parsed: serde_json::Value = serde_json::from_slice(&var_type).unwrap();
+            let parsed: String = serde_json::from_value(parsed).unwrap();
             match parsed.as_str() {
                 "Normal" => value_type = ValueType::Normal,
                 "Array" => value_type = ValueType::Array,

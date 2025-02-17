@@ -102,7 +102,7 @@ pub enum VariableType {
     PathBuf,
     Generic,
     Struct,
-    Byte
+    Byte,
 }
 
 #[cfg(test)]

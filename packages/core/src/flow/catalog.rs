@@ -11,9 +11,9 @@ pub mod http;
 pub mod logging;
 pub mod math;
 pub mod storage;
+pub mod structs;
 pub mod utils;
 pub mod variables;
-pub mod structs;
 
 use crate::state::FlowLikeState;
 

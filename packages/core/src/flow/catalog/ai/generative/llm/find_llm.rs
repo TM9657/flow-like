@@ -1,7 +1,10 @@
 use crate::{
     bit::{Bit, BitModelPreference},
     flow::{
-        execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
@@ -29,12 +32,19 @@ impl NodeLogic for FindLLMNode {
         node.add_icon("/flow/icons/find_model.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
-        node.add_input_pin("preferences", "Preferences", "Preferences for the model", VariableType::Struct)
-            .set_default_value(Some(json!(BitModelPreference::default()))).set_schema::<BitModelPreference>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
-        
+        node.add_input_pin(
+            "preferences",
+            "Preferences",
+            "Preferences for the model",
+            VariableType::Struct,
+        )
+        .set_default_value(Some(json!(BitModelPreference::default())))
+        .set_schema::<BitModelPreference>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
-        node.add_output_pin("model", "Model", "The selected model", VariableType::Struct).set_schema::<Bit>();
+        node.add_output_pin("model", "Model", "The selected model", VariableType::Struct)
+            .set_schema::<Bit>();
 
         node.set_long_running(true);
 

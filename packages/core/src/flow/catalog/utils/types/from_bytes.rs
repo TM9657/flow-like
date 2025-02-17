@@ -2,11 +2,13 @@ use std::sync::Arc;
 
 use crate::{
     flow::{
-        board::Board, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::VariableType
+        board::Board,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
-use ahash::HashMap;
 use async_trait::async_trait;
 
 #[derive(Default)]
@@ -29,13 +31,9 @@ impl NodeLogic for FromBytesNode {
         );
         node.add_icon("/flow/icons/convert.svg");
 
-        node.add_input_pin(
-            "bytes",
-            "Bytes",
-            "Bytes to convert",
-            VariableType::Byte,
-        ).set_value_type(crate::flow::pin::ValueType::Array);
-        
+        node.add_input_pin("bytes", "Bytes", "Bytes to convert", VariableType::Byte)
+            .set_value_type(crate::flow::pin::ValueType::Array);
+
         node.add_output_pin("value", "Value", "Parsed Value", VariableType::Generic);
 
         return node;

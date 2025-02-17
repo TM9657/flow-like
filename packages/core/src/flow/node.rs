@@ -193,8 +193,15 @@ impl Node {
         self.scores.as_mut().unwrap()
     }
 
-    pub fn match_type(&mut self, pin_name: &str, board: Arc<Board>, value_type: Option<ValueType>) -> anyhow::Result<()> {
-        let pin = self.get_pin_by_name(pin_name).ok_or(anyhow::anyhow!("Pin not found"))?;
+    pub fn match_type(
+        &mut self,
+        pin_name: &str,
+        board: Arc<Board>,
+        value_type: Option<ValueType>,
+    ) -> anyhow::Result<()> {
+        let pin = self
+            .get_pin_by_name(pin_name)
+            .ok_or(anyhow::anyhow!("Pin not found"))?;
         let mut nodes = pin.connected_to.clone();
         if pin.pin_type == PinType::Input {
             nodes = pin.depends_on.clone();

@@ -76,7 +76,7 @@ impl NodeLogic for SetVariable {
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let var_ref: String = context.evaluate_pin("var_ref").await?;
         let value = context.evaluate_pin::<Value>("value").await?;
-        
+
         context.set_variable_value(&var_ref, value).await?;
 
         context.activate_exec_pin("exec_out").await?;

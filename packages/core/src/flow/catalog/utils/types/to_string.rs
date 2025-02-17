@@ -2,11 +2,13 @@ use std::sync::Arc;
 
 use crate::{
     flow::{
-        board::Board, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::VariableType
+        board::Board,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
-use ahash::HashMap;
 use async_trait::async_trait;
 
 #[derive(Default)]
@@ -30,14 +32,14 @@ impl NodeLogic for ToStringNode {
         node.add_icon("/flow/icons/convert.svg");
 
         node.add_input_pin("value", "Value", "Input Value", VariableType::Generic);
-        node.add_input_pin("pretty", "Pretty?", "Should the struct be pretty printed?", VariableType::Boolean);
-
-        node.add_output_pin(
-            "string",
-            "String",
-            "Output String",
-            VariableType::String,
+        node.add_input_pin(
+            "pretty",
+            "Pretty?",
+            "Should the struct be pretty printed?",
+            VariableType::Boolean,
         );
+
+        node.add_output_pin("string", "String", "Output String", VariableType::String);
 
         return node;
     }
@@ -50,7 +52,9 @@ impl NodeLogic for ToStringNode {
         } else {
             serde_json::to_string(&string)?
         };
-        context.set_pin_value("string", serde_json::json!(value)).await?;
+        context
+            .set_pin_value("string", serde_json::json!(value))
+            .await?;
         Ok(())
     }
 

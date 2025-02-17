@@ -27,7 +27,6 @@ pub mod trace;
 
 use crate::profile::Profile;
 use crate::state::{FlowLikeEvent, FlowLikeState};
-use crate::vault::vector::VectorStore;
 
 use super::board::ExecutionStage;
 use super::{board::Board, catalog::node_to_dyn, node::NodeState, variable::Variable};
