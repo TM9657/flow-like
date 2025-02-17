@@ -35,12 +35,6 @@ impl NodeLogic for FromStringNode {
             "String to convert",
             VariableType::String,
         );
-        node.add_input_pin("type", "Variable Type", "Variable Type", VariableType::String).set_default_value(Some(serde_json::json!("Normal"))).set_options(PinOptions::new().set_valid_values(vec![
-            "Normal".to_string(),
-            "Array".to_string(),
-            "HashSet".to_string(),
-            "HashMap".to_string(),
-        ]).build());
 
         node.add_output_pin("value", "Value", "Value of the Generic", VariableType::Generic);
         return node;

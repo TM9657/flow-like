@@ -506,6 +506,12 @@
     "PinOptions": {
       "type": "object",
       "properties": {
+        "enforce_generic_value_type": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "enforce_schema": {
           "type": [
             "boolean",

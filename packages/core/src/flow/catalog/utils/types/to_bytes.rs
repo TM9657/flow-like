@@ -31,13 +31,7 @@ impl NodeLogic for ToBytesNode {
 
         node.add_input_pin("value", "Value", "Input Value", VariableType::Generic);
         node.add_input_pin("pretty", "Pretty?", "Should the struct be pretty printed?", VariableType::Boolean);
-        node.add_input_pin("type", "Variable Type", "Variable Type", VariableType::String).set_default_value(Some(serde_json::json!("Normal"))).set_options(PinOptions::new().set_valid_values(vec![
-            "Normal".to_string(),
-            "Array".to_string(),
-            "HashSet".to_string(),
-            "HashMap".to_string(),
-        ]).build());
-
+    
         node.add_output_pin(
             "bytes",
             "Bytes",
@@ -61,22 +55,7 @@ impl NodeLogic for ToBytesNode {
     }
 
     async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
-        let mut value_type = ValueType::Normal;
-        let var_type = node.get_pin_by_name("type").unwrap().default_value.clone();
-
-        if let Some(var_type) = var_type {
-            let parsed : serde_json::Value = serde_json::from_slice(&var_type).unwrap();
-            let parsed : String = serde_json::from_value(parsed).unwrap();
-            match parsed.as_str() {
-                "Normal" => value_type = ValueType::Normal,
-                "Array" => value_type = ValueType::Array,
-                "HashSet" => value_type = ValueType::HashSet,
-                "HashMap" => value_type = ValueType::HashMap,
-                _ => value_type = ValueType::Normal,
-            }
-        }
-
-        let match_type = node.match_type("value", board, Some(value_type));
+        let match_type = node.match_type("value", board, None);
 
         if match_type.is_err() {
             eprintln!("Error: {:?}", match_type.err());

@@ -17,6 +17,7 @@ pub struct PinOptions {
     pub range: Option<(f64, f64)>,
     pub step: Option<f64>,
     pub enforce_schema: Option<bool>,
+    pub enforce_generic_value_type: Option<bool>,
 }
 
 impl PinOptions {
@@ -26,6 +27,7 @@ impl PinOptions {
             range: None,
             step: None,
             enforce_schema: None,
+            enforce_generic_value_type: None,
         }
     }
 

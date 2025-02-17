@@ -21,11 +21,16 @@ export function isValidConnection(connection: any, cache: Map<string, [IPin, INo
     const schemaSource = sourcePin.schema;
     const schemaTarget = targetPin.schema;
 
-    if (schemaSource && schemaTarget) {
+    if (sourcePin.schema && targetPin.schema) {
         if (schemaSource !== schemaTarget) return false
     }
 
-    if ((sourcePin.data_type === "Generic" || targetPin.data_type === "Generic") && sourcePin.data_type !== "Execution" && targetPin.data_type !== "Execution" && targetPin.value_type === sourcePin.value_type) return true
+    if (targetPin.options?.enforce_schema || sourcePin.options?.enforce_schema) {
+        if(!sourcePin.schema || !targetPin.schema) return false
+        if (schemaSource !== schemaTarget) return false
+    }
+
+    if ((sourcePin.data_type === "Generic" || targetPin.data_type === "Generic") && sourcePin.data_type !== "Execution" && targetPin.data_type !== "Execution" && ((targetPin.options?.enforce_generic_value_type || sourcePin.options?.enforce_generic_value_type) ? (targetPin.value_type === sourcePin.value_type) : true)) return true
     if (sourcePin.value_type !== targetPin.value_type) return false
     if (sourcePin.data_type !== targetPin.data_type) return false
 
