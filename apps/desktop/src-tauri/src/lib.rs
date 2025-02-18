@@ -5,8 +5,10 @@ mod state;
 mod utils;
 use flow_like::{
     state::{FlowLikeConfig, FlowLikeState},
-    utils::{http::HTTPClient, local_object_store::LocalObjectStore},
+    utils::{dir, http::HTTPClient, local_object_store::LocalObjectStore},
 };
+use lancedb::connection::ConnectBuilder;
+use object_store::path::Path;
 use serde_json::Value;
 use settings::Settings;
 use state::TauriFlowLikeState;
@@ -19,17 +21,23 @@ use tracing_subscriber::prelude::*;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut settings_state = Settings::new();
+    let project_dir = settings_state.project_dir.clone();
 
-    let bits_store = Arc::new(LocalObjectStore::new(settings_state.bit_dir.clone()).unwrap());
-    let user_store = Arc::new(LocalObjectStore::new(settings_state.user_dir.clone()).unwrap());
-    let project_store =
-        Arc::new(LocalObjectStore::new(settings_state.project_dir.clone()).unwrap());
-    let config: FlowLikeConfig = FlowLikeConfig::new(
-        Some(bits_store.clone()),
-        bits_store,
-        user_store,
-        project_store,
-    );
+    let mut config: FlowLikeConfig = FlowLikeConfig::new();
+    config.register_bits_store(flow_like::state::FlowLikeStore::Local(Arc::new(
+        LocalObjectStore::new(settings_state.bit_dir.clone()).unwrap(),
+    )));
+    config.register_user_store(flow_like::state::FlowLikeStore::Local(Arc::new(
+        LocalObjectStore::new(settings_state.user_dir.clone()).unwrap(),
+    )));
+    config.register_project_store(flow_like::state::FlowLikeStore::Local(Arc::new(
+        LocalObjectStore::new(project_dir.clone()).unwrap(),
+    )));
+    config.register_build_project_database(Arc::new(move |path: Path| {
+        let directory = project_dir.join(path.to_string());
+        lancedb::connect(directory.to_str().unwrap())
+    }));
+
     settings_state.set_config(&config);
     let settings_state = Arc::new(Mutex::new(settings_state));
     let (http_client, refetch_rx) = HTTPClient::new();

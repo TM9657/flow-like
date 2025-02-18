@@ -373,8 +373,11 @@ impl Board {
                 .config
                 .read()
                 .await
+                .stores
                 .project_store
-                .clone(),
+                .clone()
+                .ok_or(anyhow::anyhow!("Project store not found"))?
+                .as_generic(),
         };
 
         compress_to_file(store, to, self).await?;
@@ -388,8 +391,11 @@ impl Board {
             .config
             .read()
             .await
+            .stores
             .project_store
-            .clone();
+            .clone()
+            .ok_or(anyhow::anyhow!("Project store not found"))?
+            .as_generic();
 
         let mut board: Board = from_compressed(store, path.child("manifest.board")).await?;
         board.board_dir = path;
@@ -452,12 +458,10 @@ mod tests {
     use tokio::sync::Mutex;
 
     async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
-        let config: FlowLikeConfig = FlowLikeConfig::new(
-            None,
-            Arc::new(object_store::memory::InMemory::new()),
-            Arc::new(object_store::memory::InMemory::new()),
-            Arc::new(object_store::memory::InMemory::new()),
-        );
+        let mut config: FlowLikeConfig = FlowLikeConfig::new();
+        config.register_project_store(crate::state::FlowLikeStore::Remote(Arc::new(
+            object_store::memory::InMemory::new(),
+        )));
         let (http_client, _refetch_rx) = HTTPClient::new();
         let (flow_like_state, _) = crate::state::FlowLikeState::new(config, http_client);
         Arc::new(Mutex::new(flow_like_state))

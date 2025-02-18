@@ -1,4 +1,6 @@
 use anyhow::Ok;
+use lancedb::connection::ConnectBuilder;
+use object_store::path::Path;
 use object_store::ObjectStore;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -45,27 +47,64 @@ impl FlowLikeEvent {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+pub enum FlowLikeStore {
+    Local(Arc<LocalObjectStore>),
+    Remote(Arc<dyn ObjectStore>),
+}
+
+impl FlowLikeStore {
+    pub fn as_generic(&self) -> Arc<dyn ObjectStore> {
+        match self {
+            FlowLikeStore::Local(store) => store.clone() as Arc<dyn ObjectStore>,
+            FlowLikeStore::Remote(store) => store.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct FlowLikeStores {
+    pub bits_store: Option<FlowLikeStore>,
+    pub user_store: Option<FlowLikeStore>,
+    pub project_store: Option<FlowLikeStore>,
+}
+
+#[derive(Clone, Default)]
+pub struct FlowLikeCallbacks {
+    pub build_project_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
+}
+
+#[derive(Clone, Default)]
 pub struct FlowLikeConfig {
-    pub local_store: Option<Arc<LocalObjectStore>>,
-    pub bits_store: Arc<dyn ObjectStore>,
-    pub user_store: Arc<dyn ObjectStore>,
-    pub project_store: Arc<dyn ObjectStore>,
+    pub stores: FlowLikeStores,
+    pub callbacks: FlowLikeCallbacks,
 }
 
 impl FlowLikeConfig {
-    pub fn new<T: ObjectStore>(
-        local_store: Option<Arc<LocalObjectStore>>,
-        bits_store: Arc<T>,
-        user_store: Arc<T>,
-        project_store: Arc<T>,
-    ) -> Self {
+    pub fn new() -> Self {
         FlowLikeConfig {
-            local_store,
-            bits_store,
-            user_store,
-            project_store,
+            callbacks: FlowLikeCallbacks::default(),
+            stores: FlowLikeStores::default(),
         }
+    }
+
+    pub fn register_project_store(&mut self, store: FlowLikeStore) {
+        self.stores.project_store = Some(store);
+    }
+
+    pub fn register_user_store(&mut self, store: FlowLikeStore) {
+        self.stores.user_store = Some(store);
+    }
+
+    pub fn register_bits_store(&mut self, store: FlowLikeStore) {
+        self.stores.bits_store = Some(store);
+    }
+
+    pub fn register_build_project_database(
+        &mut self,
+        callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
+    ) {
+        self.callbacks.build_project_database = Some(callback);
     }
 }
 
@@ -250,6 +289,53 @@ impl FlowLikeState {
     pub fn board_run_registry(&self) -> Arc<Mutex<HashMap<String, Arc<Mutex<InternalRun>>>>> {
         self.board_run_registry.clone()
     }
+
+    #[inline]
+    pub async fn stores(state: &Arc<Mutex<FlowLikeState>>) -> FlowLikeStores {
+        state.lock().await.config.read().await.stores.clone()
+    }
+
+    #[inline]
+    pub async fn project_store(state: &Arc<Mutex<FlowLikeState>>) -> anyhow::Result<FlowLikeStore> {
+        state
+            .lock()
+            .await
+            .config
+            .read()
+            .await
+            .stores
+            .project_store
+            .clone()
+            .ok_or(anyhow::anyhow!("No project store"))
+    }
+
+    #[inline]
+    pub async fn bit_store(state: &Arc<Mutex<FlowLikeState>>) -> anyhow::Result<FlowLikeStore> {
+        state
+            .lock()
+            .await
+            .config
+            .read()
+            .await
+            .stores
+            .bits_store
+            .clone()
+            .ok_or(anyhow::anyhow!("No bit store"))
+    }
+
+    #[inline]
+    pub async fn user_store(state: &Arc<Mutex<FlowLikeState>>) -> anyhow::Result<FlowLikeStore> {
+        state
+            .lock()
+            .await
+            .config
+            .read()
+            .await
+            .stores
+            .user_store
+            .clone()
+            .ok_or(anyhow::anyhow!("No user store"))
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -282,5 +368,19 @@ impl Default for ToastEvent {
             message: "".to_string(),
             level: ToastLevel::Info,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn path_serialization() {
+        let path = Path::from("this").child("nice").child("shit");
+        let event = PathBuf::from("test").join(path.to_string());
+        assert_eq!(path.to_string(), "this/nice/shit".to_string());
+        assert_eq!(event.to_str().unwrap(), "test/this/nice/shit");
     }
 }

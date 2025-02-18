@@ -1,7 +1,7 @@
 use super::EmbeddingModelLogic;
 use crate::{
     bit::{Bit, BitPack, BitTypes, Pooling},
-    state::FlowLikeState,
+    state::{FlowLikeState, FlowLikeStore},
     utils::{local_object_store::LocalObjectStore, tokenizer::load_tokenizer_from_file},
 };
 use anyhow::{anyhow, Result};
@@ -19,16 +19,14 @@ pub struct LocalEmbeddingModel {
 
 impl LocalEmbeddingModel {
     pub async fn new(bit: &Bit, app_state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<Arc<Self>> {
-        let bit_store = app_state
-            .lock()
-            .await
-            .config
-            .read()
-            .await
-            .local_store
-            .clone()
-            .ok_or(anyhow::anyhow!("No local store"))?;
-        let pack = bit.pack(app_state.clone()).await;
+        let bit_store = FlowLikeState::bit_store(&app_state).await?;
+
+        let bit_store = match bit_store {
+            FlowLikeStore::Local(store) => store,
+            _ => return Err(anyhow::anyhow!("Only local store supported")),
+        };
+
+        let pack = bit.pack(app_state.clone()).await?;
         pack.download(app_state.clone()).await?;
 
         let model_path = bit

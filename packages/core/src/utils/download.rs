@@ -1,4 +1,4 @@
-use crate::state::{FlowLikeEvent, FlowLikeState};
+use crate::state::{FlowLikeEvent, FlowLikeState, FlowLikeStore};
 use anyhow::{anyhow, bail};
 use futures::StreamExt;
 use object_store::path::Path;
@@ -87,15 +87,13 @@ pub async fn download_bit(
     app_state: Arc<Mutex<FlowLikeState>>,
     retries: usize,
 ) -> anyhow::Result<Path> {
-    let file_store = app_state
-        .lock()
-        .await
-        .config
-        .read()
-        .await
-        .local_store
-        .clone()
-        .ok_or(anyhow!("No local store"))?;
+    let file_store = FlowLikeState::bit_store(&app_state).await?;
+
+    let file_store = match file_store {
+        FlowLikeStore::Local(store) => store,
+        _ => bail!("Only local store supported"),
+    };
+
     let store_path =
         Path::from(bit.hash.clone()).child(bit.file_name.clone().ok_or(anyhow!("No file name"))?);
     let path_name = file_store.path_to_filesystem(&store_path)?;

@@ -327,8 +327,11 @@ fn collect_dependencies<'a>(
 }
 
 impl BitPack {
-    pub async fn get_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> Vec<Bit> {
-        let bits_store = state.lock().await.config.read().await.bits_store.clone();
+    pub async fn get_installed(
+        &self,
+        state: Arc<Mutex<FlowLikeState>>,
+    ) -> anyhow::Result<Vec<Bit>> {
+        let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
         let mut installed_bits = vec![];
         for bit in self.bits.iter() {
@@ -349,7 +352,7 @@ impl BitPack {
             }
             installed_bits.push(bit.clone());
         }
-        installed_bits
+        Ok(installed_bits)
     }
 
     pub async fn download(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<Vec<Bit>> {
@@ -399,9 +402,8 @@ impl BitPack {
         size
     }
 
-    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> bool {
-        let bits_store = state.lock().await.config.read().await.bits_store.clone();
-
+    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<bool> {
+        let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
         let mut installed = true;
         for bit in self.bits.iter() {
             let file_name = match bit.file_name.clone() {
@@ -424,7 +426,7 @@ impl BitPack {
                 break;
             }
         }
-        installed
+        Ok(installed)
     }
 }
 
@@ -511,8 +513,8 @@ impl Bit {
         None
     }
 
-    pub async fn dependencies(&self, state: Arc<Mutex<FlowLikeState>>) -> BitPack {
-        let bits_store = state.lock().await.config.read().await.bits_store.clone();
+    pub async fn dependencies(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<BitPack> {
+        let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
         let mut dependencies = vec![];
         let cache_dir =
@@ -523,7 +525,7 @@ impl Bit {
         if metadata.is_ok() {
             let file = from_compressed::<BitPack>(bits_store.clone(), cache_dir.clone()).await;
             if let Ok(file) = file {
-                return file;
+                return Ok(file);
             }
         }
 
@@ -561,17 +563,17 @@ impl Bit {
             );
         }
 
-        bit_pack
+        Ok(bit_pack)
     }
 
-    pub async fn pack(&self, state: Arc<Mutex<FlowLikeState>>) -> BitPack {
-        let mut dependencies = self.dependencies(state).await;
+    pub async fn pack(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<BitPack> {
+        let mut dependencies = self.dependencies(state).await?;
         dependencies.bits.push(self.clone());
-        dependencies
+        Ok(dependencies)
     }
 
-    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> bool {
-        let pack = self.pack(state.clone()).await;
+    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<bool> {
+        let pack = self.pack(state.clone()).await?;
         pack.is_installed(state).await
     }
 

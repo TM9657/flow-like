@@ -21,17 +21,15 @@ use crate::{
         variable::{Variable, VariableType},
     },
     profile::Profile,
-    state::{FlowLikeEvent, FlowLikeState, ToastEvent, ToastLevel},
+    state::{FlowLikeEvent, FlowLikeState, FlowLikeStores, ToastEvent, ToastLevel},
 };
 
 #[derive(Clone)]
 pub struct ExecutionContextCache {
-    pub user_store: Arc<dyn object_store::ObjectStore>,
-    pub user_board_cache: Path,
-    pub user_node_cache: Path,
-    pub project_store: Arc<dyn object_store::ObjectStore>,
-    pub board_cache: Path,
-    pub node_cache: Path,
+    pub stores: FlowLikeStores,
+    pub board_dir: Path,
+    pub board_id: String,
+    pub node_id: String,
 }
 
 impl ExecutionContextCache {
@@ -48,22 +46,33 @@ impl ExecutionContextCache {
             None => return None,
         };
 
-        let user_store = state.lock().await.config.read().await.user_store.clone();
-        let project_store = state.lock().await.config.read().await.project_store.clone();
-
-        let user_board_cache = Path::from("boards").child(board_id);
-        let user_node_cache = user_board_cache.child(node_id);
-        let board_cache = board_dir.child("cache");
-        let node_cache = board_cache.child(node_id);
+        let stores = state.lock().await.config.read().await.stores.clone();
 
         Some(ExecutionContextCache {
-            project_store,
-            user_store,
-            user_board_cache,
-            user_node_cache,
-            board_cache,
-            node_cache,
+            stores,
+            board_dir,
+            board_id,
+            node_id: node_id.to_string(),
         })
+    }
+
+    pub fn get_user_cache(&self, node: bool) -> anyhow::Result<Path> {
+        let base = Path::from("boards").child(self.board_id.clone());
+        if !node {
+            return Ok(base);
+        }
+
+        Ok(base.child(self.node_id.clone()))
+    }
+
+    pub fn get_cache(&self, node: bool) -> anyhow::Result<Path> {
+        let base = self.board_dir.child("cache");
+
+        if !node {
+            return Ok(base);
+        }
+
+        Ok(base.child(self.node_id.clone()))
     }
 
     pub fn get_tmp_dir(&self) -> anyhow::Result<tempfile::TempDir> {
@@ -160,17 +169,6 @@ impl ExecutionContext {
             execution_cache,
             state: NodeState::Idle,
         }
-    }
-
-    /// Get directory for storing long term state for the node
-    /// e.g if you want to keep track of a directory you can use this directory safely to store the state of the directory.
-    pub async fn get_node_dir(&self) -> anyhow::Result<Path> {
-        let dir = self
-            .execution_cache
-            .clone()
-            .ok_or(anyhow::anyhow!("Execution cache not found"))?
-            .node_cache;
-        Ok(dir)
     }
 
     pub async fn create_sub_context(&self, node: &Arc<Mutex<InternalNode>>) -> ExecutionContext {
