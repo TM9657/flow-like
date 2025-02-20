@@ -97,7 +97,7 @@ Just download the latest release and select from a bunch of available profiles t
 
 #### Documentation [TODO]
 
-Comprehensive documentation is available [here](https://Flow-Like.good-co.de/). This includes detailed installation guides, configuration options, and usage examples to help you get the most out of Flow-Like.
+Comprehensive documentation is available [here](https://flow-like.com/). This includes detailed installation guides, configuration options, and usage examples to help you get the most out of Flow-Like.
 
 #### Contributing [Help wanted]
 
