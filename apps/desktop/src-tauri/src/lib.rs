@@ -5,9 +5,8 @@ mod state;
 mod utils;
 use flow_like::{
     state::{FlowLikeConfig, FlowLikeState},
-    utils::{dir, http::HTTPClient, local_object_store::LocalObjectStore},
+    utils::{http::HTTPClient, local_object_store::LocalObjectStore},
 };
-use lancedb::connection::ConnectBuilder;
 use object_store::path::Path;
 use serde_json::Value;
 use settings::Settings;

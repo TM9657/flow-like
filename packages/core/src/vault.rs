@@ -206,7 +206,7 @@ impl Vault {
 
     pub async fn save(&self) -> anyhow::Result<()> {
         if let Some(app_state) = &self.app_state {
-            let store = FlowLikeState::project_store(&app_state).await?.as_generic();
+            let store = FlowLikeState::project_store(app_state).await?.as_generic();
             let registry_guard = app_state.lock().await;
             let registry = registry_guard.board_registry.lock().await;
 

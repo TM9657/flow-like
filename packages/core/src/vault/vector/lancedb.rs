@@ -304,7 +304,7 @@ impl VectorStore for LanceDBVectorStore {
             .optimize(lancedb::table::OptimizeAction::Prune {
                 delete_unverified: Some(true),
                 error_if_tagged_old_versions: Some(true),
-                older_than: older_than,
+                older_than,
             })
             .await?;
 

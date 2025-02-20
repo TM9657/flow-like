@@ -1,20 +1,15 @@
 use super::NodeDBConnection;
 use crate::{
     flow::{
-        board::Board,
-        execution::{context::ExecutionContext, Cacheable},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         pin::PinOptions,
         variable::VariableType,
     },
     state::FlowLikeState,
-    vault::vector::{lancedb::LanceDBVectorStore, VectorStore},
+    vault::vector::VectorStore,
 };
 use async_trait::async_trait;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::sync::Arc;
 
 #[derive(Default)]
 pub struct PurgeLocalDatabaseNode {}

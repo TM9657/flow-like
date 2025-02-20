@@ -2,10 +2,8 @@ use std::sync::Arc;
 
 use crate::{
     flow::{
-        board::Board,
         execution::{context::ExecutionContext, Cacheable},
         node::{Node, NodeLogic},
-        pin::PinOptions,
         variable::VariableType,
     },
     state::FlowLikeState,
@@ -133,9 +131,7 @@ impl NodeLogic for CreateLocalDatabaseNode {
                 .insert(cache_key.clone(), cacheable);
         }
 
-        let db = NodeDBConnection {
-            cache_key: cache_key,
-        };
+        let db = NodeDBConnection { cache_key };
 
         let db: serde_json::Value = serde_json::to_value(&db)?;
 
