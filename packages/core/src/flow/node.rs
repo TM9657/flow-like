@@ -54,6 +54,7 @@ pub struct Node {
     pub comment: Option<String>,
     pub long_running: Option<bool>,
     pub error: Option<String>,
+    pub docs: Option<String>,
 }
 
 impl Node {
@@ -66,17 +67,13 @@ impl Node {
             coordinates: None,
             category: category.to_string(),
             pins: HashMap::new(),
-            scores: Some(NodeScores {
-                privacy: 0,
-                security: 0,
-                performance: 0,
-                governance: 0,
-            }),
+            scores: None,
             start: None,
             icon: None,
             comment: None,
             long_running: None,
             error: None,
+            docs: None,
         }
     }
 

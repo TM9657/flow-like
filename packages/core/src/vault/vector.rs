@@ -20,6 +20,7 @@ pub trait VectorStore: Send + Sync {
         vector: Vec<f64>,
         filter: Option<&str>,
         limit: usize,
+        offset: usize,
     ) -> anyhow::Result<Vec<serde_json::Value>>;
 
     /// Perform a full-text search using the given text input.
@@ -37,6 +38,7 @@ pub trait VectorStore: Send + Sync {
         text: &str,
         filter: Option<&str>,
         limit: usize,
+        offset: usize,
     ) -> anyhow::Result<Vec<serde_json::Value>>;
 
     /// Perform a hybrid search using both vector and text input.
@@ -56,6 +58,8 @@ pub trait VectorStore: Send + Sync {
         text: &str,
         filter: Option<&str>,
         limit: usize,
+        offset: usize,
+        rerank: bool,
     ) -> anyhow::Result<Vec<serde_json::Value>>;
 
     /// Query the vector store based on a filter.
@@ -68,7 +72,12 @@ pub trait VectorStore: Send + Sync {
     /// # Returns
     ///
     /// A result containing a vector of JSON-encoded query results or an error.
-    async fn filter(&self, filter: &str, limit: usize) -> anyhow::Result<Vec<serde_json::Value>>;
+    async fn filter(
+        &self,
+        filter: &str,
+        limit: usize,
+        offset: usize,
+    ) -> anyhow::Result<Vec<serde_json::Value>>;
 
     /// Upsert items into the vector store.
     ///
@@ -79,7 +88,22 @@ pub trait VectorStore: Send + Sync {
     /// # Returns
     ///
     /// A result indicating success or an error.
-    async fn upsert(&mut self, items: Vec<serde_json::Value>) -> anyhow::Result<()>;
+    async fn upsert(
+        &mut self,
+        items: Vec<serde_json::Value>,
+        id_field: String,
+    ) -> anyhow::Result<()>;
+
+    /// Upsert items into the vector store.
+    ///
+    /// # Arguments
+    ///
+    /// * `items`: A vector of JSON-encoded items to upsert.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or an error.
+    async fn insert(&mut self, items: Vec<serde_json::Value>) -> anyhow::Result<()>;
 
     /// Delete items from the vector store based on a filter.
     ///
@@ -109,14 +133,14 @@ pub trait VectorStore: Send + Sync {
     /// # Returns
     ///
     /// A result indicating success or an error.
-    async fn optimize(&self) -> anyhow::Result<()>;
+    async fn optimize(&self, keep_versions: bool) -> anyhow::Result<()>;
 
     /// List all items in the vector store.
     ///
     /// # Returns
     ///
     /// A result containing a vector of JSON-encoded items or an error.
-    async fn list(&self) -> anyhow::Result<Vec<serde_json::Value>>;
+    async fn list(&self, limit: usize, offset: usize) -> anyhow::Result<Vec<serde_json::Value>>;
 
     /// Purge all data from the vector store.
     ///
@@ -124,4 +148,12 @@ pub trait VectorStore: Send + Sync {
     ///
     /// A result indicating success or an error.
     async fn purge(&self) -> anyhow::Result<()>;
+
+    /// Returns the total number of items in the vector store.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(usize)` - The total count of items in the vector store.
+    /// * `Err(anyhow::Error)` - If the count operation fails.
+    async fn count(&self, filter: Option<String>) -> anyhow::Result<usize>;
 }

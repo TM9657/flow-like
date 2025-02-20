@@ -53,7 +53,20 @@ pub struct Run {
     pub log_level: LogLevel,
 }
 
-pub trait Cacheable: Any + Send + Sync {}
+pub trait Cacheable: Any + Send + Sync {
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+impl dyn Cacheable {
+    pub fn downcast_ref<T: Cacheable>(&self) -> Option<&T> {
+        self.as_any().downcast_ref::<T>()
+    }
+
+    pub fn downcast_mut<T: Cacheable>(&mut self) -> Option<&mut T> {
+        self.as_any_mut().downcast_mut::<T>()
+    }
+}
 
 #[derive(Clone)]
 pub struct InternalRun {

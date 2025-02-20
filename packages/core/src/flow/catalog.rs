@@ -47,6 +47,7 @@ pub async fn load_catalog(app_state: &FlowLikeState) -> Vec<Node> {
         events::register_functions().await,
         utils::register_functions().await,
         structs::register_functions().await,
+        storage::register_functions().await,
     ];
 
     let futures: Vec<_> = intermediate_registry
