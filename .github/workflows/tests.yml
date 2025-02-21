@@ -85,7 +85,6 @@ jobs:
           fi
 
       - name: Run Rust tests
-        working-directory: src-tauri
         run: cargo test
 
       - name: Run frontend tests
