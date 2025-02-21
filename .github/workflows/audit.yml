@@ -39,7 +39,7 @@ jobs:
           targets: ${{ matrix.os == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: install frontend dependencies
-        run: npm install --legacy-peer-deps
+        run: bun install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

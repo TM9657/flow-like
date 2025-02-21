@@ -10,20 +10,6 @@ const OWNER = 'jgm';
 const REPO = 'pandoc';
 const OUTPUT_DIR = './src-tauri/bin';
 
-const build_names = [
-    // macOs
-    "pandoc-aarch64-apple-darwin",
-    "pandoc-x86_64-apple-darwin",
-    // Windows
-    "pandoc-x86_64-pc-windows-msvc.exe",
-    "pandoc-i686-pc-windows-msvc.exe",
-    "pandoc-aarch64-pc-windows-msvc.exe",
-    // Linux
-    "pandoc-x86_64-unknown-linux-gnu",
-    "pandoc-aarch64-unknown-linux-gnu",
-    "pandoc-armv7-unknown-linux-gnueabihf",
-    "pandoc-i686-unknown-linux-gnu"
-]
 
 if(!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR);
@@ -118,6 +104,13 @@ interface Asset {
     }
   }
 
+  function listFiles(dir: string) {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      console.log(file);
+    }
+  }
+
   async function main() {
     
     const force = process.argv.includes("--force")
@@ -169,6 +162,7 @@ interface Asset {
         if(asset.name.endsWith('linux-amd64.tar.gz ')) {
           console.log(`Downloading ${asset.name}...`);
           await downloadFile(asset.browser_download_url, "amd-linux.tar.gz");
+          listFiles(OUTPUT_DIR)
           extractFileFromTarGz("amd-linux.tar.gz", "pandoc", "pandoc-x86_64-unknown-linux-gnu");
           fs.unlinkSync(path.join(OUTPUT_DIR, "amd-linux.tar.gz"));
           console.log(`Downloaded ${asset.name}`);
@@ -176,6 +170,7 @@ interface Asset {
         if(asset.name.endsWith('linux-arm64.tar.gz')) {
           console.log(`Downloading ${asset.name}...`);
           await downloadFile(asset.browser_download_url, "arm-linux.tar.gz");
+          listFiles(OUTPUT_DIR)
           extractFileFromTarGz("arm-linux.tar.gz", "pandoc", "pandoc-aarch64-unknown-linux-gnu");
           fs.unlinkSync(path.join(OUTPUT_DIR, "arm-linux.tar.gz"));
           console.log(`Downloaded ${asset.name}`);
