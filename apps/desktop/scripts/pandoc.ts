@@ -98,6 +98,7 @@ interface Asset {
         .on('end', () => {
           if (!fs.existsSync(outputPath)) {
             console.log(`File '${fileToExtract}' not found.`);
+            reject(new Error(`File '${fileToExtract}' not found.`));
           }
           resolve(true);
         });
