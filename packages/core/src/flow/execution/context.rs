@@ -277,6 +277,15 @@ impl ExecutionContext {
         Ok(value)
     }
 
+    pub async fn evaluate_pin_ref<T: DeserializeOwned>(
+        &self,
+        reference: Arc<Mutex<InternalPin>>,
+    ) -> anyhow::Result<T> {
+        let value = evaluate_pin_value(reference).await?;
+        let value = serde_json::from_value(value)?;
+        Ok(value)
+    }
+
     pub async fn get_pins_by_name(
         &self,
         name: &str,

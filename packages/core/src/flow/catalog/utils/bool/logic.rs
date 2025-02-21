@@ -22,7 +22,7 @@ impl BoolAnd {
 #[async_trait]
 impl NodeLogic for BoolAnd {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
-        let mut node = Node::new("bool_and", "And", "Boolean And operation", "Logic/Bool");
+        let mut node = Node::new("bool_and", "And", "Boolean And operation", "Utils/Bool");
 
         node.add_input_pin(
             "boolean",
@@ -91,7 +91,7 @@ impl BoolOr {
 #[async_trait]
 impl NodeLogic for BoolOr {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
-        let mut node = Node::new("bool_or", "Or", "Boolean Or operation", "Logic/Bool");
+        let mut node = Node::new("bool_or", "Or", "Boolean Or operation", "Utils/Bool");
 
         node.add_input_pin(
             "boolean",

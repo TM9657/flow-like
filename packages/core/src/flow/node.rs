@@ -192,7 +192,8 @@ impl Node {
         pin_name: &str,
         board: Arc<Board>,
         value_type: Option<ValueType>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<VariableType> {
+        let mut found_type = VariableType::Generic;
         let pin = self
             .get_pin_by_name(pin_name)
             .ok_or(anyhow::anyhow!("Pin not found"))?;
@@ -203,8 +204,8 @@ impl Node {
 
         self.get_pin_mut_by_name(pin_name).unwrap().data_type = VariableType::Generic;
         self.get_pin_mut_by_name(pin_name).unwrap().value_type = ValueType::Normal;
-        if let Some(value_type) = value_type {
-            self.get_pin_mut_by_name(pin_name).unwrap().value_type = value_type;
+        if let Some(value_type) = &value_type {
+            self.get_pin_mut_by_name(pin_name).unwrap().value_type = value_type.clone();
         }
 
         if let Some(first_node) = nodes.iter().next() {
@@ -214,7 +215,10 @@ impl Node {
             match pin {
                 Some(pin) => {
                     mutable_pin.data_type = pin.data_type.clone();
-                    mutable_pin.value_type = pin.value_type.clone();
+                    if value_type.is_none() {
+                        mutable_pin.value_type = pin.value_type.clone();
+                        found_type = pin.data_type.clone();
+                    }
                 }
                 None => {
                     mutable_pin.depends_on.remove(first_node);
@@ -222,7 +226,7 @@ impl Node {
             }
         }
 
-        Ok(())
+        Ok(found_type)
     }
 }
 

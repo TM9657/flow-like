@@ -1,4 +1,8 @@
+pub mod array;
+pub mod bool;
 pub mod cuid;
+pub mod env;
+pub mod string;
 pub mod types;
 
 use crate::flow::node::NodeLogic;
@@ -9,5 +13,9 @@ pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
     let mut registry: Vec<Arc<Mutex<dyn NodeLogic>>> = Vec::new();
     registry.push(Arc::new(Mutex::new(cuid::CuidNode::default())));
     registry.append(&mut types::register_functions().await);
+    registry.append(&mut bool::register_functions().await);
+    registry.append(&mut env::register_functions().await);
+    registry.append(&mut string::register_functions().await);
+    registry.append(&mut array::register_functions().await);
     registry
 }
