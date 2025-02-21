@@ -163,7 +163,7 @@ interface Asset {
           fs.unlinkSync(path.join(OUTPUT_DIR, "amd-windows.zip"));
           console.log(`Downloaded ${asset.name}`);
         }
-        if(asset.name.endsWith('linux-amd64.tar.gz ')) {
+        if(asset.name.endsWith('linux-amd64.tar.gz')) {
           console.log(`Downloading ${asset.name}...`);
           await downloadFile(asset.browser_download_url, "amd-linux.tar.gz");
           await extractFileFromTarGz("amd-linux.tar.gz", "pandoc", "pandoc-x86_64-unknown-linux-gnu");
