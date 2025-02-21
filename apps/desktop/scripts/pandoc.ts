@@ -78,9 +78,10 @@ interface Asset {
     });
   }
 
-  function extractFileFromTarGz(zipFilePath: string, fileToExtract: string, outputPath: string) {
+  async function extractFileFromTarGz(zipFilePath: string, fileToExtract: string, outputPath: string) {
     zipFilePath = path.join(OUTPUT_DIR, zipFilePath);
     outputPath = path.join(OUTPUT_DIR, outputPath);
+    return new Promise((resolve, reject) => {
     try {
       fs.createReadStream(zipFilePath)
         .pipe(zlib.createGunzip()) // Entpacken der .gz-Kompression
@@ -98,10 +99,12 @@ interface Asset {
           if (!fs.existsSync(outputPath)) {
             console.log(`File '${fileToExtract}' not found.`);
           }
+          resolve(true);
         });
     } catch (err) {
       console.error(`Error extracting: ${err}`);
     }
+  });
   }
 
   function listFiles(dir: string) {
@@ -162,16 +165,14 @@ interface Asset {
         if(asset.name.endsWith('linux-amd64.tar.gz ')) {
           console.log(`Downloading ${asset.name}...`);
           await downloadFile(asset.browser_download_url, "amd-linux.tar.gz");
-          listFiles(OUTPUT_DIR)
-          extractFileFromTarGz("amd-linux.tar.gz", "pandoc", "pandoc-x86_64-unknown-linux-gnu");
+          await extractFileFromTarGz("amd-linux.tar.gz", "pandoc", "pandoc-x86_64-unknown-linux-gnu");
           fs.unlinkSync(path.join(OUTPUT_DIR, "amd-linux.tar.gz"));
           console.log(`Downloaded ${asset.name}`);
         }
         if(asset.name.endsWith('linux-arm64.tar.gz')) {
           console.log(`Downloading ${asset.name}...`);
           await downloadFile(asset.browser_download_url, "arm-linux.tar.gz");
-          listFiles(OUTPUT_DIR)
-          extractFileFromTarGz("arm-linux.tar.gz", "pandoc", "pandoc-aarch64-unknown-linux-gnu");
+          await extractFileFromTarGz("arm-linux.tar.gz", "pandoc", "pandoc-aarch64-unknown-linux-gnu");
           fs.unlinkSync(path.join(OUTPUT_DIR, "arm-linux.tar.gz"));
           console.log(`Downloaded ${asset.name}`);
         }
