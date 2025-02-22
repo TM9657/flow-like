@@ -14,21 +14,21 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 
 #[derive(Default)]
-pub struct SetIndexArrayNode {}
+pub struct RemoveArrayIndexNode {}
 
-impl SetIndexArrayNode {
+impl RemoveArrayIndexNode {
     pub fn new() -> Self {
-        SetIndexArrayNode {}
+        RemoveArrayIndexNode {}
     }
 }
 
 #[async_trait]
-impl NodeLogic for SetIndexArrayNode {
+impl NodeLogic for RemoveArrayIndexNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "array_set_index",
-            "Set Index",
-            "Sets an element at a specific index in an array",
+            "array_remove_index",
+            "Remove Index",
+            "Removes an element from an array at a specific index",
             "Utils/Array",
         );
         node.add_icon("/flow/icons/grip.svg");
@@ -36,13 +36,17 @@ impl NodeLogic for SetIndexArrayNode {
         node.add_input_pin("exec_in", "In", "", VariableType::Execution);
 
         node.add_input_pin("array_in", "Array", "Your Array", VariableType::Generic)
-            .set_value_type(ValueType::Array);
+            .set_value_type(crate::flow::pin::ValueType::Array);
 
-        node.add_input_pin("index", "Index", "Index to set", VariableType::Integer);
-
-        node.add_input_pin("value", "Value", "Value to set", VariableType::Generic);
+        node.add_input_pin("index", "Index", "Index to remove", VariableType::Integer);
 
         node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
+        node.add_output_pin(
+            "success",
+            "Success",
+            "Was removal successful?",
+            VariableType::Boolean,
+        );
 
         node.add_output_pin(
             "array_out",
@@ -50,14 +54,7 @@ impl NodeLogic for SetIndexArrayNode {
             "Adjusted Array",
             VariableType::Generic,
         )
-        .set_value_type(ValueType::Array);
-
-        node.add_output_pin(
-            "success",
-            "Success",
-            "Was the operation successful?",
-            VariableType::Boolean,
-        );
+        .set_value_type(crate::flow::pin::ValueType::Array);
 
         return node;
     }
@@ -65,14 +62,21 @@ impl NodeLogic for SetIndexArrayNode {
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let array_in: Vec<Value> = context.evaluate_pin("array_in").await?;
         let index: usize = context.evaluate_pin("index").await?;
-        let value: Value = context.evaluate_pin("value").await?;
 
         let mut array_out = array_in.clone();
-        let mut success = false;
+        let success = index < array_out.len();
 
-        if index < array_out.len() {
-            success = true;
-            array_out[index] = value;
+        if success {
+            array_out.remove(index);
+        } else {
+            context.log_message(
+                &format!(
+                    "Index {} is out of bounds for array of length {}",
+                    index,
+                    array_out.len()
+                ),
+                crate::flow::execution::LogLevel::Warn,
+            );
         }
 
         context.set_pin_value("array_out", json!(array_out)).await?;
@@ -99,18 +103,9 @@ impl NodeLogic for SetIndexArrayNode {
             found_type = match_type;
         }
 
-        let match_type = node
-            .match_type("value", board, Some(ValueType::Normal))
-            .unwrap_or(VariableType::Generic);
-
-        if match_type != VariableType::Generic {
-            found_type = match_type;
-        }
-
         if found_type != VariableType::Generic {
             node.get_pin_mut_by_name("array_out").unwrap().data_type = found_type.clone();
             node.get_pin_mut_by_name("array_in").unwrap().data_type = found_type.clone();
-            node.get_pin_mut_by_name("value").unwrap().data_type = found_type;
         }
     }
 }

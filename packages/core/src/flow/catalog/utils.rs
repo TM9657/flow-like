@@ -4,6 +4,7 @@ pub mod cuid;
 pub mod env;
 pub mod string;
 pub mod types;
+pub mod vector;
 
 use crate::flow::node::NodeLogic;
 use std::sync::Arc;
@@ -17,5 +18,6 @@ pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
     registry.append(&mut env::register_functions().await);
     registry.append(&mut string::register_functions().await);
     registry.append(&mut array::register_functions().await);
+    registry.append(&mut vector::register_functions().await);
     registry
 }

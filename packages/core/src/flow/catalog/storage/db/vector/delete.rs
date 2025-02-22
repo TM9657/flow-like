@@ -64,7 +64,7 @@ impl NodeLogic for DeleteLocalDatabaseNode {
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let database = database.load(context, &database.cache_key).await?;
         let filter: String = context.evaluate_pin("filter").await?;
-        let results = database.delete(&filter).await?;
+        database.delete(&filter).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }

@@ -48,6 +48,7 @@ codegen-units = 1
 lto = "fat"
 opt-level = "z"
 strip = true
+incremental = false
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2.0.0", features = ["deep-link"] }

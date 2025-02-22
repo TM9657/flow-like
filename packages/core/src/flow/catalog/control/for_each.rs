@@ -123,6 +123,7 @@ impl NodeLogic for LoopNode {
             }
         }
 
+        context.deactivate_exec_pin("exec_out").await?;
         context.activate_exec_pin_ref(&done).await?;
 
         return Ok(());

@@ -31,7 +31,7 @@ impl NodeLogic for PushArrayNode {
             "Push an item into your Array",
             "Utils/Array",
         );
-        node.add_icon("/flow/icons/array.svg");
+        node.add_icon("/flow/icons/grip.svg");
 
         node.add_input_pin("exec_in", "In", "", VariableType::Execution);
 
