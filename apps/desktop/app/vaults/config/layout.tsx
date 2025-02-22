@@ -1,5 +1,6 @@
 'use client'
 
+import { invoke } from '@tauri-apps/api/core'
 import {
     Badge, Breadcrumb,
     BreadcrumbItem,
@@ -7,10 +8,15 @@ import {
     BreadcrumbList,
     BreadcrumbPage,
     BreadcrumbSeparator,
-    HoverCard, HoverCardContent, HoverCardTrigger, humanFileSize, IVault,
-    useInvoke
+    Button,
+    HoverCard, HoverCardContent, HoverCardTrigger, humanFileSize, IBoard, INode, IVault,
+    Separator,
+    useInvoke,
+    toastError,
+    useRunExecutionStore,
+    IRun
 } from '@tm9657/flow-like-ui'
-import { AlertTriangle, Vault } from 'lucide-react'
+import { AlertTriangle, PlayCircleIcon, Vault } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
@@ -24,8 +30,24 @@ export default function Id({
     const id = searchParams.get('id')
     const currentRoute = usePathname();
     const isReady = useInvoke<boolean>("vault_configured", { vaultId: id }, [id ?? ""], typeof id === "string")
-    const vault = useInvoke<IVault | undefined>("get_vault", { vaultId: id }, [id ?? ""], typeof id === "string")
+    const vault = useInvoke<IVault | undefined>("get_vault", { vaultId: id }, [id ?? ""], typeof id === "string")
     const vaultSize = useInvoke<number>("get_vault_size", { vaultId: id }, [id ?? ""], typeof id === "string")
+    const boards = useInvoke<IBoard[]>("get_vault_boards", { vaultId: id }, [id ?? ""], typeof id === "string")
+    const { addRun, removeRun } = useRunExecutionStore()
+
+    async function executeBoard(boardId: string, node: INode) {
+        await invoke("get_vault_board", { vaultId: id, boardId: boardId, pushToRegistry: true })
+        const runId: string | undefined = await invoke("create_run", { boardId: boardId, startIds: [node.id], logLevel: "Debug" })
+        if (!runId) {
+            toastError("Failed to execute board", <PlayCircleIcon className="w-4 h-4" />)
+            return
+        }
+        await addRun(runId, boardId, [node.id])
+        await invoke("execute_run", { id: runId })
+        removeRun(runId)
+        await invoke("get_run", { id: runId })
+        await invoke("finalize_run", { id: runId })
+    }
 
     return <main className="lex min-h-screen max-h-screen overflow-hidden flex-col w-full p-4 px-6 bg-background flex">
         <Breadcrumb>
@@ -91,7 +113,22 @@ export default function Id({
                 <Link href={`/vaults/config/export?id=${vault.data?.id}`} className={currentRoute.endsWith("/export") ? "font-semibold text-primary" : ""}>
                     Export / Import
                 </Link>
-                <div id="actions" className='w-full pr-5 flex flex-col items-stretch gap-2 mt-2'>
+                <Separator className='my-2 w-[95%]' />
+                <div id="actions" className='w-full pr-5 flex flex-col items-stretch gap-2'>
+                    {boards.data?.map(board => Object.values(board.nodes).filter(node => node.start).map(node => [board, node])).flat().map(([board, node]) => <HoverCard key={node.id} openDelay={10} closeDelay={10}>
+                        <HoverCardTrigger asChild>
+                            <Button variant={"outline"} key={node.id} onClick={async () => {
+                                await executeBoard(board.id, node as INode)
+                            }}>
+                                {node.friendly_name}
+                            </Button>
+                        </HoverCardTrigger>
+                        <HoverCardContent side='right'>
+                            <p>{board.name}</p>
+                            <small className='text-muted-foreground'>{board.description}</small>
+                            <small className='text-muted-foreground'>{node.comment}</small>
+                        </HoverCardContent>
+                    </HoverCard>)}
                 </div>
             </nav>
             <div className="pb-4 pl-2 flex-grow max-h-full h-full overflow-y-auto">

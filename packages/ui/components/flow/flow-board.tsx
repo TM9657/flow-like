@@ -48,7 +48,7 @@ import { type INode } from '../../lib/schema/flow/node';
 import { type IPin } from '../../lib/schema/flow/pin';
 import { type IRun, type ITrace } from '../../lib/schema/flow/run';
 import { useFlowBoardParentState } from '../../state/flow-board-parent-state';
-import useRunExecutionStore from '../../state/run-execution-state';
+import {useRunExecutionStore} from '../../state/run-execution-state';
 import { type ISettingsProfile } from '../../types';
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Textarea } from '../ui';
 import { convertJsonToUint8Array } from '../../lib/uint8';

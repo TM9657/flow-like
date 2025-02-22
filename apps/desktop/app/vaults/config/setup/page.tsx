@@ -1,6 +1,6 @@
 'use client'
 
-import { useInvoke } from '@tm9657/flow-like-ui'
+import { IBoard, useInvoke } from '@tm9657/flow-like-ui'
 import { useQueryClient, UseQueryResult } from '@tanstack/react-query'
 import { invoke } from '@tauri-apps/api/core'
 import { IVault } from '@tm9657/flow-like-ui'
@@ -11,9 +11,8 @@ export default function Id() {
     const queryClient = useQueryClient()
     const router = useRouter()
     const id = searchParams.get('id')
-    const vault: UseQueryResult<IVault | undefined> = useInvoke("get_vault", { vaultId: id }, [id ?? ""], typeof id === "string")
-    const isReady: UseQueryResult<boolean> = useInvoke("is_local_vault_ready", { vaultId: id }, [id ?? ""], typeof id === "string")
-    const vaultSize = useInvoke("get_vault_size", { vaultId: id }, [id ?? ""], typeof id === "string")
+    const vault = useInvoke<IVault>("get_vault", { vaultId: id }, [id ?? ""], typeof id === "string")
+    const boards = useInvoke<IBoard[]>("get_vault_boards", { vaultId: id }, [id ?? ""], typeof id === "string")
 
     async function deleteVault() {
         await invoke("delete_vault", { vaultId: id })
