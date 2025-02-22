@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{
     flow::{
@@ -77,6 +77,7 @@ impl NodeLogic for LoopNode {
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+        let id = context.id.clone();
         let array = context.get_pin_by_name("array").await?;
         let value = context.get_pin_by_name("value").await?;
         let exec_item = context.get_pin_by_name("exec_out").await?;
@@ -90,6 +91,7 @@ impl NodeLogic for LoopNode {
 
         self.length = array_value.len() as u64;
 
+        context.activate_exec_pin_ref(&exec_item).await?;
         for (i, item) in array_value.iter().enumerate() {
             self.i = i as u64;
             let item = item.clone();
@@ -100,9 +102,7 @@ impl NodeLogic for LoopNode {
                 .await
                 .set_value(serde_json::json!(i as u64))
                 .await;
-            context.activate_exec_pin_ref(&exec_item).await?;
             let flow = exec_item.lock().await.get_connected_nodes().await;
-
             for node in flow {
                 let mut sub_context = context.create_sub_context(&node).await;
                 let mut log =
@@ -123,7 +123,7 @@ impl NodeLogic for LoopNode {
             }
         }
 
-        context.deactivate_exec_pin("exec_out").await?;
+        context.deactivate_exec_pin_ref(&exec_item).await?;
         context.activate_exec_pin_ref(&done).await?;
 
         return Ok(());

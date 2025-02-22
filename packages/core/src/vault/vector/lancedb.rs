@@ -334,7 +334,6 @@ impl VectorStore for LanceDBVectorStore {
 
         let result = table
             .query()
-            .only_if("*")
             .limit(limit)
             .offset(offset)
             .execute()

@@ -385,11 +385,11 @@ impl InternalNode {
             recursion_guard.insert(node.id.clone());
         }
 
-        let success = Box::pin(InternalNode::trigger_missing_dependencies(
+        let success = InternalNode::trigger_missing_dependencies(
             context,
             recursion_guard,
             with_successors,
-        ))
+        )
         .await;
         if !success {
             context.log_message("Failed to trigger missing dependencies", LogLevel::Error);
@@ -406,6 +406,7 @@ impl InternalNode {
             None,
         );
         let result = logic.run(context).await;
+        drop(logic);
         if result.is_err() {
             context.log_message(
                 &format!("Failed to execute node: {:?}", result.err()),

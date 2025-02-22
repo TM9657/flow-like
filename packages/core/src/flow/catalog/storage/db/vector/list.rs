@@ -42,14 +42,6 @@ impl NodeLogic for ListLocalDatabaseNode {
         .set_schema::<NodeDBConnection>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin(
-            "filter",
-            "SQL Filter",
-            "Optional SQL Filter",
-            VariableType::String,
-        )
-        .set_default_value(Some(json!("")));
-
         node.add_input_pin("limit", "Limit", "Limit", VariableType::Integer)
             .set_default_value(Some(json!(10)));
 
@@ -71,12 +63,11 @@ impl NodeLogic for ListLocalDatabaseNode {
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let filter: String = context.evaluate_pin("filter").await?;
         let limit: i64 = context.evaluate_pin("limit").await?;
         let offset: i64 = context.evaluate_pin("offset").await?;
         let database = database.load(context, &database.cache_key).await?;
         let results = database
-            .filter(&filter, limit as usize, offset as usize)
+            .list(limit as usize, offset as usize)
             .await?;
         context.set_pin_value("values", json!(results)).await?;
         context.activate_exec_pin("exec_out").await?;
