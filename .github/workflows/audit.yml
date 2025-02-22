@@ -19,6 +19,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Remove Large Packages
+        run: |
+          sudo apt-get remove -y '^dotnet-.*'
+          sudo apt-get remove -y 'php.*'
+          sudo apt-get remove -y '^mongodb-.*'
+          sudo apt-get remove -y '^mysql-.*'
+          sudo apt-get remove -y azure-cli firefox powershell mono-devel libgl1-mesa-dri
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          sudo rm -rf /usr/share/dotnet/
+          sudo rm -rf /usr/local/graalvm/
+          sudo rm -rf /usr/local/.ghcup/
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/lib/android
+
       - name: Cache Bun dependencies
         uses: actions/cache@v3
         with:
@@ -79,17 +94,19 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit
 
-      - name: Run npm audit
-        run: npm audit --json > npm-audit-report.json
+      # Currently not working. Neither Yarn, nor bun, nor deno work. PNPM would work but does not 
+      # use the same workspace as npm.
+      # - name: Run npm audit
+      #   run: npm audit --json > npm-audit-report.json
+
+      # - name: Upload npm audit report
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: npm-audit-report
+      #     path: npm-audit-report.json
 
       - name: Run Cargo Audit
         run: cargo audit --json > cargo-audit-report.json
-
-      - name: Upload npm audit report
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-audit-report
-          path: npm-audit-report.json
 
       - name: Upload cargo audit report
         uses: actions/upload-artifact@v4
