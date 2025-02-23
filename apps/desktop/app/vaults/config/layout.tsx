@@ -49,7 +49,7 @@ export default function Id({
         await invoke("finalize_run", { id: runId })
     }
 
-    return <main className="lex min-h-screen max-h-screen overflow-hidden flex-col w-full p-4 px-6 bg-background flex">
+    return <main className="lex min-h-screen max-h-screen overflow-hidden flex-col w-full p-4 px-6  flex">
         <Breadcrumb>
             <BreadcrumbList>
                 <BreadcrumbItem>
@@ -92,7 +92,7 @@ export default function Id({
                 <Link href={`/vaults/config?id=${vault.data?.id}`} className={currentRoute.endsWith("/config") ? "font-semibold text-primary" : ""}>
                     General
                 </Link>
-                <Link href={`/vaults/config/configuration?id=${vault.data?.id}`} className={currentRoute.endsWith("/setup") ? "font-semibold text-primary" : ""}>
+                <Link href={`/vaults/config/configuration?id=${vault.data?.id}`} className={currentRoute.endsWith("/configuration") ? "font-semibold text-primary" : ""}>
                     Configuration
                 </Link>
                 <Link href={`/vaults/config/logic?id=${vault.data?.id}`} className={currentRoute.endsWith("/logic") ? "font-semibold text-primary" : ""}>

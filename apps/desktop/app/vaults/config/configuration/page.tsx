@@ -1,22 +1,21 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
 import { invoke } from '@tauri-apps/api/core'
 import {
-    IBoard, IVariable, IVault, useInvoke, Accordion,
+    Accordion,
     AccordionContent,
     AccordionItem,
     AccordionTrigger,
+    IBoard, IVariable, IVault,
     Label,
+    useInvoke,
+    VariablesMenuEdit
 } from '@tm9657/flow-like-ui'
-import { VariablesMenuEdit } from '@tm9657/flow-like-ui/components/flow/variables/variables-menu-edit'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useMemo } from 'react'
 
 export default function Id() {
     const searchParams = useSearchParams()
-    const queryClient = useQueryClient()
-    const router = useRouter()
     const id = searchParams.get('id')
     const vault = useInvoke<IVault | undefined>("get_vault", { vaultId: id }, [id ?? ""], typeof id === "string")
     const boards = useInvoke<IBoard[]>("get_vault_boards", { vaultId: id }, [id ?? ""], typeof id === "string")
@@ -46,8 +45,8 @@ export default function Id() {
 
     return <main className="justify-start flex flex-col items-start w-full flex-1 max-h-full overflow-y-auto flex-grow gap-4">
         <h2>Configuration</h2>
-        <Accordion type="multiple" className="w-full">
-            {variables.map(([board, vars]) => <AccordionItem className='rounded-md px-2' value={board.id} key={board.id}>
+        <Accordion type="multiple" className="w-full gap-2 flex flex-col">
+            {variables.map(([board, vars]) => <AccordionItem className='rounded-md px-2 w-full bg-background/50 border' value={board.id} key={board.id}>
                 <AccordionTrigger>
                     <h4>{board.name}</h4></AccordionTrigger>
                 {
