@@ -20,6 +20,8 @@ export function typeToColor(type: IVariableType): string {
             return "var(--stone-500)"
         case "Struct": 
             return "var(--indigo-500)"
+        case "Byte":
+            return "var(--teal-400)"
         }
 
     return "LightSkyBlue"

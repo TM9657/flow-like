@@ -92,8 +92,8 @@ export default function Id({
                 <Link href={`/vaults/config?id=${vault.data?.id}`} className={currentRoute.endsWith("/config") ? "font-semibold text-primary" : ""}>
                     General
                 </Link>
-                <Link href={`/vaults/config/setup?id=${vault.data?.id}`} className={currentRoute.endsWith("/setup") ? "font-semibold text-primary" : ""}>
-                    Setup
+                <Link href={`/vaults/config/configuration?id=${vault.data?.id}`} className={currentRoute.endsWith("/setup") ? "font-semibold text-primary" : ""}>
+                    Configuration
                 </Link>
                 <Link href={`/vaults/config/logic?id=${vault.data?.id}`} className={currentRoute.endsWith("/logic") ? "font-semibold text-primary" : ""}>
                     Logic
@@ -115,7 +115,7 @@ export default function Id({
                 </Link>
                 <Separator className='my-2 w-[95%]' />
                 <div id="actions" className='w-full pr-5 flex flex-col items-stretch gap-2'>
-                    {boards.data?.map(board => Object.values(board.nodes).filter(node => node.start).map(node => [board, node])).flat().map(([board, node]) => <HoverCard key={node.id} openDelay={10} closeDelay={10}>
+                    {boards.data?.map(board => Object.values(board.nodes).filter(node => node.start).map(node => [board, node])).flat().sort((a, b) => a[1].friendly_name.localeCompare(b[1].friendly_name)).map(([board, node]) => <HoverCard key={node.id} openDelay={10} closeDelay={10}>
                         <HoverCardTrigger asChild>
                             <Button variant={"outline"} key={node.id} onClick={async () => {
                                 await executeBoard(board.id, node as INode)
