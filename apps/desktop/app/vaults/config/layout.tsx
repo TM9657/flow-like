@@ -11,10 +11,9 @@ import {
     Button,
     HoverCard, HoverCardContent, HoverCardTrigger, humanFileSize, IBoard, INode, IVault,
     Separator,
-    useInvoke,
     toastError,
-    useRunExecutionStore,
-    IRun
+    useInvoke,
+    useRunExecutionStore
 } from '@tm9657/flow-like-ui'
 import { AlertTriangle, PlayCircleIcon, Vault } from 'lucide-react'
 import Link from 'next/link'
@@ -104,10 +103,13 @@ export default function Id({
                 <Link href={`/vaults/config/explore?id=${vault.data?.id}`} className={currentRoute.endsWith("/explore") ? "font-semibold text-primary" : ""}>
                     Explore Data
                 </Link>
+                <Link href={`/vaults/config/analytics?id=${vault.data?.id}`} className={currentRoute.endsWith("/analytics") ? "font-semibold text-primary" : ""}>
+                    Analytics
+                </Link>
                 <Link href={`/vaults/config/share?id=${vault.data?.id}`} className={currentRoute.endsWith("/share") ? "font-semibold text-primary" : ""}>
                     Share
                 </Link>
-                <Link href={`/vaults/config/endpoints?id=${vault.data?.id}`} className={currentRoute.endsWith("/evaluation") ? "font-semibold text-primary" : ""}>
+                <Link href={`/vaults/config/endpoints?id=${vault.data?.id}`} className={currentRoute.endsWith("/endpoints") ? "font-semibold text-primary" : ""}>
                     Endpoints
                 </Link>
                 <Link href={`/vaults/config/export?id=${vault.data?.id}`} className={currentRoute.endsWith("/export") ? "font-semibold text-primary" : ""}>
