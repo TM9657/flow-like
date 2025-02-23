@@ -10,7 +10,9 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@tm9657/flow-like-ui": "workspace:*",
     "@astrojs/starlight": "^0.31.1",
+    "@astrojs/starlight-tailwind": "^3.0.0",
     "astro": "^5.1.5",
     "sharp": "^0.32.5"
   }
