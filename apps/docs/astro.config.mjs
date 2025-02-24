@@ -1,11 +1,15 @@
 // @ts-check
-import { defineConfig } from 'astro/config';
+import { defineConfig, passthroughImageService } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import tailwind from '@astrojs/tailwind';
 import react from "@astrojs/react";
 // https://astro.build/config
 export default defineConfig({
 	site: "https://docs.flow-like.com",
+	output: "static",
+	image: {
+		service: passthroughImageService()
+	  },
 	integrations: [
 		react(),
 		starlight({
