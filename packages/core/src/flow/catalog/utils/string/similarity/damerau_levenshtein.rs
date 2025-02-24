@@ -1,9 +1,6 @@
-use strsim::damerau_levenshtein;
-
 use crate::{
     flow::{
-        catalog::utils::vector::normalize,
-        execution::{context::ExecutionContext, LogLevel},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         variable::VariableType,
     },

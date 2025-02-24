@@ -2,7 +2,7 @@ use strsim::sorensen_dice;
 
 use crate::{
     flow::{
-        execution::{context::ExecutionContext, LogLevel},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         variable::VariableType,
     },
