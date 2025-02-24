@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 pub mod contains;
 pub mod ends_with;
 pub mod equal;
+pub mod format;
 pub mod join;
 pub mod length;
 pub mod replace;
@@ -18,6 +19,7 @@ pub mod unequal;
 
 pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
     let mut items: Vec<Arc<Mutex<dyn NodeLogic>>> = vec![
+        Arc::new(Mutex::new(format::FormatStringNode::default())),
         Arc::new(Mutex::new(join::StringJoinNode::default())),
         Arc::new(Mutex::new(replace::StringReplaceNode::default())),
         Arc::new(Mutex::new(split::StringSplitNode::default())),
