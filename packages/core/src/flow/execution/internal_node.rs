@@ -385,12 +385,9 @@ impl InternalNode {
             recursion_guard.insert(node.id.clone());
         }
 
-        let success = InternalNode::trigger_missing_dependencies(
-            context,
-            recursion_guard,
-            with_successors,
-        )
-        .await;
+        let success =
+            InternalNode::trigger_missing_dependencies(context, recursion_guard, with_successors)
+                .await;
         if !success {
             context.log_message("Failed to trigger missing dependencies", LogLevel::Error);
             context.end_trace();

@@ -1,5 +1,8 @@
 use serde_json::Value;
-use std::{collections::HashSet, sync::{Arc, Weak}};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Weak},
+};
 use tokio::sync::Mutex;
 
 use crate::flow::pin::Pin;
@@ -34,7 +37,7 @@ impl InternalPin {
                 if ids.contains(&connected_id) {
                     continue;
                 }
-                    
+
                 ids.insert(connected_id);
                 connected_nodes.push(connected_node);
             }
