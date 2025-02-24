@@ -2,7 +2,6 @@ use crate::{
     flow::{
         execution::{context::ExecutionContext, LogLevel},
         node::{Node, NodeLogic},
-        utils::{evaluate_pin_value, value_to_bool},
         variable::VariableType,
     },
     state::FlowLikeState,
@@ -57,8 +56,7 @@ impl NodeLogic for BoolOr {
         let boolean_pins = context.get_pins_by_name("boolean").await?;
 
         for pin in boolean_pins {
-            let pin = evaluate_pin_value(pin).await?;
-            let pin = value_to_bool(pin);
+            let pin = context.evaluate_pin_ref(pin).await?;
 
             output_value = output_value || pin;
             if output_value {

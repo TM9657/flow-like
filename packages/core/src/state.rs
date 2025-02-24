@@ -112,7 +112,7 @@ impl FlowLikeConfig {
 pub struct FlowNodeRegistry {
     // TODO: replace with dashmap
     pub node_registry: HashMap<String, (Node, Arc<Mutex<dyn NodeLogic>>)>,
-    initialized: bool,
+    pub initialized: bool,
 }
 
 #[cfg(feature = "flow-runtime")]

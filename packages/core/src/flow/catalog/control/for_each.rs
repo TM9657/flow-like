@@ -8,12 +8,12 @@ use crate::{
         },
         node::{Node, NodeLogic, NodeState},
         pin::{PinOptions, ValueType},
-        utils::evaluate_pin_value,
         variable::VariableType,
     },
     state::FlowLikeState,
 };
 use async_trait::async_trait;
+use serde_json::Value;
 
 #[derive(Default)]
 pub struct LoopNode {
@@ -77,14 +77,13 @@ impl NodeLogic for LoopNode {
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
-        let id = context.id.clone();
         let array = context.get_pin_by_name("array").await?;
         let value = context.get_pin_by_name("value").await?;
         let exec_item = context.get_pin_by_name("exec_out").await?;
         let index = context.get_pin_by_name("index").await?;
         let done = context.get_pin_by_name("done").await?;
 
-        let array_value = evaluate_pin_value(array).await?;
+        let array_value: Value = context.evaluate_pin_ref(array).await?;
         let array_value = array_value
             .as_array()
             .ok_or(anyhow::anyhow!("Array value is not an array"))?;

@@ -5,37 +5,6 @@ use tokio::sync::Mutex;
 
 use super::execution::internal_pin::InternalPin;
 
-pub fn value_to_string(value: Value) -> String {
-    match value {
-        Value::String(s) => s,
-        Value::Number(n) => n.to_string(),
-        Value::Bool(b) => b.to_string(),
-        Value::Null => "".to_string(),
-        _ => "".to_string(),
-    }
-}
-
-pub fn value_to_bool(value: Value) -> bool {
-    match value {
-        Value::Bool(b) => b,
-        _ => false,
-    }
-}
-
-pub fn value_to_i64(value: Value) -> i64 {
-    match value {
-        Value::Number(n) => n.as_i64().unwrap(),
-        _ => 0,
-    }
-}
-
-pub fn value_to_f64(value: Value) -> f64 {
-    match value {
-        Value::Number(n) => n.as_f64().unwrap(),
-        _ => 0.0,
-    }
-}
-
 pub async fn evaluate_pin_value_reference(
     pin: &Option<Arc<Mutex<InternalPin>>>,
 ) -> anyhow::Result<Arc<Mutex<Value>>> {
@@ -63,30 +32,33 @@ pub async fn evaluate_pin_value_reference(
 }
 
 pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> anyhow::Result<Value> {
-    let pin_guard = pin.lock().await;
-    let pin = pin_guard.pin.lock().await;
+    let mut current_pin = pin;
 
-    if pin.value.is_some() {
-        let value = pin.value.clone().unwrap();
-        let value = value.lock().await;
-        let value = value.clone();
-        return Ok(value);
-    }
+    loop {
+        let cloned_guard = current_pin.clone();
+        let pin_guard = cloned_guard.lock().await;
+        let pin = pin_guard.pin.lock().await;
 
-    if pin_guard.depends_on.is_empty() {
-        if pin.default_value.is_none() {
-            return Err(anyhow::anyhow!("Pin value is not set"));
+        if let Some(value_arc) = pin.value.clone() {
+            let value_guard = value_arc.lock().await;
+            let value = value_guard.clone();
+            return Ok(value);
         }
 
-        let value = pin.default_value.clone().unwrap();
-        let value = serde_json::from_slice(&value).unwrap();
-        return Ok(value);
+        if pin_guard.depends_on.is_empty() {
+            if let Some(default_value) = pin.default_value.clone() {
+                let value: Value = serde_json::from_slice(&default_value)?;
+                return Ok(value);
+            } else {
+                return Err(anyhow::anyhow!("Pin value is not set"));
+            }
+        }
+
+        drop(pin);
+
+        let child = pin_guard.depends_on.first().unwrap();
+        current_pin = child.clone();
+
+        drop(pin_guard);
     }
-
-    drop(pin);
-
-    let child = pin_guard.depends_on.first().unwrap().clone();
-    drop(pin_guard);
-    let value = Box::pin(evaluate_pin_value(child.clone())).await?;
-    Ok(value)
 }

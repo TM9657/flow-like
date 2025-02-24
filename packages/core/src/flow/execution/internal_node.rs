@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 use crate::flow::{
     node::{Node, NodeLogic, NodeState},
     pin::PinType,
-    utils::{evaluate_pin_value, value_to_bool},
+    utils::evaluate_pin_value,
     variable::VariableType,
 };
 
@@ -197,7 +197,10 @@ impl InternalNode {
                 continue;
             }
 
-            let bool_val = value_to_bool(value.unwrap());
+            let bool_val = match value.unwrap() {
+                serde_json::Value::Bool(b) => b,
+                _ => false,
+            };
 
             if filter_valid && !bool_val {
                 continue;
