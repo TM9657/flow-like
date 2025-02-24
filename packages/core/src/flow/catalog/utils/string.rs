@@ -2,9 +2,9 @@ use crate::flow::node::NodeLogic;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub mod compare;
 pub mod contains;
 pub mod ends_with;
+pub mod equal;
 pub mod join;
 pub mod length;
 pub mod replace;
@@ -14,6 +14,7 @@ pub mod starts_with;
 pub mod to_lowercase;
 pub mod to_uppercase;
 pub mod trim;
+pub mod unequal;
 
 pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
     let mut items: Vec<Arc<Mutex<dyn NodeLogic>>> = vec![
@@ -23,7 +24,8 @@ pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
         Arc::new(Mutex::new(to_lowercase::StringToLowerNode::default())),
         Arc::new(Mutex::new(to_uppercase::StringToUpperNode::default())),
         Arc::new(Mutex::new(length::StringLengthNode::default())),
-        Arc::new(Mutex::new(compare::CompareStringNode::default())),
+        Arc::new(Mutex::new(equal::EqualStringNode::default())),
+        Arc::new(Mutex::new(unequal::UnEqualStringNode::default())),
         Arc::new(Mutex::new(trim::StringTrimNode::default())),
         Arc::new(Mutex::new(starts_with::StringStartsWithNode::default())),
         Arc::new(Mutex::new(ends_with::StringEndsWithNode::default())),

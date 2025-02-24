@@ -3872,6 +3872,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fasteval"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f4cdac9e4065d7c48e30770f8665b8cef9a3a73a63a4056a33a5f395bc7cf75"
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4002,6 +4008,7 @@ dependencies = [
  "dirs-next",
  "erased-serde",
  "fastembed",
+ "fasteval",
  "flate2",
  "fs_extra",
  "futures",
@@ -4025,6 +4032,7 @@ dependencies = [
  "portpicker",
  "proc-macro2",
  "quote",
+ "rand 0.9.0",
  "rayon",
  "regex",
  "reqwest",

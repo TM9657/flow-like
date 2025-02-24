@@ -83,6 +83,8 @@ lz4_flex = "0.11.3"
 url = {version = "2.5.4", features = ["serde"]}
 bytes = "1.10.0"
 nalgebra = "0.33.2"
+rand = "0.9.0"
+fasteval = "0.2.4"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

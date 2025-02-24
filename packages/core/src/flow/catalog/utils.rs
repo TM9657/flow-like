@@ -2,6 +2,9 @@ pub mod array;
 pub mod bool;
 pub mod cuid;
 pub mod env;
+pub mod float;
+pub mod int;
+pub mod math;
 pub mod string;
 pub mod types;
 pub mod vector;
@@ -19,5 +22,7 @@ pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
     registry.append(&mut string::register_functions().await);
     registry.append(&mut array::register_functions().await);
     registry.append(&mut vector::register_functions().await);
+    registry.append(&mut float::register_functions().await);
+    registry.push(Arc::new(Mutex::new(math::eval::EvalNode::default())));
     registry
 }

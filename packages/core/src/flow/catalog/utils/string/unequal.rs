@@ -10,20 +10,20 @@ use async_trait::async_trait;
 use serde_json::json;
 
 #[derive(Default)]
-pub struct CompareStringNode {}
+pub struct UnEqualStringNode {}
 
-impl CompareStringNode {
+impl UnEqualStringNode {
     pub fn new() -> Self {
-        CompareStringNode {}
+        UnEqualStringNode {}
     }
 }
 
 #[async_trait]
-impl NodeLogic for CompareStringNode {
+impl NodeLogic for UnEqualStringNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "string_compare",
-            "==",
+            "not_equal_string",
+            "!=",
             "Compares two Strings",
             "Utils/String",
         );
@@ -33,8 +33,8 @@ impl NodeLogic for CompareStringNode {
         node.add_input_pin("string", "String", "Input", VariableType::String);
 
         node.add_output_pin(
-            "equal",
-            "Is Equal?",
+            "unequal",
+            "Is Unequal?",
             "Are the strings equal?",
             VariableType::Boolean,
         );
@@ -61,7 +61,7 @@ impl NodeLogic for CompareStringNode {
             value = Some(pin);
         }
 
-        context.set_pin_value("equal", json!(equal)).await?;
+        context.set_pin_value("unequal", json!(!equal)).await?;
         Ok(())
     }
 }
