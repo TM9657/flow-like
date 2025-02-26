@@ -19,40 +19,15 @@ pub struct BitDownloadEvent {
     pub hash: String,
 }
 
-async fn get_remote_size(client: &Client, url: &str) -> u64 {
-    let res = match client.head(url).send().await {
-        Ok(res) => res,
-        Err(e) => {
-            println!("Error downloading file size: {:?}", e);
-            return 0;
-        }
-    };
-
-    let total_size = match res.headers().get("content-length") {
-        Some(total_size) => total_size,
-        None => {
-            println!("Error getting file size");
-            return 0;
-        }
-    };
+async fn get_remote_size(client: &Client, url: &str) -> anyhow::Result<u64> {
+    let res = client.head(url).send().await?;
+    let total_size = res.headers().get("content-length").ok_or(anyhow!("No content length"))?;
 
     println!("Remote file size: {:?}", total_size);
 
-    let total_size = match total_size.to_str() {
-        Ok(total_size) => total_size,
-        Err(_) => {
-            println!("Error getting file size");
-            return 0;
-        }
-    };
-
-    match total_size.parse::<u64>() {
-        Ok(total_size) => total_size,
-        Err(_) => {
-            println!("Error parsing file size");
-            0
-        }
-    }
+    let total_size = total_size.to_str()?;
+    let size = total_size.parse::<u64>()?;
+    Ok(size)
 }
 
 async fn publish_progress(
@@ -133,6 +108,19 @@ pub async fn download_bit(
     let client = client.unwrap();
     let mut resume = false;
     let remote_size = get_remote_size(&client, &url).await;
+
+    if remote_size.is_err() {
+        if path_name.exists() {
+            let _rem = remove_download(bit, &app_state).await;
+            let _ = publish_progress(bit, &sender, 0, &store_path).await;
+            return Ok(store_path);
+        }
+
+        bail!("Error getting remote size");
+    }
+
+    let remote_size = remote_size.unwrap();
+
     let mut local_size = 0;
     if path_name.exists() {
         local_size = path_name.metadata().unwrap().len();
@@ -194,15 +182,16 @@ pub async fn download_bit(
     };
 
     let mut downloaded: u64 = 0;
+    let mut hasher = blake3::Hasher::new();
 
     if resume {
         downloaded = local_size;
+        hasher.update(&fs::read(&path_name).unwrap());
     }
 
     let mut stream = res.bytes_stream();
     let mut in_buffer = 0;
 
-    let mut hasher = blake3::Hasher::new();
 
     while let Some(item) = stream.next().await {
         let chunk = match item {
