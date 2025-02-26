@@ -127,7 +127,7 @@ export class Bit implements IBit {
             bits: IBit[]
         } = await invoke("get_pack_from_bit", { bit: this.toObject() })
 
-        await set(this.dependency_tree_hash, bits.bits)
+        if(bits.bits.length > 0) await set(this.dependency_tree_hash, bits.bits)
         const pack = new BitPack()
         pack.bits = bits.bits
         return pack

@@ -112,7 +112,7 @@ pub async fn download_bit(
     if remote_size.is_err() {
         if path_name.exists() {
             let _rem = remove_download(bit, &app_state).await;
-            let _ = publish_progress(bit, &sender, 0, &store_path).await;
+            let _ = publish_progress(bit, &sender, path_name.metadata().unwrap().len(), &store_path).await;
             return Ok(store_path);
         }
 

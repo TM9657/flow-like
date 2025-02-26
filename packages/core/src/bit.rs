@@ -1,5 +1,5 @@
 use crate::state::FlowLikeState;
-use crate::utils::compression::{compress_to_file, from_compressed};
+use crate::utils::compression::{compress_to_file_json, from_compressed_json};
 use crate::utils::download::download_bit;
 use crate::utils::local_object_store::LocalObjectStore;
 use futures::future::BoxFuture;
@@ -523,7 +523,7 @@ impl Bit {
         let metadata = bits_store.head(&cache_dir).await;
 
         if metadata.is_ok() {
-            let file = from_compressed::<BitPack>(bits_store.clone(), cache_dir.clone()).await;
+            let file = from_compressed_json::<BitPack>(bits_store.clone(), cache_dir.clone()).await;
             if let Ok(file) = file {
                 return Ok(file);
             }
@@ -553,8 +553,9 @@ impl Bit {
             }
         }
 
+        println!("Dependencies for {} found", self.id);
         let bit_pack = BitPack { bits: dependencies };
-        let res = compress_to_file(bits_store, cache_dir, &bit_pack).await;
+        let res = compress_to_file_json(bits_store, cache_dir, &bit_pack).await;
         if res.is_err() {
             println!(
                 "Failed to compress dependencies for {}, err: {}",
