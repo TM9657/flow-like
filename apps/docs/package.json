@@ -6,7 +6,7 @@
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",
-    "deploy": "bun run build && bunx wrangler pages publish dist",
+    "deploy": "bun run build && bunx wrangler pages deploy dist",
     "preview": "astro preview",
     "astro": "astro"
   },

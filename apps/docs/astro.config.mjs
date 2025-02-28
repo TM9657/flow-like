@@ -23,7 +23,6 @@ export default defineConfig({
 			},
 			customCss: [
 				'./src/tailwind.css',
-				// "@tm9657/flow-like-ui/globals.css",
 			],
 			social: {
 				github: 'https://github.com/TM9657/flow-like',

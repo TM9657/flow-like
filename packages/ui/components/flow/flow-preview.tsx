@@ -6,12 +6,13 @@ import { useTheme } from "next-themes";
 import { FlowNode } from "./flow-node";
 import { CommentNode } from "./comment-node";
 import '@xyflow/react/dist/style.css';
+import { PreviewFlowNode } from "./preview/preview-node";
 
 export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
     const [boardNodes, setNodes] = useNodesState<any>([]);
     const { resolvedTheme } = useTheme()
     const [edges, setEdges] = useEdgesState<any>([]);
-    const nodeTypes = useMemo(() => ({ flowNode: FlowNode, commentNode: CommentNode }), []);
+    const nodeTypes = useMemo(() => ({ flowNode: PreviewFlowNode, commentNode: CommentNode }), []);
 
     useEffect(() => {
         const parsed: {
@@ -51,19 +52,37 @@ export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
         setEdges(parsedBoard.edges)
     }, [nodes])
 
-    return <main className="w-full h-full min-h-28">
+    return <main className="w-full h-full min-h-56 rounded-md flow-preview not-content">
         <ReactFlow
             suppressHydrationWarning
-            className="w-full h-full"
-            colorMode={resolvedTheme === 'dark' ? 'dark' : 'light'}
+            className="w-0 h-0 min-h-0 dark:w-full dark:h-full dark:min-h-56 rounded-lg"
+            colorMode={'dark'}
             nodes={boardNodes}
             nodeTypes={nodeTypes}
-            edges={edges}
             fitView
+            fitViewOptions={{
+                padding: 0.8,
+            }}
+            edges={edges}
             proOptions={{ hideAttribution: true }}
         >
             <Controls />
-            <MiniMap />
+            <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+        </ReactFlow>
+        <ReactFlow
+            suppressHydrationWarning
+            className="w-full h-full min-h-56 dark:min-h-0 dark:w-0 dark:h-0 rounded-lg"
+            colorMode={'light'}
+            fitView
+            fitViewOptions={{
+                padding: 0.8
+            }}
+            nodes={boardNodes}
+            nodeTypes={nodeTypes}
+            edges={edges}
+            proOptions={{ hideAttribution: true }}
+        >
+            <Controls />
             <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
         </ReactFlow>
     </main>

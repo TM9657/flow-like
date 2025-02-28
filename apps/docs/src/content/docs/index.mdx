@@ -3,7 +3,7 @@ title: Welcome to Flow-Like
 description: Get started building your docs site with Starlight.
 template: splash
 hero:
-  tagline: Your home for interesting guides, tips and tricks and blog articles around flow-like.
+  tagline: Your home for interesting guides, tips, tricks and blog articles around flow-like.
   image:
     file: ../../assets/houston.webp
   actions:
@@ -17,7 +17,322 @@ hero:
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
-import Preview from '../../components/preview.astro';
+import { FlowPreview } from '@tm9657/flow-like-ui/components/flow/flow-preview';
+
+<FlowPreview client:load nodes={[
+    {
+      "id": "w9c1k2lz95rbckuo0dvabijx",
+      "name": "events_simple",
+      "friendly_name": "User Visits Docs",
+      "description": "129103383686177732",
+      "coordinates": [
+        505,
+        231.5,
+        0
+      ],
+      "category": "Events",
+      "scores": null,
+      "pins": {
+        "ycw10yccb59epduwolhuftgz": {
+          "id": "ycw10yccb59epduwolhuftgz",
+          "name": "exec_out",
+          "friendly_name": "Output",
+          "description": "140223827731367972",
+          "pin_type": "Output",
+          "data_type": "Execution",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [
+            "bzv16h817un5lbdq8r8ihaqe"
+          ],
+          "default_value": null,
+          "index": 1,
+          "options": null
+        }
+      },
+      "start": true,
+      "icon": "/flow/icons/event.svg",
+      "comment": "❤️ Nice",
+      "long_running": null,
+      "error": null,
+      "docs": null
+    },
+    {
+      "id": "faf46qb4kk76uce1g8bu0wki",
+      "name": "log_info",
+      "friendly_name": "Print Info",
+      "description": "9676664529365555853",
+      "coordinates": [
+        880,
+        225,
+        0
+      ],
+      "category": "Logging",
+      "scores": null,
+      "pins": {
+        "nlb25l16hc4x9b22ut53w0ck": {
+          "id": "nlb25l16hc4x9b22ut53w0ck",
+          "name": "toast",
+          "friendly_name": "On Screen?",
+          "description": "17987255129647625382",
+          "pin_type": "Input",
+          "data_type": "Boolean",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [],
+          "default_value": [
+            116,
+            114,
+            117,
+            101
+          ],
+          "index": 3,
+          "options": null
+        },
+        "k2r0lou5xkchmbljmfj1siqb": {
+          "id": "k2r0lou5xkchmbljmfj1siqb",
+          "name": "message",
+          "friendly_name": "Message",
+          "description": "1938150283787131284",
+          "pin_type": "Input",
+          "data_type": "String",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [
+            "x1t68rymh52fgniq67bzv0eg"
+          ],
+          "connected_to": [],
+          "default_value": [
+            34,
+            34
+          ],
+          "index": 2,
+          "options": null
+        },
+        "w6lbj7tqied90jk25ddy5qba": {
+          "id": "w6lbj7tqied90jk25ddy5qba",
+          "name": "exec_out",
+          "friendly_name": "Output",
+          "description": "5263826465754033912",
+          "pin_type": "Output",
+          "data_type": "Execution",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [],
+          "default_value": null,
+          "index": 1,
+          "options": null
+        },
+        "g5qw8q19kx0l7yytc0erwc6b": {
+          "id": "g5qw8q19kx0l7yytc0erwc6b",
+          "name": "exec_in",
+          "friendly_name": "Input",
+          "description": "5454119197816847421",
+          "pin_type": "Input",
+          "data_type": "Execution",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [
+            "a134yembcywcwqj3bd1ixvne"
+          ],
+          "connected_to": [],
+          "default_value": null,
+          "index": 1,
+          "options": null
+        }
+      },
+      "start": null,
+      "icon": "/flow/icons/log-info.svg",
+      "comment": null,
+      "long_running": null,
+      "error": null,
+      "docs": null
+    },
+    {
+      "id": "y27vjeibo4jm5x7doi1zaau9",
+      "name": "variable_get",
+      "friendly_name": "Get Welcome Message",
+      "description": "16428229662975399205",
+      "coordinates": [
+        690.44965,
+        220.0793,
+        0
+      ],
+      "category": "Variable",
+      "scores": null,
+      "pins": {
+        "sfqro63mwdjop6xmixoltjzc": {
+          "id": "sfqro63mwdjop6xmixoltjzc",
+          "name": "var_ref",
+          "friendly_name": "Variable Reference",
+          "description": "3156618357099637509",
+          "pin_type": "Input",
+          "data_type": "String",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [],
+          "default_value": [
+            34,
+            101,
+            121,
+            105,
+            101,
+            116,
+            112,
+            110,
+            48,
+            112,
+            57,
+            51,
+            104,
+            101,
+            49,
+            122,
+            110,
+            97,
+            103,
+            116,
+            51,
+            53,
+            106,
+            106,
+            98,
+            34
+          ],
+          "index": 1,
+          "options": null
+        },
+        "x1t68rymh52fgniq67bzv0eg": {
+          "id": "x1t68rymh52fgniq67bzv0eg",
+          "name": "value",
+          "friendly_name": "Value",
+          "description": "4544092280847793233",
+          "pin_type": "Output",
+          "data_type": "String",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [
+            "k2r0lou5xkchmbljmfj1siqb"
+          ],
+          "default_value": null,
+          "index": 1,
+          "options": null
+        }
+      },
+      "start": null,
+      "icon": "/flow/icons/variable.svg",
+      "comment": null,
+      "long_running": null,
+      "error": null,
+      "docs": null
+    },
+    {
+      "id": "isdd7cr78iuu0egjhgjcdzfd",
+      "name": "control_branch",
+      "friendly_name": "Branch",
+      "description": "17904190770306764727",
+      "coordinates": [
+        690.5,
+        269,
+        0
+      ],
+      "category": "Control",
+      "scores": null,
+      "pins": {
+        "a134yembcywcwqj3bd1ixvne": {
+          "id": "a134yembcywcwqj3bd1ixvne",
+          "name": "true",
+          "friendly_name": "True",
+          "description": "5263826465754033912",
+          "pin_type": "Output",
+          "data_type": "Execution",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [
+            "g5qw8q19kx0l7yytc0erwc6b"
+          ],
+          "default_value": null,
+          "index": 1,
+          "options": null
+        },
+        "i2i6g8jbrocukhzwwdsx5klk": {
+          "id": "i2i6g8jbrocukhzwwdsx5klk",
+          "name": "false",
+          "friendly_name": "False",
+          "description": "10819820416658184077",
+          "pin_type": "Output",
+          "data_type": "Execution",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [],
+          "default_value": null,
+          "index": 2,
+          "options": null
+        },
+        "bzv16h817un5lbdq8r8ihaqe": {
+          "id": "bzv16h817un5lbdq8r8ihaqe",
+          "name": "exec_in",
+          "friendly_name": "Input",
+          "description": "5454119197816847421",
+          "pin_type": "Input",
+          "data_type": "Execution",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [
+            "ycw10yccb59epduwolhuftgz"
+          ],
+          "connected_to": [],
+          "default_value": null,
+          "index": 1,
+          "options": null
+        },
+        "l5q49wa4ha4pnwdyeatnkdpe": {
+          "id": "l5q49wa4ha4pnwdyeatnkdpe",
+          "name": "condition",
+          "friendly_name": "Condition",
+          "description": "5425691739547396196",
+          "pin_type": "Input",
+          "data_type": "Boolean",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [],
+          "default_value": [
+            116,
+            114,
+            117,
+            101
+          ],
+          "index": 2,
+          "options": null
+        }
+      },
+      "start": null,
+      "icon": "/flow/icons/split.svg",
+      "comment": null,
+      "long_running": null,
+      "error": null,
+      "docs": null
+    }
+  ]} />
 
 ## Next steps
 
@@ -36,5 +351,4 @@ import Preview from '../../components/preview.astro';
 	</Card>
 </CardGrid>
 
-<Preview />
 

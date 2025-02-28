@@ -10,6 +10,7 @@ import { VariablesMenuEdit } from "../variables/variables-menu-edit"
 import { BooleanVariable } from "./variable-types/boolean-variable"
 import { VariableDescription } from "./variable-types/default-text"
 import { EnumVariable } from "./variable-types/enum-variable"
+import { parseUint8ArrayToJson } from "../../../lib/uint8"
 
 export function PinEdit({ pin, defaultValue, changeDefaultValue }: Readonly<{ pin: IPin, defaultValue: any, changeDefaultValue: (value: any) => void }>) {
     const [value, setValue] = useState(defaultValue)
@@ -69,7 +70,7 @@ function WithMenu({ pin, defaultValue, changeDefaultValue }: Readonly<{ pin: IPi
             <HoverCardContent side="right" className="w-fit z-[2000] p-1 text-extra-small leading-auto text-start max-w-screen-s absolute">
                 <small className="leading-auto mt-0 mb-0 p-0 text-wrap">Default Value</small><br />
                 <small className="leading-auto mt-0 mb-0 p-0 text-wrap">
-                    {JSON.stringify(defaultValue)}
+                    {JSON.stringify(parseUint8ArrayToJson(defaultValue))}
                 </small>
             </HoverCardContent>
         </HoverCard>
