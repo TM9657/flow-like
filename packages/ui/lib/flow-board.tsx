@@ -36,8 +36,8 @@ export function doPinsMatch(sourcePin: IPin, targetPin: IPin, refs: {[key: strin
         if (schemaSource !== schemaTarget) return false
     }
 
-    if (targetPin.options?.enforce_schema || sourcePin.options?.enforce_schema) {
-        if(!sourcePin.schema || !targetPin.schema) return false
+    if ((targetPin.options?.enforce_schema || sourcePin.options?.enforce_schema) && (sourcePin.name !== "value_ref" && targetPin.name !== "value_ref")) {
+        if((!sourcePin.schema || !targetPin.schema)) return false
         if (schemaSource !== schemaTarget) return false
     }
 
