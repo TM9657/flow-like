@@ -8,6 +8,7 @@ export function DynamicImage({url, className}: Readonly<{url: string, className:
 
         ref.current.style.maskImage = `url(${url})`
         ref.current.style.maskSize = `contain`      
+        ref.current.style.maskRepeat = "no-repeat"
     }, [url])
 
     if(!url.includes(".svg")) return <img alt="dynamic_icon" src={url} className={`border-0 ${className}`}/>

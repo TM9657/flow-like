@@ -222,6 +222,8 @@ impl Board {
                 }
             }
         }
+
+        self.refs = refs;
     }
 
     pub fn fix_pins(&mut self) {
@@ -282,6 +284,7 @@ impl Board {
 
         for (node_id, pin_id) in node_pins_to_remove {
             if let Some(node) = self.nodes.get_mut(&node_id) {
+                println!("Node Pins to remove: {} {}", node_id, pin_id);
                 node.pins.remove(&pin_id);
             }
         }
@@ -290,6 +293,10 @@ impl Board {
             if let Some(node) = self.nodes.get_mut(&node_id) {
                 for (pin_id, connected_to) in pins {
                     if let Some(pin) = node.pins.get_mut(&pin_id) {
+                        println!(
+                            "Node Pins connected to remove: {} {} {}",
+                            node_id, pin_id, connected_to
+                        );
                         pin.connected_to.remove(&connected_to);
                     }
                 }
@@ -300,11 +307,17 @@ impl Board {
             if let Some(node) = self.nodes.get_mut(&node_id) {
                 for (pin_id, depends_on) in pins {
                     if let Some(pin) = node.pins.get_mut(&pin_id) {
+                        println!(
+                            "Node Pins depends on remove: {} {} {}",
+                            node_id, pin_id, depends_on
+                        );
                         pin.depends_on.remove(&depends_on);
                     }
                 }
             }
         }
+
+        self.cleanup();
     }
 
     pub fn get_pin_by_id(&self, pin_id: &str) -> Option<&Pin> {
@@ -360,8 +373,11 @@ impl Board {
                 .config
                 .read()
                 .await
+                .stores
                 .project_store
-                .clone(),
+                .clone()
+                .ok_or(anyhow::anyhow!("Project store not found"))?
+                .as_generic(),
         };
 
         compress_to_file(store, to, self).await?;
@@ -375,8 +391,11 @@ impl Board {
             .config
             .read()
             .await
+            .stores
             .project_store
-            .clone();
+            .clone()
+            .ok_or(anyhow::anyhow!("Project store not found"))?
+            .as_generic();
 
         let mut board: Board = from_compressed(store, path.child("manifest.board")).await?;
         board.board_dir = path;
@@ -385,7 +404,6 @@ impl Board {
         board.undo_stack = Vec::new();
         board.logic_nodes = HashMap::new();
         board.fix_pins();
-        board.cleanup();
         Ok(board)
     }
 }
@@ -440,12 +458,10 @@ mod tests {
     use tokio::sync::Mutex;
 
     async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
-        let config: FlowLikeConfig = FlowLikeConfig::new(
-            None,
-            Arc::new(object_store::memory::InMemory::new()),
-            Arc::new(object_store::memory::InMemory::new()),
-            Arc::new(object_store::memory::InMemory::new()),
-        );
+        let mut config: FlowLikeConfig = FlowLikeConfig::new();
+        config.register_project_store(crate::state::FlowLikeStore::Remote(Arc::new(
+            object_store::memory::InMemory::new(),
+        )));
         let (http_client, _refetch_rx) = HTTPClient::new();
         let (flow_like_state, _) = crate::state::FlowLikeState::new(config, http_client);
         Arc::new(Mutex::new(flow_like_state))

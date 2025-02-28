@@ -1,15 +1,19 @@
+use std::sync::Arc;
+
 use crate::{
     flow::{
+        board::Board,
         execution::{
             context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel,
         },
         node::{Node, NodeLogic, NodeState},
-        utils::evaluate_pin_value,
+        pin::{PinOptions, ValueType},
         variable::VariableType,
     },
     state::FlowLikeState,
 };
 use async_trait::async_trait;
+use serde_json::Value;
 
 #[derive(Default)]
 pub struct LoopNode {
@@ -36,7 +40,12 @@ impl NodeLogic for LoopNode {
 
         node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
         node.add_input_pin("array", "Array", "Array to Loop", VariableType::Generic)
-            .set_value_type(crate::flow::pin::ValueType::Array);
+            .set_value_type(crate::flow::pin::ValueType::Array)
+            .set_options(
+                PinOptions::new()
+                    .set_enforce_generic_value_type(true)
+                    .build(),
+            );
 
         node.add_output_pin(
             "exec_out",
@@ -74,13 +83,14 @@ impl NodeLogic for LoopNode {
         let index = context.get_pin_by_name("index").await?;
         let done = context.get_pin_by_name("done").await?;
 
-        let array_value = evaluate_pin_value(array).await?;
+        let array_value: Value = context.evaluate_pin_ref(array).await?;
         let array_value = array_value
             .as_array()
             .ok_or(anyhow::anyhow!("Array value is not an array"))?;
 
         self.length = array_value.len() as u64;
 
+        context.activate_exec_pin_ref(&exec_item).await?;
         for (i, item) in array_value.iter().enumerate() {
             self.i = i as u64;
             let item = item.clone();
@@ -91,9 +101,7 @@ impl NodeLogic for LoopNode {
                 .await
                 .set_value(serde_json::json!(i as u64))
                 .await;
-            context.activate_exec_pin_ref(&exec_item).await?;
             let flow = exec_item.lock().await.get_connected_nodes().await;
-
             for node in flow {
                 let mut sub_context = context.create_sub_context(&node).await;
                 let mut log =
@@ -114,6 +122,7 @@ impl NodeLogic for LoopNode {
             }
         }
 
+        context.deactivate_exec_pin_ref(&exec_item).await?;
         context.activate_exec_pin_ref(&done).await?;
 
         return Ok(());
@@ -127,6 +136,25 @@ impl NodeLogic for LoopNode {
             NodeState::Success => return 100,
             NodeState::Error => return 0,
             _ => return 0,
+        }
+    }
+
+    async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
+        let match_type = node.match_type("array", board.clone(), Some(ValueType::Array));
+
+        if match_type.is_err() {
+            eprintln!("Error: {:?}", match_type.err());
+        }
+
+        let match_type = node.match_type("value", board, Some(ValueType::Normal));
+
+        if match_type.is_err() {
+            eprintln!("Error: {:?}", match_type.err());
+        }
+
+        let array_pin = node.get_pin_by_name("array").unwrap();
+        if array_pin.data_type != VariableType::Generic {
+            node.get_pin_mut_by_name("value").unwrap().data_type = array_pin.data_type.clone();
         }
     }
 }

@@ -1,5 +1,8 @@
 use serde_json::Value;
-use std::sync::{Arc, Weak};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Weak},
+};
 use tokio::sync::Mutex;
 
 use crate::flow::pin::Pin;
@@ -24,12 +27,18 @@ impl InternalPin {
 
     pub async fn get_connected_nodes(&self) -> Vec<Arc<Mutex<InternalNode>>> {
         let mut connected_nodes = vec![];
-
+        let mut ids = HashSet::new();
         for connected_pin in &self.connected_to {
             let connected_pin_guard = connected_pin.lock().await;
             let connected_node = connected_pin_guard.node.upgrade();
 
             if let Some(connected_node) = connected_node {
+                let connected_id = connected_node.lock().await.node.lock().await.id.clone();
+                if ids.contains(&connected_id) {
+                    continue;
+                }
+
+                ids.insert(connected_id);
                 connected_nodes.push(connected_node);
             }
         }

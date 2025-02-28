@@ -1,7 +1,21 @@
+import { useDraggable } from '@dnd-kit/core';
+import { createId } from "@paralleldrive/cuid2";
+import { useDebounce } from "@uidotdev/usehooks";
+import { CirclePlusIcon, EllipsisVerticalIcon, EyeIcon, EyeOffIcon, GripIcon, ListIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../../components/ui/dropdown-menu";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectLabel,
+    SelectTrigger,
+    SelectValue,
+} from "../../../components/ui/select";
 import { Separator } from "../../../components/ui/separator";
 import {
     Sheet,
@@ -11,28 +25,13 @@ import {
     SheetTitle,
     SheetTrigger,
 } from "../../../components/ui/sheet";
+import { Switch } from "../../../components/ui/switch";
 import { type IBoard, type IVariable } from "../../../lib/schema/flow/board";
 import { IVariableType } from "../../../lib/schema/flow/node";
-import { useDraggable } from '@dnd-kit/core';
-import { createId } from "@paralleldrive/cuid2";
-import { useDebounce } from "@uidotdev/usehooks";
-import { CirclePlusIcon, EllipsisVerticalIcon, EyeIcon, EyeOffIcon, GripIcon, ListIcon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { typeToColor } from "../utils";
-import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectLabel,
-    SelectTrigger,
-    SelectValue,
-} from "../../../components/ui/select"
-import { Switch } from "../../../components/ui/switch";
-import { VariablesMenuEdit } from "./variables-menu-edit";
 import { IValueType } from "../../../lib/schema/flow/pin";
-import { toast } from "sonner";
 import { convertJsonToUint8Array } from "../../../lib/uint8";
+import { typeToColor } from "../utils";
+import { VariablesMenuEdit } from "./variables-menu-edit";
 
 export function VariablesMenu({ board, executeCommand }: Readonly<{ board: IBoard, executeCommand: (command: string, args: any, append: boolean) => Promise<any> }>) {
 
@@ -66,7 +65,7 @@ export function VariablesMenu({ board, executeCommand }: Readonly<{ board: IBoar
             </Button>
         </div>
         {Object.values(board.variables).sort((a, b) => a.name.localeCompare(b.name)).map((variable) => <Variable key={variable.id} variable={variable} onVariableChange={(variable) => {
-            if(!variable.editable) {
+            if (!variable.editable) {
                 // toast.error("This variable is not editable")
                 return;
             }
@@ -87,6 +86,43 @@ export function Variable({ variable, onVariableChange, preview = false }: Readon
     useEffect(() => {
         onVariableChange(debouncedVariable)
     }, [debouncedVariable])
+
+    function defaultValueFromType(variableType: IVariableType) {
+        if (variable.value_type === IValueType.Array) {
+            return []
+        }
+
+        if (variable.value_type === IValueType.HashSet) {
+            return new Set()
+        }
+
+        if (variable.value_type === IValueType.HashMap) {
+            return new Map()
+        }
+
+        switch (variableType) {
+            case IVariableType.Boolean:
+                return false
+            case IVariableType.Date:
+                return new Date().toISOString()
+            case IVariableType.Float:
+                return 0.0
+            case IVariableType.Integer:
+                return 0
+            case IVariableType.Generic:
+                return null
+            case IVariableType.PathBuf:
+                return ""
+            case IVariableType.String:
+                return ""
+            case IVariableType.Struct:
+                return {}
+            case IVariableType.Byte:
+                return null
+            case IVariableType.Execution:
+                return null
+        }
+    }
 
     const isArrayDropdown = <DropdownMenu>
         <DropdownMenuTrigger>
@@ -145,7 +181,7 @@ export function Variable({ variable, onVariableChange, preview = false }: Readon
     if (preview) return element;
 
     return <Sheet open={openEdit} onOpenChange={(open) => {
-        if(!localVariable.editable) return;
+        if (!localVariable.editable) return;
         setOpenEdit(open)
     }}>
         <SheetTrigger>
@@ -163,7 +199,7 @@ export function Variable({ variable, onVariableChange, preview = false }: Readon
                     </div>
                     <div className="grid w-full max-w-sm items-center gap-1.5">
                         <div className="flex flex-row items-center gap-2">{isArrayDropdown}<Label htmlFor="var_type">Variable Type</Label></div>
-                        <Select value={localVariable.data_type} onValueChange={(value) => setLocalVariable(old => ({ ...old, data_type: value as IVariableType }))}>
+                        <Select value={localVariable.data_type} onValueChange={(value) => setLocalVariable(old => ({ ...old, data_type: value as IVariableType, default_value: convertJsonToUint8Array(defaultValueFromType(value as IVariableType)) }))}>
                             <SelectTrigger id="var_type" className="w-full">
                                 <SelectValue placeholder="Variable Type" />
                             </SelectTrigger>
@@ -178,6 +214,7 @@ export function Variable({ variable, onVariableChange, preview = false }: Readon
                                     <SelectItem value="PathBuf">PathBuf</SelectItem>
                                     <SelectItem value="String">String</SelectItem>
                                     <SelectItem value="Struct">Struct</SelectItem>
+                                    <SelectItem value="Byte">Byte</SelectItem>
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
@@ -196,7 +233,7 @@ export function Variable({ variable, onVariableChange, preview = false }: Readon
                         </div>
                         <small className="text-[0.8rem] text-muted-foreground">A secret Variable will be covered for input (e.g passwords)</small>
                     </div>
-                    <Separator/>
+                    <Separator />
                     {!localVariable.exposed && <VariablesMenuEdit variable={localVariable} updateVariable={async (variable) => setLocalVariable(variable)} />}
                 </SheetDescription>
             </SheetHeader>
@@ -204,7 +241,7 @@ export function Variable({ variable, onVariableChange, preview = false }: Readon
     </Sheet>
 }
 
-function VariableIcon({value_type, data_type, className} : Readonly<{value_type: IValueType, data_type: IVariableType, className?: string}>) {
+function VariableIcon({ value_type, data_type, className }: Readonly<{ value_type: IValueType, data_type: IVariableType, className?: string }>) {
     if (value_type === IValueType.Array) return <GripIcon className={`w-4 h-4 ${className}`} style={{ color: typeToColor(data_type) }} />
     if (value_type === IValueType.HashSet) return <EllipsisVerticalIcon className={`w-4 h-4 ${className}`} style={{ color: typeToColor(data_type) }} />
     if (value_type === IValueType.HashMap) return <ListIcon className={`w-4 h-4 ${className}`} style={{ color: typeToColor(data_type) }} />

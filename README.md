@@ -95,9 +95,23 @@ Flow-Like is built on the principle of democratizing technology. With Flow-Like 
 
 Just download the latest release and select from a bunch of available profiles to get started.
 
+#### Compiling from Source
+##### Ubuntu
+
+1. Install Rust
+2. Install NodeJS
+3. `sudo apt install protobuf-compiler build-essentials`
+4. `npm install -g bun`
+
+##### MacOS
+TBD
+
+##### Windows
+TBD
+
 #### Documentation [TODO]
 
-Comprehensive documentation is available [here](https://Flow-Like.good-co.de/). This includes detailed installation guides, configuration options, and usage examples to help you get the most out of Flow-Like.
+Comprehensive documentation is available [here](https://flow-like.com/). This includes detailed installation guides, configuration options, and usage examples to help you get the most out of Flow-Like.
 
 #### Contributing [Help wanted]
 

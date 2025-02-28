@@ -50,7 +50,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         onClick={async (e) => {
           if (props.onClick) {
             setIsLoading(true)
-            await props.onClick(e)
+            await props.onClick(e as React.MouseEvent<HTMLButtonElement>)
             setIsLoading(false)
           }
         }}

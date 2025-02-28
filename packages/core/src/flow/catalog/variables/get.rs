@@ -48,7 +48,7 @@ impl NodeLogic for GetVariable {
         );
 
         node.add_output_pin(
-            "value",
+            "value_ref",
             "Value",
             "The value of the variable",
             VariableType::Generic,
@@ -61,10 +61,13 @@ impl NodeLogic for GetVariable {
         let var_ref: String = context.evaluate_pin("var_ref").await?;
         let variable: crate::flow::variable::Variable = context.get_variable(&var_ref).await?;
 
-        let value_pin = context.get_pin_by_name("value").await?;
+        let value_pin = context.get_pin_by_name("value_ref").await?;
         let value = variable.get_value();
 
-        context.log_message(&format!("Got Value: {}", value.lock().await), crate::flow::execution::LogLevel::Debug);
+        context.log_message(
+            &format!("Got Value: {}", value.lock().await),
+            crate::flow::execution::LogLevel::Debug,
+        );
 
         value_pin.lock().await.set_pin_by_ref(value).await;
         Ok(())
@@ -101,8 +104,8 @@ impl NodeLogic for GetVariable {
             }
         };
 
-        node.friendly_name = var_ref_variable.name.clone();
-        let mut_value = match node.get_pin_mut_by_name("value") {
+        node.friendly_name = format!("Get {}", &var_ref_variable.name);
+        let mut_value = match node.get_pin_mut_by_name("value_ref") {
             Some(val) => val,
             None => {
                 node.error = Some("Value pin not found!".to_string());

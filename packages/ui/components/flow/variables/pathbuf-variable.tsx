@@ -7,9 +7,9 @@ import { Label } from "../../../components/ui/label";
 import { Switch } from "../../../components/ui/switch";
 import { type IFileMetadata } from "../../../lib/schema/files/file-metadata";
 import { type IVariable } from "../../../lib/schema/flow/variable";
+import { convertJsonToUint8Array } from "../../../lib/uint8";
 import { cn } from "../../../lib/utils";
 import { FileList } from "./pathbuf-list";
-import { convertJsonToUint8Array, parseUint8ArrayToJson } from "../../../lib/uint8";
 
 export function PathbufVariable({ variable, onChange }: Readonly<{ variable: IVariable, onChange: (variable: IVariable) => void }>) {
     const [files, setFiles] = useState<IFileMetadata[]>([])

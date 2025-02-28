@@ -8,6 +8,7 @@ use num_cpus;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::any::Any;
 use std::collections::BTreeMap;
 use std::time::Instant;
 use std::{
@@ -26,10 +27,10 @@ pub mod trace;
 
 use crate::profile::Profile;
 use crate::state::{FlowLikeEvent, FlowLikeState};
-use crate::vault::vector::VectorStore;
 
 use super::board::ExecutionStage;
-use super::{board::Board, catalog::node_to_dyn, node::NodeState, variable::Variable};
+use super::catalog::load_catalog;
+use super::{board::Board, node::NodeState, variable::Variable};
 
 const USE_DEPENDENCY_GRAPH: bool = false;
 
@@ -53,10 +54,19 @@ pub struct Run {
     pub log_level: LogLevel,
 }
 
-#[derive(Clone)]
-pub enum CacheValue {
-    Value(Value),
-    VectorDB(Arc<Mutex<dyn VectorStore>>),
+pub trait Cacheable: Any + Send + Sync {
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+impl dyn Cacheable {
+    pub fn downcast_ref<T: Cacheable>(&self) -> Option<&T> {
+        self.as_any().downcast_ref::<T>()
+    }
+
+    pub fn downcast_mut<T: Cacheable>(&mut self) -> Option<&mut T> {
+        self.as_any_mut().downcast_mut::<T>()
+    }
 }
 
 #[derive(Clone)]
@@ -66,7 +76,7 @@ pub struct InternalRun {
     pub dependencies: HashMap<String, Vec<Arc<Mutex<InternalNode>>>>,
     pub pins: HashMap<String, Arc<Mutex<InternalPin>>>,
     pub variables: Arc<Mutex<HashMap<String, Variable>>>,
-    pub cache: Arc<RwLock<HashMap<String, CacheValue>>>,
+    pub cache: Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
     pub profile: Arc<Profile>,
     pub sender: tokio::sync::mpsc::Sender<FlowLikeEvent>,
 
@@ -86,7 +96,7 @@ impl InternalRun {
         log_level: LogLevel,
     ) -> anyhow::Result<Self> {
         let before = Instant::now();
-        let start_ids: HashSet<String> = HashSet::from_iter(start_ids);
+        let start_ids_set: HashSet<String> = start_ids.into_iter().collect();
         let sender = handler.lock().await.event_sender.lock().await.clone();
         let run_id = cuid2::create_id();
         let run = Run {
@@ -101,24 +111,23 @@ impl InternalRun {
 
         let run = Arc::new(Mutex::new(run));
 
-        let mut pin_to_node = HashMap::new();
         let mut dependencies = HashMap::new();
-        let variables = Arc::new(Mutex::new(HashMap::with_capacity(board.variables.len())));
-        let mut stack = BTreeMap::new();
 
-        for (variable_id, variable) in &board.variables {
-            // initialize variable value
-            let value = match &variable.default_value {
-                Some(default_value) => serde_json::from_slice::<Value>(default_value).unwrap(),
-                None => Value::Null,
-            };
-            let value = Arc::new(Mutex::new(value));
-            let mut variable = variable.clone();
-            variable.value = value.clone();
-            variables.lock().await.insert(variable_id.clone(), variable);
-        }
+        let variables = Arc::new(Mutex::new({
+            let mut map = HashMap::with_capacity(board.variables.len());
+            for (variable_id, variable) in &board.variables {
+                let value = variable
+                    .default_value
+                    .as_ref()
+                    .map_or(Value::Null, |v| serde_json::from_slice::<Value>(v).unwrap());
+                let mut var = variable.clone();
+                var.value = Arc::new(Mutex::new(value));
+                map.insert(variable_id.clone(), var);
+            }
+            map
+        }));
 
-        let mut nodes = HashMap::with_capacity(board.nodes.len());
+        let mut pin_to_node = HashMap::with_capacity(board.nodes.len() * 3);
         let mut pins = HashMap::with_capacity(board.nodes.len() * 3);
 
         for (node_id, node) in &board.nodes {
@@ -131,35 +140,45 @@ impl InternalRun {
                 };
 
                 pin_to_node.insert(pin_id, (node_id, node.is_pure()));
-
-                let internal_pin = Arc::new(Mutex::new(internal_pin));
-                pins.insert(pin.id.clone(), internal_pin);
+                pins.insert(pin.id.clone(), Arc::new(Mutex::new(internal_pin)));
             }
         }
 
-        for pin in pins.values() {
-            let mut pin_guard = pin.lock().await;
-            let connected_to = pin_guard.pin.lock().await.connected_to.clone();
-            let depends_on = pin_guard.pin.lock().await.depends_on.clone();
+        for pin_arc in pins.values() {
+            let mut internal_pin = pin_arc.lock().await;
+            let inner_pin = internal_pin.pin.lock().await;
+            let connected_to = inner_pin.connected_to.clone();
+            let depends_on = inner_pin.depends_on.clone();
+
+            drop(inner_pin);
 
             for connected_pin_id in connected_to {
                 if let Some(connected_pin) = pins.get(&connected_pin_id) {
-                    pin_guard.connected_to.push(connected_pin.clone());
+                    internal_pin.connected_to.push(connected_pin.clone());
                 }
             }
 
             for depends_on_pin_id in depends_on {
                 if let Some(depends_on_pin) = pins.get(&depends_on_pin_id) {
-                    pin_guard.depends_on.push(depends_on_pin.clone());
+                    internal_pin.depends_on.push(depends_on_pin.clone());
                 }
             }
         }
 
         let mut dependency_map = HashMap::with_capacity(board.nodes.len());
+        let mut nodes = HashMap::with_capacity(board.nodes.len());
+        let mut stack = BTreeMap::new();
 
         let handler = handler.lock().await;
+        let mut registry = handler.node_registry.read().await;
+        if !registry.initialized {
+            drop(registry);
+            load_catalog(&handler).await;
+            registry = handler.node_registry.read().await;
+        }
+
         for (node_id, node) in &board.nodes {
-            let logic = node_to_dyn(&handler, node).await?;
+            let logic = registry.instantiate(node).await?;
             let mut node_pins = HashMap::new();
             let mut pin_cache = HashMap::new();
 
@@ -170,30 +189,33 @@ impl InternalRun {
                     cached_array.push(internal_pin.clone());
                 }
 
-                if !USE_DEPENDENCY_GRAPH {
-                    continue;
-                }
-
-                for dependency_pin_id in &pin.depends_on {
-                    let (dependency_node_id, is_pure) = pin_to_node.get(dependency_pin_id).unwrap();
-
-                    dependency_map
-                        .entry(node_id)
-                        .or_insert(vec![])
-                        .push((*dependency_node_id, is_pure));
+                if USE_DEPENDENCY_GRAPH {
+                    for dependency_pin_id in &pin.depends_on {
+                        if let Some((dependency_node_id, is_pure)) =
+                            pin_to_node.get(dependency_pin_id)
+                        {
+                            dependency_map
+                                .entry(node_id)
+                                .or_insert(vec![])
+                                .push((*dependency_node_id, is_pure));
+                        }
+                    }
                 }
             }
 
-            let internal_node =
-                InternalNode::new(node.clone(), node_pins.clone(), logic, pin_cache.clone());
-            let internal_node = Arc::new(Mutex::new(internal_node));
+            let internal_node = Arc::new(Mutex::new(InternalNode::new(
+                node.clone(),
+                node_pins.clone(),
+                logic,
+                pin_cache.clone(),
+            )));
 
-            for pin in node_pins.values() {
-                let mut pin_guard = pin.lock().await;
+            for internal_pin in node_pins.values() {
+                let mut pin_guard = internal_pin.lock().await;
                 pin_guard.node = Arc::downgrade(&internal_node);
             }
 
-            if start_ids.contains(&node.id) {
+            if start_ids_set.contains(&node.id) {
                 stack.insert(node.id.clone(), internal_node.clone());
             }
 
@@ -201,15 +223,15 @@ impl InternalRun {
         }
 
         if USE_DEPENDENCY_GRAPH {
-            dependency_map.iter().for_each(|(node_id, _)| {
+            for node_id in board.nodes.keys() {
                 let deps = recursive_get_deps(
                     node_id.to_string(),
                     &dependency_map,
                     &nodes,
                     &mut HashSet::new(),
                 );
-                dependencies.insert(node_id.to_string(), deps);
-            });
+                dependencies.insert(node_id.clone(), deps);
+            }
         }
 
         if log_level <= LogLevel::Info {
@@ -246,18 +268,22 @@ impl InternalRun {
     ) {
         let variables = &self.variables;
         let cache = &self.cache;
-        let dependencies = &self.dependencies;
+        let dependencies = self.dependencies.clone();
+        let run = self.run.clone();
+        let profile = self.profile.clone();
+        let sender = self.sender.clone();
         let concurrency_limit = self.concurrency_limit;
 
-        let futures = futures::stream::iter(stack)
-            .map(|(_, node)| {
+        let new_stack: BTreeMap<_, _> = futures::stream::iter(stack.into_values())
+            .map(|node| {
+                // Clone per iteration as needed
                 let dependencies = dependencies.clone();
                 let handler = handler.clone();
-                let log_level = log_level.clone();
+                let run = run.clone();
+                let profile = profile.clone();
+                let sender = sender.clone();
                 let stage = stage.clone();
-                let run = self.run.clone();
-                let profile = self.profile.clone();
-                let sender = self.sender.clone();
+                let log_level = log_level.clone();
 
                 async move {
                     step_core(
@@ -276,17 +302,18 @@ impl InternalRun {
                     .await
                 }
             })
-            .buffer_unordered(self.cpus * 3);
+            .buffer_unordered(self.cpus * 3)
+            .fold(BTreeMap::new(), |mut acc, result| async move {
+                if let Some(inner_iter) = result {
+                    for (key, node) in inner_iter {
+                        acc.insert(key, node);
+                    }
+                }
+                acc
+            })
+            .await;
 
-        let intermediate_stack: BTreeMap<_, _> = futures
-            .collect::<Vec<_>>()
-            .await
-            .into_iter()
-            .flatten()
-            .flatten()
-            .collect();
-
-        self.stack = Arc::new(Mutex::new(intermediate_stack));
+        self.stack = Arc::new(Mutex::new(new_stack));
     }
 
     async fn step_single(
@@ -300,7 +327,7 @@ impl InternalRun {
         let cache = &self.cache;
         let concurrency_limit = self.concurrency_limit;
 
-        let (_, node) = stack.iter().next().unwrap();
+        let node = stack.values().next().unwrap();
         let connected_nodes = step_core(
             node,
             concurrency_limit,
@@ -316,12 +343,11 @@ impl InternalRun {
         )
         .await;
 
-        let intermediate_stack = match connected_nodes {
-            Some(connected_nodes) => connected_nodes.into_iter().collect(),
-            None => BTreeMap::new(),
-        };
+        let new_stack = connected_nodes
+            .map(|nodes| nodes.into_iter().collect())
+            .unwrap_or_else(BTreeMap::new);
 
-        self.stack = Arc::new(Mutex::new(intermediate_stack));
+        self.stack = Arc::new(Mutex::new(new_stack));
     }
 
     async fn step(&mut self, handler: Arc<Mutex<FlowLikeState>>) {
@@ -352,8 +378,8 @@ impl InternalRun {
         let stack = stack.lock().await;
         let mut hasher = AHasher::default();
 
-        for (node_id, _node) in stack.iter() {
-            node_id.hash(&mut hasher);
+        for key in stack.keys() {
+            key.hash(&mut hasher);
         }
 
         let result = hasher.finish();
@@ -491,7 +517,7 @@ async fn step_core(
     handler: &Arc<Mutex<FlowLikeState>>,
     run: &Arc<Mutex<Run>>,
     variables: &Arc<Mutex<HashMap<String, Variable>>>,
-    cache: &Arc<RwLock<HashMap<String, CacheValue>>>,
+    cache: &Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
     log_level: LogLevel,
     stage: ExecutionStage,
     dependencies: &HashMap<String, Vec<Arc<Mutex<InternalNode>>>>,

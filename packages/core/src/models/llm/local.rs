@@ -3,7 +3,7 @@ use crate::{
     models::{
         history::History, llm::ModelLogic, response::Response, response_chunk::ResponseChunk,
     },
-    state::FlowLikeState,
+    state::{FlowLikeState, FlowLikeStore},
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -87,18 +87,19 @@ impl LocalModel {
         bit: &Bit,
         app_state: Arc<TokioMutex<FlowLikeState>>,
         execution_settings: &ExecutionSettings,
-    ) -> Option<LocalModel> {
-        let bit_store = app_state
-            .lock()
-            .await
-            .config
-            .read()
-            .await
-            .local_store
-            .clone()?;
-        let gguf_path = bit.to_path(&bit_store)?;
-        let pack = bit.pack(app_state.clone()).await;
-        pack.download(app_state).await.ok()?;
+    ) -> anyhow::Result<LocalModel> {
+        let bit_store = FlowLikeState::bit_store(&app_state).await?;
+
+        let bit_store = match bit_store {
+            FlowLikeStore::Local(store) => store,
+            _ => return Err(anyhow::anyhow!("Only local store supported")),
+        };
+
+        let gguf_path = bit
+            .to_path(&bit_store)
+            .ok_or(anyhow::anyhow!("No model path"))?;
+        let pack = bit.pack(app_state.clone()).await?;
+        pack.download(app_state).await?;
 
         let projection_bit = pack
             .bits
@@ -195,7 +196,7 @@ impl LocalModel {
 
         sleep(Duration::from_millis(2000)).await;
 
-        Some(LocalModel {
+        Ok(LocalModel {
             client: reqwest::Client::new(),
             bit: bit.clone(),
             handle: child_handle,

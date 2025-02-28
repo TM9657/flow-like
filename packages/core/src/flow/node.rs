@@ -11,7 +11,7 @@ use crate::state::FlowLikeState;
 use super::{
     board::Board,
     execution::context::ExecutionContext,
-    pin::{Pin, PinType},
+    pin::{Pin, PinType, ValueType},
     variable::VariableType,
 };
 
@@ -23,17 +23,14 @@ pub enum NodeState {
     Error,
 }
 
-/// Node Scores. Each score ranges from 0 to 10.
-/// Node Scores. From 0 - 10
-/// The higher the score, the worse the node is in this category:
-/// - Privacy: Higher score means less privacy.
-/// - Security: Higher score means less security.
-/// - Performance: Higher score means worse performance.
-/// - Governance: Higher score means less compliance with governance.
-/// - security: Assesses the node's resistance to attacks.
-/// - performance: Evaluates the node's efficiency and speed.
-/// - governance: Indicates the node's compliance with policies and regulations.
-/// The higher the score, the worse the node is in this category
+/// Represents quality metrics for a node, with scores ranging from 0 to 10.
+/// Higher scores indicate worse performance in each category.
+///
+/// # Score Categories
+/// * `privacy` - Measures data protection and confidentiality level
+/// * `security` - Assesses resistance against potential attacks
+/// * `performance` - Evaluates computational efficiency and speed
+/// * `governance` - Indicates compliance with policies and regulations
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct NodeScores {
     pub privacy: i8,
@@ -57,6 +54,7 @@ pub struct Node {
     pub comment: Option<String>,
     pub long_running: Option<bool>,
     pub error: Option<String>,
+    pub docs: Option<String>,
 }
 
 impl Node {
@@ -69,17 +67,13 @@ impl Node {
             coordinates: None,
             category: category.to_string(),
             pins: HashMap::new(),
-            scores: Some(NodeScores {
-                privacy: 0,
-                security: 0,
-                performance: 0,
-                governance: 0,
-            }),
+            scores: None,
             start: None,
             icon: None,
             comment: None,
             long_running: None,
             error: None,
+            docs: None,
         }
     }
 
@@ -191,6 +185,48 @@ impl Node {
 
     pub fn mut_scores(&mut self) -> &mut NodeScores {
         self.scores.as_mut().unwrap()
+    }
+
+    pub fn match_type(
+        &mut self,
+        pin_name: &str,
+        board: Arc<Board>,
+        value_type: Option<ValueType>,
+    ) -> anyhow::Result<VariableType> {
+        let mut found_type = VariableType::Generic;
+        let pin = self
+            .get_pin_by_name(pin_name)
+            .ok_or(anyhow::anyhow!("Pin not found"))?;
+        let mut nodes = pin.connected_to.clone();
+        if pin.pin_type == PinType::Input {
+            nodes = pin.depends_on.clone();
+        }
+
+        self.get_pin_mut_by_name(pin_name).unwrap().data_type = VariableType::Generic;
+        self.get_pin_mut_by_name(pin_name).unwrap().value_type = ValueType::Normal;
+        if let Some(value_type) = &value_type {
+            self.get_pin_mut_by_name(pin_name).unwrap().value_type = value_type.clone();
+        }
+
+        if let Some(first_node) = nodes.iter().next() {
+            let pin = board.get_pin_by_id(first_node);
+            let mutable_pin = self.get_pin_mut_by_name(pin_name).unwrap();
+
+            match pin {
+                Some(pin) => {
+                    mutable_pin.data_type = pin.data_type.clone();
+                    if value_type.is_none() {
+                        mutable_pin.value_type = pin.value_type.clone();
+                        found_type = pin.data_type.clone();
+                    }
+                }
+                None => {
+                    mutable_pin.depends_on.remove(first_node);
+                }
+            }
+        }
+
+        Ok(found_type)
     }
 }
 

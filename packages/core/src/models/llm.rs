@@ -100,8 +100,8 @@ impl ModelFactory {
 
             let local_model = LocalModel::new(bit, app_state, &settings).await;
             let local_model = match local_model {
-                Some(local_model) => local_model,
-                None => return Err(anyhow::anyhow!("Model not found")),
+                Ok(local_model) => local_model,
+                Err(e) => return Err(e),
             };
             let local_model: Arc<LocalModel> = Arc::new(local_model);
             self.ttl_list.insert(bit.id.clone(), SystemTime::now());

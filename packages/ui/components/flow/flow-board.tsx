@@ -48,7 +48,7 @@ import { type INode } from '../../lib/schema/flow/node';
 import { type IPin } from '../../lib/schema/flow/pin';
 import { type IRun, type ITrace } from '../../lib/schema/flow/run';
 import { useFlowBoardParentState } from '../../state/flow-board-parent-state';
-import useRunExecutionStore from '../../state/run-execution-state';
+import {useRunExecutionStore} from '../../state/run-execution-state';
 import { type ISettingsProfile } from '../../types';
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Textarea } from '../ui';
 import { convertJsonToUint8Array } from '../../lib/uint8';
@@ -269,6 +269,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
     async function executeCommand(command: string, args: any, append: boolean = false): Promise<any> {
         const result = await invoke(command, { ...args, append: append })
         await board.refetch()
+        console.log("Refetched board, execute command")
         return result
     }
 
@@ -278,7 +279,10 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
             await invoke(command, { ...args, append: !first })
             first = false
         }
-        await board.refetch()
+        if(commands.length > 0) {
+            await board.refetch()
+            console.log("Refetched board, execute commands")
+        }
     }
 
     const onConnect = useCallback(
@@ -395,11 +399,6 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
     }, []);
 
     const onReconnect = useCallback(async (oldEdge: any, newConnection: Connection) => {
-        console.dir({
-            oldEdge,
-            newConnection
-        })
-
         // Check if the edge is actually being moved
         const new_id = `${newConnection.sourceHandle}-${newConnection.targetHandle}`
         if (oldEdge.id === new_id) return;
@@ -504,6 +503,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                                     }
                                     await executeCommand("upsert_comment", { boardId: boardId, comment: new_comment })
                                 }}
+                                refs={board.data?.refs || {}}
                                 onClose={() => setDroppedPin(undefined)}
                                 nodes={filteredNodes.toSorted((a, b) => a.friendly_name.localeCompare(b.friendly_name))}
                                 onNodePlace={async (node) => {
@@ -569,8 +569,9 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                                                 if (!comment) await invoke("move_node", { boardId: boardId, nodeId: node.id, coordinates: [node.position.x, node.position.y, 0], append: !first })
                                                 first = false
                                             }
+                                            await board.refetch()
                                         }}
-                                        isValidConnection={(connection) => isValidConnection(connection, pinCache)}
+                                        isValidConnection={(connection) => isValidConnection(connection, pinCache, board.data?.refs ?? {})}
                                         onConnect={onConnect}
                                         onReconnect={onReconnect}
                                         onReconnectStart={onReconnectStart}

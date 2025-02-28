@@ -13,8 +13,9 @@ import { Separator } from "../ui/separator";
 import { FlowContextMenuNodes } from "./flow-context-menu-nodes";
 import { type INode } from "../../lib/schema/flow/node";
 import { type IPin } from "../../lib/schema/flow/pin";
+import { doPinsMatch } from "../../lib";
 
-export function FlowContextMenu({ nodes, children, droppedPin, onNodePlace, onCommentPlace, onFilterSearch, onClose }: Readonly<{ nodes: INode[], children: React.ReactNode, droppedPin?: IPin, onNodePlace: (node: INode) => void, onFilterSearch: (filter: string) => void, onCommentPlace: () => void, onClose: () => void }>) {
+export function FlowContextMenu({ nodes, refs, children, droppedPin, onNodePlace, onCommentPlace, onFilterSearch, onClose }: Readonly<{ nodes: INode[], refs: {[key: string]: string}, children: React.ReactNode, droppedPin?: IPin, onNodePlace: (node: INode) => void, onFilterSearch: (filter: string) => void, onCommentPlace: () => void, onClose: () => void }>) {
 
     const [filter, setFilter] = useState("")
     const [contextSensitive, setContextSensitive] = useState(true)
@@ -70,9 +71,14 @@ export function FlowContextMenu({ nodes, children, droppedPin, onNodePlace, onCo
             <div className='pr-1'>
                 <ScrollArea className="h-52 w-[calc(20rem-0.5rem)] border rounded-md">
                     {nodes && <FlowContextMenuNodes key={nodes.length + "__root"} items={(droppedPin && contextSensitive) ? [...nodes.filter(node => {
+                        if(node.name === "variable_set" || node.name === "variable_get") return false
                         const pins = Object.values(node.pins)
-                        return pins.some(pin => (pin.data_type === droppedPin.data_type || droppedPin.data_type === "Generic" || pin.data_type === "Generic") && pin.pin_type !== droppedPin.pin_type && pin.value_type === droppedPin.value_type && (typeof droppedPin.schema === "undefined" || pin.schema === droppedPin.schema || typeof pin.schema === "undefined"))
-                    })] : [...nodes]} filter={filter} onNodePlace={async (node) => onNodePlace(node)} />}
+                        return pins.some(pin => {
+                            if (pin.pin_type === droppedPin.pin_type) return false
+                            return doPinsMatch(pin, droppedPin, refs)
+                            // return (pin.data_type === droppedPin.data_type || droppedPin.data_type === "Generic" || pin.data_type === "Generic") && pin.pin_type !== droppedPin.pin_type && pin.value_type === droppedPin.value_type && (typeof droppedPin.schema === "undefined" || pin.schema === droppedPin.schema || typeof pin.schema === "undefined")
+                        })
+                    })] : [...nodes.filter(node => (node.name !== "variable_set") && (node.name !== "variable_get"))]} filter={filter} onNodePlace={async (node) => onNodePlace(node)} />}
                 </ScrollArea>
             </div>
         </ContextMenuContent>

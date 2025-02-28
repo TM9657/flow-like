@@ -62,7 +62,7 @@ export function FlowContextMenuNodes({ items, filter, pin, onNodePlace }: Readon
     )}
     {nodeState.leafs.map(node => <ContextMenuItem key={"context" + node.id} id={node.id} onClick={async () => onNodePlace(node)}>
       {node.icon ?
-        <DynamicImage url={node.icon} className="h-4 w-4 mr-2 bg-foreground" /> :
+        <DynamicImage url={node.icon} className="min-h-4 min-w-4 mr-2 bg-foreground" /> :
         <WorkflowIcon className="h-4 w-4 mr-2" />}
       {node.friendly_name}
     </ContextMenuItem>)}

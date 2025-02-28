@@ -14,6 +14,7 @@ export interface IVariable {
 
 export enum IVariableType {
     Boolean = "Boolean",
+    Byte = "Byte",
     Date = "Date",
     Execution = "Execution",
     Float = "Float",

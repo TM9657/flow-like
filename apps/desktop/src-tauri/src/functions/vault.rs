@@ -144,7 +144,7 @@ pub async fn create_vault_board(
     board.description = description;
     board.variables.insert(variable.id.clone(), variable);
     board.save(None).await?;
-    
+
     Ok(())
 }
 
@@ -168,7 +168,6 @@ pub async fn delete_vault_board(
 #[tauri::command(async)]
 pub async fn update_vault(app_handle: AppHandle, vault: Vault) -> Result<(), TauriFunctionError> {
     let mut vault = vault;
-    let state = TauriFlowLikeState::construct(&app_handle).await?;
     vault.app_state = Some(TauriFlowLikeState::construct(&app_handle).await?);
     vault.save().await?;
     Ok(())
@@ -179,15 +178,7 @@ pub async fn get_vault_size(
     app_handle: AppHandle,
     vault_id: String,
 ) -> Result<usize, TauriFunctionError> {
-    let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    let store = flow_like_state
-        .lock()
-        .await
-        .config
-        .read()
-        .await
-        .project_store
-        .clone();
+    let store = TauriFlowLikeState::get_project_store(&app_handle).await?;
     let path = Path::from("vaults").child(vault_id);
 
     let mut locations = store.list(Some(&path)).map_ok(|m| m.location).boxed();
@@ -213,15 +204,7 @@ pub async fn delete_vault(
         return Err(TauriFunctionError::new("Vault ID is empty"));
     };
 
-    let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    let store = flow_like_state
-        .lock()
-        .await
-        .config
-        .read()
-        .await
-        .project_store
-        .clone();
+    let store = TauriFlowLikeState::get_project_store(&app_handle).await?;
     let settings = TauriSettingsState::construct(&app_handle).await?;
 
     let mut settings = settings.lock().await;

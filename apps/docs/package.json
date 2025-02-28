@@ -6,12 +6,16 @@
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",
+    "deploy": "bun run build && bunx wrangler pages publish dist",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
+    "@astrojs/react": "^4.2.0",
     "@astrojs/starlight": "^0.31.1",
+    "@astrojs/starlight-tailwind": "^3.0.0",
+    "@tm9657/flow-like-ui": "workspace:*",
     "astro": "^5.1.5",
-    "sharp": "^0.32.5"
+    "sharp": "^0.33.5"
   }
 }

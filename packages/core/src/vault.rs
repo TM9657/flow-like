@@ -81,14 +81,7 @@ impl Vault {
     pub async fn load(id: String, app_state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<Self> {
         let storage_root = Path::from("vaults").child(id.clone());
 
-        let store = app_state
-            .lock()
-            .await
-            .config
-            .read()
-            .await
-            .project_store
-            .clone();
+        let store = FlowLikeState::project_store(&app_state).await?.as_generic();
 
         let mut vault: Vault = from_compressed(store, storage_root.child("manifest.vault")).await?;
         vault.app_state = Some(app_state.clone());
@@ -186,11 +179,11 @@ impl Vault {
             .child("boards")
             .child(board_id.clone());
 
-        let store = self
+        let state = self
             .app_state
             .clone()
             .ok_or(anyhow::anyhow!("App state not found"))?;
-        let store = store.lock().await.config.read().await.project_store.clone();
+        let store = FlowLikeState::project_store(&state).await?.as_generic();
         let locations = store.list(Some(&board_dir)).map_ok(|m| m.location).boxed();
         store
             .delete_stream(locations)
@@ -213,7 +206,7 @@ impl Vault {
 
     pub async fn save(&self) -> anyhow::Result<()> {
         if let Some(app_state) = &self.app_state {
-            let store = app_state.lock().await.config.read().await.project_store.clone();
+            let store = FlowLikeState::project_store(app_state).await?.as_generic();
             let registry_guard = app_state.lock().await;
             let registry = registry_guard.board_registry.lock().await;
 
@@ -229,7 +222,7 @@ impl Vault {
             .app_state
             .clone()
             .ok_or(anyhow::anyhow!("App state not found"))?;
-        let store = store.lock().await.config.read().await.project_store.clone();
+        let store = FlowLikeState::project_store(&store).await?.as_generic();
 
         let manifest_path = Path::from("vaults")
             .child(self.id.clone())
@@ -248,12 +241,10 @@ mod tests {
     use tokio::sync::Mutex;
 
     async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
-        let config: FlowLikeConfig = FlowLikeConfig::new(
-            None,
-            Arc::new(object_store::memory::InMemory::new()),
-            Arc::new(object_store::memory::InMemory::new()),
-            Arc::new(object_store::memory::InMemory::new()),
-        );
+        let mut config: FlowLikeConfig = FlowLikeConfig::new();
+        config.register_project_store(crate::state::FlowLikeStore::Remote(Arc::new(
+            object_store::memory::InMemory::new(),
+        )));
         let (http_client, _refetch_rx) = HTTPClient::new();
         let (flow_like_state, _) = crate::state::FlowLikeState::new(config, http_client);
         Arc::new(Mutex::new(flow_like_state))

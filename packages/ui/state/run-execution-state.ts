@@ -15,7 +15,7 @@ interface IRunUpdateEvent {
     method: "remove" | "add" | "update";
 }
 
-const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
+export const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
     run_nodes: new Map(),
     runs: new Map(),
     addRun: async (runId: string, boardId: string, eventIds: string[]) => {
@@ -103,5 +103,3 @@ const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
         return { runs };
     }),
 }));
-
-export default useRunExecutionStore;

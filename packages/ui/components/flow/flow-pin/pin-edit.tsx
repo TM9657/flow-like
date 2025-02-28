@@ -9,6 +9,7 @@ import { type IPin, IPinType, IVariableType } from "../../../lib/schema/flow/pin
 import { VariablesMenuEdit } from "../variables/variables-menu-edit"
 import { BooleanVariable } from "./variable-types/boolean-variable"
 import { VariableDescription } from "./variable-types/default-text"
+import { EnumVariable } from "./variable-types/enum-variable"
 
 export function PinEdit({ pin, defaultValue, changeDefaultValue }: Readonly<{ pin: IPin, defaultValue: any, changeDefaultValue: (value: any) => void }>) {
     const [value, setValue] = useState(defaultValue)
@@ -20,6 +21,7 @@ export function PinEdit({ pin, defaultValue, changeDefaultValue }: Readonly<{ pi
     if (pin.pin_type === IPinType.Output) return <VariableDescription pin={pin} />
     if (pin.depends_on.length > 0) return <VariableDescription pin={pin} />
     if (pin.data_type === IVariableType.Boolean) return <BooleanVariable pin={pin} value={value} setValue={setValue} />
+    if ((pin.options?.valid_values?.length ?? 0) > 0 && pin.data_type === IVariableType.String) return <EnumVariable pin={pin} value={value} setValue={setValue} /> 
 
     return <WithMenu pin={pin} defaultValue={value} changeDefaultValue={setValue} />
 }

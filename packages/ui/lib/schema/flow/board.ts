@@ -63,6 +63,7 @@ export interface IPin {
     id:             string;
     index:          number;
     name:           string;
+    options?:       null | IPinOptions;
     pin_type:       IPinType;
     schema?:        null | string;
     valid_values?:  string[] | null;
@@ -72,6 +73,7 @@ export interface IPin {
 
 export enum IVariableType {
     Boolean = "Boolean",
+    Byte = "Byte",
     Date = "Date",
     Execution = "Execution",
     Float = "Float",
@@ -80,6 +82,15 @@ export enum IVariableType {
     PathBuf = "PathBuf",
     String = "String",
     Struct = "Struct",
+}
+
+export interface IPinOptions {
+    enforce_generic_value_type?: boolean | null;
+    enforce_schema?:             boolean | null;
+    range?:                      number[] | null;
+    step?:                       number | null;
+    valid_values?:               string[] | null;
+    [property: string]: any;
 }
 
 export enum IPinType {

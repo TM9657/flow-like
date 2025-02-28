@@ -20,7 +20,12 @@ impl ErrorNode {
 #[async_trait]
 impl NodeLogic for ErrorNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
-        let mut node = Node::new("log_error", "Log Error", "Logs an Error", "Logging");
+        let mut node = Node::new(
+            "log_error",
+            "Log Error",
+            "Logs / Prints an Error",
+            "Logging",
+        );
         node.add_icon("/flow/icons/log-error.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);

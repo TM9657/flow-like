@@ -2,7 +2,7 @@ use super::ImageEmbeddingModelLogic;
 use crate::{
     bit::{Bit, BitTypes},
     models::{embedding::EmbeddingModelLogic, embedding_factory::EmbeddingFactory},
-    state::FlowLikeState,
+    state::{FlowLikeState, FlowLikeStore},
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -24,16 +24,14 @@ impl LocalImageEmbeddingModel {
         app_state: Arc<Mutex<FlowLikeState>>,
         factory: &mut EmbeddingFactory,
     ) -> anyhow::Result<Arc<Self>> {
-        let bit_store = app_state
-            .lock()
-            .await
-            .config
-            .read()
-            .await
-            .local_store
-            .clone()
-            .ok_or(anyhow::anyhow!("No local store"))?;
-        let pack = bit.pack(app_state.clone()).await;
+        let bit_store = FlowLikeState::bit_store(&app_state).await?;
+
+        let bit_store = match bit_store {
+            FlowLikeStore::Local(store) => store,
+            _ => return Err(anyhow::anyhow!("Only local store supported")),
+        };
+
+        let pack = bit.pack(app_state.clone()).await?;
         pack.download(app_state.clone()).await?;
         let embedding_model = pack
             .bits

@@ -9,6 +9,8 @@
     "dev:website": "bun run --cwd ./apps/website dev",
     "dev:docs": "bun run --cwd ./apps/docs dev",
     "build:desktop": "bun run --cwd ./apps/desktop tauri build",
+    "build:docs": "bun run --cwd ./apps/docs build",
+    "deploy:docs": "bun run --cwd ./apps/docs deploy",
     "postinstall": "cargo install cargo-license cargo-watch systemfd",
     "version": "npm version patch -m \"Increment version to %s\"",
     "bloat": "cargo bloat --release -n 10",
@@ -22,6 +24,9 @@
     "apps/*"
   ],
   "devDependencies": {
-    "express": "^4.21.2"
+    "dotenv-cli": "^8.0.0",
+    "express": "^4.21.2",
+    "sharp": "^0.33.5",
+    "wrangler": "^3.109.3"
   }
 }

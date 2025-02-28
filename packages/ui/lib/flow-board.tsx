@@ -8,7 +8,7 @@ import { type INode } from "./schema/flow/node"
 import { type IPin } from "./schema/flow/pin"
 import { type IRun, type ITrace } from "./schema/flow/run"
 
-export function isValidConnection(connection: any, cache: Map<string, [IPin, INode]>) {
+export function isValidConnection(connection: any, cache: Map<string, [IPin, INode]>, refs: {[key: string]: string}) {
     const [sourcePin, sourceNode] = cache.get(connection.sourceHandle) || []
     const [targetPin, targetNode] = cache.get(connection.targetHandle) || []
 
@@ -16,21 +16,41 @@ export function isValidConnection(connection: any, cache: Map<string, [IPin, INo
     if (!sourceNode || !targetNode) return false
 
     if (sourceNode.id === targetNode.id) return false
+    return doPinsMatch(sourcePin, targetPin, refs)
+};
+
+export function doPinsMatch(sourcePin: IPin, targetPin: IPin, refs: {[key: string]: string}) {
     if (sourcePin.pin_type === targetPin.pin_type) return false
 
-    const schemaSource = sourcePin.schema;
-    const schemaTarget = targetPin.schema;
+    let schemaSource = sourcePin.schema;
+    if(schemaSource) {
+        schemaSource = refs[schemaSource] ?? schemaSource
+    }
 
-    if (schemaSource && schemaTarget) {
+    let schemaTarget = targetPin.schema;
+    if(schemaTarget) {
+        schemaTarget = refs[schemaTarget] ?? schemaTarget
+    }
+
+    if (sourcePin.schema && targetPin.schema) {
         if (schemaSource !== schemaTarget) return false
     }
 
-    if ((sourcePin.data_type === "Generic" || targetPin.data_type === "Generic") && sourcePin.data_type !== "Execution" && targetPin.data_type !== "Execution" && targetPin.value_type === sourcePin.value_type) return true
+    if ((targetPin.options?.enforce_schema || sourcePin.options?.enforce_schema) && (sourcePin.name !== "value_ref" && targetPin.name !== "value_ref")) {
+        if((!sourcePin.schema || !targetPin.schema)) return false
+        if (schemaSource !== schemaTarget) return false
+    }
+
+    if(targetPin.options?.valid_values || sourcePin.options?.valid_values) {
+        if(targetPin.value_type !== sourcePin.value_type) return false
+    }
+
+    if ((sourcePin.data_type === "Generic" || targetPin.data_type === "Generic") && sourcePin.data_type !== "Execution" && targetPin.data_type !== "Execution") return true
     if (sourcePin.value_type !== targetPin.value_type) return false
     if (sourcePin.data_type !== targetPin.data_type) return false
 
     return true
-};
+}
 
 export function parseBoard(
     board: IBoard,

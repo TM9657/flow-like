@@ -1,3 +1,3 @@
 name = "flow-like-website"
-workers_dev = false  # Set to true if deploying to your Workers.dev subdomain
-compatibility_date = "2024-08-29"  # Use today's date
+compatibility_date = "2024-08-29"
+pages_build_output_dir="./dist"

@@ -29,31 +29,30 @@ impl NodeLogic for HasStructFieldNode {
         );
         node.add_icon("/flow/icons/struct.svg");
 
-        node.add_output_pin("found", "Found?", "Indicates if the value was found", VariableType::Boolean);
-
-        node.add_input_pin(
-            "struct",
-            "Struct",
-            "Struct Output",
-            VariableType::Struct,
+        node.add_output_pin(
+            "found",
+            "Found?",
+            "Indicates if the value was found",
+            VariableType::Boolean,
         );
 
-        node.add_input_pin(
-            "field",
-            "Field",
-            "Field to get",
-            VariableType::String,
-        );
+        node.add_input_pin("struct", "Struct", "Struct Output", VariableType::Struct);
+
+        node.add_input_pin("field", "Field", "Field to get", VariableType::String);
 
         return node;
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
-        let struct_value = context.evaluate_pin::<HashMap<String, serde_json::Value>>("struct").await?;
+        let struct_value = context
+            .evaluate_pin::<HashMap<String, serde_json::Value>>("struct")
+            .await?;
         let field = context.evaluate_pin::<String>("field").await?;
 
         let value = struct_value.get(&field);
-        context.set_pin_value("found", serde_json::json!(value.is_some())).await?;
+        context
+            .set_pin_value("found", serde_json::json!(value.is_some()))
+            .await?;
 
         return Ok(());
     }

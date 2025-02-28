@@ -40,6 +40,7 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = { version = "0.1.41", features = ["async-await", "attributes"] }
 dirs-next = "2.0.0"
 object_store = "0.11.2"
+lancedb = "0.16.0"
 
 [profile.release]
 panic = "abort"
@@ -47,6 +48,7 @@ codegen-units = 1
 lto = "fat"
 opt-level = "z"
 strip = true
+incremental = false
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2.0.0", features = ["deep-link"] }

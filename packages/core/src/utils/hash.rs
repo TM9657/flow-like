@@ -59,3 +59,16 @@ pub fn hash_btree_map<T: Hash>(map: &BTreeMap<String, T>) -> u64 {
 
     hasher.finish()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash_file() {
+        let input = "Hi there :)";
+        let hash1 = hash_string_non_cryptographic(input);
+        let hash2 = hash_string_non_cryptographic(input);
+        assert_eq!(hash1, hash2);
+    }
+}

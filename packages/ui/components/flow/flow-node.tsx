@@ -12,7 +12,7 @@ import {
   ContextMenuTrigger
 } from "../../components/ui/context-menu";
 import { toastSuccess } from '../../lib/messages';
-import useRunExecutionStore from "../../state/run-execution-state";
+import {useRunExecutionStore} from "../../state/run-execution-state";
 import { createId } from "@paralleldrive/cuid2";
 import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";

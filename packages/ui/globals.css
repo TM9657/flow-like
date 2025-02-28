@@ -43,7 +43,7 @@
     --sidebar-ring: var(--ring);
   }
 
-  .dark {
+  .dark,:root[data-theme='dark'] {
     --background: 0 0% 10%;
     --foreground: 0 0% 100%;
     --card: 0 0% 16%;
@@ -91,6 +91,7 @@
       text-decoration: var(--shiki-dark-text-decoration) !important;
     }
   }
+
 
   *::-webkit-scrollbar {
     width: 8px;

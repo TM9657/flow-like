@@ -77,11 +77,8 @@ pub async fn get_board(handler: AppHandle, board_id: String) -> Result<Board, Ta
 pub async fn close_board(handler: AppHandle, board_id: String) -> Result<(), TauriFunctionError> {
     let board_state = TauriFlowLikeState::board_registry(&handler).await?;
     let mut board_state = board_state.lock().await;
-    let store = {
-        let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
-        let store = flow_like_state.lock().await.config.read().await.project_store.clone();
-        store
-    };
+    let store = TauriFlowLikeState::get_project_store(&handler).await?;
+
     if let Some(board) = board_state.get(&board_id) {
         let board = board.lock().await.clone();
         board.save(Some(store.clone())).await?;
@@ -111,11 +108,7 @@ pub async fn update_board_meta(
     name: String,
     description: String,
 ) -> Result<Board, TauriFunctionError> {
-    let store = {
-        let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
-        let store = flow_like_state.lock().await.config.read().await.project_store.clone();
-        store
-    };
+    let store = TauriFlowLikeState::get_project_store(&handler).await?;
     let board_state = TauriFlowLikeState::board_registry(&handler).await?;
     let board_state = board_state.lock().await;
     if let Some(board) = board_state.get(&board_id) {
@@ -130,17 +123,13 @@ pub async fn update_board_meta(
 
 #[tauri::command(async)]
 pub async fn undo_board(handler: AppHandle, board_id: String) -> Result<Board, TauriFunctionError> {
-    let store = {
-        let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
-        let store = flow_like_state.lock().await.config.read().await.project_store.clone();
-        store
-    };
     let board_state = TauriFlowLikeState::board_registry(&handler).await?;
     let board_state = board_state.lock().await;
     let state = board_state.get(&board_id).cloned();
     drop(board_state);
     if let Some(board) = state {
         let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
+        let store = TauriFlowLikeState::get_project_store(&handler).await?;
         let mut board = board.lock().await;
         let _ = board.undo(flow_like_state).await;
         board.save(Some(store.clone())).await?;
@@ -151,11 +140,8 @@ pub async fn undo_board(handler: AppHandle, board_id: String) -> Result<Board, T
 
 #[tauri::command(async)]
 pub async fn redo_board(handler: AppHandle, board_id: String) -> Result<Board, TauriFunctionError> {
-    let store = {
-        let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
-        let store = flow_like_state.lock().await.config.read().await.project_store.clone();
-        store
-    };
+    let store = TauriFlowLikeState::get_project_store(&handler).await?;
+
     let board_state = TauriFlowLikeState::board_registry(&handler).await?;
     let board_state = board_state.lock().await;
     let state = board_state.get(&board_id).cloned();
@@ -397,12 +383,8 @@ async fn execute_command(
         let flow_like_state = flow_like_state.lock().await;
         flow_like_state.board_registry.clone()
     };
-    
-    let store = {
-        let flow_like_state = flow_like_state.lock().await;
-        let store = flow_like_state.config.read().await.project_store.clone();
-        store
-    };
+
+    let store = TauriFlowLikeState::get_project_store(handler).await?;
 
     let board = board_registry.lock().await.get(board_id).cloned();
 

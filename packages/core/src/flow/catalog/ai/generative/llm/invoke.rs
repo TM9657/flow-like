@@ -16,6 +16,7 @@ use crate::{
             LogLevel,
         },
         node::{Node, NodeLogic},
+        pin::PinOptions,
         variable::VariableType,
     },
     models::{history::History, llm::LLMCallback},
@@ -48,7 +49,9 @@ impl NodeLogic for InvokeLLM {
 
         node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
 
-        node.add_input_pin("model", "Model", "Model", VariableType::Struct);
+        node.add_input_pin("model", "Model", "Model", VariableType::Struct)
+            .set_schema::<Bit>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin("system_prompt", "System Prompt", "", VariableType::String)
             .set_default_value(Some(json!("")));

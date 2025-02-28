@@ -1,11 +1,11 @@
 "use client"
-import { humanFileSize } from "../../../lib/utils"
+import { type ColumnDef } from "@tanstack/react-table"
+import { ArrowUpDown } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { DataTable } from "../../../components/ui/data-table"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "../../../components/ui/hover-card"
 import { type IFileMetadata } from "../../../lib/schema/files/file-metadata"
-import { type ColumnDef } from "@tanstack/react-table"
-import { ArrowUpDown } from "lucide-react"
+import { humanFileSize } from "../../../lib/utils"
 
 export const columns: ColumnDef<IFileMetadata>[] = [
     {

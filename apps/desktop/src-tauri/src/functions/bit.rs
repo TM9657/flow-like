@@ -26,13 +26,13 @@ pub async fn get_bit_by_id(
 #[tauri::command(async)]
 pub async fn is_bit_installed(app_handle: AppHandle, bit: Bit) -> Result<bool, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    Ok(bit.is_installed(flow_like_state).await)
+    Ok(bit.is_installed(flow_like_state).await?)
 }
 
 #[tauri::command(async)]
 pub async fn get_bit_size(app_handle: AppHandle, bit: Bit) -> Result<u64, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    let pack = bit.pack(flow_like_state).await;
+    let pack = bit.pack(flow_like_state).await?;
     Ok(pack.size())
 }
 
@@ -42,7 +42,7 @@ pub async fn get_pack_from_bit(
     bit: Bit,
 ) -> Result<BitPack, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    let pack = bit.pack(flow_like_state).await;
+    let pack = bit.pack(flow_like_state).await?;
     Ok(pack)
 }
 
@@ -74,7 +74,7 @@ pub async fn get_bits(app_handle: AppHandle) -> Result<Vec<Bit>, TauriFunctionEr
 pub async fn download_bit(app_handle: AppHandle, bit: Bit) -> Result<Vec<Bit>, TauriFunctionError> {
     println!("Downloading bit: {}", bit.id);
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    let pack = bit.pack(flow_like_state.clone()).await;
+    let pack = bit.pack(flow_like_state.clone()).await?;
     let result = pack.download(flow_like_state).await?;
     Ok(result)
 }
@@ -92,5 +92,5 @@ pub async fn get_installed_bit(
 ) -> Result<Vec<Bit>, TauriFunctionError> {
     let pack = BitPack { bits };
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    Ok(pack.get_installed(flow_like_state).await)
+    Ok(pack.get_installed(flow_like_state).await?)
 }

@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 use crate::flow::{
     node::{Node, NodeLogic, NodeState},
     pin::PinType,
-    utils::{evaluate_pin_value, value_to_bool},
+    utils::evaluate_pin_value,
     variable::VariableType,
 };
 
@@ -197,7 +197,10 @@ impl InternalNode {
                 continue;
             }
 
-            let bool_val = value_to_bool(value.unwrap());
+            let bool_val = match value.unwrap() {
+                serde_json::Value::Bool(b) => b,
+                _ => false,
+            };
 
             if filter_valid && !bool_val {
                 continue;
@@ -385,12 +388,9 @@ impl InternalNode {
             recursion_guard.insert(node.id.clone());
         }
 
-        let success = Box::pin(InternalNode::trigger_missing_dependencies(
-            context,
-            recursion_guard,
-            with_successors,
-        ))
-        .await;
+        let success =
+            InternalNode::trigger_missing_dependencies(context, recursion_guard, with_successors)
+                .await;
         if !success {
             context.log_message("Failed to trigger missing dependencies", LogLevel::Error);
             context.end_trace();
@@ -406,6 +406,7 @@ impl InternalNode {
             None,
         );
         let result = logic.run(context).await;
+        drop(logic);
         if result.is_err() {
             context.log_message(
                 &format!("Failed to execute node: {:?}", result.err()),

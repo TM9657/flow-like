@@ -1,5 +1,5 @@
 use crate::state::FlowLikeState;
-use crate::utils::compression::{compress_to_file, from_compressed};
+use crate::utils::compression::{compress_to_file_json, from_compressed_json};
 use crate::utils::download::download_bit;
 use crate::utils::local_object_store::LocalObjectStore;
 use futures::future::BoxFuture;
@@ -59,7 +59,7 @@ pub struct BitProviderModel {
     pub version: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct BitModelPreference {
     pub cost_weight: Option<f32>,
     pub speed_weight: Option<f32>,
@@ -74,6 +74,12 @@ pub struct BitModelPreference {
     pub model_hint: Option<String>,
 }
 
+fn enforce_bound(weight: &mut Option<f32>) {
+    if let Some(w) = weight {
+        *w = w.clamp(0.0, 1.0);
+    }
+}
+
 impl BitModelPreference {
     fn normalize_weight(weight: &mut Option<f32>) {
         if let Some(w) = weight {
@@ -83,6 +89,19 @@ impl BitModelPreference {
                 *weight = Some(1.0);
             }
         }
+    }
+
+    pub fn enforce_bounds(&mut self) {
+        enforce_bound(&mut self.cost_weight);
+        enforce_bound(&mut self.speed_weight);
+        enforce_bound(&mut self.reasoning_weight);
+        enforce_bound(&mut self.creativity_weight);
+        enforce_bound(&mut self.factfulness_weight);
+        enforce_bound(&mut self.function_calling_weight);
+        enforce_bound(&mut self.safety_weight);
+        enforce_bound(&mut self.openness_weight);
+        enforce_bound(&mut self.multilinguality_weight);
+        enforce_bound(&mut self.coding_weight);
     }
 
     pub fn parse(&self) -> Self {
@@ -308,8 +327,11 @@ fn collect_dependencies<'a>(
 }
 
 impl BitPack {
-    pub async fn get_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> Vec<Bit> {
-        let bits_store = state.lock().await.config.read().await.bits_store.clone();
+    pub async fn get_installed(
+        &self,
+        state: Arc<Mutex<FlowLikeState>>,
+    ) -> anyhow::Result<Vec<Bit>> {
+        let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
         let mut installed_bits = vec![];
         for bit in self.bits.iter() {
@@ -330,7 +352,7 @@ impl BitPack {
             }
             installed_bits.push(bit.clone());
         }
-        installed_bits
+        Ok(installed_bits)
     }
 
     pub async fn download(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<Vec<Bit>> {
@@ -380,9 +402,8 @@ impl BitPack {
         size
     }
 
-    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> bool {
-        let bits_store = state.lock().await.config.read().await.bits_store.clone();
-
+    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<bool> {
+        let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
         let mut installed = true;
         for bit in self.bits.iter() {
             let file_name = match bit.file_name.clone() {
@@ -405,7 +426,7 @@ impl BitPack {
                 break;
             }
         }
-        installed
+        Ok(installed)
     }
 }
 
@@ -492,8 +513,8 @@ impl Bit {
         None
     }
 
-    pub async fn dependencies(&self, state: Arc<Mutex<FlowLikeState>>) -> BitPack {
-        let bits_store = state.lock().await.config.read().await.bits_store.clone();
+    pub async fn dependencies(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<BitPack> {
+        let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
         let mut dependencies = vec![];
         let cache_dir =
@@ -502,9 +523,9 @@ impl Bit {
         let metadata = bits_store.head(&cache_dir).await;
 
         if metadata.is_ok() {
-            let file = from_compressed::<BitPack>(bits_store.clone(), cache_dir.clone()).await;
-            if file.is_ok() {
-                return file.unwrap();
+            let file = from_compressed_json::<BitPack>(bits_store.clone(), cache_dir.clone()).await;
+            if let Ok(file) = file {
+                return Ok(file);
             }
         }
 
@@ -532,8 +553,9 @@ impl Bit {
             }
         }
 
+        println!("Dependencies for {} found", self.id);
         let bit_pack = BitPack { bits: dependencies };
-        let res = compress_to_file(bits_store, cache_dir, &bit_pack).await;
+        let res = compress_to_file_json(bits_store, cache_dir, &bit_pack).await;
         if res.is_err() {
             println!(
                 "Failed to compress dependencies for {}, err: {}",
@@ -542,17 +564,17 @@ impl Bit {
             );
         }
 
-        bit_pack
+        Ok(bit_pack)
     }
 
-    pub async fn pack(&self, state: Arc<Mutex<FlowLikeState>>) -> BitPack {
-        let mut dependencies = self.dependencies(state).await;
+    pub async fn pack(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<BitPack> {
+        let mut dependencies = self.dependencies(state).await?;
         dependencies.bits.push(self.clone());
-        dependencies
+        Ok(dependencies)
     }
 
-    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> bool {
-        let pack = self.pack(state.clone()).await;
+    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<bool> {
+        let pack = self.pack(state.clone()).await?;
         pack.is_installed(state).await
     }
 
