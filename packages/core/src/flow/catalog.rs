@@ -14,6 +14,7 @@ pub mod storage;
 pub mod structs;
 pub mod utils;
 pub mod variables;
+pub mod bit;
 
 use crate::state::FlowLikeState;
 
