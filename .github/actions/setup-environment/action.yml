@@ -1,6 +1,11 @@
 name: 'Setup Environment'
 description: 'Sets up the environment for building the project, including dependencies, caches, and tools.'
  
+inputs:
+  repo-token:
+    description: 'GitHub token'
+    required: true
+
 runs:
   using: 'composite'
   steps:
@@ -63,7 +68,7 @@ runs:
     - name: Install Protoc
       uses: arduino/setup-protoc@v3
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        repo-token: ${{ inputs.repo-token }}
 
     # Install Bun globally
     - name: Install Bun
@@ -81,7 +86,7 @@ runs:
       run: bun install
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ inputs.repo-token }}
 
     # Verify the presence of the llamafile
     - name: Check llamafile
