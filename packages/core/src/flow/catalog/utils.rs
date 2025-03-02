@@ -23,6 +23,7 @@ pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
     registry.append(&mut array::register_functions().await);
     registry.append(&mut vector::register_functions().await);
     registry.append(&mut float::register_functions().await);
+    registry.append(&mut int::register_functions().await);
     registry.push(Arc::new(Mutex::new(math::eval::EvalNode::default())));
     registry
 }

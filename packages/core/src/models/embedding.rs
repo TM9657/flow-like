@@ -4,8 +4,10 @@ use anyhow::Result;
 use async_trait::async_trait;
 use text_splitter::{MarkdownSplitter, TextSplitter};
 
+use crate::flow::execution::Cacheable;
+
 #[async_trait]
-pub trait EmbeddingModelLogic: Send + Sync {
+pub trait EmbeddingModelLogic: Send + Sync + Cacheable {
     async fn get_splitter(
         &self,
     ) -> Result<(

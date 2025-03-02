@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub mod ai;
+pub mod bit;
 pub mod control;
 pub mod events;
 pub mod http;
@@ -48,6 +49,7 @@ pub async fn load_catalog(app_state: &FlowLikeState) -> Vec<Node> {
         utils::register_functions().await,
         structs::register_functions().await,
         storage::register_functions().await,
+        bit::register_functions().await,
     ];
 
     let futures: Vec<_> = intermediate_registry

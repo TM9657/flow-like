@@ -2,8 +2,10 @@ pub mod local;
 use anyhow::Result;
 use async_trait::async_trait;
 use text_splitter::{MarkdownSplitter, TextSplitter};
+
+use crate::flow::execution::Cacheable;
 #[async_trait]
-pub trait ImageEmbeddingModelLogic: Send + Sync {
+pub trait ImageEmbeddingModelLogic: Send + Sync + Cacheable {
     async fn get_splitter(
         &self,
     ) -> anyhow::Result<(

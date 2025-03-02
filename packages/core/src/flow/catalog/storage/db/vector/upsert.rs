@@ -52,22 +52,32 @@ impl NodeLogic for UpsertLocalDatabaseNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin("success", "Success", "Success", VariableType::Boolean);
+        node.add_output_pin(
+            "failed",
+            "Failed Upsert",
+            "Triggered if the Upsert failed",
+            VariableType::Execution,
+        );
 
         return node;
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+        context.activate_exec_pin("failed").await?;
+        context.deactivate_exec_pin("exec_out").await?;
+
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let mut database = database.load(context, &database.cache_key).await?;
         let id_row: String = context.evaluate_pin("id_row").await?;
         let value: Value = context.evaluate_pin("value").await?;
         let value = vec![value];
         let results = database.upsert(value, id_row).await;
-        context
-            .set_pin_value("success", json!(results.is_ok()))
-            .await?;
-        context.activate_exec_pin("exec_out").await?;
+
+        if results.is_ok() {
+            context.deactivate_exec_pin("failed").await?;
+            context.activate_exec_pin("exec_out").await?;
+        }
+
         Ok(())
     }
 }
@@ -113,21 +123,31 @@ impl NodeLogic for BatchUpsertLocalDatabaseNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin("success", "Success", "Success", VariableType::Boolean);
+        node.add_output_pin(
+            "failed",
+            "Failed Upsert",
+            "Triggered if the Upsert failed",
+            VariableType::Execution,
+        );
 
         return node;
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+        context.activate_exec_pin("failed").await?;
+        context.deactivate_exec_pin("exec_out").await?;
+
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let mut database = database.load(context, &database.cache_key).await?;
         let value: Vec<Value> = context.evaluate_pin("value").await?;
         let id_row: String = context.evaluate_pin("id_row").await?;
         let results = database.upsert(value, id_row).await;
-        context
-            .set_pin_value("success", json!(results.is_ok()))
-            .await?;
-        context.activate_exec_pin("exec_out").await?;
+
+        if results.is_ok() {
+            context.deactivate_exec_pin("failed").await?;
+            context.activate_exec_pin("exec_out").await?;
+        }
+
         Ok(())
     }
 }

@@ -178,6 +178,17 @@ impl Profile {
         hub.get_bit_by_id(&bit_id).await
     }
 
+    pub async fn find_bit(&self, bit_id: &str, http_client: Arc<HTTPClient>) -> Result<Bit> {
+        let hubs = self.get_available_hubs(http_client).await?;
+        for hub in hubs {
+            let bit = hub.get_bit_by_id(bit_id).await;
+            if let Ok(bit) = bit {
+                return Ok(bit);
+            }
+        }
+        Err(anyhow::anyhow!("Bit not found"))
+    }
+
     pub async fn get_available_hubs(&self, http_client: Arc<HTTPClient>) -> Result<Vec<Hub>> {
         let mut hubs = HashSet::new();
         for hub in &self.hubs {

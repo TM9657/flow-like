@@ -33,5 +33,13 @@
 	--sl-color-gray-7: #F2F2F2;
 	--sl-color-black: #ffffff;
     --sl-colo-bg-nav: #F2F2F2;
+}
 
+.flow-preview .sl-markdown,
+.flow-preview .sl-markdown * {
+    margin-top: 0 !important;
+}
+
+.flow-preview [class*="sl-"] {
+    margin-top: 0 !important;
 }

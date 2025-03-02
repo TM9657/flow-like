@@ -41,12 +41,6 @@ impl NodeLogic for RemoveArrayIndexNode {
         node.add_input_pin("index", "Index", "Index to remove", VariableType::Integer);
 
         node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
-        node.add_output_pin(
-            "success",
-            "Success",
-            "Was removal successful?",
-            VariableType::Boolean,
-        );
 
         node.add_output_pin(
             "array_out",
@@ -56,10 +50,20 @@ impl NodeLogic for RemoveArrayIndexNode {
         )
         .set_value_type(crate::flow::pin::ValueType::Array);
 
+        node.add_output_pin(
+            "failed",
+            "Failed Removal",
+            "Triggered if the Removal failed",
+            VariableType::Execution,
+        );
+
         return node;
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+        context.activate_exec_pin("failed").await?;
+        context.deactivate_exec_pin("exec_out").await?;
+
         let array_in: Vec<Value> = context.evaluate_pin("array_in").await?;
         let index: usize = context.evaluate_pin("index").await?;
 
@@ -80,8 +84,12 @@ impl NodeLogic for RemoveArrayIndexNode {
         }
 
         context.set_pin_value("array_out", json!(array_out)).await?;
-        context.set_pin_value("success", json!(success)).await?;
-        context.activate_exec_pin("exec_out").await?;
+
+        if success {
+            context.deactivate_exec_pin("failed").await?;
+            context.activate_exec_pin("exec_out").await?;
+        }
+
         Ok(())
     }
 
