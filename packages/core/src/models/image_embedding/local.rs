@@ -1,13 +1,14 @@
 use super::ImageEmbeddingModelLogic;
 use crate::{
     bit::{Bit, BitTypes},
+    flow::execution::Cacheable,
     models::{embedding::EmbeddingModelLogic, embedding_factory::EmbeddingFactory},
     state::{FlowLikeState, FlowLikeStore},
 };
 use anyhow::Result;
 use async_trait::async_trait;
 use fastembed::{ImageEmbedding, ImageInitOptionsUserDefined, UserDefinedImageEmbeddingModel};
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 use text_splitter::{MarkdownSplitter, TextSplitter};
 
 use tokio::sync::Mutex;
@@ -16,6 +17,34 @@ pub struct LocalImageEmbeddingModel {
     pub bit: Bit,
     image_embedding_model: fastembed::ImageEmbedding,
     text_model: Arc<dyn EmbeddingModelLogic>,
+    user_embedding_model: UserDefinedImageEmbeddingModel,
+    init_options: ImageInitOptionsUserDefined,
+}
+
+impl Clone for LocalImageEmbeddingModel {
+    fn clone(&self) -> Self {
+        LocalImageEmbeddingModel {
+            bit: self.bit.clone(),
+            image_embedding_model: fastembed::ImageEmbedding::try_new_from_user_defined(
+                self.user_embedding_model.clone(),
+                self.init_options.clone(),
+            )
+            .unwrap(),
+            user_embedding_model: self.user_embedding_model.clone(),
+            init_options: self.init_options.clone(),
+            text_model: self.text_model.clone(),
+        }
+    }
+}
+
+impl Cacheable for LocalImageEmbeddingModel {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 impl LocalImageEmbeddingModel {
@@ -61,12 +90,16 @@ impl LocalImageEmbeddingModel {
             UserDefinedImageEmbeddingModel::new(loaded_model, loaded_preprocessor);
         let init_options = ImageInitOptionsUserDefined::new();
 
-        let loaded_model =
-            ImageEmbedding::try_new_from_user_defined(user_embedding_model, init_options)?;
+        let loaded_model = ImageEmbedding::try_new_from_user_defined(
+            user_embedding_model.clone(),
+            init_options.clone(),
+        )?;
 
         let default_return_model = LocalImageEmbeddingModel {
             bit: bit.clone(),
             image_embedding_model: loaded_model,
+            user_embedding_model,
+            init_options,
             text_model,
         };
 
@@ -103,5 +136,9 @@ impl ImageEmbeddingModelLogic for LocalImageEmbeddingModel {
         };
 
         Ok(embeddings)
+    }
+
+    fn as_cacheable(&self) -> Arc<dyn Cacheable> {
+        Arc::new(self.clone())
     }
 }

@@ -4,6 +4,7 @@ use crate::{
         execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         pin::PinOptions,
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
@@ -103,6 +104,8 @@ impl NodeLogic for IsBitOfTypeNode {
             context.activate_exec_pin("no").await?;
             return Ok(());
         }
+
+        let bit_type = bit_type.unwrap();
 
         context.set_pin_value("bit_out", json!(bit)).await?;
 

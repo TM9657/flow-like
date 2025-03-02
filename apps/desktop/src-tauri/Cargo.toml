@@ -40,7 +40,7 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = { version = "0.1.41", features = ["async-await", "attributes"] }
 dirs-next = "2.0.0"
 object_store = "0.11.2"
-lancedb = "0.16.0"
+lancedb = "0.17.0"
 
 [profile.release]
 panic = "abort"

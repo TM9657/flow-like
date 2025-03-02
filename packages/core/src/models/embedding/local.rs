@@ -1,13 +1,14 @@
 use super::EmbeddingModelLogic;
 use crate::{
     bit::{Bit, BitPack, BitTypes, Pooling},
+    flow::execution::Cacheable,
     state::{FlowLikeState, FlowLikeStore},
     utils::{local_object_store::LocalObjectStore, tokenizer::load_tokenizer_from_file},
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use fastembed::{InitOptionsUserDefined, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel};
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 use text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
 use tokio::sync::Mutex;
 
@@ -15,6 +16,34 @@ pub struct LocalEmbeddingModel {
     pub bit: Bit,
     embedding_model: fastembed::TextEmbedding,
     tokenizer_files: TokenizerFiles,
+    user_embedding_model: UserDefinedEmbeddingModel,
+    init_options: InitOptionsUserDefined,
+}
+
+impl Clone for LocalEmbeddingModel {
+    fn clone(&self) -> Self {
+        LocalEmbeddingModel {
+            bit: self.bit.clone(),
+            embedding_model: fastembed::TextEmbedding::try_new_from_user_defined(
+                self.user_embedding_model.clone(),
+                self.init_options.clone(),
+            )
+            .unwrap(),
+            user_embedding_model: self.user_embedding_model.clone(),
+            init_options: self.init_options.clone(),
+            tokenizer_files: self.tokenizer_files.clone(),
+        }
+    }
+}
+
+impl Cacheable for LocalEmbeddingModel {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 impl LocalEmbeddingModel {
@@ -51,13 +80,17 @@ impl LocalEmbeddingModel {
         let init_options =
             InitOptionsUserDefined::new().with_max_length(params.input_length as usize);
 
-        let loaded_model =
-            TextEmbedding::try_new_from_user_defined(user_embedding_model, init_options)?;
+        let loaded_model = TextEmbedding::try_new_from_user_defined(
+            user_embedding_model.clone(),
+            init_options.clone(),
+        )?;
 
         let default_return_model = LocalEmbeddingModel {
             bit: bit.clone(),
             embedding_model: loaded_model,
             tokenizer_files: loaded_tokenizer,
+            user_embedding_model,
+            init_options,
         };
 
         Ok(Arc::new(default_return_model))
@@ -135,6 +168,10 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             }
         };
         Ok(embeddings)
+    }
+
+    fn as_cacheable(&self) -> Arc<dyn Cacheable> {
+        Arc::new(self.clone())
     }
 }
 
