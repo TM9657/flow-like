@@ -140,13 +140,23 @@ impl NodeLogic for LoopNode {
     }
 
     async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
-        let match_type = node.match_type("array", board.clone(), Some(ValueType::Array));
+        let match_type = node.match_type("array", board.clone(), None, Some(ValueType::Array));
 
         if match_type.is_err() {
             eprintln!("Error: {:?}", match_type.err());
         }
+        let pin = node.get_pin_by_name("array").unwrap();
+        let pin_var = pin.value_type.clone();
+        if pin_var != ValueType::Array && pin_var != ValueType::HashSet {
+            if let Some(node) = node.get_pin_mut_by_name("array") {
+                node.value_type = ValueType::Array;
+                node.depends_on.clear();
+            }
 
-        let match_type = node.match_type("value", board, Some(ValueType::Normal));
+            let _res = node.match_type("array", board.clone(), None, Some(ValueType::Array));
+        }
+
+        let match_type = node.match_type("value", board, Some(ValueType::Normal), None);
 
         if match_type.is_err() {
             eprintln!("Error: {:?}", match_type.err());

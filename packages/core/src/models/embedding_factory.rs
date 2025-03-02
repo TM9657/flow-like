@@ -38,7 +38,7 @@ impl EmbeddingFactory {
         bit: &Bit,
         app_state: Arc<Mutex<FlowLikeState>>,
     ) -> anyhow::Result<Arc<dyn EmbeddingModelLogic>> {
-        let provider = bit.try_to_provider();
+        let provider = bit.try_to_embedding_provider();
         if provider.is_none() {
             return Err(anyhow::anyhow!("Model type not supported"));
         }

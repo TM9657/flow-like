@@ -1,0 +1,65 @@
+{
+    "authors": [
+      "https://huggingface.co/jinaai"
+    ],
+    "created": "2024-10-03T18:16:38.035Z",
+    "dependencies": [
+      [
+        "hub.buttons.good-co.de",
+        "ehbk7zguefp5tiygj2cqs2fh"
+      ],
+      [
+        "hub.buttons.good-co.de",
+        "q72tgl52byd4b3omyrudvz0g"
+      ],
+      [
+        "hub.buttons.good-co.de",
+        "fscvu66w2z6k8m0fsiknfdur"
+      ],
+      [
+        "hub.buttons.good-co.de",
+        "qbokbd3haflr821788peoau1"
+      ]
+    ],
+    "dependency_tree_hash": "b22f9ae3267aaf6d8b2772ca417ca0471c4b7f01589596320368e3bbab2dff4b",
+    "download_link": "https://huggingface.co/jinaai/jina-embeddings-v2-base-de/resolve/main/onnx/model_quantized.onnx",
+    "file_name": "model_quantized.onnx",
+    "hash": "c29b0aa275c83b52c7ca1106b4297436d7799066ba8e8e6865fd3a0d8294e3fd",
+    "hub": "hub.buttons.good-co.de",
+    "icon": "https://cdn-avatars.huggingface.co/v1/production/uploads/603763514de52ff951d89793/AFoybzd5lpBQXEBrQHuTt.png",
+    "id": "kiom7k0ppwhvx5xoi6lazb3q",
+    "license": "apache-2.0",
+    "meta": {
+      "en": {
+        "description": "jina-embeddings-v2-base-de is a German/English bilingual text embedding model supporting 8192 sequence length. It is based on a BERT architecture (JinaBERT) that supports the symmetric bidirectional variant of ALiBi to allow longer sequence length. We have designed it for high performance in mono-lingual & cross-lingual applications and trained it specifically to support mixed German-English input without bias",
+        "long_description": "jina-embeddings-v2-base-de is a German/English bilingual text embedding model supporting 8192 sequence length. It is based on a BERT architecture (JinaBERT) that supports the symmetric bidirectional variant of ALiBi to allow longer sequence length. We have designed it for high performance in mono-lingual & cross-lingual applications and trained it specifically to support mixed German-English input without bias",
+        "name": "Jina: German - English",
+        "tags": [
+          "german",
+          "english"
+        ],
+        "use_case": "general"
+      }
+    },
+    "parameters": {
+      "input_length": 8192,
+      "languages": [
+        "🇺🇸",
+        "🇩🇪"
+      ],
+      "pooling": "Mean",
+      "prefix": {
+        "paragraph": "",
+        "query": ""
+      },
+      "provider": {
+        "provider_name": "Local"
+      },
+      "vector_length": 768
+    },
+    "repository": "https://huggingface.co/jinaai/jina-embeddings-v2-base-de",
+    "size": 161565240,
+    "type": "Embedding",
+    "updated": "2024-10-03T18:16:38.036Z",
+    "version": "0.0.1"
+  }

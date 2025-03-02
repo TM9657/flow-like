@@ -1,14 +1,16 @@
+use std::sync::Arc;
+
 use fastembed::TokenizerFiles;
 use tokenizers::{AddedToken, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
 
 pub fn load_tokenizer_from_file(
-    tokenizer_files: TokenizerFiles,
+    tokenizer_files: Arc<TokenizerFiles>,
     max_length: usize,
 ) -> anyhow::Result<Tokenizer> {
     let base_error_message =
         "Error building TokenizerFiles for UserDefinedEmbeddingModel. Could not read {} file.";
 
-    // Serialise each tokenizer file
+    // Serialize each tokenizer file
     let config: serde_json::Value =
         serde_json::from_slice(&tokenizer_files.config_file).map_err(|_| {
             std::io::Error::new(
@@ -30,13 +32,15 @@ pub fn load_tokenizer_from_file(
                 base_error_message.replace("{}", "tokenizer_config.json"),
             )
         })?;
-    let mut tokenizer: tokenizers::Tokenizer =
-        tokenizers::Tokenizer::from_bytes(tokenizer_files.tokenizer_file).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                base_error_message.replace("{}", "tokenizer.json"),
-            )
-        })?;
+    let mut tokenizer: tokenizers::Tokenizer = tokenizers::Tokenizer::from_bytes(
+        tokenizer_files.tokenizer_file.clone(),
+    )
+    .map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            base_error_message.replace("{}", "tokenizer.json"),
+        )
+    })?;
 
     //For BGEBaseSmall, the model_max_length value is set to 1000000000000000019884624838656. Which fits in a f64
     let model_max_length = tokenizer_config["model_max_length"]

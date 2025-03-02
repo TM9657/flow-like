@@ -1,7 +1,7 @@
 import { useDraggable } from '@dnd-kit/core';
 import { createId } from "@paralleldrive/cuid2";
 import { useDebounce } from "@uidotdev/usehooks";
-import { CirclePlusIcon, EllipsisVerticalIcon, EyeIcon, EyeOffIcon, GripIcon, ListIcon } from "lucide-react";
+import { CirclePlusIcon, DeleteIcon, EllipsisVerticalIcon, EyeIcon, EyeOffIcon, GripIcon, ListIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../../components/ui/dropdown-menu";
@@ -64,17 +64,26 @@ export function VariablesMenu({ board, executeCommand }: Readonly<{ board: IBoar
                 New
             </Button>
         </div>
-        {Object.values(board.variables).sort((a, b) => a.name.localeCompare(b.name)).map((variable) => <Variable key={variable.id} variable={variable} onVariableChange={(variable) => {
-            if (!variable.editable) {
-                // toast.error("This variable is not editable")
-                return;
-            }
-            upsertVariable(variable)
-        }} />)}
+        {Object.values(board.variables).sort((a, b) => a.name.localeCompare(b.name)).map((variable) => <Variable key={variable.id} variable={variable}
+            onVariableChange={(variable) => {
+                if (!variable.editable) {
+                    // toast.error("This variable is not editable")
+                    return;
+                }
+                upsertVariable(variable)
+            }}
+            onVariableDeleted={(variable) => {
+                if (!variable.editable) {
+                    // toast.error("This variable is not editable")
+                    return;
+                }
+                removeVariable(variable)
+            }}
+        />)}
     </div>
 }
 
-export function Variable({ variable, onVariableChange, preview = false }: Readonly<{ variable: IVariable, onVariableChange: (variable: IVariable) => void, preview?: boolean }>) {
+export function Variable({ variable, onVariableChange, onVariableDeleted, preview = false }: Readonly<{ variable: IVariable, onVariableDeleted: (variable: IVariable) => void, onVariableChange: (variable: IVariable) => void, preview?: boolean }>) {
     const { attributes, listeners, setNodeRef, transform } = useDraggable({
         id: variable.id,
         data: variable
@@ -187,56 +196,63 @@ export function Variable({ variable, onVariableChange, preview = false }: Readon
         <SheetTrigger>
             {element}
         </SheetTrigger>
-        <SheetContent>
+        <SheetContent className='flex flex-col gap-6 max-h-screen overflow-hidden'>
             <SheetHeader>
                 <SheetTitle className="flex flex-row items-center gap-2">Edit Variable {isArrayDropdown}</SheetTitle>
                 <SheetDescription className="flex flex-col gap-6 text-foreground">
                     <p className="text-muted-foreground">Edit the variable properties to your liking.</p>
                     <Separator />
-                    <div className="grid w-full max-w-sm items-center gap-1.5">
-                        <Label htmlFor="name">Variable Name</Label>
-                        <Input value={localVariable.name} onChange={(e) => { setLocalVariable(old => ({ ...old, name: e.target.value })) }} id="name" placeholder="Name" />
-                    </div>
-                    <div className="grid w-full max-w-sm items-center gap-1.5">
-                        <div className="flex flex-row items-center gap-2">{isArrayDropdown}<Label htmlFor="var_type">Variable Type</Label></div>
-                        <Select value={localVariable.data_type} onValueChange={(value) => setLocalVariable(old => ({ ...old, data_type: value as IVariableType, default_value: convertJsonToUint8Array(defaultValueFromType(value as IVariableType)) }))}>
-                            <SelectTrigger id="var_type" className="w-full">
-                                <SelectValue placeholder="Variable Type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    <SelectLabel>Variable Type</SelectLabel>
-                                    <SelectItem value="Boolean">Boolean</SelectItem>
-                                    <SelectItem value="Date">Date</SelectItem>
-                                    <SelectItem value="Float">Float</SelectItem>
-                                    <SelectItem value="Integer">Integer</SelectItem>
-                                    <SelectItem value="Generic">Generic</SelectItem>
-                                    <SelectItem value="PathBuf">PathBuf</SelectItem>
-                                    <SelectItem value="String">String</SelectItem>
-                                    <SelectItem value="Struct">Struct</SelectItem>
-                                    <SelectItem value="Byte">Byte</SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                        <div className="flex items-center space-x-2">
-                            <Switch checked={localVariable.exposed} onCheckedChange={(checked) => setLocalVariable(old => ({ ...old, exposed: checked }))} id="exposed" />
-                            <Label htmlFor="exposed">Is Exposed?</Label>
-                        </div>
-                        <small className="text-[0.8rem] text-muted-foreground">If you expose a variable the context (Vault, App, etc. will be able to configure this)</small>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                        <div className="flex items-center space-x-2">
-                            <Switch checked={localVariable.secret} onCheckedChange={(checked) => setLocalVariable(old => ({ ...old, secret: checked }))} id="secret" />
-                            <Label htmlFor="secret">Is Secret?</Label>
-                        </div>
-                        <small className="text-[0.8rem] text-muted-foreground">A secret Variable will be covered for input (e.g passwords)</small>
-                    </div>
-                    <Separator />
-                    {!localVariable.exposed && <VariablesMenuEdit variable={localVariable} updateVariable={async (variable) => setLocalVariable(variable)} />}
                 </SheetDescription>
             </SheetHeader>
+            <div className="grid w-full max-w-sm items-center gap-1.5">
+                <Label htmlFor="name">Variable Name</Label>
+                <Input value={localVariable.name} onChange={(e) => { setLocalVariable(old => ({ ...old, name: e.target.value })) }} id="name" placeholder="Name" />
+            </div>
+            <div className="grid w-full max-w-sm items-center gap-1.5">
+                <div className="flex flex-row items-center gap-2">{isArrayDropdown}<Label htmlFor="var_type">Variable Type</Label></div>
+                <Select value={localVariable.data_type} onValueChange={(value) => setLocalVariable(old => ({ ...old, data_type: value as IVariableType, default_value: convertJsonToUint8Array(defaultValueFromType(value as IVariableType)) }))}>
+                    <SelectTrigger id="var_type" className="w-full">
+                        <SelectValue placeholder="Variable Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            <SelectLabel>Variable Type</SelectLabel>
+                            <SelectItem value="Boolean">Boolean</SelectItem>
+                            <SelectItem value="Date">Date</SelectItem>
+                            <SelectItem value="Float">Float</SelectItem>
+                            <SelectItem value="Integer">Integer</SelectItem>
+                            <SelectItem value="Generic">Generic</SelectItem>
+                            <SelectItem value="PathBuf">PathBuf</SelectItem>
+                            <SelectItem value="String">String</SelectItem>
+                            <SelectItem value="Struct">Struct</SelectItem>
+                            <SelectItem value="Byte">Byte</SelectItem>
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+                <div className="flex items-center space-x-2">
+                    <Switch checked={localVariable.exposed} onCheckedChange={(checked) => setLocalVariable(old => ({ ...old, exposed: checked }))} id="exposed" />
+                    <Label htmlFor="exposed">Is Exposed?</Label>
+                </div>
+                <small className="text-[0.8rem] text-muted-foreground">If you expose a variable the context (Vault, App, etc. will be able to configure this)</small>
+            </div>
+            <div className="flex flex-col gap-1">
+                <div className="flex items-center space-x-2">
+                    <Switch checked={localVariable.secret} onCheckedChange={(checked) => setLocalVariable(old => ({ ...old, secret: checked }))} id="secret" />
+                    <Label htmlFor="secret">Is Secret?</Label>
+                </div>
+                <small className="text-[0.8rem] text-muted-foreground">A secret Variable will be covered for input (e.g passwords)</small>
+            </div>
+            <Separator />
+            <div className='flex flex-grow h-full flex-col max-h-full overflow-auto'>
+                {!localVariable.exposed && <VariablesMenuEdit variable={localVariable} updateVariable={async (variable) => setLocalVariable(variable)} />}
+            </div>
+            <Button variant={"destructive"} onClick={() => {
+                onVariableDeleted(variable)
+            }}>
+                <Trash2Icon/>
+            </Button>
         </SheetContent>
     </Sheet>
 }

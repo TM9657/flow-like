@@ -13,28 +13,11 @@ use text_splitter::{MarkdownSplitter, TextSplitter};
 
 use tokio::sync::Mutex;
 
+#[derive(Clone)]
 pub struct LocalImageEmbeddingModel {
-    pub bit: Bit,
-    image_embedding_model: fastembed::ImageEmbedding,
+    pub bit: Arc<Bit>,
+    image_embedding_model: Arc<fastembed::ImageEmbedding>,
     text_model: Arc<dyn EmbeddingModelLogic>,
-    user_embedding_model: UserDefinedImageEmbeddingModel,
-    init_options: ImageInitOptionsUserDefined,
-}
-
-impl Clone for LocalImageEmbeddingModel {
-    fn clone(&self) -> Self {
-        LocalImageEmbeddingModel {
-            bit: self.bit.clone(),
-            image_embedding_model: fastembed::ImageEmbedding::try_new_from_user_defined(
-                self.user_embedding_model.clone(),
-                self.init_options.clone(),
-            )
-            .unwrap(),
-            user_embedding_model: self.user_embedding_model.clone(),
-            init_options: self.init_options.clone(),
-            text_model: self.text_model.clone(),
-        }
-    }
 }
 
 impl Cacheable for LocalImageEmbeddingModel {
@@ -53,6 +36,7 @@ impl LocalImageEmbeddingModel {
         app_state: Arc<Mutex<FlowLikeState>>,
         factory: &mut EmbeddingFactory,
     ) -> anyhow::Result<Arc<Self>> {
+        let bit = Arc::new(bit.clone());
         let bit_store = FlowLikeState::bit_store(&app_state).await?;
 
         let bit_store = match bit_store {
@@ -96,10 +80,8 @@ impl LocalImageEmbeddingModel {
         )?;
 
         let default_return_model = LocalImageEmbeddingModel {
-            bit: bit.clone(),
-            image_embedding_model: loaded_model,
-            user_embedding_model,
-            init_options,
+            bit,
+            image_embedding_model: Arc::new(loaded_model),
             text_model,
         };
 

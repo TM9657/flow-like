@@ -48,24 +48,27 @@ impl NodeLogic for BitFromStringNode {
 
         node.add_output_pin("output_bit", "Bit", "Output Bit", VariableType::Struct)
             .set_schema::<Bit>();
+
         node.add_output_pin(
-            "success",
-            "Success",
-            "String was successfully converted to a bit",
-            VariableType::Boolean,
+            "failed",
+            "Failed Loading",
+            "Failed to load the bit",
+            VariableType::Execution,
         );
 
         return node;
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+        context.activate_exec_pin("failed").await?;
+        context.deactivate_exec_pin("exec_out").await?;
         let bit_id: String = context.evaluate_pin("bit_id").await?;
         let http_client = context.app_state.lock().await.http_client.clone();
         let bit = context.profile.find_bit(&bit_id, http_client).await;
 
         if let Ok(bit) = bit {
-            context.set_pin_value("success", json!(false)).await?;
             context.set_pin_value("output_bit", json!(bit)).await?;
+            context.deactivate_exec_pin("failed").await?;
             context.activate_exec_pin("exec_out").await?;
             return Ok(());
         }
@@ -75,8 +78,6 @@ impl NodeLogic for BitFromStringNode {
             &format!("Bit not found: {}", err),
             crate::flow::execution::LogLevel::Error,
         );
-        context.set_pin_value("success", json!(false)).await?;
-        context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
 }

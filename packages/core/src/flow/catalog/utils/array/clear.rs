@@ -60,7 +60,7 @@ impl NodeLogic for ClearArrayNode {
     async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
         let mut found_type = VariableType::Generic;
         let match_type = node
-            .match_type("array_in", board.clone(), Some(ValueType::Array))
+            .match_type("array_in", board.clone(), Some(ValueType::Array), None)
             .unwrap_or(VariableType::Generic);
 
         if match_type != VariableType::Generic {

@@ -11,6 +11,7 @@
     "build:desktop": "bun run --cwd ./apps/desktop tauri build",
     "build:docs": "bun run --cwd ./apps/docs build",
     "deploy:docs": "bun run --cwd ./apps/docs deploy",
+    "deploy:docs:force": "bun run --cwd ./apps/docs deploy:force",
     "postinstall": "cargo install cargo-license cargo-watch systemfd",
     "version": "npm version patch -m \"Increment version to %s\"",
     "bloat": "cargo bloat --release -n 10",

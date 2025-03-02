@@ -501,6 +501,18 @@ impl Bit {
         None
     }
 
+    pub fn try_to_embedding_provider(&self) -> Option<BitProviderModel> {
+        if let Some(parameters) = self.try_to_embedding() {
+            return Some(parameters.provider);
+        }
+
+        if let Some(parameters) = self.try_to_image_embedding() {
+            return Some(parameters.provider);
+        }
+
+        None
+    }
+
     pub fn try_to_context_length(&self) -> Option<u32> {
         if let Some(parameters) = self.try_to_llm() {
             return Some(parameters.context_length);
