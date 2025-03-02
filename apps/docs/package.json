@@ -7,6 +7,7 @@
     "start": "astro dev",
     "build": "astro build",
     "deploy": "bun run build && bunx wrangler pages deploy dist",
+    "deploy:force": "bun run build && bunx wrangler pages deploy dist --branch main",
     "preview": "astro preview",
     "astro": "astro"
   },
