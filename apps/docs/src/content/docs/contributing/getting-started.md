@@ -9,12 +9,12 @@ Thank you for considering contributing to Flow-Like! This document outlines the 
 
 ## Getting Started
 1. Prerequisites: 
-    - Install [Rust](https://www.rust-lang.org/tools/install)
-    - Install [Bun](https://bun.sh/docs/installation)
-    - [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)
-    - Install Additional Dependencies (e.g Protobuf)
-      - Linux: `protobuf-compiler, build-essentials`
-      - MacOS: `brew install protobuf`
+    1. Install [Rust](https://www.rust-lang.org/tools/install)
+    2. Install [Bun](https://bun.sh/docs/installation)
+    3. [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)
+    4. Install Additional Dependencies (e.g Protobuf)
+        - Linux: `protobuf-compiler, clang`
+        - MacOS: `brew install protobuf`
 2. Fork the Repository: Fork the repository to your GitHub account and clone it locally.
 ```bash
 git clone https://github.com/your-username/flow-like.git
