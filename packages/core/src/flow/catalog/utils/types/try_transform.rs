@@ -284,7 +284,7 @@ fn value_to_struct(input: &Value, target: &mut Value) -> bool {
 fn value_to_byte(input: &Value, target: &mut Value) -> bool {
     if input.is_number() {
         if let Some(val) = input.as_i64() {
-            if val >= 0 && val <= 255 {
+            if (0..=255).contains(&val) {
                 *target = Value::Number((val as u8).into());
                 return true;
             }
@@ -292,7 +292,7 @@ fn value_to_byte(input: &Value, target: &mut Value) -> bool {
 
         if let Some(val) = input.as_f64() {
             let byte_val = val.round() as i64;
-            if byte_val >= 0 && byte_val <= 255 {
+            if (0..=255).contains(&byte_val) {
                 *target = Value::Number((byte_val as u8).into());
                 return true;
             }
@@ -308,7 +308,7 @@ fn value_to_byte(input: &Value, target: &mut Value) -> bool {
 
             if let Ok(val) = s.parse::<f64>() {
                 let byte_val = val.round() as i64;
-                if byte_val >= 0 && byte_val <= 255 {
+                if (0..=255).contains(&byte_val) {
                     *target = Value::Number((byte_val as u8).into());
                     return true;
                 }

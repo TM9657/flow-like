@@ -80,7 +80,7 @@ impl LocalImageEmbeddingModel {
         )?;
 
         let default_return_model = LocalImageEmbeddingModel {
-            bit: bit,
+            bit,
             image_embedding_model: Arc::new(loaded_model),
             text_model,
         };
