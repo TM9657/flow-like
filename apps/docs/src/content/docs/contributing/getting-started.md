@@ -22,7 +22,7 @@ cd flow-like
 
 ## Code of Conduct
 
-We aim to maintain a welcoming community. Please adhere to our Code of Conduct (coming soon...) in all interactions.
+We aim to maintain a welcoming community. Please adhere to our [Code of Conduct](/contributing/code-of-conduct) in all interactions.
 
 ## How to Contribute
 
