@@ -1,6 +1,8 @@
 ---
 title: Best Practices
 description: Creating a Node should be a straight forwards and easy task for most.
+sidebar:
+  order: 1
 ---
 
 Some of the best practices we recommend for the creation of great nodes.

@@ -1,6 +1,8 @@
 ---
 title: Code of Conduct
 description: Our mission. Please keep to it.
+sidebar:
+  order: 2
 ---
 
 ## Our Mission

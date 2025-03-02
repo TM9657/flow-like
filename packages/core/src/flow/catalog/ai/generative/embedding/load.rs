@@ -1,18 +1,15 @@
-use std::sync::Arc;
-
 use crate::{
     bit::{Bit, BitTypes},
     flow::{
-        board::Board,
-        execution::{context::ExecutionContext, Cacheable},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         pin::PinOptions,
         variable::VariableType,
     },
     state::FlowLikeState,
 };
-use ahash::HashMap;
 use async_trait::async_trait;
+use serde_json::json;
 
 use super::CachedEmbeddingModel;
 
@@ -95,7 +92,7 @@ impl NodeLogic for LoadModelNode {
                     .await
                     .build_text(&bit, app_state)
                     .await?;
-                let cacheable: Arc<dyn Cacheable> = model;
+                let cacheable = model.as_cacheable();
                 cacheable
             }
             BitTypes::ImageEmbedding => {
@@ -104,7 +101,7 @@ impl NodeLogic for LoadModelNode {
                     .await
                     .build_image(&bit, app_state)
                     .await?;
-                let cacheable: Arc<dyn Cacheable> = model;
+                let cacheable = model.as_cacheable();
                 cacheable
             }
             _ => {
@@ -112,7 +109,7 @@ impl NodeLogic for LoadModelNode {
             }
         };
 
-        context.set_cache(&bit.id, model).await?;
+        context.set_cache(&bit.id, model).await;
         let model = CachedEmbeddingModel {
             cache_key: bit.id.clone(),
             model_type: bit.bit_type.clone(),

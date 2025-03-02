@@ -40,7 +40,7 @@ sysinfo = "0.33.0"
 flate2 = "1.0.35"
 arrow-schema = {version="53.2", features = ["serde"] }
 arrow = "53.2"
-lancedb = {version="0.16.0" }
+lancedb = {version="0.17.0" }
 surrealdb = { version = "2.1.3", features = ["kv-rocksdb"] }
 walkdir = "2.5.0"
 junction = "1.2.0"
@@ -85,7 +85,7 @@ bytes = "1.10.0"
 nalgebra = "0.33.2"
 rand = "0.9.0"
 fasteval = "0.2.4"
-chrono = "0.4.40"
+chrono = "0.4.39"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
