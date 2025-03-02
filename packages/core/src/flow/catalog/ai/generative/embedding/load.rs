@@ -92,8 +92,8 @@ impl NodeLogic for LoadModelNode {
                     .await
                     .build_text(&bit, app_state)
                     .await?;
-                let cacheable = model.as_cacheable();
-                cacheable
+                
+                model.as_cacheable()
             }
             BitTypes::ImageEmbedding => {
                 let model = model_factory
@@ -101,8 +101,8 @@ impl NodeLogic for LoadModelNode {
                     .await
                     .build_image(&bit, app_state)
                     .await?;
-                let cacheable = model.as_cacheable();
-                cacheable
+                
+                model.as_cacheable()
             }
             _ => {
                 return Ok(());
