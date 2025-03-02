@@ -21,7 +21,10 @@ pub struct BitDownloadEvent {
 
 async fn get_remote_size(client: &Client, url: &str) -> anyhow::Result<u64> {
     let res = client.head(url).send().await?;
-    let total_size = res.headers().get("content-length").ok_or(anyhow!("No content length"))?;
+    let total_size = res
+        .headers()
+        .get("content-length")
+        .ok_or(anyhow!("No content length"))?;
 
     println!("Remote file size: {:?}", total_size);
 
@@ -112,7 +115,13 @@ pub async fn download_bit(
     if remote_size.is_err() {
         if path_name.exists() {
             let _rem = remove_download(bit, &app_state).await;
-            let _ = publish_progress(bit, &sender, path_name.metadata().unwrap().len(), &store_path).await;
+            let _ = publish_progress(
+                bit,
+                &sender,
+                path_name.metadata().unwrap().len(),
+                &store_path,
+            )
+            .await;
             return Ok(store_path);
         }
 
@@ -191,7 +200,6 @@ pub async fn download_bit(
 
     let mut stream = res.bytes_stream();
     let mut in_buffer = 0;
-
 
     while let Some(item) = stream.next().await {
         let chunk = match item {

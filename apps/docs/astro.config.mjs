@@ -35,6 +35,14 @@ export default defineConfig({
 					autogenerate: { directory: 'guides' },
 				},
 				{
+					label: 'Nodes',
+					autogenerate: { directory: 'nodes' },
+				},
+				{
+					label: 'Contributing',
+					autogenerate: { directory: 'contributing' },
+				},
+				{
 					label: 'Reference',
 					autogenerate: { directory: 'reference' },
 				},

@@ -49,18 +49,19 @@ impl NodeLogic for PopArrayNode {
         .set_value_type(ValueType::Array);
 
         node.add_output_pin("value", "Value", "Popped Value", VariableType::Generic);
-
         node.add_output_pin(
-            "success",
-            "Success",
-            "Was the pop successful?",
-            VariableType::Boolean,
+            "failed",
+            "Failed Pop",
+            "Triggered if the Ingest failed",
+            VariableType::Execution,
         );
 
         return node;
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+        context.activate_exec_pin("failed").await?;
+        context.deactivate_exec_pin("exec_out").await?;
         let array_in: Vec<Value> = context.evaluate_pin("array_in").await?;
         let mut array_out = array_in.clone();
         let popped_value = array_out.pop();
@@ -70,8 +71,12 @@ impl NodeLogic for PopArrayNode {
         if let Some(value) = popped_value {
             context.set_pin_value("value", json!(value)).await?;
         }
-        context.set_pin_value("success", json!(success)).await?;
-        context.activate_exec_pin("exec_out").await?;
+
+        if success {
+            context.deactivate_exec_pin("failed").await?;
+            context.activate_exec_pin("exec_out").await?;
+        }
+
         Ok(())
     }
 

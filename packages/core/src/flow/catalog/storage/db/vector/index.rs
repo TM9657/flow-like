@@ -60,25 +60,28 @@ impl NodeLogic for IndexLocalDatabaseNode {
         );
 
         node.add_output_pin(
-            "success",
-            "Success",
-            "Was optimization successful?",
-            VariableType::Boolean,
+            "failed",
+            "Failed Indexing",
+            "Failed to index the column",
+            VariableType::Execution,
         );
 
         return node;
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+        context.activate_exec_pin("failed").await?;
+        context.deactivate_exec_pin("exec_out").await?;
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let database = database.load(context, &database.cache_key).await?;
         let column: String = context.evaluate_pin("column").await?;
         let fts: bool = context.evaluate_pin("fts").await?;
         let result = database.index(&column, fts).await;
-        context
-            .set_pin_value("success", json!(result.is_ok()))
-            .await?;
-        context.activate_exec_pin("exec_out").await?;
+        if result.is_ok() {
+            context.deactivate_exec_pin("failed").await?;
+            context.activate_exec_pin("exec_out").await?;
+            return Ok(());
+        }
         Ok(())
     }
 }

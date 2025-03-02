@@ -178,11 +178,7 @@ impl Profile {
         hub.get_bit_by_id(&bit_id).await
     }
 
-    pub async fn find_bit(
-        &self,
-        bit_id: &str,
-        http_client: Arc<HTTPClient>,
-    ) -> Result<Bit> {
+    pub async fn find_bit(&self, bit_id: &str, http_client: Arc<HTTPClient>) -> Result<Bit> {
         let hubs = self.get_available_hubs(http_client).await?;
         for hub in hubs {
             let bit = hub.get_bit_by_id(bit_id).await;

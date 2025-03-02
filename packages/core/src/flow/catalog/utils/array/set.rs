@@ -53,16 +53,18 @@ impl NodeLogic for SetIndexArrayNode {
         .set_value_type(ValueType::Array);
 
         node.add_output_pin(
-            "success",
-            "Success",
-            "Was the operation successful?",
-            VariableType::Boolean,
+            "failed",
+            "Failed Setting",
+            "Triggered if the Ingest failed",
+            VariableType::Execution,
         );
 
         return node;
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+        context.activate_exec_pin("failed").await?;
+        context.deactivate_exec_pin("exec_out").await?;
         let array_in: Vec<Value> = context.evaluate_pin("array_in").await?;
         let index: usize = context.evaluate_pin("index").await?;
         let value: Value = context.evaluate_pin("value").await?;
@@ -76,8 +78,12 @@ impl NodeLogic for SetIndexArrayNode {
         }
 
         context.set_pin_value("array_out", json!(array_out)).await?;
-        context.set_pin_value("success", json!(success)).await?;
-        context.activate_exec_pin("exec_out").await?;
+
+        if success {
+            context.deactivate_exec_pin("failed").await?;
+            context.activate_exec_pin("exec_out").await?;
+        }
+
         Ok(())
     }
 

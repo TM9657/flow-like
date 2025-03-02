@@ -1,7 +1,11 @@
 use crate::{
-    bit::Bit, flow::{
-        execution::context::ExecutionContext, node::{Node, NodeLogic}, variable::VariableType
-    }, state::FlowLikeState
+    bit::Bit,
+    flow::{
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        variable::VariableType,
+    },
+    state::FlowLikeState,
 };
 use async_trait::async_trait;
 use serde_json::json;
@@ -42,8 +46,14 @@ impl NodeLogic for BitFromStringNode {
 
         node.add_input_pin("bit_id", "Bit ID", "Input String", VariableType::String);
 
-        node.add_output_pin("output_bit", "Bit", "Output Bit", VariableType::Struct).set_schema::<Bit>();
-        node.add_output_pin("success", "Success", "String was successfully converted to a bit", VariableType::Boolean);
+        node.add_output_pin("output_bit", "Bit", "Output Bit", VariableType::Struct)
+            .set_schema::<Bit>();
+        node.add_output_pin(
+            "success",
+            "Success",
+            "String was successfully converted to a bit",
+            VariableType::Boolean,
+        );
 
         return node;
     }
@@ -61,7 +71,10 @@ impl NodeLogic for BitFromStringNode {
         }
 
         let err = bit.err().unwrap();
-        context.log_message(&format!("Bit not found: {}", err), crate::flow::execution::LogLevel::Error);
+        context.log_message(
+            &format!("Bit not found: {}", err),
+            crate::flow::execution::LogLevel::Error,
+        );
         context.set_pin_value("success", json!(false)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())

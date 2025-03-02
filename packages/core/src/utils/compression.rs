@@ -50,7 +50,10 @@ where
     Ok(data)
 }
 
-pub async fn from_compressed_json<T>(store: Arc<dyn ObjectStore>, file_path: Path) -> anyhow::Result<T>
+pub async fn from_compressed_json<T>(
+    store: Arc<dyn ObjectStore>,
+    file_path: Path,
+) -> anyhow::Result<T>
 where
     T: Serialize + DeserializeOwned,
 {
