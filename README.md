@@ -76,7 +76,7 @@ Flow-Like Core Runtime is written in Rust and meant to be executed in the Softwa
 Running local by default does not mean you can´t run Flow-Like Flows anywhere. Our extremely fast runtime supports on-edge, on-prem, in cloud or local deployment of any part of the software.
 
 #### Powerfull Integrations
-Seamlessly integrate AI capabilities with your local file system or internet and intranet ressources. Automate file management, content generation, and data analysis directly from your desktop environment. You can also add new custom Integrations. Flow-Like offers a bunch of different storage solutions for you to utilize, like Vector, Graph, Full-Text or SQL and No-SQL Database. All batteries included.
+Seamlessly integrate AI capabilities with your local file system or internet and intranet resources. Automate file management, content generation, and data analysis directly from your desktop environment. You can also add new custom Integrations. Flow-Like offers a bunch of different storage solutions for you to utilize, like Vector, Graph, Full-Text or SQL and No-SQL Database. All batteries included.
 
 #### Agent Framework
 Agent frameworks are nothing new. The speed you can develop them with Flow-Like is. While we are not the first to develop a graph based approach to Agents, we offer the most flexible and most performant solution. No Python Package Hell, no Dependencies.
