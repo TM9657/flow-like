@@ -12,28 +12,11 @@ use std::{any::Any, sync::Arc};
 use text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
 use tokio::sync::Mutex;
 
+#[derive(Clone)]
 pub struct LocalEmbeddingModel {
-    pub bit: Bit,
-    pub embedding_model: fastembed::TextEmbedding,
-    pub tokenizer_files: TokenizerFiles,
-    pub user_embedding_model: UserDefinedEmbeddingModel,
-    pub init_options: InitOptionsUserDefined,
-}
-
-impl Clone for LocalEmbeddingModel {
-    fn clone(&self) -> Self {
-        LocalEmbeddingModel {
-            bit: self.bit.clone(),
-            embedding_model: fastembed::TextEmbedding::try_new_from_user_defined(
-                self.user_embedding_model.clone(),
-                self.init_options.clone(),
-            )
-            .unwrap(),
-            user_embedding_model: self.user_embedding_model.clone(),
-            init_options: self.init_options.clone(),
-            tokenizer_files: self.tokenizer_files.clone(),
-        }
-    }
+    pub bit: Arc<Bit>,
+    pub embedding_model: Arc<fastembed::TextEmbedding>,
+    pub tokenizer_files: Arc<TokenizerFiles>,
 }
 
 impl Cacheable for LocalEmbeddingModel {
@@ -48,6 +31,7 @@ impl Cacheable for LocalEmbeddingModel {
 
 impl LocalEmbeddingModel {
     pub async fn new(bit: &Bit, app_state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<Arc<Self>> {
+        let bit = Arc::new(bit.clone());
         let bit_store = FlowLikeState::bit_store(&app_state).await?;
 
         let bit_store = match bit_store {
@@ -86,11 +70,9 @@ impl LocalEmbeddingModel {
         )?;
 
         let default_return_model = LocalEmbeddingModel {
-            bit: bit.clone(),
-            embedding_model: loaded_model,
-            tokenizer_files: loaded_tokenizer,
-            user_embedding_model,
-            init_options,
+            bit,
+            embedding_model: Arc::new(loaded_model),
+            tokenizer_files: Arc::new(loaded_tokenizer),
         };
 
         Ok(Arc::new(default_return_model))
@@ -229,7 +211,7 @@ mod tests {
     use crate::{
         models::embedding_factory::EmbeddingFactory, state::FlowLikeConfig, utils::http::HTTPClient,
     };
-    use std::{mem, path::PathBuf};
+    use std::{mem, path::PathBuf, ptr};
 
     async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
         let temp_dir = tempfile::tempdir().unwrap();
@@ -253,6 +235,7 @@ mod tests {
         let mut factory = EmbeddingFactory::new();
 
         let model = factory.build_text(&bit, app_state).await.unwrap();
+
         let any = model.as_cacheable();
 
         let downcasted = any.as_any().downcast_ref::<LocalEmbeddingModel>().unwrap();
@@ -267,21 +250,39 @@ mod tests {
             mem::size_of_val(downcasted)
         );
         println!(
-            "Init Options: {} bytes",
-            mem::size_of_val(&downcasted.init_options)
-        );
-        println!(
-            "Embedding Models: {} bytes",
-            mem::size_of_val(&downcasted.embedding_model)
-        );
-        println!(
             "Tokenizer Files: {} bytes",
             mem::size_of_val(&downcasted.tokenizer_files)
         );
         println!("Bit: {} bytes", mem::size_of_val(&downcasted.bit));
 
-        // Assert that the sizes are greater than zero
         assert_eq!(model_size, any_model_size);
+    }
+
+    #[tokio::test]
+    async fn test_efficient_mem_cloning() {
+        let app_state = flow_state().await;
+        let embedding_bit = PathBuf::from("../../tests/data/embedding-bit.json");
+        let embedding_bit = std::fs::read(embedding_bit).unwrap();
+        let bit: Bit = serde_json::from_slice(&embedding_bit).unwrap();
+        let mut factory = EmbeddingFactory::new();
+
+        let model = factory.build_text(&bit, app_state).await.unwrap();
+        let any = model.as_cacheable();
+        let downcasted = any.as_any().downcast_ref::<LocalEmbeddingModel>().unwrap();
+        let model = downcasted.clone();
+
+        assert!(ptr::eq(
+            Arc::as_ptr(&downcasted.bit),
+            Arc::as_ptr(&model.bit)
+        ));
+        assert!(ptr::eq(
+            Arc::as_ptr(&downcasted.embedding_model),
+            Arc::as_ptr(&model.embedding_model)
+        ));
+        assert!(ptr::eq(
+            Arc::as_ptr(&downcasted.tokenizer_files),
+            Arc::as_ptr(&model.tokenizer_files)
+        ));
     }
 
     #[tokio::test]

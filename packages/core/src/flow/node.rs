@@ -192,6 +192,7 @@ impl Node {
         pin_name: &str,
         board: Arc<Board>,
         value_type: Option<ValueType>,
+        default_type: Option<ValueType>,
     ) -> anyhow::Result<VariableType> {
         let mut found_type = VariableType::Generic;
         let pin = self
@@ -202,8 +203,10 @@ impl Node {
             nodes = pin.depends_on.clone();
         }
 
+        let default_type = default_type.unwrap_or(ValueType::Normal);
+
         self.get_pin_mut_by_name(pin_name).unwrap().data_type = VariableType::Generic;
-        self.get_pin_mut_by_name(pin_name).unwrap().value_type = ValueType::Normal;
+        self.get_pin_mut_by_name(pin_name).unwrap().value_type = default_type;
         if let Some(value_type) = &value_type {
             self.get_pin_mut_by_name(pin_name).unwrap().value_type = value_type.clone();
         }

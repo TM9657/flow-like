@@ -6,6 +6,7 @@ pub mod clear;
 pub mod find_item;
 pub mod get;
 pub mod includes;
+pub mod len;
 pub mod make;
 pub mod pop;
 pub mod push;
@@ -14,6 +15,7 @@ pub mod set;
 
 pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
     vec![
+        Arc::new(Mutex::new(len::ArrayLengthNode::default())),
         Arc::new(Mutex::new(get::GetArrayElementNode::default())),
         Arc::new(Mutex::new(includes::ArrayIncludesNode::default())),
         Arc::new(Mutex::new(make::MakeArrayNode::default())),

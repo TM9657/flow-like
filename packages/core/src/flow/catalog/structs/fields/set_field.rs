@@ -70,7 +70,7 @@ impl NodeLogic for SetStructFieldNode {
     }
 
     async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
-        let match_type = node.match_type("value", board, None);
+        let match_type = node.match_type("value", board, None, None);
 
         if match_type.is_err() {
             eprintln!("Error: {:?}", match_type.err());

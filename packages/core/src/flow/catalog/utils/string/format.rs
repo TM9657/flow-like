@@ -133,7 +133,7 @@ impl NodeLogic for FormatStringNode {
         }
 
         all_placeholders.iter().for_each(|placeholder| {
-            let _ = node.match_type(placeholder, board.clone(), None);
+            let _ = node.match_type(placeholder, board.clone(), None, None);
         })
     }
 }

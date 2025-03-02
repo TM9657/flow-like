@@ -82,13 +82,13 @@ impl NodeLogic for TryTransformNode {
     }
 
     async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
-        let match_type = node.match_type("type_out", board.clone(), None);
+        let match_type = node.match_type("type_out", board.clone(), None, None);
 
         if match_type.is_err() {
             eprintln!("Error: {:?}", match_type.err());
         }
 
-        let match_type = node.match_type("type_in", board, None);
+        let match_type = node.match_type("type_in", board, None, None);
 
         if match_type.is_err() {
             eprintln!("Error: {:?}", match_type.err());
@@ -339,7 +339,6 @@ fn value_to_date(input: &Value, target: &mut Value) -> bool {
             if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
                 let timestamp_millis = dt.timestamp_millis();
                 let secs = timestamp_millis / 1000;
-                let nanos = (timestamp_millis % 1000) * 1_000_000;
 
                 let date_obj = json!({
                     "secs_since_epoch": secs,

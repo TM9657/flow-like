@@ -71,7 +71,7 @@ impl NodeLogic for FromStringNode {
             }
         }
 
-        let match_type = node.match_type("value", board, Some(value_type));
+        let match_type = node.match_type("value", board, Some(value_type), None);
 
         if match_type.is_err() {
             eprintln!("Error: {:?}", match_type.err());
