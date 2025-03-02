@@ -1,12 +1,9 @@
 name: 'Setup Environment'
 description: 'Sets up the environment for building the project, including dependencies, caches, and tools.'
-
+ 
 runs:
   using: 'composite'
   steps:
-    # Check out the repository
-    - uses: actions/checkout@v4
-
     # Install and cache Ubuntu-specific dependencies
     - name: Install and cache dependencies
       uses: awalsh128/cache-apt-pkgs-action@latest

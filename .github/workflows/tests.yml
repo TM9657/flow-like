@@ -18,6 +18,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-environment
 
       - name: Run Rust tests
