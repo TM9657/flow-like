@@ -9,14 +9,6 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    # Install and cache Ubuntu-specific dependencies
-    - name: Install and cache dependencies
-      uses: awalsh128/cache-apt-pkgs-action@latest
-      with:
-        packages: libgtk-3-dev libclang-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev pkg-config protobuf-compiler webkit2gtk-4.1
-        version: 1.0
-
-    # Clean up the environment to free up space
     - name: Cleanup environment
       run: |
         sudo apt-get remove -y '^dotnet-.*'
@@ -33,7 +25,12 @@ runs:
         sudo rm -rf /usr/local/lib/android
       shell: bash
 
-    # Cache Bun dependencies
+    - name: Install and cache dependencies
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: libgtk-3-dev libclang-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev pkg-config protobuf-compiler webkit2gtk-4.1
+        version: 1.0
+
     - name: Cache Bun dependencies
       uses: actions/cache@v3
       with:
@@ -42,7 +39,6 @@ runs:
         key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
         restore-keys: ${{ runner.os }}-bun-
 
-    # Cache Cargo registry
     - name: Cache cargo registry
       uses: actions/cache@v3
       with:
@@ -50,7 +46,6 @@ runs:
         key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: ${{ runner.os }}-cargo-registry-
 
-    # Cache Cargo build artifacts
     - name: Cache cargo build
       uses: actions/cache@v3
       with:
@@ -58,37 +53,31 @@ runs:
         key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: ${{ runner.os }}-cargo-target-
 
-    # Set up Node.js (LTS version)
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: lts/*
 
-    # Install Protocol Buffers compiler
     - name: Install Protoc
       uses: arduino/setup-protoc@v3
       with:
         repo-token: ${{ inputs.repo-token }}
 
-    # Install Bun globally
     - name: Install Bun
       run: npm install -g bun
       shell: bash
 
-    # Install Rust stable toolchain with conditional targets for macOS
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-    # Install frontend dependencies using Bun
     - name: Install frontend dependencies
       run: bun install
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.repo-token }}
 
-    # Verify the presence of the llamafile
     - name: Check llamafile
       run: |
         if [ ! -f "./apps/desktop/src-tauri/bin/llamafiler" ]; then
