@@ -20,17 +20,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Dependencies
+      - name: Install and cache dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libgtk-3-dev libclang-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev pkg-config protobuf-compiler webkit2gtk-4.1
+          version: 1.0
+
+      - name: Cleanup environment
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-              libgtk-3-dev \
-              libclang-dev \
-              libjavascriptcoregtk-4.1-dev \
-              libsoup-3.0-dev \
-              pkg-config \
-              protobuf-compiler \
-              webkit2gtk-4.1
           sudo apt-get remove -y '^dotnet-.*'
           sudo apt-get remove -y 'php.*'
           sudo apt-get remove -y '^mongodb-.*'
