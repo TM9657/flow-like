@@ -3,6 +3,8 @@ title: Creating Rust Nodes
 description: A small guide on how to create a Rust based Node.
 ---
 
+import { FlowPreview } from '@tm9657/flow-like-ui/components/flow/flow-preview';
+
 Nodes follow a very simple creation process. Let us create an example node.
 
 ## The Node Object
@@ -78,6 +80,175 @@ impl NodeLogic for BranchNode {
 ### Pure Nodes
 Pure Nodes are nodes without Execution Pins. These nodes might be cached by the runtime, so you should only use this type, if you do not produce any sideeffects.
 The `Branch` Node from [the previous section](##the-node-skeleton) is an example of a Pure Node.
+
+---
+
+
+<FlowPreview client:load nodes={[
+    {
+      "id": "wrlzl1o0hswgm9ysaeejx4jj",
+      "name": "control_branch",
+      "friendly_name": "Branch",
+      "description": "17904190770306764727",
+      "coordinates": [
+        745,
+        461.5,
+        0
+      ],
+      "category": "Control",
+      "scores": null,
+      "pins": {
+        "w9q6b6zw68e2zn44c5mt6vk1": {
+          "id": "w9q6b6zw68e2zn44c5mt6vk1",
+          "name": "condition",
+          "friendly_name": "Condition",
+          "description": "5425691739547396196",
+          "pin_type": "Input",
+          "data_type": "Boolean",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [
+            "jrhff4etz6nictz9juug3qir"
+          ],
+          "connected_to": [],
+          "default_value": [
+            116,
+            114,
+            117,
+            101
+          ],
+          "index": 2,
+          "options": null
+        },
+        "t4rm4830p5ow460fxps9ms6a": {
+          "id": "t4rm4830p5ow460fxps9ms6a",
+          "name": "false",
+          "friendly_name": "False",
+          "description": "10819820416658184077",
+          "pin_type": "Output",
+          "data_type": "Execution",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [],
+          "default_value": null,
+          "index": 2,
+          "options": null
+        },
+        "ehawo29s4gazke0z9cfbs37f": {
+          "id": "ehawo29s4gazke0z9cfbs37f",
+          "name": "exec_in",
+          "friendly_name": "Input",
+          "description": "5454119197816847421",
+          "pin_type": "Input",
+          "data_type": "Execution",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [],
+          "default_value": null,
+          "index": 1,
+          "options": null
+        },
+        "s13x22ocjz7ii448m1cvmqm4": {
+          "id": "s13x22ocjz7ii448m1cvmqm4",
+          "name": "true",
+          "friendly_name": "True",
+          "description": "5263826465754033912",
+          "pin_type": "Output",
+          "data_type": "Execution",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [],
+          "default_value": null,
+          "index": 1,
+          "options": null
+        }
+      },
+      "start": null,
+      "icon": "/flow/icons/split.svg",
+      "comment": "Execution",
+      "long_running": null,
+      "error": null,
+      "docs": null
+    },
+    {
+      "id": "d709htd43xb2bunp42mmewox",
+      "name": "string_compare",
+      "friendly_name": "==",
+      "description": "3855092198470154848",
+      "coordinates": [
+        572.5,
+        523,
+        0
+      ],
+      "category": "",
+      "scores": null,
+      "pins": {
+        "jrhff4etz6nictz9juug3qir": {
+          "id": "jrhff4etz6nictz9juug3qir",
+          "name": "equal",
+          "friendly_name": "Is Equal?",
+          "description": "10624759169930469181",
+          "pin_type": "Output",
+          "data_type": "Boolean",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [
+            "w9q6b6zw68e2zn44c5mt6vk1"
+          ],
+          "default_value": null,
+          "index": 1,
+          "options": null
+        },
+        "be7f1sveqdiuqj5wlzhi17q7": {
+          "id": "be7f1sveqdiuqj5wlzhi17q7",
+          "name": "string",
+          "friendly_name": "String",
+          "description": "4703754200698941876",
+          "pin_type": "Input",
+          "data_type": "String",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [],
+          "default_value": null,
+          "index": 1,
+          "options": null
+        },
+        "b6ytgrs1o0ftzv0avhk50ix4": {
+          "id": "b6ytgrs1o0ftzv0avhk50ix4",
+          "name": "string",
+          "friendly_name": "String",
+          "description": "4703754200698941876",
+          "pin_type": "Input",
+          "data_type": "String",
+          "schema": null,
+          "valid_values": null,
+          "value_type": "Normal",
+          "depends_on": [],
+          "connected_to": [],
+          "default_value": null,
+          "index": 2,
+          "options": null
+        }
+      },
+      "start": null,
+      "icon": "/flow/icons/string.svg",
+      "comment": "Pure Node",
+      "long_running": null,
+      "error": null,
+      "docs": null
+    }
+  ]} />
 
 ```rust title="A Pure Node 'Add'"
 #[async_trait]

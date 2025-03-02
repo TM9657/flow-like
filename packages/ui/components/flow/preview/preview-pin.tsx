@@ -11,7 +11,7 @@ import {
 import { type INode } from "../../../lib/schema/flow/node";
 import { IValueType, type IPin } from "../../../lib/schema/flow/pin";
 import { DynamicImage } from '../../ui/dynamic-image';
-import { PinEdit } from "../flow-pin/pin-edit";
+import { PinPreviewEdit } from "./preview-pin-edit";
 import { typeToColor } from '../utils';
 
 export function FlowPinInner({ pin, index, boardId, node }: Readonly<{ pin: IPin, index: number, boardId: string, node: INode }>) {
@@ -37,7 +37,7 @@ export function FlowPinInner({ pin, index, boardId, node }: Readonly<{ pin: IPin
         {pin.value_type === IValueType.HashSet && <EllipsisVerticalIcon strokeWidth={3} className={`w-2 h-2 absolute left-0 -translate-x-[30%] pointer-events-none bg-background`} style={{color: typeToColor(pin.data_type), backgroundColor: "var(--xy-node-background-color, var(--xy-node-background-color-default))"}}/>}
         {pin.value_type === IValueType.HashMap && <ListIcon strokeWidth={3} className={`w-2 h-2 absolute left-0 -translate-x-[30%] pointer-events-none`} style={{color: typeToColor(pin.data_type), backgroundColor: "var(--xy-node-background-color, var(--xy-node-background-color-default))"}}/>}
         {(pin.name !== "exec_in" && pin.name !== "exec_out" && pin.name !== "var_ref") && <div className={`flex flex-row items-center transition-all gap-1 max-w-1/2 ${pin.pin_type === "Input" ? "ml-2" : "translate-x-[-115%]"}`}>
-            <PinEdit pin={pin} defaultValue={defaultValue} changeDefaultValue={(value) => {setDefaultValue(value)}} />
+            <PinPreviewEdit pin={pin} defaultValue={defaultValue} changeDefaultValue={(value) => {setDefaultValue(value)}} />
         </div>}
     </Handle>
 }
