@@ -14,10 +14,10 @@ use tokio::sync::Mutex;
 
 pub struct LocalEmbeddingModel {
     pub bit: Bit,
-    embedding_model: fastembed::TextEmbedding,
-    tokenizer_files: TokenizerFiles,
-    user_embedding_model: UserDefinedEmbeddingModel,
-    init_options: InitOptionsUserDefined,
+    pub embedding_model: fastembed::TextEmbedding,
+    pub tokenizer_files: TokenizerFiles,
+    pub user_embedding_model: UserDefinedEmbeddingModel,
+    pub init_options: InitOptionsUserDefined,
 }
 
 impl Clone for LocalEmbeddingModel {
@@ -221,4 +221,88 @@ async fn load_tokenizer(
         special_tokens_map_file: std::fs::read(special_tokens_bit).unwrap_or(Vec::new()),
         tokenizer_config_file: std::fs::read(tokenizer_config_bit).unwrap_or(Vec::new()),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        models::embedding_factory::EmbeddingFactory, state::FlowLikeConfig, utils::http::HTTPClient,
+    };
+    use std::{mem, path::PathBuf};
+
+    async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut config: FlowLikeConfig = FlowLikeConfig::new();
+        let current_dir = temp_dir.path().to_path_buf();
+        let store = LocalObjectStore::new(current_dir).unwrap();
+        let store = Arc::new(store);
+        config.register_project_store(crate::state::FlowLikeStore::Local(store.clone()));
+        config.register_bits_store(crate::state::FlowLikeStore::Local(store));
+        let (http_client, _refetch_rx) = HTTPClient::new();
+        let (flow_like_state, _) = crate::state::FlowLikeState::new(config, http_client);
+        Arc::new(Mutex::new(flow_like_state))
+    }
+
+    #[tokio::test]
+    async fn test_any_size() {
+        let app_state = flow_state().await;
+        let embedding_bit = PathBuf::from("../../tests/data/embedding-bit.json");
+        let embedding_bit = std::fs::read(embedding_bit).unwrap();
+        let bit: Bit = serde_json::from_slice(&embedding_bit).unwrap();
+        let mut factory = EmbeddingFactory::new();
+
+        let model = factory.build_text(&bit, app_state).await.unwrap();
+        let any = model.as_cacheable();
+
+        let downcasted = any.as_any().downcast_ref::<LocalEmbeddingModel>().unwrap();
+
+        let model_size = mem::size_of_val(&*model);
+        let any_model_size = mem::size_of_val(&*any);
+
+        println!("Size of the model: {} bytes", model_size);
+        println!("Size of the any model: {} bytes", any_model_size);
+        println!(
+            "Size of the user_embedding_model: {} bytes",
+            mem::size_of_val(downcasted)
+        );
+        println!(
+            "Init Options: {} bytes",
+            mem::size_of_val(&downcasted.init_options)
+        );
+        println!(
+            "Embedding Models: {} bytes",
+            mem::size_of_val(&downcasted.embedding_model)
+        );
+        println!(
+            "Tokenizer Files: {} bytes",
+            mem::size_of_val(&downcasted.tokenizer_files)
+        );
+        println!("Bit: {} bytes", mem::size_of_val(&downcasted.bit));
+
+        // Assert that the sizes are greater than zero
+        assert_eq!(model_size, any_model_size);
+    }
+
+    #[tokio::test]
+    async fn test_embedding_works() {
+        let app_state = flow_state().await;
+        let embedding_bit = PathBuf::from("../../tests/data/embedding-bit.json");
+        let embedding_bit = std::fs::read(embedding_bit).unwrap();
+        let bit: Bit = serde_json::from_slice(&embedding_bit).unwrap();
+        let mut factory = EmbeddingFactory::new();
+
+        // Create a new LocalImageEmbeddingModel instance
+        let model = factory.build_text(&bit, app_state).await.unwrap();
+        let any = model.as_cacheable();
+
+        let downcasted = any.as_any().downcast_ref::<LocalEmbeddingModel>().unwrap();
+        let embedded = downcasted
+            .text_embed_query(&vec!["Hello, World!".to_string()])
+            .await
+            .unwrap();
+
+        assert_eq!(embedded.len(), 1);
+        assert_eq!(embedded[0].len(), 768);
+    }
 }
