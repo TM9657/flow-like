@@ -5,17 +5,16 @@ template: splash
 hero:
   tagline: Your home for interesting guides, tips, tricks and blog articles around flow-like.
   image:
-    file: ../../assets/houston.webp
+    file: ../../assets/dark-mode.svg
   actions:
-    - text: Example Guide
-      link: /guides/example/
+    - text: Getting Started
+      link: /guides/getting-started/
       icon: right-arrow
-    - text: Read the Starlight docs
-      link: https://starlight.astro.build
+    - text: Our Website
+      link: https://flow-like.com
       icon: external
       variant: minimal
 ---
-
 import { Card, CardGrid } from '@astrojs/starlight/components';
 import { FlowPreview } from '@tm9657/flow-like-ui/components/flow/flow-preview';
 
@@ -334,20 +333,20 @@ import { FlowPreview } from '@tm9657/flow-like-ui/components/flow/flow-preview';
     }
   ]} />
 
-## Next steps
+## How to Contribute
 
 <CardGrid stagger>
-	<Card title="Update content" icon="pencil">
-		Edit `src/content/docs/index.mdx` to see this page change.
+	<Card title="Updating the Docs" icon="pencil">
+		Fix spelling mistakes or correct old content with the "Edit Page" Button on the bottom of each page!
 	</Card>
-	<Card title="Add new content" icon="add-document">
-		Add Markdown or MDX files to `src/content/docs` to create new pages.
+	<Card title="Start Contributing" icon="add-document">
+		Contribute to the project. [Learn More](/contributing/getting-started).
 	</Card>
-	<Card title="Configure your site" icon="setting">
-		Edit your `sidebar` and other config in `astro.config.mjs`.
+	<Card title="Contribute new Nodes" icon="rocket">
+		Nodes are the fundamental Building Block of Flow-Like. [Learn More](/contributing/nodes/best-practices).
 	</Card>
-	<Card title="Read the docs" icon="open-book">
-		Learn more in [the Starlight Docs](https://starlight.astro.build/).
+	<Card title="Support Us" icon="heart">
+		Want to [support us](https://github.com/sponsors/TM9657?o=esc) financially. Or commit some changes! 
 	</Card>
 </CardGrid>
 
