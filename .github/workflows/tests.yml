@@ -27,8 +27,6 @@ jobs:
           sudo apt-get remove -y '^mongodb-.*'
           sudo apt-get remove -y '^mysql-.*'
           sudo apt-get remove -y azure-cli firefox powershell mono-devel libgl1-mesa-dri
-          sudo apt-get autoremove -y
-          sudo apt-get clean
           sudo rm -rf /usr/share/dotnet/
           sudo rm -rf /usr/local/graalvm/
           sudo rm -rf /usr/local/.ghcup/
@@ -67,6 +65,8 @@ jobs:
             pkg-config \
             protobuf-compiler \
             webkit2gtk-4.1
+            sudo apt-get autoremove -y
+            sudo apt-get clean
 
       - name: setup node
         uses: actions/setup-node@v4
