@@ -1,6 +1,8 @@
 ---
 title: Getting Started
 description: Thank you very much for considering Contributions to our Project.
+sidebar:
+  order: 0
 ---
 
 Thank you for considering contributing to Flow-Like! This document outlines the guidelines and best practices for contributing to this mostly Tauri-based project. Our application leverages Rust for the backend (via Tauri) and [Next.js/Astro] for the frontend. To ensure consistency and quality, please follow the practices below when contributing.

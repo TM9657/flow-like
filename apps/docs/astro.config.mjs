@@ -14,6 +14,7 @@ export default defineConfig({
 		react(),
 		starlight({
 			title: 'Flow-Like',
+			description: 'Flow-Like is a visual programming language for creating very fast and efficient workflows and automations.',
 			editLink: {
 				baseUrl: 'https://github.com/TM9657/flow-like/edit/main/apps/docs/',
 			  },
@@ -28,7 +29,9 @@ export default defineConfig({
 				github: 'https://github.com/TM9657/flow-like',
 				"x.com": "https://x.com/tm9657",
 				linkedin: "https://linkedin.com/company/tm9657",
+				discord: 'https://discord.gg/KTWMrS2',
 			},
+			lastUpdated: true,
 			sidebar: [
 				{
 					label: 'Guides',
