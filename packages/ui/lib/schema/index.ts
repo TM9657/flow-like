@@ -31,6 +31,7 @@ export {
     type IComment,
     ICommentType,
     IExecutionStage,
+    ILogLevel,
     type ISystemTime,
 } from "./flow/board"
 export {
@@ -40,7 +41,6 @@ export {
 export {
     type IRun,
     type ITrace,
-    type ILogLevel,
     type ILogMessage,
     type ILogStat,
     type IRunStatus,
