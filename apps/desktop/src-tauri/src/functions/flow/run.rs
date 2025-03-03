@@ -1,4 +1,4 @@
-use flow_like::flow::execution::{trace::Trace, InternalRun, LogLevel, Run, RunStatus};
+use flow_like::flow::execution::{trace::Trace, InternalRun, Run, RunStatus};
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::Mutex;
@@ -13,21 +13,14 @@ pub async fn create_run(
     app_handle: AppHandle,
     board_id: String,
     start_ids: Vec<String>,
-    log_level: LogLevel,
 ) -> Result<String, TauriFunctionError> {
     let (board, flow_like_state) =
         TauriFlowLikeState::get_board_and_state(&app_handle, &board_id).await?;
     let board = board.lock().await;
     let profile = TauriSettingsState::current_profile(&app_handle).await?;
 
-    let internal_run = InternalRun::new(
-        &board,
-        &flow_like_state,
-        &profile.hub_profile,
-        start_ids,
-        log_level,
-    )
-    .await?;
+    let internal_run =
+        InternalRun::new(&board, &flow_like_state, &profile.hub_profile, start_ids).await?;
     let run_id = internal_run.run.lock().await.id.clone();
     flow_like_state
         .lock()

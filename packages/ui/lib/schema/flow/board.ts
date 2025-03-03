@@ -3,6 +3,7 @@ export interface IBoard {
     created_at:  ISystemTime;
     description: string;
     id:          string;
+    log_level:   ILogLevel;
     name:        string;
     nodes:       { [key: string]: INode };
     refs:        { [key: string]: string };
@@ -36,11 +37,20 @@ export interface ISystemTime {
     [property: string]: any;
 }
 
+export enum ILogLevel {
+    Debug = "Debug",
+    Error = "Error",
+    Fatal = "Fatal",
+    Info = "Info",
+    Warn = "Warn",
+}
+
 export interface INode {
     category:      string;
     comment?:      null | string;
     coordinates?:  number[] | null;
     description:   string;
+    docs?:         null | string;
     error?:        null | string;
     friendly_name: string;
     icon?:         null | string;
@@ -106,13 +116,13 @@ export enum IValueType {
 }
 
 /**
- * INode Scores. Each score ranges from 0 to 10. INode Scores. From 0 - 10 The higher the
- * score, the worse the node is in this category: - Privacy: Higher score means less
- * privacy. - Security: Higher score means less security. - Performance: Higher score means
- * worse performance. - Governance: Higher score means less compliance with governance. -
- * security: Assesses the node's resistance to attacks. - performance: Evaluates the node's
- * efficiency and speed. - governance: Indicates the node's compliance with policies and
- * regulations. The higher the score, the worse the node is in this category
+ * Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores
+ * indicate worse performance in each category.
+ *
+ * # Score Categories * `privacy` - Measures data protection and confidentiality level *
+ * `security` - Assesses resistance against potential attacks * `performance` - Evaluates
+ * computational efficiency and speed * `governance` - Indicates compliance with policies
+ * and regulations
  */
 export interface INodeScores {
     governance:  number;

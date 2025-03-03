@@ -88,7 +88,10 @@ function Board({ board, vault, boardsQuery }: Readonly<{ board: IBoard, vault: I
                     <div className="w-full flex flex-row items-center gap-2">
                         <WorkflowIcon className="min-w-6 min-h-6 h-6 w-6" />
                         <div className="flex flex-col items-start w-full">
-                            {board.name}
+                            <div className="flex flex-row items-center gap-2">
+                                {board.name}
+                                <Badge variant="outline">{board.stage}</Badge>
+                            </div>
                             <small className="text-muted-foreground justify-start text-start line-clamp-1">{board.description === "" ? "[Description]" : board.description}</small>
                         </div>
                     </div>
@@ -96,6 +99,7 @@ function Board({ board, vault, boardsQuery }: Readonly<{ board: IBoard, vault: I
                         <div className="flex flex-col items-end gap-2">
                             <small>{formatRelativeTime(board.updated_at)}</small>
                             <div className="flex flex-row items-center gap-2">
+                                <Badge>{board.log_level}</Badge>
                                 <Badge className="min-w-fit">{Object.keys(board.variables).length} Variables</Badge>
                                 <Badge className="min-w-fit">{Object.keys(board.nodes).length} Nodes</Badge>
                             </div>

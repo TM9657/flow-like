@@ -18,6 +18,7 @@ use std::{
 use tokio::sync::Mutex;
 
 use super::{
+    execution::LogLevel,
     node::{Node, NodeLogic},
     pin::Pin,
     variable::Variable,
@@ -50,6 +51,7 @@ pub struct Board {
     pub viewport: (f32, f32, f32),
     pub version: (u8, u8, u8),
     pub stage: ExecutionStage,
+    pub log_level: LogLevel,
     pub refs: HashMap<String, String>,
 
     pub created_at: SystemTime,
@@ -93,6 +95,7 @@ impl Board {
             nodes: HashMap::new(),
             variables: HashMap::new(),
             comments: HashMap::new(),
+            log_level: LogLevel::Debug,
             stage: ExecutionStage::Dev,
             viewport: (0.0, 0.0, 0.0),
             version: (0, 0, 1),

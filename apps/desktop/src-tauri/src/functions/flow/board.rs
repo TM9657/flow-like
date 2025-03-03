@@ -17,8 +17,9 @@ use flow_like::flow::{
                 remove_variable::RemoveVariableCommand, upsert_variable::UpsertVariableCommand,
             },
         },
-        Board, Command, Comment,
+        Board, Command, Comment, ExecutionStage,
     },
+    execution::LogLevel,
     node::Node,
     pin::Pin,
     variable::Variable,
@@ -107,6 +108,8 @@ pub async fn update_board_meta(
     board_id: String,
     name: String,
     description: String,
+    log_level: LogLevel,
+    stage: ExecutionStage,
 ) -> Result<Board, TauriFunctionError> {
     let store = TauriFlowLikeState::get_project_store(&handler).await?;
     let board_state = TauriFlowLikeState::board_registry(&handler).await?;
@@ -115,6 +118,8 @@ pub async fn update_board_meta(
         let mut board = board.lock().await;
         board.name = name;
         board.description = description;
+        board.log_level = log_level;
+        board.stage = stage;
         board.save(Some(store.clone())).await?;
         return Ok(board.clone());
     }

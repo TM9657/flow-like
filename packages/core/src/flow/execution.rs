@@ -93,7 +93,6 @@ impl InternalRun {
         handler: &Arc<Mutex<FlowLikeState>>,
         profile: &Profile,
         start_ids: Vec<String>,
-        log_level: LogLevel,
     ) -> anyhow::Result<Self> {
         let before = Instant::now();
         let start_ids_set: HashSet<String> = start_ids.into_iter().collect();
@@ -106,7 +105,7 @@ impl InternalRun {
             start: SystemTime::now(),
             end: SystemTime::now(),
             board: board.clone(),
-            log_level: log_level.clone(),
+            log_level: board.log_level.clone(),
         };
 
         let run = Arc::new(Mutex::new(run));
@@ -234,7 +233,7 @@ impl InternalRun {
             }
         }
 
-        if log_level <= LogLevel::Info {
+        if board.log_level <= LogLevel::Info {
             println!(
                 "InternalRun::new took {:?} on {} nodes and {} pins",
                 before.elapsed(),
@@ -254,7 +253,7 @@ impl InternalRun {
             cpus: num_cpus::get(),
             sender,
             dependencies,
-            log_level,
+            log_level: board.log_level.clone(),
             profile: Arc::new(profile.clone()),
         })
     }

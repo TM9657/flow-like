@@ -43,14 +43,14 @@ import {
 import { useInvoke } from '../../hooks/use-invoke';
 import { handleCopy, handlePaste, isValidConnection, parseBoard } from '../../lib/flow-board';
 import { toastError, toastSuccess } from '../../lib/messages';
-import { type IBoard, type IComment, ICommentType, type IVariable } from '../../lib/schema/flow/board';
+import { type IBoard, type IComment, ICommentType, IExecutionStage, ILogLevel, type IVariable } from '../../lib/schema/flow/board';
 import { type INode } from '../../lib/schema/flow/node';
 import { type IPin } from '../../lib/schema/flow/pin';
 import { type IRun, type ITrace } from '../../lib/schema/flow/run';
 import { useFlowBoardParentState } from '../../state/flow-board-parent-state';
-import {useRunExecutionStore} from '../../state/run-execution-state';
+import { useRunExecutionStore } from '../../state/run-execution-state';
 import { type ISettingsProfile } from '../../types';
-import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Textarea } from '../ui';
+import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, Textarea } from '../ui';
 import { convertJsonToUint8Array } from '../../lib/uint8';
 export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
     const router = useRouter()
@@ -85,7 +85,9 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
     const [editBoard, setEditBoard] = useState(false)
     const [boardMeta, setBoardMeta] = useState({
         name: "",
-        description: ""
+        description: "",
+        stage: "Dev",
+        logLevel: "Debug"
     })
 
     useEffect(() => {
@@ -114,7 +116,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 
     const executeBoard = useCallback(async (node: INode) => {
         setCurrentRun(undefined)
-        const runId: string | undefined = await invoke("create_run", { boardId: boardId, startIds: [node.id], logLevel: "Debug" })
+        const runId: string | undefined = await invoke("create_run", { boardId: boardId, startIds: [node.id] })
         if (!runId) {
             toastError("Failed to execute board", <PlayCircleIcon className="w-4 h-4" />)
             return
@@ -248,7 +250,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
         setNodes(nodes)
         setEdges(edges)
         setPinCache(new Map(cache))
-        setBoardMeta({ name: board.data.name, description: board.data.description })
+        setBoardMeta({ name: board.data.name, description: board.data.description, stage: board.data.stage, logLevel: board.data.log_level })
     }, [board.data, currentRun])
 
     const miniSearch = useMemo(() => new MiniSearch({
@@ -279,7 +281,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
             await invoke(command, { ...args, append: !first })
             first = false
         }
-        if(commands.length > 0) {
+        if (commands.length > 0) {
             await board.refetch()
             console.log("Refetched board, execute commands")
         }
@@ -425,7 +427,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
             <div className="flex items-center justify-center absolute translate-x-[-50%] left-[50dvw] top-5 z-40">
                 <Dialog open={editBoard} onOpenChange={async (open) => {
                     if (open) return
-                    await invoke("update_board_meta", { boardId: boardId, name: boardMeta.name, description: boardMeta.description })
+                    await invoke("update_board_meta", { boardId: boardId, name: boardMeta.name, description: boardMeta.description, logLevel: boardMeta.logLevel, stage: boardMeta.stage })
                     await openBoards.refetch()
                     setEditBoard(false)
                 }}>
@@ -435,15 +437,46 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                             <DialogDescription>
                                 Give your Board a name and Description for future use!
                             </DialogDescription>
-                            <div className="grid w-full max-w-sm items-center gap-1.5">
-                                <Label htmlFor="name">Name</Label>
-                                <Input value={boardMeta.name} onChange={(e) => setBoardMeta(old => ({ ...old, name: e.target.value }))} type="text" id="name" placeholder="Name" />
-                            </div>
-                            <div className="grid w-full max-w-sm items-center gap-1.5">
-                                <Label htmlFor="description">Description</Label>
-                                <Textarea value={boardMeta.description} onChange={(e) => setBoardMeta(old => ({ ...old, description: e.target.value }))} id="description" placeholder="Description" />
-                            </div>
                         </DialogHeader>
+                        <Separator/>
+                        <div className="grid w-full max-w-sm items-center gap-1.5">
+                            <Label htmlFor="name">Name</Label>
+                            <Input value={boardMeta.name} onChange={(e) => setBoardMeta(old => ({ ...old, name: e.target.value }))} type="text" id="name" placeholder="Name" />
+                        </div>
+                        <div className="grid w-full max-w-sm items-center gap-1.5">
+                            <Label htmlFor="description">Description</Label>
+                            <Textarea value={boardMeta.description} onChange={(e) => setBoardMeta(old => ({ ...old, description: e.target.value }))} id="description" placeholder="Description" />
+                        </div>
+                        <div className="grid w-full max-w-sm items-center gap-1.5">
+                            <Label htmlFor="stage">Stage</Label>
+                            <Select value={boardMeta.stage} onValueChange={(e) => setBoardMeta(old => ({ ...old, stage: e as IExecutionStage }))}>
+                                <SelectTrigger id='stage' className="w-full max-w-sm">
+                                    <SelectValue placeholder="Stage" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value={IExecutionStage.Dev}>Development</SelectItem>
+                                    <SelectItem value={IExecutionStage.Int}>Integration</SelectItem>
+                                    <SelectItem value={IExecutionStage.QA}>QA</SelectItem>
+                                    <SelectItem value={IExecutionStage.PreProd}>Pre-Production</SelectItem>
+                                    <SelectItem value={IExecutionStage.Prod}>Production</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid w-full max-w-sm items-center gap-1.5">
+                            <Label htmlFor="stage">Log Level</Label>
+                            <Select value={boardMeta.logLevel} onValueChange={(e) => setBoardMeta(old => ({ ...old, logLevel: e as ILogLevel }))}>
+                                <SelectTrigger id='stage' className="w-full max-w-sm">
+                                    <SelectValue placeholder="Stage" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value={ILogLevel.Debug}>Debug</SelectItem>
+                                    <SelectItem value={ILogLevel.Info}>Info</SelectItem>
+                                    <SelectItem value={ILogLevel.Warn}>Warning</SelectItem>
+                                    <SelectItem value={ILogLevel.Error}>Error</SelectItem>
+                                    <SelectItem value={ILogLevel.Fatal}>Fatal</SelectItem>                   
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </DialogContent>
                 </Dialog>
                 <FlowDock items={[
@@ -529,13 +562,13 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                                     <div className='absolute top-0 left-0 right-0 p-1 z-40 flex flex-row items-center gap-1'>
                                         {openBoards.data?.map(([boardLoadId, boardName]) => <Link key={boardLoadId} className={`flex flex-row items-center gap-2 border p-1 px-2 bg-background rounded-md hover:bg-card ${boardLoadId === boardId ? "bg-card" : ""}`} href={`/flow?id=${boardLoadId}`}>
                                             <small>{boardName}</small>
-                                            <Button size={"icon"} className='w-4 h-4' onClick={ async (e) => {
+                                            <Button size={"icon"} className='w-4 h-4' onClick={async (e) => {
                                                 e.preventDefault()
                                                 e.stopPropagation()
                                                 await invoke("close_board", { boardId: boardLoadId })
-                                                if(boardLoadId === boardId) {
+                                                if (boardLoadId === boardId) {
                                                     const nextBoard = openBoards.data?.find(([id]) => id !== boardId)
-                                                    if(nextBoard) {
+                                                    if (nextBoard) {
                                                         await openBoards.refetch()
                                                         router.push(`/flow?id=${nextBoard[0]}`)
                                                         return
@@ -544,7 +577,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                                                     await openBoards.refetch()
                                                 }
                                             }}>
-                                                <XIcon className='w-3 h-3'/>
+                                                <XIcon className='w-3 h-3' />
                                             </Button>
                                         </Link>)}
                                     </div>
@@ -588,7 +621,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                                         duration: 500,
                                         easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
                                     }}>
-                                        {(active?.data?.current as IVariable)?.id && <Variable variable={active?.data?.current as IVariable} preview onVariableChange={() => { }} />}
+                                        {(active?.data?.current as IVariable)?.id && <Variable variable={active?.data?.current as IVariable} preview onVariableChange={() => { }} onVariableDeleted={() => { }} />}
                                     </DragOverlay>
                                 </div>
 
