@@ -1,0 +1,35 @@
+name: "Clippy Check"
+
+on:
+  pull_request:
+    branches: 
+      - dev
+      - int
+      - main
+
+# This is the example from the readme.
+# On each push to the `release` branch it will create or update a GitHub release, build your app, and upload the artifacts to the release.
+
+jobs:
+  clippy-application:
+    name: Clippy Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-environment
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}          
+
+      - name: install clippy
+        run: rustup component add clippy
+
+      - name: Run Clippy
+        run: cargo clippy --message-format=json -- -D warnings > clippy-report.json
+
+      - name: Upload Clippy Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: clippy-report
+          path: clippy-report.json

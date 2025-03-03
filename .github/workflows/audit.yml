@@ -1,0 +1,37 @@
+name: "Audit"
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches: 
+      - alpha
+      - int
+      - main
+
+# This is the example from the readme.
+# On each push to the `release` branch it will create or update a GitHub release, build your app, and upload the artifacts to the release.
+
+jobs:
+  audit-application:
+    name: Audit Application
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-environment
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}          
+      
+      - name: Run Cargo Audit
+        run: cargo audit --json > cargo-audit-report.json
+  
+      - name: Upload cargo audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-audit-report
+          path: cargo-audit-report.json
+  
+      # TODO: Add NPM Audit & NextJS Linting

@@ -1,19 +1,19 @@
-name: "quality, benchmark and tests"
+name: "Benchmark"
 
 on:
   push:
     branches:
-      - dev
+      - int
   pull_request:
     branches: 
-      - dev
+      - int
 
 # This is the example from the readme.
 # On each push to the `release` branch it will create or update a GitHub release, build your app, and upload the artifacts to the release.
 
 jobs:
-  test-application:
-    name: Test Application
+  bench-application:
+    name: Benchmark Application
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -26,7 +26,7 @@ jobs:
       - name: Run Rust tests
         run: cargo test
 
-      - name: Run Rust tests
+      - name: Run Rust Benchmark
         run: cargo bench
 
       - name: Save benchmark results

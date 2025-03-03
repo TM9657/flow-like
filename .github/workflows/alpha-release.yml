@@ -3,7 +3,7 @@ name: "alpha-release"
 on:
   push:
     branches:
-      - dev
+      - alpha
 
 jobs:
   alpha-release:
