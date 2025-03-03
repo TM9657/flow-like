@@ -26,7 +26,7 @@ impl NodeLogic for BitFromStringNode {
             "bit_from_string",
             "Bit From String",
             "Converts a string to a boolean (bit)",
-            "Conversions",
+            "Bit",
         );
         node.add_icon("/flow/icons/bit.svg");
 

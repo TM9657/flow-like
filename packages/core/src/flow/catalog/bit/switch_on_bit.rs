@@ -27,7 +27,7 @@ impl NodeLogic for SwitchOnBitNode {
             "switch_on_bit",
             "Switch on Bit",
             "Routes execution based on the type of the Bit",
-            "Control",
+            "Bit",
         );
 
         node.add_icon("/flow/icons/bit.svg");
