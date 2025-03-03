@@ -16,8 +16,8 @@ flow-like/
 ├── apps/          # Standalone applications
 ├── packages/      # Shared libraries and components
 ├── .github/       # GitHub workflows and configuration
-├── assets/        # Project assets
-├── tests/         # Project-wide tests
+├── assets/        # Project assets (mostly for github)
+├── tests/         # Project-wide tests & test data
 ├── tools/         # Development and build tools
 └── README.md      # Project documentation
 ```

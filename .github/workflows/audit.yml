@@ -26,7 +26,9 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}          
       
       - name: Run Cargo Audit
-        run: cargo audit --json > cargo-audit-report.json
+        run: |
+          cargo install cargo-audit
+          cargo audit --json > cargo-audit-report.json
   
       - name: Upload cargo audit report
         uses: actions/upload-artifact@v4
