@@ -47,11 +47,11 @@ import { type IBoard, type IComment, ICommentType, IExecutionStage, ILogLevel, t
 import { type INode } from '../../lib/schema/flow/node';
 import { type IPin } from '../../lib/schema/flow/pin';
 import { type IRun, type ITrace } from '../../lib/schema/flow/run';
+import { convertJsonToUint8Array } from '../../lib/uint8';
 import { useFlowBoardParentState } from '../../state/flow-board-parent-state';
 import { useRunExecutionStore } from '../../state/run-execution-state';
 import { type ISettingsProfile } from '../../types';
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, Textarea } from '../ui';
-import { convertJsonToUint8Array } from '../../lib/uint8';
 export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
     const router = useRouter()
     const selected = useRef(new Set<string>())
@@ -266,7 +266,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
     }, [catalog.data])
 
     const nodeTypes = useMemo(() => ({ flowNode: FlowNode, commentNode: CommentNode }), []);
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, setViewport } = useReactFlow();
 
     async function executeCommand(command: string, args: any, append: boolean = false): Promise<any> {
         const result = await invoke(command, { ...args, append: append })
@@ -590,6 +590,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                                         colorMode={resolvedTheme === 'dark' ? 'dark' : 'light'}
                                         nodes={nodes}
                                         nodeTypes={nodeTypes}
+                                        onlyRenderVisibleElements={true}
                                         edges={edges}
                                         onNodesChange={onNodesChangeIntercept}
                                         onEdgesChange={onEdgesChange}
@@ -612,6 +613,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                                         onConnectEnd={onConnectEnd}
                                         fitView
                                         proOptions={{ hideAttribution: true }}
+
                                     >
                                         <Controls />
                                         <MiniMap />

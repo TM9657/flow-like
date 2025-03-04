@@ -23,10 +23,10 @@
 # Flow Like
 
 
-<picture align="center">
-         <source width="1280" srcset="./assets/preview.png" media="(prefers-color-scheme: dark)">
-         <img width=1280 src="./assets/preview-light.png" alt="Icon">
-</picture>
+<video width="1280" autoplay loop muted playsinline align="center">
+  <source src="./assets/preview.mov" type="video/quicktime">
+  Your browser does not support the video tag.
+</video>
 
 ### 💕 Getting Started
 Check our [Docs](https://docs.flow-like.com)! This includes detailed installation guides, configuration options, and usage examples to help you get the most out of Flow-Like.
