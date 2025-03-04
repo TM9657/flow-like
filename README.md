@@ -9,6 +9,7 @@
 
 <div align="center">
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/7624b628408141928ca8ffd796f1a5f8)](https://app.codacy.com/gh/TM9657/flow-like?utm_source=github.com&utm_medium=referral&utm_content=TM9657/flow-like&utm_campaign=Badge_Grade)
 [![Maintainability Rating](https://sonar.good-co.de/api/project_badges/measure?project=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131&metric=software_quality_maintainability_rating&token=sqb_0721b0d278bee3607fb07c23aafbff0183948062)](https://sonar.good-co.de/dashboard?id=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131)
 [![Security Rating](https://sonar.good-co.de/api/project_badges/measure?project=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131&metric=software_quality_security_rating&token=sqb_0721b0d278bee3607fb07c23aafbff0183948062)](https://sonar.good-co.de/dashboard?id=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131)
 [![Lines of Code](https://sonar.good-co.de/api/project_badges/measure?project=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131&metric=ncloc&token=sqb_0721b0d278bee3607fb07c23aafbff0183948062)](https://sonar.good-co.de/dashboard?id=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131)
