@@ -27,7 +27,7 @@
         "coding",
         "cost",
         "creativity",
-        "factfulness",
+        "factuality",
         "function_calling",
         "multilinguality",
         "openness",
@@ -48,7 +48,7 @@
           "type": "number",
           "format": "float"
         },
-        "factfulness": {
+        "factuality": {
           "type": "number",
           "format": "float"
         },

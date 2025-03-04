@@ -64,7 +64,7 @@ export default function Home() {
     let preferences: IPreferences = {
       multilinguality_weight: 0.3,
       reasoning_weight: 0.8,
-      factfulness_weight: 0.8,
+      factuality_weight: 0.8,
       cost_weight: 0.1,
       creativity_weight: 0.3,
       speed_weight: 0.2,

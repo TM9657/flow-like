@@ -9,7 +9,7 @@ export interface IBitModelClassification {
     coding:           number;
     cost:             number;
     creativity:       number;
-    factfulness:      number;
+    factuality:      number;
     function_calling: number;
     multilinguality:  number;
     openness:         number;

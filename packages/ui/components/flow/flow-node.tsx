@@ -263,7 +263,7 @@ export function FlowNode(props: NodeProps<FlowNode>) {
             <div className={`flex flex-row items-center gap-1`}>
               {props.data.node?.icon && <DynamicImage className='w-2 h-2 bg-foreground' url={props.data.node?.icon} />}
               {!props.data.node?.icon && <WorkflowIcon className='w-2 h-2' />}
-              <small className='font-medium leading-none'>{props.data.node?.friendly_name}</small>
+              <small className='font-medium leading-none text-start line-clamp-1'>{props.data.node?.friendly_name}</small>
             </div>
             <div className="flex flex-row items-center gap-1">
               {props.data.traces.length > 0 && <ScrollTextIcon onClick={() => props.data.openTrace(props.data.traces)} className="w-2 h-2 cursor-pointer hover:text-primary" />}

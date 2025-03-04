@@ -4,13 +4,11 @@ import { VariableIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Button } from "../../../components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../../../components/ui/dialog"
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "../../../components/ui/hover-card"
 import { type IPin, IPinType, IVariableType } from "../../../lib/schema/flow/pin"
 import { VariablesMenuEdit } from "../variables/variables-menu-edit"
 import { BooleanVariable } from "./variable-types/boolean-variable"
 import { VariableDescription } from "./variable-types/default-text"
 import { EnumVariable } from "./variable-types/enum-variable"
-import { parseUint8ArrayToJson } from "../../../lib/uint8"
 
 export function PinEdit({ pin, defaultValue, changeDefaultValue }: Readonly<{ pin: IPin, defaultValue: any, changeDefaultValue: (value: any) => void }>) {
     const [value, setValue] = useState(defaultValue)
@@ -32,11 +30,9 @@ function WithMenu({ pin, defaultValue, changeDefaultValue }: Readonly<{ pin: IPi
 
     return <>
         <VariableDescription pin={pin} />
-        <HoverCard openDelay={0} closeDelay={0}>
-            <HoverCardTrigger>
                 <Button size={"icon"} variant={"ghost"} className="w-fit h-fit text-foreground">
                     <Dialog>
-                        <DialogTrigger>
+                        <DialogTrigger asChild>
                             <VariableIcon className={`w-[0.45rem] h-[0.45rem] min-w-[0.45rem] min-h-[0.45rem] ${(typeof defaultValue === "undefined" || defaultValue === null) && "text-primary"}`} />
                         </DialogTrigger>
                         <DialogContent>
@@ -66,13 +62,5 @@ function WithMenu({ pin, defaultValue, changeDefaultValue }: Readonly<{ pin: IPi
                         </DialogContent>
                     </Dialog>
                 </Button>
-            </HoverCardTrigger>
-            <HoverCardContent side="right" className="w-fit z-[2000] p-1 text-extra-small leading-auto text-start max-w-screen-s absolute">
-                <small className="leading-auto mt-0 mb-0 p-0 text-wrap">Default Value</small><br />
-                <small className="leading-auto mt-0 mb-0 p-0 text-wrap">
-                    {JSON.stringify(parseUint8ArrayToJson(defaultValue))}
-                </small>
-            </HoverCardContent>
-        </HoverCard>
     </>
 }

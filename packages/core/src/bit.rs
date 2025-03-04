@@ -65,7 +65,7 @@ pub struct BitModelPreference {
     pub speed_weight: Option<f32>,
     pub reasoning_weight: Option<f32>,
     pub creativity_weight: Option<f32>,
-    pub factfulness_weight: Option<f32>,
+    pub factuality_weight: Option<f32>,
     pub function_calling_weight: Option<f32>,
     pub safety_weight: Option<f32>,
     pub openness_weight: Option<f32>,
@@ -96,7 +96,7 @@ impl BitModelPreference {
         enforce_bound(&mut self.speed_weight);
         enforce_bound(&mut self.reasoning_weight);
         enforce_bound(&mut self.creativity_weight);
-        enforce_bound(&mut self.factfulness_weight);
+        enforce_bound(&mut self.factuality_weight);
         enforce_bound(&mut self.function_calling_weight);
         enforce_bound(&mut self.safety_weight);
         enforce_bound(&mut self.openness_weight);
@@ -115,7 +115,7 @@ impl BitModelPreference {
         Self::normalize_weight(&mut self.speed_weight);
         Self::normalize_weight(&mut self.reasoning_weight);
         Self::normalize_weight(&mut self.creativity_weight);
-        Self::normalize_weight(&mut self.factfulness_weight);
+        Self::normalize_weight(&mut self.factuality_weight);
         Self::normalize_weight(&mut self.function_calling_weight);
         Self::normalize_weight(&mut self.safety_weight);
         Self::normalize_weight(&mut self.openness_weight);
@@ -136,7 +136,7 @@ pub struct BitModelClassification {
     speed: f32,
     reasoning: f32,
     creativity: f32,
-    factfulness: f32,
+    factuality: f32,
     function_calling: f32,
     safety: f32,
     openness: f32,
@@ -186,7 +186,7 @@ impl BitModelClassification {
             (preference.speed_weight, self.speed),
             (preference.reasoning_weight, self.reasoning),
             (preference.creativity_weight, self.creativity),
-            (preference.factfulness_weight, self.factfulness),
+            (preference.factuality_weight, self.factuality),
             (preference.function_calling_weight, self.function_calling),
             (preference.safety_weight, self.safety),
             (preference.openness_weight, self.openness),
