@@ -1,8 +1,8 @@
 <p align="center">
    <a href="https://flow-like.com" target="_blank">
       <picture>
-         <source width=200 srcset="./apps/desktop/public/icon-big-darkmode.webp" media="(prefers-color-scheme: dark)">
-         <img width=200 src="./apps/desktop/public/icon-big.webp" alt="Icon">
+         <source width=200 srcset="./apps/desktop/public/app-logo-light.webp" media="(prefers-color-scheme: dark)">
+         <img width=200 src="./apps/desktop/public/app-logo.webp" alt="Icon">
       </picture>
    </a>
 </p>
@@ -26,6 +26,9 @@
          <source width="1280" srcset="./assets/preview.png" media="(prefers-color-scheme: dark)">
          <img width=1280 src="./assets/preview-light.png" alt="Icon">
 </picture>
+
+### 💕 Getting Started
+Check our [Docs](https://docs.flow-like.com)! This includes detailed installation guides, configuration options, and usage examples to help you get the most out of Flow-Like.
 
 ### ❌ The Problem
 Enterprise IT systems are becoming the foundation of modern businesses, tasked with delivering secure, scalable, and flexible solutions. Yet, these systems face mounting challenges:
@@ -90,28 +93,6 @@ Flow-Like offers a wide range of Interfaces for you to use for your own software
 Flow-Like is built on the principle of democratizing technology. With Flow-Like we offer a standardized way of building software in enterprise that is easily accessible to anyone working on the project. Onboarding is a thing of the past.
 
 ---
-
-#### Getting Started
-
-Just download the latest release and select from a bunch of available profiles to get started.
-
-#### Compiling from Source
-##### Ubuntu
-
-1. Install Rust
-2. Install NodeJS
-3. `sudo apt install protobuf-compiler build-essentials`
-4. `npm install -g bun`
-
-##### MacOS
-TBD
-
-##### Windows
-TBD
-
-#### Documentation [TODO]
-
-Comprehensive documentation is available [here](https://flow-like.com/). This includes detailed installation guides, configuration options, and usage examples to help you get the most out of Flow-Like.
 
 #### Contributing [Help wanted]
 

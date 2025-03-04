@@ -14,13 +14,24 @@ export default defineConfig({
 		react(),
 		starlight({
 			title: 'Flow-Like',
+			favicon: '/ico-light.svg',
 			description: 'Flow-Like is a visual programming language for creating very fast and efficient workflows and automations.',
+			head: [
+				{
+				  tag: 'link',
+				  attrs: {
+					rel: 'icon',
+					href: '/ico.ico',
+					sizes: '32x32',
+				  },
+				},
+			  ],
 			editLink: {
 				baseUrl: 'https://github.com/TM9657/flow-like/edit/main/apps/docs/',
 			  },
 			logo: {
-				light: './src/assets/dark-mode.svg',
-				dark: './src/assets/dark-mode.svg',
+				light: './src/assets/app-logo-light.webp',
+				dark: './src/assets/app-logo.webp',
 			},
 			customCss: [
 				'./src/tailwind.css',

@@ -79,7 +79,7 @@ function PreviewCard({ profile, bits, onClick, active }: Readonly<{ bits: IBit[]
                 bits.map(bit => <BitHover bit={bit} key={bit.id}>
                     <Avatar key={bit.id} className="w-7 h-7">
                         <AvatarImage className="rounded-full w-7 h-7" width={7} src={bit.icon} />
-                        <AvatarImage className="rounded-full w-7 h-7" width={7} src="/icon.png"></AvatarImage>
+                        <AvatarImage className="rounded-full w-7 h-7" width={7} src="/app-logo.webp"></AvatarImage>
                         <AvatarFallback>
                             NA
                         </AvatarFallback>

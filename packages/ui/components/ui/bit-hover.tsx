@@ -35,7 +35,7 @@ export function BitHover({bit, children}: Readonly<{bit: IBit, children: React.
                 <div className='flex flex-row items-center gap-2'>
                     <Avatar className="border">
                         <AvatarImage className="p-1" src={bitData.icon} />
-                        <AvatarImage className="p-1" src="/icon.png"></AvatarImage>
+                        <AvatarImage className="p-1" src="/app-logo.webp"></AvatarImage>
                         <AvatarFallback>
                             NA
                         </AvatarFallback>
