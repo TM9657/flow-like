@@ -14,11 +14,8 @@ pub async fn compress_to_file<T>(
 where
     T: Serialize + Deserialize<'static>,
 {
-    println!("Compressing to file: {:?}", file_path);
     let data = bitcode::serialize(input)?;
-    println!("Data transformed {} bytes", data.len());
     let compressed = compress_prepend_size(&data);
-    println!("Compressed {} bytes", compressed.len());
     let _result = store.put(&file_path, PutPayload::from(compressed)).await?;
     Ok(())
 }

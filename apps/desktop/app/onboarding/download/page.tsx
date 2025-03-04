@@ -238,7 +238,7 @@ function BitDownload({ bit, onDownload }: Readonly<{ bit: Bit, onDownload: (prog
     return <BitHover bit={bit}>
         <Avatar className='border'>
                         <AvatarImage className="p-1" src={bit.icon} />
-                        <AvatarImage className="p-1" src="/icon.png"></AvatarImage>
+                        <AvatarImage className="p-1" src="/app-logo.webp"></AvatarImage>
                         <AvatarFallback>
                             NA
                         </AvatarFallback>

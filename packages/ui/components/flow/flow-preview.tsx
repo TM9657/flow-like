@@ -1,6 +1,6 @@
 
 import { useEffect, useMemo } from "react";
-import { IExecutionStage, parseBoard, type IBoard, type INode } from "../../lib";
+import { IExecutionStage, ILogLevel, parseBoard, type IBoard, type INode } from "../../lib";
 import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, useEdgesState, useNodesState } from "@xyflow/react";
 import { useTheme } from "next-themes";
 import { FlowNode } from "./flow-node";
@@ -31,6 +31,7 @@ export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
             },
             description: "",
             id: "",
+            log_level: ILogLevel.Info,
             name: "",
             nodes: parsed,
             refs: {},

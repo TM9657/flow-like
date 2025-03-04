@@ -1,8 +1,8 @@
 <p align="center">
    <a href="https://flow-like.com" target="_blank">
       <picture>
-         <source width=200 srcset="./apps/desktop/public/icon-big-darkmode.webp" media="(prefers-color-scheme: dark)">
-         <img width=200 src="./apps/desktop/public/icon-big.webp" alt="Icon">
+         <source width=200 srcset="./apps/desktop/public/app-logo-light.webp" media="(prefers-color-scheme: dark)">
+         <img width=200 src="./apps/desktop/public/app-logo.webp" alt="Icon">
       </picture>
    </a>
 </p>
@@ -13,6 +13,7 @@
 [![Security Rating](https://sonar.good-co.de/api/project_badges/measure?project=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131&metric=software_quality_security_rating&token=sqb_0721b0d278bee3607fb07c23aafbff0183948062)](https://sonar.good-co.de/dashboard?id=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131)
 [![Lines of Code](https://sonar.good-co.de/api/project_badges/measure?project=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131&metric=ncloc&token=sqb_0721b0d278bee3607fb07c23aafbff0183948062)](https://sonar.good-co.de/dashboard?id=TM9657_flow-like_7e2d0aa8-e6e3-40a2-899c-24618493d131)
 [![Translation](https://translation.good-co.de/widget/buttons/svg-badge.svg?native=1)](https://translation.good-co.de)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/244d2db2a84f4e79b64d984639a2b18f)](https://app.codacy.com/gh/TM9657/flow-like/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
 [![Website](https://up.good-co.de/api/badge/1/uptime?labelPrefix=Website+)](https://up.good-co.de)
 [![Hub](https://up.good-co.de/api/badge/3/uptime?labelPrefix=Hub+)](https://up.good-co.de)
@@ -26,6 +27,9 @@
          <source width="1280" srcset="./assets/preview.png" media="(prefers-color-scheme: dark)">
          <img width=1280 src="./assets/preview-light.png" alt="Icon">
 </picture>
+
+### 💕 Getting Started
+Check our [Docs](https://docs.flow-like.com)! This includes detailed installation guides, configuration options, and usage examples to help you get the most out of Flow-Like.
 
 ### ❌ The Problem
 Enterprise IT systems are becoming the foundation of modern businesses, tasked with delivering secure, scalable, and flexible solutions. Yet, these systems face mounting challenges:
@@ -90,32 +94,6 @@ Flow-Like offers a wide range of Interfaces for you to use for your own software
 Flow-Like is built on the principle of democratizing technology. With Flow-Like we offer a standardized way of building software in enterprise that is easily accessible to anyone working on the project. Onboarding is a thing of the past.
 
 ---
-
-#### Getting Started
-
-Just download the latest release and select from a bunch of available profiles to get started.
-
-#### Compiling from Source
-##### Ubuntu
-
-1. Install Rust
-2. Install NodeJS
-3. `sudo apt install protobuf-compiler build-essentials`
-4. `npm install -g bun`
-
-##### MacOS
-TBD
-
-##### Windows
-TBD
-
-#### Documentation [TODO]
-
-Comprehensive documentation is available [here](https://flow-like.com/). This includes detailed installation guides, configuration options, and usage examples to help you get the most out of Flow-Like.
-
-#### Contributing [Help wanted]
-
-We welcome contributions from the community! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) file for guidelines on how to get involved.
 
 #### License
 
