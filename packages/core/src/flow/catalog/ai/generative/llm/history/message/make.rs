@@ -99,11 +99,11 @@ impl NodeLogic for MakeHistoryMessageNode {
         let image_pin = node.pins.get("image").clone();
         let mime_pin = node.pins.get("mime").clone();
 
-        if type_pin == "Text" && text_pin.is_some() {
+        if (type_pin == "Text".to_string()) && text_pin.is_some() {
             return;
         }
 
-        if type_pin == "Image" && image_pin.is_some() && mime_pin.is_some() {
+        if (type_pin == "Image".to_string()) && image_pin.is_some() && mime_pin.is_some() {
             return;
         }
 

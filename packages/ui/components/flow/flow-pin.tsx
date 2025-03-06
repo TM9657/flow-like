@@ -1,3 +1,9 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { invoke } from '@tauri-apps/api/core';
+import { useDebounce } from "@uidotdev/usehooks";
+import { Handle, Position, useInternalNode } from '@xyflow/react';
+import { EllipsisVerticalIcon, GripIcon, ListIcon } from "lucide-react";
+import { useCallback, useEffect, useState } from 'react';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -7,16 +13,9 @@ import {
 } from "../../components/ui/context-menu";
 import { type INode } from "../../lib/schema/flow/node";
 import { IValueType, type IPin } from "../../lib/schema/flow/pin";
-import { useQueryClient } from '@tanstack/react-query';
-import { invoke } from '@tauri-apps/api/core';
-import { useDebounce } from "@uidotdev/usehooks";
-import { Handle, Position, useInternalNode } from '@xyflow/react';
-import { useCallback, useEffect, useState } from 'react';
 import { DynamicImage } from '../ui/dynamic-image';
 import { PinEdit } from "./flow-pin/pin-edit";
 import { typeToColor } from './utils';
-import { EllipsisIcon, EllipsisVerticalIcon, GripIcon, ListIcon } from "lucide-react";
-import { IVariableType } from "../../lib/schema/flow/variable";
 
 export function FlowPinInner({ pin, index, boardId, node }: Readonly<{ pin: IPin, index: number, boardId: string, node: INode }>) {
     const queryClient = useQueryClient()
