@@ -1,3 +1,4 @@
+"use client"
 import { DragOverlay, useDroppable } from '@dnd-kit/core';
 import { createId } from '@paralleldrive/cuid2';
 import { type UseQueryResult } from '@tanstack/react-query';
@@ -10,8 +11,10 @@ import {
     BackgroundVariant,
     type Connection,
     Controls,
+    type Edge,
     type FinalConnectionState,
     type InternalNode,
+    type IsValidConnection,
     MiniMap,
     type OnEdgesChange,
     type OnNodesChange,
@@ -90,6 +93,16 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
         logLevel: "Debug"
     })
 
+    const colorMode = useMemo(() => resolvedTheme === 'dark' ? 'dark' : 'light', [resolvedTheme])
+
+    const executeCommand = useCallback(
+        async (command: string, args: any, append: boolean = false): Promise<any> => {
+            const result = await invoke(command, { ...args, append: append })
+            await board.refetch()
+            return result
+        }
+    , [board.refetch])
+
     useEffect(() => {
         if (!logPanelRef.current) return
 
@@ -129,12 +142,12 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
         await invoke("finalize_run", { id: runId })
     }, [boardId])
 
-    async function openTraces(node: INode, traces: ITrace[]) {
+    const openTraces = useCallback(async function openTraces(node: INode, traces: ITrace[]) {
         setTraces({
             node: node,
             traces: traces
         })
-    }
+    }, [])
 
     const handlePasteCB = useCallback(async (event: ClipboardEvent) => {
         const currentCursorPosition = screenToFlowPosition({ x: mousePosition.x, y: mousePosition.y });
@@ -268,12 +281,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
     const nodeTypes = useMemo(() => ({ flowNode: FlowNode, commentNode: CommentNode }), []);
     const { screenToFlowPosition, setViewport } = useReactFlow();
 
-    async function executeCommand(command: string, args: any, append: boolean = false): Promise<any> {
-        const result = await invoke(command, { ...args, append: append })
-        await board.refetch()
-        console.log("Refetched board, execute command")
-        return result
-    }
+
 
     async function executeCommands(commands: { command: string, args: any }[]) {
         let first = true
@@ -421,6 +429,26 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 
         edgeReconnectSuccessful.current = true;
     }, [boardId, setEdges]);
+
+    const onContextMenuCB = useCallback((event: any) => {
+        setClickPosition({ x: event.clientX, y: event.clientY });
+    }, [])
+
+    const onNodeDragStop = useCallback(async (event: any, node: any, nodes: any) => {
+        let first = true
+        for await (const node of nodes) {
+            console.log(`Moving node ${node.id} to ${node.position.x}, ${node.position.y}`)
+            let comment = Object.values(board.data?.comments || {}).find(comment => comment.id === node.id)
+            if (comment) await invoke("upsert_comment", { boardId: boardId, comment: { ...comment, coordinates: [node.position.x, node.position.y, 0] }, append: !first })
+            if (!comment) await invoke("move_node", { boardId: boardId, nodeId: node.id, coordinates: [node.position.x, node.position.y, 0], append: !first })
+            first = false
+        }
+        await board.refetch()
+    }, [boardId])
+
+    const isValidConnectionCB = useCallback((connection: Edge | Connection) => {
+        isValidConnection(connection, pinCache, board.data?.refs ?? {})
+    }, [pinCache, board.data?.refs]) as IsValidConnection<Edge>
 
     return (
         <div className="min-h-dvh h-dvh max-h-dvh w-full flex-1 flex-grow">
@@ -583,29 +611,17 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                                     </div>
                                     <ReactFlow
                                         suppressHydrationWarning
-                                        onContextMenu={(event) => {
-                                            setClickPosition({ x: event.clientX, y: event.clientY });
-                                        }}
+                                        onContextMenu={onContextMenuCB}
                                         ref={flowRef}
-                                        colorMode={resolvedTheme === 'dark' ? 'dark' : 'light'}
+                                        colorMode={colorMode}
                                         nodes={nodes}
                                         nodeTypes={nodeTypes}
-                                        onlyRenderVisibleElements={true}
+                                        onlyRenderVisibleElements={false}
                                         edges={edges}
                                         onNodesChange={onNodesChangeIntercept}
                                         onEdgesChange={onEdgesChange}
-                                        onNodeDragStop={async (event, _, nodes) => {
-                                            let first = true
-                                            for await (const node of nodes) {
-                                                console.log(`Moving node ${node.id} to ${node.position.x}, ${node.position.y}`)
-                                                let comment = Object.values(board.data?.comments || {}).find(comment => comment.id === node.id)
-                                                if (comment) await invoke("upsert_comment", { boardId: boardId, comment: { ...comment, coordinates: [node.position.x, node.position.y, 0] }, append: !first })
-                                                if (!comment) await invoke("move_node", { boardId: boardId, nodeId: node.id, coordinates: [node.position.x, node.position.y, 0], append: !first })
-                                                first = false
-                                            }
-                                            await board.refetch()
-                                        }}
-                                        isValidConnection={(connection) => isValidConnection(connection, pinCache, board.data?.refs ?? {})}
+                                        onNodeDragStop={onNodeDragStop}
+                                        isValidConnection={isValidConnectionCB}
                                         onConnect={onConnect}
                                         onReconnect={onReconnect}
                                         onReconnectStart={onReconnectStart}
