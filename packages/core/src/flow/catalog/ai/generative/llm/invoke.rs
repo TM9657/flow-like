@@ -53,11 +53,9 @@ impl NodeLogic for InvokeLLM {
             .set_schema::<Bit>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("system_prompt", "System Prompt", "", VariableType::String)
-            .set_default_value(Some(json!("")));
-
-        node.add_input_pin("prompt", "Prompt", "", VariableType::String)
-            .set_default_value(Some(json!("")));
+        node.add_input_pin("history", "History", "Chat History", VariableType::Struct)
+            .set_schema::<History>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "on_stream",
@@ -68,7 +66,7 @@ impl NodeLogic for InvokeLLM {
 
         node.add_output_pin("token", "Token", "Token", VariableType::String);
 
-        node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
+        node.add_output_pin("done", "Done", "Done", VariableType::Execution);
 
         node.add_output_pin(
             "result",

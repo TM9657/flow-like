@@ -1,14 +1,11 @@
-import { type IPin } from "../../../../lib/schema/flow/pin"
-import { VariableDescription } from "./default-text"
-import { Checkbox } from "../../../../components/ui/checkbox"
-import { convertJsonToUint8Array, parseUint8ArrayToJson } from "../../../../lib/uint8"
 import {
     Select,
     SelectContent,
     SelectItem,
-    SelectTrigger,
-    SelectValue,
+    SelectTrigger
 } from "../../../../components/ui/select"
+import { type IPin } from "../../../../lib/schema/flow/pin"
+import { convertJsonToUint8Array, parseUint8ArrayToJson } from "../../../../lib/uint8"
 
 export function EnumVariable({ pin, value, setValue }: Readonly<{ pin: IPin, value: number[] | undefined | null, setValue: (value: any) => void }>) {
     return <div className="flex flex-row items-center justify-start">

@@ -24,7 +24,7 @@
       ],
       "format": "float"
     },
-    "factfulness_weight": {
+    "factuality_weight": {
       "type": [
         "number",
         "null"

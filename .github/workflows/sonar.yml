@@ -1,25 +1,20 @@
-name: SonarQube Scan
-
+name: SonarQube
 on:
   push:
     branches:
+      - main
       - dev
-
-
+  pull_request:
+    types: [opened, synchronize, reopened]
 jobs:
   sonarqube:
-    name: Build and analyze
+    name: SonarQube
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-      checks: write
-    
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - uses: sonarsource/sonarqube-scan-action@v4
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}

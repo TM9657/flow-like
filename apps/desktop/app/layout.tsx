@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { AppSidebar } from '../components/app-sidebar';
 import PostHogPageView from "./PostHogPageView";
 import { PHProvider } from "./provider";
+import { ReactScan } from './ReactScanComponent';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -81,6 +82,7 @@ export default function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning suppressContentEditableWarning>
+      {/* <ReactScan /> */}
       <PHProvider>
         <ReactFlowProvider>
           <PersistQueryClientProvider

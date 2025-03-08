@@ -2,7 +2,7 @@ export interface IPreferences {
     coding_weight?:           number | null;
     cost_weight?:             number | null;
     creativity_weight?:       number | null;
-    factfulness_weight?:      number | null;
+    factuality_weight?:      number | null;
     function_calling_weight?: number | null;
     model_hint?:              null | string;
     multilinguality_weight?:  number | null;

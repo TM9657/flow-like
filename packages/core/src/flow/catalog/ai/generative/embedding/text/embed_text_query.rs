@@ -31,6 +31,7 @@ impl NodeLogic for EmbedQueryNode {
             "AI/Embedding",
         );
 
+        node.set_long_running(true);
         node.add_icon("/flow/icons/bot-invoke.svg");
 
         node.add_input_pin(

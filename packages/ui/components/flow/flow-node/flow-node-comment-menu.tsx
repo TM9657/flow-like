@@ -1,10 +1,10 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { invoke } from '@tauri-apps/api/core';
+import { useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader } from '../../../components/ui/dialog';
 import { Textarea } from '../../../components/ui/textarea';
 import { type INode } from '../../../lib/schema/flow/node';
-import { useQueryClient } from '@tanstack/react-query';
-import { invoke } from '@tauri-apps/api/core';
-import { useState } from 'react';
 
 
 export function FlowNodeCommentMenu({ node, boardId, open, onOpenChange }: Readonly<{ node: INode, boardId: string, open: boolean, onOpenChange: (open: boolean) => void }>) {

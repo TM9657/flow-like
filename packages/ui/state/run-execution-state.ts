@@ -1,5 +1,6 @@
 import { type Event, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { create } from 'zustand';
+import type { ITrace } from '../lib';
 
 interface IRunExecutionState {
     runs: Map<string, { unlistenFn: UnlistenFn, eventIds: string[], boardId: string, nodes: Set<string>, already_executed: Set<string> }>;
@@ -9,10 +10,11 @@ interface IRunExecutionState {
     removeNodesOnRun: (runId: string, nodeIds: string[]) => void;
 }
 
-interface IRunUpdateEvent {
+export interface IRunUpdateEvent {
     run_id: string;
     node_ids: string[];
     method: "remove" | "add" | "update";
+    logs: ITrace[];
 }
 
 export const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
