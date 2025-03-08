@@ -1,13 +1,15 @@
-import type { IBit, IRunUpdateEvent, IComment, IDownloadProgress, IExecutionStage, IFileMetadata, ILogLevel, INode, IProfile, IRun } from "../lib";
+import type { IBit, IComment, IDownloadProgress, IExecutionStage, IFileMetadata, ILogLevel, INode, IProfile, IRun } from "../lib";
+import type { IRunUpdateEvent } from "./run-execution-state";
+import { create } from 'zustand';
 
-interface IBackendState {
+export interface IBackendState {
     getCatalog(): Promise<INode[]>
     getBoard(id: string): Promise<INode>
     // [BoardId, BoardName]
     getOpenBoards(): Promise<[string, string][]>
     getBoardSettings(): Promise<"straight" | "step" | "simpleBezier">
 
-    createRun(boardId: string, startIds: string[]) : Promise<string>
+    createRun(boardId: string, startIds: string[]): Promise<string>
     executeRun(runId: string): Promise<void>
     getRun(runId: string): Promise<IRun>
     finalizeRun(runId: string): Promise<void>
@@ -46,5 +48,20 @@ interface IBackendState {
     getBitSize(bit: IBit): Promise<number>
     isBitInstalled(bit: IBit): Promise<boolean>
     onBitInstallProgress(callback: (progress: IDownloadProgress) => void): () => void
+}
 
+interface BackendStoreState {
+    backend: IBackendState | null;
+    setBackend: (backend: IBackendState) => void;
+}
+
+export const useBackendStore = create<BackendStoreState>((set) => ({
+    backend: null,
+    setBackend: (backend: IBackendState) => set({ backend }),
+}));
+
+export function useBackend(): IBackendState {
+    const backend = useBackendStore((state) => state.backend);
+    if (!backend) throw new Error('Backend not initialized');
+    return backend;
 }
