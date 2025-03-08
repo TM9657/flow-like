@@ -1,22 +1,32 @@
 version = 1
 
 [[analyzers]]
-name = "javascript"
-enabled = true
+name = "docker"
 
   [analyzers.meta]
-  environment = ["nodejs", "browser"]
-  plugins = ["react"]
-  dependency_file_paths = [
-    "apps/desktop/",
-    "apps/docs/",
-    "packages/ui"
-  ]
-  dialect = "typescript"
+  dockerfile_paths = ["apps/backend/docker/api/Dockerfile"]
 
 [[analyzers]]
 name = "rust"
-enabled = true
 
-[[excludes]]
-paths = ["**/node_modules/", "dist/", "build/", "**/*.min.js"]
+  [analyzers.meta]
+  msrv = "stable"
+
+[[analyzers]]
+name = "javascript"
+
+  [analyzers.meta]
+  plugins = ["react"]
+  environment = [
+    "nodejs",
+    "browser"
+  ]
+
+[[transformers]]
+name = "prettier"
+
+[[transformers]]
+name = "standardjs"
+
+[[transformers]]
+name = "rustfmt"
