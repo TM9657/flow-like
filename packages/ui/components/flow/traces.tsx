@@ -86,7 +86,7 @@ export function Traces({ traces, node, result, onOpenChange }: Readonly<{ traces
                     {traces.toSorted((a, b) => a.start.nanos_since_epoch - b.start.nanos_since_epoch).map((trace, index) => <div key={trace.id} className="bg-card p-2 rounded-md mb-2">
                         <div className="flex justify-between items-center gap-2">
                             <div className="flex items-center">
-                                <div className="w-4 h-4 rounded-full bg-primary mr-2"></div>
+                                <div className="w-4 h-4 rounded-full bg-primary mr-2" />
                                 <div><b>Run {index + 1}</b> [{parseTimespan(trace.start, trace.end)}] - <b>{trace.logs.length}</b> Log Entrie(s)</div>
                             </div>
                             <div className="flex items-center">

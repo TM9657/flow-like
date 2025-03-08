@@ -319,7 +319,7 @@ function Profiles() {
                             <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                                 <Avatar className="h-8 w-8 rounded-lg">
                                     <AvatarImage className="rounded-lg size-8 w-8 h-8" src={currentProfile.data?.hub_profile.thumbnail} />
-                                    <AvatarImage className="rounded-lg size-8 w-8 h-8" src="/app-logo.webp"></AvatarImage>
+                                    <AvatarImage className="rounded-lg size-8 w-8 h-8" src="/app-logo.webp" />
                                     <AvatarFallback>
                                         NA
                                     </AvatarFallback>
@@ -355,7 +355,7 @@ function Profiles() {
                                 <div className="flex size-6 items-center justify-center rounded-sm border">
                                     <Avatar className="h-8 w-8 rounded-sm">
                                         <AvatarImage className="rounded-sm w-8 h-8" src={profile.hub_profile.thumbnail} />
-                                        <AvatarImage className="rounded-sm w-8 h-8" src="/app-logo.webp"></AvatarImage>
+                                        <AvatarImage className="rounded-sm w-8 h-8" src="/app-logo.webp" />
                                         <AvatarFallback>
                                             NA
                                         </AvatarFallback>

@@ -111,7 +111,7 @@ export function BitCard({ bit, wide = false }: Readonly<{ bit: IBit, wide: boole
                                     <div className="rounded-full w-14 h-14 flex items-center">
                                         <Avatar className='border'>
                                             <AvatarImage className="p-2" src={bit.icon} />
-                                            <AvatarImage className="" src="/app-logo.webp"></AvatarImage>
+                                            <AvatarImage className="" src="/app-logo.webp" />
                                             <AvatarFallback>
                                                 NA
                                             </AvatarFallback>
