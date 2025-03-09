@@ -447,7 +447,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
     }, [boardId])
 
     const isValidConnectionCB = useCallback((connection: Edge | Connection) => {
-        isValidConnection(connection, pinCache, board.data?.refs ?? {})
+        return isValidConnection(connection, pinCache, board.data?.refs ?? {})
     }, [pinCache, board.data?.refs]) as IsValidConnection<Edge>
 
     return (

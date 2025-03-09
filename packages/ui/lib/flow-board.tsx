@@ -16,6 +16,7 @@ export function isValidConnection(connection: any, cache: Map<string, [IPin, INo
     if (!sourceNode || !targetNode) return false
 
     if (sourceNode.id === targetNode.id) return false
+
     return doPinsMatch(sourcePin, targetPin, refs)
 };
 
@@ -48,6 +49,8 @@ export function doPinsMatch(sourcePin: IPin, targetPin: IPin, refs: {[key: strin
     if ((sourcePin.data_type === "Generic" || targetPin.data_type === "Generic") && sourcePin.data_type !== "Execution" && targetPin.data_type !== "Execution") return true
     if (sourcePin.value_type !== targetPin.value_type) return false
     if (sourcePin.data_type !== targetPin.data_type) return false
+
+    console.log("true")
 
     return true
 }
