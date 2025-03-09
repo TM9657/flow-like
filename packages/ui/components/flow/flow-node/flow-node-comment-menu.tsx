@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { useState } from 'react';
 import { Button } from '../../../components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader } from '../../../components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Textarea } from '../../../components/ui/textarea';
 import { type INode } from '../../../lib/schema/flow/node';
 
@@ -29,7 +29,9 @@ export function FlowNodeCommentMenu({ node, boardId, open, onOpenChange }: Reado
   }}>
     <DialogContent>
       <DialogHeader>
-        Comment
+        <DialogTitle>
+          Comment
+        </DialogTitle>
       </DialogHeader>
       <DialogDescription>
         <Textarea rows={6} value={comment} onChange={(e) => {

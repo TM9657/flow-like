@@ -1,5 +1,5 @@
 import { Button } from '../../../components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader } from '../../../components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
 import { type INode } from '../../../lib/schema/flow/node';
 import { useQueryClient } from '@tanstack/react-query';
@@ -29,7 +29,9 @@ export function FlowNodeRenameMenu({ node, boardId, open, onOpenChange }: Readon
   }}>
     <DialogContent>
       <DialogHeader>
-        Rename Node
+        <DialogTitle>
+          Rename Node
+        </DialogTitle>
       </DialogHeader>
       <DialogDescription>
         <Input value={friendlyName} onChange={(e) => {

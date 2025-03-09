@@ -32,6 +32,7 @@ import { type INode } from "../../lib/schema/flow/node";
 import { type ITrace } from "../../lib/schema/flow/run";
 import { type IPin } from "../../lib/schema/flow/pin";
 import { type IComment } from "../../lib/schema/flow/board";
+import { handleCopy } from "../../lib";
 
 export interface IPinAction {
   action: "create",
@@ -50,15 +51,15 @@ export type FlowNode = Node<
   'node'
 >;
 
-const FlowNodeInner = memo(({props, onHover} : {
-  props: NodeProps<FlowNode>, 
+const FlowNodeInner = memo(({ props, onHover }: {
+  props: NodeProps<FlowNode>,
   onHover: (hover: boolean) => void,
   setCommentMenu: (open: boolean) => void,
   setRenameMenu: (open: boolean) => void
 }) => {
   const { resolvedTheme } = useTheme()
   const queryClient = useQueryClient()
-  
+
   const [executing, setExecuting] = useState(false);
   const [isExec, setIsExec] = useState(false)
   const [inputPins, setInputPins] = useState<(IPin | IPinAction)[]>([])
@@ -67,19 +68,10 @@ const FlowNodeInner = memo(({props, onHover} : {
   const [executionState, setExecutionState] = useState<"done" | "running" | "none">("none")
   const debouncedExecutionState = useDebounce(executionState, 100);
   const div = useRef<HTMLDivElement>(null)
-  const nodes = useNodes();
+  const reactFlow = useReactFlow();
   const {
     getNode
   } = useReactFlow()
-  const scope = useMemo(() => {
-    const selected = nodes.filter(node => node.selected)
-    const self = selected.find(node => node.id === props.id)
-    if (!self) {
-      return [...selected, nodes.filter(node => node.id === props.id)[0]]
-    }
-
-    return selected
-  }, [nodes])
 
   const sortPins = useCallback((a: IPin, b: IPin) => {
     // Step 1: Compare by type - Input comes before Output
@@ -129,7 +121,7 @@ const FlowNodeInner = memo(({props, onHover} : {
   }, [runs, props.id]);
 
   const addPin = useCallback(async (node: INode, pin: IPin, index: number) => {
-    const nodeGuard = nodes.find(node => node.id === props.id)
+    const nodeGuard = reactFlow.getNodes().find(node => node.id === props.id)
     if (!nodeGuard) return
 
     node = nodeGuard.data.node as INode;
@@ -150,7 +142,7 @@ const FlowNodeInner = memo(({props, onHover} : {
     queryClient.invalidateQueries({
       queryKey: ["get", "board", props.data.boardId]
     })
-  }, [nodes])
+  }, [reactFlow])
 
   const pinRemoveCallback = useCallback(async (pin: IPin) => {
     const nodeGuard = getNode(props.id)
@@ -243,7 +235,9 @@ const FlowNodeInner = memo(({props, onHover} : {
     onMouseLeave={() => onHover(false)}
   >
     {props.data.node.long_running && <div className='absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(-50%)] left-0 text-center bg-background rounded-full'>
-      <ClockIcon className='w-2 h-2 text-foreground' />
+      {useMemo(() => (
+        <ClockIcon className='w-2 h-2 text-foreground' />
+      ), [])}
     </div>}
     {props.data.node.comment && <div className='absolute top-0 translate-y-[calc(-100%-0.5rem)] left-3 right-3 mb-2 text-center bg-foreground/70 text-background p-1 rounded-md'>
       <small className='font-normal text-extra-small leading-extra-small'>{props.data.node.comment}</small>
@@ -263,20 +257,54 @@ const FlowNodeInner = memo(({props, onHover} : {
     )}
     <div className={`header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b-1 border-b-foreground p-1 justify-between rounded-md rounded-b-none bg-card ${!isExec && "bg-gradient-to-r  from-card via-emerald-300/50 to-emerald-300 dark:via-tertiary/50 dark:to-tertiary"} ${props.data.node.start && "bg-gradient-to-r  from-card via-rose-300/50 to-rose-300 dark:via-primary/50 dark:to-primary"}`}>
       <div className={`flex flex-row items-center gap-1`}>
-        {props.data.node?.icon && <DynamicImage className='w-2 h-2 bg-foreground' url={props.data.node?.icon} />}
-        {!props.data.node?.icon && <WorkflowIcon className='w-2 h-2' />}
+        {useMemo(() => (
+          props.data.node?.icon
+            ? <DynamicImage className='w-2 h-2 bg-foreground' url={props.data.node.icon} />
+            : <WorkflowIcon className='w-2 h-2' />
+        ), [props.data.node?.icon])}
         <small className='font-medium leading-none text-start line-clamp-1'>{props.data.node?.friendly_name}</small>
       </div>
       <div className="flex flex-row items-center gap-1">
-        {props.data.traces.length > 0 && <ScrollTextIcon onClick={() => props.data.openTrace(props.data.traces)} className="w-2 h-2 cursor-pointer hover:text-primary" />}
-        {props.data.node.start && !executing && <PlayCircleIcon className="w-2 h-2 cursor-pointer hover:text-primary" onClick={async (e) => {
-          if (executing) return
-          setExecuting(true)
-          await props.data.onExecute(props.data.node)
-          setExecuting(false)
-        }} />}
-        {debouncedExecutionState === "running" && <PuffLoader color={resolvedTheme === "dark" ? "white" : "black"} size={10} speedMultiplier={1} />}
-        {debouncedExecutionState === "done" && <SquareCheckIcon className="w-2 h-2 text-primary" />}
+        {useMemo(() => {
+          return props.data.traces.length > 0 ? (
+            <ScrollTextIcon
+              onClick={() => props.data.openTrace(props.data.traces)}
+              className="w-2 h-2 cursor-pointer hover:text-primary"
+            />
+          ) : null;
+        }, [props.data.traces.length, props.data.openTrace])}
+
+        {useMemo(() => {
+          if (!props.data.node.start || executing) return null;
+          return (
+            <PlayCircleIcon
+              className="w-2 h-2 cursor-pointer hover:text-primary"
+              onClick={async (e) => {
+                if (executing) return;
+                setExecuting(true);
+                await props.data.onExecute(props.data.node);
+                setExecuting(false);
+              }}
+            />
+          );
+        }, [props.data.node.start, executing, props.data.onExecute, props.data.node])}
+
+        {useMemo(() => {
+          if (debouncedExecutionState !== "running") return null;
+          return (
+            <PuffLoader
+              color={resolvedTheme === "dark" ? "white" : "black"}
+              size={10}
+              speedMultiplier={1}
+            />
+          );
+        }, [debouncedExecutionState, resolvedTheme])}
+
+        {useMemo(() => {
+          return debouncedExecutionState === "done" ? (
+            <SquareCheckIcon className="w-2 h-2 text-primary" />
+          ) : null;
+        }, [debouncedExecutionState])}
       </div>
     </div>
     {useMemo(() =>
@@ -295,30 +323,22 @@ function FlowNode(props: NodeProps<FlowNode>) {
   const [isOpen, setIsOpen] = useState(false)
   const [commentMenu, setCommentMenu] = useState(false)
   const [renameMenu, setRenameMenu] = useState(false)
-  const nodes = useNodes();
+  const flow = useReactFlow()
   const scope = useMemo(() => {
-    const selected = nodes.filter(node => node.selected)
+    const selected = flow.getNodes().filter(node => node.selected)
     const self = selected.find(node => node.id === props.id)
     if (!self) {
-      return [...selected, nodes.filter(node => node.id === props.id)[0]]
+      return [...selected, flow.getNodes().filter(node => node.id === props.id)[0]]
     }
 
     return selected
-  }, [nodes])
+  }, [flow])
 
   const copy = useCallback(async () => {
-    const selectedNodes: INode[] = scope.filter((node: any) => node.selected && node.type === "flowNode").map((node: any) => node.data.node)
-    const selectedComments: IComment[] = scope.filter((node: any) => node.selected && node.type === "commentNode").map((node: any) => node.data.comment)
-    try {
-      navigator.clipboard.writeText(JSON.stringify({ nodes: selectedNodes, comments: selectedComments }, null, 2))
-      toastSuccess("Nodes copied to clipboard", <CopyIcon className="w-4 h-4" />)
-      return;
-    } catch (error) {
-      toast.error("Failed to copy nodes to clipboard")
-    }
-  }, [scope])
+    handleCopy(flow.getNodes())
+  }, [flow])
 
-  if(isOpen || isHovered) {
+  if (isOpen || isHovered) {
     return <ContextMenu onOpenChange={(open) => {
       setIsOpen(open)
     }} key={props.id}>

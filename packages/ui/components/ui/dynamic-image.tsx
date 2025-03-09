@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, memo } from "react";
 
-export function DynamicImage({url, className}: Readonly<{url: string, className: string}>) {
+export const DynamicImage = memo(function DynamicImage({url, className}: Readonly<{url: string, className: string}>) {
     const ref = useRef<HTMLDivElement>(null)
     
     useEffect(() => {
@@ -14,4 +14,4 @@ export function DynamicImage({url, className}: Readonly<{url: string, className:
     if(!url.includes(".svg")) return <img alt="dynamic_icon" src={url} className={`border-0 ${className}`}/>
 
     return <div ref={ref} className={`border-0 ${className}`}/>
-}
+})

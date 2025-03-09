@@ -101,7 +101,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
             await board.refetch()
             return result
         }
-    , [board.refetch])
+        , [board.refetch])
 
     useEffect(() => {
         if (!logPanelRef.current) return
@@ -155,7 +155,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
     }, [boardId, mousePosition, executeCommand]);
 
     const handleCopyCB = useCallback((event: ClipboardEvent) => {
-        handleCopy(event, nodes)
+        handleCopy(nodes, event)
     }, [nodes])
 
     const shortcutHandler = useCallback(async (event: KeyboardEvent) => {
@@ -342,7 +342,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                 flowRef.current?.dispatchEvent(contextMenuEvent);
             }
         },
-        [screenToFlowPosition, pinCache],
+        [pinCache],
     );
 
     const onNodesChangeIntercept: OnNodesChange = useCallback(
@@ -466,7 +466,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                                 Give your Board a name and Description for future use!
                             </DialogDescription>
                         </DialogHeader>
-                        <Separator/>
+                        <Separator />
                         <div className="grid w-full max-w-sm items-center gap-1.5">
                             <Label htmlFor="name">Name</Label>
                             <Input value={boardMeta.name} onChange={(e) => setBoardMeta(old => ({ ...old, name: e.target.value }))} type="text" id="name" placeholder="Name" />
@@ -501,7 +501,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                                     <SelectItem value={ILogLevel.Info}>Info</SelectItem>
                                     <SelectItem value={ILogLevel.Warn}>Warning</SelectItem>
                                     <SelectItem value={ILogLevel.Error}>Error</SelectItem>
-                                    <SelectItem value={ILogLevel.Fatal}>Fatal</SelectItem>                   
+                                    <SelectItem value={ILogLevel.Fatal}>Fatal</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -616,7 +616,6 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
                                         colorMode={colorMode}
                                         nodes={nodes}
                                         nodeTypes={nodeTypes}
-                                        onlyRenderVisibleElements={false}
                                         edges={edges}
                                         onNodesChange={onNodesChangeIntercept}
                                         onEdgesChange={onEdgesChange}

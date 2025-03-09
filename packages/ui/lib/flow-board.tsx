@@ -139,7 +139,7 @@ export function parseBoard(
     return { nodes, edges, cache, traces }
 }
 
-export function handleCopy(event: ClipboardEvent, nodes: any[]) {
+export function handleCopy( nodes: any[], event?: ClipboardEvent) {
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLInputElement ||
         activeElement instanceof HTMLTextAreaElement ||
@@ -147,8 +147,8 @@ export function handleCopy(event: ClipboardEvent, nodes: any[]) {
         return;
     }
 
-    event.preventDefault()
-    event.stopPropagation()
+    event?.preventDefault()
+    event?.stopPropagation()
     const selectedNodes: INode[] = nodes.filter((node: any) => node.selected && node.type === "flowNode").map((node: any) => node.data.node)
     const selectedComments: IComment[] = nodes.filter((node: any) => node.selected && node.type === "commentNode").map((node: any) => node.data.comment)
     try {

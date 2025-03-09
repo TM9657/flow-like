@@ -14,7 +14,7 @@ import {
     useSpring,
     useTransform,
 } from "framer-motion";
-import { useRef, useState } from "react";
+import { useRef, useState, memo } from "react";
 
 type IFlowDockItem = {
     title: string,
@@ -22,7 +22,7 @@ type IFlowDockItem = {
     onClick: () => Promise<void>
 }
 
-export const FlowDock = ({
+export const FlowDock = memo(({
   items,
   desktopClassName,
   mobileClassName,
@@ -37,7 +37,7 @@ export const FlowDock = ({
       <FlowDockMobile items={items} className={mobileClassName} />
     </>
   );
-};
+});
 
 const FlowDockMobile = ({
   items,

@@ -76,7 +76,6 @@ export function FlowContextMenu({ nodes, refs, children, droppedPin, onNodePlace
                         return pins.some(pin => {
                             if (pin.pin_type === droppedPin.pin_type) return false
                             return doPinsMatch(pin, droppedPin, refs)
-                            // return (pin.data_type === droppedPin.data_type || droppedPin.data_type === "Generic" || pin.data_type === "Generic") && pin.pin_type !== droppedPin.pin_type && pin.value_type === droppedPin.value_type && (typeof droppedPin.schema === "undefined" || pin.schema === droppedPin.schema || typeof pin.schema === "undefined")
                         })
                     })] : [...nodes.filter(node => (node.name !== "variable_set") && (node.name !== "variable_get"))]} filter={filter} onNodePlace={async (node) => onNodePlace(node)} />}
                 </ScrollArea>
