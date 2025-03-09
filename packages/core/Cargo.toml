@@ -60,7 +60,7 @@ lopdf = "0.35.0"
 pdf = "0.9.0"
 id3 = "1.16.0"
 mp4ameta = "0.11.0"
-ring = "0.17.8"
+ring = "0.17.13"
 serde_arrow = { version = "0.12.2", features = ["arrow-53"] }
 scraper = "0.22.0"
 image = "0.25.5"
@@ -112,10 +112,10 @@ default = ["schema-gen", "flow-runtime", "flow", "hub", "bit", "model", "vault"]
 
 [profile.release]
 lto = "fat"
-codegen-units = 1  
+codegen-units = 1
 panic = "unwind"
 strip = true
-opt-level = "z"  
+opt-level = "z"
 
 [profile.dev]
 opt-level = 1

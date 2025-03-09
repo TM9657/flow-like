@@ -19,8 +19,8 @@ repos:
         entry: cargo fmt --all
         language: system
         types: [rust]
-      - id: local-biome-check
-        name: biome check
-        entry: npx @biomejs/biome@1.8.3 check
-        language: system
-        types: [text]
+      # - id: local-biome-check
+      #   name: biome check
+      #   entry: bunx biome check --max-diagnostics none
+      #   language: system
+      #   types: [text]

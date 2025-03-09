@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "packages/core", 
-    "apps/desktop/src-tauri", 
-    "apps/backend", 
+    "packages/core",
+    "apps/desktop/src-tauri",
+    "apps/backend",
     "apps/schema-gen"
 ]
