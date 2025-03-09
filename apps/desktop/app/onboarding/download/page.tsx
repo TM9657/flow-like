@@ -1,6 +1,8 @@
 "use client";
-import { ISettingsProfile } from "@tm9657/flow-like-ui/types";
-import { humanFileSize } from "@tm9657/flow-like-ui/lib/utils";
+import { type UseQueryResult, useQueryClient } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
+import { useInvoke } from "@tm9657/flow-like-ui";
+import { Bit, type IDownloadProgress } from "@tm9657/flow-like-ui";
 import {
 	Avatar,
 	AvatarFallback,
@@ -8,17 +10,15 @@ import {
 } from "@tm9657/flow-like-ui/components/ui/avatar";
 import { BitHover } from "@tm9657/flow-like-ui/components/ui/bit-hover";
 import {
-	ChartConfig,
+	type ChartConfig,
 	ChartContainer,
 	ChartTooltip,
 	ChartTooltipContent,
 } from "@tm9657/flow-like-ui/components/ui/chart";
 import { useEvent } from "@tm9657/flow-like-ui/hooks/use-event";
-import { useInvoke } from "@tm9657/flow-like-ui";
-import { Bit, IDownloadProgress } from "@tm9657/flow-like-ui";
-import { IBit } from "@tm9657/flow-like-ui/lib/schema/bit/bit";
-import { useQueryClient, UseQueryResult } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
+import type { IBit } from "@tm9657/flow-like-ui/lib/schema/bit/bit";
+import { humanFileSize } from "@tm9657/flow-like-ui/lib/utils";
+import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CartesianGrid, Line, LineChart, XAxis } from "recharts";

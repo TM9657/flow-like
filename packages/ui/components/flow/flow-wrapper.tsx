@@ -1,6 +1,6 @@
 import { DndContext, MouseSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { useCallback, useState } from "react";
-import { type IVariable } from "../../lib/schema/flow/variable";
+import type { IVariable } from "../../lib/schema/flow/variable";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { FlowBoard } from "./flow-board";

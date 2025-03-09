@@ -5,7 +5,7 @@ import remarkParse, { type Options as RemarkParseOptions } from "remark-parse";
 import remarkRehype, {
 	type Options as RemarkRehypeOptions,
 } from "remark-rehype";
-import { unified, type PluggableList } from "unified";
+import { type PluggableList, unified } from "unified";
 
 export interface UseRemarkOptions {
 	remarkParseOptions?: RemarkParseOptions;

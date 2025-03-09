@@ -1,11 +1,3 @@
-import { parseTimespan } from "../../lib/date";
-import { type INode } from "../../lib/schema/flow/node";
-import {
-	ILogLevel,
-	type ILogMessage,
-	type IRun,
-	type ITrace,
-} from "../../lib/schema/flow/run";
 import { createId } from "@paralleldrive/cuid2";
 import {
 	BombIcon,
@@ -19,8 +11,16 @@ import {
 import MiniSearch from "minisearch";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AutoSizer } from "react-virtualized";
+import { parseTimespan } from "../../lib/date";
+import type { INode } from "../../lib/schema/flow/node";
+import {
+	ILogLevel,
+	type ILogMessage,
+	type IRun,
+	type ITrace,
+} from "../../lib/schema/flow/run";
 import "react-virtualized/styles.css";
-import { VariableSizeList as List, VariableSizeList } from "react-window";
+import { VariableSizeList as List, type VariableSizeList } from "react-window";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -74,12 +74,11 @@ export function Traces({
 	}
 
 	useEffect(() => {
-		let filteredTraces = traceFilter
+		const filteredTraces = traceFilter
 			? result.traces.filter((trace) => traceFilter.id === trace.id)
 			: result.traces;
-		let logMessages = filteredTraces
-			.map((trace) => trace.logs)
-			.flat()
+		const logMessages = filteredTraces
+			.flatMap((trace) => trace.logs)
 			.filter((log) => logFilter.has(log.log_level))
 			.sort((a, b) => a.start.nanos_since_epoch - b.start.nanos_since_epoch);
 

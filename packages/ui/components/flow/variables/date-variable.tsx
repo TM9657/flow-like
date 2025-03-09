@@ -1,6 +1,6 @@
 import { Calendar } from "../../../components/ui/calendar";
-import { type ISystemTime } from "../../../lib/schema/flow/board";
-import { type IVariable } from "../../../lib/schema/flow/variable";
+import type { ISystemTime } from "../../../lib/schema/flow/board";
+import type { IVariable } from "../../../lib/schema/flow/variable";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,

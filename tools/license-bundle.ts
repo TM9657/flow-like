@@ -1,6 +1,6 @@
-import CargoLicense from "../src-tauri/assets/licenses.json";
-import NodeLicense from "../src-tauri/assets/licenses-node.json";
 import fs from "fs";
+import NodeLicense from "../src-tauri/assets/licenses-node.json";
+import CargoLicense from "../src-tauri/assets/licenses.json";
 let license_bundled: {
 	name: string;
 	license: string | null;

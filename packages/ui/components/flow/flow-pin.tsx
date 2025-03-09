@@ -4,9 +4,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { useDebounce } from "@uidotdev/usehooks";
 import {
 	Handle,
+	type HandleType,
 	Position,
 	useInternalNode,
-	type HandleType,
 } from "@xyflow/react";
 import { EllipsisVerticalIcon, GripIcon, ListIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
@@ -17,8 +17,8 @@ import {
 	ContextMenuLabel,
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
-import { type INode } from "../../lib/schema/flow/node";
-import { IValueType, type IPin } from "../../lib/schema/flow/pin";
+import type { INode } from "../../lib/schema/flow/node";
+import { type IPin, IValueType } from "../../lib/schema/flow/pin";
 import { DynamicImage } from "../ui/dynamic-image";
 import { PinEdit } from "./flow-pin/pin-edit";
 import { typeToColor } from "./utils";

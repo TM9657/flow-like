@@ -1,10 +1,10 @@
-import { type IPin } from "../../../../lib/schema/flow/pin";
-import { VariableDescription } from "./default-text";
 import { Checkbox } from "../../../../components/ui/checkbox";
+import type { IPin } from "../../../../lib/schema/flow/pin";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,
 } from "../../../../lib/uint8";
+import { VariableDescription } from "./default-text";
 
 export function BooleanVariable({
 	pin,

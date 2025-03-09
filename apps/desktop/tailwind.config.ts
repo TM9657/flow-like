@@ -1,5 +1,5 @@
-import type { Config } from "tailwindcss";
 import preset from "@tm9657/flow-like-ui/tailwind.config";
+import type { Config } from "tailwindcss";
 
 const config = {
 	presets: [preset],

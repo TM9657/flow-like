@@ -1,20 +1,20 @@
-import { type Nullable } from "../schema/auto-import";
-import { IRole } from "../schema/llm/history";
-import {
-	type IChoice,
-	type ICompletionTokenDetails,
-	type IFunctionCall,
-	type IPromptTokenDetails,
-	type IResponse,
-	type IResponseFunction,
-	type IResponseMessage,
-	type IUsage,
+import type { Nullable } from "../schema/auto-import";
+import type { IRole } from "../schema/llm/history";
+import type {
+	IChoice,
+	ICompletionTokenDetails,
+	IFunctionCall,
+	IPromptTokenDetails,
+	IResponse,
+	IResponseFunction,
+	IResponseMessage,
+	IUsage,
 } from "../schema/llm/response";
-import { type IDelta, type IResponseChunk } from "../schema/llm/response-chunk";
+import type { IDelta, IResponseChunk } from "../schema/llm/response-chunk";
 
 export class FunctionCall implements IFunctionCall {
 	index?: number | null = null;
-	id: string = "";
+	id = "";
 	type?: string | null = null;
 	function: IResponseFunction = {
 		name: null,
@@ -26,7 +26,7 @@ export class ResponseMessage implements IResponseMessage {
 	content?: Nullable<string>;
 	refusal?: Nullable<string>;
 	toolCalls: IFunctionCall[] = [];
-	role: string = "";
+	role = "";
 
 	public static fromJson(json: string): ResponseMessage {
 		const object = JSON.parse(json);
@@ -106,9 +106,9 @@ export class ResponseMessage implements IResponseMessage {
 }
 
 export class Usage implements IUsage {
-	completion_tokens: number = 0;
-	prompt_tokens: number = 0;
-	total_tokens: number = 0;
+	completion_tokens = 0;
+	prompt_tokens = 0;
+	total_tokens = 0;
 	prompt_tokens_details?: Nullable<IPromptTokenDetails>;
 	completion_tokens_details?: Nullable<ICompletionTokenDetails>;
 }

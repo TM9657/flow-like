@@ -1,5 +1,5 @@
 import { CirclePlusIcon } from "lucide-react";
-import { type IPinAction } from "../flow-node";
+import type { IPinAction } from "../flow-node";
 
 export function FlowPinAction({
 	action,

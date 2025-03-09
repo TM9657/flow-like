@@ -11,7 +11,7 @@ import {
 	DialogTitle,
 } from "../../../components/ui/dialog";
 import { Textarea } from "../../../components/ui/textarea";
-import { type INode } from "../../../lib/schema/flow/node";
+import type { INode } from "../../../lib/schema/flow/node";
 
 export function FlowNodeCommentMenu({
 	node,

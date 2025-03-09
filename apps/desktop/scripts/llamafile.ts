@@ -1,6 +1,6 @@
-import axios from "axios";
 import fs from "fs";
 import path from "path";
+import axios from "axios";
 
 const GITHUB_API_BASE_URL = "https://api.github.com";
 const OWNER = "Mozilla-Ocho";

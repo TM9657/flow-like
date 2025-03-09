@@ -91,7 +91,7 @@ function PoweredByElement({
 				)}
 				{license &&
 					(license.href ? (
-						<a href={license.href} target="_blank">
+						<a href={license.href} target="_blank" rel="noreferrer">
 							<span className="underline">{license.name}</span>
 						</a>
 					) : (

@@ -8,8 +8,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@tm9657/flow-like-ui";
-import { Checkbox } from "@tm9657/flow-like-ui/components/ui/checkbox";
 import { Input } from "@tm9657/flow-like-ui";
+import { Checkbox } from "@tm9657/flow-like-ui/components/ui/checkbox";
 
 export default function SettingsPage() {
 	return (

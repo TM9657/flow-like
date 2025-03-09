@@ -1,4 +1,4 @@
-import { type IProfile } from "./lib/schema/profile/profile";
+import type { IProfile } from "./lib/schema/profile/profile";
 
 export interface ISystemInfo {
 	cores: number;

@@ -1,4 +1,4 @@
-import { type IVariable } from "../lib/schema/flow/variable";
+import type { IVariable } from "../lib/schema/flow/variable";
 import { parseUint8ArrayToJson } from "./uint8";
 
 export function saveParseFloat(variable: IVariable, input: string): number {

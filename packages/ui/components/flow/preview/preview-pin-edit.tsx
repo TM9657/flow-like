@@ -21,9 +21,9 @@ import {
 	IPinType,
 	IVariableType,
 } from "../../../lib/schema/flow/pin";
-import { VariablesMenuEdit } from "../variables/variables-menu-edit";
-import { VariableDescription } from "../flow-pin/variable-types/default-text";
 import { parseUint8ArrayToJson } from "../../../lib/uint8";
+import { VariableDescription } from "../flow-pin/variable-types/default-text";
+import { VariablesMenuEdit } from "../variables/variables-menu-edit";
 
 export function PinPreviewEdit({
 	pin,

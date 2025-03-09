@@ -1,18 +1,5 @@
 "use client";
 
-import {
-	ContextMenu,
-	ContextMenuContent,
-	ContextMenuItem,
-	ContextMenuLabel,
-	ContextMenuSeparator,
-	ContextMenuSub,
-	ContextMenuSubContent,
-	ContextMenuSubTrigger,
-	ContextMenuTrigger,
-} from "../../components/ui/context-menu";
-import { toastSuccess } from "../../lib/messages";
-import { useRunExecutionStore } from "../../state/run-execution-state";
 import { createId } from "@paralleldrive/cuid2";
 import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
@@ -41,20 +28,33 @@ import {
 	SquarePenIcon,
 	WorkflowIcon,
 } from "lucide-react";
+import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import PuffLoader from "react-spinners/PuffLoader";
 import { toast } from "sonner";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuLabel,
+	ContextMenuSeparator,
+	ContextMenuSub,
+	ContextMenuSubContent,
+	ContextMenuSubTrigger,
+	ContextMenuTrigger,
+} from "../../components/ui/context-menu";
+import { handleCopy } from "../../lib";
+import { toastSuccess } from "../../lib/messages";
+import type { IComment } from "../../lib/schema/flow/board";
+import type { INode } from "../../lib/schema/flow/node";
+import type { IPin } from "../../lib/schema/flow/pin";
+import type { ITrace } from "../../lib/schema/flow/run";
+import { useRunExecutionStore } from "../../state/run-execution-state";
 import { DynamicImage } from "../ui/dynamic-image";
 import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
 import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
 import { FlowPin } from "./flow-pin";
-import PuffLoader from "react-spinners/PuffLoader";
-import { useTheme } from "next-themes";
-import { type INode } from "../../lib/schema/flow/node";
-import { type ITrace } from "../../lib/schema/flow/run";
-import { type IPin } from "../../lib/schema/flow/pin";
-import { type IComment } from "../../lib/schema/flow/board";
-import { handleCopy } from "../../lib";
 
 export interface IPinAction {
 	action: "create";
@@ -166,7 +166,7 @@ const FlowNodeInner = memo(
 					index: index,
 				};
 
-				let pins = Object.values(node.pins).sort(sortPins);
+				const pins = Object.values(node.pins).sort(sortPins);
 				pins.splice(index, 0, newPin);
 				node.pins = {};
 				pins.forEach(
@@ -234,7 +234,7 @@ const FlowNodeInner = memo(
 					.forEach((pin, index) => {
 						if (pin.data_type === "Execution") isExec = true;
 
-						let pastPinId = pin.name + "_" + pin.pin_type;
+						const pastPinId = pin.name + "_" + pin.pin_type;
 
 						if (pastPinWithCount[0] === pastPinId) {
 							pastPinWithCount[1] += 1;

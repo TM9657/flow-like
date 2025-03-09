@@ -1,19 +1,19 @@
+import { SquarePlusIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
-import { SquarePlusIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { doPinsMatch } from "../../lib";
+import type { INode } from "../../lib/schema/flow/node";
+import type { IPin } from "../../lib/schema/flow/pin";
 import { Checkbox } from "../ui/checkbox";
 import { Input } from "../ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import { Separator } from "../ui/separator";
 import { FlowContextMenuNodes } from "./flow-context-menu-nodes";
-import { type INode } from "../../lib/schema/flow/node";
-import { type IPin } from "../../lib/schema/flow/pin";
-import { doPinsMatch } from "../../lib";
 
 export function FlowContextMenu({
 	nodes,
@@ -80,7 +80,7 @@ export function FlowContextMenu({
 					<ContextMenuItem
 						className="flex flex-row gap-1 items-center"
 						onClick={() => {
-							let node_ref = nodes.find(
+							const node_ref = nodes.find(
 								(node) => node.name === "events_simple",
 							);
 							if (node_ref) onNodePlace(node_ref);
@@ -105,7 +105,7 @@ export function FlowContextMenu({
 					<ScrollArea className="h-52 w-[calc(20rem-0.5rem)] border rounded-md">
 						{nodes && (
 							<FlowContextMenuNodes
-								key={nodes.length + "__root"}
+								key={`${nodes.length}__root`}
 								items={
 									droppedPin && contextSensitive
 										? [

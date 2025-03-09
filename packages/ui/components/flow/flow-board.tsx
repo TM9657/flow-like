@@ -1,12 +1,9 @@
 "use client";
 import { DragOverlay, useDroppable } from "@dnd-kit/core";
 import { createId } from "@paralleldrive/cuid2";
-import { type UseQueryResult } from "@tanstack/react-query";
+import type { UseQueryResult } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
-	addEdge,
-	applyEdgeChanges,
-	applyNodeChanges,
 	Background,
 	BackgroundVariant,
 	type Connection,
@@ -19,6 +16,9 @@ import {
 	type OnEdgesChange,
 	type OnNodesChange,
 	ReactFlow,
+	addEdge,
+	applyEdgeChanges,
+	applyNodeChanges,
 	reconnectEdge,
 	useEdgesState,
 	useNodesState,
@@ -40,7 +40,7 @@ import { useTheme } from "next-themes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ImperativePanelHandle } from "react-resizable-panels";
+import type { ImperativePanelHandle } from "react-resizable-panels";
 import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
@@ -71,13 +71,13 @@ import {
 	ILogLevel,
 	type IVariable,
 } from "../../lib/schema/flow/board";
-import { type INode } from "../../lib/schema/flow/node";
-import { type IPin } from "../../lib/schema/flow/pin";
-import { type IRun, type ITrace } from "../../lib/schema/flow/run";
+import type { INode } from "../../lib/schema/flow/node";
+import type { IPin } from "../../lib/schema/flow/pin";
+import type { IRun, ITrace } from "../../lib/schema/flow/run";
 import { convertJsonToUint8Array } from "../../lib/uint8";
 import { useFlowBoardParentState } from "../../state/flow-board-parent-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
-import { type ISettingsProfile } from "../../types";
+import type { ISettingsProfile } from "../../types";
 import {
 	Button,
 	Dialog,
@@ -149,11 +149,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 	);
 
 	const executeCommand = useCallback(
-		async (
-			command: string,
-			args: any,
-			append: boolean = false,
-		): Promise<any> => {
+		async (command: string, args: any, append = false): Promise<any> => {
 			const result = await invoke(command, { ...args, append: append });
 			await board.refetch();
 			return result;
@@ -167,7 +163,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 		if (!traces) return logPanelRef.current.collapse();
 
 		logPanelRef.current.expand();
-		let size = logPanelRef.current.getSize();
+		const size = logPanelRef.current.getSize();
 
 		if (size < 10) logPanelRef.current.resize(45);
 	}, [traces, logPanelRef.current]);
@@ -181,7 +177,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 			return;
 		}
 
-		let size = varPanelRef.current.getSize();
+		const size = varPanelRef.current.getSize();
 		if (size < 10) varPanelRef.current.resize(20);
 	}
 
@@ -512,7 +508,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 				executeCommands(
 					removeChanges
 						.map((change) => {
-							let foundNode = Object.values(board.data?.nodes || {}).find(
+							const foundNode = Object.values(board.data?.nodes || {}).find(
 								(node) => node.id === change.id,
 							);
 							if (foundNode)
@@ -520,9 +516,9 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 									command: "remove_node_from_board",
 									args: { boardId: boardId, node: foundNode },
 								};
-							let foundComment = Object.values(board.data?.comments || {}).find(
-								(comment) => comment.id === change.id,
-							);
+							const foundComment = Object.values(
+								board.data?.comments || {},
+							).find((comment) => comment.id === change.id);
 							if (foundComment)
 								return {
 									command: "remove_comment",
@@ -570,8 +566,8 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 						.map((change: any) => {
 							const selectedId = change.id;
 							const [fromPinId, toPinId] = selectedId.split("-");
-							let [fromPin, fromNode] = pinCache.get(fromPinId) || [];
-							let [toPin, toNode] = pinCache.get(toPinId) || [];
+							const [fromPin, fromNode] = pinCache.get(fromPinId) || [];
+							const [toPin, toNode] = pinCache.get(toPinId) || [];
 
 							if (!fromPin || !toPin) return undefined;
 							if (!fromNode || !toNode) return undefined;
@@ -660,7 +656,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 				console.log(
 					`Moving node ${node.id} to ${node.position.x}, ${node.position.y}`,
 				);
-				let comment = Object.values(board.data?.comments || {}).find(
+				const comment = Object.values(board.data?.comments || {}).find(
 					(comment) => comment.id === node.id,
 				);
 				if (comment)
@@ -867,7 +863,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 										x: clickPosition.x,
 										y: clickPosition.y,
 									});
-									let new_comment: IComment = {
+									const new_comment: IComment = {
 										comment_type: ICommentType.Text,
 										content: "New Comment",
 										coordinates: [location.x, location.y, 0],

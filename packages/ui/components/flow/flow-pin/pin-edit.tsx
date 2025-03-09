@@ -1,6 +1,7 @@
 "use client";
 
 import { VariableIcon } from "lucide-react";
+import { memo } from "react";
 import { Button } from "../../../components/ui/button";
 import {
 	Dialog,
@@ -19,7 +20,6 @@ import { VariablesMenuEdit } from "../variables/variables-menu-edit";
 import { BooleanVariable } from "./variable-types/boolean-variable";
 import { VariableDescription } from "./variable-types/default-text";
 import { EnumVariable } from "./variable-types/enum-variable";
-import { memo } from "react";
 
 export function PinEdit({
 	pin,

@@ -6,12 +6,12 @@ import {
 	AccordionContent,
 	AccordionItem,
 	AccordionTrigger,
-	IBoard,
-	IVariable,
-	IVault,
+	type IBoard,
+	type IVariable,
+	type IVault,
 	Label,
-	useInvoke,
 	VariablesMenuEdit,
+	useInvoke,
 } from "@tm9657/flow-like-ui";
 import { useSearchParams } from "next/navigation";
 import { useMemo } from "react";

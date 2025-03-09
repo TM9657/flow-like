@@ -1,3 +1,4 @@
+import { IValueType } from "../../../lib/schema/flow/pin";
 import {
 	type IVariable,
 	IVariableType,
@@ -6,14 +7,13 @@ import { BoolArrayVariable } from "./bool-array-variable";
 import { BoolVariable } from "./bool-variable";
 import { DateArrayVariable } from "./date-array-variable";
 import { DateVariable } from "./date-variable";
+import { FloatArrayVariable } from "./float-array-variable";
+import { FloatVariable } from "./float-variable";
+import { IntegerArrayVariable } from "./integer-array-variable";
+import { IntegerVariable } from "./integer-variable";
+import { PathbufVariable } from "./pathbuf-variable";
 import { StringArrayVariable } from "./string-array-variable";
 import { StringVariable } from "./string-variable";
-import { FloatVariable } from "./float-variable";
-import { FloatArrayVariable } from "./float-array-variable";
-import { IntegerVariable } from "./integer-variable";
-import { IntegerArrayVariable } from "./integer-array-variable";
-import { PathbufVariable } from "./pathbuf-variable";
-import { IValueType } from "../../../lib/schema/flow/pin";
 
 export function VariablesMenuEdit({
 	variable,

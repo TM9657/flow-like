@@ -1,5 +1,5 @@
-import type { IDownloadProgress } from "../lib/bit/bit";
 import { create } from "zustand";
+import type { IDownloadProgress } from "../lib/bit/bit";
 
 interface BearState {
 	stats: {

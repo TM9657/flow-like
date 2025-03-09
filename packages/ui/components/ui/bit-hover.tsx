@@ -1,4 +1,4 @@
-import { humanFileSize } from "../../lib/utils";
+import { useEffect, useState } from "react";
 import {
 	Avatar,
 	AvatarFallback,
@@ -9,10 +9,10 @@ import {
 	HoverCardContent,
 	HoverCardTrigger,
 } from "../../components/ui/hover-card";
-import { useEffect, useState } from "react";
-import { Badge } from "./badge";
 import { Bit } from "../../lib/bit/bit";
-import { type IBit } from "../../lib/schema/bit/bit";
+import type { IBit } from "../../lib/schema/bit/bit";
+import { humanFileSize } from "../../lib/utils";
+import { Badge } from "./badge";
 
 export function BitHover({
 	bit,

@@ -1,12 +1,12 @@
 "use client";
+import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 export function useInvoke<T>(
 	path: string,
 	args: any,
 	deps: string[] = [],
-	enabled: boolean = true,
+	enabled = true,
 ): UseQueryResult<T, any> {
 	const query = useQuery({
 		queryKey: [...path.split("_"), ...deps],

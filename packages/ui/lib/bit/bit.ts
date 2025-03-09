@@ -1,13 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { type IBit, type IBitMeta, IBitTypes } from "../schema/bit/bit";
-import { type IImageEmbeddingModelParameters } from "../schema/bit/bit/image-embedding-model-parameters";
-import { type IEmbeddingModelParameters } from "../schema/bit/bit/embedding-model-parameters";
-import { type ILlmParameters } from "../schema/bit/bit/llm-parameters";
-import { type IVlmParameters } from "../schema/bit/bit/vlm-parameters";
-import { type Nullable } from "../schema/auto-import";
-import { BitPack } from "./bit-pack";
+import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { get, set } from "idb-keyval";
+import type { Nullable } from "../schema/auto-import";
+import { type IBit, type IBitMeta, IBitTypes } from "../schema/bit/bit";
+import type { IEmbeddingModelParameters } from "../schema/bit/bit/embedding-model-parameters";
+import type { IImageEmbeddingModelParameters } from "../schema/bit/bit/image-embedding-model-parameters";
+import type { ILlmParameters } from "../schema/bit/bit/llm-parameters";
+import type { IVlmParameters } from "../schema/bit/bit/vlm-parameters";
+import { BitPack } from "./bit-pack";
 
 export interface IDownloadProgress {
 	hash: string;
@@ -78,16 +78,16 @@ export class Download {
 
 export class Bit implements IBit {
 	authors: string[] = [];
-	created: string = "";
+	created = "";
 	dependencies: Array<string[]> = [];
-	dependency_tree_hash: string = "";
+	dependency_tree_hash = "";
 	download_link?: Nullable<string>;
 	file_name?: Nullable<string>;
-	hash: string = "";
-	hub: string = "";
-	icon: string = "";
-	id: string = "";
-	license: string = "";
+	hash = "";
+	hub = "";
+	icon = "";
+	id = "";
+	license = "";
 	meta: { [key: string]: IBitMeta } = {};
 	parameters:
 		| IImageEmbeddingModelParameters
@@ -98,8 +98,8 @@ export class Bit implements IBit {
 	repository?: Nullable<string>;
 	size?: Nullable<number>;
 	type: IBitTypes = IBitTypes.Other;
-	updated: string = "";
-	version: string = "";
+	updated = "";
+	version = "";
 
 	public toJSON(): string {
 		const object = this.toObject();

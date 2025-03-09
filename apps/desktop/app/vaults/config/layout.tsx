@@ -13,11 +13,11 @@ import {
 	HoverCard,
 	HoverCardContent,
 	HoverCardTrigger,
-	humanFileSize,
-	IBoard,
-	INode,
-	IVault,
+	type IBoard,
+	type INode,
+	type IVault,
 	Separator,
+	humanFileSize,
 	toastError,
 	useInvoke,
 	useRunExecutionStore,
@@ -230,12 +230,11 @@ export default function Id({
 						className="w-full pr-5 flex flex-col items-stretch gap-2"
 					>
 						{boards.data
-							?.map((board) =>
+							?.flatMap((board) =>
 								Object.values(board.nodes)
 									.filter((node) => node.start)
 									.map((node) => [board, node]),
 							)
-							.flat()
 							.sort((a, b) =>
 								a[1].friendly_name.localeCompare(b[1].friendly_name),
 							)

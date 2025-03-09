@@ -1,23 +1,23 @@
 "use client";
-import { QueryObserverResult } from "@tanstack/react-query";
+import type { QueryObserverResult } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
 	Badge,
 	BitHover,
 	Button,
 	DynamicImage,
-	IBit,
+	type IBit,
 	IBitTypes,
+	type ISettingsProfile,
+	type IVault,
 	Input,
-	ISettingsProfile,
-	IVault,
 	Label,
 	Progress,
 	Textarea,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
 import { useRouter } from "next/navigation";
-import { Dispatch, SetStateAction, useEffect, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import Crossfire from "react-canvas-confetti/dist/presets/crossfire";
 import { toast } from "sonner";
 

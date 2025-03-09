@@ -1,9 +1,9 @@
 import { execSync } from "child_process";
 import {
-	readdirSync,
-	statSync,
 	mkdirSync,
 	readFileSync,
+	readdirSync,
+	statSync,
 	writeFileSync,
 } from "fs";
 import { join, parse, relative } from "path";

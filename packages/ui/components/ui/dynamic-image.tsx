@@ -1,4 +1,4 @@
-import { useEffect, useRef, memo } from "react";
+import { memo, useEffect, useRef } from "react";
 
 export const DynamicImage = memo(function DynamicImage({
 	url,

@@ -1,11 +1,3 @@
-import { useEffect, useMemo } from "react";
-import {
-	IExecutionStage,
-	ILogLevel,
-	parseBoard,
-	type IBoard,
-	type INode,
-} from "../../lib";
 import {
 	Background,
 	BackgroundVariant,
@@ -16,8 +8,16 @@ import {
 	useNodesState,
 } from "@xyflow/react";
 import { useTheme } from "next-themes";
-import { FlowNode } from "./flow-node";
+import { useEffect, useMemo } from "react";
+import {
+	type IBoard,
+	IExecutionStage,
+	ILogLevel,
+	type INode,
+	parseBoard,
+} from "../../lib";
 import { CommentNode } from "./comment-node";
+import { FlowNode } from "./flow-node";
 import "@xyflow/react/dist/style.css";
 import { PreviewFlowNode } from "./preview/preview-node";
 

@@ -4,17 +4,17 @@
  * Mobile navbar is better positioned at bottom right.
  **/
 
-import { cn } from "../../lib/utils";
 import { IconLayoutNavbarCollapse } from "@tabler/icons-react";
 import {
 	AnimatePresence,
-	MotionValue,
+	type MotionValue,
 	motion,
 	useMotionValue,
 	useSpring,
 	useTransform,
 } from "framer-motion";
-import { useRef, useState, memo } from "react";
+import { memo, useRef, useState } from "react";
+import { cn } from "../../lib/utils";
 
 type IFlowDockItem = {
 	title: string;
@@ -105,11 +105,11 @@ const FlowDockDesktop = ({
 	items: IFlowDockItem[];
 	className?: string;
 }) => {
-	let mouseX = useMotionValue(Infinity);
+	const mouseX = useMotionValue(Number.POSITIVE_INFINITY);
 	return (
 		<motion.div
 			onMouseMove={(e) => mouseX.set(e.pageX)}
-			onMouseLeave={() => mouseX.set(Infinity)}
+			onMouseLeave={() => mouseX.set(Number.POSITIVE_INFINITY)}
 			className={cn(
 				"mx-auto hidden md:flex h-16 gap-4 items-end  rounded-2xl bg-gray-50 dark:bg-neutral-900 px-4 pb-3",
 				className,
@@ -133,41 +133,45 @@ function IconContainer({
 	icon: React.ReactNode;
 	onClick: () => Promise<void>;
 }>) {
-	let ref = useRef<HTMLDivElement>(null);
+	const ref = useRef<HTMLDivElement>(null);
 
-	let distance = useTransform(mouseX, (val) => {
-		let bounds = ref.current?.getBoundingClientRect() ?? { x: 0, width: 0 };
+	const distance = useTransform(mouseX, (val) => {
+		const bounds = ref.current?.getBoundingClientRect() ?? { x: 0, width: 0 };
 
 		return val - bounds.x - bounds.width / 2;
 	});
 
-	let widthTransform = useTransform(distance, [-150, 0, 150], [40, 80, 40]);
-	let heightTransform = useTransform(distance, [-150, 0, 150], [40, 80, 40]);
+	const widthTransform = useTransform(distance, [-150, 0, 150], [40, 80, 40]);
+	const heightTransform = useTransform(distance, [-150, 0, 150], [40, 80, 40]);
 
-	let widthTransformIcon = useTransform(distance, [-150, 0, 150], [20, 40, 20]);
-	let heightTransformIcon = useTransform(
+	const widthTransformIcon = useTransform(
+		distance,
+		[-150, 0, 150],
+		[20, 40, 20],
+	);
+	const heightTransformIcon = useTransform(
 		distance,
 		[-150, 0, 150],
 		[20, 40, 20],
 	);
 
-	let width = useSpring(widthTransform, {
+	const width = useSpring(widthTransform, {
 		mass: 0.1,
 		stiffness: 150,
 		damping: 12,
 	});
-	let height = useSpring(heightTransform, {
+	const height = useSpring(heightTransform, {
 		mass: 0.1,
 		stiffness: 150,
 		damping: 12,
 	});
 
-	let widthIcon = useSpring(widthTransformIcon, {
+	const widthIcon = useSpring(widthTransformIcon, {
 		mass: 0.1,
 		stiffness: 150,
 		damping: 12,
 	});
-	let heightIcon = useSpring(heightTransformIcon, {
+	const heightIcon = useSpring(heightTransformIcon, {
 		mass: 0.1,
 		stiffness: 150,
 		damping: 12,

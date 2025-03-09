@@ -1,14 +1,14 @@
 "use client";
-import { ISettingsProfile } from "@tm9657/flow-like-ui/types";
+import type { UseQueryResult } from "@tanstack/react-query";
+import { useInvoke } from "@tm9657/flow-like-ui";
+import type { Bit } from "@tm9657/flow-like-ui";
 import {
 	BentoGrid,
 	BentoGridItem,
 } from "@tm9657/flow-like-ui/components/ui/bento-grid";
 import { BitCard } from "@tm9657/flow-like-ui/components/ui/bit-card";
 import { Skeleton } from "@tm9657/flow-like-ui/components/ui/skeleton";
-import { useInvoke } from "@tm9657/flow-like-ui";
-import { Bit } from "@tm9657/flow-like-ui";
-import { UseQueryResult } from "@tanstack/react-query";
+import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { useEffect, useState } from "react";
 
 let counter = 0;
@@ -40,13 +40,11 @@ export default function Page() {
 			imageEmbeddingModels.data.map((bit) => bit.fetchDependencies()),
 		);
 		const blacklist = new Set<string>(
-			dependencies
-				.map((dep) =>
-					dep.bits
-						.filter((bit) => bit.type !== "ImageEmbedding")
-						.map((bit) => bit.id),
-				)
-				.flat(),
+			dependencies.flatMap((dep) =>
+				dep.bits
+					.filter((bit) => bit.type !== "ImageEmbedding")
+					.map((bit) => bit.id),
+			),
 		);
 		setBlacklist(blacklist);
 	}
@@ -70,13 +68,13 @@ export default function Page() {
 						<BentoGrid className="mx-auto cursor-pointer w-full">
 							{[...Array(10)].map((item, i) => {
 								if (i === 0) counter = 0;
-								let wide = counter === 3 || counter === 6;
+								const wide = counter === 3 || counter === 6;
 								if (counter === 6) counter = 0;
 								else counter += 1;
 								return (
 									<BentoGridItem
 										className={`h-full w-full ${wide ? "md:col-span-2" : ""}`}
-										key={i + "__skeleton"}
+										key={`${i}__skeleton`}
 										title={
 											<div className="flex flex-row items-center">
 												<Skeleton className="h-4 w-[200px]" />{" "}
@@ -110,7 +108,7 @@ export default function Page() {
 									.filter((bit) => !blacklist.has(bit.id))
 									.map((bit, i) => {
 										if (i === 0) counter = 0;
-										let wide = counter === 3 || counter === 6;
+										const wide = counter === 3 || counter === 6;
 										if (counter === 6) counter = 0;
 										else counter += 1;
 										return <BitCard key={bit.id} bit={bit} wide={wide} />;

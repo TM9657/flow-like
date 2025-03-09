@@ -1,12 +1,12 @@
 "use client";
 
-import { ISettingsProfile, ISystemInfo } from "@tm9657/flow-like-ui/types";
+import { type UseQueryResult, useQueryClient } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
 import { Input } from "@tm9657/flow-like-ui";
+import { useInvoke } from "@tm9657/flow-like-ui";
 import { Label } from "@tm9657/flow-like-ui/components/ui/label";
 import { Switch } from "@tm9657/flow-like-ui/components/ui/switch";
-import { useInvoke } from "@tm9657/flow-like-ui";
-import { useQueryClient, UseQueryResult } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
+import type { ISettingsProfile, ISystemInfo } from "@tm9657/flow-like-ui/types";
 import Image from "next/image";
 
 export default function SettingsPage() {
@@ -99,7 +99,7 @@ export default function SettingsPage() {
 													...currentProfile.data,
 													execution_settings: {
 														...currentProfile.data.execution_settings,
-														max_context_size: parseInt(e.target.value),
+														max_context_size: Number.parseInt(e.target.value),
 													},
 												});
 										}}

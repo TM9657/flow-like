@@ -1,7 +1,7 @@
 import i18n from "i18next";
-import { initReactI18next } from "react-i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import HttpApi from "i18next-http-backend";
+import { initReactI18next } from "react-i18next";
 
 i18n
 	// detect user language
@@ -28,7 +28,7 @@ i18n
 	});
 
 if (process.env.NODE_ENV === "development")
-	i18n.on("missingKey", async function (lngs, namespace, key, res) {
+	i18n.on("missingKey", async (lngs, namespace, key, res) => {
 		const url = `http://localhost:5544/`;
 		const data = {
 			lngs,

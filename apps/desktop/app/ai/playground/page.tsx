@@ -1,23 +1,24 @@
 "use client";
 import { createId } from "@paralleldrive/cuid2";
 import { Label } from "@radix-ui/react-context-menu";
-import { UseQueryResult } from "@tanstack/react-query";
+import type { UseQueryResult } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { Event, listen, UnlistenFn } from "@tauri-apps/api/event";
+import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
 import {
-	Bit,
+	type Bit,
 	Button,
 	Card,
 	CardContent,
 	CardDescription,
 	CardHeader,
 	CardTitle,
-	IDownloadProgress,
-	Input,
-	IPreferences,
-	IResponse,
-	IResponseChunk,
+	type IDownloadProgress,
+	type IPreferences,
+	type IResponse,
+	type IResponseChunk,
 	IRole,
+	type ISettingsProfile,
+	Input,
 	Response as LLMResponse,
 	MarkdownComponent,
 	Progress,
@@ -26,7 +27,6 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 	useInvoke,
-	type ISettingsProfile,
 } from "@tm9657/flow-like-ui";
 import { CornerDownLeft, Mic } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -88,7 +88,7 @@ export default function Home() {
 		setLoading(true);
 		const id = createId();
 
-		let preferences: IPreferences = {
+		const preferences: IPreferences = {
 			multilinguality_weight: 0.3,
 			reasoning_weight: 0.8,
 			factuality_weight: 0.8,
@@ -141,7 +141,7 @@ export default function Home() {
 		const download_model_subscription = listen(
 			`download:${bit.hash}`,
 			(event: { payload: IDownloadProgress[] }) => {
-				let lastElement = event.payload.pop();
+				const lastElement = event.payload.pop();
 				if (lastElement) setDlProgress({ ...lastElement });
 			},
 		);
@@ -171,13 +171,13 @@ export default function Home() {
 
 	useEffect(() => {
 		if (!profile.data) return;
-		let subscriptions: (Promise<UnlistenFn> | undefined)[] = [];
+		const subscriptions: (Promise<UnlistenFn> | undefined)[] = [];
 
 		profile.data.hub_profile.bits.forEach(([category, model]) => {
 			const unlistenFn = listen(
 				`download:${model}`,
 				(event: { payload: IDownloadProgress[] }) => {
-					let lastElement = event.payload.pop();
+					const lastElement = event.payload.pop();
 					if (lastElement) setDlProgress({ ...lastElement });
 				},
 			);

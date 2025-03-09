@@ -1,8 +1,8 @@
-import { get, set, del } from "idb-keyval";
-import {
-	type PersistedClient,
-	type Persister,
+import type {
+	PersistedClient,
+	Persister,
 } from "@tanstack/react-query-persist-client";
+import { del, get, set } from "idb-keyval";
 
 /**
  * Creates an Indexed DB persister

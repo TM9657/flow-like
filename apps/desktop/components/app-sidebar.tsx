@@ -46,7 +46,7 @@ import {
 	useInvoke,
 	useSidebar,
 } from "@tm9657/flow-like-ui";
-import { ISettingsProfile } from "@tm9657/flow-like-ui/types";
+import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import {
 	BadgeCheck,
 	Bell,
@@ -60,7 +60,7 @@ import {
 	LayoutGridIcon,
 	LogInIcon,
 	LogOut,
-	LucideIcon,
+	type LucideIcon,
 	Moon,
 	Plus,
 	Settings2Icon,

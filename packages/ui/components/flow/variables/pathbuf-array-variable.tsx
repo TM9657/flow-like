@@ -1,3 +1,7 @@
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { FolderIcon, InfoIcon, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import {
@@ -6,13 +10,9 @@ import {
 	HoverCardTrigger,
 } from "../../../components/ui/hover-card";
 import { Label } from "../../../components/ui/label";
+import type { IFileMetadata } from "../../../lib/schema/files/file-metadata";
 import { cn } from "../../../lib/utils";
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
-import { FolderIcon, InfoIcon, X } from "lucide-react";
-import { useEffect, useState } from "react";
 import { FileList } from "./pathbuf-list";
-import { type IFileMetadata } from "../../../lib/schema/files/file-metadata";
 
 // @ts-ignore
 export function FolderArrayVariable({

@@ -1,5 +1,3 @@
-// https://github.com/shikijs/shiki/issues/829
-import useMarkdown from "../../hooks/use-markdown";
 import { transformerColorizedBrackets } from "@shikijs/colorized-brackets";
 import rehypeShiki from "@shikijs/rehype";
 import {
@@ -11,6 +9,8 @@ import {
 	transformerRenderWhitespace,
 } from "@shikijs/transformers";
 import { toast } from "sonner";
+// https://github.com/shikijs/shiki/issues/829
+import useMarkdown from "../../hooks/use-markdown";
 
 export function MarkdownComponent({ content }: Readonly<{ content: string }>) {
 	const [markdown] = useMarkdown(content, {

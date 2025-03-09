@@ -4,20 +4,17 @@ import { useDebounce } from "@uidotdev/usehooks";
 import { type Node, type NodeProps, useNodes } from "@xyflow/react";
 import {
 	ClockIcon,
-	CopyIcon,
 	PlayCircleIcon,
 	SquareCheckIcon,
 	WorkflowIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PuffLoader from "react-spinners/PuffLoader";
-import { toast } from "sonner";
 import { toastSuccess } from "../../../lib/messages";
-import { type IComment } from "../../../lib/schema/flow/board";
-import { type INode } from "../../../lib/schema/flow/node";
-import { type IPin } from "../../../lib/schema/flow/pin";
-import { type ITrace } from "../../../lib/schema/flow/run";
+import type { INode } from "../../../lib/schema/flow/node";
+import type { IPin } from "../../../lib/schema/flow/pin";
+import type { ITrace } from "../../../lib/schema/flow/run";
 import { useRunExecutionStore } from "../../../state/run-execution-state";
 import { DynamicImage } from "../../ui/dynamic-image";
 import { FlowPinAction } from "../flow-node/flow-node-pin-action";
@@ -123,7 +120,7 @@ export function PreviewFlowNode(props: NodeProps<FlowNode>) {
 			.forEach((pin, index) => {
 				if (pin.data_type === "Execution") isExec = true;
 
-				let pastPinId = pin.name + "_" + pin.pin_type;
+				const pastPinId = pin.name + "_" + pin.pin_type;
 
 				if (pastPinWithCount[0] === pastPinId) {
 					pastPinWithCount[1] += 1;

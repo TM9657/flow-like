@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Bit } from "./bit";
-import { type IBitPack } from "../schema/bit/bit-pack";
-import { type IBit } from "../schema/bit/bit";
+import type { IBit } from "../schema/bit/bit";
+import type { IBitPack } from "../schema/bit/bit-pack";
+import type { Bit } from "./bit";
 
 export class BitPack implements IBitPack {
 	bits: IBit[] = [];

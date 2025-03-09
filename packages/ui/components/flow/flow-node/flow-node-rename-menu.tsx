@@ -1,3 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
+import { useState } from "react";
 import { Button } from "../../../components/ui/button";
 import {
 	Dialog,
@@ -8,10 +11,7 @@ import {
 	DialogTitle,
 } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
-import { type INode } from "../../../lib/schema/flow/node";
-import { useQueryClient } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
-import { useState } from "react";
+import type { INode } from "../../../lib/schema/flow/node";
 
 export function FlowNodeRenameMenu({
 	node,

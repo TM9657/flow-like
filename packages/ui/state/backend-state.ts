@@ -1,3 +1,4 @@
+import { create } from "zustand";
 import type {
 	IBit,
 	IComment,
@@ -10,7 +11,6 @@ import type {
 	IRun,
 } from "../lib";
 import type { IRunUpdateEvent } from "./run-execution-state";
-import { create } from "zustand";
 
 export interface IBackendState {
 	getCatalog(): Promise<INode[]>;

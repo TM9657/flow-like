@@ -1,15 +1,15 @@
 "use client";
+import { ChevronRightIcon, WorkflowIcon } from "lucide-react";
+import { useMemo } from "react";
 import {
 	ContextMenuItem,
 	ContextMenuSub,
 	ContextMenuSubContent,
 	ContextMenuSubTrigger,
 } from "../../components/ui/context-menu";
-import { ChevronRightIcon, WorkflowIcon } from "lucide-react";
-import { useMemo } from "react";
+import type { INode } from "../../lib/schema/flow/node";
+import type { IPin } from "../../lib/schema/flow/pin";
 import { DynamicImage } from "../ui/dynamic-image";
-import { type INode } from "../../lib/schema/flow/node";
-import { type IPin } from "../../lib/schema/flow/pin";
 
 export function FlowContextMenuNodes({
 	items,
@@ -28,7 +28,7 @@ export function FlowContextMenuNodes({
 
 		items.forEach((item) => {
 			const itemCopy = { ...item };
-			let category = itemCopy.category.trim().split("/");
+			const category = itemCopy.category.trim().split("/");
 
 			if (category.length === 0 || category[0] === "") {
 				leafs.push(itemCopy);

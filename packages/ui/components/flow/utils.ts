@@ -1,4 +1,4 @@
-import { IVariableType } from "../../lib/schema/flow/variable";
+import type { IVariableType } from "../../lib/schema/flow/variable";
 
 export function typeToColor(type: IVariableType): string {
 	switch (type) {

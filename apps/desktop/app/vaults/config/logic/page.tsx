@@ -1,5 +1,5 @@
 "use client";
-import { UseQueryResult } from "@tanstack/react-query";
+import type { UseQueryResult } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
 	Badge,
@@ -15,13 +15,13 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-	formatRelativeTime,
-	IBoard,
+	type IBoard,
+	type IVault,
 	Input,
-	IVault,
 	Label,
 	Separator,
 	Textarea,
+	formatRelativeTime,
 	useFlowBoardParentState,
 	useInvoke,
 } from "@tm9657/flow-like-ui";

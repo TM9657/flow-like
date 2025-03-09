@@ -1,12 +1,13 @@
 "use client";
 
-import { ISettingsProfile } from "@tm9657/flow-like-ui/types";
+import type { UseQueryResult } from "@tanstack/react-query";
+import type { Bit } from "@tm9657/flow-like-ui";
+import { Button, Input, useInvoke } from "@tm9657/flow-like-ui";
 import {
 	BentoGrid,
 	BentoGridItem,
 } from "@tm9657/flow-like-ui/components/ui/bento-grid";
 import { BitCard } from "@tm9657/flow-like-ui/components/ui/bit-card";
-import { Button } from "@tm9657/flow-like-ui";
 import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,
@@ -15,11 +16,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@tm9657/flow-like-ui/components/ui/dropdown-menu";
-import { Input } from "@tm9657/flow-like-ui";
 import { Skeleton } from "@tm9657/flow-like-ui/components/ui/skeleton";
-import { useInvoke } from "@tm9657/flow-like-ui";
-import { Bit } from "@tm9657/flow-like-ui";
-import { UseQueryResult } from "@tanstack/react-query";
+import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { ListFilter, Search } from "lucide-react";
 import MiniSearch from "minisearch";
 import { useState } from "react";
@@ -130,7 +128,7 @@ export default function SettingsPage() {
 					<BentoGrid className="mx-auto cursor-pointer w-full">
 						{[...Array(10)].map((item, i) => {
 							if (i === 0) counter = 0;
-							let wide = counter === 3 || counter === 6;
+							const wide = counter === 3 || counter === 6;
 							if (counter === 6) counter = 0;
 							else counter += 1;
 							return (
@@ -169,7 +167,7 @@ export default function SettingsPage() {
 								.sort((a, b) => Date.parse(b.updated) - Date.parse(a.updated))
 								.map((bit, i) => {
 									if (i === 0) counter = 0;
-									let wide = counter === 3 || counter === 6;
+									const wide = counter === 3 || counter === 6;
 									if (counter === 6) counter = 0;
 									else counter += 1;
 									return <BitCard key={bit.id} bit={bit} wide={wide} />;

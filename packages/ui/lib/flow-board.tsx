@@ -1,12 +1,12 @@
-import { typeToColor } from "../components/flow/utils";
 import { createId } from "@paralleldrive/cuid2";
 import { CopyIcon } from "lucide-react";
 import { toast } from "sonner";
+import { typeToColor } from "../components/flow/utils";
 import { toastSuccess } from "./messages";
 import { type IBoard, type IComment, ICommentType } from "./schema/flow/board";
-import { type INode } from "./schema/flow/node";
-import { type IPin } from "./schema/flow/pin";
-import { type IRun, type ITrace } from "./schema/flow/run";
+import type { INode } from "./schema/flow/node";
+import type { IPin } from "./schema/flow/pin";
+import type { IRun, ITrace } from "./schema/flow/run";
 
 export function isValidConnection(
 	connection: any,

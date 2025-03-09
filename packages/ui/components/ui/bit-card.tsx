@@ -1,5 +1,16 @@
 "use client";
+import type { UseQueryResult } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { DownloadCloudIcon, PackageCheckIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Progress } from "../../components/ui/progress";
+import { useInvoke } from "../../hooks/use-invoke";
+import { Bit, type IDownloadProgress } from "../../lib/bit/bit";
+import type { IBit } from "../../lib/schema/bit/bit";
 import { humanFileSize } from "../../lib/utils";
+import type { ISettingsProfile } from "../../types";
+import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
 import { Badge } from "./badge";
 import { BentoGridItem } from "./bento-grid";
 import {
@@ -9,18 +20,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { useInvoke } from "../../hooks/use-invoke";
-import { Bit, type IDownloadProgress } from "../../lib/bit/bit";
-import { type IBit } from "../../lib/schema/bit/bit";
-import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
-import { Progress } from "../../components/ui/progress";
-import { type UseQueryResult } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { DownloadCloudIcon, PackageCheckIcon } from "lucide-react";
-import Image from "next/image";
-import { useEffect, useState } from "react";
-import type { ISettingsProfile } from "../../types";
 
 export function BitCard({
 	bit,

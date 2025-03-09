@@ -1,7 +1,7 @@
 "use client";
 
-import { UseQueryResult } from "@tanstack/react-query";
-import { humanFileSize, IVault, useInvoke } from "@tm9657/flow-like-ui";
+import type { UseQueryResult } from "@tanstack/react-query";
+import { type IVault, humanFileSize, useInvoke } from "@tm9657/flow-like-ui";
 import {
 	Badge,
 	Button,

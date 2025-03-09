@@ -1,6 +1,6 @@
-import type { Config } from "tailwindcss";
-import preset from "@tm9657/flow-like-ui/tailwind.config";
 import starlightPlugin from "@astrojs/starlight-tailwind";
+import preset from "@tm9657/flow-like-ui/tailwind.config";
+import type { Config } from "tailwindcss";
 import colors from "tailwindcss/colors";
 
 const config = {

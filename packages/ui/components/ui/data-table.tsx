@@ -2,13 +2,13 @@
 
 import {
 	type ColumnDef,
-	flexRender,
-	getCoreRowModel,
-	useReactTable,
-	getPaginationRowModel,
 	type SortingState,
 	type VisibilityState,
+	flexRender,
+	getCoreRowModel,
+	getPaginationRowModel,
 	getSortedRowModel,
+	useReactTable,
 } from "@tanstack/react-table";
 
 import {
@@ -27,8 +27,8 @@ import {
 	DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 
-import { Button } from "../../components/ui/button";
 import { useState } from "react";
+import { Button } from "../../components/ui/button";
 
 interface DataTableProps<TData, TValue> {
 	columns: ColumnDef<TData, TValue>[];

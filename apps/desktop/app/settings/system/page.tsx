@@ -1,8 +1,8 @@
 "use client";
-import { ISystemInfo } from "@tm9657/flow-like-ui/types";
-import { humanFileSize } from "@tm9657/flow-like-ui/lib/utils";
+import type { UseQueryResult } from "@tanstack/react-query";
 import { useInvoke } from "@tm9657/flow-like-ui";
-import { UseQueryResult } from "@tanstack/react-query";
+import { humanFileSize } from "@tm9657/flow-like-ui/lib/utils";
+import type { ISystemInfo } from "@tm9657/flow-like-ui/types";
 
 export default function SettingsPage() {
 	const systemInfo: UseQueryResult<ISystemInfo> = useInvoke(

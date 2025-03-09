@@ -8,11 +8,11 @@ import {
 	ContextMenuLabel,
 	ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
-import { type INode } from "../../../lib/schema/flow/node";
-import { IValueType, type IPin } from "../../../lib/schema/flow/pin";
+import type { INode } from "../../../lib/schema/flow/node";
+import { type IPin, IValueType } from "../../../lib/schema/flow/pin";
 import { DynamicImage } from "../../ui/dynamic-image";
-import { PinPreviewEdit } from "./preview-pin-edit";
 import { typeToColor } from "../utils";
+import { PinPreviewEdit } from "./preview-pin-edit";
 
 export function FlowPinInner({
 	pin,

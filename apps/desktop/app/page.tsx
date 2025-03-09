@@ -1,18 +1,11 @@
 "use client";
 import {
-	Button,
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-	Skeleton,
-	useInvoke,
 	type ISettingsProfile,
+	Skeleton,
+	useInvoke
 } from "@tm9657/flow-like-ui";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { TutorialDialog } from "../components/tutorial-dialog";
 
 export default function Home() {

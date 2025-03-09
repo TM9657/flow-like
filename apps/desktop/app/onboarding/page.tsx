@@ -1,5 +1,5 @@
 "use client";
-import { UseQueryResult } from "@tanstack/react-query";
+import type { UseQueryResult } from "@tanstack/react-query";
 import { Bit, Button, useInvoke } from "@tm9657/flow-like-ui";
 import {
 	Avatar,
@@ -7,9 +7,9 @@ import {
 	AvatarImage,
 } from "@tm9657/flow-like-ui/components/ui/avatar";
 import { BitHover } from "@tm9657/flow-like-ui/components/ui/bit-hover";
-import { IBit } from "@tm9657/flow-like-ui/lib/schema/bit/bit";
+import type { IBit } from "@tm9657/flow-like-ui/lib/schema/bit/bit";
 import { humanFileSize } from "@tm9657/flow-like-ui/lib/utils";
-import { ISettingsProfile } from "@tm9657/flow-like-ui/types";
+import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { ArrowBigRight } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -25,7 +25,7 @@ export default function Onboarding() {
 		const bits = new Map<string, Bit>();
 		activeProfiles.forEach((profileId) => {
 			const profile = profiles.find(
-				([profile, bits]) => profile.hub_profile.id === profileId,
+				([profile]) => profile.hub_profile.id === profileId,
 			);
 			if (!profile) return;
 			profile[1].forEach((bit) => bits.set(bit.id, Bit.fromObject(bit)));
@@ -108,6 +108,7 @@ function PreviewCard({
 }>) {
 	return (
 		<button
+			type="button"
 			onClick={onClick}
 			className="group cursor-pointer bg-card p-4 relative flex flex-col items-center justify-center h-64 w-44 rounded-lg overflow-hidden border"
 		>
@@ -140,7 +141,7 @@ function PreviewCard({
 								className="rounded-full w-7 h-7"
 								width={7}
 								src="/app-logo.webp"
-							></AvatarImage>
+							/>
 							<AvatarFallback>NA</AvatarFallback>
 						</Avatar>
 					</BitHover>

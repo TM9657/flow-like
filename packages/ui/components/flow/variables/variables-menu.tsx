@@ -40,7 +40,7 @@ import {
 	SheetTrigger,
 } from "../../../components/ui/sheet";
 import { Switch } from "../../../components/ui/switch";
-import { type IBoard, type IVariable } from "../../../lib/schema/flow/board";
+import type { IBoard, IVariable } from "../../../lib/schema/flow/board";
 import { IVariableType } from "../../../lib/schema/flow/node";
 import { IValueType } from "../../../lib/schema/flow/pin";
 import { convertJsonToUint8Array } from "../../../lib/uint8";

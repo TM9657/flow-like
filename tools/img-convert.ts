@@ -1,5 +1,5 @@
-import path from "path";
 import fs from "fs";
+import path from "path";
 import sharp, {} from "sharp";
 
 const extensions = new Set([".png", ".jpg", ".jpeg"]);

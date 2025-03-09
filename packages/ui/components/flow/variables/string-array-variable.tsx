@@ -1,6 +1,6 @@
 import { Input } from "../../../components/ui/input";
 import { Textarea } from "../../../components/ui/textarea";
-import { type IVariable } from "../../../lib/schema/flow/variable";
+import type { IVariable } from "../../../lib/schema/flow/variable";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,

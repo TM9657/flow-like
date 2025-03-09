@@ -1,4 +1,4 @@
-import { type Event, listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import type { ITrace } from "../lib";
 
@@ -99,7 +99,7 @@ export const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
 
 	addNodesOnRun: (runId: string, nodeIds: string[]) =>
 		set((state) => {
-			let runs = new Map(state.runs);
+			const runs = new Map(state.runs);
 			const run = runs.get(runId);
 			if (!run) {
 				return state;

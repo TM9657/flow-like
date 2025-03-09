@@ -1,14 +1,16 @@
 "use client";
 
+import type { Node, NodeProps } from "@xyflow/react";
+import { MessageSquareIcon, SquarePenIcon } from "lucide-react";
+import { useState } from "react";
 import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
-import { type IComment } from "../../lib/schema/flow/board";
-import { type Node, type NodeProps } from "@xyflow/react";
-import { MessageSquareIcon, SquarePenIcon } from "lucide-react";
+import type { IComment } from "../../lib/schema/flow/board";
+import { Button } from "../ui/button";
 import {
 	Dialog,
 	DialogContent,
@@ -16,10 +18,8 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "../ui/dialog";
-import { useState } from "react";
-import { Textarea } from "../ui/textarea";
-import { Button } from "../ui/button";
 import { MarkdownComponent } from "../ui/markdown";
+import { Textarea } from "../ui/textarea";
 
 export type CommentNode = Node<
 	{

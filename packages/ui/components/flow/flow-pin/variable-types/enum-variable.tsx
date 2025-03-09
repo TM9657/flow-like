@@ -4,7 +4,7 @@ import {
 	SelectItem,
 	SelectTrigger,
 } from "../../../../components/ui/select";
-import { type IPin } from "../../../../lib/schema/flow/pin";
+import type { IPin } from "../../../../lib/schema/flow/pin";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,

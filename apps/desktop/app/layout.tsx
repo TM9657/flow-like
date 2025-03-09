@@ -2,8 +2,8 @@
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { Bit } from "@tm9657/flow-like-ui";
+import { type UnlistenFn, listen } from "@tauri-apps/api/event";
+import type { Bit } from "@tm9657/flow-like-ui";
 import { ThemeProvider } from "@tm9657/flow-like-ui/components/theme-provider";
 import { Toaster } from "@tm9657/flow-like-ui/components/ui/sonner";
 import { TooltipProvider } from "@tm9657/flow-like-ui/components/ui/tooltip";
@@ -16,8 +16,8 @@ import { Suspense, useEffect } from "react";
 import { toast } from "sonner";
 import { AppSidebar } from "../components/app-sidebar";
 import PostHogPageView from "./PostHogPageView";
-import { PHProvider } from "./provider";
 import { ReactScan } from "./ReactScanComponent";
+import { PHProvider } from "./provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -57,7 +57,7 @@ export default function RootLayout({
 	useEffect(() => {
 		initDownloads();
 
-		let subscriptions: (Promise<UnlistenFn> | undefined)[] = [];
+		const subscriptions: (Promise<UnlistenFn> | undefined)[] = [];
 		const unlistenFn = listen(
 			"toast",
 			(event: {

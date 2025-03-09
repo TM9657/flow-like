@@ -4,13 +4,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
 	Button,
+	type IVault,
 	Input,
-	IVault,
 	Label,
 	Separator,
 	Textarea,
-	useInvoke,
 	VerificationDialog,
+	useInvoke,
 } from "@tm9657/flow-like-ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";

@@ -1,17 +1,17 @@
-import { type Nullable } from "../schema/auto-import";
+import type { Nullable } from "../schema/auto-import";
 import {
-	type IHistory,
-	type IStreamOptions,
-	type IHistoryMessage,
-	type ITool,
 	IContentType,
+	type IHistory,
+	type IHistoryMessage,
 	IRole,
+	type IStreamOptions,
+	type ITool,
 	type IToolChoice,
 } from "../schema/llm/history";
 
 export class History implements IHistory {
 	messages: IHistoryMessage[] = [];
-	model: string = "";
+	model = "";
 	stream: Nullable<boolean>;
 	streamOptions: Nullable<IStreamOptions>;
 	maxCompletionTokens: Nullable<number>;

@@ -1,9 +1,9 @@
 import { del, get, set } from "idb-keyval";
 import { create } from "zustand";
 import {
+	type StateStorage,
 	createJSONStorage,
 	persist,
-	type StateStorage,
 } from "zustand/middleware";
 
 interface IFlowBoardParentState {

@@ -1,7 +1,7 @@
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { type IVariable } from "../../../lib/schema/flow/variable";
 import { saveParseFloat } from "../../../lib/save-parse";
+import type { IVariable } from "../../../lib/schema/flow/variable";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,

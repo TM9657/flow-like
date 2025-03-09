@@ -1,6 +1,6 @@
 import { Label } from "../../../components/ui/label";
 import { Switch } from "../../../components/ui/switch";
-import { type IVariable } from "../../../lib/schema/flow/variable";
+import type { IVariable } from "../../../lib/schema/flow/variable";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,
