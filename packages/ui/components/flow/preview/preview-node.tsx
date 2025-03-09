@@ -69,7 +69,7 @@ export function PreviewFlowNode(props: NodeProps<FlowNode>) {
 
 	useEffect(() => {
 		const height = Math.max(inputPins.length, outputPins.length);
-		div.current!.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
+		if(div.current) div.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
 	}, [inputPins, outputPins]);
 
 	useEffect(() => {
@@ -120,7 +120,7 @@ export function PreviewFlowNode(props: NodeProps<FlowNode>) {
 			.forEach((pin, index) => {
 				if (pin.data_type === "Execution") isExec = true;
 
-				const pastPinId = pin.name + "_" + pin.pin_type;
+				const pastPinId = `${pin.name}_${pin.pin_type}`;
 
 				if (pastPinWithCount[0] === pastPinId) {
 					pastPinWithCount[1] += 1;
@@ -149,7 +149,7 @@ export function PreviewFlowNode(props: NodeProps<FlowNode>) {
 
 	return (
 		<div
-			key={props.id + "__node"}
+			key={`${props.id}__node`}
 			ref={div}
 			className={`bg-card p-2 react-flow__node-default selectable focus:ring-2 relative rounded-md group ${props.selected && "!border-primary border-2"} ${isExec ? "" : "bg-emerald-900"} ${executionState === "done" ? "opacity-60" : "opacity-100"}`}
 		>
@@ -177,7 +177,7 @@ export function PreviewFlowNode(props: NodeProps<FlowNode>) {
 				.map((pin, index) =>
 					isPinAction(pin) ? (
 						<FlowPinAction
-							key={pin.pin.id + "__action"}
+							key={`${pin.pin.id}__action`}
 							action={pin}
 							index={index}
 							input
@@ -196,7 +196,7 @@ export function PreviewFlowNode(props: NodeProps<FlowNode>) {
 			<div
 				className={`absolute top-0 left-0 right-0 h-4 gap-1 !mt-0 flex flex-row items-center border-b-1 border-b-foreground p-1 justify-between rounded-md rounded-b-none bg-card ${!isExec && "bg-gradient-to-r  from-card via-emerald-300/50 to-emerald-300 dark:via-tertiary/50 dark:to-tertiary"} ${props.data.node.start && "bg-gradient-to-r  from-card via-rose-300/50 to-rose-300 dark:via-primary/50 dark:to-primary"}`}
 			>
-				<div className={`flex flex-row items-center !mt-0 gap-1`}>
+				<div className={"flex flex-row items-center !mt-0 gap-1"}>
 					{props.data.node?.icon && (
 						<DynamicImage
 							className="w-2 h-2 bg-foreground"
@@ -238,7 +238,7 @@ export function PreviewFlowNode(props: NodeProps<FlowNode>) {
 						action={pin}
 						index={index}
 						input={false}
-						key={pin.pin.id + "__action"}
+						key={`${pin.pin.id}__action`}
 					/>
 				) : (
 					<FlowPreviewPin

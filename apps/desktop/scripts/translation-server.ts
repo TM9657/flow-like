@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import express from "express";
 
 const app = express();
@@ -20,7 +20,7 @@ app.post("/", (req, res) => {
 	const language = lngs[0];
 
 	let data: any = {};
-	const dir = path.join(pasePath, language, namespace + ".json");
+	const dir = path.join(pasePath, language, `${namespace}.json`);
 	if (fs.existsSync(dir)) {
 		data = JSON.parse(fs.readFileSync(dir, "utf-8"));
 	}

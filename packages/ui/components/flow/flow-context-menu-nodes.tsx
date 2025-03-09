@@ -93,7 +93,7 @@ export function FlowContextMenuNodes({
 				))}
 			{nodeState.leafs.map((node) => (
 				<ContextMenuItem
-					key={"context" + node.id}
+					key={`context${node.id}`}
 					id={node.id}
 					onClick={async () => onNodePlace(node)}
 				>

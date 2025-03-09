@@ -712,9 +712,9 @@ function Flows() {
 			<SidebarMenu>
 				<Collapsible
 					asChild
-					defaultOpen={localStorage.getItem(`sidebar:flows`) === "open"}
+					defaultOpen={localStorage.getItem("sidebar:flows") === "open"}
 					onOpenChange={(open) => {
-						localStorage.setItem(`sidebar:flows`, open ? "open" : "closed");
+						localStorage.setItem("sidebar:flows", open ? "open" : "closed");
 					}}
 					className="group/collapsible"
 				>

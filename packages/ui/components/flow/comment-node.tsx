@@ -40,7 +40,7 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 		<ContextMenu>
 			<ContextMenuTrigger>
 				<div
-					key={props.id + "__node"}
+					key={`${props.id}__node`}
 					className={`bg-card p-1 react-flow__node-default selectable !w-[300px] focus:ring-2 relative rounded-md group opacity-80 ${props.selected && "!border-primary border-2"}`}
 				>
 					<Dialog

@@ -122,7 +122,9 @@ export default function SettingsPage() {
 			</div>
 			<br />
 			<div
-				className={`max-h-[calc(100dvh-3rem)] overflow-auto invisible-scroll w-full`}
+				className={
+					"max-h-[calc(100dvh-3rem)] overflow-auto invisible-scroll w-full"
+				}
 			>
 				{(llms.isLoading || vlms.isLoading) && (
 					<BentoGrid className="mx-auto cursor-pointer w-full">
@@ -134,7 +136,7 @@ export default function SettingsPage() {
 							return (
 								<BentoGridItem
 									className={`h-full w-full ${wide ? "md:col-span-2" : ""}`}
-									key={i + "__skeleton"}
+									key={`${i}__skeleton`}
 									title={
 										<div className="flex flex-row items-center">
 											<Skeleton className="h-4 w-[200px]" />{" "}

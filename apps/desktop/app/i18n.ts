@@ -29,7 +29,7 @@ i18n
 
 if (process.env.NODE_ENV === "development")
 	i18n.on("missingKey", async (lngs, namespace, key, res) => {
-		const url = `http://localhost:5544/`;
+		const url = "http://localhost:5544/";
 		const data = {
 			lngs,
 			namespace,

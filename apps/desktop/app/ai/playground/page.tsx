@@ -81,7 +81,7 @@ export default function Home() {
 			return `![img${index + 1}](${img})`;
 		});
 
-		return "images: " + images.join(", ");
+		return `images: ${images.join(", ")}`;
 	}
 
 	async function send() {

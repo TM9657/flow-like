@@ -55,7 +55,7 @@ export default function PoweredByPage() {
 			<Separator className="my-4" />
 			<div className="grid grid-cols-2 gap-2 w-full">
 				{poweredBy.map((element, i) => (
-					<PoweredByElement key={i + "__powered_by"} {...element} />
+					<PoweredByElement key={`${i}__powered_by`} {...element} />
 				))}
 			</div>
 		</main>

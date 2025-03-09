@@ -428,7 +428,7 @@ function Template({
 				<div className="rounded-full overflow-hidden">
 					{!bit.icon.endsWith("svg") && (
 						<img
-							alt={bit.meta?.["en"]?.name}
+							alt={bit.meta?.en?.name}
 							width={32}
 							height={32}
 							src={bit.icon}
@@ -441,12 +441,12 @@ function Template({
 						/>
 					)}
 				</div>
-				<p className="line-clamp-1">{bit.meta?.["en"]?.name}</p>
+				<p className="line-clamp-1">{bit.meta?.en?.name}</p>
 			</div>
 			<small
 				className={`text-start text-muted-foreground group-hover:text-primary-foreground transition-all line-clamp-3 ${selected ? "text-primary-foreground" : ""}`}
 			>
-				{bit.meta?.["en"]?.description}
+				{bit.meta?.en?.description}
 			</small>
 		</button>
 	);
@@ -485,7 +485,7 @@ function Bit({
 					<div className="rounded-full overflow-hidden">
 						{!bitData.data.icon.endsWith("svg") && (
 							<img
-								alt={bitData.data.meta?.["en"]?.name}
+								alt={bitData.data.meta?.en?.name}
 								width={32}
 								height={32}
 								src={bitData.data.icon}
@@ -498,13 +498,13 @@ function Bit({
 							/>
 						)}
 					</div>
-					<p className="line-clamp-1">{bitData.data.meta?.["en"]?.name}</p>
+					<p className="line-clamp-1">{bitData.data.meta?.en?.name}</p>
 					<small>{bitData.data.type}</small>
 				</div>
 				<small
 					className={`text-start text-muted-foreground group-hover:text-primary-foreground transition-all line-clamp-3 ${selected && "text-primary-foreground"}`}
 				>
-					{bitData.data.meta?.["en"]?.description}
+					{bitData.data.meta?.en?.description}
 				</small>
 			</button>
 		</BitHover>

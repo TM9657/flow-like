@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import sharp, {} from "sharp";
 
 const extensions = new Set([".png", ".jpg", ".jpeg"]);
@@ -7,7 +7,7 @@ const extensions = new Set([".png", ".jpg", ".jpeg"]);
 async function convertToWebp(imgPath: string) {
 	const newPath = path.join(
 		path.dirname(imgPath),
-		path.basename(imgPath, path.extname(imgPath)) + ".webp",
+		`${path.basename(imgPath, path.extname(imgPath))}.webp`,
 	);
 	const img = sharp(imgPath);
 	await img.webp().toFile(newPath);

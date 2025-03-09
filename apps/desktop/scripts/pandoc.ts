@@ -1,8 +1,8 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import AdmZip from "adm-zip";
 import axios from "axios";
-const zlib = require("zlib");
+const zlib = require("node:zlib");
 const tar = require("tar");
 
 const GITHUB_API_BASE_URL = "https://api.github.com";

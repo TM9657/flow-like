@@ -22,13 +22,14 @@ export function formatRelativeTime(date: IDate) {
 
 	if (seconds < 60) {
 		return formatter.format(-1 * seconds, "second");
-	} else if (minutes < 60) {
-		return formatter.format(-1 * minutes, "minute");
-	} else if (hours < 24) {
-		return formatter.format(-1 * hours, "hour");
-	} else {
-		return formatter.format(-1 * days, "day");
 	}
+	if (minutes < 60) {
+		return formatter.format(-1 * minutes, "minute");
+	}
+	if (hours < 24) {
+		return formatter.format(-1 * hours, "hour");
+	}
+	return formatter.format(-1 * days, "day");
 }
 
 export function parseTimespan(start: IDate, end: IDate) {

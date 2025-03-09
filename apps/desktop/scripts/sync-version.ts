@@ -1,4 +1,4 @@
-import fs from "fs";
+import fs from "node:fs";
 
 const version = JSON.parse(fs.readFileSync("package.json", "utf-8")).version;
 const cargoToml = fs.readFileSync("./src-tauri/Cargo.toml", "utf-8");

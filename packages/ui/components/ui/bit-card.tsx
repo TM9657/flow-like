@@ -115,7 +115,7 @@ export function BitCard({
 	return (
 		<div
 			className={`${wide ? "md:col-span-2 z-10" : "z-10"} focus:outline-none`}
-			data-testid={`box`}
+			data-testid={"box"}
 		>
 			<DropdownMenu>
 				<DropdownMenuTrigger className="relative w-full h-full text-start">
@@ -124,7 +124,7 @@ export function BitCard({
 						title={
 							<div className="flex flex-row items-center text-nowrap text-start">
 								<p className="max-w-[60%] overflow-hidden text-ellipsis">
-									{bit.meta["en"].name}
+									{bit.meta.en.name}
 								</p>{" "}
 								<Badge variant={"outline"} className="ml-2">
 									{isInstalled ? (
@@ -146,7 +146,7 @@ export function BitCard({
 						}
 						description={
 							<div className="overflow-scroll max-h-20 overflow-x-hidden overflow-y-auto">
-								{bit.meta["en"].description}
+								{bit.meta.en.description}
 							</div>
 						}
 						header={
@@ -169,15 +169,14 @@ export function BitCard({
 											<AvatarFallback>NA</AvatarFallback>
 										</Avatar>
 									</div>
-									{bit.repository &&
-										bit.repository.startsWith("https://huggingface.co/") && (
-											<img
-												src={"/hf-logo.png"}
-												width={25}
-												height={25}
-												alt="Huggingface Logo"
-											/>
-										)}
+									{bit.repository?.startsWith("https://huggingface.co/") && (
+										<img
+											src={"/hf-logo.png"}
+											width={25}
+											height={25}
+											alt="Huggingface Logo"
+										/>
+									)}
 								</div>
 							</div>
 						}

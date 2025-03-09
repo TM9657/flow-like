@@ -2,7 +2,7 @@
 import {
 	type ISettingsProfile,
 	Skeleton,
-	useInvoke
+	useInvoke,
 } from "@tm9657/flow-like-ui";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";

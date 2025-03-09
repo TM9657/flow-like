@@ -50,7 +50,9 @@ export function FlowPinInner({
 			{pin.value_type === IValueType.Array && (
 				<GripIcon
 					strokeWidth={3}
-					className={`w-2 h-2 absolute left-0 -translate-x-[30%] pointer-events-none bg-background`}
+					className={
+						"w-2 h-2 absolute left-0 -translate-x-[30%] pointer-events-none bg-background"
+					}
 					style={{
 						color: typeToColor(pin.data_type),
 						backgroundColor:
@@ -61,7 +63,9 @@ export function FlowPinInner({
 			{pin.value_type === IValueType.HashSet && (
 				<EllipsisVerticalIcon
 					strokeWidth={3}
-					className={`w-2 h-2 absolute left-0 -translate-x-[30%] pointer-events-none bg-background`}
+					className={
+						"w-2 h-2 absolute left-0 -translate-x-[30%] pointer-events-none bg-background"
+					}
 					style={{
 						color: typeToColor(pin.data_type),
 						backgroundColor:
@@ -72,7 +76,9 @@ export function FlowPinInner({
 			{pin.value_type === IValueType.HashMap && (
 				<ListIcon
 					strokeWidth={3}
-					className={`w-2 h-2 absolute left-0 -translate-x-[30%] pointer-events-none`}
+					className={
+						"w-2 h-2 absolute left-0 -translate-x-[30%] pointer-events-none"
+					}
 					style={{
 						color: typeToColor(pin.data_type),
 						backgroundColor:

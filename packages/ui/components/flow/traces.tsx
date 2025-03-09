@@ -126,7 +126,9 @@ export function Traces({
 
 	return (
 		<div
-			className={`transition-all top-0 bottom-0 right-0 h-[calc(100%-2rem)] z-10 bg-background border rounded-lg flex flex-col p-2 w-full`}
+			className={
+				"transition-all top-0 bottom-0 right-0 h-[calc(100%-2rem)] z-10 bg-background border rounded-lg flex flex-col p-2 w-full"
+			}
 		>
 			<div className="flex flex-row items-center justify-between w-full">
 				<div>

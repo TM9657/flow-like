@@ -1,4 +1,4 @@
-import fs from "fs";
+import fs from "node:fs";
 import NodeLicense from "../src-tauri/assets/licenses-node.json";
 import CargoLicense from "../src-tauri/assets/licenses.json";
 let license_bundled: {

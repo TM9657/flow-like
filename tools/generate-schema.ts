@@ -1,12 +1,12 @@
-import { execSync } from "child_process";
+import { execSync } from "node:child_process";
 import {
 	mkdirSync,
 	readFileSync,
 	readdirSync,
 	statSync,
 	writeFileSync,
-} from "fs";
-import { join, parse, relative } from "path";
+} from "node:fs";
+import { join, parse, relative } from "node:path";
 
 // 1st: Make "../" the root directory
 

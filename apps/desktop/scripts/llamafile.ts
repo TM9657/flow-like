@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import axios from "axios";
 
 const GITHUB_API_BASE_URL = "https://api.github.com";

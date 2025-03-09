@@ -4,7 +4,7 @@ import { parseUint8ArrayToJson } from "./uint8";
 export function saveParseFloat(variable: IVariable, input: string): number {
 	try {
 		const parsedValue = Number.parseFloat(input);
-		if (isNaN(parsedValue)) {
+		if (Number.isNaN(parsedValue)) {
 			return parseUint8ArrayToJson(variable.default_value);
 		}
 		return parsedValue;
@@ -16,7 +16,7 @@ export function saveParseFloat(variable: IVariable, input: string): number {
 export function saveParseInt(variable: IVariable, input: string): number {
 	try {
 		const parsedValue = Number.parseInt(input);
-		if (isNaN(parsedValue)) {
+		if (Number.isNaN(parsedValue)) {
 			return parseUint8ArrayToJson(variable.default_value);
 		}
 		return parsedValue;

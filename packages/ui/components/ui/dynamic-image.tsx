@@ -10,7 +10,7 @@ export const DynamicImage = memo(function DynamicImage({
 		if (!ref.current) return;
 
 		ref.current.style.maskImage = `url(${url})`;
-		ref.current.style.maskSize = `contain`;
+		ref.current.style.maskSize = "contain";
 		ref.current.style.maskRepeat = "no-repeat";
 	}, [url]);
 

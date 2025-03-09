@@ -944,7 +944,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 																router.push(`/flow?id=${nextBoard[0]}`);
 																return;
 															}
-															router.push(`/`);
+															router.push("/");
 															await openBoards.refetch();
 														}
 													}}

@@ -1,5 +1,5 @@
 "use client";
-import path from "path";
+import path from "node:path";
 import { withSentryConfig } from "@sentry/nextjs";
 /** @type {import('next').NextConfig} */
 const nextConfig = {

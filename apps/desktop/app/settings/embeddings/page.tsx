@@ -62,7 +62,9 @@ export default function Page() {
 				</h1>
 				<br />
 				<div
-					className={`max-h-[calc(100dvh-3rem)] overflow-auto invisible-scroll w-full`}
+					className={
+						"max-h-[calc(100dvh-3rem)] overflow-auto invisible-scroll w-full"
+					}
 				>
 					{!(embeddingModels.data && imageEmbeddingModels.data) && (
 						<BentoGrid className="mx-auto cursor-pointer w-full">
