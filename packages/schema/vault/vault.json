@@ -1,75 +1,72 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Vault",
-  "type": "object",
-  "required": [
-    "author",
-    "bits",
-    "boards",
-    "created_at",
-    "description",
-    "id",
-    "name",
-    "tags",
-    "updated_at"
-  ],
-  "properties": {
-    "author": {
-      "type": "string"
-    },
-    "bits": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "boards": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "created_at": {
-      "$ref": "#/definitions/SystemTime"
-    },
-    "description": {
-      "type": "string"
-    },
-    "id": {
-      "type": "string"
-    },
-    "name": {
-      "type": "string"
-    },
-    "tags": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "updated_at": {
-      "$ref": "#/definitions/SystemTime"
-    }
-  },
-  "definitions": {
-    "SystemTime": {
-      "type": "object",
-      "required": [
-        "nanos_since_epoch",
-        "secs_since_epoch"
-      ],
-      "properties": {
-        "nanos_since_epoch": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0.0
-        },
-        "secs_since_epoch": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        }
-      }
-    }
-  }
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "Vault",
+	"type": "object",
+	"required": [
+		"author",
+		"bits",
+		"boards",
+		"created_at",
+		"description",
+		"id",
+		"name",
+		"tags",
+		"updated_at"
+	],
+	"properties": {
+		"author": {
+			"type": "string"
+		},
+		"bits": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			}
+		},
+		"boards": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			}
+		},
+		"created_at": {
+			"$ref": "#/definitions/SystemTime"
+		},
+		"description": {
+			"type": "string"
+		},
+		"id": {
+			"type": "string"
+		},
+		"name": {
+			"type": "string"
+		},
+		"tags": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			}
+		},
+		"updated_at": {
+			"$ref": "#/definitions/SystemTime"
+		}
+	},
+	"definitions": {
+		"SystemTime": {
+			"type": "object",
+			"required": ["nanos_since_epoch", "secs_since_epoch"],
+			"properties": {
+				"nanos_since_epoch": {
+					"type": "integer",
+					"format": "uint32",
+					"minimum": 0.0
+				},
+				"secs_since_epoch": {
+					"type": "integer",
+					"format": "uint64",
+					"minimum": 0.0
+				}
+			}
+		}
+	}
 }

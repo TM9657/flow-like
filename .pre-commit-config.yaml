@@ -1,0 +1,26 @@
+repos:
+  -   repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v3.2.0
+      hooks:
+      -   id: check-yaml
+      -   id: end-of-file-fixer
+      -   id: trailing-whitespace
+
+  -   repo: https://github.com/astral-sh/ruff-pre-commit
+      # Ruff version.
+      rev: v0.9.10
+      hooks:
+      - id: ruff
+
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: Cargo Format
+        entry: cargo fmt --all
+        language: system
+        types: [rust]
+      - id: local-biome-check
+        name: biome check
+        entry: npx @biomejs/biome@1.8.3 check
+        language: system
+        types: [text]

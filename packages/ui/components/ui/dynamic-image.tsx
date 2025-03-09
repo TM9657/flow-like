@@ -1,17 +1,23 @@
 import { useEffect, useRef, memo } from "react";
 
-export const DynamicImage = memo(function DynamicImage({url, className}: Readonly<{url: string, className: string}>) {
-    const ref = useRef<HTMLDivElement>(null)
-    
-    useEffect(() => {
-        if(!ref.current) return
+export const DynamicImage = memo(function DynamicImage({
+	url,
+	className,
+}: Readonly<{ url: string; className: string }>) {
+	const ref = useRef<HTMLDivElement>(null);
 
-        ref.current.style.maskImage = `url(${url})`
-        ref.current.style.maskSize = `contain`      
-        ref.current.style.maskRepeat = "no-repeat"
-    }, [url])
+	useEffect(() => {
+		if (!ref.current) return;
 
-    if(!url.includes(".svg")) return <img alt="dynamic_icon" src={url} className={`border-0 ${className}`}/>
+		ref.current.style.maskImage = `url(${url})`;
+		ref.current.style.maskSize = `contain`;
+		ref.current.style.maskRepeat = "no-repeat";
+	}, [url]);
 
-    return <div ref={ref} className={`border-0 ${className}`}/>
-})
+	if (!url.includes(".svg"))
+		return (
+			<img alt="dynamic_icon" src={url} className={`border-0 ${className}`} />
+		);
+
+	return <div ref={ref} className={`border-0 ${className}`} />;
+});

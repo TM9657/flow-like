@@ -1,22 +1,22 @@
 {
-  "name": "docs",
-  "type": "module",
-  "version": "0.0.1",
-  "scripts": {
-    "dev": "astro dev",
-    "start": "astro dev",
-    "build": "astro build",
-    "deploy": "bun run build && bunx wrangler pages deploy dist",
-    "deploy:force": "bun run build && bunx wrangler pages deploy dist --branch main",
-    "preview": "astro preview",
-    "astro": "astro"
-  },
-  "dependencies": {
-    "@astrojs/react": "^4.2.0",
-    "@astrojs/starlight": "^0.31.1",
-    "@astrojs/starlight-tailwind": "^3.0.0",
-    "@tm9657/flow-like-ui": "workspace:*",
-    "astro": "^5.1.5",
-    "sharp": "^0.33.5"
-  }
+	"name": "docs",
+	"type": "module",
+	"version": "0.0.1",
+	"scripts": {
+		"dev": "astro dev",
+		"start": "astro dev",
+		"build": "astro build",
+		"deploy": "bun run build && bunx wrangler pages deploy dist",
+		"deploy:force": "bun run build && bunx wrangler pages deploy dist --branch main",
+		"preview": "astro preview",
+		"astro": "astro"
+	},
+	"dependencies": {
+		"@astrojs/react": "^4.2.0",
+		"@astrojs/starlight": "^0.31.1",
+		"@astrojs/starlight-tailwind": "^3.0.0",
+		"@tm9657/flow-like-ui": "workspace:*",
+		"astro": "^5.1.5",
+		"sharp": "^0.33.5"
+	}
 }

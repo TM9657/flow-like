@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open } from '@tauri-apps/plugin-dialog';
+import { open } from "@tauri-apps/plugin-dialog";
 import { FileIcon, FolderIcon, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
@@ -11,119 +11,159 @@ import { convertJsonToUint8Array } from "../../../lib/uint8";
 import { cn } from "../../../lib/utils";
 import { FileList } from "./pathbuf-list";
 
-export function PathbufVariable({ variable, onChange }: Readonly<{ variable: IVariable, onChange: (variable: IVariable) => void }>) {
-    const [files, setFiles] = useState<IFileMetadata[]>([])
-    const [folder, setFolder] = useState<string | undefined>();
-    const [isFolder, setIsFolder] = useState<boolean>(false);
+export function PathbufVariable({
+	variable,
+	onChange,
+}: Readonly<{ variable: IVariable; onChange: (variable: IVariable) => void }>) {
+	const [files, setFiles] = useState<IFileMetadata[]>([]);
+	const [folder, setFolder] = useState<string | undefined>();
+	const [isFolder, setIsFolder] = useState<boolean>(false);
 
-    async function loadFiles() {
-        const files: IFileMetadata[] = await invoke("get_folder_meta", { folderPath: folder });
-        setFiles(files);
-    }
+	async function loadFiles() {
+		const files: IFileMetadata[] = await invoke("get_folder_meta", {
+			folderPath: folder,
+		});
+		setFiles(files);
+	}
 
-    useEffect(() => {
-        setFolder(undefined)
-        setFiles([])
-    }, [isFolder])
+	useEffect(() => {
+		setFolder(undefined);
+		setFiles([]);
+	}, [isFolder]);
 
-    useEffect(() => {
-        loadFiles()
-    }, [folder])
+	useEffect(() => {
+		loadFiles();
+	}, [folder]);
 
-    return <>
-        <div className="flex items-center space-x-2">
-            <Switch checked={isFolder} onCheckedChange={(checked) => {setIsFolder(checked)}} id="is_folder" />
-            <Label htmlFor="is_folder">Select Folder</Label>
-        </div>
-        <FileList files={files} >
-            <div className="w-full items-center gap-1.5 max-w-full">
-                <div className="flex flex-row items-center gap-2 w-full">
-                    <Button
-                        variant={"outline"}
-                        className={cn(
-                            "w-full justify-start text-left font-normal",
-                            files.length === 0 && "text-muted-foreground"
-                        )}
-                        onClick={async () => {
-                            const pathBuf: any = await open({
-                                multiple: false,
-                                directory: isFolder,
-                                recursive: true,
-                            });
-                            if (!pathBuf) return;
+	return (
+		<>
+			<div className="flex items-center space-x-2">
+				<Switch
+					checked={isFolder}
+					onCheckedChange={(checked) => {
+						setIsFolder(checked);
+					}}
+					id="is_folder"
+				/>
+				<Label htmlFor="is_folder">Select Folder</Label>
+			</div>
+			<FileList files={files}>
+				<div className="w-full items-center gap-1.5 max-w-full">
+					<div className="flex flex-row items-center gap-2 w-full">
+						<Button
+							variant={"outline"}
+							className={cn(
+								"w-full justify-start text-left font-normal",
+								files.length === 0 && "text-muted-foreground",
+							)}
+							onClick={async () => {
+								const pathBuf: any = await open({
+									multiple: false,
+									directory: isFolder,
+									recursive: true,
+								});
+								if (!pathBuf) return;
 
-                            if(!isFolder) {
-                                console.dir(pathBuf)
-                                const fileMetadata = await invoke<IFileMetadata>("get_file_meta", { filePath: pathBuf });
-                                setFiles([fileMetadata]);
-                                onChange({ ...variable, default_value: convertJsonToUint8Array(fileMetadata.file_path) });
-                                return
-                            };
+								if (!isFolder) {
+									console.dir(pathBuf);
+									const fileMetadata = await invoke<IFileMetadata>(
+										"get_file_meta",
+										{ filePath: pathBuf },
+									);
+									setFiles([fileMetadata]);
+									onChange({
+										...variable,
+										default_value: convertJsonToUint8Array(
+											fileMetadata.file_path,
+										),
+									});
+									return;
+								}
 
-                            setFolder(pathBuf);
-                            onChange({ ...variable, default_value: convertJsonToUint8Array(pathBuf) });
-                        }}
-                    >
-                        {isFolder && <FolderIcon className="mr-2 min-w-4 h-4 w-4" />}
-                        {!isFolder && <FileIcon className="mr-2 min-w-4 h-4 w-4" />}
-                        {isFolder && (folder ? <span className="text-wrap">{folder.split("/").pop()}</span> : <span>Pick a folder</span>)}
-                        {!isFolder && (files.length > 0 ? <span className="text-wrap">{files[0].file_name}</span> : <span>Pick a file</span>)}
-                    </Button>
-                    {files.length > 0 &&
-                        <Button size={"sm"} variant={"ghost"} onClick={() => {
-                            setFolder(undefined);
-                            setFiles([]);
-                            onChange({ ...variable, default_value: undefined });
-                        }}><X className="text-muted-foreground w-4 h-4" /></Button>
-                    }
-                </div>
-            </div>
-        </FileList>
-    </>
+								setFolder(pathBuf);
+								onChange({
+									...variable,
+									default_value: convertJsonToUint8Array(pathBuf),
+								});
+							}}
+						>
+							{isFolder && <FolderIcon className="mr-2 min-w-4 h-4 w-4" />}
+							{!isFolder && <FileIcon className="mr-2 min-w-4 h-4 w-4" />}
+							{isFolder &&
+								(folder ? (
+									<span className="text-wrap">{folder.split("/").pop()}</span>
+								) : (
+									<span>Pick a folder</span>
+								))}
+							{!isFolder &&
+								(files.length > 0 ? (
+									<span className="text-wrap">{files[0].file_name}</span>
+								) : (
+									<span>Pick a file</span>
+								))}
+						</Button>
+						{files.length > 0 && (
+							<Button
+								size={"sm"}
+								variant={"ghost"}
+								onClick={() => {
+									setFolder(undefined);
+									setFiles([]);
+									onChange({ ...variable, default_value: undefined });
+								}}
+							>
+								<X className="text-muted-foreground w-4 h-4" />
+							</Button>
+						)}
+					</div>
+				</div>
+			</FileList>
+		</>
+	);
 
-    // return <div key={name} className="w-full items-center gap-1.5">
-    //     <div className="flex flex-row items-center gap-2">
-    //         <Label htmlFor={name}>{name}</Label>
-    //         <HoverCard>
-    //             <HoverCardTrigger>
-    //                 <InfoIcon className="w-4 h-4" />
-    //             </HoverCardTrigger>
-    //             <HoverCardContent>
-    //                 {variable.description}
-    //             </HoverCardContent>
-    //         </HoverCard>
-    //     </div>
-    //     <FileList files={files} >
-    //         <div key={name} className="w-full items-center gap-1.5">
-    //             <div className="flex flex-row items-center gap-2">
-    //                 <Button
-    //                     id={name}
-    //                     variant={"outline"}
-    //                     className={cn(
-    //                         "w-full justify-start text-left font-normal",
-    //                         !folder && "text-muted-foreground"
-    //                     )}
-    //                     onClick={async () => {
-    //                         const folder: any = await open({
-    //                             multiple: false,
-    //                             directory: true,
-    //                             recursive: true,
-    //                         });
-    //                         if (!folder) return;
-    //                         setFolder(folder);
-    //                     }}
-    //                 >
-    //                     <FolderIcon className="mr-2 h-4 w-4" />
-    //                     {folder ? <span>{folder.split("/").pop()}</span> : <span>Pick a folder</span>}
-    //                 </Button>
-    //                 {folder &&
-    //                     <Button size={"sm"} variant={"ghost"} onClick={() => {
-    //                         setFolder(undefined);
-    //                         setFiles([]);
-    //                     }}><X className="text-muted-foreground w-4 h-4" /></Button>
-    //                 }
-    //             </div>
-    //         </div>
-    //     </FileList>
-    // </div>
+	// return <div key={name} className="w-full items-center gap-1.5">
+	//     <div className="flex flex-row items-center gap-2">
+	//         <Label htmlFor={name}>{name}</Label>
+	//         <HoverCard>
+	//             <HoverCardTrigger>
+	//                 <InfoIcon className="w-4 h-4" />
+	//             </HoverCardTrigger>
+	//             <HoverCardContent>
+	//                 {variable.description}
+	//             </HoverCardContent>
+	//         </HoverCard>
+	//     </div>
+	//     <FileList files={files} >
+	//         <div key={name} className="w-full items-center gap-1.5">
+	//             <div className="flex flex-row items-center gap-2">
+	//                 <Button
+	//                     id={name}
+	//                     variant={"outline"}
+	//                     className={cn(
+	//                         "w-full justify-start text-left font-normal",
+	//                         !folder && "text-muted-foreground"
+	//                     )}
+	//                     onClick={async () => {
+	//                         const folder: any = await open({
+	//                             multiple: false,
+	//                             directory: true,
+	//                             recursive: true,
+	//                         });
+	//                         if (!folder) return;
+	//                         setFolder(folder);
+	//                     }}
+	//                 >
+	//                     <FolderIcon className="mr-2 h-4 w-4" />
+	//                     {folder ? <span>{folder.split("/").pop()}</span> : <span>Pick a folder</span>}
+	//                 </Button>
+	//                 {folder &&
+	//                     <Button size={"sm"} variant={"ghost"} onClick={() => {
+	//                         setFolder(undefined);
+	//                         setFiles([]);
+	//                     }}><X className="text-muted-foreground w-4 h-4" /></Button>
+	//                 }
+	//             </div>
+	//         </div>
+	//     </FileList>
+	// </div>
 }

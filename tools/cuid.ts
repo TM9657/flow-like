@@ -1,3 +1,3 @@
-import {createId} from "@paralleldrive/cuid2"
+import { createId } from "@paralleldrive/cuid2";
 
-console.log(createId())
+console.log(createId());
