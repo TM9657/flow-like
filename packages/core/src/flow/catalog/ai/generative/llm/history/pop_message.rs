@@ -1,6 +1,9 @@
 use crate::{
     flow::{
-        execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     models::history::{History, HistoryMessage},
     state::FlowLikeState,
@@ -46,13 +49,28 @@ impl NodeLogic for PopHistoryMessageNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin("history_out", "History", "Updated ChatHistory", VariableType::Struct)
-            .set_schema::<History>();
+        node.add_output_pin(
+            "history_out",
+            "History",
+            "Updated ChatHistory",
+            VariableType::Struct,
+        )
+        .set_schema::<History>();
 
-        node.add_output_pin("message", "Message", "Removed Message", VariableType::Struct)
-            .set_schema::<HistoryMessage>();
+        node.add_output_pin(
+            "message",
+            "Message",
+            "Removed Message",
+            VariableType::Struct,
+        )
+        .set_schema::<HistoryMessage>();
 
-        node.add_output_pin("empty", "Empty", "History was empty", VariableType::Execution);
+        node.add_output_pin(
+            "empty",
+            "Empty",
+            "History was empty",
+            VariableType::Execution,
+        );
 
         return node;
     }

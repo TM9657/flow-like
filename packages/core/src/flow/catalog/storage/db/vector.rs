@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use crate::{
+    db::vector::lancedb::LanceDBVectorStore,
     flow::{
         execution::{context::ExecutionContext, Cacheable},
         node::{Node, NodeLogic},
         variable::VariableType,
     },
     state::FlowLikeState,
-    vault::vector::lancedb::LanceDBVectorStore,
 };
 use async_trait::async_trait;
 use schemars::JsonSchema;
@@ -107,7 +107,7 @@ impl NodeLogic for CreateLocalDatabaseNode {
                 .execution_cache
                 .clone()
                 .ok_or(anyhow::anyhow!("No execution cache found"))?
-                .get_cache(false)?;
+                .get_storage(false)?;
             let board_dir = board_dir.child("db");
             let db =
                 context

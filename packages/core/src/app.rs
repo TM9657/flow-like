@@ -1,31 +1,26 @@
-use std::{sync::Arc, time::SystemTime, vec};
-
 use cuid2;
 use futures::{StreamExt, TryStreamExt};
 use object_store::path::Path;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::{fmt::format, sync::Arc, time::SystemTime, vec};
 use tokio::sync::Mutex;
 
 use crate::{
+    bit::BitMeta,
     flow::board::Board,
     state::FlowLikeState,
     utils::compression::{compress_to_file, from_compressed},
 };
 
-pub mod graph;
-pub mod vector;
-
 #[derive(Serialize, Deserialize, JsonSchema)]
-pub struct Vault {
+pub struct App {
     pub id: String,
-    pub name: String,
-    pub description: String,
-    pub author: String,
-    pub tags: Vec<String>,
-    pub boards: Vec<String>,
+    pub meta: std::collections::HashMap<String, BitMeta>,
+    pub authors: Vec<String>,
 
     pub bits: Vec<String>,
+    pub boards: Vec<String>,
 
     pub updated_at: SystemTime,
     pub created_at: SystemTime,
@@ -34,41 +29,38 @@ pub struct Vault {
     pub app_state: Option<Arc<Mutex<FlowLikeState>>>,
 }
 
-impl Clone for Vault {
+impl Clone for App {
     fn clone(&self) -> Self {
         Self {
             id: self.id.clone(),
-            name: self.name.clone(),
-            description: self.description.clone(),
-            author: self.author.clone(),
-            tags: self.tags.clone(),
+            meta: self.meta.clone(),
+            authors: self.authors.clone(),
+            boards: self.boards.clone(),
             bits: self.bits.clone(),
             updated_at: self.updated_at,
             created_at: self.created_at,
             app_state: self.app_state.clone(),
-            boards: self.boards.clone(),
         }
     }
 }
 
-impl Vault {
+impl App {
     pub async fn new(
-        name: String,
-        description: String,
-        author: String,
+        meta: BitMeta,
         bits: Vec<String>,
         app_state: Arc<Mutex<FlowLikeState>>,
     ) -> anyhow::Result<Self> {
         let id = cuid2::create_id();
 
+        let mut meta_map = std::collections::HashMap::new();
+        meta_map.insert("en".to_string(), meta);
+
         let item = Self {
             id,
-            name,
-            description,
-            boards: vec![],
-            author,
+            meta: meta_map,
+            authors: vec![],
             bits,
-            tags: vec![],
+            boards: vec![],
             updated_at: SystemTime::now(),
             created_at: SystemTime::now(),
 
@@ -79,25 +71,23 @@ impl Vault {
     }
 
     pub async fn load(id: String, app_state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<Self> {
-        let storage_root = Path::from("vaults").child(id.clone());
+        let storage_root = Path::from("apps").child(id.clone());
 
         let store = FlowLikeState::project_store(&app_state).await?.as_generic();
 
-        let mut vault: Vault = from_compressed(store, storage_root.child("manifest.vault")).await?;
+        let mut vault: App = from_compressed(store, storage_root.child("manifest.app")).await?;
         vault.app_state = Some(app_state.clone());
 
         Ok(vault)
     }
 
     pub async fn create_board(&mut self) -> anyhow::Result<String> {
+        let storage_root = Path::from("apps").child(self.id.clone());
         let state = self
             .app_state
             .clone()
             .ok_or(anyhow::anyhow!("App state not found"))?;
-        let board = Board::new(
-            Path::from("vaults").child(self.id.clone()).child("boards"),
-            state,
-        );
+        let board = Board::new(storage_root, state);
         board.save(None).await?;
         self.boards.push(board.id.clone());
         self.updated_at = SystemTime::now();
@@ -125,6 +115,7 @@ impl Vault {
         board_id: String,
         register: Option<bool>,
     ) -> anyhow::Result<Arc<Mutex<Board>>> {
+        let storage_root = Path::from("apps").child(self.id.clone());
         if let Some(app_state) = &self.app_state {
             let board = app_state
                 .lock()
@@ -140,16 +131,12 @@ impl Vault {
             }
         }
 
-        let board_dir = Path::from("vaults")
-            .child(self.id.clone())
-            .child("boards")
-            .child(board_id.clone());
         let state = self
             .app_state
             .clone()
             .ok_or(anyhow::anyhow!("App state not found"))?;
 
-        let board = Board::load(board_dir, state).await?;
+        let board = Board::load(storage_root, &board_id, state).await?;
         let board_ref = Arc::new(Mutex::new(board));
         let register = register.unwrap_or(false);
         if register {
@@ -174,21 +161,16 @@ impl Vault {
             .position(|x| x == board_id)
             .ok_or(anyhow::anyhow!("Board not found"))?;
         let board_id = self.boards.remove(board_index);
-        let board_dir = Path::from("vaults")
+        let board_dir = Path::from("apps")
             .child(self.id.clone())
-            .child("boards")
-            .child(board_id.clone());
+            .child(format!("{}.board", board_id.clone()));
 
         let state = self
             .app_state
             .clone()
             .ok_or(anyhow::anyhow!("App state not found"))?;
         let store = FlowLikeState::project_store(&state).await?.as_generic();
-        let locations = store.list(Some(&board_dir)).map_ok(|m| m.location).boxed();
-        store
-            .delete_stream(locations)
-            .try_collect::<Vec<Path>>()
-            .await?;
+        store.delete(&board_dir).await?;
 
         if let Some(app_state) = &self.app_state {
             app_state
@@ -224,9 +206,9 @@ impl Vault {
             .ok_or(anyhow::anyhow!("App state not found"))?;
         let store = FlowLikeState::project_store(&store).await?.as_generic();
 
-        let manifest_path = Path::from("vaults")
+        let manifest_path = Path::from("apps")
             .child(self.id.clone())
-            .child("manifest.vault");
+            .child("manifest.app");
 
         compress_to_file(store, manifest_path, self).await?;
 
@@ -251,13 +233,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn serialize_vault() {
-        let vault = crate::vault::Vault {
+    async fn serialize_app() {
+        let vault = crate::app::App {
             id: "id".to_string(),
-            name: "name".to_string(),
-            description: "description".to_string(),
-            author: "author".to_string(),
-            tags: vec!["tag1".to_string(), "tag2".to_string()],
+            meta: std::collections::HashMap::new(),
+            authors: vec!["author1".to_string(), "author2".to_string()],
             boards: vec!["board1".to_string(), "board2".to_string()],
             bits: vec!["bit1".to_string(), "bit2".to_string()],
             updated_at: std::time::SystemTime::now(),
@@ -266,7 +246,7 @@ mod tests {
         };
 
         let ser = bitcode::serialize(&vault).unwrap();
-        let deser: crate::vault::Vault = bitcode::deserialize(&ser).unwrap();
+        let deser: crate::app::App = bitcode::deserialize(&ser).unwrap();
 
         assert_eq!(vault.id, deser.id);
     }

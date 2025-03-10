@@ -2,7 +2,11 @@ use std::sync::Arc;
 
 use crate::{
     flow::{
-        board::Board, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        board::Board,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     models::history::{History, ResponseFormat},
     state::FlowLikeState,
@@ -47,7 +51,11 @@ impl NodeLogic for SetHistoryResponseFormatNode {
             "Response Format Value",
             VariableType::Generic,
         )
-        .set_options(PinOptions::new().set_enforce_generic_value_type(true).build());
+        .set_options(
+            PinOptions::new()
+                .set_enforce_generic_value_type(true)
+                .build(),
+        );
 
         node.add_output_pin(
             "exec_out",
@@ -56,8 +64,13 @@ impl NodeLogic for SetHistoryResponseFormatNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin("history_out", "History", "Updated ChatHistory", VariableType::Struct)
-            .set_schema::<History>();
+        node.add_output_pin(
+            "history_out",
+            "History",
+            "Updated ChatHistory",
+            VariableType::Struct,
+        )
+        .set_schema::<History>();
 
         return node;
     }

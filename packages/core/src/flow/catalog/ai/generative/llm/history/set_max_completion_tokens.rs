@@ -1,6 +1,9 @@
 use crate::{
     flow::{
-        execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     models::history::History,
     state::FlowLikeState,
@@ -39,7 +42,12 @@ impl NodeLogic for SetHistoryMaxTokensNode {
             .set_schema::<History>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("max_tokens", "Max Tokens", "Max Tokens Value", VariableType::Integer);
+        node.add_input_pin(
+            "max_tokens",
+            "Max Tokens",
+            "Max Tokens Value",
+            VariableType::Integer,
+        );
 
         node.add_output_pin(
             "exec_out",
@@ -48,8 +56,13 @@ impl NodeLogic for SetHistoryMaxTokensNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin("history_out", "History", "Updated ChatHistory", VariableType::Struct)
-            .set_schema::<History>();
+        node.add_output_pin(
+            "history_out",
+            "History",
+            "Updated ChatHistory",
+            VariableType::Struct,
+        )
+        .set_schema::<History>();
 
         return node;
     }

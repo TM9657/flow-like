@@ -1,10 +1,10 @@
 use crate::{
+    app::App,
     state::FlowLikeState,
     utils::{
         compression::{compress_to_file, from_compressed},
         hash::hash_string_non_cryptographic,
     },
-    vault::Vault,
 };
 use async_trait::async_trait;
 use object_store::{path::Path, ObjectStore};
@@ -28,7 +28,7 @@ pub mod commands;
 
 #[derive(Debug, Clone)]
 pub enum BoardParent {
-    Vault(Weak<Mutex<Vault>>),
+    App(Weak<Mutex<App>>),
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -86,12 +86,12 @@ impl Board {
     /// The board is created in the base directory appended with the ID
     pub fn new(base_dir: Path, app_state: Arc<Mutex<FlowLikeState>>) -> Self {
         let id = cuid2::create_id();
-        let board_dir = base_dir.child(id.clone());
+        let board_dir = base_dir;
 
         Board {
             id,
             name: "New Board".to_string(),
-            description: "".to_string(),
+            description: "Your new Workflow!".to_string(),
             nodes: HashMap::new(),
             variables: HashMap::new(),
             comments: HashMap::new(),
@@ -364,7 +364,7 @@ impl Board {
     }
 
     pub async fn save(&self, store: Option<Arc<dyn ObjectStore>>) -> anyhow::Result<()> {
-        let to = self.board_dir.child("manifest.board");
+        let to = self.board_dir.child(format!("{}.board", self.id));
         let store = match store {
             Some(store) => store,
             None => self
@@ -387,7 +387,11 @@ impl Board {
         Ok(())
     }
 
-    pub async fn load(path: Path, app_state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<Self> {
+    pub async fn load(
+        path: Path,
+        id: &str,
+        app_state: Arc<Mutex<FlowLikeState>>,
+    ) -> anyhow::Result<Self> {
         let store = app_state
             .lock()
             .await
@@ -400,7 +404,7 @@ impl Board {
             .ok_or(anyhow::anyhow!("Project store not found"))?
             .as_generic();
 
-        let mut board: Board = from_compressed(store, path.child("manifest.board")).await?;
+        let mut board: Board = from_compressed(store, path.child(format!("{}.board", id))).await?;
         board.board_dir = path;
         board.app_state = Some(app_state.clone());
         board.redo_stack = Vec::new();

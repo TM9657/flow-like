@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
 	Button,
-	type IVault,
+	type IApp,
 	Input,
 	Label,
 	Separator,
@@ -20,21 +20,21 @@ export default function Id() {
 	const queryClient = useQueryClient();
 	const router = useRouter();
 	const id = searchParams.get("id");
-	const vault = useInvoke<IVault | undefined>(
-		"get_vault",
-		{ vaultId: id },
+	const app = useInvoke<IApp | undefined>(
+		"get_app",
+		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
 	const isReady = useInvoke<boolean>(
-		"vault_configured",
-		{ vaultId: id },
+		"app_configured",
+		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
-	const vaultSize = useInvoke<number>(
-		"get_vault_size",
-		{ vaultId: id },
+	const appSize = useInvoke<number>(
+		"get_app_size",
+		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
@@ -44,37 +44,43 @@ export default function Id() {
 	});
 
 	useEffect(() => {
-		if (!vault.data) return;
+		if (!app.data) return;
 		if (localTags.loaded) {
-			updateVault({
-				...vault.data,
-				tags: localTags.value.split(",").map((tag) => tag.trim().toLowerCase()),
+			updateApp({
+				...app.data,
+				meta: {
+					...app.data.meta,
+					"en": {
+						...app.data.meta.en,
+						tags: localTags.value.split(",").map((tag) => tag.trim().toLowerCase()),
+					}
+				}
 			});
 			return;
 		}
 
 		setLocalTags({
 			loaded: true,
-			value: vault.data.tags.join(", "),
+			value: app.data.meta.en.tags.join(", "),
 		});
-	}, [vault.data, localTags]);
+	}, [app.data, localTags]);
 
-	async function updateVault(changedVault: IVault) {
-		await invoke("update_vault", { vault: changedVault });
-		await vault.refetch();
+	async function updateApp(changedApp: IApp) {
+		await invoke("update_app", { app: changedApp });
+		await app.refetch();
 		await isReady.refetch();
-		await vaultSize.refetch();
+		await appSize.refetch();
 		await queryClient.invalidateQueries({
-			queryKey: "get_vaults".split("_"),
+			queryKey: "get_apps".split("_"),
 		});
 	}
 
 	async function deleteVault() {
-		await invoke("delete_vault", { vaultId: id });
+		await invoke("delete_app", { appId: id });
 		await queryClient.invalidateQueries({
-			queryKey: "get_vaults".split("_"),
+			queryKey: "get_apps".split("_"),
 		});
-		router.push("/vaults");
+		router.push("/store/yours");
 	}
 
 	return (
@@ -84,10 +90,10 @@ export default function Id() {
 				<Input
 					id="name"
 					placeholder="Name"
-					value={vault.data?.name}
+					value={app.data?.meta.en.name}
 					onChange={(e) => {
-						if (vault.data)
-							updateVault({ ...vault.data, name: e.target.value });
+						if (app.data)
+							updateApp({ ...app.data, meta: { ...app.data.meta, en: { ...app.data.meta.en, name: e.target.value } } });
 					}}
 				/>
 			</div>
@@ -97,10 +103,10 @@ export default function Id() {
 					cols={5}
 					id="description"
 					placeholder="Description"
-					value={vault.data?.description}
+					value={app.data?.meta.en.description}
 					onChange={(e) => {
-						if (vault.data)
-							updateVault({ ...vault.data, description: e.target.value });
+						if (app.data)
+							updateApp({ ...app.data, meta: { ...app.data.meta, en: { ...app.data.meta.en, description: e.target.value } } });
 					}}
 				/>
 			</div>
@@ -112,18 +118,6 @@ export default function Id() {
 					value={localTags.value}
 					onChange={(e) => {
 						setLocalTags({ loaded: true, value: e.target.value });
-					}}
-				/>
-			</div>
-			<div className="grid w-full max-w-sm items-center gap-1.5">
-				<Label htmlFor="author">Author</Label>
-				<Input
-					id="author"
-					placeholder="Author"
-					value={vault.data?.author}
-					onChange={(e) => {
-						if (vault.data)
-							updateVault({ ...vault.data, author: e.target.value });
 					}}
 				/>
 			</div>

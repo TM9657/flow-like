@@ -1,4 +1,5 @@
 use crate::{
+    app::App,
     bit::{
         Bit, BitModelPreference, BitPack, BitProvider, EmbeddingModelParameters,
         ImageEmbeddingModelParameters, LLMParameters, VLMParameters,
@@ -8,7 +9,6 @@ use crate::{
     models::{history::History, response::Response, response_chunk::ResponseChunk},
     profile::Profile,
     utils::file::FileMetadata,
-    vault::Vault,
 };
 use anyhow::Result;
 use schemars::{schema_for, JsonSchema};
@@ -66,7 +66,7 @@ pub fn generate_schema(base_path: PathBuf) -> anyhow::Result<()> {
 
     generate_and_save_schema::<Hub>(&base_path, "hub/hub.json")?;
 
-    generate_and_save_schema::<Vault>(&base_path, "vault/vault.json")?;
+    generate_and_save_schema::<App>(&base_path, "app/app.json")?;
 
     generate_and_save_schema::<FileMetadata>(&base_path, "files/file-metadata.json")?;
 

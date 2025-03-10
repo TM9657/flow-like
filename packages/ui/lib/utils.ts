@@ -24,7 +24,7 @@ export function humanFileSize(bytes: number, si = false, dp = 1) {
 		value /= thresh;
 		++u;
 	} while (
-		Math.round(Math.abs(bytes) * r) / r >= thresh &&
+		Math.round(Math.abs(value) * r) / r >= thresh &&
 		u < units.length - 1
 	);
 

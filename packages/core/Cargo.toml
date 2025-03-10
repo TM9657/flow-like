@@ -105,10 +105,9 @@ flow = ["flow-runtime"]
 hub = []
 bit = ["hub"]
 model = ["bit"]
-vault = ["bit", "model", "hub"]
-full = ["schema-gen", "flow-runtime", "flow", "hub", "bit", "model", "vault"]
-
-default = ["schema-gen", "flow-runtime", "flow", "hub", "bit", "model", "vault"]
+app = ["bit", "model", "hub"]
+full = ["schema-gen", "flow-runtime", "flow", "hub", "bit", "model", "app"]
+default = ["schema-gen", "flow-runtime", "flow", "hub", "bit", "model", "app"]
 
 [profile.release]
 lto = "fat"

@@ -1,6 +1,9 @@
 use crate::{
     flow::{
-        execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     models::history::{History, HistoryMessage, Role},
     state::FlowLikeState,
@@ -32,8 +35,13 @@ impl NodeLogic for GetSystemPromptNode {
             .set_schema::<History>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin("system_prompt", "System Prompt", "System Prompt", VariableType::Struct)
-            .set_schema::<HistoryMessage>();
+        node.add_output_pin(
+            "system_prompt",
+            "System Prompt",
+            "System Prompt",
+            VariableType::Struct,
+        )
+        .set_schema::<HistoryMessage>();
 
         node.add_output_pin(
             "success",
@@ -57,10 +65,11 @@ impl NodeLogic for GetSystemPromptNode {
 
         if let Some(system_prompt) = system_prompt {
             context.set_pin_value("success", json!(true)).await?;
-            context.set_pin_value("system_prompt", json!(system_prompt)).await?;
+            context
+                .set_pin_value("system_prompt", json!(system_prompt))
+                .await?;
             return Ok(());
         };
-
 
         context.set_pin_value("success", json!(false)).await?;
         Ok(())

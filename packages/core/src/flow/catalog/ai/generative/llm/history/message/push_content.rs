@@ -59,8 +59,13 @@ impl NodeLogic for PushContentNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin("message_out", "Message", "Output Message", VariableType::Struct)
-            .set_schema::<HistoryMessage>();
+        node.add_output_pin(
+            "message_out",
+            "Message",
+            "Output Message",
+            VariableType::Struct,
+        )
+        .set_schema::<HistoryMessage>();
 
         return node;
     }

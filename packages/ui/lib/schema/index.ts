@@ -56,4 +56,4 @@ export type {
 } from "./llm/response-chunk";
 
 export * from "./profile/profile";
-export * from "./vault/vault";
+export * from "./app/app";

@@ -30,8 +30,13 @@ impl NodeLogic for MakePreferencesNode {
         );
         node.add_icon("/flow/icons/struct.svg");
 
-        node.add_output_pin("preferences", "Preferences", "BitModelPreference", VariableType::Struct)
-            .set_schema::<BitModelPreference>();
+        node.add_output_pin(
+            "preferences",
+            "Preferences",
+            "BitModelPreference",
+            VariableType::Struct,
+        )
+        .set_schema::<BitModelPreference>();
 
         return node;
     }
@@ -39,7 +44,9 @@ impl NodeLogic for MakePreferencesNode {
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let preferences = BitModelPreference::default();
 
-        context.set_pin_value("preferences", json!(preferences)).await?;
+        context
+            .set_pin_value("preferences", json!(preferences))
+            .await?;
 
         Ok(())
     }

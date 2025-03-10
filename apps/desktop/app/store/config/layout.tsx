@@ -15,7 +15,7 @@ import {
 	HoverCardTrigger,
 	type IBoard,
 	type INode,
-	type IVault,
+	type IApp,
 	Separator,
 	humanFileSize,
 	toastError,
@@ -36,34 +36,34 @@ export default function Id({
 	const id = searchParams.get("id");
 	const currentRoute = usePathname();
 	const isReady = useInvoke<boolean>(
-		"vault_configured",
-		{ vaultId: id },
+		"app_configured",
+		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
-	const vault = useInvoke<IVault | undefined>(
-		"get_vault",
-		{ vaultId: id },
+	const app = useInvoke<IApp | undefined>(
+		"get_app",
+		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
-	const vaultSize = useInvoke<number>(
-		"get_vault_size",
-		{ vaultId: id },
+	const appSize = useInvoke<number>(
+		"get_app_size",
+		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
 	const boards = useInvoke<IBoard[]>(
-		"get_vault_boards",
-		{ vaultId: id },
+		"get_app_boards",
+		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
 	const { addRun, removeRun } = useRunExecutionStore();
 
 	async function executeBoard(boardId: string, node: INode) {
-		await invoke("get_vault_board", {
-			vaultId: id,
+		await invoke("get_app_board", {
+			appId: id,
 			boardId: boardId,
 			pushToRegistry: true,
 		});
@@ -94,11 +94,11 @@ export default function Id({
 					</BreadcrumbItem>
 					<BreadcrumbSeparator />
 					<BreadcrumbItem>
-						<BreadcrumbLink href="/vaults">Vaults</BreadcrumbLink>
+						<BreadcrumbLink href="/store/yours">Your Apps</BreadcrumbLink>
 					</BreadcrumbItem>
 					<BreadcrumbSeparator />
 					<BreadcrumbItem>
-						<BreadcrumbPage>{vault.data?.name}</BreadcrumbPage>
+						<BreadcrumbPage>{app.data?.meta.en.name}</BreadcrumbPage>
 					</BreadcrumbItem>
 				</BreadcrumbList>
 			</Breadcrumb>
@@ -106,12 +106,12 @@ export default function Id({
 				<div className="flex flex-row items-center gap-2">
 					<Vault />
 					<h1 className="text-3xl font-semibold flex flex-row items-center">
-						{vault.data?.name}
+						{app.data?.meta.en.name}
 					</h1>
 					<Badge variant={"outline"}>
-						{humanFileSize(vaultSize.data ?? 0)}
+						{humanFileSize(appSize.data ?? 0)}
 					</Badge>
-					{vault.data?.tags.map((tag) => (
+					{app.data?.meta.en.tags.map((tag) => (
 						<Badge key={tag} variant={"secondary"}>
 							{tag}
 						</Badge>
@@ -130,12 +130,12 @@ export default function Id({
 					)}
 				</div>
 
-				<p className="leading-7 line-clamp-1">{vault.data?.description}</p>
+				<p className="leading-7 line-clamp-1">{app.data?.meta.en.description}</p>
 			</div>
 			<div className="grid w-full items-start gap-6 md:grid-cols-[180px_1fr] lg:grid-cols-[250px_1fr] mt-8 h-full flex-grow overflow-auto">
 				<nav className="flex flex-col gap-4 text-sm text-muted-foreground border-r h-full">
 					<Link
-						href={`/vaults/config?id=${vault.data?.id}`}
+						href={`/store/config?id=${app.data?.id}`}
 						className={
 							currentRoute.endsWith("/config")
 								? "font-semibold text-primary"
@@ -145,7 +145,7 @@ export default function Id({
 						General
 					</Link>
 					<Link
-						href={`/vaults/config/configuration?id=${vault.data?.id}`}
+						href={`/store/config/configuration?id=${app.data?.id}`}
 						className={
 							currentRoute.endsWith("/configuration")
 								? "font-semibold text-primary"
@@ -155,7 +155,7 @@ export default function Id({
 						Configuration
 					</Link>
 					<Link
-						href={`/vaults/config/logic?id=${vault.data?.id}`}
+						href={`/store/config/logic?id=${app.data?.id}`}
 						className={
 							currentRoute.endsWith("/logic")
 								? "font-semibold text-primary"
@@ -165,7 +165,7 @@ export default function Id({
 						Logic
 					</Link>
 					<Link
-						href={`/vaults/config/storage?id=${vault.data?.id}`}
+						href={`/store/config/storage?id=${app.data?.id}`}
 						className={
 							currentRoute.endsWith("/storage")
 								? "font-semibold text-primary"
@@ -175,7 +175,7 @@ export default function Id({
 						Storage
 					</Link>
 					<Link
-						href={`/vaults/config/explore?id=${vault.data?.id}`}
+						href={`/store/config/explore?id=${app.data?.id}`}
 						className={
 							currentRoute.endsWith("/explore")
 								? "font-semibold text-primary"
@@ -185,7 +185,7 @@ export default function Id({
 						Explore Data
 					</Link>
 					<Link
-						href={`/vaults/config/analytics?id=${vault.data?.id}`}
+						href={`/store/config/analytics?id=${app.data?.id}`}
 						className={
 							currentRoute.endsWith("/analytics")
 								? "font-semibold text-primary"
@@ -195,7 +195,7 @@ export default function Id({
 						Analytics
 					</Link>
 					<Link
-						href={`/vaults/config/share?id=${vault.data?.id}`}
+						href={`/store/config/share?id=${app.data?.id}`}
 						className={
 							currentRoute.endsWith("/share")
 								? "font-semibold text-primary"
@@ -205,7 +205,7 @@ export default function Id({
 						Share
 					</Link>
 					<Link
-						href={`/vaults/config/endpoints?id=${vault.data?.id}`}
+						href={`/store/config/endpoints?id=${app.data?.id}`}
 						className={
 							currentRoute.endsWith("/endpoints")
 								? "font-semibold text-primary"
@@ -215,7 +215,7 @@ export default function Id({
 						Endpoints
 					</Link>
 					<Link
-						href={`/vaults/config/export?id=${vault.data?.id}`}
+						href={`/store/config/export?id=${app.data?.id}`}
 						className={
 							currentRoute.endsWith("/export")
 								? "font-semibold text-primary"

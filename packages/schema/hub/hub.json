@@ -1,36 +1,36 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
-	"title": "Hub",
-	"type": "object",
-	"required": [
-		"dependencies",
-		"description",
-		"domain",
-		"icon",
-		"name",
-		"thumbnail"
-	],
-	"properties": {
-		"dependencies": {
-			"type": "array",
-			"items": {
-				"type": "string"
-			}
-		},
-		"description": {
-			"type": "string"
-		},
-		"domain": {
-			"type": "string"
-		},
-		"icon": {
-			"type": "string"
-		},
-		"name": {
-			"type": "string"
-		},
-		"thumbnail": {
-			"type": "string"
-		}
-	}
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Hub",
+  "type": "object",
+  "required": [
+    "dependencies",
+    "description",
+    "domain",
+    "icon",
+    "name",
+    "thumbnail"
+  ],
+  "properties": {
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "description": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "icon": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "thumbnail": {
+      "type": "string"
+    }
+  }
 }

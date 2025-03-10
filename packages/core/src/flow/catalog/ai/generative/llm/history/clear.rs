@@ -1,6 +1,9 @@
 use crate::{
     flow::{
-        execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     models::history::History,
     state::FlowLikeState,
@@ -46,8 +49,13 @@ impl NodeLogic for ClearHistoryNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin("history_out", "History", "Cleared ChatHistory", VariableType::Struct)
-            .set_schema::<History>();
+        node.add_output_pin(
+            "history_out",
+            "History",
+            "Cleared ChatHistory",
+            VariableType::Struct,
+        )
+        .set_schema::<History>();
 
         return node;
     }

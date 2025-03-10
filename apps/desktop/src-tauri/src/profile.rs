@@ -31,9 +31,6 @@ pub struct UserProfile {
     pub execution_settings: ExecutionSettings,
 
     #[serde(default = "Vec::new")]
-    pub vaults: Vec<String>,
-
-    #[serde(default = "Vec::new")]
     pub apps: Vec<String>,
 
     #[serde(default)]
@@ -48,7 +45,6 @@ impl UserProfile {
         UserProfile {
             hub_profile: profile,
             execution_settings: ExecutionSettings::new(),
-            vaults: Vec::new(),
             apps: Vec::new(),
             flow_settings: FlowSettings::default(),
             updated: String::new(),

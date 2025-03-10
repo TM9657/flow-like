@@ -16,7 +16,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 	type IBoard,
-	type IVault,
+	type IApp,
 	Input,
 	Label,
 	Separator,
@@ -33,24 +33,24 @@ export default function Page() {
 	const parentRegister = useFlowBoardParentState();
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
-	const vault = useInvoke<IVault>(
-		"get_vault",
-		{ vaultId: id },
+	const app = useInvoke<IApp>(
+		"get_app",
+		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
 	const boards = useInvoke<IBoard[]>(
-		"get_vault_boards",
-		{ vaultId: id },
+		"get_app_boards",
+		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
 
 	useEffect(() => {
-		if (!vault.data) return;
+		if (!app.data) return;
 		if (!boards.data) return;
 		boards.data?.forEach((board) => {
-			parentRegister?.addBoardParent(board.id, `/vaults/config/logic?id=${id}`);
+			parentRegister?.addBoardParent(board.id, `/store/config/logic?id=${id}`);
 		});
 	}, [boards.data, id]);
 
@@ -78,7 +78,7 @@ export default function Page() {
 						<DialogHeader>
 							<DialogTitle>Add Board</DialogTitle>
 							<DialogDescription>
-								Create a new board for the vault
+								Create a new board for the app
 							</DialogDescription>
 						</DialogHeader>
 						<div className="grid w-full max-w-sm items-center gap-1.5">
@@ -117,14 +117,14 @@ export default function Page() {
 							</Button>
 							<Button
 								onClick={async () => {
-									await invoke("create_vault_board", {
-										vaultId: vault.data?.id,
+									await invoke("create_app_board", {
+										appId: app.data?.id,
 										name: boardCreation.name,
 										description: boardCreation.description,
 									});
 									await Promise.allSettled([
 										await boards.refetch(),
-										await vault.refetch(),
+										await app.refetch(),
 									]);
 									setBoardCreation({ name: "", description: "", open: false });
 								}}
@@ -137,12 +137,12 @@ export default function Page() {
 			</div>
 			<Separator className="mt-2 mb-4" />
 			<div className="flex flex-col gap-2 mt-4 pr-2">
-				{vault.data &&
+				{app.data &&
 					boards.data?.map((board) => (
 						<Board
 							key={board.id}
 							board={board}
-							vault={vault.data}
+							app={app.data}
 							boardsQuery={boards}
 						/>
 					))}
@@ -153,11 +153,11 @@ export default function Page() {
 
 function Board({
 	board,
-	vault,
+	app,
 	boardsQuery,
 }: Readonly<{
 	board: IBoard;
-	vault: IVault;
+	app: IApp;
 	boardsQuery: UseQueryResult<IBoard[]>;
 }>) {
 	const router = useRouter();
@@ -166,10 +166,11 @@ function Board({
 		<ContextMenu>
 			<ContextMenuTrigger asChild className="w-full">
 				<button
+				 	type="button"
 					className="flex w-full flex-row items-stretch gap-2 border p-3 bg-card/80 rounded-md cursor-pointer hover:bg-card"
 					onClick={async () => {
-						await invoke("get_vault_board", {
-							vaultId: vault.id,
+						await invoke("get_app_board", {
+							appId: app.id,
 							boardId: board.id,
 							pushToRegistry: true,
 						});
@@ -212,8 +213,8 @@ function Board({
 				<ContextMenuItem
 					disabled={(boardsQuery.data?.length ?? 2) <= 1}
 					onClick={async () => {
-						await invoke("delete_vault_board", {
-							vaultId: vault.id,
+						await invoke("delete_app_board", {
+							appId: app.id,
 							boardId: board.id,
 						});
 						await boardsQuery.refetch();

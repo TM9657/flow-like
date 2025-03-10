@@ -1,6 +1,9 @@
 use crate::{
     flow::{
-        execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     models::history::History,
     state::FlowLikeState,
@@ -44,7 +47,8 @@ impl NodeLogic for SetHistoryPresencePenaltyNode {
             "Presence Penalty",
             "Presence Penalty Value",
             VariableType::Float,
-        ).set_options(PinOptions::new().set_range((0.0, 1.0)).build());
+        )
+        .set_options(PinOptions::new().set_range((0.0, 1.0)).build());
 
         node.add_output_pin(
             "exec_out",
@@ -53,8 +57,13 @@ impl NodeLogic for SetHistoryPresencePenaltyNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin("history_out", "History", "Updated ChatHistory", VariableType::Struct)
-            .set_schema::<History>();
+        node.add_output_pin(
+            "history_out",
+            "History",
+            "Updated ChatHistory",
+            VariableType::Struct,
+        )
+        .set_schema::<History>();
 
         return node;
     }

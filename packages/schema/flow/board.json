@@ -1,474 +1,569 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
-	"title": "Board",
-	"type": "object",
-	"required": [
-		"comments",
-		"created_at",
-		"description",
-		"id",
-		"log_level",
-		"name",
-		"nodes",
-		"refs",
-		"stage",
-		"updated_at",
-		"variables",
-		"version",
-		"viewport"
-	],
-	"properties": {
-		"comments": {
-			"type": "object",
-			"additionalProperties": {
-				"$ref": "#/definitions/Comment"
-			}
-		},
-		"created_at": {
-			"$ref": "#/definitions/SystemTime"
-		},
-		"description": {
-			"type": "string"
-		},
-		"id": {
-			"type": "string"
-		},
-		"log_level": {
-			"$ref": "#/definitions/LogLevel"
-		},
-		"name": {
-			"type": "string"
-		},
-		"nodes": {
-			"type": "object",
-			"additionalProperties": {
-				"$ref": "#/definitions/Node"
-			}
-		},
-		"refs": {
-			"type": "object",
-			"additionalProperties": {
-				"type": "string"
-			}
-		},
-		"stage": {
-			"$ref": "#/definitions/ExecutionStage"
-		},
-		"updated_at": {
-			"$ref": "#/definitions/SystemTime"
-		},
-		"variables": {
-			"type": "object",
-			"additionalProperties": {
-				"$ref": "#/definitions/Variable"
-			}
-		},
-		"version": {
-			"type": "array",
-			"items": [
-				{
-					"type": "integer",
-					"format": "uint8",
-					"minimum": 0.0
-				},
-				{
-					"type": "integer",
-					"format": "uint8",
-					"minimum": 0.0
-				},
-				{
-					"type": "integer",
-					"format": "uint8",
-					"minimum": 0.0
-				}
-			],
-			"maxItems": 3,
-			"minItems": 3
-		},
-		"viewport": {
-			"type": "array",
-			"items": [
-				{
-					"type": "number",
-					"format": "float"
-				},
-				{
-					"type": "number",
-					"format": "float"
-				},
-				{
-					"type": "number",
-					"format": "float"
-				}
-			],
-			"maxItems": 3,
-			"minItems": 3
-		}
-	},
-	"definitions": {
-		"Comment": {
-			"type": "object",
-			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
-			"properties": {
-				"author": {
-					"type": ["string", "null"]
-				},
-				"comment_type": {
-					"$ref": "#/definitions/CommentType"
-				},
-				"content": {
-					"type": "string"
-				},
-				"coordinates": {
-					"type": "array",
-					"items": [
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						}
-					],
-					"maxItems": 3,
-					"minItems": 3
-				},
-				"id": {
-					"type": "string"
-				},
-				"timestamp": {
-					"$ref": "#/definitions/SystemTime"
-				}
-			}
-		},
-		"CommentType": {
-			"type": "string",
-			"enum": ["Text", "Image", "Video"]
-		},
-		"ExecutionStage": {
-			"type": "string",
-			"enum": ["Dev", "Int", "QA", "PreProd", "Prod"]
-		},
-		"LogLevel": {
-			"type": "string",
-			"enum": ["Debug", "Info", "Warn", "Error", "Fatal"]
-		},
-		"Node": {
-			"type": "object",
-			"required": [
-				"category",
-				"description",
-				"friendly_name",
-				"id",
-				"name",
-				"pins"
-			],
-			"properties": {
-				"category": {
-					"type": "string"
-				},
-				"comment": {
-					"type": ["string", "null"]
-				},
-				"coordinates": {
-					"type": ["array", "null"],
-					"items": [
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						}
-					],
-					"maxItems": 3,
-					"minItems": 3
-				},
-				"description": {
-					"type": "string"
-				},
-				"docs": {
-					"type": ["string", "null"]
-				},
-				"error": {
-					"type": ["string", "null"]
-				},
-				"friendly_name": {
-					"type": "string"
-				},
-				"icon": {
-					"type": ["string", "null"]
-				},
-				"id": {
-					"type": "string"
-				},
-				"long_running": {
-					"type": ["boolean", "null"]
-				},
-				"name": {
-					"type": "string"
-				},
-				"pins": {
-					"type": "object",
-					"additionalProperties": {
-						"$ref": "#/definitions/Pin"
-					}
-				},
-				"scores": {
-					"anyOf": [
-						{
-							"$ref": "#/definitions/NodeScores"
-						},
-						{
-							"type": "null"
-						}
-					]
-				},
-				"start": {
-					"type": ["boolean", "null"]
-				}
-			}
-		},
-		"NodeScores": {
-			"description": "Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores indicate worse performance in each category.\n\n# Score Categories * `privacy` - Measures data protection and confidentiality level * `security` - Assesses resistance against potential attacks * `performance` - Evaluates computational efficiency and speed * `governance` - Indicates compliance with policies and regulations",
-			"type": "object",
-			"required": ["governance", "performance", "privacy", "security"],
-			"properties": {
-				"governance": {
-					"type": "integer",
-					"format": "int8"
-				},
-				"performance": {
-					"type": "integer",
-					"format": "int8"
-				},
-				"privacy": {
-					"type": "integer",
-					"format": "int8"
-				},
-				"security": {
-					"type": "integer",
-					"format": "int8"
-				}
-			}
-		},
-		"Pin": {
-			"type": "object",
-			"required": [
-				"connected_to",
-				"data_type",
-				"depends_on",
-				"description",
-				"friendly_name",
-				"id",
-				"index",
-				"name",
-				"pin_type",
-				"value_type"
-			],
-			"properties": {
-				"connected_to": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					},
-					"uniqueItems": true
-				},
-				"data_type": {
-					"$ref": "#/definitions/VariableType"
-				},
-				"default_value": {
-					"type": ["array", "null"],
-					"items": {
-						"type": "integer",
-						"format": "uint8",
-						"minimum": 0.0
-					}
-				},
-				"depends_on": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					},
-					"uniqueItems": true
-				},
-				"description": {
-					"type": "string"
-				},
-				"friendly_name": {
-					"type": "string"
-				},
-				"id": {
-					"type": "string"
-				},
-				"index": {
-					"type": "integer",
-					"format": "uint16",
-					"minimum": 0.0
-				},
-				"name": {
-					"type": "string"
-				},
-				"options": {
-					"anyOf": [
-						{
-							"$ref": "#/definitions/PinOptions"
-						},
-						{
-							"type": "null"
-						}
-					]
-				},
-				"pin_type": {
-					"$ref": "#/definitions/PinType"
-				},
-				"schema": {
-					"type": ["string", "null"]
-				},
-				"valid_values": {
-					"type": ["array", "null"],
-					"items": {
-						"type": "string"
-					}
-				},
-				"value_type": {
-					"$ref": "#/definitions/ValueType"
-				}
-			}
-		},
-		"PinOptions": {
-			"type": "object",
-			"properties": {
-				"enforce_generic_value_type": {
-					"type": ["boolean", "null"]
-				},
-				"enforce_schema": {
-					"type": ["boolean", "null"]
-				},
-				"range": {
-					"type": ["array", "null"],
-					"items": [
-						{
-							"type": "number",
-							"format": "double"
-						},
-						{
-							"type": "number",
-							"format": "double"
-						}
-					],
-					"maxItems": 2,
-					"minItems": 2
-				},
-				"step": {
-					"type": ["number", "null"],
-					"format": "double"
-				},
-				"valid_values": {
-					"type": ["array", "null"],
-					"items": {
-						"type": "string"
-					}
-				}
-			}
-		},
-		"PinType": {
-			"type": "string",
-			"enum": ["Input", "Output"]
-		},
-		"SystemTime": {
-			"type": "object",
-			"required": ["nanos_since_epoch", "secs_since_epoch"],
-			"properties": {
-				"nanos_since_epoch": {
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0.0
-				},
-				"secs_since_epoch": {
-					"type": "integer",
-					"format": "uint64",
-					"minimum": 0.0
-				}
-			}
-		},
-		"ValueType": {
-			"type": "string",
-			"enum": ["Array", "Normal", "HashMap", "HashSet"]
-		},
-		"Variable": {
-			"type": "object",
-			"required": [
-				"data_type",
-				"editable",
-				"exposed",
-				"id",
-				"name",
-				"secret",
-				"value_type"
-			],
-			"properties": {
-				"category": {
-					"type": ["string", "null"]
-				},
-				"data_type": {
-					"$ref": "#/definitions/VariableType"
-				},
-				"default_value": {
-					"type": ["array", "null"],
-					"items": {
-						"type": "integer",
-						"format": "uint8",
-						"minimum": 0.0
-					}
-				},
-				"description": {
-					"type": ["string", "null"]
-				},
-				"editable": {
-					"type": "boolean"
-				},
-				"exposed": {
-					"type": "boolean"
-				},
-				"id": {
-					"type": "string"
-				},
-				"name": {
-					"type": "string"
-				},
-				"secret": {
-					"type": "boolean"
-				},
-				"value_type": {
-					"$ref": "#/definitions/ValueType"
-				}
-			}
-		},
-		"VariableType": {
-			"type": "string",
-			"enum": [
-				"Execution",
-				"String",
-				"Integer",
-				"Float",
-				"Boolean",
-				"Date",
-				"PathBuf",
-				"Generic",
-				"Struct",
-				"Byte"
-			]
-		}
-	}
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Board",
+  "type": "object",
+  "required": [
+    "comments",
+    "created_at",
+    "description",
+    "id",
+    "log_level",
+    "name",
+    "nodes",
+    "refs",
+    "stage",
+    "updated_at",
+    "variables",
+    "version",
+    "viewport"
+  ],
+  "properties": {
+    "comments": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/Comment"
+      }
+    },
+    "created_at": {
+      "$ref": "#/definitions/SystemTime"
+    },
+    "description": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "log_level": {
+      "$ref": "#/definitions/LogLevel"
+    },
+    "name": {
+      "type": "string"
+    },
+    "nodes": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/Node"
+      }
+    },
+    "refs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "stage": {
+      "$ref": "#/definitions/ExecutionStage"
+    },
+    "updated_at": {
+      "$ref": "#/definitions/SystemTime"
+    },
+    "variables": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/Variable"
+      }
+    },
+    "version": {
+      "type": "array",
+      "items": [
+        {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      ],
+      "maxItems": 3,
+      "minItems": 3
+    },
+    "viewport": {
+      "type": "array",
+      "items": [
+        {
+          "type": "number",
+          "format": "float"
+        },
+        {
+          "type": "number",
+          "format": "float"
+        },
+        {
+          "type": "number",
+          "format": "float"
+        }
+      ],
+      "maxItems": 3,
+      "minItems": 3
+    }
+  },
+  "definitions": {
+    "Comment": {
+      "type": "object",
+      "required": [
+        "comment_type",
+        "content",
+        "coordinates",
+        "id",
+        "timestamp"
+      ],
+      "properties": {
+        "author": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "comment_type": {
+          "$ref": "#/definitions/CommentType"
+        },
+        "content": {
+          "type": "string"
+        },
+        "coordinates": {
+          "type": "array",
+          "items": [
+            {
+              "type": "number",
+              "format": "float"
+            },
+            {
+              "type": "number",
+              "format": "float"
+            },
+            {
+              "type": "number",
+              "format": "float"
+            }
+          ],
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "id": {
+          "type": "string"
+        },
+        "timestamp": {
+          "$ref": "#/definitions/SystemTime"
+        }
+      }
+    },
+    "CommentType": {
+      "type": "string",
+      "enum": [
+        "Text",
+        "Image",
+        "Video"
+      ]
+    },
+    "ExecutionStage": {
+      "type": "string",
+      "enum": [
+        "Dev",
+        "Int",
+        "QA",
+        "PreProd",
+        "Prod"
+      ]
+    },
+    "LogLevel": {
+      "type": "string",
+      "enum": [
+        "Debug",
+        "Info",
+        "Warn",
+        "Error",
+        "Fatal"
+      ]
+    },
+    "Node": {
+      "type": "object",
+      "required": [
+        "category",
+        "description",
+        "friendly_name",
+        "id",
+        "name",
+        "pins"
+      ],
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "comment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "coordinates": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": [
+            {
+              "type": "number",
+              "format": "float"
+            },
+            {
+              "type": "number",
+              "format": "float"
+            },
+            {
+              "type": "number",
+              "format": "float"
+            }
+          ],
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "description": {
+          "type": "string"
+        },
+        "docs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "friendly_name": {
+          "type": "string"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "long_running": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "pins": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/Pin"
+          }
+        },
+        "scores": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NodeScores"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "start": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "NodeScores": {
+      "description": "Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores indicate worse performance in each category.\n\n# Score Categories * `privacy` - Measures data protection and confidentiality level * `security` - Assesses resistance against potential attacks * `performance` - Evaluates computational efficiency and speed * `governance` - Indicates compliance with policies and regulations",
+      "type": "object",
+      "required": [
+        "governance",
+        "performance",
+        "privacy",
+        "security"
+      ],
+      "properties": {
+        "governance": {
+          "type": "integer",
+          "format": "int8"
+        },
+        "performance": {
+          "type": "integer",
+          "format": "int8"
+        },
+        "privacy": {
+          "type": "integer",
+          "format": "int8"
+        },
+        "security": {
+          "type": "integer",
+          "format": "int8"
+        }
+      }
+    },
+    "Pin": {
+      "type": "object",
+      "required": [
+        "connected_to",
+        "data_type",
+        "depends_on",
+        "description",
+        "friendly_name",
+        "id",
+        "index",
+        "name",
+        "pin_type",
+        "value_type"
+      ],
+      "properties": {
+        "connected_to": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "data_type": {
+          "$ref": "#/definitions/VariableType"
+        },
+        "default_value": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "description": {
+          "type": "string"
+        },
+        "friendly_name": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "name": {
+          "type": "string"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PinOptions"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pin_type": {
+          "$ref": "#/definitions/PinType"
+        },
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "valid_values": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "value_type": {
+          "$ref": "#/definitions/ValueType"
+        }
+      }
+    },
+    "PinOptions": {
+      "type": "object",
+      "properties": {
+        "enforce_generic_value_type": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "enforce_schema": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "range": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": [
+            {
+              "type": "number",
+              "format": "double"
+            },
+            {
+              "type": "number",
+              "format": "double"
+            }
+          ],
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "step": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "valid_values": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "PinType": {
+      "type": "string",
+      "enum": [
+        "Input",
+        "Output"
+      ]
+    },
+    "SystemTime": {
+      "type": "object",
+      "required": [
+        "nanos_since_epoch",
+        "secs_since_epoch"
+      ],
+      "properties": {
+        "nanos_since_epoch": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "secs_since_epoch": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ValueType": {
+      "type": "string",
+      "enum": [
+        "Array",
+        "Normal",
+        "HashMap",
+        "HashSet"
+      ]
+    },
+    "Variable": {
+      "type": "object",
+      "required": [
+        "data_type",
+        "editable",
+        "exposed",
+        "id",
+        "name",
+        "secret",
+        "value_type"
+      ],
+      "properties": {
+        "category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "data_type": {
+          "$ref": "#/definitions/VariableType"
+        },
+        "default_value": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "editable": {
+          "type": "boolean"
+        },
+        "exposed": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "secret": {
+          "type": "boolean"
+        },
+        "value_type": {
+          "$ref": "#/definitions/ValueType"
+        }
+      }
+    },
+    "VariableType": {
+      "type": "string",
+      "enum": [
+        "Execution",
+        "String",
+        "Integer",
+        "Float",
+        "Boolean",
+        "Date",
+        "PathBuf",
+        "Generic",
+        "Struct",
+        "Byte"
+      ]
+    }
+  }
 }

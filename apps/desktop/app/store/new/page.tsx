@@ -5,11 +5,13 @@ import {
 	Badge,
 	BitHover,
 	Button,
+	Checkbox,
 	DynamicImage,
+	type IApp,
 	type IBit,
+	type IBitMeta,
 	IBitTypes,
 	type ISettingsProfile,
-	type IVault,
 	Input,
 	Label,
 	Progress,
@@ -33,11 +35,11 @@ const BLANK_BIT: IBit = {
 	license: "",
 	meta: {
 		en: {
-			description: "Start from a blank canvas and create your own Vault",
-			long_description: "Create your own Vault from scratch",
+			description: "Start from a blank canvas and create your own App",
+			long_description: "Create your own App from scratch",
 			name: "Blank",
 			tags: [],
-			use_case: "Create your own Vault from scratch",
+			use_case: "Create your own App from scratch",
 		},
 	},
 	parameters: {},
@@ -50,18 +52,15 @@ const BLANK_BIT: IBit = {
 interface ICreationDialog {
 	templateId: string;
 	progress: number;
-	tags: string[];
+	meta: IBitMeta;
 	models: string[];
-	name: string;
-	description: string;
-	author: string;
 }
 
-export default function CreateVaultPage() {
+export default function CreateAppPage() {
 	const templates = useInvoke<IBit[]>("get_bits_by_category", {
 		bitType: IBitTypes.Template,
 	});
-	const vaults = useInvoke<IVault[]>("get_vaults", {});
+	const apps = useInvoke<IApp[]>("get_apps", {});
 	const currentProfile = useInvoke<ISettingsProfile | null>(
 		"get_current_profile",
 		{},
@@ -70,10 +69,13 @@ export default function CreateVaultPage() {
 		templateId: "blank",
 		progress: 0,
 		models: [],
-		tags: [],
-		name: "",
-		description: "",
-		author: "",
+		meta: {
+			description: "",
+			long_description: "",
+			name: "",
+			tags: [],
+			use_case: "",
+		}
 	});
 
 	return (
@@ -111,7 +113,7 @@ export default function CreateVaultPage() {
 					creationDialog={creationDialog}
 					setCreationDialog={setCreationDialog}
 					refresh={async () => {
-						await vaults.refetch();
+						await apps.refetch();
 					}}
 				/>
 			)}
@@ -154,17 +156,14 @@ function FinalScreen({
 						</Button>
 						<Button
 							onClick={async () => {
-								await invoke("create_vault", {
-									name: creationDialog.name,
-									description: creationDialog.description,
-									author: creationDialog.author,
+								await invoke("create_app", {
+									meta: creationDialog.meta,
 									bits: creationDialog.models,
 									template: creationDialog.templateId,
-									tags: creationDialog.tags,
 								});
-								toast("Created Vault 🎉");
+								toast("Created App 🎉");
 								await refresh();
-								router.push("/vaults");
+								router.push("/store/yours");
 							}}
 						>
 							Finish
@@ -188,7 +187,10 @@ function MetadataCreation({
 	useEffect(() => {
 		setCreationDialog((old) => ({
 			...old,
-			tags: localTags.split(",").map((tag) => tag.trim().toLowerCase()),
+			meta: {
+				...old.meta,
+				tags: localTags.split(",").map((tag) => tag.trim().toLowerCase()),
+			},
 		}));
 	}, [localTags]);
 
@@ -196,10 +198,10 @@ function MetadataCreation({
 		<div className="max-w-screen-lg w-full h-full flex-grow flex flex-col gap-3 max-h-full overflow-hidden">
 			<div>
 				<h2>
-					<b className="text-primary">2.</b> Let´s name your new Vault
+					<b className="text-primary">2.</b> Let´s name your new App
 				</h2>
 				<p>
-					The metadata you assign to your vault is not only helpful for other
+					The metadata you assign to your App is not only helpful for other
 					humans to understand the content, but also for AI agents working with
 					it!
 				</p>
@@ -208,39 +210,27 @@ function MetadataCreation({
 				<div className="grid items-center gap-1.5 w-full">
 					<Label htmlFor="name">Name</Label>
 					<Input
-						value={creationDialog.name}
+						value={creationDialog.meta.name}
 						type="text"
 						id="name"
 						placeholder="Name"
 						onChange={(e) => {
-							setCreationDialog((old) => ({ ...old, name: e.target.value }));
+							setCreationDialog((old) => ({ ...old, meta: { ...old.meta, name: e.target.value } }));
 						}}
 					/>
 				</div>
 				<div className="grid items-center gap-1.5 w-full">
 					<Label htmlFor="description">Description</Label>
 					<Textarea
-						value={creationDialog.description}
+						value={creationDialog.meta.description}
 						cols={12}
 						id="description"
 						placeholder="Description"
 						onChange={(e) => {
 							setCreationDialog((old) => ({
 								...old,
-								description: e.target.value,
+								meta: { ...old.meta, description: e.target.value },
 							}));
-						}}
-					/>
-				</div>
-				<div className="grid items-center gap-1.5 w-full">
-					<Label htmlFor="author">Author</Label>
-					<Input
-						value={creationDialog.author}
-						type="text"
-						id="author"
-						placeholder="Author"
-						onChange={(e) => {
-							setCreationDialog((old) => ({ ...old, author: e.target.value }));
 						}}
 					/>
 				</div>
@@ -257,7 +247,7 @@ function MetadataCreation({
 					/>
 				</div>
 				<div className="flex flex-row gap-2">
-					{creationDialog.tags
+					{creationDialog.meta.tags
 						.filter((tag) => tag !== "")
 						.map((tag) => (
 							<Badge key={tag} variant={"default"}>
@@ -277,7 +267,7 @@ function MetadataCreation({
 				</Button>
 				<Button
 					disabled={
-						creationDialog.name === "" || creationDialog.description === ""
+						creationDialog.meta.name === "" || creationDialog.meta.description === ""
 					}
 					onClick={() => {
 						setCreationDialog((old) => ({ ...old, progress: 2 }));
@@ -299,16 +289,18 @@ function ModelSelection({
 	setCreationDialog: Dispatch<SetStateAction<ICreationDialog>>;
 	currentProfile: QueryObserverResult<ISettingsProfile | null>;
 }>) {
+	const [skipModel, setSkipModel] = useState(false);
+
 	return (
 		<div className="max-w-screen-lg w-full h-full flex-grow flex flex-col gap-3 max-h-full overflow-hidden">
 			<div>
 				<h2>
 					<b className="text-primary">3.</b> Select the Embedding Models for
-					this Vault
+					this App
 				</h2>
 				<p>
 					You will not be able to change them later on. You would need to
-					recreate the Vault, for other Embedding models.
+					recreate the App, for other Embedding models.
 				</p>
 			</div>
 			<div className="flex-grow border p-2 rounded-md bg-background max-h-full overflow-y-auto h-full flex flex-col">
@@ -334,6 +326,20 @@ function ModelSelection({
 					))}
 				</div>
 			</div>
+			<div className="flex items-center space-x-2">
+      <Checkbox id="skip" checked={skipModel} onCheckedChange={(checked) => {
+		setSkipModel(checked as boolean);
+		if(checked) {
+			setCreationDialog((old) => ({ ...old, models: [] }));
+		}
+	  }} />
+      <label
+        htmlFor="skip"
+        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+      >
+        Skip Model Selection
+      </label>
+    </div>
 			<div className="w-full flex flex-row justify-end gap-2">
 				<Button
 					variant={"outline"}
@@ -344,7 +350,7 @@ function ModelSelection({
 					Back
 				</Button>
 				<Button
-					disabled={creationDialog.models.length === 0}
+					disabled={creationDialog.models.length === 0 && !skipModel}
 					onClick={() => {
 						setCreationDialog((old) => ({ ...old, progress: 3 }));
 					}}
@@ -369,10 +375,10 @@ function TemplateSelection({
 		<div className="max-w-screen-lg w-full h-full flex-grow flex flex-col gap-3 max-h-full overflow-hidden">
 			<div>
 				<h2>
-					<b className="text-primary">1.</b> Let´s create your new Vault
+					<b className="text-primary">1.</b> Let´s create your new App
 				</h2>
 				<p>
-					First, we need to select a starting template for your new Vault.
+					First, we need to select a starting template for your new App.
 					Please select one from below or start from scratch with a blank
 					Template.
 				</p>

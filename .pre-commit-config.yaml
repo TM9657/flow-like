@@ -3,7 +3,7 @@ repos:
       rev: v3.2.0
       hooks:
       -   id: check-yaml
-      -   id: end-of-file-fixer
+      # -   id: end-of-file-fixer
       -   id: trailing-whitespace
 
   -   repo: https://github.com/astral-sh/ruff-pre-commit
@@ -12,13 +12,13 @@ repos:
       hooks:
       - id: ruff
 
-  - repo: local
-    hooks:
-      - id: cargo-fmt
-        name: Cargo Format
-        entry: cargo fmt --all
-        language: system
-        types: [rust]
+  # - repo: local
+  #   hooks:
+  #     - id: cargo-fmt
+  #       name: Cargo Format
+  #       entry: cargo fmt --all
+  #       language: system
+  #       types: [rust]
       # - id: local-biome-check
       #   name: biome check
       #   entry: bunx biome check --max-diagnostics none

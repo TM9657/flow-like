@@ -1,77 +1,98 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
-	"title": "EmbeddingModelParameters",
-	"type": "object",
-	"required": [
-		"input_length",
-		"languages",
-		"pooling",
-		"prefix",
-		"provider",
-		"vector_length"
-	],
-	"properties": {
-		"input_length": {
-			"type": "integer",
-			"format": "uint32",
-			"minimum": 0.0
-		},
-		"languages": {
-			"type": "array",
-			"items": {
-				"type": "string"
-			}
-		},
-		"pooling": {
-			"$ref": "#/definitions/Pooling"
-		},
-		"prefix": {
-			"$ref": "#/definitions/Prefix"
-		},
-		"provider": {
-			"$ref": "#/definitions/BitProviderModel"
-		},
-		"vector_length": {
-			"type": "integer",
-			"format": "uint32",
-			"minimum": 0.0
-		}
-	},
-	"definitions": {
-		"BitProvider": {
-			"type": "string",
-			"enum": ["Local", "AzureOpenAI", "Bedrock", "OpenAI", "Anthropic"]
-		},
-		"BitProviderModel": {
-			"type": "object",
-			"required": ["provider_name"],
-			"properties": {
-				"model_id": {
-					"type": ["string", "null"]
-				},
-				"provider_name": {
-					"$ref": "#/definitions/BitProvider"
-				},
-				"version": {
-					"type": ["string", "null"]
-				}
-			}
-		},
-		"Pooling": {
-			"type": "string",
-			"enum": ["CLS", "Mean", "None"]
-		},
-		"Prefix": {
-			"type": "object",
-			"required": ["paragraph", "query"],
-			"properties": {
-				"paragraph": {
-					"type": "string"
-				},
-				"query": {
-					"type": "string"
-				}
-			}
-		}
-	}
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EmbeddingModelParameters",
+  "type": "object",
+  "required": [
+    "input_length",
+    "languages",
+    "pooling",
+    "prefix",
+    "provider",
+    "vector_length"
+  ],
+  "properties": {
+    "input_length": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "pooling": {
+      "$ref": "#/definitions/Pooling"
+    },
+    "prefix": {
+      "$ref": "#/definitions/Prefix"
+    },
+    "provider": {
+      "$ref": "#/definitions/BitProviderModel"
+    },
+    "vector_length": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    }
+  },
+  "definitions": {
+    "BitProvider": {
+      "type": "string",
+      "enum": [
+        "Local",
+        "AzureOpenAI",
+        "Bedrock",
+        "OpenAI",
+        "Anthropic"
+      ]
+    },
+    "BitProviderModel": {
+      "type": "object",
+      "required": [
+        "provider_name"
+      ],
+      "properties": {
+        "model_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider_name": {
+          "$ref": "#/definitions/BitProvider"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Pooling": {
+      "type": "string",
+      "enum": [
+        "CLS",
+        "Mean",
+        "None"
+      ]
+    },
+    "Prefix": {
+      "type": "object",
+      "required": [
+        "paragraph",
+        "query"
+      ],
+      "properties": {
+        "paragraph": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        }
+      }
+    }
+  }
 }

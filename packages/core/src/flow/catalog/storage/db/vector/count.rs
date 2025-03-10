@@ -1,5 +1,6 @@
 use super::NodeDBConnection;
 use crate::{
+    db::vector::VectorStore,
     flow::{
         execution::context::ExecutionContext,
         node::{Node, NodeLogic},
@@ -7,7 +8,6 @@ use crate::{
         variable::VariableType,
     },
     state::FlowLikeState,
-    vault::vector::VectorStore,
 };
 use async_trait::async_trait;
 use serde_json::json;

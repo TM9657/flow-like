@@ -9,7 +9,7 @@ use std::{
     time::SystemTime,
 };
 use tauri::AppHandle;
-use futures::stream::StreamExt; 
+use futures::stream::StreamExt;
 use crate::models::embedding::local::LocalEmbeddingModel;
 use crate::models::embedding::EmbeddingModelLogic;
 use crate::utils::adapter::get_vault_dir;
@@ -24,7 +24,7 @@ use crate::utils::rag::embed_chunks;
 use crate::utils::rag::extract_pages;
 use crate::utils::rag::preprocess_file;
 use crate::vault::path_diff_vault;
-use crate::vault::vector::VectorStore;
+use crate::db::vector::VectorStore;
 use crate::vault::chunk::Chunk;
 use crate::{
     adapter::{
@@ -259,7 +259,7 @@ impl FileAdapter {
         }
 
         let files_dir = vault_dir.join("references");
-        
+
         if !files_dir.exists() {
             fs::create_dir_all(&files_dir).unwrap();
         }
@@ -297,7 +297,7 @@ impl FileAdapter {
         let res: (Vec<Option<PathBuf>>, Vec<Option<PathBuf>>, Vec<Vec<PathBuf>>) = futures::join!(new_file_tasks, changed_file_tasks, deleted_file_tasks);
         let mut preprocessed_files : Vec<PathBuf> = res.0.clone().into_iter().filter_map(|x| x).collect();
         preprocessed_files.extend(res.1.clone().into_iter().filter_map(|x| x));
-        
+
         let pages = join_all(
             preprocessed_files.into_iter().map(|path| async move {
                 match extract_pages(&path).await {
@@ -463,9 +463,9 @@ impl FileAdapter {
 
         let vault_id = self.vault.upgrade().unwrap().lock().await.id.clone();
         let embedding_models = self.vault.upgrade().unwrap().lock().await.embedding_models.clone();
-        
+
         self.publish_update("Optimize", json!({"progress": 0.1, "message": "Initializing"}), &vault_id);
-        
+
         for (i, model_id) in embedding_models.iter().enumerate() {
             let vector_db = self.vault.upgrade().unwrap().lock().await.get_vector_db(&model_id.id).await;
             vector_db.unwrap().optimize().await;

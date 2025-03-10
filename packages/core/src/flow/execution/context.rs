@@ -75,6 +75,21 @@ impl ExecutionContextCache {
         Ok(base.child(self.node_id.clone()))
     }
 
+    pub fn get_storage(&self, node: bool) -> anyhow::Result<Path> {
+        let base = self.board_dir.child("storage");
+
+        if !node {
+            return Ok(base);
+        }
+
+        Ok(base.child(self.node_id.clone()))
+    }
+
+    pub fn get_upload_dir(&self) -> anyhow::Result<Path> {
+        let base = self.board_dir.child("upload");
+        Ok(base)
+    }
+
     pub fn get_tmp_dir(&self) -> anyhow::Result<tempfile::TempDir> {
         let dir = tempfile::tempdir()?;
         Ok(dir)

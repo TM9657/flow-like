@@ -1,6 +1,9 @@
 use crate::{
     flow::{
-        execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     models::history::History,
     state::FlowLikeState,
@@ -39,7 +42,12 @@ impl NodeLogic for SetHistoryTemperatureNode {
             .set_schema::<History>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("temperature", "Temperature", "Temperature Value", VariableType::Float)
+        node.add_input_pin(
+            "temperature",
+            "Temperature",
+            "Temperature Value",
+            VariableType::Float,
+        )
         .set_options(PinOptions::new().set_range((0.0, 2.0)).build());
 
         node.add_output_pin(
@@ -49,8 +57,13 @@ impl NodeLogic for SetHistoryTemperatureNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin("history_out", "History", "Updated ChatHistory", VariableType::Struct)
-            .set_schema::<History>();
+        node.add_output_pin(
+            "history_out",
+            "History",
+            "Updated ChatHistory",
+            VariableType::Struct,
+        )
+        .set_schema::<History>();
 
         return node;
     }

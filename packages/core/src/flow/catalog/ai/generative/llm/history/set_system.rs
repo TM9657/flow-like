@@ -47,7 +47,8 @@ impl NodeLogic for SetSystemPromptMessageNode {
             "Message",
             "System Prompt Message",
             VariableType::String,
-        ).set_default_value(Some(json!("")));
+        )
+        .set_default_value(Some(json!("")));
 
         node.add_output_pin(
             "exec_out",
@@ -56,8 +57,13 @@ impl NodeLogic for SetSystemPromptMessageNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin("history_out", "History", "Updated ChatHistory", VariableType::Struct)
-            .set_schema::<History>();
+        node.add_output_pin(
+            "history_out",
+            "History",
+            "Updated ChatHistory",
+            VariableType::Struct,
+        )
+        .set_schema::<History>();
 
         return node;
     }
@@ -68,7 +74,9 @@ impl NodeLogic for SetSystemPromptMessageNode {
 
         let new_message = HistoryMessage::from_string(Role::System, &new_message);
 
-        history.messages.retain(|message| message.role != Role::System);
+        history
+            .messages
+            .retain(|message| message.role != Role::System);
         history.messages.insert(0, new_message);
 
         context.set_pin_value("history_out", json!(history)).await?;

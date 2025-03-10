@@ -8,7 +8,7 @@ import {
 	AccordionTrigger,
 	type IBoard,
 	type IVariable,
-	type IVault,
+	type IApp,
 	Label,
 	VariablesMenuEdit,
 	useInvoke,
@@ -19,15 +19,15 @@ import { useMemo } from "react";
 export default function Id() {
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
-	const vault = useInvoke<IVault | undefined>(
-		"get_vault",
-		{ vaultId: id },
+	const app = useInvoke<IApp | undefined>(
+		"get_app",
+		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
 	const boards = useInvoke<IBoard[]>(
-		"get_vault_boards",
-		{ vaultId: id },
+		"get_app_boards",
+		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
@@ -50,14 +50,14 @@ export default function Id() {
 	}, [boards.data]);
 
 	async function upsertVariable(board: IBoard, variable: IVariable) {
-		await invoke("get_vault_board", {
-			vaultId: id,
+		await invoke("get_app_board", {
+			appId: id,
 			boardId: board.id,
 			pushToRegistry: true,
 		});
 		await invoke("upsert_variable", { boardId: board.id, variable });
 		await boards.refetch();
-		await vault.refetch();
+		await app.refetch();
 	}
 
 	if (variables.length === 0) {

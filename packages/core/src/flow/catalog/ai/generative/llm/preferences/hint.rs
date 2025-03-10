@@ -1,7 +1,10 @@
 use crate::{
     bit::BitModelPreference,
     flow::{
-        execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
@@ -75,7 +78,9 @@ impl NodeLogic for SetModelHintNode {
 
         preferences.model_hint = Some(model_hint);
 
-        context.set_pin_value("preferences_out", json!(preferences)).await?;
+        context
+            .set_pin_value("preferences_out", json!(preferences))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())
