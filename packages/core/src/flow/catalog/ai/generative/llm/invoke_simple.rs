@@ -28,20 +28,20 @@ use serde_json::json;
 use tokio::sync::Mutex;
 
 #[derive(Default)]
-pub struct InvokeLLM {}
+pub struct InvokeLLMSimpleNode {}
 
-impl InvokeLLM {
+impl InvokeLLMSimpleNode {
     pub fn new() -> Self {
-        InvokeLLM {}
+        InvokeLLMSimpleNode {}
     }
 }
 
 #[async_trait]
-impl NodeLogic for InvokeLLM {
+impl NodeLogic for InvokeLLMSimpleNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "ai_generative_invoke",
-            "Invoke Model",
+            "ai_generative_invoke_simple",
+            "Invoke Simple",
             "Invokes the Model",
             "AI/Generative",
         );
@@ -53,9 +53,8 @@ impl NodeLogic for InvokeLLM {
             .set_schema::<Bit>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("history", "History", "Chat History", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin("system_prompt", "System Prompt", "", VariableType::String).set_default_value(Some(json!("")));
+        node.add_input_pin("prompt", "Prompt", "", VariableType::String).set_default_value(Some(json!("")));
 
         node.add_output_pin(
             "on_stream",
@@ -87,13 +86,21 @@ impl NodeLogic for InvokeLLM {
         if let Some(meta) = model.meta.get("en") {
             model_name = meta.name.clone();
         }
-        let history = context.evaluate_pin::<History>("history").await?;
+        let system_prompt = context.evaluate_pin::<String>("system_prompt").await?;
+        let prompt = context.evaluate_pin::<String>("prompt").await?;
         let model_factory = context.app_state.lock().await.model_factory.clone();
         let model = model_factory
             .lock()
             .await
             .build(&model, context.app_state.clone())
             .await?;
+
+        let mut history = History::new(model_name.clone(), vec![]);
+        history.set_system_prompt(system_prompt.clone());
+        history.push_message(crate::models::history::HistoryMessage::from_string(
+            crate::models::history::Role::User,
+            &prompt,
+        ));
 
         let on_stream = context.get_pin_by_name("on_stream").await?;
         context.activate_exec_pin_ref(&on_stream).await?;

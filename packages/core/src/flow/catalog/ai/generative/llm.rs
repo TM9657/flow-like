@@ -1,6 +1,7 @@
 pub mod find_llm;
 pub mod history;
 pub mod invoke;
+pub mod invoke_simple;
 pub mod preferences;
 pub mod result;
 
@@ -12,6 +13,7 @@ pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
     vec![
         Arc::new(Mutex::new(find_llm::FindLLMNode::default())),
         Arc::new(Mutex::new(invoke::InvokeLLM::default())),
+        Arc::new(Mutex::new(invoke_simple::InvokeLLMSimpleNode::default())),
         Arc::new(Mutex::new(preferences::make::MakePreferencesNode::default())),
         Arc::new(Mutex::new(preferences::hint::SetModelHintNode::default())),
         Arc::new(Mutex::new(preferences::weight::SetWeightNode::default())),

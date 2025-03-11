@@ -76,7 +76,7 @@ impl InternalNode {
             }
         }
 
-        Err(anyhow::anyhow!("Pin not found"))
+        Err(anyhow::anyhow!("Pin {} not found", name))
     }
 
     pub async fn get_pins_by_name(
@@ -89,7 +89,7 @@ impl InternalNode {
             return Ok(pins_ref.clone());
         }
 
-        Err(anyhow::anyhow!("Pin not found"))
+        Err(anyhow::anyhow!("Pin {} not found", name))
     }
 
     pub fn get_pin_by_id(&self, id: &str) -> anyhow::Result<Arc<Mutex<InternalPin>>> {
@@ -97,7 +97,7 @@ impl InternalNode {
             return Ok(pin.clone());
         }
 
-        Err(anyhow::anyhow!("Pin not found"))
+        Err(anyhow::anyhow!("Pin {} not found", id))
     }
 
     pub async fn orphaned(&self) -> bool {
