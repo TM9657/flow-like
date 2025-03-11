@@ -375,7 +375,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 	useEffect(() => {
 		if (!board.data) return;
 
-		const { nodes, edges, cache } = parseBoard(
+		const parsed = parseBoard(
 			board.data,
 			executeBoard,
 			openTraces,
@@ -383,11 +383,13 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 			selected.current,
 			currentRun,
 			currentProfile.data?.flow_settings.connection_mode,
+			nodes,
+			edges
 		);
 
-		setNodes(nodes);
-		setEdges(edges);
-		setPinCache(new Map(cache));
+		setNodes(parsed.nodes);
+		setEdges(parsed.edges);
+		setPinCache(new Map(parsed.cache));
 		setBoardMeta({
 			name: board.data.name,
 			description: board.data.description,
@@ -432,7 +434,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 	}, [catalog.data]);
 
 	const nodeTypes = useMemo(
-		() => ({ flowNode: FlowNode, commentNode: CommentNode }),
+		() => ({ flowNode: FlowNode, commentNode: CommentNode, node: FlowNode }),
 		[],
 	);
 	const { screenToFlowPosition, setViewport } = useReactFlow();

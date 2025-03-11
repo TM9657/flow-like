@@ -1,4 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
+import crypto from "crypto";
 import { CopyIcon } from "lucide-react";
 import { toast } from "sonner";
 import { typeToColor } from "../components/flow/utils";
@@ -72,6 +73,15 @@ export function doPinsMatch(
 	return true;
 }
 
+function hashNode(node: INode | IComment, traces?: ITrace[]) {
+	const hash = crypto.createHash("md5");
+	hash.update(JSON.stringify(node));
+	if (traces) {
+		hash.update(JSON.stringify(traces));
+	}
+	return hash.digest("hex");
+}
+
 export function parseBoard(
 	board: IBoard,
 	executeBoard: (node: INode) => Promise<void>,
@@ -80,52 +90,78 @@ export function parseBoard(
 	selected: Set<string>,
 	run?: IRun,
 	connectionMode?: string,
+	oldNodes?: any[],
+	oldEdges?: any[],
 ) {
 	const nodes: any[] = [];
 	const edges: any[] = [];
 	const cache = new Map<string, [IPin, INode]>();
 	const traces = new Map<string, ITrace[]>();
+	const oldNodesMap = new Map<string, any>();
+	const oldEdgesMap = new Map<string, any>();
 
-	run?.traces.forEach((trace) => {
+	for (const oldNode of oldNodes ?? []) {
+		oldNodesMap.set(oldNode.data?.hash, oldNode);
+	  }
+
+	for (const edge of oldEdges ?? []) {
+		oldEdgesMap.set(edge.id, edge);
+	}
+
+	for (const trace of run?.traces ?? []) {
 		if (traces.has(trace.node_id)) {
 			traces.get(trace.node_id)?.push(trace);
-			return;
+			continue;
 		}
 
 		traces.set(trace.node_id, [trace]);
-	});
+	};
 
-	Object.values(board.nodes).forEach((node) => {
-		nodes.push({
-			id: node.id,
-			type: "flowNode",
-			position: { x: node.coordinates?.[0], y: node.coordinates?.[1] },
-			data: {
-				label: node.name,
-				node: node,
-				boardId: board.id,
-				onExecute: async (node: INode) => {
-					await executeBoard(node);
+	for (const node of Object.values(board.nodes)) {
+		const hash = hashNode(node, traces.get(node.id))
+		const oldNode = oldNodesMap.get(hash);
+		if (oldNode) {
+			nodes.push(oldNode);
+		} else {
+			nodes.push({
+				id: node.id,
+				type: "node",
+				position: { x: node.coordinates?.[0] ?? 0, y: node.coordinates?.[1] ?? 0 },
+				data: {
+					label: node.name,
+					node: node,
+					hash: hash,
+					boardId: board.id,
+					onExecute: async (node: INode) => {
+						await executeBoard(node);
+					},
+					openTrace: async (traces: ITrace[]) => {
+						await openTraces(node, traces);
+					},
+					traces: traces.get(node.id) || [],
 				},
-				openTrace: async (traces: ITrace[]) => {
-					await openTraces(node, traces);
-				},
-				traces: traces.get(node.id) || [],
-			},
-			selected: selected.has(node.id),
-		});
+				selected: selected.has(node.id),
+			});
+		}
 
-		Object.values(node.pins).forEach((pin) => {
+		for (const pin of Object.values(node.pins)) {
 			cache.set(pin.id, [pin, node]);
-		});
-	});
+		}
+	};
 
-	cache.forEach(([pin, node]) => {
-		if (pin.connected_to.length === 0) return;
+	for (const [pin, node] of cache.values()) {
+		if (pin.connected_to.length === 0) continue;
 
-		pin.connected_to.forEach((connectedTo) => {
+		for (const connectedTo of pin.connected_to) {
 			const [conntectedPin, connectedNode] = cache.get(connectedTo) || [];
-			if (!conntectedPin || !connectedNode) return;
+			if (!conntectedPin || !connectedNode) continue;
+
+			const edge = oldEdgesMap.get(`${pin.id}-${connectedTo}`);
+
+			if (edge) {
+				edges.push(edge);
+				continue;
+			}
 
 			edges.push({
 				id: `${pin.id}-${connectedTo}`,
@@ -140,11 +176,17 @@ export function parseBoard(
 				data_type: pin.data_type,
 				selected: selected.has(`${pin.id}-${connectedTo}`),
 			});
-		});
-	});
+		};
+	};
 
-	Object.values(board.comments).forEach((comment) => {
-		//#endregion
+	for (const comment of Object.values(board.comments)) {
+		const hash = hashNode(comment)
+		const oldNode = oldNodesMap.get(hash);
+		if (oldNode) {
+			nodes.push(oldNode);
+			continue;
+		}
+
 		nodes.push({
 			id: comment.id,
 			type: "commentNode",
@@ -152,6 +194,7 @@ export function parseBoard(
 			data: {
 				label: comment.id,
 				boardId: board.id,
+				hash: hash,
 				comment: comment,
 				onUpsert: (comment: IComment) =>
 					executeCommand(
@@ -162,7 +205,7 @@ export function parseBoard(
 			},
 			selected: selected.has(comment.id),
 		});
-	});
+	};
 
 	return { nodes, edges, cache, traces };
 }

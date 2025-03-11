@@ -7,8 +7,7 @@ import { useDebounce } from "@uidotdev/usehooks";
 import {
 	type Node,
 	type NodeProps,
-	useNodes,
-	useReactFlow,
+	useReactFlow
 } from "@xyflow/react";
 import {
 	AlignCenterVerticalIcon,
@@ -34,7 +33,6 @@ import {
 import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PuffLoader from "react-spinners/PuffLoader";
-import { toast } from "sonner";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -47,8 +45,6 @@ import {
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
 import { handleCopy } from "../../lib";
-import { toastSuccess } from "../../lib/messages";
-import type { IComment } from "../../lib/schema/flow/board";
 import type { INode } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
 import { ILogLevel, type ITrace } from "../../lib/schema/flow/run";
@@ -67,6 +63,7 @@ export interface IPinAction {
 
 export type FlowNode = Node<
 	{
+		hash: string;
 		node: INode;
 		boardId: string;
 		traces: ITrace[];

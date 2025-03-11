@@ -26,6 +26,7 @@ export type CommentNode = Node<
 		comment: IComment;
 		onUpsert: (comment: IComment) => Promise<void>;
 		boardId: string;
+		hash: string;
 	},
 	"commentNode"
 >;
