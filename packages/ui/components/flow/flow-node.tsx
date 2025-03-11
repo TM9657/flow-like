@@ -19,6 +19,8 @@ import {
 	AlignVerticalJustifyEndIcon,
 	AlignVerticalJustifyStartIcon,
 	AlignVerticalSpaceAroundIcon,
+	BanIcon,
+	CircleXIcon,
 	ClockIcon,
 	CopyIcon,
 	MessageSquareIcon,
@@ -26,6 +28,7 @@ import {
 	ScrollTextIcon,
 	SquareCheckIcon,
 	SquarePenIcon,
+	TriangleAlertIcon,
 	WorkflowIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -48,7 +51,7 @@ import { toastSuccess } from "../../lib/messages";
 import type { IComment } from "../../lib/schema/flow/board";
 import type { INode } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
-import type { ITrace } from "../../lib/schema/flow/run";
+import { ILogLevel, type ITrace } from "../../lib/schema/flow/run";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 import { DynamicImage } from "../ui/dynamic-image";
 import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
@@ -98,6 +101,32 @@ const FlowNodeInner = memo(
 		const div = useRef<HTMLDivElement>(null);
 		const reactFlow = useReactFlow();
 		const { getNode } = useReactFlow();
+		const severity = useMemo(() => {
+			let severity = ILogLevel.Debug;
+
+			for (const trace of props.data.traces) {
+				for (const log of trace.logs) {
+					if (severity === ILogLevel.Fatal) break;
+
+					if (severity === ILogLevel.Error) {
+						if (log.log_level === ILogLevel.Fatal) severity = ILogLevel.Fatal;
+						continue;
+					}
+
+					if (severity === ILogLevel.Warn) {
+						if (log.log_level === ILogLevel.Fatal) severity = ILogLevel.Fatal;
+						if (log.log_level === ILogLevel.Error) severity = ILogLevel.Error;
+						continue;
+					}
+
+					if (log.log_level === ILogLevel.Fatal) severity = ILogLevel.Fatal;
+					if (log.log_level === ILogLevel.Error) severity = ILogLevel.Error;
+					if (log.log_level === ILogLevel.Warn) severity = ILogLevel.Warn;
+				}
+			}
+
+			return severity;
+		}, [props.data.traces])
 
 		const sortPins = useCallback((a: IPin, b: IPin) => {
 			// Step 1: Compare by type - Input comes before Output
@@ -315,6 +344,13 @@ const FlowNodeInner = memo(
 							),
 							[],
 						)}
+					</div>
+				)}
+				{severity !== ILogLevel.Debug && (
+					<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(50%)] right-0 text-center bg-background rounded-full">
+								{severity === ILogLevel.Fatal && <BanIcon className="w-3 h-3 text-red-800" />}
+								{severity === ILogLevel.Error && <CircleXIcon className="w-3 h-3 text-red-500" />}
+								{severity === ILogLevel.Warn && <TriangleAlertIcon className="w-3 h-3 text-yellow-500" />}
 					</div>
 				)}
 				{props.data.node.comment && (

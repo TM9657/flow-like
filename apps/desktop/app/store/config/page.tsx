@@ -130,7 +130,7 @@ export default function Id() {
 					await deleteVault();
 				}}
 			>
-				<Button>Delete Vault</Button>
+				<Button>Delete App</Button>
 			</VerificationDialog>
 		</main>
 	);

@@ -168,6 +168,7 @@ function FlowPinInnerComponent({
 		</Handle>
 	);
 }
+
 function pinPropsAreEqual(prevProps: any, nextProps: any) {
 	return (
 		prevProps.index === nextProps.index &&

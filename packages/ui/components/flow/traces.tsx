@@ -93,6 +93,12 @@ export function Traces({
 	}, [traces, logFilter, traceFilter]);
 
 	useEffect(() => {
+		if(!node) setTraceFilter(null);
+		const trace = traces.find((trace) => trace.node_id === node?.id);
+		if(trace) setTraceFilter(trace)
+	}, [node])
+
+	useEffect(() => {
 		if (search === "") {
 			setItems(logs);
 			return;
@@ -156,7 +162,7 @@ export function Traces({
 					<Separator className="my-1" />
 					{node && (
 						<div className="p-2 w-full">
-							<h4 className="mb-2">Node Stats</h4>
+							<h4 className="mb-2">{node.friendly_name} Stats</h4>
 							{traces
 								.toSorted(
 									(a, b) =>
