@@ -1,3 +1,4 @@
+import { use, useEffect, useState } from "react";
 import { IValueType } from "../../../lib/schema/flow/pin";
 import {
 	type IVariable,
@@ -22,11 +23,18 @@ export function VariablesMenuEdit({
 	variable: IVariable;
 	updateVariable: (variable: IVariable) => Promise<void>;
 }>) {
+	const [intermediateValue, setIntermediateValue] = useState(variable);
+
+	useEffect(() => {
+		updateVariable(intermediateValue);
+	}, [intermediateValue]);
+
+
 	if (
 		variable.data_type === IVariableType.String &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <StringVariable variable={variable} onChange={updateVariable} />;
+		return <StringVariable variable={intermediateValue} onChange={setIntermediateValue} />;
 	}
 
 	if (
@@ -34,7 +42,7 @@ export function VariablesMenuEdit({
 		variable.value_type === IValueType.Array
 	) {
 		return (
-			<StringArrayVariable variable={variable} onChange={updateVariable} />
+			<StringArrayVariable variable={intermediateValue} onChange={setIntermediateValue} />
 		);
 	}
 
@@ -42,49 +50,49 @@ export function VariablesMenuEdit({
 		variable.data_type === IVariableType.Boolean &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <BoolVariable variable={variable} onChange={updateVariable} />;
+		return <BoolVariable variable={intermediateValue} onChange={setIntermediateValue} />;
 	}
 
 	if (
 		variable.data_type === IVariableType.Boolean &&
 		variable.value_type === IValueType.Array
 	) {
-		return <BoolArrayVariable variable={variable} onChange={updateVariable} />;
+		return <BoolArrayVariable variable={intermediateValue} onChange={setIntermediateValue} />;
 	}
 
 	if (
 		variable.data_type === IVariableType.Date &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <DateVariable variable={variable} onChange={updateVariable} />;
+		return <DateVariable variable={intermediateValue} onChange={setIntermediateValue} />;
 	}
 
 	if (
 		variable.data_type === IVariableType.Date &&
 		variable.value_type === IValueType.Array
 	) {
-		return <DateArrayVariable variable={variable} onChange={updateVariable} />;
+		return <DateArrayVariable variable={intermediateValue} onChange={setIntermediateValue} />;
 	}
 
 	if (
 		variable.data_type === IVariableType.Float &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <FloatVariable variable={variable} onChange={updateVariable} />;
+		return <FloatVariable variable={intermediateValue} onChange={setIntermediateValue} />;
 	}
 
 	if (
 		variable.data_type === IVariableType.Float &&
 		variable.value_type === IValueType.Array
 	) {
-		return <FloatArrayVariable variable={variable} onChange={updateVariable} />;
+		return <FloatArrayVariable variable={intermediateValue} onChange={setIntermediateValue} />;
 	}
 
 	if (
 		variable.data_type === IVariableType.Integer &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <IntegerVariable variable={variable} onChange={updateVariable} />;
+		return <IntegerVariable variable={intermediateValue} onChange={setIntermediateValue} />;
 	}
 
 	if (
@@ -92,7 +100,7 @@ export function VariablesMenuEdit({
 		variable.value_type === IValueType.Array
 	) {
 		return (
-			<IntegerArrayVariable variable={variable} onChange={updateVariable} />
+			<IntegerArrayVariable variable={intermediateValue} onChange={setIntermediateValue} />
 		);
 	}
 
@@ -100,7 +108,7 @@ export function VariablesMenuEdit({
 		variable.data_type === IVariableType.PathBuf &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <PathbufVariable variable={variable} onChange={updateVariable} />;
+		return <PathbufVariable variable={intermediateValue} onChange={setIntermediateValue} />;
 	}
 
 	return null;

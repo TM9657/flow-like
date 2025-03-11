@@ -1,7 +1,7 @@
 "use client";
 
 import { VariableIcon } from "lucide-react";
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import {
 	Dialog,
@@ -30,6 +30,12 @@ export function PinEdit({
 	defaultValue: any;
 	changeDefaultValue: (value: any) => void;
 }>) {
+	const [cachedDefaultValue, setCachedDefaultValue] = useState(defaultValue);
+
+	useEffect(() => {
+		changeDefaultValue(cachedDefaultValue);
+	}, [cachedDefaultValue]);
+
 	if (pin.pin_type === IPinType.Output)
 		return <VariableDescription pin={pin} />;
 	if (pin.depends_on.length > 0) return <VariableDescription pin={pin} />;
@@ -37,8 +43,8 @@ export function PinEdit({
 		return (
 			<BooleanVariable
 				pin={pin}
-				value={defaultValue}
-				setValue={changeDefaultValue}
+				value={cachedDefaultValue}
+				setValue={setCachedDefaultValue}
 			/>
 		);
 	if (
@@ -48,16 +54,16 @@ export function PinEdit({
 		return (
 			<EnumVariable
 				pin={pin}
-				value={defaultValue}
-				setValue={changeDefaultValue}
+				value={cachedDefaultValue}
+				setValue={setCachedDefaultValue}
 			/>
 		);
 
 	return (
 		<WithMenu
 			pin={pin}
-			defaultValue={defaultValue}
-			changeDefaultValue={changeDefaultValue}
+			defaultValue={cachedDefaultValue}
+			changeDefaultValue={setCachedDefaultValue}
 		/>
 	);
 }
