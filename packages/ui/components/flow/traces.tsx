@@ -93,10 +93,10 @@ export function Traces({
 	}, [traces, logFilter, traceFilter]);
 
 	useEffect(() => {
-		if(!node) setTraceFilter(null);
+		if (!node) setTraceFilter(null);
 		const trace = traces.find((trace) => trace.node_id === node?.id);
-		if(trace) setTraceFilter(trace)
-	}, [node])
+		if (trace) setTraceFilter(trace);
+	}, [node]);
 
 	useEffect(() => {
 		if (search === "") {

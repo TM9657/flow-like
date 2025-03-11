@@ -1,5 +1,5 @@
-import { createId } from "@paralleldrive/cuid2";
 import crypto from "crypto";
+import { createId } from "@paralleldrive/cuid2";
 import { CopyIcon } from "lucide-react";
 import { toast } from "sonner";
 import { typeToColor } from "../components/flow/utils";
@@ -102,7 +102,7 @@ export function parseBoard(
 
 	for (const oldNode of oldNodes ?? []) {
 		oldNodesMap.set(oldNode.data?.hash, oldNode);
-	  }
+	}
 
 	for (const edge of oldEdges ?? []) {
 		oldEdgesMap.set(edge.id, edge);
@@ -115,10 +115,10 @@ export function parseBoard(
 		}
 
 		traces.set(trace.node_id, [trace]);
-	};
+	}
 
 	for (const node of Object.values(board.nodes)) {
-		const hash = hashNode(node, traces.get(node.id))
+		const hash = hashNode(node, traces.get(node.id));
 		const oldNode = oldNodesMap.get(hash);
 		if (oldNode) {
 			nodes.push(oldNode);
@@ -126,7 +126,10 @@ export function parseBoard(
 			nodes.push({
 				id: node.id,
 				type: "node",
-				position: { x: node.coordinates?.[0] ?? 0, y: node.coordinates?.[1] ?? 0 },
+				position: {
+					x: node.coordinates?.[0] ?? 0,
+					y: node.coordinates?.[1] ?? 0,
+				},
 				data: {
 					label: node.name,
 					node: node,
@@ -147,7 +150,7 @@ export function parseBoard(
 		for (const pin of Object.values(node.pins)) {
 			cache.set(pin.id, [pin, node]);
 		}
-	};
+	}
 
 	for (const [pin, node] of cache.values()) {
 		if (pin.connected_to.length === 0) continue;
@@ -176,11 +179,11 @@ export function parseBoard(
 				data_type: pin.data_type,
 				selected: selected.has(`${pin.id}-${connectedTo}`),
 			});
-		};
-	};
+		}
+	}
 
 	for (const comment of Object.values(board.comments)) {
-		const hash = hashNode(comment)
+		const hash = hashNode(comment);
 		const oldNode = oldNodesMap.get(hash);
 		if (oldNode) {
 			nodes.push(oldNode);
@@ -205,7 +208,7 @@ export function parseBoard(
 			},
 			selected: selected.has(comment.id),
 		});
-	};
+	}
 
 	return { nodes, edges, cache, traces };
 }

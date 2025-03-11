@@ -40,7 +40,7 @@ export default function RootLayout({
 	}, [theme]);
 
 	async function initDownloads() {
-		const downloads = await invoke<{[key: string]: Bit}>("init_downloads");
+		const downloads = await invoke<{ [key: string]: Bit }>("init_downloads");
 		console.dir({ downloads });
 		const items = Object.keys(downloads).map((bitId) => {
 			const bit: Bit = downloads[bitId];

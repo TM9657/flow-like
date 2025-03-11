@@ -69,7 +69,8 @@ export function PreviewFlowNode(props: NodeProps<FlowNode>) {
 
 	useEffect(() => {
 		const height = Math.max(inputPins.length, outputPins.length);
-		if(div.current) div.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
+		if (div.current)
+			div.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
 	}, [inputPins, outputPins]);
 
 	useEffect(() => {

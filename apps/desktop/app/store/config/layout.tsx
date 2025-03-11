@@ -13,9 +13,9 @@ import {
 	HoverCard,
 	HoverCardContent,
 	HoverCardTrigger,
+	type IApp,
 	type IBoard,
 	type INode,
-	type IApp,
 	Separator,
 	humanFileSize,
 	toastError,
@@ -108,9 +108,7 @@ export default function Id({
 					<h1 className="text-3xl font-semibold flex flex-row items-center">
 						{app.data?.meta.en.name}
 					</h1>
-					<Badge variant={"outline"}>
-						{humanFileSize(appSize.data ?? 0)}
-					</Badge>
+					<Badge variant={"outline"}>{humanFileSize(appSize.data ?? 0)}</Badge>
 					{app.data?.meta.en.tags.map((tag) => (
 						<Badge key={tag} variant={"secondary"}>
 							{tag}
@@ -130,7 +128,9 @@ export default function Id({
 					)}
 				</div>
 
-				<p className="leading-7 line-clamp-1">{app.data?.meta.en.description}</p>
+				<p className="leading-7 line-clamp-1">
+					{app.data?.meta.en.description}
+				</p>
 			</div>
 			<div className="grid w-full items-start gap-6 md:grid-cols-[180px_1fr] lg:grid-cols-[250px_1fr] mt-8 h-full flex-grow overflow-auto">
 				<nav className="flex flex-col gap-4 text-sm text-muted-foreground border-r h-full">

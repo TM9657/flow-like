@@ -127,7 +127,7 @@ impl NodeLogic for SetVariable {
         if !mut_value.depends_on.is_empty() {
             let mut dependencies = mut_value.depends_on.clone();
             dependencies.retain(|deps| {
-                board.get_pin_by_id(deps).map_or(false, |pin| {
+                board.get_pin_by_id(deps).is_some_and(|pin| {
                     pin.data_type == mut_value.data_type && pin.value_type == mut_value.value_type
                 })
             });
@@ -150,7 +150,7 @@ impl NodeLogic for SetVariable {
             let mut connected = var_ref.connected_to.clone();
 
             connected.retain(|conn| {
-                board.get_pin_by_id(conn).map_or(false, |pin| {
+                board.get_pin_by_id(conn).is_some_and(|pin| {
                     pin.data_type == mut_new_value.data_type
                         && pin.value_type == mut_new_value.value_type
                 })

@@ -29,12 +29,16 @@ export function VariablesMenuEdit({
 		updateVariable(intermediateValue);
 	}, [intermediateValue]);
 
-
 	if (
 		variable.data_type === IVariableType.String &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <StringVariable variable={intermediateValue} onChange={setIntermediateValue} />;
+		return (
+			<StringVariable
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+			/>
+		);
 	}
 
 	if (
@@ -42,7 +46,10 @@ export function VariablesMenuEdit({
 		variable.value_type === IValueType.Array
 	) {
 		return (
-			<StringArrayVariable variable={intermediateValue} onChange={setIntermediateValue} />
+			<StringArrayVariable
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+			/>
 		);
 	}
 
@@ -50,49 +57,84 @@ export function VariablesMenuEdit({
 		variable.data_type === IVariableType.Boolean &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <BoolVariable variable={intermediateValue} onChange={setIntermediateValue} />;
+		return (
+			<BoolVariable
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+			/>
+		);
 	}
 
 	if (
 		variable.data_type === IVariableType.Boolean &&
 		variable.value_type === IValueType.Array
 	) {
-		return <BoolArrayVariable variable={intermediateValue} onChange={setIntermediateValue} />;
+		return (
+			<BoolArrayVariable
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+			/>
+		);
 	}
 
 	if (
 		variable.data_type === IVariableType.Date &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <DateVariable variable={intermediateValue} onChange={setIntermediateValue} />;
+		return (
+			<DateVariable
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+			/>
+		);
 	}
 
 	if (
 		variable.data_type === IVariableType.Date &&
 		variable.value_type === IValueType.Array
 	) {
-		return <DateArrayVariable variable={intermediateValue} onChange={setIntermediateValue} />;
+		return (
+			<DateArrayVariable
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+			/>
+		);
 	}
 
 	if (
 		variable.data_type === IVariableType.Float &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <FloatVariable variable={intermediateValue} onChange={setIntermediateValue} />;
+		return (
+			<FloatVariable
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+			/>
+		);
 	}
 
 	if (
 		variable.data_type === IVariableType.Float &&
 		variable.value_type === IValueType.Array
 	) {
-		return <FloatArrayVariable variable={intermediateValue} onChange={setIntermediateValue} />;
+		return (
+			<FloatArrayVariable
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+			/>
+		);
 	}
 
 	if (
 		variable.data_type === IVariableType.Integer &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <IntegerVariable variable={intermediateValue} onChange={setIntermediateValue} />;
+		return (
+			<IntegerVariable
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+			/>
+		);
 	}
 
 	if (
@@ -100,7 +142,10 @@ export function VariablesMenuEdit({
 		variable.value_type === IValueType.Array
 	) {
 		return (
-			<IntegerArrayVariable variable={intermediateValue} onChange={setIntermediateValue} />
+			<IntegerArrayVariable
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+			/>
 		);
 	}
 
@@ -108,7 +153,12 @@ export function VariablesMenuEdit({
 		variable.data_type === IVariableType.PathBuf &&
 		variable.value_type === IValueType.Normal
 	) {
-		return <PathbufVariable variable={intermediateValue} onChange={setIntermediateValue} />;
+		return (
+			<PathbufVariable
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+			/>
+		);
 	}
 
 	return null;

@@ -96,7 +96,7 @@ impl NodeLogic for IsBitOfTypeNode {
 
         let bit_type = from_str::<BitTypes>(&format!("\"{}\"", bit_type_str));
 
-        if let Err(_) = bit_type {
+        if bit_type.is_err() {
             context.log_message(
                 &format!("Invalid Bit Type: {}", bit_type_str),
                 crate::flow::execution::LogLevel::Error,

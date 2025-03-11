@@ -549,11 +549,7 @@ function NavMain({
 						</Collapsible>
 					) : (
 						<SidebarMenuItem key={item.title}>
-							<a
-								href={item.url}
-								target="_blank"
-								rel="noreferrer"
-							>
+							<a href={item.url} target="_blank" rel="noreferrer">
 								<SidebarMenuButton
 									variant={pathname === item.url ? "outline" : "default"}
 									tooltip={item.title}

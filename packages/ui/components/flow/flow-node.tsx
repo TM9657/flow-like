@@ -4,11 +4,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { useDebounce } from "@uidotdev/usehooks";
-import {
-	type Node,
-	type NodeProps,
-	useReactFlow
-} from "@xyflow/react";
+import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import {
 	AlignCenterVerticalIcon,
 	AlignEndVerticalIcon,
@@ -123,7 +119,7 @@ const FlowNodeInner = memo(
 			}
 
 			return severity;
-		}, [props.data.traces])
+		}, [props.data.traces]);
 
 		const sortPins = useCallback((a: IPin, b: IPin) => {
 			// Step 1: Compare by type - Input comes before Output
@@ -136,7 +132,8 @@ const FlowNodeInner = memo(
 
 		useEffect(() => {
 			const height = Math.max(inputPins.length, outputPins.length);
-			if(div.current) div.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
+			if (div.current)
+				div.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
 		}, [inputPins, outputPins]);
 
 		useEffect(() => {
@@ -345,9 +342,15 @@ const FlowNodeInner = memo(
 				)}
 				{severity !== ILogLevel.Debug && (
 					<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(50%)] right-0 text-center bg-background rounded-full">
-								{severity === ILogLevel.Fatal && <BanIcon className="w-3 h-3 text-red-800" />}
-								{severity === ILogLevel.Error && <CircleXIcon className="w-3 h-3 text-red-500" />}
-								{severity === ILogLevel.Warn && <TriangleAlertIcon className="w-3 h-3 text-yellow-500" />}
+						{severity === ILogLevel.Fatal && (
+							<BanIcon className="w-3 h-3 text-red-800" />
+						)}
+						{severity === ILogLevel.Error && (
+							<CircleXIcon className="w-3 h-3 text-red-500" />
+						)}
+						{severity === ILogLevel.Warn && (
+							<TriangleAlertIcon className="w-3 h-3 text-yellow-500" />
+						)}
 					</div>
 				)}
 				{props.data.node.comment && (

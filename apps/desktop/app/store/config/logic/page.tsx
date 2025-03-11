@@ -15,8 +15,8 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-	type IBoard,
 	type IApp,
+	type IBoard,
 	Input,
 	Label,
 	Separator,
@@ -166,7 +166,7 @@ function Board({
 		<ContextMenu>
 			<ContextMenuTrigger asChild className="w-full">
 				<button
-				 	type="button"
+					type="button"
 					className="flex w-full flex-row items-stretch gap-2 border p-3 bg-card/80 rounded-md cursor-pointer hover:bg-card"
 					onClick={async () => {
 						await invoke("get_app_board", {

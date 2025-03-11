@@ -50,11 +50,13 @@ export default function Id() {
 				...app.data,
 				meta: {
 					...app.data.meta,
-					"en": {
+					en: {
 						...app.data.meta.en,
-						tags: localTags.value.split(",").map((tag) => tag.trim().toLowerCase()),
-					}
-				}
+						tags: localTags.value
+							.split(",")
+							.map((tag) => tag.trim().toLowerCase()),
+					},
+				},
 			});
 			return;
 		}
@@ -93,7 +95,13 @@ export default function Id() {
 					value={app.data?.meta.en.name}
 					onChange={(e) => {
 						if (app.data)
-							updateApp({ ...app.data, meta: { ...app.data.meta, en: { ...app.data.meta.en, name: e.target.value } } });
+							updateApp({
+								...app.data,
+								meta: {
+									...app.data.meta,
+									en: { ...app.data.meta.en, name: e.target.value },
+								},
+							});
 					}}
 				/>
 			</div>
@@ -106,7 +114,13 @@ export default function Id() {
 					value={app.data?.meta.en.description}
 					onChange={(e) => {
 						if (app.data)
-							updateApp({ ...app.data, meta: { ...app.data.meta, en: { ...app.data.meta.en, description: e.target.value } } });
+							updateApp({
+								...app.data,
+								meta: {
+									...app.data.meta,
+									en: { ...app.data.meta.en, description: e.target.value },
+								},
+							});
 					}}
 				/>
 			</div>

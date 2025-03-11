@@ -1,115 +1,97 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "VLMParameters",
-  "type": "object",
-  "required": [
-    "context_length",
-    "model_classification",
-    "provider"
-  ],
-  "properties": {
-    "context_length": {
-      "type": "integer",
-      "format": "uint32",
-      "minimum": 0.0
-    },
-    "model_classification": {
-      "$ref": "#/definitions/BitModelClassification"
-    },
-    "provider": {
-      "$ref": "#/definitions/BitProviderModel"
-    }
-  },
-  "definitions": {
-    "BitModelClassification": {
-      "type": "object",
-      "required": [
-        "coding",
-        "cost",
-        "creativity",
-        "factuality",
-        "function_calling",
-        "multilinguality",
-        "openness",
-        "reasoning",
-        "safety",
-        "speed"
-      ],
-      "properties": {
-        "coding": {
-          "type": "number",
-          "format": "float"
-        },
-        "cost": {
-          "type": "number",
-          "format": "float"
-        },
-        "creativity": {
-          "type": "number",
-          "format": "float"
-        },
-        "factuality": {
-          "type": "number",
-          "format": "float"
-        },
-        "function_calling": {
-          "type": "number",
-          "format": "float"
-        },
-        "multilinguality": {
-          "type": "number",
-          "format": "float"
-        },
-        "openness": {
-          "type": "number",
-          "format": "float"
-        },
-        "reasoning": {
-          "type": "number",
-          "format": "float"
-        },
-        "safety": {
-          "type": "number",
-          "format": "float"
-        },
-        "speed": {
-          "type": "number",
-          "format": "float"
-        }
-      }
-    },
-    "BitProvider": {
-      "type": "string",
-      "enum": [
-        "Local",
-        "AzureOpenAI",
-        "Bedrock",
-        "OpenAI",
-        "Anthropic"
-      ]
-    },
-    "BitProviderModel": {
-      "type": "object",
-      "required": [
-        "provider_name"
-      ],
-      "properties": {
-        "model_id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "provider_name": {
-          "$ref": "#/definitions/BitProvider"
-        },
-        "version": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    }
-  }
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "VLMParameters",
+	"type": "object",
+	"required": ["context_length", "model_classification", "provider"],
+	"properties": {
+		"context_length": {
+			"type": "integer",
+			"format": "uint32",
+			"minimum": 0.0
+		},
+		"model_classification": {
+			"$ref": "#/definitions/BitModelClassification"
+		},
+		"provider": {
+			"$ref": "#/definitions/BitProviderModel"
+		}
+	},
+	"definitions": {
+		"BitModelClassification": {
+			"type": "object",
+			"required": [
+				"coding",
+				"cost",
+				"creativity",
+				"factuality",
+				"function_calling",
+				"multilinguality",
+				"openness",
+				"reasoning",
+				"safety",
+				"speed"
+			],
+			"properties": {
+				"coding": {
+					"type": "number",
+					"format": "float"
+				},
+				"cost": {
+					"type": "number",
+					"format": "float"
+				},
+				"creativity": {
+					"type": "number",
+					"format": "float"
+				},
+				"factuality": {
+					"type": "number",
+					"format": "float"
+				},
+				"function_calling": {
+					"type": "number",
+					"format": "float"
+				},
+				"multilinguality": {
+					"type": "number",
+					"format": "float"
+				},
+				"openness": {
+					"type": "number",
+					"format": "float"
+				},
+				"reasoning": {
+					"type": "number",
+					"format": "float"
+				},
+				"safety": {
+					"type": "number",
+					"format": "float"
+				},
+				"speed": {
+					"type": "number",
+					"format": "float"
+				}
+			}
+		},
+		"BitProvider": {
+			"type": "string",
+			"enum": ["Local", "AzureOpenAI", "Bedrock", "OpenAI", "Anthropic"]
+		},
+		"BitProviderModel": {
+			"type": "object",
+			"required": ["provider_name"],
+			"properties": {
+				"model_id": {
+					"type": ["string", "null"]
+				},
+				"provider_name": {
+					"$ref": "#/definitions/BitProvider"
+				},
+				"version": {
+					"type": ["string", "null"]
+				}
+			}
+		}
+	}
 }

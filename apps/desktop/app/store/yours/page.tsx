@@ -1,16 +1,34 @@
-"use client"
+"use client";
 
-import { Badge, Button, EmptyState, HoverCard, HoverCardContent, HoverCardTrigger, humanFileSize, type IApp, Separator, useInvoke } from "@tm9657/flow-like-ui";
-import { AlertTriangle, FilesIcon, LayoutGridIcon, LinkIcon, Plus } from "lucide-react";
+import {
+	Badge,
+	Button,
+	EmptyState,
+	HoverCard,
+	HoverCardContent,
+	HoverCardTrigger,
+	type IApp,
+	Separator,
+	humanFileSize,
+	useInvoke,
+} from "@tm9657/flow-like-ui";
+import {
+	AlertTriangle,
+	FilesIcon,
+	LayoutGridIcon,
+	LinkIcon,
+	Plus,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function YoursPage() {
-    const apps = useInvoke<IApp[]>("get_apps", {});
+	const apps = useInvoke<IApp[]>("get_apps", {});
 	const router = useRouter();
 
-    return 	<main className="justify-start flex min-h-dvh max-h-dvh flex-row items-start w-full flex-1 flex-grow p-4">
-        <div className="mr-6 max-h-screen overflow-y-auto invisible-scroll flex-2 flex-grow h-full w-full">
+	return (
+		<main className="justify-start flex min-h-dvh max-h-dvh flex-row items-start w-full flex-1 flex-grow p-4">
+			<div className="mr-6 max-h-screen overflow-y-auto invisible-scroll flex-2 flex-grow h-full w-full">
 				<div className="flex flex-row items-center">
 					<h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
 						Apps
@@ -47,25 +65,22 @@ export default function YoursPage() {
 						})}
 				</div>
 			</div>
-    </main>
+		</main>
+	);
 }
 
 function App({ app }: Readonly<{ app: IApp }>) {
 	const router = useRouter();
-	const app_size = useInvoke<number>(
-		"get_app_size",
-		{ appId: app.id },
-		[app.id],
-	);
-	const configured = useInvoke<boolean>(
-		"app_configured",
-		{ appId: app.id },
-		[app.id],
-	);
+	const app_size = useInvoke<number>("get_app_size", { appId: app.id }, [
+		app.id,
+	]);
+	const configured = useInvoke<boolean>("app_configured", { appId: app.id }, [
+		app.id,
+	]);
 
 	return (
 		<button
-            type="button"
+			type="button"
 			onClick={() => {
 				router.push(`/store/config?id=${app.id}`);
 			}}

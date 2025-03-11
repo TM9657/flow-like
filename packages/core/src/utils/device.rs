@@ -76,5 +76,5 @@ pub fn get_ram() -> anyhow::Result<u64> {
 pub fn get_cores() -> anyhow::Result<u64> {
     let mut sys = System::new_all();
     sys.refresh_all();
-    return Ok(sys.cpus().len() as u64);
+    Ok(sys.cpus().len() as u64)
 }

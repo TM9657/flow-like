@@ -1,179 +1,147 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Pin",
-  "type": "object",
-  "required": [
-    "connected_to",
-    "data_type",
-    "depends_on",
-    "description",
-    "friendly_name",
-    "id",
-    "index",
-    "name",
-    "pin_type",
-    "value_type"
-  ],
-  "properties": {
-    "connected_to": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "uniqueItems": true
-    },
-    "data_type": {
-      "$ref": "#/definitions/VariableType"
-    },
-    "default_value": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": "integer",
-        "format": "uint8",
-        "minimum": 0.0
-      }
-    },
-    "depends_on": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "uniqueItems": true
-    },
-    "description": {
-      "type": "string"
-    },
-    "friendly_name": {
-      "type": "string"
-    },
-    "id": {
-      "type": "string"
-    },
-    "index": {
-      "type": "integer",
-      "format": "uint16",
-      "minimum": 0.0
-    },
-    "name": {
-      "type": "string"
-    },
-    "options": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/PinOptions"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "pin_type": {
-      "$ref": "#/definitions/PinType"
-    },
-    "schema": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "valid_values": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": "string"
-      }
-    },
-    "value_type": {
-      "$ref": "#/definitions/ValueType"
-    }
-  },
-  "definitions": {
-    "PinOptions": {
-      "type": "object",
-      "properties": {
-        "enforce_generic_value_type": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "enforce_schema": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "range": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": [
-            {
-              "type": "number",
-              "format": "double"
-            },
-            {
-              "type": "number",
-              "format": "double"
-            }
-          ],
-          "maxItems": 2,
-          "minItems": 2
-        },
-        "step": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double"
-        },
-        "valid_values": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "PinType": {
-      "type": "string",
-      "enum": [
-        "Input",
-        "Output"
-      ]
-    },
-    "ValueType": {
-      "type": "string",
-      "enum": [
-        "Array",
-        "Normal",
-        "HashMap",
-        "HashSet"
-      ]
-    },
-    "VariableType": {
-      "type": "string",
-      "enum": [
-        "Execution",
-        "String",
-        "Integer",
-        "Float",
-        "Boolean",
-        "Date",
-        "PathBuf",
-        "Generic",
-        "Struct",
-        "Byte"
-      ]
-    }
-  }
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "Pin",
+	"type": "object",
+	"required": [
+		"connected_to",
+		"data_type",
+		"depends_on",
+		"description",
+		"friendly_name",
+		"id",
+		"index",
+		"name",
+		"pin_type",
+		"value_type"
+	],
+	"properties": {
+		"connected_to": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			},
+			"uniqueItems": true
+		},
+		"data_type": {
+			"$ref": "#/definitions/VariableType"
+		},
+		"default_value": {
+			"type": ["array", "null"],
+			"items": {
+				"type": "integer",
+				"format": "uint8",
+				"minimum": 0.0
+			}
+		},
+		"depends_on": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			},
+			"uniqueItems": true
+		},
+		"description": {
+			"type": "string"
+		},
+		"friendly_name": {
+			"type": "string"
+		},
+		"id": {
+			"type": "string"
+		},
+		"index": {
+			"type": "integer",
+			"format": "uint16",
+			"minimum": 0.0
+		},
+		"name": {
+			"type": "string"
+		},
+		"options": {
+			"anyOf": [
+				{
+					"$ref": "#/definitions/PinOptions"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"pin_type": {
+			"$ref": "#/definitions/PinType"
+		},
+		"schema": {
+			"type": ["string", "null"]
+		},
+		"valid_values": {
+			"type": ["array", "null"],
+			"items": {
+				"type": "string"
+			}
+		},
+		"value_type": {
+			"$ref": "#/definitions/ValueType"
+		}
+	},
+	"definitions": {
+		"PinOptions": {
+			"type": "object",
+			"properties": {
+				"enforce_generic_value_type": {
+					"type": ["boolean", "null"]
+				},
+				"enforce_schema": {
+					"type": ["boolean", "null"]
+				},
+				"range": {
+					"type": ["array", "null"],
+					"items": [
+						{
+							"type": "number",
+							"format": "double"
+						},
+						{
+							"type": "number",
+							"format": "double"
+						}
+					],
+					"maxItems": 2,
+					"minItems": 2
+				},
+				"step": {
+					"type": ["number", "null"],
+					"format": "double"
+				},
+				"valid_values": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"PinType": {
+			"type": "string",
+			"enum": ["Input", "Output"]
+		},
+		"ValueType": {
+			"type": "string",
+			"enum": ["Array", "Normal", "HashMap", "HashSet"]
+		},
+		"VariableType": {
+			"type": "string",
+			"enum": [
+				"Execution",
+				"String",
+				"Integer",
+				"Float",
+				"Boolean",
+				"Date",
+				"PathBuf",
+				"Generic",
+				"Struct",
+				"Byte"
+			]
+		}
+	}
 }

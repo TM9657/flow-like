@@ -75,7 +75,7 @@ export default function CreateAppPage() {
 			name: "",
 			tags: [],
 			use_case: "",
-		}
+		},
 	});
 
 	return (
@@ -215,7 +215,10 @@ function MetadataCreation({
 						id="name"
 						placeholder="Name"
 						onChange={(e) => {
-							setCreationDialog((old) => ({ ...old, meta: { ...old.meta, name: e.target.value } }));
+							setCreationDialog((old) => ({
+								...old,
+								meta: { ...old.meta, name: e.target.value },
+							}));
 						}}
 					/>
 				</div>
@@ -267,7 +270,8 @@ function MetadataCreation({
 				</Button>
 				<Button
 					disabled={
-						creationDialog.meta.name === "" || creationDialog.meta.description === ""
+						creationDialog.meta.name === "" ||
+						creationDialog.meta.description === ""
 					}
 					onClick={() => {
 						setCreationDialog((old) => ({ ...old, progress: 2 }));
@@ -327,19 +331,23 @@ function ModelSelection({
 				</div>
 			</div>
 			<div className="flex items-center space-x-2">
-      <Checkbox id="skip" checked={skipModel} onCheckedChange={(checked) => {
-		setSkipModel(checked as boolean);
-		if(checked) {
-			setCreationDialog((old) => ({ ...old, models: [] }));
-		}
-	  }} />
-      <label
-        htmlFor="skip"
-        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-      >
-        Skip Model Selection
-      </label>
-    </div>
+				<Checkbox
+					id="skip"
+					checked={skipModel}
+					onCheckedChange={(checked) => {
+						setSkipModel(checked as boolean);
+						if (checked) {
+							setCreationDialog((old) => ({ ...old, models: [] }));
+						}
+					}}
+				/>
+				<label
+					htmlFor="skip"
+					className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+				>
+					Skip Model Selection
+				</label>
+			</div>
 			<div className="w-full flex flex-row justify-end gap-2">
 				<Button
 					variant={"outline"}
@@ -350,7 +358,7 @@ function ModelSelection({
 					Back
 				</Button>
 				<Button
-					disabled={creationDialog.models.length === 0 && !skipModel}
+					disabled={creationDialog.models.length === 0 && !skipModel}
 					onClick={() => {
 						setCreationDialog((old) => ({ ...old, progress: 3 }));
 					}}
@@ -378,9 +386,8 @@ function TemplateSelection({
 					<b className="text-primary">1.</b> Let´s create your new App
 				</h2>
 				<p>
-					First, we need to select a starting template for your new App.
-					Please select one from below or start from scratch with a blank
-					Template.
+					First, we need to select a starting template for your new App. Please
+					select one from below or start from scratch with a blank Template.
 				</p>
 			</div>
 			<div className="flex-grow border p-2 rounded-md bg-background max-h-full overflow-y-auto h-full flex flex-col">

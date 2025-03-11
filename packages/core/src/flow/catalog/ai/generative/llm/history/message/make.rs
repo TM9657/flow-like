@@ -121,15 +121,15 @@ impl NodeLogic for MakeHistoryMessageNode {
             .and_then(|json| json.as_str().map(ToOwned::to_owned))
             .unwrap_or_default();
 
-        let text_pin = node.get_pin_by_name("text").cloned();
-        let image_pin = node.get_pin_by_name("image").clone();
-        let mime_pin = node.get_pin_by_name("mime").clone();
+        let text_pin = node.get_pin_by_name("text");
+        let image_pin = node.get_pin_by_name("image");
+        let mime_pin = node.get_pin_by_name("mime");
 
-        if (type_pin == "Text".to_string()) && text_pin.is_some() {
+        if (type_pin == *"Text") && text_pin.is_some() {
             return;
         }
 
-        if (type_pin == "Image".to_string()) && image_pin.is_some() && mime_pin.is_some() {
+        if (type_pin == *"Image") && image_pin.is_some() && mime_pin.is_some() {
             return;
         }
 

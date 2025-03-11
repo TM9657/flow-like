@@ -124,7 +124,7 @@ impl NodeLogic for GetVariable {
         let mut connected = immutable_value.connected_to.clone();
 
         connected.retain(|conn| {
-            board.get_pin_by_id(conn).map_or(false, |pin| {
+            board.get_pin_by_id(conn).is_some_and(|pin| {
                 pin.data_type == mut_value.data_type && pin.value_type == mut_value.value_type
             })
         });
