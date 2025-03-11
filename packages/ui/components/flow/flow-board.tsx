@@ -69,9 +69,10 @@ import {
 	ICommentType,
 	IExecutionStage,
 	ILogLevel,
+	IPinType,
 	type IVariable,
 } from "../../lib/schema/flow/board";
-import type { INode } from "../../lib/schema/flow/node";
+import { IVariableType, type INode } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
 import type { IRun, ITrace } from "../../lib/schema/flow/run";
 import { convertJsonToUint8Array } from "../../lib/uint8";
@@ -273,10 +274,25 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 			});
 			if (droppedPin) {
 				const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
+				const pinValueType = droppedPin.value_type;
 				const pinDataType = droppedPin.data_type;
+				const schema = droppedPin.schema;
+				const options = droppedPin.options;
 
 				const pin = Object.values(new_node.pins).find(
-					(pin) => pin.pin_type === pinType && pin.data_type === pinDataType,
+					(pin) => {
+						if (typeof schema === "string") {
+							if ((pin.options?.enforce_schema || options?.enforce_schema) && pin.schema !== schema && pin.data_type !== IVariableType.Generic) return false;
+						}
+						if (pin.pin_type !== pinType) return false;
+						if(pin.value_type !== pinValueType) {
+							if ((pinDataType !== IVariableType.Generic) && (pin.data_type !== IVariableType.Generic)) return false;
+							if ((options?.enforce_generic_value_type) || (pin.options?.enforce_generic_value_type)) return false;
+						}
+						if ((pin.data_type === IVariableType.Generic) && (pinDataType !== IVariableType.Execution)) return true;
+						if ((pinDataType === IVariableType.Generic) && (pin.data_type !== IVariableType.Execution)) return true;
+						return pin.data_type === pinDataType;
+					},
 				);
 				const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
 				if (!sourcePin || !sourceNode) return;
