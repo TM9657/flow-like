@@ -163,17 +163,21 @@ pub fn connect_pins(
                 pin.depends_on.remove(&from_pin.id);
             });
         });
+
+        to_pin.depends_on.insert(from_pin.id.clone());
     }
 
-    let mut old_depends_on = to_pin.depends_on.clone();
-    to_pin.depends_on = HashSet::from([from_pin.id.clone()]);
-    old_depends_on.remove(&from_pin.id);
+    if from_pin.data_type != VariableType::Execution {
+        let mut old_depends_on = to_pin.depends_on.clone();
+        to_pin.depends_on = HashSet::from([from_pin.id.clone()]);
+        old_depends_on.remove(&from_pin.id);
 
-    board.nodes.iter_mut().for_each(|(_, node)| {
-        node.pins.iter_mut().for_each(|(_, pin)| {
-            pin.connected_to.remove(&to_pin.id);
+        board.nodes.iter_mut().for_each(|(_, node)| {
+            node.pins.iter_mut().for_each(|(_, pin)| {
+                pin.connected_to.remove(&to_pin.id);
+            });
         });
-    });
+    }
 
     from_pin.connected_to.insert(to_pin.id.clone());
 
