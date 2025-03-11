@@ -29,8 +29,19 @@ pub async fn sidecar(command: &PathBuf) -> anyhow::Result<StdCommand> {
         return Err(anyhow::anyhow!("Sidecar is not a file: {:?}", path));
     }
 
-    let sidecar = StdCommand::new(path);
-    Ok(sidecar)
+    #[cfg(not(target_os = "linux"))]
+    {
+        let sidecar = StdCommand::new(path);
+        Ok(sidecar)
+    }
+
+
+    #[cfg(target_os = "linux")]
+    {
+        let mut sidecar = StdCommand::new("bash");
+        sidecar.arg(path);
+        return Ok(sidecar);
+    }
 }
 
 //
@@ -45,8 +56,18 @@ pub async fn async_sidecar(command: &PathBuf) -> anyhow::Result<Command> {
         return Err(anyhow::anyhow!("Sidecar is not a file: {:?}", path));
     }
 
-    let sidecar = process::Command::new(path);
-    Ok(sidecar)
+    #[cfg(not(target_os = "linux"))]
+    {
+        let sidecar = process::Command::new(path);
+        Ok(sidecar)
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let mut sidecar = process::Command::new("bash");
+        sidecar.arg(path);
+        return Ok(sidecar);
+    }
 }
 
 // ==================== IDEAS ====================
