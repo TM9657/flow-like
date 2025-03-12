@@ -215,9 +215,13 @@ export function parseBoard(
 	return { nodes, edges, cache, traces };
 }
 
-export function handleCopy(nodes: any[], event?: ClipboardEvent, refs?: {
-    [key: string]: string;
-}) {
+export function handleCopy(
+	nodes: any[],
+	event?: ClipboardEvent,
+	refs?: {
+		[key: string]: string;
+	},
+) {
 	const activeElement = document.activeElement;
 	if (
 		activeElement instanceof HTMLInputElement ||

@@ -31,9 +31,14 @@ impl NodeLogic for LastContentNode {
         );
         node.add_icon("/flow/icons/history.svg");
 
-        node.add_input_pin("response", "Response", "Response to extract from", VariableType::Struct)
-            .set_schema::<Response>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "response",
+            "Response",
+            "Response to extract from",
+            VariableType::Struct,
+        )
+        .set_schema::<Response>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "content",

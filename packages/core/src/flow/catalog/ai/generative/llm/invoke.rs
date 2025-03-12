@@ -19,7 +19,9 @@ use crate::{
         pin::PinOptions,
         variable::VariableType,
     },
-    models::{history::History, llm::LLMCallback, response::Response, response_chunk::ResponseChunk},
+    models::{
+        history::History, llm::LLMCallback, response::Response, response_chunk::ResponseChunk,
+    },
     state::FlowLikeState,
 };
 use async_trait::async_trait;
@@ -179,9 +181,7 @@ impl NodeLogic for InvokeLLM {
             context.push_sub_context(sub_context.clone());
         }
 
-        context
-            .set_pin_value("result", json!(res))
-            .await?;
+        context.set_pin_value("result", json!(res)).await?;
         context.deactivate_exec_pin("on_stream").await?;
         context.activate_exec_pin("done").await?;
 

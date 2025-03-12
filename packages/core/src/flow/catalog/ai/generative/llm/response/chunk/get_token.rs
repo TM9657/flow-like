@@ -31,9 +31,14 @@ impl NodeLogic for GetTokenNode {
         );
         node.add_icon("/flow/icons/history.svg");
 
-        node.add_input_pin("chunk", "Chunk", "Response chunk to extract from", VariableType::Struct)
-            .set_schema::<ResponseChunk>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "chunk",
+            "Chunk",
+            "Response chunk to extract from",
+            VariableType::Struct,
+        )
+        .set_schema::<ResponseChunk>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "token",

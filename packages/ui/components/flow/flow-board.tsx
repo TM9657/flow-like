@@ -281,7 +281,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 				const options = droppedPin.options;
 
 				const pin = Object.values(new_node.pins).find((pin) => {
-					if (typeof schema === "string" || typeof pin.schema === "string") {
+					if (typeof schema === "string" || typeof pin.schema === "string") {
 						const pinSchema = refs?.[pin.schema ?? ""] ?? pin.schema;
 						if (
 							(pin.options?.enforce_schema || options?.enforce_schema) &&

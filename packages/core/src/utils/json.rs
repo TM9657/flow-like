@@ -1,5 +1,5 @@
-use serde_json::Value;
 use json5;
+use serde_json::Value;
 
 fn fix_unbalanced(s: &str) -> String {
     let open_braces = s.chars().filter(|&c| c == '{').count();
@@ -98,7 +98,8 @@ pub fn parse_malformed_json(input: &str) -> Result<Value, Box<dyn std::error::Er
         }
 
         // Trim any trailing garbage beyond the last valid JSON delimiter.
-        let last_valid_index = candidate.rfind(|c| c == '}' || c == ']')
+        let last_valid_index = candidate
+            .rfind(|c| c == '}' || c == ']')
             .map(|idx| idx + 1)
             .unwrap_or(candidate.len());
         let candidate = &candidate[..last_valid_index];
@@ -181,7 +182,8 @@ mod tests {
     fn malformed_json_test_deeply_nested_unbalanced() {
         let input = r#"{"level1": {"level2": {"level3": [1, 2, {"deep": "value""#;
         let result = parse_malformed_json(input).unwrap();
-        let expected = serde_json::json!({"level1": {"level2": {"level3": [1, 2, {"deep": "value"}]}}});
+        let expected =
+            serde_json::json!({"level1": {"level2": {"level3": [1, 2, {"deep": "value"}]}}});
         assert_eq!(result, expected);
     }
 

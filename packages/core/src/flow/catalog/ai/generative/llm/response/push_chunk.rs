@@ -38,13 +38,23 @@ impl NodeLogic for PushChunkNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin("response", "Response", "Response to update", VariableType::Struct)
-            .set_schema::<Response>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "response",
+            "Response",
+            "Response to update",
+            VariableType::Struct,
+        )
+        .set_schema::<Response>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("chunk", "Chunk", "Response chunk to add", VariableType::Struct)
-            .set_schema::<ResponseChunk>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "chunk",
+            "Chunk",
+            "Response chunk to add",
+            VariableType::Struct,
+        )
+        .set_schema::<ResponseChunk>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "exec_out",
@@ -70,7 +80,9 @@ impl NodeLogic for PushChunkNode {
 
         response.push_chunk(chunk);
 
-        context.set_pin_value("response_out", json!(response)).await?;
+        context
+            .set_pin_value("response_out", json!(response))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

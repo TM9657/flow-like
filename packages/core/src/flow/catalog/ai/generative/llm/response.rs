@@ -1,6 +1,6 @@
 pub mod chunk;
-pub mod last_message;
 pub mod last_content;
+pub mod last_message;
 pub mod make;
 pub mod message;
 pub mod push_chunk;

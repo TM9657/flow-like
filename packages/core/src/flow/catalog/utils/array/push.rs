@@ -37,7 +37,11 @@ impl NodeLogic for PushArrayNode {
 
         node.add_input_pin("array_in", "Array", "Your Array", VariableType::Generic)
             .set_value_type(crate::flow::pin::ValueType::Array)
-            .set_options(PinOptions::new().set_enforce_generic_value_type(true).build());
+            .set_options(
+                PinOptions::new()
+                    .set_enforce_generic_value_type(true)
+                    .build(),
+            );
 
         node.add_input_pin("value", "Value", "Value to push", VariableType::Generic);
 
@@ -50,7 +54,11 @@ impl NodeLogic for PushArrayNode {
             VariableType::Generic,
         )
         .set_value_type(crate::flow::pin::ValueType::Array)
-        .set_options(PinOptions::new().set_enforce_generic_value_type(true).build());
+        .set_options(
+            PinOptions::new()
+                .set_enforce_generic_value_type(true)
+                .build(),
+        );
 
         return node;
     }

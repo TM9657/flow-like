@@ -31,9 +31,14 @@ impl NodeLogic for GetContentNode {
         );
         node.add_icon("/flow/icons/history.svg");
 
-        node.add_input_pin("message", "Message", "Message to extract content from", VariableType::Struct)
-            .set_schema::<ResponseMessage>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "message",
+            "Message",
+            "Message to extract content from",
+            VariableType::Struct,
+        )
+        .set_schema::<ResponseMessage>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "content",

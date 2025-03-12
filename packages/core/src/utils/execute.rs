@@ -35,7 +35,6 @@ pub async fn sidecar(command: &PathBuf) -> anyhow::Result<StdCommand> {
         Ok(sidecar)
     }
 
-
     #[cfg(target_os = "linux")]
     {
         let mut sidecar = StdCommand::new("bash");

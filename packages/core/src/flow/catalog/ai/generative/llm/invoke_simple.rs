@@ -53,8 +53,10 @@ impl NodeLogic for InvokeLLMSimpleNode {
             .set_schema::<Bit>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("system_prompt", "System Prompt", "", VariableType::String).set_default_value(Some(json!("")));
-        node.add_input_pin("prompt", "Prompt", "", VariableType::String).set_default_value(Some(json!("")));
+        node.add_input_pin("system_prompt", "System Prompt", "", VariableType::String)
+            .set_default_value(Some(json!("")));
+        node.add_input_pin("prompt", "Prompt", "", VariableType::String)
+            .set_default_value(Some(json!("")));
 
         node.add_output_pin(
             "on_stream",

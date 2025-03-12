@@ -107,9 +107,9 @@ impl NodeLogic for PushContentNode {
             .and_then(|json| json.as_str().map(ToOwned::to_owned))
             .unwrap_or_default();
 
-            let text_pin = node.get_pin_by_name("text");
-            let image_pin = node.get_pin_by_name("image");
-            let mime_pin = node.get_pin_by_name("mime");
+        let text_pin = node.get_pin_by_name("text");
+        let image_pin = node.get_pin_by_name("image");
+        let mime_pin = node.get_pin_by_name("mime");
 
         if type_pin == *"Text" && text_pin.is_some() {
             return;
