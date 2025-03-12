@@ -22,7 +22,7 @@ fn fix_unbalanced(s: &str) -> String {
 /// that were expected but not found.
 fn extract_json_fragment(input: &str) -> Option<(String, Vec<char>)> {
     // Locate the first JSON opening character.
-    let start = input.find(|c| c == '{' || c == '[')?;
+    let start = input.find(['{', '['])?;
     let candidate = &input[start..];
 
     let mut stack = Vec::new();
@@ -83,7 +83,7 @@ fn extract_json_fragment(input: &str) -> Option<(String, Vec<char>)> {
 }
 
 /// Tries multiple strategies to parse a malformed JSON string into a serde_json::Value.
-pub fn parse_malformed_json(input: &str) -> Result<Value, Box<dyn std::error::Error>> {
+pub fn parse_malformed_json(input: &str) -> anyhow::Result<Value> {
     // 1. Direct parse attempt.
     if let Ok(val) = serde_json::from_str(input) {
         return Ok(val);
@@ -99,7 +99,7 @@ pub fn parse_malformed_json(input: &str) -> Result<Value, Box<dyn std::error::Er
 
         // Trim any trailing garbage beyond the last valid JSON delimiter.
         let last_valid_index = candidate
-            .rfind(|c| c == '}' || c == ']')
+            .rfind(['}', ']'])
             .map(|idx| idx + 1)
             .unwrap_or(candidate.len());
         let candidate = &candidate[..last_valid_index];
@@ -124,7 +124,7 @@ pub fn parse_malformed_json(input: &str) -> Result<Value, Box<dyn std::error::Er
     }
 
     // 6. Fallback: remove any non-JSON prefix and apply a basic fix.
-    if let Some(start) = input.find(|c| c == '{' || c == '[') {
+    if let Some(start) = input.find(['{', '[']) {
         let trimmed = &input[start..];
         let fixed = fix_unbalanced(trimmed);
         if let Ok(val) = json5::from_str(&fixed) {
@@ -132,7 +132,7 @@ pub fn parse_malformed_json(input: &str) -> Result<Value, Box<dyn std::error::Er
         }
     }
 
-    Err("Unable to parse malformed JSON".into())
+    anyhow::bail!("Failed to parse JSON")
 }
 
 #[cfg(test)]

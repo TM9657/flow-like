@@ -17,6 +17,9 @@ use tokio::sync::Mutex;
 pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
     let mut registry: Vec<Arc<Mutex<dyn NodeLogic>>> = Vec::new();
     registry.push(Arc::new(Mutex::new(cuid::CuidNode::default())));
+    registry.push(Arc::new(Mutex::new(
+        json::repair_parse::RepairParseNode::default(),
+    )));
     registry.append(&mut types::register_functions().await);
     registry.append(&mut bool::register_functions().await);
     registry.append(&mut env::register_functions().await);
