@@ -5,7 +5,7 @@ use crate::{
         board::Board,
         execution::context::ExecutionContext,
         node::{Node, NodeLogic},
-        pin::ValueType,
+        pin::{PinOptions, ValueType},
         variable::VariableType,
     },
     state::FlowLikeState,
@@ -36,19 +36,21 @@ impl NodeLogic for PushArrayNode {
         node.add_input_pin("exec_in", "In", "", VariableType::Execution);
 
         node.add_input_pin("array_in", "Array", "Your Array", VariableType::Generic)
-            .set_value_type(crate::flow::pin::ValueType::Array);
+            .set_value_type(crate::flow::pin::ValueType::Array)
+            .set_options(PinOptions::new().set_enforce_generic_value_type(true).build());
 
         node.add_input_pin("value", "Value", "Value to push", VariableType::Generic);
 
         node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
 
-        node.add_input_pin(
+        node.add_output_pin(
             "array_out",
             "Array",
             "Adjusted Array",
             VariableType::Generic,
         )
-        .set_value_type(crate::flow::pin::ValueType::Array);
+        .set_value_type(crate::flow::pin::ValueType::Array)
+        .set_options(PinOptions::new().set_enforce_generic_value_type(true).build());
 
         return node;
     }
