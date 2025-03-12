@@ -8,6 +8,7 @@ pub mod math;
 pub mod string;
 pub mod types;
 pub mod vector;
+pub mod json;
 
 use crate::flow::node::NodeLogic;
 use std::sync::Arc;

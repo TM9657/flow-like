@@ -19,7 +19,7 @@ use crate::{
         pin::PinOptions,
         variable::VariableType,
     },
-    models::{history::History, llm::LLMCallback},
+    models::{history::History, llm::LLMCallback, response::Response, response_chunk::ResponseChunk},
     state::FlowLikeState,
 };
 use async_trait::async_trait;
@@ -64,7 +64,9 @@ impl NodeLogic for InvokeLLM {
             VariableType::Execution,
         );
 
-        node.add_output_pin("token", "Token", "Token", VariableType::String);
+        node.add_output_pin("chunk", "Chunk", "", VariableType::Struct)
+            .set_schema::<ResponseChunk>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin("done", "Done", "Done", VariableType::Execution);
 
@@ -72,8 +74,10 @@ impl NodeLogic for InvokeLLM {
             "result",
             "Result",
             "Resulting Model Output",
-            VariableType::String,
-        );
+            VariableType::Struct,
+        )
+        .set_schema::<Response>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.set_long_running(true);
 
@@ -123,7 +127,7 @@ impl NodeLogic for InvokeLLM {
                     let mut recursion_guard = HashSet::new();
                     recursion_guard.insert(parent_node_id.clone());
                     let string_token = input.get_streamed_token().unwrap_or("".to_string());
-                    ctx.set_pin_value("token", json!(string_token)).await?;
+                    ctx.set_pin_value("chunk", json!(input)).await?;
                     callback_count.fetch_add(1, Ordering::SeqCst);
                     for entry in connected_nodes.iter() {
                         let (id, context) = entry.pair();
@@ -160,11 +164,6 @@ impl NodeLogic for InvokeLLM {
         );
 
         let res = model.invoke(&history, Some(callback)).await?;
-        let mut response_string = "".to_string();
-
-        if let Some(response) = res.last_message() {
-            response_string = response.content.clone().unwrap_or("".to_string());
-        }
 
         message.end();
         message.put_stats(LogStat::new(
@@ -181,7 +180,7 @@ impl NodeLogic for InvokeLLM {
         }
 
         context
-            .set_pin_value("result", json!(response_string))
+            .set_pin_value("result", json!(res))
             .await?;
         context.deactivate_exec_pin("on_stream").await?;
         context.activate_exec_pin("done").await?;

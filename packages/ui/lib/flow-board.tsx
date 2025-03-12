@@ -49,7 +49,9 @@ export function doPinsMatch(
 	if (
 		(targetPin.options?.enforce_schema || sourcePin.options?.enforce_schema) &&
 		sourcePin.name !== "value_ref" &&
-		targetPin.name !== "value_ref"
+		targetPin.name !== "value_ref" &&
+		sourcePin.name !== "value_in" &&
+		targetPin.name !== "value_in"
 	) {
 		if (!sourcePin.schema || !targetPin.schema) return false;
 		if (schemaSource !== schemaTarget) return false;
@@ -213,7 +215,9 @@ export function parseBoard(
 	return { nodes, edges, cache, traces };
 }
 
-export function handleCopy(nodes: any[], event?: ClipboardEvent) {
+export function handleCopy(nodes: any[], event?: ClipboardEvent, refs?: {
+    [key: string]: string;
+}) {
 	const activeElement = document.activeElement;
 	if (
 		activeElement instanceof HTMLInputElement ||
@@ -226,7 +230,7 @@ export function handleCopy(nodes: any[], event?: ClipboardEvent) {
 	event?.preventDefault();
 	event?.stopPropagation();
 	const selectedNodes: INode[] = nodes
-		.filter((node: any) => node.selected && node.type === "flowNode")
+		.filter((node: any) => node.selected && node.type === "node")
 		.map((node: any) => node.data.node);
 	const selectedComments: IComment[] = nodes
 		.filter((node: any) => node.selected && node.type === "commentNode")
@@ -234,7 +238,7 @@ export function handleCopy(nodes: any[], event?: ClipboardEvent) {
 	try {
 		navigator.clipboard.writeText(
 			JSON.stringify(
-				{ nodes: selectedNodes, comments: selectedComments },
+				{ nodes: selectedNodes, comments: selectedComments, refs },
 				null,
 				2,
 			),

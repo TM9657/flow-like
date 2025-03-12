@@ -3,14 +3,14 @@ pub mod history;
 pub mod invoke;
 pub mod invoke_simple;
 pub mod preferences;
-pub mod result;
+pub mod response;
 
 use crate::flow::node::NodeLogic;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
-    vec![
+    let mut nodes: Vec<Arc<Mutex<dyn NodeLogic>>> = vec![
         Arc::new(Mutex::new(find_llm::FindLLMNode::default())),
         Arc::new(Mutex::new(invoke::InvokeLLM::default())),
         Arc::new(Mutex::new(invoke_simple::InvokeLLMSimpleNode::default())),
@@ -62,5 +62,11 @@ pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
             history::set_response_format::SetHistoryResponseFormatNode::default(),
         )),
         Arc::new(Mutex::new(history::set_n::SetHistoryNNode::default())),
-    ]
+    ];
+
+    // Add response nodes
+    let response_nodes = response::register_functions().await;
+    nodes.extend(response_nodes);
+
+    nodes
 }

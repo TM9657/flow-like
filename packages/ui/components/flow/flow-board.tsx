@@ -229,9 +229,9 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 
 	const handleCopyCB = useCallback(
 		(event: ClipboardEvent) => {
-			handleCopy(nodes, event);
+			handleCopy(nodes, event, board.data?.refs);
 		},
-		[nodes],
+		[nodes, board.data?.refs],
 	);
 
 	const shortcutHandler = useCallback(
@@ -264,6 +264,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 
 	const placeNode = useCallback(
 		async (node: INode, position?: { x: number; y: number }) => {
+			const refs = board.data?.refs ?? {};
 			const location = screenToFlowPosition({
 				x: position?.x ?? clickPosition.x,
 				y: position?.y ?? clickPosition.y,
@@ -276,14 +277,15 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 				const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
 				const pinValueType = droppedPin.value_type;
 				const pinDataType = droppedPin.data_type;
-				const schema = droppedPin.schema;
+				const schema = refs?.[droppedPin.schema ?? ""] ?? droppedPin.schema;
 				const options = droppedPin.options;
 
 				const pin = Object.values(new_node.pins).find((pin) => {
-					if (typeof schema === "string") {
+					if (typeof schema === "string" || typeof pin.schema === "string") {
+						const pinSchema = refs?.[pin.schema ?? ""] ?? pin.schema;
 						if (
 							(pin.options?.enforce_schema || options?.enforce_schema) &&
-							pin.schema !== schema &&
+							schema !== pinSchema &&
 							pin.data_type !== IVariableType.Generic
 						)
 							return false;
@@ -326,7 +328,7 @@ export function FlowBoard({ boardId }: Readonly<{ boardId: string }>) {
 				});
 			}
 		},
-		[clickPosition, boardId, droppedPin],
+		[clickPosition, boardId, droppedPin, board.data?.refs],
 	);
 
 	const handleDrop = useCallback(

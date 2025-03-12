@@ -50,7 +50,7 @@ impl NodeLogic for SetVariable {
         );
 
         node.add_input_pin(
-            "value_ref",
+            "value_in",
             "Value",
             "The value of the variable",
             VariableType::Generic,
@@ -64,7 +64,7 @@ impl NodeLogic for SetVariable {
         );
 
         node.add_output_pin(
-            "new_value",
+            "value_ref",
             "New Value",
             "The newly set value",
             VariableType::Generic,
@@ -75,10 +75,10 @@ impl NodeLogic for SetVariable {
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let var_ref: String = context.evaluate_pin("var_ref").await?;
-        let value = context.evaluate_pin::<Value>("value_ref").await?;
+        let value = context.evaluate_pin::<Value>("value_in").await?;
 
-        context.set_variable_value(&var_ref, value).await?;
-
+        context.set_variable_value(&var_ref, value.clone()).await?;
+        context.set_pin_value("value_ref", value).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
@@ -115,7 +115,7 @@ impl NodeLogic for SetVariable {
         };
 
         node.friendly_name = format!("Set {}", &var_ref_variable.name);
-        let mut_value = match node.get_pin_mut_by_name("value_ref") {
+        let mut_value = match node.get_pin_mut_by_name("value_in") {
             Some(val) => val,
             None => {
                 node.error = Some("Value pin not found!".to_string());
@@ -135,7 +135,7 @@ impl NodeLogic for SetVariable {
             mut_value.depends_on = dependencies;
         }
 
-        let mut_new_value = match node.get_pin_mut_by_name("new_value") {
+        let mut_new_value = match node.get_pin_mut_by_name("value_ref") {
             Some(val) => val,
             None => {
                 node.error = Some("New Value pin not found!".to_string());
