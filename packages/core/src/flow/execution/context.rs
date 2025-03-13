@@ -30,7 +30,7 @@ pub struct ExecutionContextCache {
     pub board_dir: Path,
     pub board_id: String,
     pub node_id: String,
-    pub sub: String
+    pub sub: String,
 }
 
 impl ExecutionContextCache {
@@ -56,12 +56,15 @@ impl ExecutionContextCache {
             board_dir,
             board_id,
             node_id: node_id.to_string(),
-            sub
+            sub,
         })
     }
 
     pub fn get_user_cache(&self, node: bool) -> anyhow::Result<Path> {
-        let base = Path::from("users").child(self.sub.clone()).child("apps").child(self.board_id.clone());
+        let base = Path::from("users")
+            .child(self.sub.clone())
+            .child("apps")
+            .child(self.board_id.clone());
         if !node {
             return Ok(base);
         }

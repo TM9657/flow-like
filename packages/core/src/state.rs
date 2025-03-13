@@ -1,17 +1,20 @@
 use anyhow::Ok;
 use lancedb::connection::ConnectBuilder;
 use object_store::path::Path;
+use object_store::signer::Signer;
 use object_store::ObjectStore;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use tokio::sync::{mpsc, Mutex, RwLock};
+use url::Url;
 
 #[cfg(feature = "flow-runtime")]
 use crate::flow::board::Board;
+use crate::flow::execution::Cacheable;
 #[cfg(feature = "flow-runtime")]
 use crate::flow::execution::InternalRun;
 use crate::flow::node::Node;
@@ -50,15 +53,58 @@ impl FlowLikeEvent {
 #[derive(Clone)]
 pub enum FlowLikeStore {
     Local(Arc<LocalObjectStore>),
-    Remote(Arc<dyn ObjectStore>),
+    AWS(Arc<object_store::aws::AmazonS3>),
+    Azure(Arc<object_store::azure::MicrosoftAzure>),
+    Google(Arc<object_store::gcp::GoogleCloudStorage>),
+    Other(Arc<dyn ObjectStore>),
+}
+
+impl Cacheable for FlowLikeStore {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 impl FlowLikeStore {
     pub fn as_generic(&self) -> Arc<dyn ObjectStore> {
         match self {
             FlowLikeStore::Local(store) => store.clone() as Arc<dyn ObjectStore>,
-            FlowLikeStore::Remote(store) => store.clone(),
+            FlowLikeStore::AWS(store) => store.clone() as Arc<dyn ObjectStore>,
+            FlowLikeStore::Azure(store) => store.clone() as Arc<dyn ObjectStore>,
+            FlowLikeStore::Google(store) => store.clone() as Arc<dyn ObjectStore>,
+            FlowLikeStore::Other(store) => store.clone() as Arc<dyn ObjectStore>,
         }
+    }
+
+    pub async fn sign_get(&self, path: &Path, expires_after: Duration) -> anyhow::Result<Url> {
+        let url: Url = match self {
+            FlowLikeStore::AWS(store) => {
+                store
+                    .signed_url(reqwest::Method::GET, path, expires_after)
+                    .await?
+            }
+            FlowLikeStore::Google(store) => {
+                store
+                    .signed_url(reqwest::Method::GET, path, expires_after)
+                    .await?
+            }
+            FlowLikeStore::Azure(store) => {
+                store
+                    .signed_url(reqwest::Method::GET, path, expires_after)
+                    .await?
+            }
+            FlowLikeStore::Local(store) => {
+                Url::from_directory_path(store.path_to_filesystem(path)?)
+                    .map_err(|_| anyhow::anyhow!("Could not build File System URL"))?
+            }
+            FlowLikeStore::Other(_) => anyhow::bail!("Sign not implemented for this store"),
+        };
+
+        Ok(url)
     }
 }
 
@@ -373,14 +419,40 @@ impl Default for ToastEvent {
 
 #[cfg(test)]
 mod tests {
+    use object_store::PutPayload;
+
     use super::*;
     use std::path::PathBuf;
 
     #[test]
-    fn path_serialization() {
-        let path = Path::from("this").child("nice").child("shit");
-        let event = PathBuf::from("test").join(path.to_string());
-        assert_eq!(path.to_string(), "this/nice/shit".to_string());
-        assert_eq!(event.to_str().unwrap(), "test/this/nice/shit");
+    fn object_store_path_serialization() {
+        let path = Path::from("test").child("path").child("one");
+        let event = PathBuf::from("random").join(path.to_string());
+        assert_eq!(path.to_string(), "test/path/one".to_string());
+        assert_eq!(event.to_str().unwrap(), "random/test/path/one");
+    }
+
+    #[tokio::test]
+    async fn test_object_store_any_cast() {
+        let memory_store = object_store::memory::InMemory::new();
+        let test_string = b"Hi, I am Testing";
+        let test_path = Path::from("test");
+        memory_store
+            .put(&test_path, PutPayload::from_static(test_string))
+            .await
+            .unwrap();
+        let store: FlowLikeStore = FlowLikeStore::Other(Arc::new(memory_store));
+        let store: Arc<dyn Cacheable> = Arc::new(store.clone());
+        let down_casted: &FlowLikeStore = store.downcast_ref().unwrap();
+        let read_bytes: bytes::Bytes = down_casted
+            .as_generic()
+            .get(&test_path)
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+        let test_bytes = bytes::Bytes::from_static(test_string);
+        assert_eq!(read_bytes, test_bytes);
     }
 }

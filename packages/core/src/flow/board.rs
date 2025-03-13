@@ -466,7 +466,7 @@ mod tests {
 
     async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
         let mut config: FlowLikeConfig = FlowLikeConfig::new();
-        config.register_project_store(crate::state::FlowLikeStore::Remote(Arc::new(
+        config.register_project_store(crate::state::FlowLikeStore::Other(Arc::new(
             object_store::memory::InMemory::new(),
         )));
         let (http_client, _refetch_rx) = HTTPClient::new();
