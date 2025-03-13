@@ -20,7 +20,7 @@ pub async fn create_run(
     let profile = TauriSettingsState::current_profile(&app_handle).await?;
 
     let internal_run =
-        InternalRun::new(&board, &flow_like_state, &profile.hub_profile, start_ids).await?;
+        InternalRun::new(&board, &flow_like_state, &profile.hub_profile, start_ids, None).await?;
     let run_id = internal_run.run.lock().await.id.clone();
     flow_like_state
         .lock()

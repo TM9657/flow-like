@@ -52,6 +52,7 @@ pub struct Run {
     pub end: SystemTime,
     pub board: Board,
     pub log_level: LogLevel,
+    pub sub: String,
 }
 
 pub trait Cacheable: Any + Send + Sync {
@@ -93,6 +94,7 @@ impl InternalRun {
         handler: &Arc<Mutex<FlowLikeState>>,
         profile: &Profile,
         start_ids: Vec<String>,
+        sub: Option<String>,
     ) -> anyhow::Result<Self> {
         let before = Instant::now();
         let start_ids_set: HashSet<String> = start_ids.into_iter().collect();
@@ -106,6 +108,7 @@ impl InternalRun {
             end: SystemTime::now(),
             board: board.clone(),
             log_level: board.log_level.clone(),
+            sub: sub.unwrap_or_else(|| "local".to_string()),
         };
 
         let run = Arc::new(Mutex::new(run));
