@@ -50,7 +50,7 @@ pub async fn create_symlink_or_junction(src: PathBuf, target_dir: PathBuf) -> io
 
 #[cfg(target_family = "windows")]
 pub async fn create_symlink_or_junction(src: PathBuf, target_dir: PathBuf) -> io::Result<()> {
-    match fs::hard_link(&src, &target_dir) {
+    match std::fs::hard_link(&src, &target_dir) {
         Ok(_) => Ok(()),
         Err(_) => {
             // probably a different drive
