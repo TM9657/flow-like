@@ -25,9 +25,9 @@ pub async fn get_default_profiles(
     app_handle: AppHandle,
 ) -> Result<Vec<(UserProfile, Vec<Bit>)>, TauriFunctionError> {
     let settings = TauriSettingsState::construct(&app_handle).await?;
-    let settings: tokio::sync::MutexGuard<'_, crate::settings::Settings> = settings.lock().await;
+    let default_hub = settings.lock().await.default_hub.clone();
     let http_client = TauriFlowLikeState::http_client(&app_handle).await?;
-    let default_hub = Hub::new(&settings.default_hub, http_client.clone()).await?;
+    let default_hub = Hub::new(&default_hub, http_client.clone()).await?;
 
     let profiles = default_hub.get_profiles().await?;
     let profiles = get_bits(profiles.clone(), http_client).await;

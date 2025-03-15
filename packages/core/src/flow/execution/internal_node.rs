@@ -53,30 +53,44 @@ impl InternalNode {
     }
 
     pub async fn ensure_cache(&self, name: &str) {
-        let mut cache = self.pin_name_cache.lock().await;
-        if cache.contains_key(name) {
-            return;
+        {
+            let cache = self.pin_name_cache.lock().await;
+            if cache.contains_key(name) {
+                return;
+            }
         }
 
+        let mut pins_by_name = HashMap::new();
         for pin_ref in self.pins.values() {
-            let pin_guard = pin_ref.lock().await;
-            let pin = pin_guard.pin.lock().await;
+            let pin_name = {
+                let pin_guard = pin_ref.lock().await;
+                let pin = pin_guard.pin.lock().await;
+                pin.name.clone()
+            };
 
-            let cached_array = cache.entry(pin.name.clone()).or_insert(vec![]);
-            cached_array.push(pin_ref.clone());
+            pins_by_name
+                .entry(pin_name)
+                .or_insert_with(Vec::new)
+                .push(pin_ref.clone());
+        }
+
+        let mut cache = self.pin_name_cache.lock().await;
+        for (pin_name, pins) in pins_by_name {
+            cache.entry(pin_name).or_insert(pins);
         }
     }
 
     pub async fn get_pin_by_name(&self, name: &str) -> anyhow::Result<Arc<Mutex<InternalPin>>> {
         self.ensure_cache(name).await;
-        let cache = self.pin_name_cache.lock().await;
-        if let Some(pins_ref) = cache.get(name) {
-            if !pins_ref.is_empty() {
-                return Ok(pins_ref[0].clone());
-            }
-        }
 
-        Err(anyhow::anyhow!("Pin {} not found", name))
+        let pin = {
+            let cache = self.pin_name_cache.lock().await;
+            cache.get(name)
+                .and_then(|pins_ref| pins_ref.first().cloned())
+        };
+
+        let pin = pin.ok_or(anyhow::anyhow!("Pin {} not found", name))?;
+        Ok(pin)
     }
 
     pub async fn get_pins_by_name(
@@ -102,8 +116,8 @@ impl InternalNode {
 
     pub async fn orphaned(&self) -> bool {
         for pin in self.pins.values() {
-            let pin_guard = pin.lock().await;
-            let pin = pin_guard.pin.lock().await;
+            let pin_guard = pin.lock().await.pin.clone();
+            let pin = pin_guard.lock().await;
 
             if pin.pin_type != PinType::Input {
                 continue;

@@ -97,8 +97,8 @@ impl App {
         for board_id in &self.boards {
             let board = self.open_board(board_id.clone(), Some(false)).await;
             if let Ok(board) = board {
-                let board = board.lock().await;
-                for var in board.variables.values() {
+                let vars = board.lock().await.variables.values().cloned().collect::<Vec<_>>();
+                for var in vars {
                     if var.default_value.is_none() {
                         return false;
                     }
@@ -119,13 +119,9 @@ impl App {
             let board = app_state
                 .lock()
                 .await
-                .board_registry()
-                .lock()
-                .await
-                .get(&board_id)
-                .cloned();
+                .get_board(&board_id);
 
-            if let Some(board) = board {
+            if let Ok(board) = board {
                 return Ok(board);
             }
         }
@@ -143,10 +139,7 @@ impl App {
                 app_state
                     .lock()
                     .await
-                    .board_registry()
-                    .lock()
-                    .await
-                    .insert(board_id.clone(), board_ref.clone());
+                    .register_board(&board_id, board_ref.clone())?;
             }
         }
 
@@ -175,10 +168,7 @@ impl App {
             app_state
                 .lock()
                 .await
-                .board_registry()
-                .lock()
-                .await
-                .remove(&board_id);
+                .remove_board(&board_id)?;
         }
 
         self.updated_at = SystemTime::now();
@@ -188,14 +178,22 @@ impl App {
     pub async fn save(&self) -> anyhow::Result<()> {
         if let Some(app_state) = &self.app_state {
             let store = FlowLikeState::project_store(app_state).await?.as_generic();
-            let registry_guard = app_state.lock().await;
-            let registry = registry_guard.board_registry.lock().await;
 
-            for board_id in &self.boards {
-                let board = registry.get(board_id).cloned();
-                if let Some(board) = board {
-                    board.lock().await.save(Some(store.clone())).await?;
+            let board_refs = {
+                let guard = app_state.lock().await;
+                let mut refs = Vec::with_capacity(self.boards.len());
+
+                for board_id in &self.boards {
+                    if let Ok(board) = guard.get_board(board_id) {
+                        refs.push(board.clone());
+                    }
                 }
+                refs
+            };
+
+            for board in board_refs {
+                let tmp = board.lock().await.clone();
+                tmp.save(Some(store.clone())).await?;
             }
         }
 

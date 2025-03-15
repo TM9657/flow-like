@@ -111,8 +111,10 @@ pub fn run() {
                     interval.tick().await;
 
                     {
-                        let mut state = model_factory.lock().await;
-                        state.gc();
+                        let state = model_factory.try_lock();
+                        if let Ok(mut state) = state {
+                            state.gc();
+                        }
                     }
                 }
             });

@@ -52,6 +52,7 @@ impl ExecutionSettings {
     }
 }
 
+// TODO: implement DashMap
 pub struct ModelFactory {
     pub cached_models: HashMap<String, Arc<LocalModel>>,
     pub ttl_list: HashMap<String, SystemTime>,
@@ -136,10 +137,11 @@ pub async fn start_gc(state: Arc<Mutex<ModelFactory>>) {
     loop {
         interval.tick().await;
 
-        // Lock the state, call gc(), and release the lock
         {
-            let mut state = state.lock().await;
-            state.gc();
+            let state = state.try_lock();
+            if let Ok(mut state) = state {
+                state.gc();
+            }
         }
     }
 }

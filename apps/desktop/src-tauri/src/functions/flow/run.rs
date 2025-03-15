@@ -16,11 +16,11 @@ pub async fn create_run(
 ) -> Result<String, TauriFunctionError> {
     let (board, flow_like_state) =
         TauriFlowLikeState::get_board_and_state(&app_handle, &board_id).await?;
-    let board = board.lock().await;
+    let board = board.lock().await.clone();
     let profile = TauriSettingsState::current_profile(&app_handle).await?;
 
     let internal_run = InternalRun::new(
-        &board,
+        board,
         &flow_like_state,
         &profile.hub_profile,
         start_ids,
@@ -31,10 +31,8 @@ pub async fn create_run(
     flow_like_state
         .lock()
         .await
-        .board_run_registry
-        .lock()
-        .await
-        .insert(run_id.clone(), Arc::new(Mutex::new(internal_run)));
+        .register_run(&run_id, Arc::new(Mutex::new(internal_run)));
+
     Ok(run_id)
 }
 
@@ -89,8 +87,6 @@ pub async fn get_run_traces(
 #[tauri::command(async)]
 pub async fn finalize_run(app_state: AppHandle, id: String) -> Result<(), TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_state).await?;
-    let flow_like_state = flow_like_state.lock().await;
-    let mut run_state = flow_like_state.board_run_registry.lock().await;
-    run_state.remove(&id);
+    flow_like_state.lock().await.remove_run(&id).ok_or(TauriFunctionError::new("Run not found"))?;
     Ok(())
 }

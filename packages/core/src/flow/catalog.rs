@@ -29,16 +29,12 @@ pub async fn node_to_dyn(
     Ok(node)
 }
 
-pub async fn load_catalog(app_state: &FlowLikeState) -> Vec<Node> {
-    let catalog = app_state.node_registry();
-    let catalog = catalog.read().await;
-    let items = catalog.get_nodes();
+pub async fn load_catalog(app_state: Arc<Mutex<FlowLikeState>>) -> Vec<Node> {
+    let catalog = app_state.lock().await.node_registry();
 
-    if let Ok(items) = items {
+    if let Ok(items) = catalog.read().await.get_nodes() {
         return items;
     }
-
-    drop(catalog);
 
     let intermediate_registry = [
         ai::register_functions().await,
@@ -52,19 +48,22 @@ pub async fn load_catalog(app_state: &FlowLikeState) -> Vec<Node> {
         bit::register_functions().await,
     ];
 
+    // TODO: This holds the lock for a long time, should be optimized
+    let guard = app_state.lock().await;
     let futures: Vec<_> = intermediate_registry
         .iter()
         .flatten()
         .map(|node| async {
             let node_ref = node.clone();
-            let node = node.lock().await.get_node(app_state).await;
+            let node = node.lock().await.get_node(&guard).await;
             (node, node_ref)
         })
         .collect();
 
     let nodes = join_all(futures).await;
-    let registry_guard = app_state.node_registry();
-    let mut registry = registry_guard.write().await;
+    println!("Loaded {} nodes", nodes.len());
+    let mut registry = catalog.write().await;
+    println!("Registering nodes");
     registry.initialize(nodes);
     registry.get_nodes().unwrap_or(vec![])
 }

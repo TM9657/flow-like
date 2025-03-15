@@ -50,7 +50,7 @@ pub struct Run {
     pub status: RunStatus,
     pub start: SystemTime,
     pub end: SystemTime,
-    pub board: Board,
+    pub board: Arc<Board>,
     pub log_level: LogLevel,
     pub sub: String,
 }
@@ -90,7 +90,7 @@ pub struct InternalRun {
 
 impl InternalRun {
     pub async fn new(
-        board: &Board,
+        board: Board,
         handler: &Arc<Mutex<FlowLikeState>>,
         profile: &Profile,
         start_ids: Vec<String>,
@@ -100,14 +100,17 @@ impl InternalRun {
         let start_ids_set: HashSet<String> = start_ids.into_iter().collect();
         let sender = handler.lock().await.event_sender.lock().await.clone();
         let run_id = cuid2::create_id();
+
+        let board = Arc::new(board);
+
         let run = Run {
             id: run_id.clone(),
             traces: vec![],
             status: RunStatus::Running,
             start: SystemTime::now(),
             end: SystemTime::now(),
-            board: board.clone(),
             log_level: board.log_level.clone(),
+            board: board.clone(),
             sub: sub.unwrap_or_else(|| "local".to_string()),
         };
 
@@ -148,11 +151,12 @@ impl InternalRun {
 
         for pin_arc in pins.values() {
             let mut internal_pin = pin_arc.lock().await;
-            let inner_pin = internal_pin.pin.lock().await;
-            let connected_to = inner_pin.connected_to.clone();
-            let depends_on = inner_pin.depends_on.clone();
-
-            drop(inner_pin);
+            let (connected_to, depends_on) = {
+                let inner = internal_pin.pin.lock().await;
+                let connected_to = inner.connected_to.clone();
+                let depends_on = inner.depends_on.clone();
+                (connected_to, depends_on)
+            };
 
             for connected_pin_id in connected_to {
                 if let Some(connected_pin) = pins.get(&connected_pin_id) {
@@ -171,14 +175,11 @@ impl InternalRun {
         let mut nodes = HashMap::with_capacity(board.nodes.len());
         let mut stack = BTreeMap::new();
 
-        let handler = handler.lock().await;
-        let mut registry = handler.node_registry.read().await;
-        if !registry.initialized {
-            drop(registry);
-            load_catalog(&handler).await;
-            registry = handler.node_registry.read().await;
+        if !handler.lock().await.node_registry.read().await.initialized {
+            load_catalog(handler.clone()).await;
         }
 
+        let registry = handler.lock().await.node_registry.read().await.node_registry.clone();
         for (node_id, node) in &board.nodes {
             let logic = registry.instantiate(node).await?;
             let mut node_pins = HashMap::new();
@@ -377,11 +378,13 @@ impl InternalRun {
     async fn stack_hash(&self) -> u64 {
         let start = Instant::now();
         let stack: Arc<Mutex<BTreeMap<String, Arc<Mutex<InternalNode>>>>> = self.stack.clone();
-        let stack = stack.lock().await;
         let mut hasher = AHasher::default();
 
-        for key in stack.keys() {
-            key.hash(&mut hasher);
+        {
+            let stack = stack.lock().await;
+            for key in stack.keys() {
+                key.hash(&mut hasher);
+            }
         }
 
         let result = hasher.finish();
@@ -577,11 +580,15 @@ async fn step_core(
         let connected = node.lock().await.get_connected_exec(true).await;
         let mut connected_nodes = Vec::with_capacity(connected.len());
         for connected_node in connected {
-            let id = {
-                let connected_node = connected_node.lock().await;
-                let node = connected_node.node.lock().await;
-                node.id.clone()
-            };
+            let id = connected_node
+                .lock()
+                .await
+                .node
+                .clone()
+                .lock()
+                .await
+                .id
+                .clone();
 
             connected_nodes.push((id, connected_node.clone()));
         }

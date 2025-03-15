@@ -150,11 +150,12 @@ impl Board {
         append: bool,
     ) -> anyhow::Result<()> {
         command.lock().await.execute(self, state.clone()).await?;
-        if append {
-            self.undo_stack.last_mut().unwrap().push(command);
-        } else {
-            self.undo_stack.push(vec![command]);
+
+        match (append, self.undo_stack.last_mut()) {
+            (true, Some(last_commands)) => last_commands.push(command),
+            _ => self.undo_stack.push(vec![command]),
         }
+
         self.redo_stack.clear();
         self.fixate_node_update(state).await;
         self.updated_at = SystemTime::now();
@@ -450,10 +451,14 @@ pub trait Command: Send + Sync {
         node: &Node,
         state: Arc<Mutex<FlowLikeState>>,
     ) -> anyhow::Result<Arc<Mutex<dyn NodeLogic>>> {
-        let node_registry = state.lock().await;
-        let node_registry = node_registry.node_registry();
-        let node_registry = node_registry.read().await;
-        Ok(node_registry.instantiate(node).await?)
+        let node_registry = {
+            let state_guard = state.lock().await;
+            state_guard.node_registry().clone()
+        };
+
+        let registry_guard = node_registry.read().await;
+
+        registry_guard.instantiate(node).await
     }
 }
 

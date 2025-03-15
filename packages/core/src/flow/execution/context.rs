@@ -155,10 +155,9 @@ impl ExecutionContext {
         sender: tokio::sync::mpsc::Sender<FlowLikeEvent>,
     ) -> Self {
         let (id, execution_cache) = {
-            let guard = node.lock().await;
-            let node = guard.node.lock().await;
-            let execution_cache = ExecutionContextCache::new(run, state, &node.id).await;
-            (node.id.clone(), execution_cache)
+            let node_id = node.lock().await.node.lock().await.id.clone();
+            let execution_cache = ExecutionContextCache::new(run, state, &node_id).await;
+            (node_id, execution_cache)
         };
 
         let mut trace = Trace::new(&id);
@@ -209,9 +208,8 @@ impl ExecutionContext {
     }
 
     pub async fn get_variable(&self, variable_id: &str) -> anyhow::Result<Variable> {
-        let variables = self.variables.lock().await;
-        if let Some(variable) = variables.get(variable_id) {
-            return Ok(variable.clone());
+        if let Some(variable) = self.variables.lock().await.get(variable_id).cloned() {
+            return Ok(variable);
         }
 
         Err(anyhow::anyhow!("Variable not found"))
@@ -223,14 +221,10 @@ impl ExecutionContext {
     }
 
     pub async fn set_variable_value(&self, variable_id: &str, value: Value) -> anyhow::Result<()> {
-        let mut variables = self.variables.lock().await;
-        if let Some(variable) = variables.get_mut(variable_id) {
-            let mut guard = variable.value.lock().await;
-            *guard = value;
-            return Ok(());
-        }
-
-        Err(anyhow::anyhow!("Variable not found"))
+        let value_ref = self.variables.lock().await.get(variable_id).ok_or(anyhow::anyhow!("Variable not found"))?.value.clone();
+        let mut guard = value_ref.lock().await;
+        *guard = value;
+        return Ok(());
     }
 
     pub async fn get_cache(&self, key: &str) -> Option<Arc<dyn Cacheable>> {
@@ -409,7 +403,7 @@ impl ExecutionContext {
         Err(anyhow::anyhow!("Run not found"))
     }
 
-    pub async fn read_node(&mut self) -> Node {
+    pub async fn read_node(&self) -> Node {
         let node_guard = self.node.lock().await;
         let node = node_guard.node.lock().await;
 

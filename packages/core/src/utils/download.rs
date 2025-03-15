@@ -54,10 +54,8 @@ async fn publish_progress(
 }
 
 async fn remove_download(bit: &crate::bit::Bit, app_state: &Arc<Mutex<FlowLikeState>>) {
-    let guard = app_state.lock().await;
-    let manager = guard.download_manager();
-    let mut manager = manager.lock().await;
-    manager.remove_download(bit)
+    let manager = app_state.lock().await.download_manager();
+    manager.lock().await.remove_download(bit);
 }
 
 pub async fn download_bit(
@@ -77,17 +75,14 @@ pub async fn download_bit(
     let path_name = file_store.path_to_filesystem(&store_path)?;
     let url = bit.download_link.clone().unwrap();
     let sender = {
-        let guard = app_state.lock().await;
-        let sender = guard.event_sender.clone();
-        let sender = sender.lock().await;
+        let sender = app_state.lock().await.event_sender.lock().await.clone();
         sender.clone()
     };
     let sender = sender.clone();
 
     // Another download of that type already exists
     let exists = {
-        let guard = app_state.lock().await;
-        let manager = guard.download_manager();
+        let manager =  app_state.lock().await.download_manager();
         let manager = manager.lock().await;
         manager.download_exists(bit)
     };
@@ -97,8 +92,7 @@ pub async fn download_bit(
     }
 
     let client = {
-        let guard = app_state.lock().await;
-        let manager = guard.download_manager();
+        let manager = app_state.lock().await.download_manager();
         let mut manager = manager.lock().await;
         manager.add_download(bit)
     };

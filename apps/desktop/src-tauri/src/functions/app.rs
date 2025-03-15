@@ -75,16 +75,17 @@ pub async fn create_app(
     if template == "blank" {
         let board = new_app.create_board().await?;
         let board = new_app.open_board(board, Some(false)).await?;
-        let mut board = board.lock().await;
         let mut variable = Variable::new(
             "Embedding Models",
             flow_like::flow::variable::VariableType::String,
             flow_like::flow::pin::ValueType::HashSet,
         );
         variable
-            .set_exposed(false)
-            .set_editable(false)
-            .set_default_value(serde_json::json!(bits_map));
+        .set_exposed(false)
+        .set_editable(false)
+        .set_default_value(serde_json::json!(bits_map));
+
+        let mut board = board.lock().await;
         board.variables.insert(variable.id.clone(), variable);
         board.save(None).await?;
     }
@@ -202,6 +203,8 @@ pub async fn delete_app(app_handle: AppHandle, app_id: String) -> Result<(), Tau
     for profile in settings.profiles.values_mut() {
         profile.apps.retain(|app| app != &app_id);
     }
+    settings.serialize();
+    drop(settings);
 
     let path = Path::from("apps").child(app_id);
     let locations = store.list(Some(&path)).map_ok(|m| m.location).boxed();
@@ -210,8 +213,6 @@ pub async fn delete_app(app_handle: AppHandle, app_id: String) -> Result<(), Tau
         .try_collect::<Vec<Path>>()
         .await
         .map_err(|_| TauriFunctionError::new("Failed to delete app"))?;
-
-    settings.serialize();
 
     Ok(())
 }

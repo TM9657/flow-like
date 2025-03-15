@@ -4,7 +4,7 @@ use flow_like::{
     utils::http::HTTPClient,
 };
 use object_store::ObjectStore;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
 
@@ -28,27 +28,12 @@ impl TauriFlowLikeState {
     }
 
     #[inline]
-    pub async fn board_registry(
-        app_handle: &AppHandle,
-    ) -> anyhow::Result<Arc<Mutex<HashMap<String, Arc<Mutex<Board>>>>>> {
-        let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
-        let flow_like_state = flow_like_state.lock().await.board_registry().clone();
-        Ok(flow_like_state)
-    }
-
-    #[inline]
     pub async fn get_board_and_state(
         app_handle: &AppHandle,
         board_id: &str,
     ) -> anyhow::Result<(Arc<Mutex<Board>>, Arc<Mutex<FlowLikeState>>)> {
         let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
-        let board_registry = flow_like_state.lock().await.board_registry();
-        let board = board_registry
-            .lock()
-            .await
-            .get(board_id)
-            .ok_or(anyhow::anyhow!("Board not found"))?
-            .clone();
+        let board = flow_like_state.lock().await.get_board(board_id)?;
         Ok((board, flow_like_state))
     }
 
@@ -58,13 +43,7 @@ impl TauriFlowLikeState {
         run_id: &str,
     ) -> anyhow::Result<(Arc<Mutex<InternalRun>>, Arc<Mutex<FlowLikeState>>)> {
         let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
-        let run_registry = flow_like_state.lock().await.board_run_registry();
-        let run = run_registry
-            .lock()
-            .await
-            .get(run_id)
-            .ok_or(anyhow::anyhow!("Run not found"))?
-            .clone();
+        let run = flow_like_state.lock().await.get_run(run_id)?;
         Ok((run, flow_like_state))
     }
 

@@ -14,51 +14,72 @@ pub async fn evaluate_pin_value_reference(
 
     let pin = pin.clone().unwrap();
 
-    let pin_guard = pin.lock().await;
-    let pin = pin_guard.pin.lock().await;
-    if pin.value.is_none() {
-        if pin.default_value.is_none() {
-            return Err(anyhow::anyhow!("Pin value is not set"));
+    let (value, default_value, name) = {
+        let pin_guard = pin.lock().await.pin.clone();
+        let pin = pin_guard.lock().await;
+        (pin.value.clone(), pin.default_value.clone(), pin.friendly_name.clone())
+    };
+
+    match value {
+        Some(value) => return Ok(value),
+        None => {
+            if let Some(default_value) = default_value {
+                let value: Value = serde_json::from_slice(&default_value)?;
+                return Ok(Arc::new(Mutex::new(value)));
+            }
+
+            return Err(anyhow::anyhow!("Pin {} default value is not set", name));
         }
-
-        let value = pin.default_value.clone().unwrap();
-        let value = serde_json::from_slice(&value).unwrap();
-
-        return Ok(Arc::new(Mutex::new(value)));
     }
-
-    let value = pin.value.clone().unwrap();
-    Ok(value)
 }
 
 pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> anyhow::Result<Value> {
     let mut current_pin = pin;
+    let mut visited_pins = std::collections::HashSet::with_capacity(8);
 
     loop {
-        let cloned_guard = current_pin.clone();
-        let pin_guard = cloned_guard.lock().await;
-        let pin = pin_guard.pin.lock().await;
+        // Step 1: Get internal pin reference and dependency with a single lock
+        let (pin_ref, first_dependency) = {
+            let guard = current_pin.lock().await;
+            (guard.pin.clone(), guard.depends_on.first().cloned())
+        };
 
-        if let Some(value_arc) = pin.value.clone() {
-            let value_guard = value_arc.lock().await;
-            let value = value_guard.clone();
-            return Ok(value);
+        // Step 2: Get all pin data with a single lock
+        let (pin_id, value, default_value, friendly_name) = {
+            let pin = pin_ref.lock().await;
+            (
+                pin.id.clone(),
+                pin.value.clone(),
+                pin.default_value.clone(),
+                pin.friendly_name.clone(),
+            )
+        };
+
+        // Check for circular dependencies
+        if !visited_pins.insert(pin_id) {
+            return Err(anyhow::anyhow!("Detected circular dependency in pin chain"));
         }
 
-        if pin_guard.depends_on.is_empty() {
-            if let Some(default_value) = pin.default_value.clone() {
-                let value: Value = serde_json::from_slice(&default_value)?;
-                return Ok(value);
-            } else {
-                return Err(anyhow::anyhow!("Pin value is not set"));
-            }
+        // Case 1: Pin has a value - directly return from here
+        if let Some(value_arc) = value {
+            return Ok(value_arc.lock().await.clone());
         }
 
-        drop(pin);
+        // Case 2: Pin depends on another pin
+        if let Some(dependency) = first_dependency {
+            current_pin = dependency;
+            continue;
+        }
 
-        let child = pin_guard.depends_on.first().unwrap();
-        current_pin = child.clone();
+        // Case 3: Use default value if available
+        if let Some(default_value) = default_value {
+            return match serde_json::from_slice(&default_value) {
+                Ok(value) => Ok(value),
+                Err(e) => Err(anyhow::anyhow!("Failed to parse default value for pin '{}': {}", friendly_name, e)),
+            };
+        }
 
-        drop(pin_guard);
+        // Case 4: No value found
+        return Err(anyhow::anyhow!("Pin '{}' has no value, dependencies, or default value", friendly_name));
     }
 }

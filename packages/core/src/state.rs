@@ -1,4 +1,5 @@
 use anyhow::Ok;
+use dashmap::DashMap;
 use lancedb::connection::ConnectBuilder;
 use object_store::path::Path;
 use object_store::signer::Signer;
@@ -155,9 +156,56 @@ impl FlowLikeConfig {
 }
 
 #[cfg(feature = "flow-runtime")]
+pub struct FlowNodeRegistryInner {
+    pub registry: HashMap<String, (Node, Arc<Mutex<dyn NodeLogic>>)>
+}
+
+impl Default for FlowNodeRegistryInner {
+    fn default() -> Self {
+        FlowNodeRegistryInner {
+            registry: HashMap::new()
+        }
+    }
+}
+
+impl FlowNodeRegistryInner {
+    pub fn new(size: usize) -> Self {
+        FlowNodeRegistryInner {
+            registry: HashMap::with_capacity(size)
+        }
+    }
+
+    pub fn insert(&mut self, node: Node, logic: Arc<Mutex<dyn NodeLogic>>) {
+        self.registry.insert(node.name.clone(), (node, logic));
+    }
+
+    pub fn get_nodes(&self) -> Vec<Node> {
+        self.registry
+            .iter()
+            .map(|(_id, node)| node.0.clone())
+            .collect()
+    }
+
+    pub fn get_node(&self, node_id: &str) -> anyhow::Result<Node> {
+        let node = self.registry.get(node_id);
+        match node {
+            Some(node) => Ok(node.0.clone()),
+            None => Err(anyhow::anyhow!("Node not found")),
+        }
+    }
+
+    pub async fn instantiate(&self, node: &Node) -> anyhow::Result<Arc<Mutex<dyn NodeLogic>>> {
+        let node = self.registry.get(&node.name);
+        match node {
+            Some(node) => Ok(node.1.clone()),
+            None => Err(anyhow::anyhow!("Node not found")),
+        }
+    }
+}
+
+#[cfg(feature = "flow-runtime")]
 pub struct FlowNodeRegistry {
-    // TODO: replace with dashmap
-    pub node_registry: HashMap<String, (Node, Arc<Mutex<dyn NodeLogic>>)>,
+    pub node_registry: Arc<FlowNodeRegistryInner>,
     pub initialized: bool,
 }
 
@@ -171,7 +219,7 @@ impl Default for FlowNodeRegistry {
 impl FlowNodeRegistry {
     pub fn new() -> Self {
         FlowNodeRegistry {
-            node_registry: HashMap::new(),
+            node_registry: Arc::new(FlowNodeRegistryInner::new(0)),
             initialized: false,
         }
     }
@@ -181,19 +229,22 @@ impl FlowNodeRegistry {
             return Err(anyhow::anyhow!("Registry not initialized"));
         }
 
-        let nodes = self
-            .node_registry
-            .iter()
-            .map(|(_, (node, _))| node.clone())
-            .collect();
+        let nodes =
+            self.node_registry
+                .get_nodes();
+
         Ok(nodes)
     }
 
     pub fn initialize(&mut self, nodes: Vec<(Node, Arc<Mutex<dyn NodeLogic>>)>) {
+        let mut registry = FlowNodeRegistryInner::new(nodes.len());
         for (node, logic) in nodes {
-            self.node_registry.insert(node.name.clone(), (node, logic));
+            registry.insert( node, logic);
         }
 
+        println!("Initialized registry with {} nodes", registry.registry.len());
+
+        self.node_registry = Arc::new(registry);
         self.initialized = true;
     }
 
@@ -202,11 +253,8 @@ impl FlowNodeRegistry {
             return Err(anyhow::anyhow!("Registry not initialized"));
         }
 
-        let node = self.node_registry.get(node_id);
-        match node {
-            Some(node) => Ok(node.0.clone()),
-            None => Err(anyhow::anyhow!("Node not found")),
-        }
+        let node = self.node_registry.get_node(node_id)?;
+        Ok(node)
     }
 
     pub async fn instantiate(&self, node: &Node) -> anyhow::Result<Arc<Mutex<dyn NodeLogic>>> {
@@ -214,11 +262,8 @@ impl FlowNodeRegistry {
             return Err(anyhow::anyhow!("Registry not initialized"));
         }
 
-        let node = self.node_registry.get(&node.name);
-        match node {
-            Some((_, logic)) => Ok(logic.clone()),
-            None => Err(anyhow::anyhow!("Node not found")),
-        }
+        let node = self.node_registry.instantiate(node).await?;
+        Ok(node)
     }
 }
 
@@ -240,9 +285,9 @@ pub struct FlowLikeState {
     #[cfg(feature = "flow-runtime")]
     pub node_registry: Arc<RwLock<FlowNodeRegistry>>,
     #[cfg(feature = "flow-runtime")]
-    pub board_registry: Arc<Mutex<HashMap<String, Arc<Mutex<Board>>>>>,
+    pub board_registry: Arc<DashMap<String, Arc<Mutex<Board>>>>, // TODO: should board be wrapped in RWLock or Mutex?
     #[cfg(feature = "flow-runtime")]
-    pub board_run_registry: Arc<Mutex<HashMap<String, Arc<Mutex<InternalRun>>>>>,
+    pub board_run_registry: Arc<DashMap<String, Arc<Mutex<InternalRun>>>>,
 
     pub event_sender: Arc<Mutex<mpsc::Sender<FlowLikeEvent>>>,
 }
@@ -271,9 +316,9 @@ impl FlowLikeState {
                 #[cfg(feature = "flow-runtime")]
                 node_registry: Arc::new(RwLock::new(FlowNodeRegistry::new())),
                 #[cfg(feature = "flow-runtime")]
-                board_registry: Arc::new(Mutex::new(HashMap::new())),
+                board_registry: Arc::new(DashMap::new()),
                 #[cfg(feature = "flow-runtime")]
-                board_run_registry: Arc::new(Mutex::new(HashMap::new())),
+                board_run_registry: Arc::new(DashMap::new()),
                 event_sender: Arc::new(Mutex::new(event_sender)),
             },
             event_receiver,
@@ -327,13 +372,63 @@ impl FlowLikeState {
     }
 
     #[cfg(feature = "flow-runtime")]
-    pub fn board_registry(&self) -> Arc<Mutex<HashMap<String, Arc<Mutex<Board>>>>> {
+    pub fn board_registry(&self) -> Arc<DashMap<String, Arc<Mutex<Board>>>> {
         self.board_registry.clone()
     }
 
     #[cfg(feature = "flow-runtime")]
-    pub fn board_run_registry(&self) -> Arc<Mutex<HashMap<String, Arc<Mutex<InternalRun>>>>> {
+    pub fn get_board(&self, board_id: &str) -> anyhow::Result<Arc<Mutex<Board>>> {
+        let board = self.board_registry.try_get(board_id);
+
+        match board.try_unwrap() {
+            Some(board) => Ok(board.clone()),
+            None => Err(anyhow::anyhow!("Board not found or could not be locked")),
+        }
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn remove_board(&self, board_id: &str) -> anyhow::Result<Option<Arc<Mutex<Board>>>> {
+        let removed = self.board_registry.remove(board_id);
+
+        match removed {
+            Some((_id, board)) => Ok(Some(board)),
+            None => Ok(None),
+        }
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn register_board(&self, board_id: &str, board: Arc<Mutex<Board>>) -> anyhow::Result<()> {
+        self.board_registry.insert(board_id.to_string(), board.clone());
+        Ok(())
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn board_run_registry(&self) -> Arc<DashMap<String, Arc<Mutex<InternalRun>>>> {
         self.board_run_registry.clone()
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn register_run(&self, run_id: &str, run: Arc<Mutex<InternalRun>>) {
+        self.board_run_registry.insert(run_id.to_string(), run);
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn remove_run(&self, run_id: &str) -> Option<Arc<Mutex<InternalRun>>> {
+        let removed = self.board_run_registry.remove(run_id);
+        match removed {
+            Some((_id, run)) => Some(run),
+            None => None,
+        }
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn get_run(&self, run_id: &str) -> anyhow::Result<Arc<Mutex<InternalRun>>> {
+        let run = self.board_run_registry.try_get(run_id);
+
+        match run.try_unwrap() {
+            Some(run) => Ok(run.clone()),
+            None => Err(anyhow::anyhow!("Run not found or could not be locked")),
+        }
     }
 
     #[inline]
