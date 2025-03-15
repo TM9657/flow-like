@@ -186,6 +186,7 @@ impl FlowNodeRegistryInner {
             .collect()
     }
 
+    #[inline]
     pub fn get_node(&self, node_id: &str) -> anyhow::Result<Node> {
         let node = self.registry.get(node_id);
         match node {
@@ -194,7 +195,8 @@ impl FlowNodeRegistryInner {
         }
     }
 
-    pub async fn instantiate(&self, node: &Node) -> anyhow::Result<Arc<Mutex<dyn NodeLogic>>> {
+    #[inline]
+    pub fn instantiate(&self, node: &Node) -> anyhow::Result<Arc<Mutex<dyn NodeLogic>>> {
         let node = self.registry.get(&node.name);
         match node {
             Some(node) => Ok(node.1.clone()),
@@ -262,7 +264,7 @@ impl FlowNodeRegistry {
             return Err(anyhow::anyhow!("Registry not initialized"));
         }
 
-        let node = self.node_registry.instantiate(node).await?;
+        let node = self.node_registry.instantiate(node)?;
         Ok(node)
     }
 }

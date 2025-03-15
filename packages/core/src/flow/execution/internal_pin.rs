@@ -17,6 +17,11 @@ pub struct InternalPin {
 }
 
 impl InternalPin {
+    pub async fn reset(&mut self) {
+        let mut pin = self.pin.lock().await;
+        pin.value = None;
+    }
+
     pub async fn get_connected_and_dependent_nodes(&self) -> Vec<Arc<Mutex<InternalNode>>> {
         let mut connected = self.get_connected_nodes().await;
         let dependent = self.get_dependent_nodes().await;

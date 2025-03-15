@@ -44,6 +44,10 @@ impl InternalNode {
         }
     }
 
+    pub async fn reset(&mut self) {
+        self.execution_count = 0;
+    }
+
     pub fn increment_execution_count(&mut self) {
         self.execution_count += 1;
     }
