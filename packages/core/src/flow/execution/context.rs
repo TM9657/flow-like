@@ -221,10 +221,17 @@ impl ExecutionContext {
     }
 
     pub async fn set_variable_value(&self, variable_id: &str, value: Value) -> anyhow::Result<()> {
-        let value_ref = self.variables.lock().await.get(variable_id).ok_or(anyhow::anyhow!("Variable not found"))?.value.clone();
+        let value_ref = self
+            .variables
+            .lock()
+            .await
+            .get(variable_id)
+            .ok_or(anyhow::anyhow!("Variable not found"))?
+            .value
+            .clone();
         let mut guard = value_ref.lock().await;
         *guard = value;
-        return Ok(());
+        Ok(())
     }
 
     pub async fn get_cache(&self, key: &str) -> Option<Arc<dyn Cacheable>> {

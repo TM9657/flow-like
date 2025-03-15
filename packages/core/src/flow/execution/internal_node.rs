@@ -89,7 +89,8 @@ impl InternalNode {
 
         let pin = {
             let cache = self.pin_name_cache.lock().await;
-            cache.get(name)
+            cache
+                .get(name)
                 .and_then(|pins_ref| pins_ref.first().cloned())
         };
 

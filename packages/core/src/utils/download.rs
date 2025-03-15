@@ -82,7 +82,7 @@ pub async fn download_bit(
 
     // Another download of that type already exists
     let exists = {
-        let manager =  app_state.lock().await.download_manager();
+        let manager = app_state.lock().await.download_manager();
         let manager = manager.lock().await;
         manager.download_exists(bit)
     };

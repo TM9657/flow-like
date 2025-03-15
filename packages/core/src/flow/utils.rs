@@ -17,18 +17,22 @@ pub async fn evaluate_pin_value_reference(
     let (value, default_value, name) = {
         let pin_guard = pin.lock().await.pin.clone();
         let pin = pin_guard.lock().await;
-        (pin.value.clone(), pin.default_value.clone(), pin.friendly_name.clone())
+        (
+            pin.value.clone(),
+            pin.default_value.clone(),
+            pin.friendly_name.clone(),
+        )
     };
 
     match value {
-        Some(value) => return Ok(value),
+        Some(value) => Ok(value),
         None => {
             if let Some(default_value) = default_value {
                 let value: Value = serde_json::from_slice(&default_value)?;
                 return Ok(Arc::new(Mutex::new(value)));
             }
 
-            return Err(anyhow::anyhow!("Pin {} default value is not set", name));
+            Err(anyhow::anyhow!("Pin {} default value is not set", name))
         }
     }
 }
@@ -75,11 +79,18 @@ pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> anyhow::Result<
         if let Some(default_value) = default_value {
             return match serde_json::from_slice(&default_value) {
                 Ok(value) => Ok(value),
-                Err(e) => Err(anyhow::anyhow!("Failed to parse default value for pin '{}': {}", friendly_name, e)),
+                Err(e) => Err(anyhow::anyhow!(
+                    "Failed to parse default value for pin '{}': {}",
+                    friendly_name,
+                    e
+                )),
             };
         }
 
         // Case 4: No value found
-        return Err(anyhow::anyhow!("Pin '{}' has no value, dependencies, or default value", friendly_name));
+        return Err(anyhow::anyhow!(
+            "Pin '{}' has no value, dependencies, or default value",
+            friendly_name
+        ));
     }
 }

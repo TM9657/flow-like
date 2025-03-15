@@ -30,21 +30,14 @@
 	"bundle": {
 		"fileAssociations": [
 			{
-				"ext": ["bvault"],
-				"description": "Flow Like Vault",
-				"mimeType": "application/vnd.flow-like.vault",
-				"name": "Flow Like Vault",
-				"role": "Editor"
-			},
-			{
-				"ext": ["bapp"],
+				"ext": ["fl-app"],
 				"description": "Flow-Like App",
 				"mimeType": "application/vnd.flow-like.app",
 				"name": "Flow-Like App",
 				"role": "Editor"
 			},
 			{
-				"ext": ["bflow"],
+				"ext": ["fl-flow"],
 				"description": "Flow-Like Flow",
 				"mimeType": "application/vnd.flow-like.flow",
 				"name": "Flow-Like Flow",

@@ -87,6 +87,10 @@ pub async fn get_run_traces(
 #[tauri::command(async)]
 pub async fn finalize_run(app_state: AppHandle, id: String) -> Result<(), TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_state).await?;
-    flow_like_state.lock().await.remove_run(&id).ok_or(TauriFunctionError::new("Run not found"))?;
+    flow_like_state
+        .lock()
+        .await
+        .remove_run(&id)
+        .ok_or(TauriFunctionError::new("Run not found"))?;
     Ok(())
 }

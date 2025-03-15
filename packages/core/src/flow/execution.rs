@@ -218,7 +218,14 @@ impl InternalRun {
             load_catalog(handler.clone()).await;
         }
 
-        let registry = handler.lock().await.node_registry.read().await.node_registry.clone();
+        let registry = handler
+            .lock()
+            .await
+            .node_registry
+            .read()
+            .await
+            .node_registry
+            .clone();
         for (node_id, node) in &board.nodes {
             let logic = registry.instantiate(node)?;
             let mut node_pins = HashMap::new();
@@ -244,7 +251,6 @@ impl InternalRun {
                     }
                 }
             }
-
 
             let internal_node = Arc::new(Mutex::new(InternalNode::new(
                 node.clone(),
@@ -375,14 +381,17 @@ impl InternalRun {
                 }
             })
             .buffer_unordered(self.cpus * 3)
-            .fold(RunStack::with_capacity(stack.stack.len()), |mut acc, result| async move {
-                if let Some(inner_iter) = result {
-                    for (key, node) in inner_iter {
-                        acc.push(&key, node);
+            .fold(
+                RunStack::with_capacity(stack.stack.len()),
+                |mut acc, result| async move {
+                    if let Some(inner_iter) = result {
+                        for (key, node) in inner_iter {
+                            acc.push(&key, node);
+                        }
                     }
-                }
-                acc
-            })
+                    acc
+                },
+            )
             .await;
 
         self.stack = Arc::new(new_stack);

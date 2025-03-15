@@ -55,7 +55,10 @@ pub async fn create_board(app_handle: AppHandle) -> Result<Board, TauriFunctionE
     let board = Board::new(path, flow_like_state);
 
     let board_state = TauriFlowLikeState::construct(&app_handle).await?;
-    board_state.lock().await.register_board(&board.id, Arc::new(Mutex::new(board.clone())))?;
+    board_state
+        .lock()
+        .await
+        .register_board(&board.id, Arc::new(Mutex::new(board.clone())))?;
     Ok(board)
 }
 
@@ -72,9 +75,7 @@ pub async fn close_board(handler: AppHandle, board_id: String) -> Result<(), Tau
     let board_state = TauriFlowLikeState::construct(&handler).await?;
     let store = TauriFlowLikeState::get_project_store(&handler).await?;
 
-    let board = {
-        board_state.lock().await.remove_board(&board_id)?
-    };
+    let board = { board_state.lock().await.remove_board(&board_id)? };
 
     if let Some(board) = board {
         let board = board.lock().await;
@@ -131,7 +132,7 @@ pub async fn undo_board(handler: AppHandle, board_id: String) -> Result<Board, T
     let mut board = board.lock().await;
     let _ = board.undo(flow_like_state).await;
     board.save(Some(store.clone())).await?;
-    return Ok(board.clone());
+    Ok(board.clone())
 }
 
 #[tauri::command(async)]
@@ -381,5 +382,5 @@ async fn execute_command(
     drop(board);
 
     tmp_save.save(Some(store.clone())).await?;
-    return Ok(tmp_save);
+    Ok(tmp_save)
 }

@@ -97,7 +97,13 @@ impl App {
         for board_id in &self.boards {
             let board = self.open_board(board_id.clone(), Some(false)).await;
             if let Ok(board) = board {
-                let vars = board.lock().await.variables.values().cloned().collect::<Vec<_>>();
+                let vars = board
+                    .lock()
+                    .await
+                    .variables
+                    .values()
+                    .cloned()
+                    .collect::<Vec<_>>();
                 for var in vars {
                     if var.default_value.is_none() {
                         return false;
@@ -116,10 +122,7 @@ impl App {
     ) -> anyhow::Result<Arc<Mutex<Board>>> {
         let storage_root = Path::from("apps").child(self.id.clone());
         if let Some(app_state) = &self.app_state {
-            let board = app_state
-                .lock()
-                .await
-                .get_board(&board_id);
+            let board = app_state.lock().await.get_board(&board_id);
 
             if let Ok(board) = board {
                 return Ok(board);
@@ -165,10 +168,7 @@ impl App {
         store.delete(&board_dir).await?;
 
         if let Some(app_state) = &self.app_state {
-            app_state
-                .lock()
-                .await
-                .remove_board(&board_id)?;
+            app_state.lock().await.remove_board(&board_id)?;
         }
 
         self.updated_at = SystemTime::now();

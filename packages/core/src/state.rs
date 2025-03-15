@@ -156,22 +156,15 @@ impl FlowLikeConfig {
 }
 
 #[cfg(feature = "flow-runtime")]
+#[derive(Default)]
 pub struct FlowNodeRegistryInner {
-    pub registry: HashMap<String, (Node, Arc<Mutex<dyn NodeLogic>>)>
-}
-
-impl Default for FlowNodeRegistryInner {
-    fn default() -> Self {
-        FlowNodeRegistryInner {
-            registry: HashMap::new()
-        }
-    }
+    pub registry: HashMap<String, (Node, Arc<Mutex<dyn NodeLogic>>)>,
 }
 
 impl FlowNodeRegistryInner {
     pub fn new(size: usize) -> Self {
         FlowNodeRegistryInner {
-            registry: HashMap::with_capacity(size)
+            registry: HashMap::with_capacity(size),
         }
     }
 
@@ -180,10 +173,7 @@ impl FlowNodeRegistryInner {
     }
 
     pub fn get_nodes(&self) -> Vec<Node> {
-        self.registry
-            .iter()
-            .map(|(_id, node)| node.0.clone())
-            .collect()
+        self.registry.values().map(|node| node.0.clone()).collect()
     }
 
     #[inline]
@@ -231,9 +221,7 @@ impl FlowNodeRegistry {
             return Err(anyhow::anyhow!("Registry not initialized"));
         }
 
-        let nodes =
-            self.node_registry
-                .get_nodes();
+        let nodes = self.node_registry.get_nodes();
 
         Ok(nodes)
     }
@@ -241,10 +229,13 @@ impl FlowNodeRegistry {
     pub fn initialize(&mut self, nodes: Vec<(Node, Arc<Mutex<dyn NodeLogic>>)>) {
         let mut registry = FlowNodeRegistryInner::new(nodes.len());
         for (node, logic) in nodes {
-            registry.insert( node, logic);
+            registry.insert(node, logic);
         }
 
-        println!("Initialized registry with {} nodes", registry.registry.len());
+        println!(
+            "Initialized registry with {} nodes",
+            registry.registry.len()
+        );
 
         self.node_registry = Arc::new(registry);
         self.initialized = true;
@@ -400,7 +391,8 @@ impl FlowLikeState {
 
     #[cfg(feature = "flow-runtime")]
     pub fn register_board(&self, board_id: &str, board: Arc<Mutex<Board>>) -> anyhow::Result<()> {
-        self.board_registry.insert(board_id.to_string(), board.clone());
+        self.board_registry
+            .insert(board_id.to_string(), board.clone());
         Ok(())
     }
 
@@ -417,10 +409,7 @@ impl FlowLikeState {
     #[cfg(feature = "flow-runtime")]
     pub fn remove_run(&self, run_id: &str) -> Option<Arc<Mutex<InternalRun>>> {
         let removed = self.board_run_registry.remove(run_id);
-        match removed {
-            Some((_id, run)) => Some(run),
-            None => None,
-        }
+        removed.map(|(_id, run)| run)
     }
 
     #[cfg(feature = "flow-runtime")]

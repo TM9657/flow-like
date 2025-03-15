@@ -81,9 +81,9 @@ pub async fn create_app(
             flow_like::flow::pin::ValueType::HashSet,
         );
         variable
-        .set_exposed(false)
-        .set_editable(false)
-        .set_default_value(serde_json::json!(bits_map));
+            .set_exposed(false)
+            .set_editable(false)
+            .set_default_value(serde_json::json!(bits_map));
 
         let mut board = board.lock().await;
         board.variables.insert(variable.id.clone(), variable);
