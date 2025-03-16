@@ -63,7 +63,7 @@ jobs:
           echo "binary_path=apps/docling/dist/${{ matrix.artifact_name }}" >> $GITHUB_OUTPUT
 
       - name: Upload binary to artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ steps.prepare-binary.outputs.binary_path }}
@@ -76,7 +76,7 @@ jobs:
     if: github.event_name == 'release'
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
 
