@@ -52,10 +52,6 @@ export default function ProfileCreation() {
 		}[]
 	>([]);
 	const [doneCounter, setDoneCounter] = useState(0);
-	const [debugStats, setDebugStats] = useState({
-		currentTotal: 0,
-		maxTotal: 0,
-	});
 	const defaultProfiles: UseQueryResult<[ISettingsProfile, IBit[]][]> =
 		useInvoke("get_default_profiles", {});
 
@@ -174,10 +170,6 @@ export default function ProfileCreation() {
 			return;
 		}
 
-		setDebugStats({
-			currentTotal,
-			maxTotal: max,
-		});
 		setDoneCounter(0);
 	}
 
@@ -193,7 +185,6 @@ export default function ProfileCreation() {
 						</b>{" "}
 						finished 🤩
 					</h2>
-					<small>{JSON.stringify(debugStats, null, 2)}</small>
 				</div>
 			</div>
 			<div className="mt-4">
