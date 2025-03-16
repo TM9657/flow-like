@@ -21,6 +21,8 @@ def main():
     target = sys.argv[2]
     cache = sys.argv[3]
 
+    os.environ["HF_HOME"] = str(Path(cache).joinpath("huggingface"))
+
     source_path = Path(source)
     if not source_path.exists():
         print(f"Source file {source} does not exist")
