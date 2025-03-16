@@ -73,16 +73,26 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: github.event_name == 'release'
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Upload binaries to release
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: release-docling-${{ steps.date.outputs.date }}
+          name: Automated Docling Release ${{ steps.date.outputs.date }}
+          draft: false
+          prerelease: false
           files: |
             artifacts/flow-docling-linux-x64/flow-docling-linux-x64
             artifacts/flow-docling-windows-x64.exe/flow-docling-windows-x64.exe
