@@ -1,0 +1,90 @@
+name: Build Docling
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: flow-docling-linux-x64
+          - os: windows-latest
+            artifact_name: flow-docling-windows-x64.exe
+          - os: macos-latest
+            artifact_name: flow-docling-macos-x64
+          - os: macos-14
+            artifact_name: flow-docling-macos-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: 'apps/docling/requirements*.txt'
+
+      - name: Cache build directory
+        uses: actions/cache@v3
+        with:
+          path: apps/docling/build
+          key: ${{ runner.os }}-build-${{ hashFiles('apps/docling/**/*.py') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: Install dependencies
+        working-directory: apps/docling
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller docling rtree
+
+      - name: Build binary
+        working-directory: apps/docling
+        run: |
+          pyinstaller --onefile --name flow-docling --hidden-import=docling --hidden-import=rtree --noconfirm --collect-all docling_parse main.py
+
+      - name: Prepare binary for upload
+        id: prepare-binary
+        shell: bash
+        working-directory: apps/docling/dist
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cp flow-docling.exe ${{ matrix.artifact_name }}
+          else
+            cp flow-docling ${{ matrix.artifact_name }}
+          fi
+          echo "binary_path=apps/docling/dist/${{ matrix.artifact_name }}" >> $GITHUB_OUTPUT
+
+      - name: Upload binary to artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ steps.prepare-binary.outputs.binary_path }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: github.event_name == 'release'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Upload binaries to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/flow-docling-linux-x64/flow-docling-linux-x64
+            artifacts/flow-docling-windows-x64.exe/flow-docling-windows-x64.exe
+            artifacts/flow-docling-macos-x64/flow-docling-macos-x64
+            artifacts/flow-docling-macos-arm64/flow-docling-macos-arm64

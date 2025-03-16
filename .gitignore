@@ -6,6 +6,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.venv
 
 node_modules
 dist
@@ -24,6 +25,7 @@ target
 *.njsproj
 *.sln
 *.sw?
+tmp
 
 /.next/
 /out/

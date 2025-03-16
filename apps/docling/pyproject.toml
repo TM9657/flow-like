@@ -1,0 +1,19 @@
+[project]
+name = "docling-binary"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Felix Schultz",email = "felix.schultz@good-co.de"}
+]
+readme = "README.md"
+requires-python = ">=3.9, <4.0"
+dependencies = [
+    "docling (>=2.26.0,<3.0.0)"
+]
+
+[tool.poetry]
+package-mode = false
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
