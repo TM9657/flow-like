@@ -1,5 +1,6 @@
 use anyhow::Ok;
 use dashmap::DashMap;
+use futures::StreamExt;
 use lancedb::connection::ConnectBuilder;
 use object_store::path::Path;
 use object_store::signer::Signer;
@@ -106,6 +107,27 @@ impl FlowLikeStore {
         };
 
         Ok(url)
+    }
+
+    pub async fn hash(&self, path: &Path) -> anyhow::Result<String> {
+        let store = self.as_generic();
+        let meta = store.head(path).await?;
+
+        if let Some(hash) = meta.e_tag {
+            return Ok(hash);
+        }
+
+        let mut hash = blake3::Hasher::new();
+        let mut reader = store.get(path).await?.into_stream();
+
+        while let Some(data) = reader.next().await {
+            let data = data?;
+            hash.update(&data);
+        }
+
+        let finalized = hash.finalize();
+        let finalized = finalized.to_hex().to_lowercase().to_string();
+        Ok(finalized)
     }
 }
 
