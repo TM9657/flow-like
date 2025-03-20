@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
-    vec![
+    let mut nodes = vec![
         Arc::new(Mutex::new(db::vector::CreateLocalDatabaseNode::default()))
             as Arc<Mutex<dyn NodeLogic>>,
         Arc::new(Mutex::new(
@@ -51,5 +51,9 @@ pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
         Arc::new(Mutex::new(
             db::vector::count::CountLocalDatabaseNode::default(),
         )) as Arc<Mutex<dyn NodeLogic>>,
-    ]
+    ];
+
+    nodes.extend(path::register_functions().await);
+
+    nodes
 }

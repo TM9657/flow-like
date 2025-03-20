@@ -10,6 +10,8 @@ use crate::flow::execution::Cacheable;
 pub trait ImageEmbeddingModelLogic: Send + Sync + Cacheable + 'static {
     async fn get_splitter(
         &self,
+        capacity: Option<usize>,
+        overlap: Option<usize>,
     ) -> anyhow::Result<(
         TextSplitter<tokenizers::Tokenizer>,
         MarkdownSplitter<tokenizers::Tokenizer>,

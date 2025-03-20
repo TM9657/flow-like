@@ -1,4 +1,3 @@
-
 use crate::{
     flow::{
         catalog::storage::path::FlowPath, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
@@ -6,25 +5,23 @@ use crate::{
     state::FlowLikeState,
 };
 use async_trait::async_trait;
-use bytes::Bytes;
-use object_store::PutPayload;
 
 #[derive(Default)]
-pub struct PutNode {}
+pub struct PathExistsNode {}
 
-impl PutNode {
+impl PathExistsNode {
     pub fn new() -> Self {
-        PutNode {}
+        PathExistsNode {}
     }
 }
 
 #[async_trait]
-impl NodeLogic for PutNode {
+impl NodeLogic for PathExistsNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "path_put",
-            "Put",
-            "Writes bytes to a file",
+            "path_exists",
+            "Path Exists?",
+            "Checks if a path exists",
             "Storage/Paths/Operations",
         );
         node.add_icon("/flow/icons/path.svg");
@@ -40,25 +37,17 @@ impl NodeLogic for PutNode {
             .set_schema::<FlowPath>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin(
-            "bytes",
-            "Bytes",
-            "Bytes to write",
-            VariableType::Byte,
-        )
-        .set_value_type(crate::flow::pin::ValueType::Array);
-
         node.add_output_pin(
-            "exec_out",
-            "Output",
-            "Done with the Execution",
+            "exec_out_exists",
+            "Yes",
+            "Execution if path exists",
             VariableType::Execution,
         );
 
         node.add_output_pin(
-            "failed",
-            "Failed",
-            "Failed to write to the file",
+            "exec_out_missing",
+            "No",
+            "Execution if path does not exist",
             VariableType::Execution,
         );
 
@@ -66,19 +55,19 @@ impl NodeLogic for PutNode {
     }
 
     async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
-        context.activate_exec_pin("failed").await?;
-        context.deactivate_exec_pin("exec_out").await?;
         let path: FlowPath = context.evaluate_pin("path").await?;
-        let bytes: Vec<u8> = context.evaluate_pin("bytes").await?;
 
-        let path = path.to_runtime(context).await?;
-        let store = path.store.as_generic();
-        let bytes = Bytes::from(bytes);
-        let payload = PutPayload::from_bytes(bytes);
-        store.put(&path.path, payload).await?;
+        let dynamic = path.to_runtime(context).await?;
+        let store = dynamic.store.as_generic();
 
-        context.deactivate_exec_pin("failed").await?;
-        context.activate_exec_pin("exec_out").await?;
+        let exists = store.head(&dynamic.path).await.is_ok();
+
+        if exists {
+            context.activate_exec_pin("exec_out_exists").await?;
+        } else {
+            context.activate_exec_pin("exec_out_missing").await?;
+        }
+
         Ok(())
     }
 }

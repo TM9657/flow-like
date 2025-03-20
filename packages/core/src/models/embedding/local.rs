@@ -83,6 +83,8 @@ impl LocalEmbeddingModel {
 impl EmbeddingModelLogic for LocalEmbeddingModel {
     async fn get_splitter(
         &self,
+        capacity: Option<usize>,
+        overlap: Option<usize>,
     ) -> anyhow::Result<(
         TextSplitter<tokenizers::Tokenizer>,
         MarkdownSplitter<tokenizers::Tokenizer>,
@@ -91,16 +93,18 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .bit
             .try_to_embedding()
             .ok_or(anyhow::anyhow!("Not an Embedding Model"))?;
-        let max_tokens = params.input_length as usize;
+        let max_tokens = capacity.unwrap_or(params.input_length as usize);
+        let max_tokens = std::cmp::min(max_tokens, params.input_length as usize);
+        let overlap = overlap.unwrap_or(20);
 
         let tokenizer = load_tokenizer_from_file(self.tokenizer_files.clone(), max_tokens)?;
         let config_md = ChunkConfig::new(max_tokens)
             .with_sizer(tokenizer.clone())
-            .with_overlap(20)?;
+            .with_overlap(overlap)?;
 
         let config = ChunkConfig::new(max_tokens)
             .with_sizer(tokenizer)
-            .with_overlap(20)?;
+            .with_overlap(overlap)?;
 
         return Ok((TextSplitter::new(config), MarkdownSplitter::new(config_md)));
     }

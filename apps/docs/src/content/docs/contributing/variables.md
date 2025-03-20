@@ -2,10 +2,8 @@
 title: Variable & Value Types
 description: Understanding the data types and value structures in Flow Like
 sidebar:
-  order: 1
+  order: 0
 ---
-
-# Variable and Value Types in Flow Like
 
 Understanding the different variable and value types is essential for creating efficient and effective flows. Flow Like provides a comprehensive type system that balances simplicity with the power needed for complex operations.
 

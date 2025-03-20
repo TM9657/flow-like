@@ -93,11 +93,13 @@ impl LocalImageEmbeddingModel {
 impl ImageEmbeddingModelLogic for LocalImageEmbeddingModel {
     async fn get_splitter(
         &self,
+        capacity: Option<usize>,
+        overlap: Option<usize>,
     ) -> anyhow::Result<(
         TextSplitter<tokenizers::Tokenizer>,
         MarkdownSplitter<tokenizers::Tokenizer>,
     )> {
-        return self.text_model.get_splitter().await;
+        return self.text_model.get_splitter(capacity, overlap).await;
     }
 
     async fn text_embed_query(&self, texts: &Vec<String>) -> Result<Vec<Vec<f32>>> {

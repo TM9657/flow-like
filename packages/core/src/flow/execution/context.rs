@@ -280,7 +280,11 @@ impl ExecutionContext {
         };
 
         let event = FlowLikeEvent::new(&format!("run:{}", self.run_id), update_event);
-        self.sender.send(event).await.unwrap();
+        let res = self.sender.send(event).await;
+
+        if let Err(e) = res {
+            println!("Failed to send run update event: {:?}", e);
+        }
     }
 
     pub fn get_state(&self) -> NodeState {

@@ -82,21 +82,29 @@ impl FlowLikeStore {
         }
     }
 
-    pub async fn sign_get(&self, path: &Path, expires_after: Duration) -> anyhow::Result<Url> {
+    pub async fn sign(&self, method: &str, path: &Path, expires_after: Duration) -> anyhow::Result<Url> {
+        let method = match method.to_uppercase().as_str() {
+            "GET" => reqwest::Method::GET,
+            "PUT" => reqwest::Method::PUT,
+            "POST" => reqwest::Method::POST,
+            "DELETE" => reqwest::Method::DELETE,
+            _ => anyhow::bail!("Invalid HTTP Method"),
+        };
+
         let url: Url = match self {
             FlowLikeStore::AWS(store) => {
                 store
-                    .signed_url(reqwest::Method::GET, path, expires_after)
+                    .signed_url(method, path, expires_after)
                     .await?
             }
             FlowLikeStore::Google(store) => {
                 store
-                    .signed_url(reqwest::Method::GET, path, expires_after)
+                    .signed_url(method, path, expires_after)
                     .await?
             }
             FlowLikeStore::Azure(store) => {
                 store
-                    .signed_url(reqwest::Method::GET, path, expires_after)
+                    .signed_url(method, path, expires_after)
                     .await?
             }
             FlowLikeStore::Local(store) => {

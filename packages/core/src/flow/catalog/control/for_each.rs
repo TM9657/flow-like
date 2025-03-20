@@ -162,9 +162,20 @@ impl NodeLogic for LoopNode {
             eprintln!("Error: {:?}", match_type.err());
         }
 
-        let array_pin = node.get_pin_by_name("array").unwrap();
+        let array_pin = node.get_pin_by_name("array").unwrap().clone();
         if array_pin.data_type != VariableType::Generic {
-            node.get_pin_mut_by_name("value").unwrap().data_type = array_pin.data_type.clone();
+            let pin = node.get_pin_mut_by_name("value").unwrap();
+            pin.data_type = array_pin.data_type.clone();
+            pin.schema = array_pin.schema.clone();
+            return;
+        }
+
+        let value_pin = node.get_pin_by_name("value").unwrap().clone();
+        if value_pin.data_type != VariableType::Generic {
+            let pin = node.get_pin_mut_by_name("array").unwrap();
+            pin.data_type = value_pin.data_type.clone();
+            pin.schema = value_pin.schema.clone();
+            return;
         }
     }
 }
