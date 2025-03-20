@@ -67,7 +67,7 @@ impl NodeLogic for ChildNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let parent_path: FlowPath = context.evaluate_pin("parent_path").await?;
         let child_name: String = context.evaluate_pin("child_name").await?;
 

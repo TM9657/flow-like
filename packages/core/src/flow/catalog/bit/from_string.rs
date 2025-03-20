@@ -59,7 +59,7 @@ impl NodeLogic for BitFromStringNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         context.activate_exec_pin("failed").await?;
         context.deactivate_exec_pin("exec_out").await?;
         let bit_id: String = context.evaluate_pin("bit_id").await?;

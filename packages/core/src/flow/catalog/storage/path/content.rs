@@ -8,11 +8,11 @@ use crate::flow::node::NodeLogic;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
-        Arc::new(Mutex::new(read_to_bytes::ReadToBytesNode::default())),
-        Arc::new(Mutex::new(read_to_string::ReadToStringNode::default())),
-        Arc::new(Mutex::new(write_from_bytes::WriteBytesNode::default())),
-        Arc::new(Mutex::new(write_from_string::WriteStringNode::default())),
+        Arc::new(read_to_bytes::ReadToBytesNode::default()),
+        Arc::new(read_to_string::ReadToStringNode::default()),
+        Arc::new(write_from_bytes::WriteBytesNode::default()),
+        Arc::new(write_from_string::WriteStringNode::default()),
     ]
 }

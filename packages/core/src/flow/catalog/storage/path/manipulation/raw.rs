@@ -45,7 +45,7 @@ impl NodeLogic for RawPathNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let path: FlowPath = context.evaluate_pin("path").await?;
 
         let path = path.to_runtime(context).await?;

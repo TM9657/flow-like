@@ -61,7 +61,7 @@ impl NodeLogic for GetArrayElementNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let array_in: Vec<Value> = context.evaluate_pin("array_in").await?;
         let index: i64 = context.evaluate_pin("index").await?;
 

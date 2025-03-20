@@ -47,7 +47,7 @@ impl NodeLogic for StringStartsWithNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let string: String = context.evaluate_pin("string").await?;
         let prefix: String = context.evaluate_pin("prefix").await?;
 

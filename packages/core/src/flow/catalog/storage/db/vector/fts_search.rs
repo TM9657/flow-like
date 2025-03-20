@@ -76,7 +76,7 @@ impl NodeLogic for FTSLocalDatabaseNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let search: String = context.evaluate_pin("search").await?;
         let filter: String = context.evaluate_pin("filter").await?;

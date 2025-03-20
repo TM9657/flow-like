@@ -38,7 +38,7 @@ impl NodeLogic for CuidNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let cuid = cuid2::create_id();
         context.set_pin_value("cuid", json!(cuid)).await?;
         context.activate_exec_pin("exec_out").await?;

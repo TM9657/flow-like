@@ -44,7 +44,7 @@ impl NodeLogic for ToStringNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let string: serde_json::Value = context.evaluate_pin("value").await?;
         let pretty = context.evaluate_pin::<bool>("pretty").await?;
         let value: String = if pretty {

@@ -11,7 +11,7 @@ use super::internal_node::InternalNode;
 
 pub struct InternalPin {
     pub pin: Arc<Mutex<Pin>>,
-    pub node: Weak<Mutex<InternalNode>>,
+    pub node: Weak<InternalNode>,
     pub connected_to: Vec<Arc<Mutex<InternalPin>>>,
     pub depends_on: Vec<Arc<Mutex<InternalPin>>>,
 }
@@ -22,7 +22,7 @@ impl InternalPin {
         pin.value = None;
     }
 
-    pub async fn get_connected_and_dependent_nodes(&self) -> Vec<Arc<Mutex<InternalNode>>> {
+    pub async fn get_connected_and_dependent_nodes(&self) -> Vec<Arc<InternalNode>> {
         let mut connected = self.get_connected_nodes().await;
         let dependent = self.get_dependent_nodes().await;
 
@@ -30,7 +30,7 @@ impl InternalPin {
         connected
     }
 
-    pub async fn get_connected_nodes(&self) -> Vec<Arc<Mutex<InternalNode>>> {
+    pub async fn get_connected_nodes(&self) -> Vec<Arc<InternalNode>> {
         let mut connected_nodes = vec![];
         let mut ids = HashSet::new();
         for connected_pin in &self.connected_to {
@@ -38,7 +38,7 @@ impl InternalPin {
             let connected_node = connected_pin_guard.node.upgrade();
 
             if let Some(connected_node) = connected_node {
-                let connected_id = connected_node.lock().await.node.lock().await.id.clone();
+                let connected_id = connected_node.node.lock().await.id.clone();
                 if ids.contains(&connected_id) {
                     continue;
                 }
@@ -51,7 +51,7 @@ impl InternalPin {
         connected_nodes
     }
 
-    pub async fn get_dependent_nodes(&self) -> Vec<Arc<Mutex<InternalNode>>> {
+    pub async fn get_dependent_nodes(&self) -> Vec<Arc<InternalNode>> {
         let mut connected_nodes = vec![];
 
         for depends_on_pin in &self.depends_on {
@@ -78,7 +78,6 @@ impl InternalPin {
 
     pub async fn is_pure(&self) -> bool {
         if let Some(internal_node) = self.node.upgrade() {
-            let internal_node = internal_node.lock().await;
             return internal_node.is_pure().await;
         }
         false

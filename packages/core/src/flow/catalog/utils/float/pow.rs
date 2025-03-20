@@ -47,7 +47,7 @@ impl NodeLogic for PowerFloatNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let base: f64 = context.evaluate_pin("base").await?;
         let exponent: f64 = context.evaluate_pin("exponent").await?;
 

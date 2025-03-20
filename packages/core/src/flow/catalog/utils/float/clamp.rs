@@ -43,7 +43,7 @@ impl NodeLogic for ClampFloatNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let float: f64 = context.evaluate_pin("float").await?;
         let min: f64 = context.evaluate_pin("min").await?;
         let max: f64 = context.evaluate_pin("max").await?;

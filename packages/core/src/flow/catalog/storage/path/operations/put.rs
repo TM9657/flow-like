@@ -1,7 +1,10 @@
-
 use crate::{
     flow::{
-        catalog::storage::path::FlowPath, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        catalog::storage::path::FlowPath,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
@@ -40,13 +43,8 @@ impl NodeLogic for PutNode {
             .set_schema::<FlowPath>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin(
-            "bytes",
-            "Bytes",
-            "Bytes to write",
-            VariableType::Byte,
-        )
-        .set_value_type(crate::flow::pin::ValueType::Array);
+        node.add_input_pin("bytes", "Bytes", "Bytes to write", VariableType::Byte)
+            .set_value_type(crate::flow::pin::ValueType::Array);
 
         node.add_output_pin(
             "exec_out",
@@ -65,7 +63,7 @@ impl NodeLogic for PutNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         context.activate_exec_pin("failed").await?;
         context.deactivate_exec_pin("exec_out").await?;
         let path: FlowPath = context.evaluate_pin("path").await?;

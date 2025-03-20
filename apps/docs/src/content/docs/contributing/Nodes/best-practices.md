@@ -25,7 +25,7 @@ If you have the option to use the Failed Execution Pin, we prefer that.
 
 ```rust title="Failed Execution Path"
 // From the Pop Array Node
- async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+ async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         // We initialize by setting the failed path. This node might be executed multiple times.
         // Resetting its state is good practice and makes sure we don't get strange behavior.
         context.activate_exec_pin("failed").await?;

@@ -62,7 +62,7 @@ impl NodeLogic for SetHistoryUserNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut history: History = context.evaluate_pin("history").await?;
         let user: String = context.evaluate_pin("user").await?;
 

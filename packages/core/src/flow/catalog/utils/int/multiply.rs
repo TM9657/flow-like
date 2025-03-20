@@ -47,7 +47,7 @@ impl NodeLogic for MultiplyIntegerNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let integer1: i64 = context.evaluate_pin("integer1").await?;
         let integer2: i64 = context.evaluate_pin("integer2").await?;
         let product = integer1 * integer2;

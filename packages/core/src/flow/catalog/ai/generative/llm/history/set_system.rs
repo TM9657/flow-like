@@ -68,7 +68,7 @@ impl NodeLogic for SetSystemPromptMessageNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut history: History = context.evaluate_pin("history").await?;
         let new_message: String = context.evaluate_pin("message").await?;
 

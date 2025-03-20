@@ -37,7 +37,7 @@ impl NodeLogic for BoolNot {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let input_value: bool = context.evaluate_pin("boolean").await?;
         let output_value = !input_value;
 

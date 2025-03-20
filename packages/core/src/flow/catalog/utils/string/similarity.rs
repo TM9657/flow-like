@@ -10,20 +10,14 @@ pub mod levenshtein;
 pub mod optimal_string_alignment;
 pub mod sorensen_dice;
 
-pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
-        Arc::new(Mutex::new(jaro_winkler::JaroWinklerDistanceNode::default())),
-        Arc::new(Mutex::new(
-            optimal_string_alignment::OptimalStringAlignmentDistanceNode::default(),
-        )),
-        Arc::new(Mutex::new(jaro::JaroDistanceNode::default())),
-        Arc::new(Mutex::new(levenshtein::LevenshteinDistanceNode::default())),
-        Arc::new(Mutex::new(
-            damerau_levenshtein::DamerauLevenshteinDistanceNode::default(),
-        )),
-        Arc::new(Mutex::new(hamming::HammingDistanceNode::default())),
-        Arc::new(Mutex::new(
-            sorensen_dice::SorensenDiceCoefficientNode::default(),
-        )),
+        Arc::new(jaro_winkler::JaroWinklerDistanceNode::default()),
+        Arc::new(optimal_string_alignment::OptimalStringAlignmentDistanceNode::default()),
+        Arc::new(jaro::JaroDistanceNode::default()),
+        Arc::new(levenshtein::LevenshteinDistanceNode::default()),
+        Arc::new(damerau_levenshtein::DamerauLevenshteinDistanceNode::default()),
+        Arc::new(hamming::HammingDistanceNode::default()),
+        Arc::new(sorensen_dice::SorensenDiceCoefficientNode::default()),
     ]
 }

@@ -68,7 +68,7 @@ impl NodeLogic for SetHistoryFrequencyPenaltyNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut history: History = context.evaluate_pin("history").await?;
         let frequency_penalty: f64 = context.evaluate_pin("frequency_penalty").await?;
 

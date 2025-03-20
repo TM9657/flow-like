@@ -35,7 +35,7 @@ impl NodeLogic for MakeStructNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let empty_struct: HashMap<String, serde_json::Value> = HashMap::new();
         context
             .set_pin_value("struct", serde_json::json!(empty_struct))

@@ -1,14 +1,16 @@
-
 use crate::{
     flow::{
-        catalog::storage::path::FlowPath, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        catalog::storage::path::FlowPath,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
 use async_trait::async_trait;
 use futures::StreamExt;
 use serde_json::json;
-
 
 #[derive(Default)]
 pub struct ListWithOffsetNode {}
@@ -42,9 +44,8 @@ impl NodeLogic for ListWithOffsetNode {
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin("offset", "Offset", "FlowPath", VariableType::Struct)
-        .set_schema::<FlowPath>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
-
+            .set_schema::<FlowPath>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
             "offset",
@@ -67,19 +68,14 @@ impl NodeLogic for ListWithOffsetNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin(
-            "paths",
-            "Paths",
-            "Output Paths",
-            VariableType::Struct,
-        )
-        .set_schema::<FlowPath>()
-        .set_value_type(crate::flow::pin::ValueType::Array);
+        node.add_output_pin("paths", "Paths", "Output Paths", VariableType::Struct)
+            .set_schema::<FlowPath>()
+            .set_value_type(crate::flow::pin::ValueType::Array);
 
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         context.activate_exec_pin("failed").await?;
         context.deactivate_exec_pin("exec_out").await?;
         let original_prefix: FlowPath = context.evaluate_pin("prefix").await?;
@@ -89,17 +85,22 @@ impl NodeLogic for ListWithOffsetNode {
         let offset = original_offset.to_runtime(context).await?;
         let store = prefix.store.as_generic();
 
-        let paths = store.list_with_offset(Some(&prefix.path), &offset.path).map(|r| r.map_err(anyhow::Error::from))
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
+        let paths = store
+            .list_with_offset(Some(&prefix.path), &offset.path)
+            .map(|r| r.map_err(anyhow::Error::from))
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
 
-        let paths = paths.iter().map(|p| {
-            let mut new_path = original_prefix.clone();
-            new_path.path = p.location.as_ref().to_string();
-            new_path
-        }).collect::<Vec<FlowPath>>();
+        let paths = paths
+            .iter()
+            .map(|p| {
+                let mut new_path = original_prefix.clone();
+                new_path.path = p.location.as_ref().to_string();
+                new_path
+            })
+            .collect::<Vec<FlowPath>>();
 
         context.set_pin_value("paths", json!(paths)).await?;
         context.deactivate_exec_pin("failed").await?;

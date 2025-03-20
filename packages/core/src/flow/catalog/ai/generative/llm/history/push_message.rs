@@ -64,7 +64,7 @@ impl NodeLogic for PushHistoryMessageNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut history: History = context.evaluate_pin("history").await?;
         let message: HistoryMessage = context.evaluate_pin("message").await?;
 

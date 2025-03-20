@@ -41,7 +41,7 @@ impl NodeLogic for RoundFloatNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let float: f64 = context.evaluate_pin("float").await?;
 
         let rounded = float.round();

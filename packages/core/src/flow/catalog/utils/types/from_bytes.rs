@@ -39,7 +39,7 @@ impl NodeLogic for FromBytesNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let bytes: Vec<u8> = context.evaluate_pin("bytes").await?;
         let value: serde_json::Value = serde_json::from_slice(&bytes)?;
         context.set_pin_value("value", value).await?;

@@ -48,7 +48,7 @@ impl NodeLogic for FromStringNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let string: String = context.evaluate_pin("string").await?;
         let value: serde_json::Value = serde_json::from_str(&string)?;
         context.set_pin_value("value", value).await?;

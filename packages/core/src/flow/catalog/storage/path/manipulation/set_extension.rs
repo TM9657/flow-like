@@ -67,7 +67,7 @@ impl NodeLogic for SetExtensionNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let path: FlowPath = context.evaluate_pin("path").await?;
         let extension: String = context.evaluate_pin("extension").await?;
 

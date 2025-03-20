@@ -53,7 +53,7 @@ impl NodeLogic for StringReplaceNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let string: String = context.evaluate_pin("string").await?;
         let pattern: String = context.evaluate_pin("pattern").await?;
         let replacement: String = context.evaluate_pin("replacement").await?;

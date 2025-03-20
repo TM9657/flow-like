@@ -58,7 +58,7 @@ impl NodeLogic for LastMessageNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let response: Response = context.evaluate_pin("response").await?;
 
         if let Some(message) = response.last_message() {

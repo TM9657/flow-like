@@ -38,7 +38,7 @@ impl NodeLogic for SimpleEventNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let exec_out_pin = context.get_pin_by_name("exec_out").await?;
 
         context.activate_exec_pin_ref(&exec_out_pin).await?;

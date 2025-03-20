@@ -23,28 +23,28 @@ pub mod round;
 pub mod subtract;
 pub mod unequal;
 
-pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
-    let items: Vec<Arc<Mutex<dyn NodeLogic>>> = vec![
-        Arc::new(Mutex::new(add::AddFloatNode::default())),
-        Arc::new(Mutex::new(ceil::CeilFloatNode::default())),
-        Arc::new(Mutex::new(clamp::ClampFloatNode::default())),
-        Arc::new(Mutex::new(divide::DivideFloatNode::default())),
-        Arc::new(Mutex::new(equal::EqualFloatNode::default())),
-        Arc::new(Mutex::new(floor::FloorFloatNode::default())),
-        Arc::new(Mutex::new(gt::GreaterThanFloatNode::default())),
-        Arc::new(Mutex::new(gte::GreaterThanOrEqualFloatNode::default())),
-        Arc::new(Mutex::new(lt::LessThanFloatNode::default())),
-        Arc::new(Mutex::new(lte::LessThanOrEqualFloatNode::default())),
-        Arc::new(Mutex::new(max::MaxFloatNode::default())),
-        Arc::new(Mutex::new(min::MinFloatNode::default())),
-        Arc::new(Mutex::new(multiply::MultiplyFloatNode::default())),
-        Arc::new(Mutex::new(random_range::RandomFloatInRangeNode::default())),
-        Arc::new(Mutex::new(round::RoundFloatNode::default())),
-        Arc::new(Mutex::new(subtract::SubtractFloatNode::default())),
-        Arc::new(Mutex::new(unequal::UnequalFloatNode::default())),
-        Arc::new(Mutex::new(abs::AbsFloatNode::default())),
-        Arc::new(Mutex::new(pow::PowerFloatNode::default())),
-        Arc::new(Mutex::new(root::RootFloatNode::default())),
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
+    let items: Vec<Arc<dyn NodeLogic>> = vec![
+        Arc::new(add::AddFloatNode::default()),
+        Arc::new(ceil::CeilFloatNode::default()),
+        Arc::new(clamp::ClampFloatNode::default()),
+        Arc::new(divide::DivideFloatNode::default()),
+        Arc::new(equal::EqualFloatNode::default()),
+        Arc::new(floor::FloorFloatNode::default()),
+        Arc::new(gt::GreaterThanFloatNode::default()),
+        Arc::new(gte::GreaterThanOrEqualFloatNode::default()),
+        Arc::new(lt::LessThanFloatNode::default()),
+        Arc::new(lte::LessThanOrEqualFloatNode::default()),
+        Arc::new(max::MaxFloatNode::default()),
+        Arc::new(min::MinFloatNode::default()),
+        Arc::new(multiply::MultiplyFloatNode::default()),
+        Arc::new(random_range::RandomFloatInRangeNode::default()),
+        Arc::new(round::RoundFloatNode::default()),
+        Arc::new(subtract::SubtractFloatNode::default()),
+        Arc::new(unequal::UnequalFloatNode::default()),
+        Arc::new(abs::AbsFloatNode::default()),
+        Arc::new(pow::PowerFloatNode::default()),
+        Arc::new(root::RootFloatNode::default()),
     ];
 
     items

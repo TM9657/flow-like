@@ -46,7 +46,7 @@ impl NodeLogic for EvalNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let expression: String = context.evaluate_pin("expression").await?;
         let mut ns = fasteval::EmptyNamespace;
         let result = match fasteval::ez_eval(expression.as_str(), &mut ns) {

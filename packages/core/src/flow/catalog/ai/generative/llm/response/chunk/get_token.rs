@@ -50,7 +50,7 @@ impl NodeLogic for GetTokenNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let chunk: ResponseChunk = context.evaluate_pin("chunk").await?;
 
         let token = chunk.get_streamed_token().unwrap_or_default();

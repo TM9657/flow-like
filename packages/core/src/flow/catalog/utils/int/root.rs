@@ -52,7 +52,7 @@ impl NodeLogic for RootIntegerNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let radicand: i64 = context.evaluate_pin("radicand").await?;
         let degree: i64 = context.evaluate_pin("degree").await?;
 

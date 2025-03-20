@@ -7,11 +7,11 @@ use crate::flow::node::NodeLogic;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
-        Arc::new(Mutex::new(branch_node::BranchNode::default())),
-        Arc::new(Mutex::new(for_each::LoopNode::default())),
-        Arc::new(Mutex::new(sequence::SequenceNode::default())),
-        Arc::new(Mutex::new(par_execution::ParallelExecutionNode::default())),
+        Arc::new(branch_node::BranchNode::default()),
+        Arc::new(for_each::LoopNode::default()),
+        Arc::new(sequence::SequenceNode::default()),
+        Arc::new(par_execution::ParallelExecutionNode::default()),
     ]
 }

@@ -47,7 +47,7 @@ impl NodeLogic for StringContainsNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let string: String = context.evaluate_pin("string").await?;
         let substring: String = context.evaluate_pin("substring").await?;
 

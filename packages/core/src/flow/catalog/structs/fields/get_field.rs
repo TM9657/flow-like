@@ -52,7 +52,7 @@ impl NodeLogic for GetStructFieldNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let struct_value = context
             .evaluate_pin::<HashMap<String, serde_json::Value>>("struct")
             .await?;

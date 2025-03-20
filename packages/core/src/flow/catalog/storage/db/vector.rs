@@ -98,7 +98,7 @@ impl NodeLogic for CreateLocalDatabaseNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let table: String = context.evaluate_pin("name").await?;
         let cache_key = format!("db_{}", table);
         let cache_set = context.cache.read().await.contains_key(&cache_key);

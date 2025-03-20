@@ -1,3 +1,4 @@
+use crate::flow::node::NodeLogic;
 use crate::{
     flow::execution::{context::ExecutionContext, Cacheable},
     state::FlowLikeStore,
@@ -8,7 +9,6 @@ use object_store::path::Path;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
-use crate::flow::node::NodeLogic;
 use tokio::sync::Mutex;
 
 pub mod content;
@@ -226,20 +226,17 @@ impl FlowPathRuntime {
     }
 }
 
-
-
-pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let mut nodes = vec![];
 
     nodes.extend(content::register_functions().await);
     nodes.extend(dirs::register_functions().await);
     nodes.extend(manipulation::register_functions().await);
     nodes.extend(operations::register_functions().await);
-    nodes.push(Arc::new(Mutex::new(path_from_buf::PathBufToPathNode::new())));
+    nodes.push(Arc::new(path_from_buf::PathBufToPathNode::new()));
 
     nodes
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -47,7 +47,7 @@ impl NodeLogic for GetEnvVariableNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let key: String = context.evaluate_pin("key").await?;
         let variable = std::env::var(key);
         let found = variable.is_ok();

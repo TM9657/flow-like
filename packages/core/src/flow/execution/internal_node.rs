@@ -23,16 +23,15 @@ pub enum InternalNodeError {
 pub struct InternalNode {
     pub node: Arc<Mutex<Node>>,
     pub pins: HashMap<String, Arc<Mutex<InternalPin>>>,
-    pub logic: Arc<Mutex<dyn NodeLogic>>,
+    pub logic: Arc<dyn NodeLogic>,
     pin_name_cache: Mutex<HashMap<String, Vec<Arc<Mutex<InternalPin>>>>>,
-    execution_count: u64,
 }
 
 impl InternalNode {
     pub fn new(
         node: Node,
         pins: HashMap<String, Arc<Mutex<InternalPin>>>,
-        logic: Arc<Mutex<dyn NodeLogic>>,
+        logic: Arc<dyn NodeLogic>,
         name_cache: HashMap<String, Vec<Arc<Mutex<InternalPin>>>>,
     ) -> Self {
         InternalNode {
@@ -40,20 +39,7 @@ impl InternalNode {
             pins,
             logic,
             pin_name_cache: Mutex::new(name_cache),
-            execution_count: 0,
         }
-    }
-
-    pub async fn reset(&mut self) {
-        self.execution_count = 0;
-    }
-
-    pub fn increment_execution_count(&mut self) {
-        self.execution_count += 1;
-    }
-
-    pub fn get_execution_count(&self) -> u64 {
-        self.execution_count
     }
 
     pub async fn ensure_cache(&self, name: &str) {
@@ -178,7 +164,7 @@ impl InternalNode {
         true
     }
 
-    pub async fn get_connected(&self) -> Vec<Arc<Mutex<InternalNode>>> {
+    pub async fn get_connected(&self) -> Vec<Arc<InternalNode>> {
         let mut connected = Vec::with_capacity(self.pins.len());
 
         for pin in self.pins.values() {
@@ -206,7 +192,7 @@ impl InternalNode {
         connected
     }
 
-    pub async fn get_connected_exec(&self, filter_valid: bool) -> Vec<Arc<Mutex<InternalNode>>> {
+    pub async fn get_connected_exec(&self, filter_valid: bool) -> Vec<Arc<InternalNode>> {
         let mut connected = vec![];
 
         for pin in self.pins.values() {
@@ -253,7 +239,7 @@ impl InternalNode {
         connected
     }
 
-    pub async fn get_dependencies(&self) -> Vec<Arc<Mutex<InternalNode>>> {
+    pub async fn get_dependencies(&self) -> Vec<Arc<InternalNode>> {
         let mut dependencies = Vec::with_capacity(self.pins.len());
 
         for pin in self.pins.values() {
@@ -295,7 +281,7 @@ impl InternalNode {
         recursion_guard: &mut Option<HashSet<String>>,
         with_successors: bool,
     ) -> bool {
-        let pins = context.node.lock().await.pins.clone();
+        let pins = context.node.pins.clone();
 
         // TODO: optimize this for parallel execution
         for pin in pins.values() {
@@ -330,13 +316,11 @@ impl InternalNode {
                 };
 
                 let (node_id, node_name) = {
-                    let parent_guard = parent.lock().await;
-
                     // We only run pure nodes
-                    if !parent_guard.is_pure().await {
+                    if !parent.is_pure().await {
                         continue;
                     }
-                    let parent_node = parent_guard.node.lock().await;
+                    let parent_node = parent.node.lock().await;
                     (parent_node.id.clone(), parent_node.friendly_name.clone())
                 };
 
@@ -416,8 +400,7 @@ impl InternalNode {
             return Err(InternalNodeError::DependencyFailed(node.id));
         }
 
-        let logic = context.node.lock().await.logic.clone();
-        let mut logic = logic.lock().await;
+        let logic = context.node.logic.clone();
 
         let mut log_message = LogMessage::new(
             &format!("Starting Node Execution: {} [{}]", &node.name, &node.id),
@@ -443,7 +426,7 @@ impl InternalNode {
         context.end_trace();
 
         if with_successors {
-            let successors = context.node.lock().await.get_connected_exec(true).await;
+            let successors = context.node.get_connected_exec(true).await;
             // TODO: optimize this for parallel execution
             for successor in successors {
                 let mut sub_context = context.create_sub_context(&successor).await;
@@ -468,7 +451,7 @@ impl InternalNode {
         context: &mut ExecutionContext,
         recursion_guard: &mut Option<HashSet<String>>,
         with_successors: bool,
-        dependencies: &HashMap<String, Vec<Arc<Mutex<InternalNode>>>>,
+        dependencies: &HashMap<String, Vec<Arc<InternalNode>>>,
     ) -> Result<(), InternalNodeError> {
         context.set_state(NodeState::Running).await;
 
@@ -517,8 +500,7 @@ impl InternalNode {
             }
         }
 
-        let logic = context.node.lock().await.logic.clone();
-        let mut logic = logic.lock().await;
+        let logic = context.node.logic.clone();
 
         let mut log_message = LogMessage::new(
             &format!("Starting Node Execution: {} [{}]", &node.name, &node.id),
@@ -544,7 +526,7 @@ impl InternalNode {
         context.end_trace();
 
         if with_successors {
-            let successors = context.node.lock().await.get_connected_exec(true).await;
+            let successors = context.node.get_connected_exec(true).await;
             // TODO: optimize this for parallel execution
             for successor in successors {
                 let mut sub_context = context.create_sub_context(&successor).await;

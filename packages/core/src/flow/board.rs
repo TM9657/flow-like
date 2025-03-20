@@ -69,7 +69,7 @@ pub struct Board {
     pub board_dir: Path,
 
     #[serde(skip)]
-    pub logic_nodes: HashMap<String, Arc<Mutex<dyn NodeLogic>>>,
+    pub logic_nodes: HashMap<String, Arc<dyn NodeLogic>>,
 
     #[serde(skip)]
     pub app_state: Option<Arc<Mutex<FlowLikeState>>>,
@@ -135,11 +135,7 @@ impl Board {
                     }
                 }
             };
-            node_logic
-                .lock()
-                .await
-                .on_update(node, reference.clone())
-                .await;
+            node_logic.on_update(node, reference.clone()).await;
         }
     }
 
@@ -450,7 +446,7 @@ pub trait Command: Send + Sync {
         &self,
         node: &Node,
         state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<Arc<Mutex<dyn NodeLogic>>> {
+    ) -> anyhow::Result<Arc<dyn NodeLogic>> {
         let node_registry = {
             let state_guard = state.lock().await;
             state_guard.node_registry().clone()

@@ -70,7 +70,7 @@ impl NodeLogic for MakeHistoryMessageNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let role: String = context.evaluate_pin("role").await?;
         let message_type: String = context.evaluate_pin("type").await?;
 

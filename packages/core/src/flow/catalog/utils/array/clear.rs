@@ -47,7 +47,7 @@ impl NodeLogic for ClearArrayNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let _array_in: Vec<Value> = context.evaluate_pin("array_in").await?; // We read it to keep the pin active, but don't need it
         let array_out: Vec<Value> = Vec::new();
 

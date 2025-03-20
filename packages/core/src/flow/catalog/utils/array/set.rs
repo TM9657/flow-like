@@ -62,7 +62,7 @@ impl NodeLogic for SetIndexArrayNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         context.activate_exec_pin("failed").await?;
         context.deactivate_exec_pin("exec_out").await?;
         let array_in: Vec<Value> = context.evaluate_pin("array_in").await?;

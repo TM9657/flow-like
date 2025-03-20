@@ -55,7 +55,7 @@ impl NodeLogic for FloatVectorMultiplicationNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let vector1: Vec<f64> = context.evaluate_pin("vector1").await?;
         let vector2: Vec<f64> = context.evaluate_pin("vector2").await?;
 

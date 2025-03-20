@@ -1,19 +1,19 @@
+pub mod chunk_text;
+pub mod chunk_text_char;
 pub mod embed_text_document;
 pub mod embed_text_query;
 pub mod embed_texts_document;
 pub mod embed_texts_query;
-pub mod chunk_text;
-pub mod chunk_text_char;
 
 use crate::flow::node::NodeLogic;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
-        Arc::new(Mutex::new(embed_text_document::EmbedDocumentNode::default())),
-        Arc::new(Mutex::new(embed_text_query::EmbedQueryNode::default())),
-        Arc::new(Mutex::new(chunk_text::ChunkText::default())),
-        Arc::new(Mutex::new(chunk_text_char::ChunkTextChar::default())),
+        Arc::new(embed_text_document::EmbedDocumentNode::default()),
+        Arc::new(embed_text_query::EmbedQueryNode::default()),
+        Arc::new(chunk_text::ChunkText::default()),
+        Arc::new(chunk_text_char::ChunkTextChar::default()),
     ]
 }

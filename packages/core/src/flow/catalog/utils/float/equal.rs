@@ -48,7 +48,7 @@ impl NodeLogic for EqualFloatNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let float1: f64 = context.evaluate_pin("float1").await?;
         let float2: f64 = context.evaluate_pin("float2").await?;
         let tolerance: f64 = context.evaluate_pin("tolerance").await?;

@@ -47,7 +47,7 @@ impl NodeLogic for PowerIntegerNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let base: i64 = context.evaluate_pin("base").await?;
         let exponent: i64 = context.evaluate_pin("exponent").await?;
 

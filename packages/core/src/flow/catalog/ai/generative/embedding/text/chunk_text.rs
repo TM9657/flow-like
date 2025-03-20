@@ -41,12 +41,7 @@ impl NodeLogic for ChunkText {
             VariableType::Execution,
         );
 
-        node.add_input_pin(
-            "text",
-            "Text",
-            "The string to embed",
-            VariableType::String,
-        );
+        node.add_input_pin("text", "Text", "The string to embed", VariableType::String);
 
         node.add_input_pin(
             "model",
@@ -57,13 +52,28 @@ impl NodeLogic for ChunkText {
         .set_schema::<CachedEmbeddingModel>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("capacity", "Capacity", "Chunk Capacity", VariableType::Integer)
+        node.add_input_pin(
+            "capacity",
+            "Capacity",
+            "Chunk Capacity",
+            VariableType::Integer,
+        )
         .set_default_value(Some(json!(512)));
 
-        node.add_input_pin("overlap", "Overlap", "Overlap between Chunks", VariableType::Integer)
+        node.add_input_pin(
+            "overlap",
+            "Overlap",
+            "Overlap between Chunks",
+            VariableType::Integer,
+        )
         .set_default_value(Some(json!(20)));
 
-        node.add_input_pin("markdown", "Markdown", "Use Markdown Splitter?", VariableType::Boolean)
+        node.add_input_pin(
+            "markdown",
+            "Markdown",
+            "Use Markdown Splitter?",
+            VariableType::Boolean,
+        )
         .set_default_value(Some(json!(true)));
 
         node.add_output_pin(
@@ -91,7 +101,7 @@ impl NodeLogic for ChunkText {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         context.activate_exec_pin("failed").await?;
 
@@ -113,19 +123,29 @@ impl NodeLogic for ChunkText {
             .downcast_ref::<CachedEmbeddingModelObject>()
             .ok_or(anyhow!("Failed to Downcast Model"))?;
 
-
-        let (text_splitter, md_splitter) = if let Some(text_model) = embedding_model.text_model.clone() {
-            text_model.get_splitter(Some(capacity as usize), Some(overlap as usize)).await?
-        } else if let Some(image_model) = embedding_model.image_model.clone() {
-            image_model.get_splitter(Some(capacity as usize), Some(overlap as usize)).await?
-        } else {
-            return Err(anyhow!("No model found"));
-        };
+        let (text_splitter, md_splitter) =
+            if let Some(text_model) = embedding_model.text_model.clone() {
+                text_model
+                    .get_splitter(Some(capacity as usize), Some(overlap as usize))
+                    .await?
+            } else if let Some(image_model) = embedding_model.image_model.clone() {
+                image_model
+                    .get_splitter(Some(capacity as usize), Some(overlap as usize))
+                    .await?
+            } else {
+                return Err(anyhow!("No model found"));
+            };
 
         let chunks = if markdown {
-            md_splitter.chunks(&text).map(|c| c.to_string()).collect::<Vec<String>>()
+            md_splitter
+                .chunks(&text)
+                .map(|c| c.to_string())
+                .collect::<Vec<String>>()
         } else {
-            text_splitter.chunks(&text).map(|c| c.to_string()).collect::<Vec<String>>()
+            text_splitter
+                .chunks(&text)
+                .map(|c| c.to_string())
+                .collect::<Vec<String>>()
         };
 
         context.set_pin_value("chunks", json!(chunks)).await?;

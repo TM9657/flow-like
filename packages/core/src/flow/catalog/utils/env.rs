@@ -4,6 +4,6 @@ use tokio::sync::Mutex;
 
 pub mod get_env;
 
-pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
-    vec![Arc::new(Mutex::new(get_env::GetEnvVariableNode::default()))]
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
+    vec![Arc::new(get_env::GetEnvVariableNode::default())]
 }

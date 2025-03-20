@@ -41,7 +41,7 @@ impl NodeLogic for MakePreferencesNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let preferences = BitModelPreference::default();
 
         context

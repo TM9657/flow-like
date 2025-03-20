@@ -82,7 +82,12 @@ impl FlowLikeStore {
         }
     }
 
-    pub async fn sign(&self, method: &str, path: &Path, expires_after: Duration) -> anyhow::Result<Url> {
+    pub async fn sign(
+        &self,
+        method: &str,
+        path: &Path,
+        expires_after: Duration,
+    ) -> anyhow::Result<Url> {
         let method = match method.to_uppercase().as_str() {
             "GET" => reqwest::Method::GET,
             "PUT" => reqwest::Method::PUT,
@@ -92,21 +97,9 @@ impl FlowLikeStore {
         };
 
         let url: Url = match self {
-            FlowLikeStore::AWS(store) => {
-                store
-                    .signed_url(method, path, expires_after)
-                    .await?
-            }
-            FlowLikeStore::Google(store) => {
-                store
-                    .signed_url(method, path, expires_after)
-                    .await?
-            }
-            FlowLikeStore::Azure(store) => {
-                store
-                    .signed_url(method, path, expires_after)
-                    .await?
-            }
+            FlowLikeStore::AWS(store) => store.signed_url(method, path, expires_after).await?,
+            FlowLikeStore::Google(store) => store.signed_url(method, path, expires_after).await?,
+            FlowLikeStore::Azure(store) => store.signed_url(method, path, expires_after).await?,
             FlowLikeStore::Local(store) => {
                 Url::from_directory_path(store.path_to_filesystem(path)?)
                     .map_err(|_| anyhow::anyhow!("Could not build File System URL"))?
@@ -188,7 +181,7 @@ impl FlowLikeConfig {
 #[cfg(feature = "flow-runtime")]
 #[derive(Default)]
 pub struct FlowNodeRegistryInner {
-    pub registry: HashMap<String, (Node, Arc<Mutex<dyn NodeLogic>>)>,
+    pub registry: HashMap<String, (Node, Arc<dyn NodeLogic>)>,
 }
 
 impl FlowNodeRegistryInner {
@@ -198,7 +191,7 @@ impl FlowNodeRegistryInner {
         }
     }
 
-    pub fn insert(&mut self, node: Node, logic: Arc<Mutex<dyn NodeLogic>>) {
+    pub fn insert(&mut self, node: Node, logic: Arc<dyn NodeLogic>) {
         self.registry.insert(node.name.clone(), (node, logic));
     }
 
@@ -216,7 +209,7 @@ impl FlowNodeRegistryInner {
     }
 
     #[inline]
-    pub fn instantiate(&self, node: &Node) -> anyhow::Result<Arc<Mutex<dyn NodeLogic>>> {
+    pub fn instantiate(&self, node: &Node) -> anyhow::Result<Arc<dyn NodeLogic>> {
         let node = self.registry.get(&node.name);
         match node {
             Some(node) => Ok(node.1.clone()),
@@ -256,7 +249,7 @@ impl FlowNodeRegistry {
         Ok(nodes)
     }
 
-    pub fn initialize(&mut self, nodes: Vec<(Node, Arc<Mutex<dyn NodeLogic>>)>) {
+    pub fn initialize(&mut self, nodes: Vec<(Node, Arc<dyn NodeLogic>)>) {
         let mut registry = FlowNodeRegistryInner::new(nodes.len());
         for (node, logic) in nodes {
             registry.insert(node, logic);
@@ -280,7 +273,7 @@ impl FlowNodeRegistry {
         Ok(node)
     }
 
-    pub async fn instantiate(&self, node: &Node) -> anyhow::Result<Arc<Mutex<dyn NodeLogic>>> {
+    pub async fn instantiate(&self, node: &Node) -> anyhow::Result<Arc<dyn NodeLogic>> {
         if !self.initialized {
             return Err(anyhow::anyhow!("Registry not initialized"));
         }

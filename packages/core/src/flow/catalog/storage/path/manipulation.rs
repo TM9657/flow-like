@@ -9,13 +9,13 @@ use crate::flow::node::NodeLogic;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
-        Arc::new(Mutex::new(child::ChildNode::default())),
-        Arc::new(Mutex::new(extension::ExtensionNode::default())),
-        Arc::new(Mutex::new(filename::FilenameNode::default())),
-        Arc::new(Mutex::new(parent::ParentNode::default())),
-        Arc::new(Mutex::new(raw::RawPathNode::default())),
-        Arc::new(Mutex::new(set_extension::SetExtensionNode::default())),
+        Arc::new(child::ChildNode::default()),
+        Arc::new(extension::ExtensionNode::default()),
+        Arc::new(filename::FilenameNode::default()),
+        Arc::new(parent::ParentNode::default()),
+        Arc::new(raw::RawPathNode::default()),
+        Arc::new(set_extension::SetExtensionNode::default()),
     ]
 }

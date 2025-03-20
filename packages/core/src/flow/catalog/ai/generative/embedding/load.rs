@@ -72,7 +72,7 @@ impl NodeLogic for LoadModelNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let bit: Bit = context.evaluate_pin("bit").await?;
         context.deactivate_exec_pin("exec_out").await?;
         context.activate_exec_pin("failed").await?;

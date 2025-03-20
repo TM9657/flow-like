@@ -1,14 +1,16 @@
-
 use crate::{
     flow::{
-        catalog::storage::path::FlowPath, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        catalog::storage::path::FlowPath,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
 use async_trait::async_trait;
 use futures::StreamExt;
 use serde_json::json;
-
 
 #[derive(Default)]
 pub struct ListPathsNode {}
@@ -55,15 +57,9 @@ impl NodeLogic for ListPathsNode {
             VariableType::Execution,
         );
 
-
-        node.add_output_pin(
-            "paths",
-            "Paths",
-            "Output Paths",
-            VariableType::Struct,
-        )
-        .set_schema::<FlowPath>()
-        .set_value_type(crate::flow::pin::ValueType::Array);
+        node.add_output_pin("paths", "Paths", "Output Paths", VariableType::Struct)
+            .set_schema::<FlowPath>()
+            .set_value_type(crate::flow::pin::ValueType::Array);
 
         node.add_output_pin(
             "failed",
@@ -75,7 +71,7 @@ impl NodeLogic for ListPathsNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         context.activate_exec_pin("failed").await?;
         context.deactivate_exec_pin("exec_out").await?;
         let original_path: FlowPath = context.evaluate_pin("prefix").await?;
@@ -85,22 +81,26 @@ impl NodeLogic for ListPathsNode {
         let store = path.store.as_generic();
 
         let file_objects = if recursive {
-            store.list(Some(&path.path))
-            .map(|r| r.map_err(anyhow::Error::from))
-            .collect::<Vec<_>>()
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()?
+            store
+                .list(Some(&path.path))
+                .map(|r| r.map_err(anyhow::Error::from))
+                .collect::<Vec<_>>()
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>()?
         } else {
             let files = store.list_with_delimiter(Some(&path.path)).await?;
             files.objects
         };
 
-        let paths = file_objects.iter().map(|p| {
-            let mut new_path = original_path.clone();
-            new_path.path = p.location.as_ref().to_string();
-            new_path
-        }).collect::<Vec<FlowPath>>();
+        let paths = file_objects
+            .iter()
+            .map(|p| {
+                let mut new_path = original_path.clone();
+                new_path.path = p.location.as_ref().to_string();
+                new_path
+            })
+            .collect::<Vec<FlowPath>>();
 
         context.set_pin_value("paths", json!(paths)).await?;
         context.deactivate_exec_pin("failed").await?;

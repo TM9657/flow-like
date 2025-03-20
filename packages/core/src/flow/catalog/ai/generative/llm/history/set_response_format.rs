@@ -75,7 +75,7 @@ impl NodeLogic for SetHistoryResponseFormatNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut history: History = context.evaluate_pin("history").await?;
         let response_format: Value = context.evaluate_pin("response_format").await?;
 

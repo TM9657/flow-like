@@ -70,7 +70,7 @@ impl NodeLogic for PushContentNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut message: HistoryMessage = context.evaluate_pin("message").await?;
         let content_type: String = context.evaluate_pin("type").await?;
 

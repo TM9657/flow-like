@@ -35,7 +35,7 @@ impl NodeLogic for ParallelExecutionNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let exec_out_pins = context.get_pins_by_name("exec_out").await?;
         for pin in exec_out_pins {
             let deactivate_pin = context.activate_exec_pin_ref(&pin).await;

@@ -45,7 +45,7 @@ impl NodeLogic for ToBytesNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let value: serde_json::Value = context.evaluate_pin("value").await?;
         let pretty = context.evaluate_pin::<bool>("pretty").await?;
         let bytes: Vec<u8> = if pretty {

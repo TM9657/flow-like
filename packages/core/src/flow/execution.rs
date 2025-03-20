@@ -1,6 +1,7 @@
 use ahash::AHasher;
 use context::ExecutionContext;
 use cuid2;
+use dashmap::DashMap;
 use futures::StreamExt;
 use internal_node::InternalNode;
 use internal_pin::InternalPin;
@@ -71,7 +72,7 @@ impl dyn Cacheable {
 
 #[derive(Clone)]
 struct RunStack {
-    stack: Vec<Arc<Mutex<InternalNode>>>,
+    stack: Vec<Arc<InternalNode>>,
     deduplication: HashSet<u64>,
     hash: u64,
 }
@@ -85,7 +86,7 @@ impl RunStack {
         }
     }
 
-    fn push(&mut self, node_id: &str, node: Arc<Mutex<InternalNode>>) {
+    fn push(&mut self, node_id: &str, node: Arc<InternalNode>) {
         let mut hasher = AHasher::default();
         node_id.hash(&mut hasher);
         let hash = hasher.finish();
@@ -113,8 +114,8 @@ impl RunStack {
 #[derive(Clone)]
 pub struct InternalRun {
     pub run: Arc<Mutex<Run>>,
-    pub nodes: HashMap<String, Arc<Mutex<InternalNode>>>,
-    pub dependencies: HashMap<String, Vec<Arc<Mutex<InternalNode>>>>,
+    pub nodes: HashMap<String, Arc<InternalNode>>,
+    pub dependencies: HashMap<String, Vec<Arc<InternalNode>>>,
     pub pins: HashMap<String, Arc<Mutex<InternalPin>>>,
     pub variables: Arc<Mutex<HashMap<String, Variable>>>,
     pub cache: Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
@@ -123,6 +124,7 @@ pub struct InternalRun {
 
     stack: Arc<RunStack>,
     concurrency_limit: u64,
+    concurrency_map: Arc<DashMap<String, u64>>,
     cpus: usize,
     log_level: LogLevel,
 }
@@ -252,12 +254,12 @@ impl InternalRun {
                 }
             }
 
-            let internal_node = Arc::new(Mutex::new(InternalNode::new(
+            let internal_node = Arc::new(InternalNode::new(
                 node.clone(),
                 node_pins.clone(),
                 logic,
                 pin_cache.clone(),
-            )));
+            ));
 
             for internal_pin in node_pins.values() {
                 let mut pin_guard = internal_pin.lock().await;
@@ -299,7 +301,8 @@ impl InternalRun {
             variables,
             cache: Arc::new(RwLock::new(HashMap::new())),
             stack: Arc::new(stack),
-            concurrency_limit: 128_000,
+            concurrency_limit: 2_000_000,
+            concurrency_map: Arc::new(DashMap::with_capacity(board.nodes.len())),
             cpus: num_cpus::get(),
             sender,
             dependencies,
@@ -322,9 +325,7 @@ impl InternalRun {
         self.run.lock().await.start = SystemTime::now();
         self.run.lock().await.end = SystemTime::now();
         for node in self.nodes.values() {
-            let mut guard = node.lock().await;
-            guard.reset().await;
-            for (_, pin) in guard.pins.iter_mut() {
+            for (_, pin) in node.pins.iter() {
                 pin.lock().await.reset().await;
             }
         }
@@ -362,6 +363,7 @@ impl InternalRun {
                 let sender = sender.clone();
                 let stage = stage.clone();
                 let log_level = log_level.clone();
+                let concurrency_map = self.concurrency_map.clone();
 
                 async move {
                     step_core(
@@ -376,6 +378,7 @@ impl InternalRun {
                         &dependencies,
                         &profile,
                         &sender,
+                        concurrency_map,
                     )
                     .await
                 }
@@ -421,6 +424,7 @@ impl InternalRun {
             &self.dependencies,
             &self.profile,
             &self.sender,
+            self.concurrency_map.clone(),
         )
         .await;
 
@@ -532,9 +536,9 @@ impl InternalRun {
 fn recursive_get_deps(
     node_id: String,
     dependencies: &HashMap<&String, Vec<(&String, &bool)>>,
-    lookup: &HashMap<String, Arc<Mutex<InternalNode>>>,
+    lookup: &HashMap<String, Arc<InternalNode>>,
     recursion_filter: &mut HashSet<String>,
-) -> Vec<Arc<Mutex<InternalNode>>> {
+) -> Vec<Arc<InternalNode>> {
     if recursion_filter.contains(&node_id) {
         return vec![];
     }
@@ -577,7 +581,7 @@ pub enum RunStatus {
 }
 
 async fn step_core(
-    node: &Arc<Mutex<InternalNode>>,
+    node: &Arc<InternalNode>,
     concurrency_limit: u64,
     handler: &Arc<Mutex<FlowLikeState>>,
     run: &Arc<Mutex<Run>>,
@@ -585,21 +589,21 @@ async fn step_core(
     cache: &Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
     log_level: LogLevel,
     stage: ExecutionStage,
-    dependencies: &HashMap<String, Vec<Arc<Mutex<InternalNode>>>>,
+    dependencies: &HashMap<String, Vec<Arc<InternalNode>>>,
     profile: &Arc<Profile>,
     sender: &tokio::sync::mpsc::Sender<FlowLikeEvent>,
-) -> Option<Vec<(String, Arc<Mutex<InternalNode>>)>> {
+    concurrency_map: Arc<DashMap<String, u64>>,
+) -> Option<Vec<(String, Arc<InternalNode>)>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
     {
-        let mut internal_node = node.lock().await;
-
-        if internal_node.get_execution_count() >= concurrency_limit
-            || internal_node.orphaned().await
-        {
+        let mut limit = concurrency_map
+            .entry(node.node.lock().await.id.clone())
+            .or_insert(0);
+        if *limit >= concurrency_limit {
             return None;
         }
 
-        internal_node.increment_execution_count();
+        *limit += 1;
     }
 
     let weak_run = Arc::downgrade(run);
@@ -637,18 +641,10 @@ async fn step_core(
     drop(context);
 
     if state == NodeState::Success {
-        let connected = node.lock().await.get_connected_exec(true).await;
+        let connected = node.get_connected_exec(true).await;
         let mut connected_nodes = Vec::with_capacity(connected.len());
         for connected_node in connected {
-            let id = connected_node
-                .lock()
-                .await
-                .node
-                .clone()
-                .lock()
-                .await
-                .id
-                .clone();
+            let id = connected_node.node.clone().lock().await.id.clone();
 
             connected_nodes.push((id, connected_node.clone()));
         }

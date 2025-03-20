@@ -90,7 +90,7 @@ impl NodeLogic for IsBitOfTypeNode {
         node
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         let bit: Bit = context.evaluate_pin("bit").await?;
         let bit_type_str: String = context.evaluate_pin("bit_type").await?;
 

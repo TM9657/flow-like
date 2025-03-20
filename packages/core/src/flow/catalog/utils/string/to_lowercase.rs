@@ -41,7 +41,7 @@ impl NodeLogic for StringToLowerNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let string: String = context.evaluate_pin("string").await?;
         let lowercase_string = string.to_lowercase();
 

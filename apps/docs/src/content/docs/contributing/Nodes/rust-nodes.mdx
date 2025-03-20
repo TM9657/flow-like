@@ -60,7 +60,7 @@ impl NodeLogic for BranchNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let condition = context.evaluate_pin::<bool>("condition").await?;
 
         let true_pin = context.get_pin_by_name("true").await?;
@@ -285,7 +285,7 @@ impl NodeLogic for AddIntegerNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let integer1: i64 = context.evaluate_pin("integer1").await?;
         let integer2: i64 = context.evaluate_pin("integer2").await?;
         let sum = integer1 + integer2;
@@ -365,13 +365,13 @@ You can use the `on_update` function to validate the Node and return Error codes
 ## The Context Object
 By now you have probably wondered about the input elements you get for your node. First you get a reference to the state of the app, where you can interact with Model Providers and get a cached HTTP Client.
 
-More important however is the `Context` Object. This context let´s you do multiple things. 
+More important however is the `Context` Object. This context let´s you do multiple things.
 
 ### Pin Interactions
-The context object is your best friend interacting with Pins. Most of the time you will use it to read and write to Pins. You can either do so by reference or by name. 
+The context object is your best friend interacting with Pins. Most of the time you will use it to read and write to Pins. You can either do so by reference or by name.
 If you have to write to a pin multiple times, the reference one is cheaper.
 
-The Type we use for Communication is the abstract `serde_json:Value`. It allows to write a lot of 
+The Type we use for Communication is the abstract `serde_json:Value`. It allows to write a lot of
 
 ```rust title="Reading and Writing Pins"
 // The Type is necessary in this case to guide the evaluate_pin function. This evaluation is by name.
@@ -412,7 +412,7 @@ node.add_input_pin(
 ```
 
 :::note
-Pin Schemas are not stored inline with the node. These are classical JSON Schema definitions, which can be quite huge. 
+Pin Schemas are not stored inline with the node. These are classical JSON Schema definitions, which can be quite huge.
 We are hashing these Schemars for all nodes and storing them in the references of the board. Depending on the Size of the Struct you are working with this can however still add quite some overhead.
 :::
 

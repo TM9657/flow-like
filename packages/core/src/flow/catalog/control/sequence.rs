@@ -38,7 +38,7 @@ impl NodeLogic for SequenceNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut already_executed = HashSet::new();
 
         let mut pin_indices = {
@@ -67,8 +67,7 @@ impl NodeLogic for SequenceNode {
                     let connection = connection.lock().await;
                     let node = connection.node.upgrade();
                     if let Some(node) = node {
-                        let node_guard = node.lock().await;
-                        let node_id = node_guard.node.lock().await.id.clone();
+                        let node_id = node.node.lock().await.id.clone();
                         if !already_executed.contains(&node_id) {
                             execution_order.push((node.clone(), node_id.clone()));
                             already_executed.insert(node_id);
@@ -80,7 +79,7 @@ impl NodeLogic for SequenceNode {
         };
 
         let mut recursion_guard = HashSet::new();
-        recursion_guard.insert(context.node.lock().await.node.lock().await.id.clone());
+        recursion_guard.insert(context.node.node.lock().await.id.clone());
 
         for (node, _node_id) in execution_order {
             let mut sub_context = context.create_sub_context(&node).await;

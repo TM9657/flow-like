@@ -33,9 +33,8 @@ impl Cacheable for CachedEmbeddingModelObject {
     }
 }
 
-pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
-    let mut nodes: Vec<Arc<Mutex<dyn NodeLogic>>> =
-        vec![Arc::new(Mutex::new(load::LoadModelNode::default()))];
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
+    let mut nodes: Vec<Arc<dyn NodeLogic>> = vec![Arc::new(load::LoadModelNode::default())];
     nodes.extend(text::register_functions().await);
     nodes.extend(image::register_functions().await);
     nodes

@@ -21,9 +21,9 @@ impl GetVariable {
         GetVariable {}
     }
 
-    pub fn push_registry(registry: &mut HashMap<&'static str, Arc<Mutex<dyn NodeLogic>>>) {
+    pub fn push_registry(registry: &mut HashMap<&'static str, Arc<dyn NodeLogic>>) {
         let node = GetVariable::new();
-        let node = Arc::new(Mutex::new(node));
+        let node = Arc::new(node);
         registry.insert("variable_get", node);
     }
 }
@@ -57,7 +57,7 @@ impl NodeLogic for GetVariable {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let var_ref: String = context.evaluate_pin("var_ref").await?;
         let variable: crate::flow::variable::Variable = context.get_variable(&var_ref).await?;
 

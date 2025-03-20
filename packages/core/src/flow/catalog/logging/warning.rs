@@ -46,7 +46,7 @@ impl NodeLogic for WarningNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let should_toast = context.evaluate_pin::<bool>("toast").await?;
         let message = context.evaluate_pin::<String>("message").await?;
 

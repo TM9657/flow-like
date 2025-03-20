@@ -66,7 +66,7 @@ impl NodeLogic for DeleteNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         context.activate_exec_pin("exec_out_failure").await?;
 

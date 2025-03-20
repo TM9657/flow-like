@@ -238,7 +238,7 @@ impl Node {
 #[async_trait]
 pub trait NodeLogic: Send + Sync {
     async fn get_node(&self, handler: &FlowLikeState) -> Node;
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()>;
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()>;
 
     async fn get_progress(&self, context: &mut ExecutionContext) -> i32 {
         let state = context.get_state();

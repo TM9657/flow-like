@@ -39,20 +39,30 @@ impl NodeLogic for ChunkTextChar {
             VariableType::Execution,
         );
 
-        node.add_input_pin(
-            "text",
-            "Text",
-            "The string to embed",
-            VariableType::String,
-        );
+        node.add_input_pin("text", "Text", "The string to embed", VariableType::String);
 
-        node.add_input_pin("capacity", "Capacity", "Chunk Capacity", VariableType::Integer)
+        node.add_input_pin(
+            "capacity",
+            "Capacity",
+            "Chunk Capacity",
+            VariableType::Integer,
+        )
         .set_default_value(Some(json!(512)));
 
-        node.add_input_pin("overlap", "Overlap", "Overlap between Chunks", VariableType::Integer)
+        node.add_input_pin(
+            "overlap",
+            "Overlap",
+            "Overlap between Chunks",
+            VariableType::Integer,
+        )
         .set_default_value(Some(json!(20)));
 
-        node.add_input_pin("markdown", "Markdown", "Use Markdown Splitter?", VariableType::Boolean)
+        node.add_input_pin(
+            "markdown",
+            "Markdown",
+            "Use Markdown Splitter?",
+            VariableType::Boolean,
+        )
         .set_default_value(Some(json!(true)));
 
         node.add_output_pin(
@@ -80,7 +90,7 @@ impl NodeLogic for ChunkTextChar {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         context.activate_exec_pin("failed").await?;
 
@@ -92,11 +102,17 @@ impl NodeLogic for ChunkTextChar {
         let chunks = if markdown {
             let config = ChunkConfig::new(capacity as usize).with_overlap(overlap as usize)?;
             let splitter = TextSplitter::new(config);
-            splitter.chunks(&text).map(|c| c.to_string()).collect::<Vec<String>>()
+            splitter
+                .chunks(&text)
+                .map(|c| c.to_string())
+                .collect::<Vec<String>>()
         } else {
             let config = ChunkConfig::new(capacity as usize).with_overlap(overlap as usize)?;
             let splitter = MarkdownSplitter::new(config);
-            splitter.chunks(&text).map(|c| c.to_string()).collect::<Vec<String>>()
+            splitter
+                .chunks(&text)
+                .map(|c| c.to_string())
+                .collect::<Vec<String>>()
         };
 
         context.set_pin_value("chunks", json!(chunks)).await?;

@@ -75,7 +75,7 @@ impl NodeLogic for PopHistoryMessageNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut history: History = context.evaluate_pin("history").await?;
 
         if history.messages.is_empty() {

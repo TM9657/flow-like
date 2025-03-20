@@ -43,7 +43,7 @@ impl NodeLogic for RandomFloatInRangeNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let min: f64 = context.evaluate_pin("min").await?;
         let max: f64 = context.evaluate_pin("max").await?;
 

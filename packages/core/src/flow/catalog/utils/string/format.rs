@@ -62,7 +62,7 @@ impl NodeLogic for FormatStringNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let format_string: String = context.evaluate_pin("format_string").await?;
         let mut formatted_string = format_string.clone();
 

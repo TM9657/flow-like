@@ -14,12 +14,10 @@ use crate::flow::node::NodeLogic;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
-    let mut registry: Vec<Arc<Mutex<dyn NodeLogic>>> = Vec::new();
-    registry.push(Arc::new(Mutex::new(cuid::CuidNode::default())));
-    registry.push(Arc::new(Mutex::new(
-        json::repair_parse::RepairParseNode::default(),
-    )));
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
+    let mut registry: Vec<Arc<dyn NodeLogic>> = Vec::new();
+    registry.push(Arc::new(cuid::CuidNode::default()));
+    registry.push(Arc::new(json::repair_parse::RepairParseNode::default()));
     registry.append(&mut types::register_functions().await);
     registry.append(&mut bool::register_functions().await);
     registry.append(&mut env::register_functions().await);
@@ -28,6 +26,6 @@ pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
     registry.append(&mut vector::register_functions().await);
     registry.append(&mut float::register_functions().await);
     registry.append(&mut int::register_functions().await);
-    registry.push(Arc::new(Mutex::new(math::eval::EvalNode::default())));
+    registry.push(Arc::new(math::eval::EvalNode::default()));
     registry
 }

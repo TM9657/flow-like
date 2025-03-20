@@ -56,7 +56,7 @@ impl NodeLogic for TryTransformNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let input_value: Value = context.evaluate_pin("type_in").await?;
         let output_value = context.get_pin_by_name("type_out").await?;
         let out_type = output_value.lock().await.pin.lock().await.data_type.clone();

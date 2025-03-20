@@ -63,7 +63,7 @@ impl NodeLogic for PushArrayNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let array_in: Vec<Value> = context.evaluate_pin("array_in").await?;
         let value: Value = context.evaluate_pin("value").await?;
         let mut array_out = array_in.clone();

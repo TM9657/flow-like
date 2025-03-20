@@ -45,7 +45,7 @@ impl NodeLogic for MakeArrayNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let array_out: Vec<serde_json::Value> = Vec::new(); // Create an empty array
         context.set_pin_value("array_out", json!(array_out)).await?;
         Ok(())

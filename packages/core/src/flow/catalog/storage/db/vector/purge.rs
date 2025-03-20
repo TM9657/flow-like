@@ -51,7 +51,7 @@ impl NodeLogic for PurgeLocalDatabaseNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let database = database.load(context, &database.cache_key).await?;
         database.purge().await?;

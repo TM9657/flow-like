@@ -41,7 +41,7 @@ impl NodeLogic for AbsoluteIntegerNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let integer: i64 = context.evaluate_pin("integer").await?;
         let absolute = integer.abs();
         context.set_pin_value("absolute", json!(absolute)).await?;

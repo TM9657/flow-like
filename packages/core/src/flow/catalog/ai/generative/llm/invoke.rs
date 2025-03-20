@@ -86,7 +86,7 @@ impl NodeLogic for InvokeLLM {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         context.deactivate_exec_pin("done").await?;
         let model = context.evaluate_pin::<Bit>("model").await?;
         let mut model_name = model.id.clone();
@@ -110,11 +110,11 @@ impl NodeLogic for InvokeLLM {
             let node = pin.lock().await.node.clone();
             if let Some(node) = node.upgrade() {
                 let context = Arc::new(Mutex::new(context.create_sub_context(&node).await));
-                connected_nodes.insert(node.lock().await.node.lock().await.id.clone(), context);
+                connected_nodes.insert(node.node.lock().await.id.clone(), context);
             }
         }
 
-        let parent_node_id = context.node.lock().await.node.lock().await.id.clone();
+        let parent_node_id = context.node.node.lock().await.id.clone();
         let ctx = context.clone();
         let collection_nodes = connected_nodes.clone();
         let callback_count = Arc::new(AtomicUsize::new(0));

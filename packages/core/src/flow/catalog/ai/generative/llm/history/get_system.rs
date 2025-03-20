@@ -53,7 +53,7 @@ impl NodeLogic for GetSystemPromptNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let history: History = context.evaluate_pin("history").await?;
         let system_prompt = history.messages.iter().find_map(|message| {
             if message.role == Role::System {

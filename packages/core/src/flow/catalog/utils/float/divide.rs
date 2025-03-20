@@ -52,7 +52,7 @@ impl NodeLogic for DivideFloatNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let dividend: f64 = context.evaluate_pin("dividend").await?;
         let divisor: f64 = context.evaluate_pin("divisor").await?;
 

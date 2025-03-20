@@ -55,7 +55,7 @@ impl NodeLogic for SetStructFieldNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut old_struct = context
             .evaluate_pin::<HashMap<String, serde_json::Value>>("struct_in")
             .await?;

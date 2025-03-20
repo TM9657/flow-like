@@ -53,7 +53,7 @@ impl NodeLogic for StringJoinNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let strings: Vec<String> = context.evaluate_pin("strings").await?;
         let separator: String = context.evaluate_pin("separator").await?;
 

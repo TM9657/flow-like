@@ -57,7 +57,7 @@ impl NodeLogic for GetContentNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let message: ResponseMessage = context.evaluate_pin("message").await?;
 
         if let Some(content) = message.content.as_ref() {

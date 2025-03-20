@@ -46,7 +46,7 @@ impl NodeLogic for MakeHistoryNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let model_name: String = context.evaluate_pin("model_name").await?;
         let history = History::new(model_name, vec![]);
 

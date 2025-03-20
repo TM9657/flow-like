@@ -37,7 +37,7 @@ impl NodeLogic for EqualStringNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let string_pins = context.get_pins_by_name("string").await?;
         let mut equal = true;
         let mut value = None;

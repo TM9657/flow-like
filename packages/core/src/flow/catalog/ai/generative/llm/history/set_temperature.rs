@@ -68,7 +68,7 @@ impl NodeLogic for SetHistoryTemperatureNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut history: History = context.evaluate_pin("history").await?;
         let temperature: f64 = context.evaluate_pin("temperature").await?;
 

@@ -41,7 +41,7 @@ impl NodeLogic for StringTrimNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let string: String = context.evaluate_pin("string").await?;
         let trimmed_string = string.trim().to_string();
 

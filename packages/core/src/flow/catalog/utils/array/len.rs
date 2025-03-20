@@ -46,7 +46,7 @@ impl NodeLogic for ArrayLengthNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let array: Vec<serde_json::Value> = context.evaluate_pin("array").await?;
         let length = array.len() as i64;
         context.set_pin_value("length", json!(length)).await?;

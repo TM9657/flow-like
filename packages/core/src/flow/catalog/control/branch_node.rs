@@ -53,7 +53,7 @@ impl NodeLogic for BranchNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let condition = context.evaluate_pin::<bool>("condition").await?;
 
         let true_pin = context.get_pin_by_name("true").await?;

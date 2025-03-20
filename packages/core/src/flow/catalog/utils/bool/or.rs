@@ -50,7 +50,7 @@ impl NodeLogic for BoolOr {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut output_value = false;
 
         let boolean_pins = context.get_pins_by_name("boolean").await?;

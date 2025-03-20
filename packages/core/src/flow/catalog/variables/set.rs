@@ -21,9 +21,9 @@ impl SetVariable {
         SetVariable {}
     }
 
-    pub fn push_registry(registry: &mut HashMap<&'static str, Arc<Mutex<dyn NodeLogic>>>) {
+    pub fn push_registry(registry: &mut HashMap<&'static str, Arc<dyn NodeLogic>>) {
         let node = SetVariable::new();
-        let node = Arc::new(Mutex::new(node));
+        let node = Arc::new(node);
         registry.insert("variable_set", node);
     }
 }
@@ -73,7 +73,7 @@ impl NodeLogic for SetVariable {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let var_ref: String = context.evaluate_pin("var_ref").await?;
         let value = context.evaluate_pin::<Value>("value_in").await?;
 

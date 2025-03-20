@@ -92,7 +92,7 @@ impl NodeLogic for SetWeightNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut preferences: BitModelPreference = context.evaluate_pin("preferences_in").await?;
         let preferences_key: String = context.evaluate_pin("preferences_key").await?;
         let weight: f32 = context.evaluate_pin("weight").await?;

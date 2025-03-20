@@ -39,7 +39,7 @@ impl NodeLogic for JaroDistanceNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let string1: String = context.evaluate_pin("string1").await?;
         let string2: String = context.evaluate_pin("string2").await?;
 

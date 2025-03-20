@@ -128,7 +128,7 @@ pub struct ExecutionContext {
     pub id: String,
     pub run: Weak<Mutex<Run>>,
     pub profile: Arc<Profile>,
-    pub node: Arc<Mutex<InternalNode>>,
+    pub node: Arc<InternalNode>,
     pub sub_traces: Vec<Trace>,
     pub app_state: Arc<Mutex<FlowLikeState>>,
     pub variables: Arc<Mutex<HashMap<String, Variable>>>,
@@ -146,7 +146,7 @@ impl ExecutionContext {
     pub async fn new(
         run: &Weak<Mutex<Run>>,
         state: &Arc<Mutex<FlowLikeState>>,
-        node: &Arc<Mutex<InternalNode>>,
+        node: &Arc<InternalNode>,
         variables: &Arc<Mutex<HashMap<String, Variable>>>,
         cache: &Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
         log_level: LogLevel,
@@ -155,7 +155,7 @@ impl ExecutionContext {
         sender: tokio::sync::mpsc::Sender<FlowLikeEvent>,
     ) -> Self {
         let (id, execution_cache) = {
-            let node_id = node.lock().await.node.lock().await.id.clone();
+            let node_id = node.node.lock().await.id.clone();
             let execution_cache = ExecutionContextCache::new(run, state, &node_id).await;
             (node_id, execution_cache)
         };
@@ -192,7 +192,7 @@ impl ExecutionContext {
         }
     }
 
-    pub async fn create_sub_context(&self, node: &Arc<Mutex<InternalNode>>) -> ExecutionContext {
+    pub async fn create_sub_context(&self, node: &Arc<InternalNode>) -> ExecutionContext {
         ExecutionContext::new(
             &self.run,
             &self.app_state,
@@ -292,8 +292,7 @@ impl ExecutionContext {
     }
 
     pub async fn get_pin_by_name(&self, name: &str) -> anyhow::Result<Arc<Mutex<InternalPin>>> {
-        let node = self.node.lock().await;
-        let pin = node.get_pin_by_name(name).await?;
+        let pin = self.node.get_pin_by_name(name).await?;
         Ok(pin)
     }
 
@@ -317,14 +316,12 @@ impl ExecutionContext {
         &self,
         name: &str,
     ) -> anyhow::Result<Vec<Arc<Mutex<InternalPin>>>> {
-        let node = self.node.lock().await;
-        let pins = node.get_pins_by_name(name).await?;
+        let pins = self.node.get_pins_by_name(name).await?;
         Ok(pins)
     }
 
     pub async fn get_pin_by_id(&self, id: &str) -> anyhow::Result<Arc<Mutex<InternalPin>>> {
-        let node = self.node.lock().await;
-        let pin = node.get_pin_by_id(id)?;
+        let pin = self.node.get_pin_by_id(id)?;
         Ok(pin)
     }
 
@@ -415,8 +412,7 @@ impl ExecutionContext {
     }
 
     pub async fn read_node(&self) -> Node {
-        let node_guard = self.node.lock().await;
-        let node = node_guard.node.lock().await;
+        let node = self.node.node.lock().await;
 
         node.clone()
     }

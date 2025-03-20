@@ -67,7 +67,7 @@ impl NodeLogic for SetHistoryMaxTokensNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut history: History = context.evaluate_pin("history").await?;
         let max_tokens: i64 = context.evaluate_pin("max_tokens").await?;
 

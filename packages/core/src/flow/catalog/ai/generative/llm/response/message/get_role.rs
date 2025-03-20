@@ -59,7 +59,7 @@ impl NodeLogic for GetRoleNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let message: ResponseMessage = context.evaluate_pin("message").await?;
 
         context.set_pin_value("role", json!(message.role)).await?;

@@ -38,7 +38,7 @@ impl NodeLogic for ClampIntegerNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let integer: i64 = context.evaluate_pin("integer").await?;
         let min: i64 = context.evaluate_pin("min").await?;
         let max: i64 = context.evaluate_pin("max").await?;

@@ -5,52 +5,23 @@ use crate::flow::node::NodeLogic;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub async fn register_functions() -> Vec<Arc<Mutex<dyn NodeLogic>>> {
-    let mut nodes = vec![
-        Arc::new(Mutex::new(db::vector::CreateLocalDatabaseNode::default()))
-            as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::vector_search::VectorSearchLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::insert::InsertLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::insert::BatchInsertLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::upsert::UpsertLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::upsert::BatchUpsertLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::purge::PurgeLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::optimize::OptimizeLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::list::ListLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::index::IndexLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::hybrid_search::HybridSearchLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::fts_search::FTSLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::filter::FilterLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::delete::DeleteLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
-        Arc::new(Mutex::new(
-            db::vector::count::CountLocalDatabaseNode::default(),
-        )) as Arc<Mutex<dyn NodeLogic>>,
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
+    let mut nodes: Vec<Arc<dyn NodeLogic>> = vec![
+        Arc::new(db::vector::CreateLocalDatabaseNode::default()),
+        Arc::new(db::vector::vector_search::VectorSearchLocalDatabaseNode::default()),
+        Arc::new(db::vector::insert::InsertLocalDatabaseNode::default()),
+        Arc::new(db::vector::insert::BatchInsertLocalDatabaseNode::default()),
+        Arc::new(db::vector::upsert::UpsertLocalDatabaseNode::default()),
+        Arc::new(db::vector::upsert::BatchUpsertLocalDatabaseNode::default()),
+        Arc::new(db::vector::purge::PurgeLocalDatabaseNode::default()),
+        Arc::new(db::vector::optimize::OptimizeLocalDatabaseNode::default()),
+        Arc::new(db::vector::list::ListLocalDatabaseNode::default()),
+        Arc::new(db::vector::index::IndexLocalDatabaseNode::default()),
+        Arc::new(db::vector::hybrid_search::HybridSearchLocalDatabaseNode::default()),
+        Arc::new(db::vector::fts_search::FTSLocalDatabaseNode::default()),
+        Arc::new(db::vector::filter::FilterLocalDatabaseNode::default()),
+        Arc::new(db::vector::delete::DeleteLocalDatabaseNode::default()),
+        Arc::new(db::vector::count::CountLocalDatabaseNode::default()),
     ];
 
     nodes.extend(path::register_functions().await);

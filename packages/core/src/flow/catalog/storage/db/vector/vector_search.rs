@@ -70,7 +70,7 @@ impl NodeLogic for VectorSearchLocalDatabaseNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let vector: Vec<f64> = context.evaluate_pin("vector").await?;
         let filter: String = context.evaluate_pin("filter").await?;

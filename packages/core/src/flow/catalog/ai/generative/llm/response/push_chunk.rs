@@ -74,7 +74,7 @@ impl NodeLogic for PushChunkNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut response: Response = context.evaluate_pin("response").await?;
         let chunk: ResponseChunk = context.evaluate_pin("chunk").await?;
 

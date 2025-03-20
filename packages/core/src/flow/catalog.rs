@@ -21,7 +21,7 @@ use crate::state::FlowLikeState;
 pub async fn node_to_dyn(
     app_state: &FlowLikeState,
     node: &Node,
-) -> anyhow::Result<Arc<Mutex<dyn NodeLogic>>> {
+) -> anyhow::Result<Arc<dyn NodeLogic>> {
     let registry_state = app_state.node_registry();
     let registry = registry_state.read().await;
 
@@ -55,7 +55,7 @@ pub async fn load_catalog(app_state: Arc<Mutex<FlowLikeState>>) -> Vec<Node> {
         .flatten()
         .map(|node| async {
             let node_ref = node.clone();
-            let node = node.lock().await.get_node(&guard).await;
+            let node = node.get_node(&guard).await;
             (node, node_ref)
         })
         .collect();

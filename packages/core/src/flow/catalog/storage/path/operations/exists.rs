@@ -1,6 +1,10 @@
 use crate::{
     flow::{
-        catalog::storage::path::FlowPath, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::PinOptions, variable::VariableType
+        catalog::storage::path::FlowPath,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
@@ -54,7 +58,7 @@ impl NodeLogic for PathExistsNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let path: FlowPath = context.evaluate_pin("path").await?;
 
         let dynamic = path.to_runtime(context).await?;

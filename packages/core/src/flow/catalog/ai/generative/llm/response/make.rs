@@ -38,7 +38,7 @@ impl NodeLogic for MakeResponseNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let response = Response::new();
 
         context.set_pin_value("response", json!(response)).await?;

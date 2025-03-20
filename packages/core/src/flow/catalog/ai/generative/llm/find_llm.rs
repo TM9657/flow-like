@@ -51,7 +51,7 @@ impl NodeLogic for FindLLMNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let mut preference: BitModelPreference = context.evaluate_pin("preferences").await?;
         preference.enforce_bounds();
 

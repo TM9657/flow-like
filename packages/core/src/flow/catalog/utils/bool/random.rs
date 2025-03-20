@@ -50,7 +50,7 @@ impl NodeLogic for RandomBoolNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let probability: f64 = context.evaluate_pin("probability").await?;
         let random_bool = {
             let mut rng = rand::rng();

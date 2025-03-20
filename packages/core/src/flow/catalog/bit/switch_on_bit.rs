@@ -152,7 +152,7 @@ impl NodeLogic for SwitchOnBitNode {
         node
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let bit: Bit = context.evaluate_pin("bit").await?;
 
         context.set_pin_value("bit_out", json!(bit)).await?;

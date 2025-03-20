@@ -1,4 +1,3 @@
-
 use std::time::Duration;
 
 use crate::{
@@ -98,7 +97,7 @@ impl NodeLogic for SignUrlsNode {
         return node;
     }
 
-    async fn run(&mut self, context: &mut ExecutionContext) -> anyhow::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         context.activate_exec_pin("failed").await?;
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -112,7 +111,11 @@ impl NodeLogic for SignUrlsNode {
             let runtime_path = path.to_runtime(context).await?;
             let signed_url = runtime_path
                 .store
-                .sign(&method, &runtime_path.path, Duration::from_secs(expiration as u64))
+                .sign(
+                    &method,
+                    &runtime_path.path,
+                    Duration::from_secs(expiration as u64),
+                )
                 .await;
 
             match signed_url {
@@ -128,7 +131,9 @@ impl NodeLogic for SignUrlsNode {
             }
         }
 
-        context.set_pin_value("signed_urls", json!(signed_urls)).await?;
+        context
+            .set_pin_value("signed_urls", json!(signed_urls))
+            .await?;
         context.deactivate_exec_pin("failed").await?;
         context.activate_exec_pin("exec_out").await?;
 
