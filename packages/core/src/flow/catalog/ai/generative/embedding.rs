@@ -10,7 +10,6 @@ use crate::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{any::Any, sync::Arc};
-use tokio::sync::Mutex;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct CachedEmbeddingModel {

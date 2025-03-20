@@ -417,16 +417,23 @@ impl ExecutionContext {
         node.clone()
     }
 
-    pub async fn toast_message(&self, message: &str, level: ToastLevel) -> anyhow::Result<()> {
+    pub async fn toast_message(&mut self, message: &str, level: ToastLevel) -> anyhow::Result<()> {
         let event = FlowLikeEvent::new("toast", ToastEvent::new(message, level));
-        self.app_state
+        let toast_result = self
+            .app_state
             .lock()
             .await
             .event_sender
             .lock()
             .await
             .send(event)
-            .await?;
+            .await;
+
+        if toast_result.is_err() {
+            let error_msg = format!("Failed to send toast event: {:?}", toast_result.err());
+            self.log_message(&error_msg, LogLevel::Error);
+        }
+
         Ok(())
     }
 }

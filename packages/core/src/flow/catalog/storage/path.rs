@@ -9,7 +9,6 @@ use object_store::path::Path;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
-use tokio::sync::Mutex;
 
 pub mod content;
 pub mod dirs;
@@ -89,7 +88,7 @@ impl FlowPath {
             .clone()
             .ok_or(anyhow!("Failed to get Execution Cache"))?;
         let dir = exec_context.get_upload_dir()?;
-        let store_hash = String::from(format!("dirs__upload_{}", dir.as_ref()));
+        let store_hash = format!("dirs__upload_{}", dir.as_ref());
 
         if let Some(_) = context.get_cache(&store_hash).await {
             return Ok(Self {
@@ -122,7 +121,7 @@ impl FlowPath {
             .clone()
             .ok_or(anyhow!("Failed to get Execution Cache"))?;
         let dir = exec_context.get_storage(node)?;
-        let store_hash = String::from(format!("dirs__storage_{}", dir.as_ref()));
+        let store_hash = format!("dirs__storage_{}", dir.as_ref());
 
         if let Some(_) = context.get_cache(&store_hash).await {
             return Ok(Self {
@@ -155,7 +154,7 @@ impl FlowPath {
             .clone()
             .ok_or(anyhow!("Failed to get Execution Cache"))?;
         let dir = exec_context.get_cache(node)?;
-        let store_hash = String::from(format!("dirs__cache_{}", dir.as_ref()));
+        let store_hash = format!("dirs__cache_{}", dir.as_ref());
 
         if let Some(_) = context.get_cache(&store_hash).await {
             return Ok(Self {
@@ -185,7 +184,7 @@ impl FlowPath {
             .clone()
             .ok_or(anyhow!("Failed to get Execution Cache"))?;
         let dir = exec_context.get_user_cache(node)?;
-        let store_hash = String::from(format!("dirs__user_{}", dir.as_ref()));
+        let store_hash = format!("dirs__user_{}", dir.as_ref());
 
         if let Some(_) = context.get_cache(&store_hash).await {
             return Ok(Self {

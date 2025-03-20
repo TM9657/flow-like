@@ -1,6 +1,5 @@
 use crate::flow::node::NodeLogic;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 pub mod addition;
 pub mod cosine_sim;

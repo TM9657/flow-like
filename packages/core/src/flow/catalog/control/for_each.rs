@@ -85,8 +85,6 @@ impl NodeLogic for LoopNode {
             .as_array()
             .ok_or(anyhow::anyhow!("Array value is not an array"))?;
 
-        let length = array_value.len() as u64;
-
         context.activate_exec_pin_ref(&exec_item).await?;
         for (i, item) in array_value.iter().enumerate() {
             let item = item.clone();
