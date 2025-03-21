@@ -87,7 +87,12 @@ impl NodeLogic for FTSLocalDatabaseNode {
         };
         let limit: i64 = context.evaluate_pin("limit").await?;
         let offset: i64 = context.evaluate_pin("offset").await?;
-        let database = database.load(context, &database.cache_key).await?;
+        let database = database
+            .load(context, &database.cache_key)
+            .await?
+            .db
+            .clone();
+        let database = database.read().await;
         let results = database
             .fts_search(&search, filter, limit as usize, offset as usize)
             .await?;

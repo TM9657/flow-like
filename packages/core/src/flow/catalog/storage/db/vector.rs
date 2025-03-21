@@ -12,6 +12,7 @@ use crate::{
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
 pub mod count;
 pub mod delete;
@@ -31,12 +32,27 @@ pub struct NodeDBConnection {
     pub cache_key: String,
 }
 
+#[derive(Clone)]
+pub struct CachedDB {
+    pub db: Arc<RwLock<LanceDBVectorStore>>,
+}
+
+impl Cacheable for CachedDB {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
 impl NodeDBConnection {
     pub async fn load(
         &self,
         context: &mut ExecutionContext,
         cache_key: &str,
-    ) -> anyhow::Result<LanceDBVectorStore> {
+    ) -> anyhow::Result<CachedDB> {
         let cached = context
             .cache
             .read()
@@ -46,7 +62,7 @@ impl NodeDBConnection {
             .ok_or(anyhow::anyhow!("No cache found"))?;
         let db = cached
             .as_any()
-            .downcast_ref::<LanceDBVectorStore>()
+            .downcast_ref::<CachedDB>()
             .ok_or(anyhow::anyhow!("Could not downcast"))?;
         Ok(db.clone())
     }
@@ -123,6 +139,9 @@ impl NodeLogic for CreateLocalDatabaseNode {
                     .ok_or(anyhow::anyhow!("No database builder found"))?(board_dir);
             let db = db.execute().await?;
             let intermediate = LanceDBVectorStore::from_connection(db, table).await;
+            let intermediate = CachedDB {
+                db: Arc::new(RwLock::new(intermediate)),
+            };
             let cacheable: Arc<dyn Cacheable> = Arc::new(intermediate.clone());
             context
                 .cache

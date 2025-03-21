@@ -67,7 +67,12 @@ impl NodeLogic for UpsertLocalDatabaseNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let mut database = database.load(context, &database.cache_key).await?;
+        let database = database
+            .load(context, &database.cache_key)
+            .await?
+            .db
+            .clone();
+        let mut database = database.write().await;
         let id_row: String = context.evaluate_pin("id_row").await?;
         let value: Value = context.evaluate_pin("value").await?;
         let value = vec![value];
@@ -138,7 +143,12 @@ impl NodeLogic for BatchUpsertLocalDatabaseNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let mut database = database.load(context, &database.cache_key).await?;
+        let database = database
+            .load(context, &database.cache_key)
+            .await?
+            .db
+            .clone();
+        let mut database = database.write().await;
         let value: Vec<Value> = context.evaluate_pin("value").await?;
         let id_row: String = context.evaluate_pin("id_row").await?;
         let results = database.upsert(value, id_row).await;

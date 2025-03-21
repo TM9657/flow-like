@@ -62,7 +62,12 @@ impl NodeLogic for DeleteLocalDatabaseNode {
 
     async fn run(&self, context: &mut ExecutionContext) -> anyhow::Result<()> {
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let database = database.load(context, &database.cache_key).await?;
+        let database = database
+            .load(context, &database.cache_key)
+            .await?
+            .db
+            .clone();
+        let database = database.read().await;
         let filter: String = context.evaluate_pin("filter").await?;
         database.delete(&filter).await?;
         context.activate_exec_pin("exec_out").await?;

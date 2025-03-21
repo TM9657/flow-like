@@ -65,7 +65,12 @@ impl NodeLogic for ListLocalDatabaseNode {
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let limit: i64 = context.evaluate_pin("limit").await?;
         let offset: i64 = context.evaluate_pin("offset").await?;
-        let database = database.load(context, &database.cache_key).await?;
+        let database = database
+            .load(context, &database.cache_key)
+            .await?
+            .db
+            .clone();
+        let database = database.read().await;
         let results = database.list(limit as usize, offset as usize).await?;
         context.set_pin_value("values", json!(results)).await?;
         context.activate_exec_pin("exec_out").await?;

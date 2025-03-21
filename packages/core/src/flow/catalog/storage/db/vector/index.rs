@@ -73,7 +73,12 @@ impl NodeLogic for IndexLocalDatabaseNode {
         context.activate_exec_pin("failed").await?;
         context.deactivate_exec_pin("exec_out").await?;
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let database = database.load(context, &database.cache_key).await?;
+        let database = database
+            .load(context, &database.cache_key)
+            .await?
+            .db
+            .clone();
+        let database = database.read().await;
         let column: String = context.evaluate_pin("column").await?;
         let fts: bool = context.evaluate_pin("fts").await?;
         let result = database.index(&column, fts).await;
