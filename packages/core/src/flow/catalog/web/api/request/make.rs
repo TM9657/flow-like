@@ -47,7 +47,8 @@ impl NodeLogic for MakeRequestNode {
                     "PATCH".to_string(),
                 ])
                 .build(),
-        );
+        )
+        .set_default_value(Some(json!("GET")));
 
         node.add_input_pin("url", "URL", "The request URL", VariableType::String);
 

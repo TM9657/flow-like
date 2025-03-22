@@ -45,7 +45,19 @@ impl NodeLogic for SetMethodNode {
             "Method",
             "The method of the request",
             VariableType::String,
-        );
+        )
+        .set_options(
+            PinOptions::new()
+                .set_valid_values(vec![
+                    "GET".to_string(),
+                    "POST".to_string(),
+                    "PUT".to_string(),
+                    "DELETE".to_string(),
+                    "PATCH".to_string(),
+                ])
+                .build(),
+        )
+        .set_default_value(Some(json!("GET")));
 
         node.add_output_pin(
             "request",
