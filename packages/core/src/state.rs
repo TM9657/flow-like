@@ -179,7 +179,7 @@ impl FlowLikeConfig {
 }
 
 #[cfg(feature = "flow-runtime")]
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct FlowNodeRegistryInner {
     pub registry: HashMap<String, (Node, Arc<dyn NodeLogic>)>,
 }
@@ -262,6 +262,33 @@ impl FlowNodeRegistry {
 
         self.node_registry = Arc::new(registry);
         self.initialized = true;
+    }
+
+    pub fn push_node(&mut self, node: Node, logic: Arc<dyn NodeLogic>) -> anyhow::Result<()> {
+        if !self.initialized {
+            return Err(anyhow::anyhow!("Registry not initialized"));
+        }
+        let mut registry = FlowNodeRegistryInner {
+            registry: self.node_registry.registry.clone(),
+        };
+        registry.insert(node, logic);
+        self.node_registry = Arc::new(registry);
+        Ok(())
+    }
+
+    pub fn push_nodes(&mut self, nodes: Vec<(Node, Arc<dyn NodeLogic>)>) -> anyhow::Result<()> {
+        if !self.initialized {
+            return Err(anyhow::anyhow!("Registry not initialized"));
+        }
+        let mut registry = FlowNodeRegistryInner {
+            registry: self.node_registry.registry.clone(),
+        };
+
+        for (node, logic) in nodes {
+            registry.insert(node, logic);
+        }
+        self.node_registry = Arc::new(registry);
+        Ok(())
     }
 
     pub fn get_node(&self, node_id: &str) -> anyhow::Result<Node> {

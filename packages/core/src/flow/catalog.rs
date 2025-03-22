@@ -15,6 +15,7 @@ pub mod storage;
 pub mod structs;
 pub mod utils;
 pub mod variables;
+pub mod web;
 
 use crate::state::FlowLikeState;
 
@@ -46,6 +47,7 @@ pub async fn load_catalog(app_state: Arc<Mutex<FlowLikeState>>) -> Vec<Node> {
         structs::register_functions().await,
         storage::register_functions().await,
         bit::register_functions().await,
+        web::register_functions().await,
     ];
 
     // TODO: This holds the lock for a long time, should be optimized

@@ -86,6 +86,7 @@ rand = "0.9.0"
 fasteval = "0.2.4"
 chrono = "0.4.39"
 json5 = "0.4.1"
+deno_core = "0.341.0"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
