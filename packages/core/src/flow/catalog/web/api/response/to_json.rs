@@ -9,7 +9,6 @@ use crate::{
     state::FlowLikeState,
 };
 use async_trait::async_trait;
-use serde_json::json;
 
 #[derive(Default)]
 pub struct ToJsonNode {}

@@ -1,6 +1,6 @@
 use crate::{
     flow::{
-        catalog::web::api::{HttpRequest, HttpResponse},
+        catalog::web::api::HttpResponse,
         execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         pin::PinOptions,
