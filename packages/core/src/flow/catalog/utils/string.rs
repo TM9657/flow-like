@@ -15,6 +15,7 @@ pub mod to_lowercase;
 pub mod to_uppercase;
 pub mod trim;
 pub mod unequal;
+pub mod utf_8_lossy;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let mut items: Vec<Arc<dyn NodeLogic>> = vec![
@@ -30,6 +31,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(trim::StringTrimNode::default()),
         Arc::new(starts_with::StringStartsWithNode::default()),
         Arc::new(ends_with::StringEndsWithNode::default()),
+        Arc::new(utf_8_lossy::ParseUtf8LossyNode::default()),
         Arc::new(contains::StringContainsNode::default()),
     ];
 

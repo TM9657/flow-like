@@ -6,12 +6,20 @@ use object_store::PutPayload;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::Arc;
+use std::{future::Future, pin::Pin, sync::Arc};
 
 pub mod download;
 pub mod fetch;
+pub mod streaming_fetch;
 pub mod request;
 pub mod response;
+
+pub type StreamingCallback = Arc<
+    dyn Fn(bytes::Bytes) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+        + Send
+        + Sync
+        + 'static,
+>;
 
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
 pub enum Method {
@@ -123,6 +131,42 @@ impl HttpRequest {
         })
     }
 
+    pub async fn streaming_trigger(
+        &self,
+        client: &reqwest::Client,
+        callback: Option<StreamingCallback>,
+    ) -> anyhow::Result<HttpResponse>{
+        let request = self.to_request(client).await?;
+        let response = request.send().await?;
+        let status_code = response.status().as_u16();
+        let headers = response.headers().clone();
+
+        let mut stream = response.bytes_stream();
+        let mut response_body = vec![];
+
+        while let Some(chunk_result) = stream.next().await {
+            let chunk = chunk_result?;
+            response_body.extend_from_slice(&chunk);
+            if let Some(callback) = &callback {
+                callback(chunk).await?;
+            }
+        }
+
+        Ok(HttpResponse {
+            status_code,
+            headers: headers
+                .iter()
+                .map(|(key, value)| {
+                    (
+                        key.as_str().to_string(),
+                        value.to_str().unwrap().to_string(),
+                    )
+                })
+                .collect(),
+            body: Some(response_body), // No body collected in streaming mode
+        })
+    }
+
     pub async fn download_to_path(
         &self,
         client: &reqwest::Client,
@@ -192,6 +236,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let mut out: Vec<Arc<dyn NodeLogic>> = vec![
         Arc::new(download::HttpDownloadNode::default()),
         Arc::new(fetch::HttpFetchNode::default()),
+        Arc::new(streaming_fetch::StreamingHttpFetchNode::default()),
     ];
 
     out.extend(request::register_functions().await);

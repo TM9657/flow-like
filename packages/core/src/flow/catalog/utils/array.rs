@@ -10,10 +10,12 @@ pub mod make;
 pub mod pop;
 pub mod push;
 pub mod remove_index;
+pub mod extend;
 pub mod set;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
+        Arc::new(extend::ExtendArrayNode::default()),
         Arc::new(len::ArrayLengthNode::default()),
         Arc::new(get::GetArrayElementNode::default()),
         Arc::new(includes::ArrayIncludesNode::default()),
