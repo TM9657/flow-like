@@ -31,7 +31,7 @@ impl NodeLogic for SignUrlNode {
             "Generates a signed URL for accessing a file",
             "Storage/Paths/Operations",
         );
-        node.add_icon("/flow/icons/link.svg");
+        node.add_icon("/flow/icons/path.svg");
 
         node.add_input_pin(
             "exec_in",

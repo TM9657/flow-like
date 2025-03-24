@@ -28,7 +28,7 @@ impl NodeLogic for RepairParseNode {
             "Utils/JSON",
         );
 
-        node.add_icon("/flow/icons/hammer.svg");
+        node.add_icon("/flow/icons/repair.svg");
 
         node.add_input_pin(
             "exec_in",

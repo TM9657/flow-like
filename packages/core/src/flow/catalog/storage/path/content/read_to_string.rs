@@ -29,7 +29,7 @@ impl NodeLogic for ReadToStringNode {
             "Reads the content of a file to a string",
             "Storage/Paths/Content",
         );
-        node.add_icon("/flow/icons/text.svg");
+        node.add_icon("/flow/icons/path.svg");
 
         node.add_input_pin(
             "exec_in",

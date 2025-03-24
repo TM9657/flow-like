@@ -29,7 +29,7 @@ impl NodeLogic for ReadToBytesNode {
             "Reads the content of a file to bytes",
             "Storage/Paths/Content",
         );
-        node.add_icon("/flow/icons/binary.svg"); // Consider a more appropriate icon
+        node.add_icon("/flow/icons/path.svg"); // Consider a more appropriate icon
 
         node.add_input_pin(
             "exec_in",

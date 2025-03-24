@@ -30,7 +30,7 @@ impl NodeLogic for DeleteNode {
             "Deletes a file or directory",
             "Storage/Paths/Operations",
         );
-        node.add_icon("/flow/icons/delete.svg");
+        node.add_icon("/flow/icons/path.svg");
 
         node.add_input_pin(
             "exec_in",

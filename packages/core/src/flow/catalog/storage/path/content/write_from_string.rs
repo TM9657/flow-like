@@ -30,7 +30,7 @@ impl NodeLogic for WriteStringNode {
             "Writes a string to a file",
             "Storage/Paths/Content",
         );
-        node.add_icon("/flow/icons/text.svg");
+        node.add_icon("/flow/icons/path.svg");
 
         node.add_input_pin(
             "exec_in",
