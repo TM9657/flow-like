@@ -43,7 +43,7 @@ arrow = "53.2"
 lancedb = {version="0.17.0" }
 walkdir = "2.5.0"
 junction = "1.2.0"
-zip = "2.2.1"
+zip = "2.5.0"
 ignore = "0.4.23"
 text-splitter = { version = "0.23.0", features = ["markdown", "tokenizers"] }
 tokenizers = "0.21.0"
