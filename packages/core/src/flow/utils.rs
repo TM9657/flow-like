@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use serde_json::Value;
 use tokio::sync::Mutex;
@@ -37,6 +37,13 @@ pub async fn evaluate_pin_value_reference(
     }
 }
 
+pub async fn evaluate_pin_value_weak(pin: &Weak<Mutex<InternalPin>>) -> anyhow::Result<Value> {
+    let pin = pin
+        .upgrade()
+        .ok_or_else(|| anyhow::anyhow!("Pin is not set"))?;
+    evaluate_pin_value(pin).await
+}
+
 pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> anyhow::Result<Value> {
     let mut current_pin = pin;
     let mut visited_pins = std::collections::HashSet::with_capacity(8);
@@ -71,8 +78,10 @@ pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> anyhow::Result<
 
         // Case 2: Pin depends on another pin
         if let Some(dependency) = first_dependency {
-            current_pin = dependency;
-            continue;
+            if let Some(dependency) = dependency.upgrade() {
+                current_pin = dependency;
+                continue;
+            }
         }
 
         // Case 3: Use default value if available

@@ -64,6 +64,9 @@ impl NodeLogic for SequenceNode {
                 let pin = pin.lock().await;
                 let connected_to = pin.connected_to.clone();
                 for connection in connected_to {
+                    let connection = connection
+                        .upgrade()
+                        .ok_or(anyhow::anyhow!("Connection not Valid"))?;
                     let connection = connection.lock().await;
                     let node = connection.node.upgrade();
                     if let Some(node) = node {

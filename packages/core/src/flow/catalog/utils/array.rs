@@ -2,6 +2,7 @@ use crate::flow::node::NodeLogic;
 use std::sync::Arc;
 
 pub mod clear;
+pub mod extend;
 pub mod find_item;
 pub mod get;
 pub mod includes;
@@ -10,7 +11,6 @@ pub mod make;
 pub mod pop;
 pub mod push;
 pub mod remove_index;
-pub mod extend;
 pub mod set;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {

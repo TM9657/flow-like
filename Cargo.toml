@@ -4,5 +4,6 @@ members = [
     "packages/core",
     "apps/desktop/src-tauri",
     "apps/backend",
-    "apps/schema-gen"
+    "apps/schema-gen",
+    "apps/benchmark"
 ]

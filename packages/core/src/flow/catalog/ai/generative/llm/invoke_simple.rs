@@ -110,7 +110,8 @@ impl NodeLogic for InvokeLLMSimpleNode {
         let connected_nodes = Arc::new(DashMap::new());
         let connected = on_stream.lock().await.connected_to.clone();
         for pin in connected {
-            let node = pin.lock().await.node.clone();
+            let node = pin.upgrade().ok_or(anyhow::anyhow!("Pin is not set"))?;
+            let node = node.lock().await.node.clone();
             if let Some(node) = node.upgrade() {
                 let context = Arc::new(Mutex::new(context.create_sub_context(&node).await));
                 connected_nodes.insert(node.node.lock().await.id.clone(), context);

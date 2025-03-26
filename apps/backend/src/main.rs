@@ -41,7 +41,6 @@ async fn main() {
         .nest("/auth", routes::auth::routes())
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }));
-
     let port = 3000;
     let listener = match create_listener(format!("0.0.0.0:{}", port)) {
         Ok(listener) => listener,

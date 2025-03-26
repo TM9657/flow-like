@@ -40,9 +40,7 @@ impl NodeLogic for ParseUtf8LossyNode {
         let bytes: Vec<u8> = context.evaluate_pin("bytes").await?;
         let string = String::from_utf8_lossy(&bytes).to_string();
 
-        context
-            .set_pin_value("string", json!(string))
-            .await?;
+        context.set_pin_value("string", json!(string)).await?;
         Ok(())
     }
 }

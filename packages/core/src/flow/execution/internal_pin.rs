@@ -12,8 +12,8 @@ use super::internal_node::InternalNode;
 pub struct InternalPin {
     pub pin: Arc<Mutex<Pin>>,
     pub node: Weak<InternalNode>,
-    pub connected_to: Vec<Arc<Mutex<InternalPin>>>,
-    pub depends_on: Vec<Arc<Mutex<InternalPin>>>,
+    pub connected_to: Vec<Weak<Mutex<InternalPin>>>,
+    pub depends_on: Vec<Weak<Mutex<InternalPin>>>,
 }
 
 impl InternalPin {
@@ -34,6 +34,9 @@ impl InternalPin {
         let mut connected_nodes = vec![];
         let mut ids = HashSet::new();
         for connected_pin in &self.connected_to {
+            let Some(connected_pin) = connected_pin.upgrade() else {
+                continue;
+            };
             let connected_pin_guard = connected_pin.lock().await;
             let connected_node = connected_pin_guard.node.upgrade();
 
@@ -55,6 +58,9 @@ impl InternalPin {
         let mut connected_nodes = vec![];
 
         for depends_on_pin in &self.depends_on {
+            let Some(depends_on_pin) = depends_on_pin.upgrade() else {
+                continue;
+            };
             let depends_on_pin_guard = depends_on_pin.lock().await;
             let depends_on_node = depends_on_pin_guard.node.upgrade();
 

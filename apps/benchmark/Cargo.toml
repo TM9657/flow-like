@@ -1,0 +1,16 @@
+[package]
+name = "benchmark"
+version = "0.1.0"
+edition = "2021"
+description = "Schema Generation for flow-like Types"
+authors = ["TM9657 GmbH"]
+repository = "https://github.com/TM9657/flow-like/"
+categories = ["GenAI", "AI", "Productivity"]
+license-file = "LICENSE"
+readme = "README.md"
+
+[dependencies]
+anyhow = "1.0.95"
+serde = "1.0.217"
+serde_json = "1.0.134"
+flow-like = {path="../../packages/core"}

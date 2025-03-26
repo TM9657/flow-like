@@ -1,4 +1,5 @@
 use ahash::AHasher;
+use anyhow::anyhow;
 use context::ExecutionContext;
 use cuid2;
 use dashmap::DashMap;
@@ -131,7 +132,7 @@ pub struct InternalRun {
 
 impl InternalRun {
     pub async fn new(
-        board: Board,
+        board: Arc<Board>,
         handler: &Arc<Mutex<FlowLikeState>>,
         profile: &Profile,
         start_ids: Vec<String>,
@@ -141,8 +142,6 @@ impl InternalRun {
         let start_ids_set: HashSet<String> = start_ids.into_iter().collect();
         let sender = handler.lock().await.event_sender.lock().await.clone();
         let run_id = cuid2::create_id();
-
-        let board = Arc::new(board);
 
         let run = Run {
             id: run_id.clone(),
@@ -201,13 +200,15 @@ impl InternalRun {
 
             for connected_pin_id in connected_to {
                 if let Some(connected_pin) = pins.get(&connected_pin_id) {
-                    internal_pin.connected_to.push(connected_pin.clone());
+                    let connected = Arc::downgrade(&connected_pin);
+                    internal_pin.connected_to.push(connected);
                 }
             }
 
             for depends_on_pin_id in depends_on {
                 if let Some(depends_on_pin) = pins.get(&depends_on_pin_id) {
-                    internal_pin.depends_on.push(depends_on_pin.clone());
+                    let depends_on = Arc::downgrade(&depends_on_pin);
+                    internal_pin.depends_on.push(depends_on);
                 }
             }
         }
@@ -386,8 +387,8 @@ impl InternalRun {
             .buffer_unordered(self.cpus * 3)
             .fold(
                 RunStack::with_capacity(stack.stack.len()),
-                |mut acc, result| async move {
-                    if let Some(inner_iter) = result {
+                |mut acc: RunStack, result| async move {
+                    if let Ok(inner_iter) = result {
                         for (key, node) in inner_iter {
                             acc.push(&key, node);
                         }
@@ -429,7 +430,7 @@ impl InternalRun {
         .await;
 
         let mut new_stack = RunStack::with_capacity(stack.len());
-        if let Some(nodes) = connected_nodes {
+        if let Ok(nodes) = connected_nodes {
             for (key, node) in nodes {
                 new_stack.push(&key, node);
             }
@@ -593,14 +594,14 @@ async fn step_core(
     profile: &Arc<Profile>,
     sender: &tokio::sync::mpsc::Sender<FlowLikeEvent>,
     concurrency_map: Arc<DashMap<String, u64>>,
-) -> Option<Vec<(String, Arc<InternalNode>)>> {
+) -> anyhow::Result<Vec<(String, Arc<InternalNode>)>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
     {
         let mut limit = concurrency_map
             .entry(node.node.lock().await.id.clone())
             .or_insert(0);
         if *limit >= concurrency_limit {
-            return None;
+            return Err(anyhow!("Concurrency limit reached"));
         }
 
         *limit += 1;
@@ -641,15 +642,15 @@ async fn step_core(
     drop(context);
 
     if state == NodeState::Success {
-        let connected = node.get_connected_exec(true).await;
+        let connected = node.get_connected_exec(true).await.unwrap();
         let mut connected_nodes = Vec::with_capacity(connected.len());
         for connected_node in connected {
             let id = connected_node.node.clone().lock().await.id.clone();
 
             connected_nodes.push((id, connected_node.clone()));
         }
-        return Some(connected_nodes);
+        return Ok(connected_nodes);
     }
 
-    None
+    Err(anyhow!("Node failed"))
 }

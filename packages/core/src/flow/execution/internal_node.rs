@@ -122,7 +122,7 @@ impl InternalNode {
         false
     }
 
-    pub async fn is_ready(&self) -> bool {
+    pub async fn is_ready(&self) -> anyhow::Result<bool> {
         for pin in self.pins.values() {
             let pin_guard = pin.lock().await;
             let pin = pin_guard.pin.lock().await;
@@ -132,7 +132,7 @@ impl InternalNode {
             }
 
             if pin.depends_on.is_empty() && pin.default_value.is_none() {
-                return false;
+                return Ok(false);
             }
 
             // execution pins can have multiple inputs for different paths leading to it. We only need to make sure that one of them is valid!
@@ -143,12 +143,15 @@ impl InternalNode {
             drop(pin_guard);
 
             for depends_on_pin in depends_on {
+                let depends_on_pin = depends_on_pin
+                    .upgrade()
+                    .ok_or(anyhow::anyhow!("Failed to lock Pin"))?;
                 let depends_on_pin_guard = depends_on_pin.lock().await;
                 let depends_on_pin = depends_on_pin_guard.pin.lock().await;
 
                 // non execution pins need all inputs to be valid
                 if depends_on_pin.value.is_none() && !is_execution {
-                    return false;
+                    return Ok(false);
                 }
 
                 if depends_on_pin.value.is_some() {
@@ -157,14 +160,14 @@ impl InternalNode {
             }
 
             if is_execution && !execution_valid {
-                return false;
+                return Ok(false);
             }
         }
 
-        true
+        Ok(true)
     }
 
-    pub async fn get_connected(&self) -> Vec<Arc<InternalNode>> {
+    pub async fn get_connected(&self) -> anyhow::Result<Vec<Arc<InternalNode>>> {
         let mut connected = Vec::with_capacity(self.pins.len());
 
         for pin in self.pins.values() {
@@ -180,7 +183,10 @@ impl InternalNode {
             let connected_pins = pin_guard.connected_to.clone();
 
             for connected_pin in &connected_pins {
-                let connected_pin_guard = connected_pin.lock().await;
+                let connected_pin_guard = connected_pin
+                    .upgrade()
+                    .ok_or(anyhow::anyhow!("Failed to lock Pin"))?;
+                let connected_pin_guard = connected_pin_guard.lock().await;
                 let connected_node = connected_pin_guard.node.upgrade();
 
                 if let Some(connected_node) = connected_node {
@@ -189,10 +195,13 @@ impl InternalNode {
             }
         }
 
-        connected
+        Ok(connected)
     }
 
-    pub async fn get_connected_exec(&self, filter_valid: bool) -> Vec<Arc<InternalNode>> {
+    pub async fn get_connected_exec(
+        &self,
+        filter_valid: bool,
+    ) -> anyhow::Result<Vec<Arc<InternalNode>>> {
         let mut connected = vec![];
 
         for pin in self.pins.values() {
@@ -227,7 +236,10 @@ impl InternalNode {
             let connected_pins = pin_guard.connected_to.clone();
 
             for connected_pin in &connected_pins {
-                let connected_pin_guard = connected_pin.lock().await;
+                let connected_pin_guard = connected_pin
+                    .upgrade()
+                    .ok_or(anyhow::anyhow!("Failed to lock Pin"))?;
+                let connected_pin_guard = connected_pin_guard.lock().await;
                 let connected_node = connected_pin_guard.node.upgrade();
 
                 if let Some(connected_node) = connected_node {
@@ -236,10 +248,10 @@ impl InternalNode {
             }
         }
 
-        connected
+        Ok(connected)
     }
 
-    pub async fn get_dependencies(&self) -> Vec<Arc<InternalNode>> {
+    pub async fn get_dependencies(&self) -> anyhow::Result<Vec<Arc<InternalNode>>> {
         let mut dependencies = Vec::with_capacity(self.pins.len());
 
         for pin in self.pins.values() {
@@ -255,7 +267,10 @@ impl InternalNode {
             let dependency_pins = pin_guard.depends_on.clone();
 
             for connected_pin in &dependency_pins {
-                let dependency_pin_guard = connected_pin.lock().await;
+                let dependency_pin_guard = connected_pin
+                    .upgrade()
+                    .ok_or(anyhow::anyhow!("Failed to lock Pin"))?;
+                let dependency_pin_guard = dependency_pin_guard.lock().await;
                 let dependency_pin = dependency_pin_guard.node.upgrade();
 
                 if let Some(dependency) = dependency_pin {
@@ -264,7 +279,7 @@ impl InternalNode {
             }
         }
 
-        dependencies
+        Ok(dependencies)
     }
 
     pub async fn is_pure(&self) -> bool {
@@ -304,6 +319,13 @@ impl InternalNode {
             // TODO: optimize this for parallel execution
             for dependency in &dependencies {
                 let parent = {
+                    let dependency = match dependency.upgrade() {
+                        Some(dep) => dep,
+                        None => {
+                            context.log_message("Failed to lock dependency", LogLevel::Error);
+                            return false;
+                        }
+                    };
                     let dependency_guard = dependency.lock().await;
 
                     let parent = dependency_guard.node.upgrade();
@@ -426,7 +448,16 @@ impl InternalNode {
         context.end_trace();
 
         if with_successors {
-            let successors = context.node.get_connected_exec(true).await;
+            let successors = match context.node.get_connected_exec(true).await {
+                Ok(nodes) => nodes,
+                Err(err) => {
+                    context.log_message(
+                        &format!("Failed to get successors: {:?}", err),
+                        LogLevel::Error,
+                    );
+                    return Err(InternalNodeError::ExecutionFailed(node.id));
+                }
+            };
             // TODO: optimize this for parallel execution
             for successor in successors {
                 let mut sub_context = context.create_sub_context(&successor).await;
@@ -526,7 +557,16 @@ impl InternalNode {
         context.end_trace();
 
         if with_successors {
-            let successors = context.node.get_connected_exec(true).await;
+            let successors = match context.node.get_connected_exec(true).await {
+                Ok(nodes) => nodes,
+                Err(err) => {
+                    context.log_message(
+                        &format!("Failed to get successors: {:?}", err),
+                        LogLevel::Error,
+                    );
+                    return Err(InternalNodeError::ExecutionFailed(node.id));
+                }
+            };
             // TODO: optimize this for parallel execution
             for successor in successors {
                 let mut sub_context = context.create_sub_context(&successor).await;

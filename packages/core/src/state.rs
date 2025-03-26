@@ -255,11 +255,6 @@ impl FlowNodeRegistry {
             registry.insert(node, logic);
         }
 
-        println!(
-            "Initialized registry with {} nodes",
-            registry.registry.len()
-        );
-
         self.node_registry = Arc::new(registry);
         self.initialized = true;
     }

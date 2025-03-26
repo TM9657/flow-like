@@ -16,7 +16,7 @@ pub async fn create_run(
 ) -> Result<String, TauriFunctionError> {
     let (board, flow_like_state) =
         TauriFlowLikeState::get_board_and_state(&app_handle, &board_id).await?;
-    let board = board.lock().await.clone();
+    let board = Arc::new(board.lock().await.clone());
     let profile = TauriSettingsState::current_profile(&app_handle).await?;
 
     let internal_run = InternalRun::new(

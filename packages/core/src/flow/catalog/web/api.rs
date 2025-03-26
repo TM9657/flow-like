@@ -10,9 +10,9 @@ use std::{future::Future, pin::Pin, sync::Arc};
 
 pub mod download;
 pub mod fetch;
-pub mod streaming_fetch;
 pub mod request;
 pub mod response;
+pub mod streaming_fetch;
 
 pub type StreamingCallback = Arc<
     dyn Fn(bytes::Bytes) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
@@ -135,7 +135,7 @@ impl HttpRequest {
         &self,
         client: &reqwest::Client,
         callback: Option<StreamingCallback>,
-    ) -> anyhow::Result<HttpResponse>{
+    ) -> anyhow::Result<HttpResponse> {
         let request = self.to_request(client).await?;
         let response = request.send().await?;
         let status_code = response.status().as_u16();

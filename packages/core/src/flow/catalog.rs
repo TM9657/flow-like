@@ -63,9 +63,7 @@ pub async fn load_catalog(app_state: Arc<Mutex<FlowLikeState>>) -> Vec<Node> {
         .collect();
 
     let nodes = join_all(futures).await;
-    println!("Loaded {} nodes", nodes.len());
     let mut registry = catalog.write().await;
-    println!("Registering nodes");
     registry.initialize(nodes);
     registry.get_nodes().unwrap_or(vec![])
 }
