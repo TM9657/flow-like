@@ -76,10 +76,10 @@ fn get_memory_usage() -> f64 {
 fn criterion_benchmark(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let mut memory_start = get_memory_usage();
+    let memory_start = get_memory_usage();
     let mut memory_mid = 0.0;
     let mut memory_end = 0.0;
-    let mut shared_memory_start = 0.0;
+    let shared_memory_start = 0.0;
     let mut shared_memory_mid = 0.0;
     let mut shared_memory_end = 0.0;
 

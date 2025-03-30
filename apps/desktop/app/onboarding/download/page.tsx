@@ -1,7 +1,12 @@
 "use client";
 import { type UseQueryResult, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { Button, useBackend, useDownloadManager, useInvalidateInvoke } from "@tm9657/flow-like-ui";
+import {
+	Button,
+	useBackend,
+	useDownloadManager,
+	useInvalidateInvoke,
+} from "@tm9657/flow-like-ui";
 import {
 	Avatar,
 	AvatarFallback,
@@ -34,9 +39,9 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export default function ProfileCreation() {
-	const backend = useBackend()
-	const { manager } = useDownloadManager()
-	const invalidate = useInvalidateInvoke()
+	const backend = useBackend();
+	const { manager } = useDownloadManager();
+	const invalidate = useInvalidateInvoke();
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const intervalRef = useRef<any>(null);
@@ -64,8 +69,8 @@ export default function ProfileCreation() {
 			await invoke("upsert_profile", { profile });
 		}
 
-		await invalidate(backend.getProfile, [])
-		await invalidate(backend.getSettingsProfile, [])
+		await invalidate(backend.getProfile, []);
+		await invalidate(backend.getSettingsProfile, []);
 		await queryClient.invalidateQueries({
 			queryKey: ["get", "profiles"],
 		});
@@ -87,13 +92,13 @@ export default function ProfileCreation() {
 		const filter = new Set<string>();
 		filteredProfiles.forEach(([profile, bits]) => {
 			bits.forEach((bit) => {
-				foundBits.set(bit.id, bit)
-				filter.add(bit.hash)
+				foundBits.set(bit.id, bit);
+				filter.add(bit.hash);
 			});
 		});
 
 		setBits(Array.from(foundBits.values()));
-		setFilter(filter)
+		setFilter(filter);
 		addProfiles(filteredProfiles.map(([profile]) => profile));
 	}, [defaultProfiles.data, searchParams]);
 
@@ -117,13 +122,13 @@ export default function ProfileCreation() {
 	}, [doneCounter, bits]);
 
 	const calculateStats = useCallback(async () => {
-		const measurement = await manager.getSpeed(filter)
+		const measurement = await manager.getSpeed(filter);
 		console.dir({
 			measurement,
 			filter,
-			manager
-		})
-		setTotalSize(prev => Math.max(prev, measurement.max))
+			manager,
+		});
+		setTotalSize((prev) => Math.max(prev, measurement.max));
 		const time = Date.now();
 		const timeString = new Date(time).toLocaleTimeString();
 		setStats((prev) => {
@@ -211,12 +216,15 @@ export default function ProfileCreation() {
 						{humanFileSize(totalSize)} Total
 					</div>
 					<div className="border p-2 bg-card text-card-foreground">
-						{humanFileSize((stats[stats.length - 1]?.speed ?? 0))} / s
+						{humanFileSize(stats[stats.length - 1]?.speed ?? 0)} / s
 					</div>
-					<button onClick={() => {
-						localStorage.setItem("onboarding-done", "true");
-						router.push("/");
-					}} className="border p-2 bg-primary text-primary-foreground hover:bg-background hover:text-foreground transition-all">
+					<button
+						onClick={() => {
+							localStorage.setItem("onboarding-done", "true");
+							router.push("/");
+						}}
+						className="border p-2 bg-primary text-primary-foreground hover:bg-background hover:text-foreground transition-all"
+					>
 						Background Download
 					</button>
 				</div>
@@ -225,10 +233,8 @@ export default function ProfileCreation() {
 	);
 }
 
-function BitDownload({
-	bit,
-}: Readonly<{ bit: IBit }>) {
-	const {download} = useDownloadManager()
+function BitDownload({ bit }: Readonly<{ bit: IBit }>) {
+	const { download } = useDownloadManager();
 	useEffect(() => {
 		const downloadBit = async () => {
 			try {

@@ -6,13 +6,12 @@ import { useMemo } from "react";
 
 export default function FlowEditPage() {
 	const searchParams = useSearchParams();
-	const {boardId, appId} = useMemo(() => {
-		 let boardId = searchParams.get("id") ?? "";
-		 let appId = searchParams.get("app") ?? "";
-		 return {boardId, appId};
+	const { boardId, appId } = useMemo(() => {
+		const boardId = searchParams.get("id") ?? "";
+		const appId = searchParams.get("app") ?? "";
+		return { boardId, appId };
 	}, [searchParams]);
 
-
 	if (boardId === "") return <p>Board not found...</p>;
-	return <FlowWrapper boardId={boardId} appId={appId}/>;
+	return <FlowWrapper boardId={boardId} appId={appId} />;
 }

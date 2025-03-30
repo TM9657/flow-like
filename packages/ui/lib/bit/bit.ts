@@ -1,4 +1,5 @@
 import { get, set } from "idb-keyval";
+import type { IBackendState } from "../../state/backend-state";
 import type { Nullable } from "../schema/auto-import";
 import { type IBit, type IBitMeta, IBitTypes } from "../schema/bit/bit";
 import type { IEmbeddingModelParameters } from "../schema/bit/bit/embedding-model-parameters";
@@ -6,7 +7,6 @@ import type { IImageEmbeddingModelParameters } from "../schema/bit/bit/image-emb
 import type { ILlmParameters } from "../schema/bit/bit/llm-parameters";
 import type { IVlmParameters } from "../schema/bit/bit/vlm-parameters";
 import { BitPack } from "./bit-pack";
-import type { IBackendState } from "../../state/backend-state";
 
 export interface IDownloadProgress {
 	hash: string;
@@ -26,7 +26,7 @@ export class Download {
 
 	constructor(parent: IBit, bits: IBit[]) {
 		this._parent = parent;
-		const map = new Map()
+		const map = new Map();
 		bits.forEach((bit) => {
 			map.set(bit.hash, bit);
 		});
@@ -67,10 +67,13 @@ export class Download {
 		const time = now - last;
 
 		const { max, downloaded } = this.total();
-		const lastDownloaded = Array.from(this.speed.lastPoints.values())
-        .reduce((acc, val) => acc + val, 0);
+		const lastDownloaded = Array.from(this.speed.lastPoints.values()).reduce(
+			(acc, val) => acc + val,
+			0,
+		);
 
-		const bytesPerSecond = time > 0 ? ((downloaded - lastDownloaded) / time) * 1000 : 0;
+		const bytesPerSecond =
+			time > 0 ? ((downloaded - lastDownloaded) / time) * 1000 : 0;
 
 		this.speed.lastMeasured = now;
 		this.speed.lastPoints.clear();
@@ -122,11 +125,11 @@ export class Bit implements IBit {
 	type: IBitTypes = IBitTypes.Other;
 	updated = "";
 	version = "";
-	backend: IBackendState | undefined
+	backend: IBackendState | undefined;
 
 	public setBackend(backend?: IBackendState) {
 		this.backend = backend;
-		return this
+		return this;
 	}
 
 	public toJSON(): string {
@@ -171,9 +174,11 @@ export class Bit implements IBit {
 			return pack;
 		}
 
-		const bits: undefined | {
-			bits: IBit[];
-		} = await this.backend?.getPackFromBit(this.toObject());
+		const bits:
+			| undefined
+			| {
+					bits: IBit[];
+			  } = await this.backend?.getPackFromBit(this.toObject());
 
 		if (!bits) {
 			throw new Error("No dependencies found");
@@ -195,11 +200,15 @@ export class Bit implements IBit {
 			const dependencies = await this.fetchDependencies();
 			const totalProgress = new Download(this.toObject(), dependencies.bits);
 
-			const download: undefined | IBit[] = await this.backend?.downloadBit(this.toObject(), dependencies.toObject(), (progress => {
-				const lastElement = progress.pop();
-				if (lastElement) totalProgress.push(lastElement);
-				if (cb) cb(totalProgress);
-			}));
+			const download: undefined | IBit[] = await this.backend?.downloadBit(
+				this.toObject(),
+				dependencies.toObject(),
+				(progress) => {
+					const lastElement = progress.pop();
+					if (lastElement) totalProgress.push(lastElement);
+					if (cb) cb(totalProgress);
+				},
+			);
 
 			if (!download) {
 				throw new Error("No dependencies found");

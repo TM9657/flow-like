@@ -19,7 +19,7 @@ import {
 	toastError,
 	useBackend,
 	useInvoke,
-	useRunExecutionStore
+	useRunExecutionStore,
 } from "@tm9657/flow-like-ui";
 import { AlertTriangle, PlayCircleIcon, Vault } from "lucide-react";
 import Link from "next/link";
@@ -32,7 +32,7 @@ export default function Id({
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
-	const backend = useBackend()
+	const backend = useBackend();
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
 	const currentRoute = usePathname();
@@ -42,11 +42,7 @@ export default function Id({
 		[id ?? ""],
 		typeof id === "string",
 	);
-	const app = useInvoke(
-		backend.getApp,
-		[id ?? ""],
-		typeof id === "string",
-	);
+	const app = useInvoke(backend.getApp, [id ?? ""], typeof id === "string");
 	const appSize = useTauriInvoke<number>(
 		"get_app_size",
 		{ appId: id },

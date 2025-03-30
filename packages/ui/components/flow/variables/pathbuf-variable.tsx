@@ -7,14 +7,14 @@ import type { IFileMetadata } from "../../../lib/schema/files/file-metadata";
 import type { IVariable } from "../../../lib/schema/flow/variable";
 import { convertJsonToUint8Array } from "../../../lib/uint8";
 import { cn } from "../../../lib/utils";
-import { FileList } from "./pathbuf-list";
 import { useBackend } from "../../../state/backend-state";
+import { FileList } from "./pathbuf-list";
 
 export function PathbufVariable({
 	variable,
 	onChange,
 }: Readonly<{ variable: IVariable; onChange: (variable: IVariable) => void }>) {
-	const backend = useBackend()
+	const backend = useBackend();
 	const [files, setFiles] = useState<IFileMetadata[]>([]);
 	const [folder, setFolder] = useState<string | undefined>();
 	const [isFolder, setIsFolder] = useState<boolean>(false);
@@ -56,7 +56,11 @@ export function PathbufVariable({
 								files.length === 0 && "text-muted-foreground",
 							)}
 							onClick={async () => {
-								const pathBuf: any = await backend.openFileOrFolderMenu(false, isFolder, true);
+								const pathBuf: any = await backend.openFileOrFolderMenu(
+									false,
+									isFolder,
+									true,
+								);
 								if (!pathBuf) return;
 
 								if (!isFolder) {

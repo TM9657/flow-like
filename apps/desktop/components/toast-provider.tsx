@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
 export default function ToastProvider() {
-    useEffect(() => {
+	useEffect(() => {
 		const subscriptions: (Promise<UnlistenFn> | undefined)[] = [];
 		const unlistenFn = listen(
 			"toast",
@@ -36,5 +36,5 @@ export default function ToastProvider() {
 		};
 	}, []);
 
-    return null
+	return null;
 }

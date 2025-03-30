@@ -1,9 +1,6 @@
 use super::TauriFunctionError;
 use crate::state::{TauriFlowLikeState, TauriSettingsState};
-use flow_like::{
-    bit::{Bit, BitPack, BitTypes},
-    hub::Hub,
-};
+use flow_like::bit::{Bit, BitPack, BitTypes};
 use tauri::AppHandle;
 
 #[tauri::command(async)]

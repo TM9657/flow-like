@@ -19,17 +19,13 @@ import { useEffect, useState } from "react";
 import { useTauriInvoke } from "../../../components/useInvoke";
 
 export default function Id() {
-	const backend = useBackend()
+	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 	const searchParams = useSearchParams();
 	const queryClient = useQueryClient();
 	const router = useRouter();
 	const id = searchParams.get("id");
-	const app = useInvoke(
-		backend.getApp,
-		[id ?? ""],
-		typeof id === "string",
-	);
+	const app = useInvoke(backend.getApp, [id ?? ""], typeof id === "string");
 	const isReady = useTauriInvoke<boolean>(
 		"app_configured",
 		{ appId: id },
@@ -76,12 +72,12 @@ export default function Id() {
 		await app.refetch();
 		await isReady.refetch();
 		await appSize.refetch();
-		await invalidate(backend.getApps, [])
+		await invalidate(backend.getApps, []);
 	}
 
 	async function deleteVault() {
 		await invoke("delete_app", { appId: id });
-		await invalidate(backend.getApps, [])
+		await invalidate(backend.getApps, []);
 		router.push("/store/yours");
 	}
 

@@ -200,14 +200,14 @@ impl InternalRun {
 
             for connected_pin_id in connected_to {
                 if let Some(connected_pin) = pins.get(&connected_pin_id) {
-                    let connected = Arc::downgrade(&connected_pin);
+                    let connected = Arc::downgrade(connected_pin);
                     internal_pin.connected_to.push(connected);
                 }
             }
 
             for depends_on_pin_id in depends_on {
                 if let Some(depends_on_pin) = pins.get(&depends_on_pin_id) {
-                    let depends_on = Arc::downgrade(&depends_on_pin);
+                    let depends_on = Arc::downgrade(depends_on_pin);
                     internal_pin.depends_on.push(depends_on);
                 }
             }

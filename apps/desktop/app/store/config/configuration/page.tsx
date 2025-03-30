@@ -17,14 +17,10 @@ import { useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 
 export default function Id() {
-	const backend = useBackend()
+	const backend = useBackend();
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
-	const app = useInvoke(
-		backend.getApp,
-		[id ?? ""],
-		typeof id === "string",
-	);
+	const app = useInvoke(backend.getApp, [id ?? ""], typeof id === "string");
 	const boards = useInvoke(
 		backend.getBoards,
 		[id ?? ""],

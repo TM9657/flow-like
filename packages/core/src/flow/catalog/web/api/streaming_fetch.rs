@@ -130,11 +130,8 @@ impl NodeLogic for StreamingHttpFetchNode {
                 for entry in connected_nodes.iter() {
                     let (_id, context) = entry.pair();
                     let mut context = context.lock().await;
-                    let mut message = LogMessage::new(
-                        &format!("Streaming Intermediate Response"),
-                        LogLevel::Debug,
-                        None,
-                    );
+                    let mut message =
+                        LogMessage::new("Streaming Intermediate Response", LogLevel::Debug, None);
                     let run = InternalNode::trigger(
                         &mut context,
                         &mut Some(recursion_guard.clone()),

@@ -9,10 +9,10 @@ import {
 	DialogTitle,
 } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
-import type { INode } from "../../../lib/schema/flow/node";
-import { updateNodeCommand } from "../../../lib";
-import { useBackend } from "../../../state/backend-state";
 import { useInvalidateInvoke } from "../../../hooks";
+import { updateNodeCommand } from "../../../lib";
+import type { INode } from "../../../lib/schema/flow/node";
+import { useBackend } from "../../../state/backend-state";
 
 export function FlowNodeRenameMenu({
 	node,
@@ -28,15 +28,15 @@ export function FlowNodeRenameMenu({
 	onOpenChange: (open: boolean) => void;
 }>) {
 	const invalidate = useInvalidateInvoke();
-	const backend = useBackend()
+	const backend = useBackend();
 	const [friendlyName, setFriendlyName] = useState(node.friendly_name);
 
 	async function saveComment() {
 		const command = updateNodeCommand({
 			node: { ...node, friendly_name: friendlyName },
-		})
+		});
 
-		await backend.executeCommand(appId, boardId, command, false)
+		await backend.executeCommand(appId, boardId, command, false);
 		onOpenChange(false);
 		setFriendlyName("");
 		refetchBoard();

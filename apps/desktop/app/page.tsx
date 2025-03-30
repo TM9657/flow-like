@@ -1,9 +1,5 @@
 "use client";
-import {
-	Skeleton,
-	useBackend,
-	useInvoke,
-} from "@tm9657/flow-like-ui";
+import { Skeleton, useBackend, useInvoke } from "@tm9657/flow-like-ui";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { TutorialDialog } from "../components/tutorial-dialog";

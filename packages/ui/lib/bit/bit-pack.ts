@@ -5,11 +5,11 @@ import { Bit } from "./bit";
 
 export class BitPack implements IBitPack {
 	bits: IBit[] = [];
-	backend: IBackendState | undefined
+	backend: IBackendState | undefined;
 
 	public setBackend(backend?: IBackendState) {
 		this.backend = backend;
-		return this
+		return this;
 	}
 
 	async get_installed(): Promise<Bit[]> {

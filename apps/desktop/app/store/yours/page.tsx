@@ -25,7 +25,7 @@ import { useRouter } from "next/navigation";
 import { useTauriInvoke } from "../../../components/useInvoke";
 
 export default function YoursPage() {
-	const backend = useBackend()
+	const backend = useBackend();
 	const apps = useInvoke(backend.getApps, []);
 	const router = useRouter();
 
@@ -77,9 +77,11 @@ function App({ app }: Readonly<{ app: IApp }>) {
 	const app_size = useTauriInvoke<number>("get_app_size", { appId: app.id }, [
 		app.id,
 	]);
-	const configured = useTauriInvoke<boolean>("app_configured", { appId: app.id }, [
-		app.id,
-	]);
+	const configured = useTauriInvoke<boolean>(
+		"app_configured",
+		{ appId: app.id },
+		[app.id],
+	);
 
 	return (
 		<button

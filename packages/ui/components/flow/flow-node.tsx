@@ -39,18 +39,18 @@ import {
 	ContextMenuSubTrigger,
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
+import { useInvalidateInvoke } from "../../hooks";
 import { handleCopy, updateNodeCommand } from "../../lib";
 import type { INode } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
 import { ILogLevel, type ITrace } from "../../lib/schema/flow/run";
+import { useBackend } from "../../state/backend-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 import { DynamicImage } from "../ui/dynamic-image";
 import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
 import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
 import { FlowPin } from "./flow-pin";
-import { useBackend } from "../../state/backend-state";
-import { useInvalidateInvoke } from "../../hooks";
 
 export interface IPinAction {
 	action: "create";
@@ -63,7 +63,7 @@ export type FlowNode = Node<
 		hash: string;
 		node: INode;
 		boardId: string;
-		appId: string
+		appId: string;
 		traces: ITrace[];
 		onExecute: (node: INode) => Promise<void>;
 		openTrace: (trace: ITrace[]) => Promise<void>;
@@ -80,8 +80,8 @@ const FlowNodeInner = memo(
 		onHover: (hover: boolean) => void;
 	}) => {
 		const { resolvedTheme } = useTheme();
-		const backend = useBackend()
-		const invalidate = useInvalidateInvoke()
+		const backend = useBackend();
+		const invalidate = useInvalidateInvoke();
 
 		const [executing, setExecuting] = useState(false);
 		const [isExec, setIsExec] = useState(false);
@@ -198,14 +198,22 @@ const FlowNodeInner = memo(
 				);
 
 				const command = updateNodeCommand({
-					node:  {
+					node: {
 						...node,
 						coordinates: [nodeGuard.position.x, nodeGuard.position.y, 0],
 					},
-				})
+				});
 
-				await backend.executeCommand(props.data.appId, props.data.boardId, command, false)
-				await invalidate(backend.getBoard, [props.data.appId, props.data.boardId])
+				await backend.executeCommand(
+					props.data.appId,
+					props.data.boardId,
+					command,
+					false,
+				);
+				await invalidate(backend.getBoard, [
+					props.data.appId,
+					props.data.boardId,
+				]);
 			},
 			[reactFlow],
 		);
@@ -226,14 +234,22 @@ const FlowNodeInner = memo(
 						(props.data.node.pins[pin.id] = { ...pin, index: index }),
 				);
 				const command = updateNodeCommand({
-					node:  {
+					node: {
 						...node,
 						coordinates: [nodeGuard.position.x, nodeGuard.position.y, 0],
 					},
-				})
+				});
 
-				await backend.executeCommand(props.data.appId, props.data.boardId, command, false)
-				await invalidate(backend.getBoard, [props.data.appId, props.data.boardId])
+				await backend.executeCommand(
+					props.data.appId,
+					props.data.boardId,
+					command,
+					false,
+				);
+				await invalidate(backend.getBoard, [
+					props.data.appId,
+					props.data.boardId,
+				]);
 			},
 			[inputPins, outputPins, getNode],
 		);
@@ -520,10 +536,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 				key={props.id}
 			>
 				<ContextMenuTrigger>
-					<FlowNodeInner
-						props={props}
-						onHover={setIsHovered}
-					/>
+					<FlowNodeInner props={props} onHover={setIsHovered} />
 				</ContextMenuTrigger>
 				<ContextMenuContent className="max-w-20">
 					<ContextMenuLabel>Node Actions</ContextMenuLabel>
@@ -649,10 +662,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					onOpenChange={(open) => setRenameMenu(open)}
 				/>
 			)}
-			<FlowNodeInner
-				props={props}
-				onHover={(hover) => setIsHovered(hover)}
-			/>
+			<FlowNodeInner props={props} onHover={(hover) => setIsHovered(hover)} />
 		</>
 	);
 }

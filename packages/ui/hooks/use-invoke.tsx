@@ -1,5 +1,9 @@
 "use client";
-import { type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+	type UseQueryResult,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
 
 type BackendFunction<T, Args extends any[]> = (...args: Args) => Promise<T>;
 
@@ -19,30 +23,30 @@ type BackendFunction<T, Args extends any[]> = (...args: Args) => Promise<T>;
  * @returns {UseQueryResult<T, Error>} The result object from React Query, containing data, error, status, etc.
  */
 export function useInvoke<T, Args extends any[]>(
-  backendFn: BackendFunction<T, Args>,
-  args: Args,
-  enabled = true,
-  additionalDeps: any[] = [],
+	backendFn: BackendFunction<T, Args>,
+	args: Args,
+	enabled = true,
+	additionalDeps: any[] = [],
 ): UseQueryResult<T, Error> {
-  const query = useQuery<T, Error>({
-    queryKey: [backendFn.name || "backendFn", ...args, ...additionalDeps],
-    queryFn: async () => {
-      try {
-        const response = await backendFn(...args);
-        return response; // No need to cast if types are correctly inferred/set
-      } catch (error) {
-        console.error("Error invoking backend function:", error);
-        if (error instanceof Error) {
-            throw error;
-        } else {
-            throw new Error(String(error));
-        }
-      }
-    },
-    enabled,
-  });
+	const query = useQuery<T, Error>({
+		queryKey: [backendFn.name || "backendFn", ...args, ...additionalDeps],
+		queryFn: async () => {
+			try {
+				const response = await backendFn(...args);
+				return response; // No need to cast if types are correctly inferred/set
+			} catch (error) {
+				console.error("Error invoking backend function:", error);
+				if (error instanceof Error) {
+					throw error;
+				} else {
+					throw new Error(String(error));
+				}
+			}
+		},
+		enabled,
+	});
 
-  return query;
+	return query;
 }
 
 /**
@@ -54,28 +58,32 @@ export function useInvoke<T, Args extends any[]>(
  * A function that accepts the backend function whose queries should be invalidated.
  */
 export function useInvalidateInvoke() {
-    const queryClient = useQueryClient();
+	const queryClient = useQueryClient();
 
-    /**
-     * Invalidates queries associated with the given backend function.
-     * Uses prefix matching based on the function name.
-     *
-     * @template T The return type of the backend function (often not needed for invalidation).
-     * @template Args The arguments array type of the backend function (often not needed for invalidation).
-     * @param {BackendFunction<T, Args>} backendFn The backend function used in `useInvoke` calls.
-     * @returns {Promise<void>} A promise that resolves when the invalidation is complete.
-     */
-    const invalidate = <T, Args extends any[]>(
-        backendFn: BackendFunction<T, Args>,
+	/**
+	 * Invalidates queries associated with the given backend function.
+	 * Uses prefix matching based on the function name.
+	 *
+	 * @template T The return type of the backend function (often not needed for invalidation).
+	 * @template Args The arguments array type of the backend function (often not needed for invalidation).
+	 * @param {BackendFunction<T, Args>} backendFn The backend function used in `useInvoke` calls.
+	 * @returns {Promise<void>} A promise that resolves when the invalidation is complete.
+	 */
+	const invalidate = <T, Args extends any[]>(
+		backendFn: BackendFunction<T, Args>,
 		args: Args,
-		additionalDeps: any[] = []
-    ): Promise<void> => {
-      const queryKeyPrefix = [backendFn.name || "backendFn", ...args, ...additionalDeps];
-      console.log(`Invalidating queries with prefix:`, queryKeyPrefix);
-      return queryClient.invalidateQueries({
-        queryKey: queryKeyPrefix,
-      });
-    };
+		additionalDeps: any[] = [],
+	): Promise<void> => {
+		const queryKeyPrefix = [
+			backendFn.name || "backendFn",
+			...args,
+			...additionalDeps,
+		];
+		console.log(`Invalidating queries with prefix:`, queryKeyPrefix);
+		return queryClient.invalidateQueries({
+			queryKey: queryKeyPrefix,
+		});
+	};
 
-    return invalidate;
+	return invalidate;
 }

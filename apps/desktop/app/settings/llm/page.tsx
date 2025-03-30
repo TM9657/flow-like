@@ -1,7 +1,13 @@
 "use client";
 
 import type { UseQueryResult } from "@tanstack/react-query";
-import { Button, IBitTypes, Input, useBackend, useInvoke } from "@tm9657/flow-like-ui";
+import {
+	Button,
+	IBitTypes,
+	Input,
+	useBackend,
+	useInvoke,
+} from "@tm9657/flow-like-ui";
 import {
 	BentoGrid,
 	BentoGridItem,
@@ -25,7 +31,7 @@ import { useTauriInvoke } from "../../../components/useInvoke";
 let counter = 0;
 
 export default function SettingsPage() {
-	const backend = useBackend()
+	const backend = useBackend();
 
 	const profile: UseQueryResult<ISettingsProfile> = useTauriInvoke(
 		"get_current_profile",
@@ -33,11 +39,11 @@ export default function SettingsPage() {
 	);
 
 	const llms = useInvoke(
-			backend.getBitsByCategory,
-			[IBitTypes.Llm],
-			typeof profile.data !== "undefined",
-			[profile.data?.hub_profile.id ?? ""],
-		);
+		backend.getBitsByCategory,
+		[IBitTypes.Llm],
+		typeof profile.data !== "undefined",
+		[profile.data?.hub_profile.id ?? ""],
+	);
 
 	const vlms = useInvoke(
 		backend.getBitsByCategory,

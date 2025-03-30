@@ -7,6 +7,7 @@ import { useInvoke } from "../../hooks/use-invoke";
 import { Bit, type IDownloadProgress } from "../../lib/bit/bit";
 import type { IBit } from "../../lib/schema/bit/bit";
 import { humanFileSize } from "../../lib/utils";
+import { useBackend } from "../../state/backend-state";
 import type { ISettingsProfile } from "../../types";
 import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
 import { Badge } from "./badge";
@@ -18,13 +19,12 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { useBackend } from "../../state/backend-state";
 
 export function BitCard({
 	bit,
 	wide = false,
 }: Readonly<{ bit: IBit; wide: boolean }>) {
-	const backend = useBackend()
+	const backend = useBackend();
 	const [progress, setProgress] = useState<{
 		active: boolean;
 		progress: IDownloadProgress;
@@ -41,17 +41,14 @@ export function BitCard({
 		backend.isBitInstalled,
 		[bit],
 	);
-	const bitSize: UseQueryResult<number> = useInvoke(
-		backend.getBitSize,
-		[bit],
-	);
+	const bitSize: UseQueryResult<number> = useInvoke(backend.getBitSize, [bit]);
 	const currentProfile: UseQueryResult<ISettingsProfile> = useInvoke(
 		backend.getSettingsProfile,
 		[],
 	);
 
 	async function download(bit: IBit) {
-		const obj = Bit.fromObject(bit)
+		const obj = Bit.fromObject(bit);
 		obj.setBackend(backend);
 		await obj.download((event) => {
 			setProgress((prev) => {

@@ -39,7 +39,7 @@ export default function RootLayout({
 						<TooltipProvider>
 							<Toaster />
 							<body className={inter.className}>
-								<ToastProvider/>
+								<ToastProvider />
 								<TauriProvider>
 									<Suspense
 										fallback={

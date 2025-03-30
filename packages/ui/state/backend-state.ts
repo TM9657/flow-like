@@ -15,8 +15,8 @@ import type {
 	IProfile,
 	IRun,
 } from "../lib";
-import type { IRunUpdateEvent } from "./run-execution-state";
 import type { ISettingsProfile } from "../types";
+import type { IRunUpdateEvent } from "./run-execution-state";
 
 export interface IBackendState {
 	getApps(): Promise<IApp[]>;
@@ -28,8 +28,16 @@ export interface IBackendState {
 	getOpenBoards(): Promise<[string, string][]>;
 	getBoardSettings(): Promise<"straight" | "step" | "simpleBezier">;
 
-	createRun(appId: string, boardId: string, startIds: string[]): Promise<string>;
-	executeRun(appId: string, runId: string, cb?: (event: IRunUpdateEvent[]) => void): Promise<void>;
+	createRun(
+		appId: string,
+		boardId: string,
+		startIds: string[],
+	): Promise<string>;
+	executeRun(
+		appId: string,
+		runId: string,
+		cb?: (event: IRunUpdateEvent[]) => void,
+	): Promise<void>;
 	getRun(appId: string, runId: string): Promise<IRun>;
 	finalizeRun(appId: string, runId: string): Promise<void>;
 	undoBoard(appId: string, boardId: string): Promise<void>;
@@ -70,7 +78,11 @@ export interface IBackendState {
 	getPackFromBit(bit: IBit): Promise<{
 		bits: IBit[];
 	}>;
-	downloadBit(bit: IBit, pack: IBitPack, cb?: (progress: IDownloadProgress[]) => void): Promise<IBit[]>;
+	downloadBit(
+		bit: IBit,
+		pack: IBitPack,
+		cb?: (progress: IDownloadProgress[]) => void,
+	): Promise<IBit[]>;
 	deleteBit(bit: IBit): Promise<void>;
 	getBit(id: string, hub?: string): Promise<IBit>;
 	addBit(bit: IBit, profile: ISettingsProfile): Promise<void>;
@@ -80,8 +92,6 @@ export interface IBackendState {
 	getBitsByCategory(type: IBitTypes): Promise<IBit[]>;
 	isBitInstalled(bit: IBit): Promise<boolean>;
 }
-
-
 
 interface BackendStoreState {
 	backend: IBackendState | null;

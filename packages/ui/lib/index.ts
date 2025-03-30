@@ -12,4 +12,4 @@ export * from "./bit/bit";
 export * from "./bit/bit-pack";
 
 export * from "./schema/index";
-export * from "./command/generic-command"
+export * from "./command/generic-command";

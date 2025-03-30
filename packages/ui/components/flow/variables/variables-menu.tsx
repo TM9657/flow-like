@@ -40,13 +40,17 @@ import {
 	SheetTrigger,
 } from "../../../components/ui/sheet";
 import { Switch } from "../../../components/ui/switch";
+import {
+	type IGeneric,
+	removeVariableCommand,
+	upsertVariableCommand,
+} from "../../../lib";
 import type { IBoard, IVariable } from "../../../lib/schema/flow/board";
 import { IVariableType } from "../../../lib/schema/flow/node";
 import { IValueType } from "../../../lib/schema/flow/pin";
 import { convertJsonToUint8Array } from "../../../lib/uint8";
 import { typeToColor } from "../utils";
 import { VariablesMenuEdit } from "./variables-menu-edit";
-import { removeVariableCommand, upsertVariableCommand, type IGeneric } from "../../../lib";
 
 export function VariablesMenu({
 	board,
@@ -57,23 +61,17 @@ export function VariablesMenu({
 }>) {
 	async function upsertVariable(variable: IVariable) {
 		const command = upsertVariableCommand({
-			variable
+			variable,
 		});
 
-		await executeCommand(
-			command,
-			false,
-		);
+		await executeCommand(command, false);
 	}
 
 	async function removeVariable(variable: IVariable) {
 		const command = removeVariableCommand({
-			variable
-		})
-		await executeCommand(
-			command,
-			false,
-		);
+			variable,
+		});
+		await executeCommand(command, false);
 	}
 
 	return (

@@ -5,7 +5,7 @@ import {
 	DialogDescription,
 	DialogFooter,
 	DialogHeader,
-	DialogTitle
+	DialogTitle,
 } from "@tm9657/flow-like-ui";
 import { useEffect, useState } from "react";
 

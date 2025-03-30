@@ -2,7 +2,7 @@ use crate::{functions::TauriFunctionError, state::TauriFlowLikeState};
 use flow_like::{
     app::App,
     flow::{
-        board::{self, commands::GenericCommand, Board, ExecutionStage},
+        board::{commands::GenericCommand, Board, ExecutionStage},
         execution::LogLevel,
     },
 };

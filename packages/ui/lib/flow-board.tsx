@@ -3,13 +3,16 @@ import { createId } from "@paralleldrive/cuid2";
 import { CopyIcon } from "lucide-react";
 import { toast } from "sonner";
 import { typeToColor } from "../components/flow/utils";
+import {
+	copyPasteCommand,
+	upsertCommentCommand,
+} from "./command/generic-command";
 import { toastSuccess } from "./messages";
+import type { IGeneric } from "./schema";
 import { type IBoard, type IComment, ICommentType } from "./schema/flow/board";
 import type { INode } from "./schema/flow/node";
 import type { IPin } from "./schema/flow/pin";
 import type { IRun, ITrace } from "./schema/flow/run";
-import type { IGeneric } from "./schema";
-import { copyPasteCommand, upsertCommentCommand } from "./command/generic-command";
 
 export function isValidConnection(
 	connection: any,
@@ -206,12 +209,9 @@ export function parseBoard(
 				onUpsert: (comment: IComment) => {
 					const command = upsertCommentCommand({
 						comment: comment,
-					})
-					executeCommand(
-						command,
-						false,
-					)
-				}
+					});
+					executeCommand(command, false);
+				},
 			},
 			selected: selected.has(comment.id),
 		});
@@ -263,10 +263,7 @@ export async function handlePaste(
 	event: ClipboardEvent,
 	cursorPosition: { x: number; y: number },
 	boardId: string,
-	executeCommand: (
-		command: IGeneric,
-		append?: boolean,
-	) => Promise<any>,
+	executeCommand: (command: IGeneric, append?: boolean) => Promise<any>,
 ) {
 	const activeElement = document.activeElement;
 	if (
@@ -287,13 +284,13 @@ export async function handlePaste(
 		const nodes: any[] = data.nodes;
 		const comments: any[] = data.comments;
 
-		let command = copyPasteCommand({
+		const command = copyPasteCommand({
 			original_comments: comments,
 			original_nodes: nodes,
 			new_comments: [],
 			new_nodes: [],
 			offset: [cursorPosition.x, cursorPosition.y, 0],
-		})
+		});
 		await executeCommand(command);
 		return;
 	} catch (error) {}
@@ -311,9 +308,9 @@ export async function handlePaste(
 			},
 		};
 
-		let command = upsertCommentCommand({
+		const command = upsertCommentCommand({
 			comment: comment,
-		})
+		});
 
 		await executeCommand(command);
 		return;

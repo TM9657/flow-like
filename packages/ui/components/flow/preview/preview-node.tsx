@@ -1,7 +1,7 @@
 "use client";
 
 import { useDebounce } from "@uidotdev/usehooks";
-import { type Node, type NodeProps } from "@xyflow/react";
+import type { Node, NodeProps } from "@xyflow/react";
 import {
 	ClockIcon,
 	PlayCircleIcon,

@@ -15,14 +15,14 @@ import {
 	ContextMenuLabel,
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
+import { useInvalidateInvoke } from "../../hooks";
+import { updateNodeCommand } from "../../lib";
 import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IValueType } from "../../lib/schema/flow/pin";
+import { useBackend } from "../../state/backend-state";
 import { DynamicImage } from "../ui/dynamic-image";
 import { PinEdit } from "./flow-pin/pin-edit";
 import { typeToColor } from "./utils";
-import { updateNodeCommand } from "../../lib";
-import { useBackend } from "../../state/backend-state";
-import { useInvalidateInvoke } from "../../hooks";
 
 function FlowPinInnerComponent({
 	pin,
@@ -30,8 +30,14 @@ function FlowPinInnerComponent({
 	boardId,
 	appId,
 	node,
-}: Readonly<{ pin: IPin; index: number; boardId: string; appId: string; node: INode }>) {
-	const invalidate = useInvalidateInvoke()
+}: Readonly<{
+	pin: IPin;
+	index: number;
+	boardId: string;
+	appId: string;
+	node: INode;
+}>) {
+	const invalidate = useInvalidateInvoke();
 	const backend = useBackend();
 	const currentNode = useInternalNode(node.id);
 
@@ -86,10 +92,15 @@ function FlowPinInnerComponent({
 					...node.pins,
 					[pin.id]: { ...pin, default_value: debouncedDefaultValue },
 				},
-			}
-		})
+			},
+		});
 
-		await backend.executeCommand(currentNode.data.appId as string, boardId, command, false)
+		await backend.executeCommand(
+			currentNode.data.appId as string,
+			boardId,
+			command,
+			false,
+		);
 		await refetchBoard();
 	}, [pin.id, debouncedDefaultValue, currentNode]);
 
@@ -102,7 +113,7 @@ function FlowPinInnerComponent({
 	}, [pin]);
 
 	const refetchBoard = useCallback(async () => {
-		invalidate(backend.getBoard, [appId, boardId])
+		invalidate(backend.getBoard, [appId, boardId]);
 	}, [appId, boardId]);
 
 	const pinTypeProps = useMemo(
@@ -204,7 +215,13 @@ function FlowPin({
 		return (
 			<ContextMenu>
 				<ContextMenuTrigger>
-					<FlowPinInner appId={appId} pin={pin} index={index} boardId={boardId} node={node} />
+					<FlowPinInner
+						appId={appId}
+						pin={pin}
+						index={index}
+						boardId={boardId}
+						node={node}
+					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent>
 					<ContextMenuLabel>Pin Actions</ContextMenuLabel>
@@ -219,7 +236,15 @@ function FlowPin({
 			</ContextMenu>
 		);
 
-	return <FlowPinInner appId={appId} pin={pin} index={index} boardId={boardId} node={node} />;
+	return (
+		<FlowPinInner
+			appId={appId}
+			pin={pin}
+			index={index}
+			boardId={boardId}
+			node={node}
+		/>
+	);
 }
 
 const pin = memo(FlowPin);

@@ -156,9 +156,8 @@ export default function SettingsPage() {
 										await invoke("set_current_profile", {
 											profileId: profile.hub_profile.id,
 										});
-									await invalidate(backend.getProfile, [])
-									await invalidate(backend.getSettingsProfile, [])
-
+									await invalidate(backend.getProfile, []);
+									await invalidate(backend.getSettingsProfile, []);
 								}}
 							>
 								<img

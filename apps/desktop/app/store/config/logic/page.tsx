@@ -31,15 +31,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export default function Page() {
-	const backend = useBackend()
+	const backend = useBackend();
 	const parentRegister = useFlowBoardParentState();
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
-	const app = useInvoke(
-		backend.getApp,
-		[id ?? ""],
-		typeof id === "string",
-	);
+	const app = useInvoke(backend.getApp, [id ?? ""], typeof id === "string");
 	const boards = useInvoke(
 		backend.getBoards,
 		[id ?? ""],

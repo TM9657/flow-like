@@ -8,6 +8,6 @@ pub async fn get_path_meta(path: String) -> Vec<FileMetadata> {
     if path.is_dir() {
         return FileMetadata::from_folder(&path);
     }
-    let meta = FileMetadata::new(&PathBuf::from(path));
-    return vec![meta];
+    let meta = FileMetadata::new(&path);
+    vec![meta]
 }

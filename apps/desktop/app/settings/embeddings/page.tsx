@@ -14,7 +14,7 @@ import { useTauriInvoke } from "../../../components/useInvoke";
 let counter = 0;
 
 export default function Page() {
-	const backend = useBackend()
+	const backend = useBackend();
 	const profile: UseQueryResult<ISettingsProfile> = useTauriInvoke(
 		"get_current_profile",
 		{},
@@ -38,7 +38,9 @@ export default function Page() {
 		if (!(embeddingModels.data && imageEmbeddingModels.data)) return;
 
 		const dependencies = await Promise.all(
-			imageEmbeddingModels.data.map((bit) => Bit.fromObject(bit).setBackend(backend).fetchDependencies()),
+			imageEmbeddingModels.data.map((bit) =>
+				Bit.fromObject(bit).setBackend(backend).fetchDependencies(),
+			),
 		);
 		const blacklist = new Set<string>(
 			dependencies.flatMap((dep) =>

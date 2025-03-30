@@ -9,10 +9,10 @@ import {
 	DialogTitle,
 } from "../../../components/ui/dialog";
 import { Textarea } from "../../../components/ui/textarea";
-import type { INode } from "../../../lib/schema/flow/node";
-import { updateNodeCommand } from "../../../lib";
-import { useBackend } from "../../../state/backend-state";
 import { useInvalidateInvoke } from "../../../hooks";
+import { updateNodeCommand } from "../../../lib";
+import type { INode } from "../../../lib/schema/flow/node";
+import { useBackend } from "../../../state/backend-state";
 
 export function FlowNodeCommentMenu({
 	node,
@@ -22,21 +22,21 @@ export function FlowNodeCommentMenu({
 	onOpenChange,
 }: Readonly<{
 	node: INode;
-	appId: string,
+	appId: string;
 	boardId: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }>) {
 	const invalidate = useInvalidateInvoke();
-	const backend = useBackend()
+	const backend = useBackend();
 	const [comment, setComment] = useState("");
 
 	async function saveComment() {
 		const command = updateNodeCommand({
-			node: { ...node, comment }
-		})
+			node: { ...node, comment },
+		});
 
-		await backend.executeCommand(appId, boardId, command, false)
+		await backend.executeCommand(appId, boardId, command, false);
 		onOpenChange(false);
 		setComment("");
 		refetchBoard();

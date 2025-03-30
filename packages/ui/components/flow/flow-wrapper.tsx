@@ -5,7 +5,10 @@ import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { FlowBoard } from "./flow-board";
 
-export function FlowWrapper({ boardId, appId }: Readonly<{ boardId: string, appId: string }>) {
+export function FlowWrapper({
+	boardId,
+	appId,
+}: Readonly<{ boardId: string; appId: string }>) {
 	const mouseSensor = useSensor(MouseSensor, {
 		activationConstraint: {
 			distance: 10,

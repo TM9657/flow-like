@@ -16,7 +16,7 @@ import {
 	Progress,
 	Textarea,
 	useBackend,
-	useInvoke
+	useInvoke,
 } from "@tm9657/flow-like-ui";
 import { useRouter } from "next/navigation";
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
@@ -59,13 +59,8 @@ interface ICreationDialog {
 
 export default function CreateAppPage() {
 	const backend = useBackend();
-	const templates = useInvoke(
-		backend.getBitsByCategory,
-		[IBitTypes.Template],
-	);
-	const apps = useInvoke(
-		backend.getApps,
-		[]);
+	const templates = useInvoke(backend.getBitsByCategory, [IBitTypes.Template]);
+	const apps = useInvoke(backend.getApps, []);
 	const currentProfile = useTauriInvoke<ISettingsProfile | null>(
 		"get_current_profile",
 		{},
@@ -481,10 +476,8 @@ function Bit({
 	selected: boolean;
 	onSelect: () => void;
 }>) {
-	const backend = useBackend()
-	const bitData = useInvoke(
-		backend.getBit,
-		[bit, hub]);
+	const backend = useBackend();
+	const bitData = useInvoke(backend.getBit, [bit, hub]);
 
 	if (!bitData.data) return null;
 	if (
