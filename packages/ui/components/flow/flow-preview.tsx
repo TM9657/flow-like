@@ -63,6 +63,7 @@ export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
 
 		const parsedBoard = parseBoard(
 			board,
+			"",
 			async () => {},
 			async () => {},
 			async () => {},
