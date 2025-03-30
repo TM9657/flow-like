@@ -4,7 +4,33 @@ use crate::{
         Bit, BitModelPreference, BitPack, BitProvider, EmbeddingModelParameters,
         ImageEmbeddingModelParameters, LLMParameters, VLMParameters,
     },
-    flow::{board::Board, execution::Run, node::Node, pin::Pin, variable::Variable},
+    flow::{
+        board::{
+            commands::{
+                comments::{
+                    remove_comment::RemoveCommentCommand, upsert_comment::UpsertCommentCommand,
+                },
+                nodes::{
+                    add_node::AddNodeCommand, copy_paste::CopyPasteCommand,
+                    move_node::MoveNodeCommand, remove_node::RemoveNodeCommand,
+                    update_node::UpdateNodeCommand,
+                },
+                pins::{
+                    connect_pins::ConnectPinsCommand, disconnect_pins::DisconnectPinsCommand,
+                    upsert_pin::UpsertPinCommand,
+                },
+                variables::{
+                    remove_variable::RemoveVariableCommand, upsert_variable::UpsertVariableCommand,
+                },
+                GenericCommand,
+            },
+            Board,
+        },
+        execution::Run,
+        node::Node,
+        pin::Pin,
+        variable::Variable,
+    },
     hub::Hub,
     models::{history::History, response::Response, response_chunk::ResponseChunk},
     profile::Profile,
@@ -57,6 +83,49 @@ pub fn generate_schema(base_path: PathBuf) -> anyhow::Result<()> {
     generate_and_save_schema::<BitPack>(&base_path, "bit/bit-pack.json")?;
 
     generate_and_save_schema::<Board>(&base_path, "flow/board.json")?;
+    generate_and_save_schema::<GenericCommand>(&base_path, "flow/board/commands/generic.json")?;
+    generate_and_save_schema::<RemoveCommentCommand>(
+        &base_path,
+        "flow/board/commands/remove-comment.json",
+    )?;
+    generate_and_save_schema::<UpsertCommentCommand>(
+        &base_path,
+        "flow/board/commands/upsert-comment.json",
+    )?;
+    generate_and_save_schema::<AddNodeCommand>(&base_path, "flow/board/commands/add-node.json")?;
+    generate_and_save_schema::<CopyPasteCommand>(
+        &base_path,
+        "flow/board/commands/copy-paste.json",
+    )?;
+    generate_and_save_schema::<MoveNodeCommand>(&base_path, "flow/board/commands/move-node.json")?;
+    generate_and_save_schema::<RemoveNodeCommand>(
+        &base_path,
+        "flow/board/commands/remove-node.json",
+    )?;
+    generate_and_save_schema::<UpdateNodeCommand>(
+        &base_path,
+        "flow/board/commands/update-node.json",
+    )?;
+    generate_and_save_schema::<DisconnectPinsCommand>(
+        &base_path,
+        "flow/board/commands/disconnect-pins.json",
+    )?;
+    generate_and_save_schema::<ConnectPinsCommand>(
+        &base_path,
+        "flow/board/commands/connect-pins.json",
+    )?;
+    generate_and_save_schema::<UpsertPinCommand>(
+        &base_path,
+        "flow/board/commands/upsert-pin.json",
+    )?;
+    generate_and_save_schema::<RemoveVariableCommand>(
+        &base_path,
+        "flow/board/commands/remove-variable.json",
+    )?;
+    generate_and_save_schema::<UpsertVariableCommand>(
+        &base_path,
+        "flow/board/commands/upsert-variable.json",
+    )?;
     generate_and_save_schema::<Node>(&base_path, "flow/node.json")?;
     generate_and_save_schema::<Pin>(&base_path, "flow/pin.json")?;
     generate_and_save_schema::<Variable>(&base_path, "flow/variable.json")?;

@@ -13,49 +13,48 @@ import {
 	HoverCard,
 	HoverCardContent,
 	HoverCardTrigger,
-	type IApp,
-	type IBoard,
 	type INode,
 	Separator,
 	humanFileSize,
 	toastError,
+	useBackend,
 	useInvoke,
-	useRunExecutionStore,
+	useRunExecutionStore
 } from "@tm9657/flow-like-ui";
 import { AlertTriangle, PlayCircleIcon, Vault } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { useTauriInvoke } from "../../../components/useInvoke";
 
 export default function Id({
 	children,
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
+	const backend = useBackend()
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
 	const currentRoute = usePathname();
-	const isReady = useInvoke<boolean>(
+	const isReady = useTauriInvoke<boolean>(
 		"app_configured",
 		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
-	const app = useInvoke<IApp | undefined>(
-		"get_app",
-		{ appId: id },
+	const app = useInvoke(
+		backend.getApp,
 		[id ?? ""],
 		typeof id === "string",
 	);
-	const appSize = useInvoke<number>(
+	const appSize = useTauriInvoke<number>(
 		"get_app_size",
 		{ appId: id },
 		[id ?? ""],
 		typeof id === "string",
 	);
-	const boards = useInvoke<IBoard[]>(
-		"get_app_boards",
-		{ appId: id },
+	const boards = useInvoke(
+		backend.getBoards,
 		[id ?? ""],
 		typeof id === "string",
 	);

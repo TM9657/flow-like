@@ -26,6 +26,7 @@ import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
+	useBackend,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
 import { CornerDownLeft, Mic } from "lucide-react";
@@ -34,14 +35,15 @@ import { useEffect, useRef, useState } from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 
 export default function Home() {
+	const backend = useBackend();
 	const { resolvedTheme } = useTheme();
 	const fileInput = useRef<any>(null);
 	const [prompt, setPrompt] = useState("");
 	const [question, setQuestion] = useState("");
 	const [model, setModel] = useState("");
 	const profile: UseQueryResult<ISettingsProfile> = useInvoke(
-		"get_current_profile",
-		{},
+		backend.getSettingsProfile,
+		[],
 	);
 	const [response, setResponse] = useState("");
 	const [progress, setProgress] = useState(0);

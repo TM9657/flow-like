@@ -25,15 +25,13 @@ pub async fn init_downloads(
 }
 
 #[tauri::command(async)]
-pub async fn resume_download(app_handle: AppHandle, bit: Bit) -> Result<(), TauriFunctionError> {
+pub async fn get_downloads(
+    app_handle: AppHandle,
+) -> Result<HashMap<String, Bit>, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    match flow_like::utils::download::download_bit(&bit, flow_like_state, 3).await {
-        Ok(_) => {
-            println!("Download Resumed: {}", bit.hash);
-        }
-        Err(e) => {
-            println!("Error Resuming Download: {}", e);
-        }
-    }
-    Ok(())
+    let download_manager = flow_like_state.lock().await.download_manager().clone();
+    let download_manager = download_manager.lock().await;
+    let list = download_manager.download_list.clone();
+
+    Ok(list)
 }

@@ -1,7 +1,6 @@
 "use client";
 
-import { Button } from "@tm9657/flow-like-ui";
-import { Card, CardContent, CardHeader } from "@tm9657/flow-like-ui";
+import { Button, Card, CardContent, CardHeader } from "@tm9657/flow-like-ui";
 import { PartyPopper } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Crossfire from "react-canvas-confetti/dist/presets/crossfire";

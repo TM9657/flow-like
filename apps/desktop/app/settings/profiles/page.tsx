@@ -2,25 +2,25 @@
 
 import { type UseQueryResult, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { Input } from "@tm9657/flow-like-ui";
-import { useInvoke } from "@tm9657/flow-like-ui";
+import { Input, useBackend, useInvalidateInvoke } from "@tm9657/flow-like-ui";
 import { Label } from "@tm9657/flow-like-ui/components/ui/label";
 import { Switch } from "@tm9657/flow-like-ui/components/ui/switch";
 import type { ISettingsProfile, ISystemInfo } from "@tm9657/flow-like-ui/types";
-import Image from "next/image";
+import { useTauriInvoke } from "../../../components/useInvoke";
 
 export default function SettingsPage() {
-	const queryClient = useQueryClient();
-	const profiles: UseQueryResult<ISettingsProfile> = useInvoke(
+	const backend = useBackend();
+	const invalidate = useInvalidateInvoke();
+	const profiles: UseQueryResult<ISettingsProfile> = useTauriInvoke(
 		"get_profiles",
 		{},
 	);
-	const systemInfo: UseQueryResult<ISystemInfo> = useInvoke(
+	const systemInfo: UseQueryResult<ISystemInfo> = useTauriInvoke(
 		"get_system_info",
 		{},
 	);
 	const currentProfile: UseQueryResult<ISettingsProfile | undefined> =
-		useInvoke("get_current_profile", {});
+		useTauriInvoke("get_current_profile", {});
 
 	async function upsertProfile(profile: ISettingsProfile) {
 		await invoke("upsert_profile", { profile });
@@ -156,9 +156,9 @@ export default function SettingsPage() {
 										await invoke("set_current_profile", {
 											profileId: profile.hub_profile.id,
 										});
-									await queryClient.invalidateQueries({
-										queryKey: "get_current_profile".split("_"),
-									});
+									await invalidate(backend.getProfile, [])
+									await invalidate(backend.getSettingsProfile, [])
+
 								}}
 							>
 								<img

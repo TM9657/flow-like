@@ -10,6 +10,7 @@ import {
 	type IApp,
 	Separator,
 	humanFileSize,
+	useBackend,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
 import {
@@ -21,9 +22,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTauriInvoke } from "../../../components/useInvoke";
 
 export default function YoursPage() {
-	const apps = useInvoke<IApp[]>("get_apps", {});
+	const backend = useBackend()
+	const apps = useInvoke(backend.getApps, []);
 	const router = useRouter();
 
 	return (
@@ -33,7 +36,7 @@ export default function YoursPage() {
 					<h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
 						Apps
 					</h1>
-					<Link href={"/vaults/new"}>
+					<Link href={"/store/new"}>
 						<Button variant="default" className="ml-4">
 							<Plus className="mr-2 h-4 w-4" /> Create
 						</Button>
@@ -44,7 +47,7 @@ export default function YoursPage() {
 					{apps.data?.length === 0 && (
 						<EmptyState
 							action={{
-								label: "Create Vault",
+								label: "Create App",
 								onClick: () => {
 									router.push("/store/new");
 								},
@@ -71,10 +74,10 @@ export default function YoursPage() {
 
 function App({ app }: Readonly<{ app: IApp }>) {
 	const router = useRouter();
-	const app_size = useInvoke<number>("get_app_size", { appId: app.id }, [
+	const app_size = useTauriInvoke<number>("get_app_size", { appId: app.id }, [
 		app.id,
 	]);
-	const configured = useInvoke<boolean>("app_configured", { appId: app.id }, [
+	const configured = useTauriInvoke<boolean>("app_configured", { appId: app.id }, [
 		app.id,
 	]);
 

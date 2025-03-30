@@ -7,7 +7,6 @@ import {
 	Button,
 	Checkbox,
 	DynamicImage,
-	type IApp,
 	type IBit,
 	type IBitMeta,
 	IBitTypes,
@@ -16,12 +15,14 @@ import {
 	Label,
 	Progress,
 	Textarea,
-	useInvoke,
+	useBackend,
+	useInvoke
 } from "@tm9657/flow-like-ui";
 import { useRouter } from "next/navigation";
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import Crossfire from "react-canvas-confetti/dist/presets/crossfire";
 import { toast } from "sonner";
+import { useTauriInvoke } from "../../../components/useInvoke";
 
 const BLANK_BIT: IBit = {
 	authors: [],
@@ -57,11 +58,15 @@ interface ICreationDialog {
 }
 
 export default function CreateAppPage() {
-	const templates = useInvoke<IBit[]>("get_bits_by_category", {
-		bitType: IBitTypes.Template,
-	});
-	const apps = useInvoke<IApp[]>("get_apps", {});
-	const currentProfile = useInvoke<ISettingsProfile | null>(
+	const backend = useBackend();
+	const templates = useInvoke(
+		backend.getBitsByCategory,
+		[IBitTypes.Template],
+	);
+	const apps = useInvoke(
+		backend.getApps,
+		[]);
+	const currentProfile = useTauriInvoke<ISettingsProfile | null>(
 		"get_current_profile",
 		{},
 	);
@@ -476,10 +481,10 @@ function Bit({
 	selected: boolean;
 	onSelect: () => void;
 }>) {
-	const bitData = useInvoke<IBit>("get_bit_by_id", { bit: [bit, hub], hub }, [
-		bit,
-		hub,
-	]);
+	const backend = useBackend()
+	const bitData = useInvoke(
+		backend.getBit,
+		[bit, hub]);
 
 	if (!bitData.data) return null;
 	if (

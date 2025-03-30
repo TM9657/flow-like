@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use schemars::JsonSchema;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -6,7 +7,7 @@ use std::collections::HashSet;
 
 use crate::{
     flow::{
-        board::{Board, Command},
+        board::{commands::Command, Board},
         pin::PinType,
         variable::VariableType,
     },
@@ -14,7 +15,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ConnectPinsCommand {
     pub from_pin: String,
     pub to_pin: String,

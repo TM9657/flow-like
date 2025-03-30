@@ -1,10 +1,11 @@
 use async_trait::async_trait;
+use schemars::JsonSchema;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::{
     flow::{
-        board::{Board, Command},
+        board::{commands::Command, Board},
         node::Node,
     },
     state::FlowLikeState,
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use cuid2;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct AddNodeCommand {
     pub node: Node,
 }

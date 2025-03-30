@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { get, set } from "idb-keyval";
 import type { Nullable } from "../schema/auto-import";
 import { type IBit, type IBitMeta, IBitTypes } from "../schema/bit/bit";
@@ -8,6 +6,7 @@ import type { IImageEmbeddingModelParameters } from "../schema/bit/bit/image-emb
 import type { ILlmParameters } from "../schema/bit/bit/llm-parameters";
 import type { IVlmParameters } from "../schema/bit/bit/vlm-parameters";
 import { BitPack } from "./bit-pack";
+import type { IBackendState } from "../../state/backend-state";
 
 export interface IDownloadProgress {
 	hash: string;
@@ -17,22 +16,41 @@ export interface IDownloadProgress {
 }
 
 export class Download {
-	progress = new Map<string, IDownloadProgress>();
+	private readonly _progress = new Map<string, IDownloadProgress>();
+	private readonly _bits: Map<string, IBit>;
+	private readonly _parent: IBit;
 	speed = {
 		lastMeasured: 0,
 		lastPoints: new Map<string, number>(),
 	};
 
+	constructor(parent: IBit, bits: IBit[]) {
+		this._parent = parent;
+		const map = new Map()
+		bits.forEach((bit) => {
+			map.set(bit.hash, bit);
+		});
+		this._bits = map;
+	}
+
 	push(progress: IDownloadProgress) {
-		this.progress.set(progress.hash, progress);
+		this._progress.set(progress.hash, progress);
+	}
+
+	parent() {
+		return this._parent;
+	}
+
+	bits() {
+		return this._bits;
 	}
 
 	total() {
-		const max = Array.from(this.progress.values()).reduce(
+		const max = Array.from(this._progress.values()).reduce(
 			(acc, progress) => acc + progress.max,
 			0,
 		);
-		const downloaded = Array.from(this.progress.values()).reduce(
+		const downloaded = Array.from(this._progress.values()).reduce(
 			(acc, progress) => acc + progress.downloaded,
 			0,
 		);
@@ -40,26 +58,24 @@ export class Download {
 	}
 
 	files() {
-		return this.progress;
+		return this._progress;
 	}
 
 	measureSpeed() {
 		const now = Date.now();
 		const last = this.speed.lastMeasured;
 		const time = now - last;
-		this.speed.lastMeasured = now;
 
 		const { max, downloaded } = this.total();
-		const lastDownloaded = this.speed.lastPoints
-			.values()
-			.reduce((acc, val) => acc + val, 0);
+		const lastDownloaded = Array.from(this.speed.lastPoints.values())
+        .reduce((acc, val) => acc + val, 0);
 
-		const bytesPerSecond = ((downloaded - lastDownloaded) / time) * 1000;
+		const bytesPerSecond = time > 0 ? ((downloaded - lastDownloaded) / time) * 1000 : 0;
 
 		this.speed.lastMeasured = now;
 		this.speed.lastPoints.clear();
 
-		this.progress.forEach((progress) => {
+		this._progress.forEach((progress) => {
 			this.speed.lastPoints.set(progress.hash, progress.downloaded);
 		});
 
@@ -71,8 +87,14 @@ export class Download {
 		};
 	}
 
+	progress() {
+		const { max, downloaded } = this.total();
+		if (max === 0) return 0;
+		return downloaded / max;
+	}
+
 	clear() {
-		this.progress.clear();
+		this._progress.clear();
 	}
 }
 
@@ -100,6 +122,12 @@ export class Bit implements IBit {
 	type: IBitTypes = IBitTypes.Other;
 	updated = "";
 	version = "";
+	backend: IBackendState | undefined
+
+	public setBackend(backend?: IBackendState) {
+		this.backend = backend;
+		return this
+	}
 
 	public toJSON(): string {
 		const object = this.toObject();
@@ -143,9 +171,13 @@ export class Bit implements IBit {
 			return pack;
 		}
 
-		const bits: {
+		const bits: undefined | {
 			bits: IBit[];
-		} = await invoke("get_pack_from_bit", { bit: this.toObject() });
+		} = await this.backend?.getPackFromBit(this.toObject());
+
+		if (!bits) {
+			throw new Error("No dependencies found");
+		}
 
 		if (bits.bits.length > 0) await set(this.dependency_tree_hash, bits.bits);
 		const pack = new BitPack();
@@ -161,30 +193,18 @@ export class Bit implements IBit {
 	async download(cb?: (progress: Download) => void): Promise<IBit[]> {
 		try {
 			const dependencies = await this.fetchDependencies();
-			const unlistenFn: UnlistenFn[] = [];
+			const totalProgress = new Download(this.toObject(), dependencies.bits);
 
-			const totalProgress = new Download();
+			const download: undefined | IBit[] = await this.backend?.downloadBit(this.toObject(), dependencies.toObject(), (progress => {
+				const lastElement = progress.pop();
+				if (lastElement) totalProgress.push(lastElement);
+				if (cb) cb(totalProgress);
+			}));
 
-			for (const deps of dependencies.bits) {
-				unlistenFn.push(
-					await listen(
-						`download:${deps.hash}`,
-						(event: { payload: IDownloadProgress[] }) => {
-							const lastElement = event.payload.pop();
-							if (lastElement) totalProgress.push(lastElement);
-							if (cb) cb(totalProgress);
-						},
-					),
-				);
+			if (!download) {
+				throw new Error("No dependencies found");
 			}
 
-			const download: IBit[] = await invoke("download_bit", {
-				bit: this.toObject(),
-			});
-
-			for (const unlisten of unlistenFn) {
-				unlisten();
-			}
 			return download;
 		} catch (error) {
 			console.error(error);

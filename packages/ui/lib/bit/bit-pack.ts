@@ -1,17 +1,31 @@
-import { invoke } from "@tauri-apps/api/core";
+import type { IBackendState } from "../../state/backend-state";
 import type { IBit } from "../schema/bit/bit";
 import type { IBitPack } from "../schema/bit/bit-pack";
-import type { Bit } from "./bit";
+import { Bit } from "./bit";
 
 export class BitPack implements IBitPack {
 	bits: IBit[] = [];
+	backend: IBackendState | undefined
+
+	public setBackend(backend?: IBackendState) {
+		this.backend = backend;
+		return this
+	}
 
 	async get_installed(): Promise<Bit[]> {
-		return await invoke("get_installed_bit", { bits: this.bits });
+		const installed = await this.backend?.getInstalledBit(this.bits);
+		if (!installed) {
+			throw new Error("No installed bits found");
+		}
+		return installed.map((bit) => Bit.fromObject(bit).setBackend(this.backend));
 	}
 
 	async size(): Promise<number> {
-		return await invoke("get_pack_size", { bits: this.bits });
+		const size = await this.backend?.getPackSize(this.bits);
+		if (!size) {
+			throw new Error("No size found");
+		}
+		return size;
 	}
 
 	public static fromJson(json: string): BitPack {

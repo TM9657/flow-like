@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use schemars::JsonSchema;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -7,13 +8,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     flow::{
-        board::{Board, Command},
+        board::{commands::Command, Board},
         node::Node,
     },
     state::FlowLikeState,
 };
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema)]
 pub struct RemoveNodeCommand {
     pub node: Node,
     pub connected_nodes: Vec<Node>,

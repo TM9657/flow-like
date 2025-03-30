@@ -1,4 +1,3 @@
-import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import type { ITrace } from "../lib";
 
@@ -6,13 +5,13 @@ interface IRunExecutionState {
 	runs: Map<
 		string,
 		{
-			unlistenFn: UnlistenFn;
 			eventIds: string[];
 			boardId: string;
 			nodes: Set<string>;
 			already_executed: Set<string>;
 		}
 	>;
+	pushUpdate(runId: string, events: IRunUpdateEvent[]): void;
 	addRun: (runId: string, boardId: string, eventIds: string[]) => Promise<void>;
 	removeRun: (runId: string) => void;
 	addNodesOnRun: (runId: string, nodeIds: string[]) => void;
@@ -29,57 +28,50 @@ export interface IRunUpdateEvent {
 export const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
 	run_nodes: new Map(),
 	runs: new Map(),
+	pushUpdate: (runId: string, events: IRunUpdateEvent[]) => {
+		const add_nodes = new Map();
+		const remove_nodes = new Map();
+
+		for (const payload of events) {
+			if (payload.method === "add") {
+				if (add_nodes.has(payload.run_id)) {
+					add_nodes.set(payload.run_id, [
+						...add_nodes.get(payload.run_id),
+						...payload.node_ids,
+					]);
+					continue;
+				}
+				add_nodes.set(payload.run_id, payload.node_ids);
+				continue;
+			}
+
+			if (remove_nodes.has(payload.run_id)) {
+				remove_nodes.set(payload.run_id, [
+					...remove_nodes.get(payload.run_id),
+					...payload.node_ids,
+				]);
+				continue;
+			}
+
+			remove_nodes.set(payload.run_id, payload.node_ids);
+		}
+
+		add_nodes.forEach((node_ids, run_id) => {
+			get().addNodesOnRun(run_id, node_ids);
+		});
+
+		remove_nodes.forEach((node_ids, run_id) => {
+			get().removeNodesOnRun(run_id, node_ids);
+		});
+	},
 	addRun: async (runId: string, boardId: string, eventIds: string[]) => {
 		if (get().runs.has(runId)) {
 			return;
 		}
 
-		const unlisten = await listen(
-			`run:${runId}`,
-			(event: Event<IRunUpdateEvent[]>) => {
-				if (event.payload.length > 1) console.log(event.payload.length);
-
-				const add_nodes = new Map();
-				const remove_nodes = new Map();
-
-				for (const payload of event.payload) {
-					if (payload.method === "add") {
-						if (add_nodes.has(payload.run_id)) {
-							add_nodes.set(payload.run_id, [
-								...add_nodes.get(payload.run_id),
-								...payload.node_ids,
-							]);
-							continue;
-						}
-						add_nodes.set(payload.run_id, payload.node_ids);
-						continue;
-					}
-
-					if (remove_nodes.has(payload.run_id)) {
-						remove_nodes.set(payload.run_id, [
-							...remove_nodes.get(payload.run_id),
-							...payload.node_ids,
-						]);
-						continue;
-					}
-
-					remove_nodes.set(payload.run_id, payload.node_ids);
-				}
-
-				add_nodes.forEach((node_ids, run_id) => {
-					get().addNodesOnRun(run_id, node_ids);
-				});
-
-				remove_nodes.forEach((node_ids, run_id) => {
-					get().removeNodesOnRun(run_id, node_ids);
-				});
-			},
-		);
-
 		set((state) => {
 			const runs = new Map(state.runs);
 			runs.set(runId, {
-				unlistenFn: unlisten,
 				eventIds,
 				boardId,
 				nodes: new Set(),
@@ -92,7 +84,6 @@ export const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
 	removeRun: (runId: string) =>
 		set((state) => {
 			const runs = new Map(state.runs);
-			runs.get(runId)?.unlistenFn();
 			runs.delete(runId);
 			return { runs };
 		}),

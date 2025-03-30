@@ -1,5 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 import { Button } from "../../../components/ui/button";
 import {
@@ -12,35 +10,40 @@ import {
 } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
 import type { INode } from "../../../lib/schema/flow/node";
+import { updateNodeCommand } from "../../../lib";
+import { useBackend } from "../../../state/backend-state";
+import { useInvalidateInvoke } from "../../../hooks";
 
 export function FlowNodeRenameMenu({
 	node,
 	boardId,
+	appId,
 	open,
 	onOpenChange,
 }: Readonly<{
 	node: INode;
+	appId: string;
 	boardId: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }>) {
-	const queryClient = useQueryClient();
+	const invalidate = useInvalidateInvoke();
+	const backend = useBackend()
 	const [friendlyName, setFriendlyName] = useState(node.friendly_name);
 
 	async function saveComment() {
-		await invoke("update_node", {
-			boardId: boardId,
+		const command = updateNodeCommand({
 			node: { ...node, friendly_name: friendlyName },
-		});
+		})
+
+		await backend.executeCommand(appId, boardId, command, false)
 		onOpenChange(false);
 		setFriendlyName("");
 		refetchBoard();
 	}
 
 	async function refetchBoard() {
-		queryClient.invalidateQueries({
-			queryKey: ["get", "board", boardId],
-		});
+		await invalidate(backend.getBoard, [appId, boardId]);
 	}
 
 	return (

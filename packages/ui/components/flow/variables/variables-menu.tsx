@@ -46,26 +46,32 @@ import { IValueType } from "../../../lib/schema/flow/pin";
 import { convertJsonToUint8Array } from "../../../lib/uint8";
 import { typeToColor } from "../utils";
 import { VariablesMenuEdit } from "./variables-menu-edit";
+import { removeVariableCommand, upsertVariableCommand, type IGeneric } from "../../../lib";
 
 export function VariablesMenu({
 	board,
 	executeCommand,
 }: Readonly<{
 	board: IBoard;
-	executeCommand: (command: string, args: any, append: boolean) => Promise<any>;
+	executeCommand: (command: IGeneric, append: boolean) => Promise<any>;
 }>) {
 	async function upsertVariable(variable: IVariable) {
+		const command = upsertVariableCommand({
+			variable
+		});
+
 		await executeCommand(
-			"upsert_variable",
-			{ boardId: board.id, variable },
+			command,
 			false,
 		);
 	}
 
 	async function removeVariable(variable: IVariable) {
+		const command = removeVariableCommand({
+			variable
+		})
 		await executeCommand(
-			"remove_variable",
-			{ boardId: board.id, variable },
+			command,
 			false,
 		);
 	}

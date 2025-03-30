@@ -1,8 +1,7 @@
 "use client";
 import { type UseQueryResult, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { useInvoke } from "@tm9657/flow-like-ui";
-import { Bit, type IDownloadProgress } from "@tm9657/flow-like-ui";
+import { Button, useBackend, useDownloadManager, useInvalidateInvoke } from "@tm9657/flow-like-ui";
 import {
 	Avatar,
 	AvatarFallback,
@@ -15,13 +14,13 @@ import {
 	ChartTooltip,
 	ChartTooltipContent,
 } from "@tm9657/flow-like-ui/components/ui/chart";
-import { useEvent } from "@tm9657/flow-like-ui/hooks/use-event";
 import type { IBit } from "@tm9657/flow-like-ui/lib/schema/bit/bit";
 import { humanFileSize } from "@tm9657/flow-like-ui/lib/utils";
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CartesianGrid, Line, LineChart, XAxis } from "recharts";
+import { useTauriInvoke } from "../../../components/useInvoke";
 
 const chartConfig = {
 	downloaded: {
@@ -34,13 +33,14 @@ const chartConfig = {
 	},
 } satisfies ChartConfig;
 
-const downloadStatus = new Map<string, IDownloadProgress>();
 export default function ProfileCreation() {
+	const backend = useBackend()
+	const { manager } = useDownloadManager()
+	const invalidate = useInvalidateInvoke()
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const intervalRef = useRef<any>(null);
 	const searchParams = useSearchParams();
-	const [totalSize, setTotalSize] = useState(0);
 	const [stats, setStats] = useState<
 		{
 			time: number;
@@ -53,25 +53,22 @@ export default function ProfileCreation() {
 	>([]);
 	const [doneCounter, setDoneCounter] = useState(0);
 	const defaultProfiles: UseQueryResult<[ISettingsProfile, IBit[]][]> =
-		useInvoke("get_default_profiles", {});
+		useTauriInvoke("get_default_profiles", {});
 
-	const [bits, setBits] = useState<Bit[]>([]);
-
-	async function calculateSize() {
-		const sizes = await Promise.all(
-			bits.map((bit) => Bit.fromObject(bit).fetchSize()),
-		);
-		setTotalSize(sizes.reduce((acc, size) => acc + size, 0));
-	}
-
-	useEffect(() => {
-		calculateSize();
-	}, [bits]);
+	const [bits, setBits] = useState<IBit[]>([]);
+	const [filter, setFilter] = useState(new Set<string>());
+	const [totalSize, setTotalSize] = useState(0);
 
 	async function addProfiles(profiles: ISettingsProfile[]) {
 		for await (const profile of profiles) {
 			await invoke("upsert_profile", { profile });
 		}
+
+		await invalidate(backend.getProfile, [])
+		await invalidate(backend.getSettingsProfile, [])
+		await queryClient.invalidateQueries({
+			queryKey: ["get", "profiles"],
+		});
 	}
 
 	useEffect(() => {
@@ -86,17 +83,17 @@ export default function ProfileCreation() {
 		const filteredProfiles = defaultProfiles.data.filter((profile) =>
 			selected.has(profile[0].hub_profile.id ?? ""),
 		);
-		const foundBits = new Map<string, Bit>();
+		const foundBits = new Map<string, IBit>();
+		const filter = new Set<string>();
 		filteredProfiles.forEach(([profile, bits]) => {
-			bits.forEach((bit) => foundBits.set(bit.id, Bit.fromObject(bit)));
-		});
-
-		console.dir({
-			filteredProfiles,
-			selected,
+			bits.forEach((bit) => {
+				foundBits.set(bit.id, bit)
+				filter.add(bit.hash)
+			});
 		});
 
 		setBits(Array.from(foundBits.values()));
+		setFilter(filter)
 		addProfiles(filteredProfiles.map(([profile]) => profile));
 	}, [defaultProfiles.data, searchParams]);
 
@@ -110,51 +107,34 @@ export default function ProfileCreation() {
 		return () => {
 			clearInterval(intervalRef.current);
 		};
-	}, []);
+	}, [filter]);
 
 	useEffect(() => {
 		async function finalize() {
-			await queryClient.invalidateQueries({
-				queryKey: ["get", "current", "profile"],
-			});
-			await queryClient.invalidateQueries({
-				queryKey: ["get", "profiles"],
-			});
 			router.push("/onboarding/done");
 		}
 		if (doneCounter >= 5 && bits.length > 0) finalize();
-	}, [doneCounter, bits, queryClient]);
+	}, [doneCounter, bits]);
 
-	function onDownload(progress: IDownloadProgress) {
-		downloadStatus.set(progress.hash, progress);
-	}
-
-	function calculateStats() {
-		let lastTotal = 0;
-
-		let currentTotal = 0;
-		let max = 0;
-		downloadStatus.forEach((value) => {
-			currentTotal += value.downloaded;
-			max += value.max;
-		});
-
-		if (max === 0) return;
-
+	const calculateStats = useCallback(async () => {
+		const measurement = await manager.getSpeed(filter)
+		console.dir({
+			measurement,
+			filter,
+			manager
+		})
+		setTotalSize(prev => Math.max(prev, measurement.max))
 		const time = Date.now();
 		const timeString = new Date(time).toLocaleTimeString();
 		setStats((prev) => {
-			if (prev.length > 0) {
-				lastTotal = prev[prev.length - 1].total;
-			}
 			const next = [...prev];
 			next.push({
 				time,
 				timeString,
-				speed: ((currentTotal - lastTotal) * 8) / 1024 / 1024,
-				progress: (100 * currentTotal) / max,
-				total: currentTotal,
-				max,
+				speed: measurement.bytesPerSecond,
+				progress: measurement.progress,
+				total: measurement.total,
+				max: measurement.max,
 			});
 
 			if (next.length > 10) {
@@ -164,14 +144,14 @@ export default function ProfileCreation() {
 			return next;
 		});
 
-		if (currentTotal >= max) {
+		if (measurement.total >= measurement.max) {
 			setDoneCounter((prev) => prev + 1);
 			console.log("Done Counter", doneCounter);
 			return;
 		}
 
 		setDoneCounter(0);
-	}
+	}, [doneCounter, filter, manager]);
 
 	return (
 		<div className="p-4 max-w-screen-lg w-full">
@@ -223,7 +203,7 @@ export default function ProfileCreation() {
 			<div className="flex flex-row justify-between items-start mt-4">
 				<div className="flex flex-row items-center justify-end flex-nowrap gap-2">
 					{bits.map((bit) => (
-						<BitDownload key={bit.id} onDownload={onDownload} bit={bit} />
+						<BitDownload key={bit.id} bit={bit} />
 					))}
 				</div>
 				<div className="flex flex-row flex-wrap gap-2 justify-end items-center">
@@ -231,8 +211,14 @@ export default function ProfileCreation() {
 						{humanFileSize(totalSize)} Total
 					</div>
 					<div className="border p-2 bg-card text-card-foreground">
-						{stats[stats.length - 1]?.speed.toFixed(2) || 0} Mbit / s
+						{humanFileSize((stats[stats.length - 1]?.speed ?? 0))} / s
 					</div>
+					<button onClick={() => {
+						localStorage.setItem("onboarding-done", "true");
+						router.push("/");
+					}} className="border p-2 bg-primary text-primary-foreground hover:bg-background hover:text-foreground transition-all">
+						Background Download
+					</button>
 				</div>
 			</div>
 		</div>
@@ -241,21 +227,12 @@ export default function ProfileCreation() {
 
 function BitDownload({
 	bit,
-	onDownload,
-}: Readonly<{ bit: Bit; onDownload: (progress: IDownloadProgress) => void }>) {
-	useEvent(
-		`download:${bit.hash}`,
-		(event: { payload: IDownloadProgress[] }) => {
-			const lastElement = event.payload.pop();
-			if (lastElement) onDownload(lastElement);
-		},
-		[],
-	);
-
+}: Readonly<{ bit: IBit }>) {
+	const {download} = useDownloadManager()
 	useEffect(() => {
 		const downloadBit = async () => {
 			try {
-				await bit.download();
+				await download(bit);
 			} catch (error) {
 				console.error(error);
 			}

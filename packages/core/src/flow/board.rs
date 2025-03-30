@@ -6,7 +6,7 @@ use crate::{
         hash::hash_string_non_cryptographic,
     },
 };
-use async_trait::async_trait;
+use commands::GenericCommand;
 use object_store::{path::Path, ObjectStore};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -61,9 +61,9 @@ pub struct Board {
     pub parent: Option<BoardParent>,
 
     #[serde(skip)]
-    pub undo_stack: Vec<Vec<Arc<Mutex<dyn Command>>>>,
+    pub undo_stack: Vec<Vec<GenericCommand>>,
     #[serde(skip)]
-    pub redo_stack: Vec<Vec<Arc<Mutex<dyn Command>>>>,
+    pub redo_stack: Vec<Vec<GenericCommand>>,
 
     #[serde(skip)]
     pub board_dir: Path,
@@ -141,11 +141,12 @@ impl Board {
 
     pub async fn execute_command(
         &mut self,
-        command: Arc<Mutex<dyn Command>>,
+        command: GenericCommand,
         state: Arc<Mutex<FlowLikeState>>,
         append: bool,
     ) -> anyhow::Result<()> {
-        command.lock().await.execute(self, state.clone()).await?;
+        let mut command = command;
+        command.execute(self, state.clone()).await?;
 
         match (append, self.undo_stack.last_mut()) {
             (true, Some(last_commands)) => last_commands.push(command),
@@ -159,10 +160,10 @@ impl Board {
     }
 
     pub async fn undo(&mut self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<()> {
-        if let Some(commands) = self.undo_stack.pop() {
+        if let Some(mut commands) = self.undo_stack.pop() {
             let mut redo_commands = vec![];
-            for command in commands.iter().rev() {
-                command.lock().await.undo(self, state.clone()).await?;
+            for command in commands.iter_mut().rev() {
+                command.undo(self, state.clone()).await?;
                 redo_commands.push(command.clone());
             }
             self.redo_stack.push(redo_commands);
@@ -173,10 +174,10 @@ impl Board {
     }
 
     pub async fn redo(&mut self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<()> {
-        if let Some(commands) = self.redo_stack.pop() {
+        if let Some(mut commands) = self.redo_stack.pop() {
             let mut undo_commands = vec![];
-            for command in commands.iter().rev() {
-                command.lock().await.execute(self, state.clone()).await?;
+            for command in commands.iter_mut().rev() {
+                command.execute(self, state.clone()).await?;
                 undo_commands.push(command.clone());
             }
             self.undo_stack.push(undo_commands);
@@ -427,35 +428,6 @@ pub struct Comment {
     comment_type: CommentType,
     timestamp: SystemTime,
     coordinates: (f32, f32, f32),
-}
-
-#[async_trait]
-pub trait Command: Send + Sync {
-    async fn execute(
-        &mut self,
-        board: &mut Board,
-        state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()>;
-    async fn undo(
-        &mut self,
-        board: &mut Board,
-        state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()>;
-
-    async fn node_to_logic(
-        &self,
-        node: &Node,
-        state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<Arc<dyn NodeLogic>> {
-        let node_registry = {
-            let state_guard = state.lock().await;
-            state_guard.node_registry().clone()
-        };
-
-        let registry_guard = node_registry.read().await;
-
-        registry_guard.instantiate(node).await
-    }
 }
 
 #[cfg(test)]

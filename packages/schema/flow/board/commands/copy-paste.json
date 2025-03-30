@@ -1,0 +1,366 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "CopyPasteCommand",
+	"type": "object",
+	"required": [
+		"new_comments",
+		"new_nodes",
+		"offset",
+		"original_comments",
+		"original_nodes"
+	],
+	"properties": {
+		"new_comments": {
+			"type": "array",
+			"items": {
+				"$ref": "#/definitions/Comment"
+			}
+		},
+		"new_nodes": {
+			"type": "array",
+			"items": {
+				"$ref": "#/definitions/Node"
+			}
+		},
+		"offset": {
+			"type": "array",
+			"items": [
+				{
+					"type": "number",
+					"format": "float"
+				},
+				{
+					"type": "number",
+					"format": "float"
+				},
+				{
+					"type": "number",
+					"format": "float"
+				}
+			],
+			"maxItems": 3,
+			"minItems": 3
+		},
+		"original_comments": {
+			"type": "array",
+			"items": {
+				"$ref": "#/definitions/Comment"
+			}
+		},
+		"original_nodes": {
+			"type": "array",
+			"items": {
+				"$ref": "#/definitions/Node"
+			}
+		}
+	},
+	"definitions": {
+		"Comment": {
+			"type": "object",
+			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
+			"properties": {
+				"author": {
+					"type": ["string", "null"]
+				},
+				"comment_type": {
+					"$ref": "#/definitions/CommentType"
+				},
+				"content": {
+					"type": "string"
+				},
+				"coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"id": {
+					"type": "string"
+				},
+				"timestamp": {
+					"$ref": "#/definitions/SystemTime"
+				}
+			}
+		},
+		"CommentType": {
+			"type": "string",
+			"enum": ["Text", "Image", "Video"]
+		},
+		"Node": {
+			"type": "object",
+			"required": [
+				"category",
+				"description",
+				"friendly_name",
+				"id",
+				"name",
+				"pins"
+			],
+			"properties": {
+				"category": {
+					"type": "string"
+				},
+				"comment": {
+					"type": ["string", "null"]
+				},
+				"coordinates": {
+					"type": ["array", "null"],
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"description": {
+					"type": "string"
+				},
+				"docs": {
+					"type": ["string", "null"]
+				},
+				"error": {
+					"type": ["string", "null"]
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"icon": {
+					"type": ["string", "null"]
+				},
+				"id": {
+					"type": "string"
+				},
+				"long_running": {
+					"type": ["boolean", "null"]
+				},
+				"name": {
+					"type": "string"
+				},
+				"pins": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Pin"
+					}
+				},
+				"scores": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/NodeScores"
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"start": {
+					"type": ["boolean", "null"]
+				}
+			}
+		},
+		"NodeScores": {
+			"description": "Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores indicate worse performance in each category.\n\n# Score Categories * `privacy` - Measures data protection and confidentiality level * `security` - Assesses resistance against potential attacks * `performance` - Evaluates computational efficiency and speed * `governance` - Indicates compliance with policies and regulations",
+			"type": "object",
+			"required": ["governance", "performance", "privacy", "security"],
+			"properties": {
+				"governance": {
+					"type": "integer",
+					"format": "int8"
+				},
+				"performance": {
+					"type": "integer",
+					"format": "int8"
+				},
+				"privacy": {
+					"type": "integer",
+					"format": "int8"
+				},
+				"security": {
+					"type": "integer",
+					"format": "int8"
+				}
+			}
+		},
+		"Pin": {
+			"type": "object",
+			"required": [
+				"connected_to",
+				"data_type",
+				"depends_on",
+				"description",
+				"friendly_name",
+				"id",
+				"index",
+				"name",
+				"pin_type",
+				"value_type"
+			],
+			"properties": {
+				"connected_to": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
+				},
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
+				},
+				"default_value": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "integer",
+						"format": "uint8",
+						"minimum": 0.0
+					}
+				},
+				"depends_on": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
+				},
+				"description": {
+					"type": "string"
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"id": {
+					"type": "string"
+				},
+				"index": {
+					"type": "integer",
+					"format": "uint16",
+					"minimum": 0.0
+				},
+				"name": {
+					"type": "string"
+				},
+				"options": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/PinOptions"
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"pin_type": {
+					"$ref": "#/definitions/PinType"
+				},
+				"schema": {
+					"type": ["string", "null"]
+				},
+				"valid_values": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
+				},
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
+				}
+			}
+		},
+		"PinOptions": {
+			"type": "object",
+			"properties": {
+				"enforce_generic_value_type": {
+					"type": ["boolean", "null"]
+				},
+				"enforce_schema": {
+					"type": ["boolean", "null"]
+				},
+				"range": {
+					"type": ["array", "null"],
+					"items": [
+						{
+							"type": "number",
+							"format": "double"
+						},
+						{
+							"type": "number",
+							"format": "double"
+						}
+					],
+					"maxItems": 2,
+					"minItems": 2
+				},
+				"step": {
+					"type": ["number", "null"],
+					"format": "double"
+				},
+				"valid_values": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"PinType": {
+			"type": "string",
+			"enum": ["Input", "Output"]
+		},
+		"SystemTime": {
+			"type": "object",
+			"required": ["nanos_since_epoch", "secs_since_epoch"],
+			"properties": {
+				"nanos_since_epoch": {
+					"type": "integer",
+					"format": "uint32",
+					"minimum": 0.0
+				},
+				"secs_since_epoch": {
+					"type": "integer",
+					"format": "uint64",
+					"minimum": 0.0
+				}
+			}
+		},
+		"ValueType": {
+			"type": "string",
+			"enum": ["Array", "Normal", "HashMap", "HashSet"]
+		},
+		"VariableType": {
+			"type": "string",
+			"enum": [
+				"Execution",
+				"String",
+				"Integer",
+				"Float",
+				"Boolean",
+				"Date",
+				"PathBuf",
+				"Generic",
+				"Struct",
+				"Byte"
+			]
+		}
+	}
+}

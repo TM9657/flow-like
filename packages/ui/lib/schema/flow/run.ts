@@ -5,6 +5,7 @@ export interface IRun {
 	log_level: ILogLevel;
 	start: ISystemTime;
 	status: IRunStatus;
+	sub: string;
 	traces: ITrace[];
 	[property: string]: any;
 }

@@ -1,6 +1,4 @@
 "use client";
-import { useQueryClient } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
 import { useDebounce } from "@uidotdev/usehooks";
 import {
 	Handle,
@@ -22,14 +20,19 @@ import { type IPin, IValueType } from "../../lib/schema/flow/pin";
 import { DynamicImage } from "../ui/dynamic-image";
 import { PinEdit } from "./flow-pin/pin-edit";
 import { typeToColor } from "./utils";
+import { updateNodeCommand } from "../../lib";
+import { useBackend } from "../../state/backend-state";
+import { useInvalidateInvoke } from "../../hooks";
 
 function FlowPinInnerComponent({
 	pin,
 	index,
 	boardId,
+	appId,
 	node,
-}: Readonly<{ pin: IPin; index: number; boardId: string; node: INode }>) {
-	const queryClient = useQueryClient();
+}: Readonly<{ pin: IPin; index: number; boardId: string; appId: string; node: INode }>) {
+	const invalidate = useInvalidateInvoke()
+	const backend = useBackend();
 	const currentNode = useInternalNode(node.id);
 
 	const [defaultValue, setDefaultValue] = useState(pin.default_value);
@@ -75,8 +78,7 @@ function FlowPinInnerComponent({
 		if (debouncedDefaultValue === null) return;
 		if (debouncedDefaultValue === pin.default_value) return;
 		if (!currentNode) return;
-		await invoke("update_node", {
-			boardId: boardId,
+		const command = updateNodeCommand({
 			node: {
 				...node,
 				coordinates: [currentNode.position.x, currentNode.position.y, 0],
@@ -84,10 +86,12 @@ function FlowPinInnerComponent({
 					...node.pins,
 					[pin.id]: { ...pin, default_value: debouncedDefaultValue },
 				},
-			},
-		});
+			}
+		})
+
+		await backend.executeCommand(currentNode.data.appId as string, boardId, command, false)
 		await refetchBoard();
-	}, [debouncedDefaultValue, currentNode]);
+	}, [pin.id, debouncedDefaultValue, currentNode]);
 
 	useEffect(() => {
 		updateNode();
@@ -98,10 +102,8 @@ function FlowPinInnerComponent({
 	}, [pin]);
 
 	const refetchBoard = useCallback(async () => {
-		queryClient.invalidateQueries({
-			queryKey: ["get", "board", boardId],
-		});
-	}, [boardId]);
+		invalidate(backend.getBoard, [appId, boardId])
+	}, [appId, boardId]);
 
 	const pinTypeProps = useMemo(
 		() => ({
@@ -187,12 +189,14 @@ function FlowPin({
 	pin,
 	index,
 	boardId,
+	appId,
 	node,
 	onPinRemove,
 }: Readonly<{
 	pin: IPin;
 	index: number;
 	boardId: string;
+	appId: string;
 	node: INode;
 	onPinRemove: (pin: IPin) => Promise<void>;
 }>) {
@@ -200,7 +204,7 @@ function FlowPin({
 		return (
 			<ContextMenu>
 				<ContextMenuTrigger>
-					<FlowPinInner pin={pin} index={index} boardId={boardId} node={node} />
+					<FlowPinInner appId={appId} pin={pin} index={index} boardId={boardId} node={node} />
 				</ContextMenuTrigger>
 				<ContextMenuContent>
 					<ContextMenuLabel>Pin Actions</ContextMenuLabel>
@@ -215,7 +219,7 @@ function FlowPin({
 			</ContextMenu>
 		);
 
-	return <FlowPinInner pin={pin} index={index} boardId={boardId} node={node} />;
+	return <FlowPinInner appId={appId} pin={pin} index={index} boardId={boardId} node={node} />;
 }
 
 const pin = memo(FlowPin);

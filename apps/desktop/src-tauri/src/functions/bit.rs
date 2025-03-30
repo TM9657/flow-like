@@ -9,17 +9,12 @@ use tauri::AppHandle;
 #[tauri::command(async)]
 pub async fn get_bit_by_id(
     app_handle: AppHandle,
-    bit: (String, String),
+    bit: String,
     hub: Option<String>,
 ) -> Result<Bit, TauriFunctionError> {
     let profile = TauriSettingsState::current_profile(&app_handle).await?;
     let http_client = TauriFlowLikeState::http_client(&app_handle).await?;
-    if hub.is_some() {
-        let hub = Hub::new(&format!("https://{}", hub.unwrap()), http_client).await?;
-        let bit = hub.get_bit_by_id(&bit.0).await?;
-        return Ok(bit);
-    }
-    let bit = profile.hub_profile.get_bit(bit, http_client).await?;
+    let bit = profile.hub_profile.get_bit(bit, hub, http_client).await?;
     Ok(bit)
 }
 

@@ -1,0 +1,49 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "MoveNodeCommand",
+	"type": "object",
+	"required": ["node_id", "to_coordinates"],
+	"properties": {
+		"from_coordinates": {
+			"type": ["array", "null"],
+			"items": [
+				{
+					"type": "number",
+					"format": "float"
+				},
+				{
+					"type": "number",
+					"format": "float"
+				},
+				{
+					"type": "number",
+					"format": "float"
+				}
+			],
+			"maxItems": 3,
+			"minItems": 3
+		},
+		"node_id": {
+			"type": "string"
+		},
+		"to_coordinates": {
+			"type": "array",
+			"items": [
+				{
+					"type": "number",
+					"format": "float"
+				},
+				{
+					"type": "number",
+					"format": "float"
+				},
+				{
+					"type": "number",
+					"format": "float"
+				}
+			],
+			"maxItems": 3,
+			"minItems": 3
+		}
+	}
+}

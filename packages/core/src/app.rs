@@ -12,6 +12,19 @@ use crate::{
     utils::compression::{compress_to_file, from_compressed},
 };
 
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+pub enum StandardInterfaces {
+    Chat,
+    Search,
+    Form,
+    List,
+}
+
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+pub struct FrontendConfiguration {
+    pub landing_page: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct App {
     pub id: String,
@@ -23,6 +36,8 @@ pub struct App {
 
     pub updated_at: SystemTime,
     pub created_at: SystemTime,
+
+    pub frontend: Option<FrontendConfiguration>,
 
     #[serde(skip)]
     pub app_state: Option<Arc<Mutex<FlowLikeState>>>,
@@ -39,6 +54,7 @@ impl Clone for App {
             updated_at: self.updated_at,
             created_at: self.created_at,
             app_state: self.app_state.clone(),
+            frontend: self.frontend.clone(),
         }
     }
 }
@@ -62,6 +78,7 @@ impl App {
             boards: vec![],
             updated_at: SystemTime::now(),
             created_at: SystemTime::now(),
+            frontend: None,
 
             app_state: Some(app_state.clone()),
         };
@@ -240,6 +257,7 @@ mod tests {
             updated_at: std::time::SystemTime::now(),
             created_at: std::time::SystemTime::now(),
             app_state: Some(flow_state().await),
+            frontend: None,
         };
 
         let ser = bitcode::serialize(&vault).unwrap();

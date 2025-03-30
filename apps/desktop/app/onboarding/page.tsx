@@ -1,6 +1,6 @@
 "use client";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { Bit, Button, useInvoke } from "@tm9657/flow-like-ui";
+import { Bit, Button } from "@tm9657/flow-like-ui";
 import {
 	Avatar,
 	AvatarFallback,
@@ -12,13 +12,14 @@ import { humanFileSize } from "@tm9657/flow-like-ui/lib/utils";
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { ArrowBigRight } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTauriInvoke } from "../../components/useInvoke";
 
 export default function Onboarding() {
 	const [profiles, setProfiles] = useState<[ISettingsProfile, IBit[]][]>([]);
 	const [route, setRoute] = useState("");
 	const [totalSize, setTotalSize] = useState(0);
 	const defaultProfiles: UseQueryResult<[ISettingsProfile, IBit[]][]> =
-		useInvoke("get_default_profiles", {});
+		useTauriInvoke("get_default_profiles", {});
 	const [activeProfiles, setActiveProfiles] = useState<string[]>([]);
 
 	async function calculateSize() {

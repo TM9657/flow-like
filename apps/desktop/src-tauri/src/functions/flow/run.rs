@@ -11,6 +11,7 @@ use crate::{
 #[tauri::command(async)]
 pub async fn create_run(
     app_handle: AppHandle,
+    app_id: String,
     board_id: String,
     start_ids: Vec<String>,
 ) -> Result<String, TauriFunctionError> {
@@ -37,8 +38,13 @@ pub async fn create_run(
 }
 
 #[tauri::command(async)]
-pub async fn execute_run(app_handle: AppHandle, id: String) -> Result<(), TauriFunctionError> {
-    let (run, flow_like_state) = TauriFlowLikeState::get_run_and_state(&app_handle, &id).await?;
+pub async fn execute_run(
+    app_handle: AppHandle,
+    app_id: String,
+    run_id: String,
+) -> Result<(), TauriFunctionError> {
+    let (run, flow_like_state) =
+        TauriFlowLikeState::get_run_and_state(&app_handle, &run_id).await?;
     let mut run = run.lock().await;
     run.execute(flow_like_state).await;
     Ok(())
@@ -65,8 +71,12 @@ pub async fn get_run_status(
 }
 
 #[tauri::command(async)]
-pub async fn get_run(app_handle: AppHandle, id: String) -> Result<Run, TauriFunctionError> {
-    let (run, _) = TauriFlowLikeState::get_run_and_state(&app_handle, &id).await?;
+pub async fn get_run(
+    app_handle: AppHandle,
+    app_id: String,
+    run_id: String,
+) -> Result<Run, TauriFunctionError> {
+    let (run, _) = TauriFlowLikeState::get_run_and_state(&app_handle, &run_id).await?;
     let run = run.lock().await;
 
     let run = run.get_run().await;
@@ -85,12 +95,16 @@ pub async fn get_run_traces(
 }
 
 #[tauri::command(async)]
-pub async fn finalize_run(app_state: AppHandle, id: String) -> Result<(), TauriFunctionError> {
+pub async fn finalize_run(
+    app_state: AppHandle,
+    app_id: String,
+    run_id: String,
+) -> Result<(), TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_state).await?;
     flow_like_state
         .lock()
         .await
-        .remove_run(&id)
+        .remove_run(&run_id)
         .ok_or(TauriFunctionError::new("Run not found"))?;
     Ok(())
 }

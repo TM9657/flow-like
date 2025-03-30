@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import { FileIcon, FolderIcon, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
@@ -10,19 +8,20 @@ import type { IVariable } from "../../../lib/schema/flow/variable";
 import { convertJsonToUint8Array } from "../../../lib/uint8";
 import { cn } from "../../../lib/utils";
 import { FileList } from "./pathbuf-list";
+import { useBackend } from "../../../state/backend-state";
 
 export function PathbufVariable({
 	variable,
 	onChange,
 }: Readonly<{ variable: IVariable; onChange: (variable: IVariable) => void }>) {
+	const backend = useBackend()
 	const [files, setFiles] = useState<IFileMetadata[]>([]);
 	const [folder, setFolder] = useState<string | undefined>();
 	const [isFolder, setIsFolder] = useState<boolean>(false);
 
 	async function loadFiles() {
-		const files: IFileMetadata[] = await invoke("get_folder_meta", {
-			folderPath: folder,
-		});
+		if (!folder) return;
+		const files = await backend.getPathMeta(folder);
 		setFiles(files);
 	}
 
@@ -57,24 +56,18 @@ export function PathbufVariable({
 								files.length === 0 && "text-muted-foreground",
 							)}
 							onClick={async () => {
-								const pathBuf: any = await open({
-									multiple: false,
-									directory: isFolder,
-									recursive: true,
-								});
+								const pathBuf: any = await backend.openFileOrFolderMenu(false, isFolder, true);
 								if (!pathBuf) return;
 
 								if (!isFolder) {
 									console.dir(pathBuf);
-									const fileMetadata = await invoke<IFileMetadata>(
-										"get_file_meta",
-										{ filePath: pathBuf },
-									);
-									setFiles([fileMetadata]);
+									const fileMetadata = await backend.getPathMeta(pathBuf);
+									if (!fileMetadata || fileMetadata.length === 0) return;
+									setFiles([fileMetadata[0]]);
 									onChange({
 										...variable,
 										default_value: convertJsonToUint8Array(
-											fileMetadata.file_path,
+											fileMetadata[0].file_path,
 										),
 									});
 									return;

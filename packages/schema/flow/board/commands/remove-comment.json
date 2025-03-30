@@ -1,0 +1,73 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "RemoveCommentCommand",
+	"type": "object",
+	"required": ["comment"],
+	"properties": {
+		"comment": {
+			"$ref": "#/definitions/Comment"
+		}
+	},
+	"definitions": {
+		"Comment": {
+			"type": "object",
+			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
+			"properties": {
+				"author": {
+					"type": ["string", "null"]
+				},
+				"comment_type": {
+					"$ref": "#/definitions/CommentType"
+				},
+				"content": {
+					"type": "string"
+				},
+				"coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"id": {
+					"type": "string"
+				},
+				"timestamp": {
+					"$ref": "#/definitions/SystemTime"
+				}
+			}
+		},
+		"CommentType": {
+			"type": "string",
+			"enum": ["Text", "Image", "Video"]
+		},
+		"SystemTime": {
+			"type": "object",
+			"required": ["nanos_since_epoch", "secs_since_epoch"],
+			"properties": {
+				"nanos_since_epoch": {
+					"type": "integer",
+					"format": "uint32",
+					"minimum": 0.0
+				},
+				"secs_since_epoch": {
+					"type": "integer",
+					"format": "uint64",
+					"minimum": 0.0
+				}
+			}
+		}
+	}
+}

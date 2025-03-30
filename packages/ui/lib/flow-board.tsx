@@ -8,6 +8,8 @@ import { type IBoard, type IComment, ICommentType } from "./schema/flow/board";
 import type { INode } from "./schema/flow/node";
 import type { IPin } from "./schema/flow/pin";
 import type { IRun, ITrace } from "./schema/flow/run";
+import type { IGeneric } from "./schema";
+import { copyPasteCommand, upsertCommentCommand } from "./command/generic-command";
 
 export function isValidConnection(
 	connection: any,
@@ -70,8 +72,6 @@ export function doPinsMatch(
 	if (sourcePin.value_type !== targetPin.value_type) return false;
 	if (sourcePin.data_type !== targetPin.data_type) return false;
 
-	console.log("true");
-
 	return true;
 }
 
@@ -86,9 +86,10 @@ function hashNode(node: INode | IComment, traces?: ITrace[]) {
 
 export function parseBoard(
 	board: IBoard,
+	appId: string,
 	executeBoard: (node: INode) => Promise<void>,
 	openTraces: (node: INode, traces: ITrace[]) => Promise<void>,
-	executeCommand: (command: string, args: any, append: boolean) => Promise<any>,
+	executeCommand: (command: IGeneric, append: boolean) => Promise<any>,
 	selected: Set<string>,
 	run?: IRun,
 	connectionMode?: string,
@@ -137,6 +138,7 @@ export function parseBoard(
 					node: node,
 					hash: hash,
 					boardId: board.id,
+					appId: appId,
 					onExecute: async (node: INode) => {
 						await executeBoard(node);
 					},
@@ -201,12 +203,15 @@ export function parseBoard(
 				boardId: board.id,
 				hash: hash,
 				comment: comment,
-				onUpsert: (comment: IComment) =>
+				onUpsert: (comment: IComment) => {
+					const command = upsertCommentCommand({
+						comment: comment,
+					})
 					executeCommand(
-						"upsert_comment",
-						{ boardId: board.id, comment: comment },
+						command,
 						false,
-					),
+					)
+				}
 			},
 			selected: selected.has(comment.id),
 		});
@@ -259,8 +264,7 @@ export async function handlePaste(
 	cursorPosition: { x: number; y: number },
 	boardId: string,
 	executeCommand: (
-		command: string,
-		args: any,
+		command: IGeneric,
 		append?: boolean,
 	) => Promise<any>,
 ) {
@@ -283,12 +287,14 @@ export async function handlePaste(
 		const nodes: any[] = data.nodes;
 		const comments: any[] = data.comments;
 
-		await executeCommand("paste_nodes_to_board", {
-			boardId: boardId,
-			nodes: nodes,
-			comments: comments,
+		let command = copyPasteCommand({
+			original_comments: comments,
+			original_nodes: nodes,
+			new_comments: [],
+			new_nodes: [],
 			offset: [cursorPosition.x, cursorPosition.y, 0],
-		});
+		})
+		await executeCommand(command);
 		return;
 	} catch (error) {}
 
@@ -304,10 +310,12 @@ export async function handlePaste(
 				secs_since_epoch: 0,
 			},
 		};
-		await executeCommand("upsert_comment", {
-			boardId: boardId,
+
+		let command = upsertCommentCommand({
 			comment: comment,
-		});
+		})
+
+		await executeCommand(command);
 		return;
 	} catch (error) {}
 }

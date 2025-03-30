@@ -3,6 +3,7 @@ export interface IApp {
 	bits: string[];
 	boards: string[];
 	created_at: ISystemTime;
+	frontend?: null | IFrontendConfiguration;
 	id: string;
 	meta: { [key: string]: IBitMeta };
 	updated_at: ISystemTime;
@@ -12,6 +13,11 @@ export interface IApp {
 export interface ISystemTime {
 	nanos_since_epoch: number;
 	secs_since_epoch: number;
+	[property: string]: any;
+}
+
+export interface IFrontendConfiguration {
+	landing_page?: null | string;
 	[property: string]: any;
 }
 

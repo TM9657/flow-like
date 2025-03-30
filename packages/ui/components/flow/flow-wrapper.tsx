@@ -5,7 +5,7 @@ import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { FlowBoard } from "./flow-board";
 
-export function FlowWrapper({ boardId }: Readonly<{ boardId: string }>) {
+export function FlowWrapper({ boardId, appId }: Readonly<{ boardId: string, appId: string }>) {
 	const mouseSensor = useSensor(MouseSensor, {
 		activationConstraint: {
 			distance: 10,
@@ -50,7 +50,7 @@ export function FlowWrapper({ boardId }: Readonly<{ boardId: string }>) {
 				});
 			}}
 		>
-			<FlowBoard boardId={boardId} />
+			<FlowBoard boardId={boardId} appId={appId} />
 			<Dialog
 				open={detail !== undefined}
 				onOpenChange={(open) => {

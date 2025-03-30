@@ -1,8 +1,7 @@
 "use client";
 
 import type { UseQueryResult } from "@tanstack/react-query";
-import type { Bit } from "@tm9657/flow-like-ui";
-import { Button, Input, useInvoke } from "@tm9657/flow-like-ui";
+import { Button, IBitTypes, Input, useBackend, useInvoke } from "@tm9657/flow-like-ui";
 import {
 	BentoGrid,
 	BentoGridItem,
@@ -21,26 +20,32 @@ import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { ListFilter, Search } from "lucide-react";
 import MiniSearch from "minisearch";
 import { useState } from "react";
+import { useTauriInvoke } from "../../../components/useInvoke";
 
 let counter = 0;
 
 export default function SettingsPage() {
-	const profile: UseQueryResult<ISettingsProfile> = useInvoke(
+	const backend = useBackend()
+
+	const profile: UseQueryResult<ISettingsProfile> = useTauriInvoke(
 		"get_current_profile",
 		{},
 	);
-	const llms: UseQueryResult<Bit[]> = useInvoke(
-		"get_bits_by_category",
-		{ bitType: "Llm" },
-		["Llm", profile.data?.hub_profile.id ?? ""],
+
+	const llms = useInvoke(
+			backend.getBitsByCategory,
+			[IBitTypes.Llm],
+			typeof profile.data !== "undefined",
+			[profile.data?.hub_profile.id ?? ""],
+		);
+
+	const vlms = useInvoke(
+		backend.getBitsByCategory,
+		[IBitTypes.Vlm],
 		typeof profile.data !== "undefined",
+		[profile.data?.hub_profile.id ?? ""],
 	);
-	const vlms: UseQueryResult<Bit[]> = useInvoke(
-		"get_bits_by_category",
-		{ bitType: "Vlm" },
-		["Vlm", profile.data?.hub_profile.id ?? ""],
-		typeof profile.data !== "undefined",
-	);
+
 	const [searchFilter, setSearchFilter] = useState<{
 		search: string;
 		index: MiniSearch;

@@ -170,12 +170,24 @@ impl Profile {
 
     pub async fn get_bit(
         &self,
-        bit: (String, String),
+        bit: String,
+        hub: Option<String>,
         http_client: Arc<HTTPClient>,
     ) -> Result<Bit> {
-        let (hub_id, bit_id) = bit;
-        let hub = Hub::new(&hub_id, http_client).await?;
-        hub.get_bit_by_id(&bit_id).await
+        if hub.is_some() {
+            let hub = Hub::new(&format!("https://{}", hub.unwrap()), http_client).await?;
+            let bit = hub.get_bit_by_id(&bit).await?;
+            return Ok(bit);
+        }
+
+        let hubs = self.get_available_hubs(http_client).await?;
+        for hub in hubs {
+            let bit = hub.get_bit_by_id(&bit).await;
+            if let Ok(bit) = bit {
+                return Ok(bit);
+            }
+        }
+        Err(anyhow::anyhow!("Bit not found"))
     }
 
     pub async fn find_bit(&self, bit_id: &str, http_client: Arc<HTTPClient>) -> Result<Bit> {

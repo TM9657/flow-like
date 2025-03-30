@@ -1,16 +1,17 @@
 use async_trait::async_trait;
+use schemars::JsonSchema;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::{
-    flow::board::{Board, Command},
+    flow::board::{commands::Command, Board},
     state::FlowLikeState,
 };
 use serde::{Deserialize, Serialize};
 
 use super::connect_pins::{connect_pins, disconnect_pins};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DisconnectPinsCommand {
     pub from_pin: String,
     pub to_pin: String,

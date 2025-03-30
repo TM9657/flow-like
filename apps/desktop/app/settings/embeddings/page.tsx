@@ -1,7 +1,6 @@
 "use client";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { useInvoke } from "@tm9657/flow-like-ui";
-import type { Bit } from "@tm9657/flow-like-ui";
+import { Bit, IBitTypes, useBackend, useInvoke } from "@tm9657/flow-like-ui";
 import {
 	BentoGrid,
 	BentoGridItem,
@@ -10,25 +9,27 @@ import { BitCard } from "@tm9657/flow-like-ui/components/ui/bit-card";
 import { Skeleton } from "@tm9657/flow-like-ui/components/ui/skeleton";
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { useEffect, useState } from "react";
+import { useTauriInvoke } from "../../../components/useInvoke";
 
 let counter = 0;
 
 export default function Page() {
-	const profile: UseQueryResult<ISettingsProfile> = useInvoke(
+	const backend = useBackend()
+	const profile: UseQueryResult<ISettingsProfile> = useTauriInvoke(
 		"get_current_profile",
 		{},
 	);
-	const embeddingModels: UseQueryResult<Bit[]> = useInvoke(
-		"get_bits_by_category",
-		{ bitType: "Embedding" },
-		["Embedding", profile.data?.hub_profile.id ?? ""],
+	const embeddingModels = useInvoke(
+		backend.getBitsByCategory,
+		[IBitTypes.Embedding],
 		typeof profile.data !== "undefined",
+		[profile.data?.hub_profile.id ?? ""],
 	);
-	const imageEmbeddingModels: UseQueryResult<Bit[]> = useInvoke(
-		"get_bits_by_category",
-		{ bitType: "ImageEmbedding" },
-		["ImageEmbedding", profile.data?.hub_profile.id ?? ""],
+	const imageEmbeddingModels = useInvoke(
+		backend.getBitsByCategory,
+		[IBitTypes.ImageEmbedding],
 		typeof profile.data !== "undefined",
+		[profile.data?.hub_profile.id ?? ""],
 	);
 
 	const [blacklist, setBlacklist] = useState(new Set<string>());
@@ -37,7 +38,7 @@ export default function Page() {
 		if (!(embeddingModels.data && imageEmbeddingModels.data)) return;
 
 		const dependencies = await Promise.all(
-			imageEmbeddingModels.data.map((bit) => bit.fetchDependencies()),
+			imageEmbeddingModels.data.map((bit) => Bit.fromObject(bit).setBackend(backend).fetchDependencies()),
 		);
 		const blacklist = new Set<string>(
 			dependencies.flatMap((dep) =>

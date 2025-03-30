@@ -1,7 +1,7 @@
 "use client";
 
 import { useDebounce } from "@uidotdev/usehooks";
-import { type Node, type NodeProps, useNodes } from "@xyflow/react";
+import { type Node, type NodeProps } from "@xyflow/react";
 import {
 	ClockIcon,
 	PlayCircleIcon,
@@ -9,7 +9,7 @@ import {
 	WorkflowIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 import { toastSuccess } from "../../../lib/messages";
 import type { INode } from "../../../lib/schema/flow/node";
@@ -47,17 +47,6 @@ export function PreviewFlowNode(props: NodeProps<FlowNode>) {
 	>("none");
 	const debouncedExecutionState = useDebounce(executionState, 100);
 	const div = useRef<HTMLDivElement>(null);
-	const nodes = useNodes();
-	const scope = useMemo(() => {
-		const selected = nodes.filter((node) => node.selected);
-		const self = selected.find((node) => node.id === props.id);
-		if (!self) {
-			return [...selected, nodes.filter((node) => node.id === props.id)[0]];
-		}
-
-		return selected;
-	}, [nodes]);
-
 	function sortPins(a: IPin, b: IPin) {
 		// Step 1: Compare by type - Input comes before Output
 		if (a.pin_type === "Input" && b.pin_type === "Output") return -1;

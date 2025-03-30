@@ -33,6 +33,16 @@
 		"created_at": {
 			"$ref": "#/definitions/SystemTime"
 		},
+		"frontend": {
+			"anyOf": [
+				{
+					"$ref": "#/definitions/FrontendConfiguration"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
 		"id": {
 			"type": "string"
 		},
@@ -74,6 +84,14 @@
 				},
 				"use_case": {
 					"type": "string"
+				}
+			}
+		},
+		"FrontendConfiguration": {
+			"type": "object",
+			"properties": {
+				"landing_page": {
+					"type": ["string", "null"]
 				}
 			}
 		},

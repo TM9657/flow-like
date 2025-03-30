@@ -2,18 +2,19 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     flow::{
-        board::{Board, Command, Comment},
+        board::{commands::Command, Board, Comment},
         node::Node,
     },
     state::FlowLikeState,
 };
 use async_trait::async_trait;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cuid2;
 use tokio::sync::Mutex;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct CopyPasteCommand {
     pub original_nodes: Vec<Node>,
     pub original_comments: Vec<Comment>,

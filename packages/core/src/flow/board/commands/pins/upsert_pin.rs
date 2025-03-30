@@ -1,17 +1,18 @@
 use async_trait::async_trait;
+use schemars::JsonSchema;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::{
     flow::{
-        board::{Board, Command},
+        board::{commands::Command, Board},
         pin::Pin,
     },
     state::FlowLikeState,
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct UpsertPinCommand {
     pub node_id: String,
     pub pin: Pin,

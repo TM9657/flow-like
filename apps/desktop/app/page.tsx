@@ -1,7 +1,7 @@
 "use client";
 import {
-	type ISettingsProfile,
 	Skeleton,
+	useBackend,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
 import { useRouter } from "next/navigation";
@@ -9,7 +9,8 @@ import { useEffect } from "react";
 import { TutorialDialog } from "../components/tutorial-dialog";
 
 export default function Home() {
-	const profile = useInvoke<ISettingsProfile>("get_current_profile", {});
+	const backend = useBackend();
+	const profile = useInvoke(backend.getSettingsProfile, []);
 	const router = useRouter();
 
 	function checkOnboarding() {

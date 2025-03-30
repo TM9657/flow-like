@@ -1,37 +1,42 @@
 import { create } from "zustand";
 import type {
+	Download,
+	IApp,
 	IBit,
-	IComment,
+	IBitPack,
+	IBitTypes,
+	IBoard,
 	IDownloadProgress,
 	IExecutionStage,
 	IFileMetadata,
+	IGeneric,
 	ILogLevel,
 	INode,
 	IProfile,
 	IRun,
 } from "../lib";
 import type { IRunUpdateEvent } from "./run-execution-state";
+import type { ISettingsProfile } from "../types";
 
 export interface IBackendState {
+	getApps(): Promise<IApp[]>;
+	getApp(appId: string): Promise<IApp>;
+	getBoards(appId: string): Promise<IBoard[]>;
 	getCatalog(): Promise<INode[]>;
-	getBoard(id: string): Promise<INode>;
+	getBoard(appId: string, boardId: string): Promise<IBoard>;
 	// [BoardId, BoardName]
 	getOpenBoards(): Promise<[string, string][]>;
 	getBoardSettings(): Promise<"straight" | "step" | "simpleBezier">;
 
-	createRun(boardId: string, startIds: string[]): Promise<string>;
-	executeRun(runId: string): Promise<void>;
-	getRun(runId: string): Promise<IRun>;
-	finalizeRun(runId: string): Promise<void>;
-	onRunUpdate(
-		runId: string,
-		callback: (run: IRun) => IRunUpdateEvent[],
-	): () => void;
-
-	undoBoard(boardId: string): Promise<void>;
-	redoBoard(boardId: string): Promise<void>;
+	createRun(appId: string, boardId: string, startIds: string[]): Promise<string>;
+	executeRun(appId: string, runId: string, cb?: (event: IRunUpdateEvent[]) => void): Promise<void>;
+	getRun(appId: string, runId: string): Promise<IRun>;
+	finalizeRun(appId: string, runId: string): Promise<void>;
+	undoBoard(appId: string, boardId: string): Promise<void>;
+	redoBoard(appId: string, boardId: string): Promise<void>;
 
 	updateBoardMeta(
+		appId: string,
 		boardId: string,
 		name: string,
 		description: string,
@@ -43,46 +48,18 @@ export interface IBackendState {
 
 	// Profile Operations
 	getProfile(): Promise<IProfile>;
+	getSettingsProfile(): Promise<ISettingsProfile>;
 
 	// Board Operations
-	upsertComment(
+	executeCommand(
+		appId: string,
 		boardId: string,
-		comment: IComment,
-		append: boolean,
-	): Promise<void>;
-	updateNode(boardId: string, node: INode, append: boolean): Promise<void>;
-	moveNode(
-		boardId: string,
-		nodeId: string,
-		coordinates: [number, number, number],
-		append: boolean,
-	): Promise<void>;
-	addNodeToBoard(boardId: string, node: INode, append: boolean): Promise<INode>;
-	connectPins(
-		boardId: string,
-		fromNode: string,
-		fromPin: string,
-		toNode: string,
-		toPin: string,
-		append: boolean,
-	): Promise<void>;
-	disconnectPins(
-		boardId: string,
-		fromNode: string,
-		fromPin: string,
-		toNode: string,
-		toPin: string,
-		append: boolean,
-	): Promise<void>;
-	removeNode(boardId: string, nodeId: INode, append: boolean): Promise<void>;
-	removeComment(
-		boardId: string,
-		commentId: IComment,
+		command: IGeneric,
 		append: boolean,
 	): Promise<void>;
 
 	// Additional Functionality
-	gefFolderMeta(folderPath: string): Promise<IFileMetadata[]>;
+	getPathMeta(folderPath: string): Promise<IFileMetadata[]>;
 	openFileOrFolderMenu(
 		multiple: boolean,
 		directory: boolean,
@@ -93,14 +70,18 @@ export interface IBackendState {
 	getPackFromBit(bit: IBit): Promise<{
 		bits: IBit[];
 	}>;
-	downloadBit(bit: IBit): Promise<void>;
+	downloadBit(bit: IBit, pack: IBitPack, cb?: (progress: IDownloadProgress[]) => void): Promise<IBit[]>;
+	deleteBit(bit: IBit): Promise<void>;
+	getBit(id: string, hub?: string): Promise<IBit>;
+	addBit(bit: IBit, profile: ISettingsProfile): Promise<void>;
+	removeBit(bit: IBit, profile: ISettingsProfile): Promise<void>;
 	getPackSize(bits: IBit[]): Promise<number>;
 	getBitSize(bit: IBit): Promise<number>;
+	getBitsByCategory(type: IBitTypes): Promise<IBit[]>;
 	isBitInstalled(bit: IBit): Promise<boolean>;
-	onBitInstallProgress(
-		callback: (progress: IDownloadProgress) => void,
-	): () => void;
 }
+
+
 
 interface BackendStoreState {
 	backend: IBackendState | null;
