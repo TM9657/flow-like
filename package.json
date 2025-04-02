@@ -6,10 +6,13 @@
 	"scripts": {
 		"dev:desktop": "bun run --cwd ./apps/desktop dev:all",
 		"dev:backend": "bun run --cwd ./apps/backend dev",
+		"dev:embedded": "bun run --cwd ./apps/embedded dev",
 		"dev:website": "bun run --cwd ./apps/website dev",
 		"dev:docs": "bun run --cwd ./apps/docs dev",
 		"build:desktop": "bun run --cwd ./apps/desktop tauri build",
 		"build:docs": "bun run --cwd ./apps/docs build",
+		"build:embedded": "bun run --cwd ./apps/embedded build",
+		"deploy:embedded": "bun run --cwd ./apps/embedded deploy",
 		"deploy:docs": "bun run --cwd ./apps/docs deploy",
 		"deploy:docs:force": "bun run --cwd ./apps/docs deploy:force",
 		"postinstall": "cargo install cargo-license cargo-watch systemfd",
