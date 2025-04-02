@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import type {
-	Download,
 	IApp,
 	IBit,
 	IBitPack,
@@ -13,7 +12,7 @@ import type {
 	ILogLevel,
 	INode,
 	IProfile,
-	IRun,
+	IRun
 } from "../lib";
 import type { ISettingsProfile } from "../types";
 import type { IRunUpdateEvent } from "./run-execution-state";
@@ -40,8 +39,8 @@ export interface IBackendState {
 	): Promise<void>;
 	getRun(appId: string, runId: string): Promise<IRun>;
 	finalizeRun(appId: string, runId: string): Promise<void>;
-	undoBoard(appId: string, boardId: string): Promise<void>;
-	redoBoard(appId: string, boardId: string): Promise<void>;
+	undoBoard(appId: string, boardId: string, commands: IGeneric[]): Promise<void>;
+	redoBoard(appId: string, boardId: string, commands: IGeneric[]): Promise<void>;
 
 	updateBoardMeta(
 		appId: string,
@@ -63,8 +62,13 @@ export interface IBackendState {
 		appId: string,
 		boardId: string,
 		command: IGeneric,
-		append: boolean,
-	): Promise<void>;
+	): Promise<IGeneric>;
+
+	executeCommands(
+		appId: string,
+		boardId: string,
+		commands: IGeneric[],
+	): Promise<IGeneric[]>;
 
 	// Additional Functionality
 	getPathMeta(folderPath: string): Promise<IFileMetadata[]>;

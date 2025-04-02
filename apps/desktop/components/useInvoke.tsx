@@ -1,4 +1,4 @@
-import { type UseQueryResult, useQuery } from "@tanstack/react-query";
+import { type UseQueryResult, useQuery } from "@tm9657/flow-like-ui";
 import { invoke } from "@tauri-apps/api/core";
 
 export function useTauriInvoke<T>(

@@ -103,10 +103,12 @@ import {
 	Separator,
 	Textarea,
 } from "../ui";
+import { useUndoRedo } from "./flow-history";
 export function FlowBoard({
 	appId,
 	boardId,
 }: Readonly<{ appId: string; boardId: string }>) {
+	const { pushCommand, pushCommands, redo, undo } = useUndoRedo(appId, boardId);
 	const router = useRouter();
 	const backend = useBackend();
 	const selected = useRef(new Set<string>());
@@ -160,13 +162,25 @@ export function FlowBoard({
 				appId,
 				boardId,
 				command,
-				append,
 			);
+			await pushCommand(result, append);
 			await board.refetch();
 			return result;
 		},
 		[board.refetch],
 	);
+
+	const executeCommands = useCallback(async (commands: IGeneric[]) => {
+		if (commands.length === 0) return;
+		const result = await backend.executeCommands(
+			appId,
+			boardId,
+			commands
+		);
+		await pushCommands(result);
+		await board.refetch();
+		return result;
+	}, [board.refetch])
 
 	useEffect(() => {
 		if (!logPanelRef.current) return;
@@ -257,7 +271,8 @@ export function FlowBoard({
 			) {
 				event.preventDefault();
 				event.stopPropagation();
-				await backend.undoBoard(appId, boardId);
+				const stack = await undo();
+				if(stack) await backend.undoBoard(appId, boardId, stack);
 				toastSuccess("Undo", <Undo2Icon className="w-4 h-4" />);
 				await board.refetch();
 				return;
@@ -267,7 +282,8 @@ export function FlowBoard({
 			if ((event.metaKey || event.ctrlKey) && event.key === "y") {
 				event.preventDefault();
 				event.stopPropagation();
-				await backend.redoBoard(appId, boardId);
+				const stack = await redo();
+				if(stack) await backend.redoBoard(appId, boardId, stack);
 				toastSuccess("Redo", <Redo2Icon className="w-4 h-4" />);
 				await board.refetch();
 			}
@@ -479,17 +495,7 @@ export function FlowBoard({
 	);
 	const { screenToFlowPosition } = useReactFlow();
 
-	async function executeCommands(commands: IGeneric[]) {
-		let first = true;
-		for (const command of commands) {
-			await backend.executeCommand(appId, boardId, command, !first);
-			first = false;
-		}
-		if (commands.length > 0) {
-			await board.refetch();
-			console.log("Refetched board, execute commands");
-		}
-	}
+
 
 	const onConnect = useCallback(
 		(params: any) =>
@@ -591,7 +597,7 @@ export function FlowBoard({
 
 				return applyNodeChanges(changes, nds);
 			}),
-		[setNodes, board.data, boardId],
+		[setNodes, board.data, boardId, executeCommands],
 	);
 
 	const onEdgesChange: OnEdgesChange = useCallback(

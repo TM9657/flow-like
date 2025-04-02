@@ -1,6 +1,5 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
 	Button,
@@ -22,7 +21,6 @@ export default function Id() {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 	const searchParams = useSearchParams();
-	const queryClient = useQueryClient();
 	const router = useRouter();
 	const id = searchParams.get("id");
 	const app = useInvoke(backend.getApp, [id ?? ""], typeof id === "string");

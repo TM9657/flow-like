@@ -1,6 +1,6 @@
 "use client";
 
-import type { UseQueryResult } from "@tanstack/react-query";
+import type { UseQueryResult } from "@tm9657/flow-like-ui";
 import {
 	Button,
 	IBitTypes,

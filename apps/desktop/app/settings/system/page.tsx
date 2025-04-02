@@ -1,5 +1,5 @@
 "use client";
-import type { UseQueryResult } from "@tanstack/react-query";
+import type { UseQueryResult } from "@tm9657/flow-like-ui";
 import { humanFileSize } from "@tm9657/flow-like-ui/lib/utils";
 import type { ISystemInfo } from "@tm9657/flow-like-ui/types";
 import { useTauriInvoke } from "../../../components/useInvoke";

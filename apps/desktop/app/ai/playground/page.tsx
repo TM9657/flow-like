@@ -1,10 +1,10 @@
 "use client";
 import { createId } from "@paralleldrive/cuid2";
 import { Label } from "@radix-ui/react-context-menu";
-import type { UseQueryResult } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
 import {
+	type UseQueryResult,
 	type Bit,
 	Button,
 	Card,

@@ -61,11 +61,6 @@ pub struct Board {
     pub parent: Option<BoardParent>,
 
     #[serde(skip)]
-    pub undo_stack: Vec<Vec<GenericCommand>>,
-    #[serde(skip)]
-    pub redo_stack: Vec<Vec<GenericCommand>>,
-
-    #[serde(skip)]
     pub board_dir: Path,
 
     #[serde(skip)]
@@ -84,8 +79,8 @@ pub struct BoardUndoRedoStack {
 impl Board {
     /// Create a new board with a unique ID
     /// The board is created in the base directory appended with the ID
-    pub fn new(base_dir: Path, app_state: Arc<Mutex<FlowLikeState>>) -> Self {
-        let id = cuid2::create_id();
+    pub fn new(id: Option<String>, base_dir: Path, app_state: Arc<Mutex<FlowLikeState>>) -> Self {
+        let id = id.unwrap_or(cuid2::create_id());
         let board_dir = base_dir;
 
         Board {
@@ -103,8 +98,6 @@ impl Board {
             updated_at: SystemTime::now(),
             refs: HashMap::new(),
             parent: None,
-            undo_stack: Vec::new(),
-            redo_stack: Vec::new(),
             board_dir,
             logic_nodes: HashMap::new(),
             app_state: Some(app_state.clone()),
@@ -142,49 +135,46 @@ impl Board {
     pub async fn execute_command(
         &mut self,
         command: GenericCommand,
-        state: Arc<Mutex<FlowLikeState>>,
-        append: bool,
-    ) -> anyhow::Result<()> {
+        state: Arc<Mutex<FlowLikeState>>
+    ) -> anyhow::Result<GenericCommand> {
         let mut command = command;
         command.execute(self, state.clone()).await?;
-
-        match (append, self.undo_stack.last_mut()) {
-            (true, Some(last_commands)) => last_commands.push(command),
-            _ => self.undo_stack.push(vec![command]),
-        }
-
-        self.redo_stack.clear();
         self.fixate_node_update(state).await;
         self.updated_at = SystemTime::now();
-        Ok(())
+        Ok(command)
     }
 
-    pub async fn undo(&mut self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<()> {
-        if let Some(mut commands) = self.undo_stack.pop() {
-            let mut redo_commands = vec![];
+    pub async fn execute_commands(
+        &mut self,
+        commands: Vec<GenericCommand>,
+        state: Arc<Mutex<FlowLikeState>>
+    ) -> anyhow::Result<Vec<GenericCommand>> {
+        let mut commands = commands;
+        for command in commands.iter_mut() {
+            let res = command.execute(self, state.clone()).await;
+            if let Err(e) = res {
+                println!("Error executing command: {:?}", e);
+            }
+        }
+        self.fixate_node_update(state).await;
+        self.updated_at = SystemTime::now();
+        Ok(commands)
+    }
+
+    pub async fn undo(&mut self, commands: Vec<GenericCommand>, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<()> {
+        let mut commands = commands;
             for command in commands.iter_mut().rev() {
                 command.undo(self, state.clone()).await?;
-                redo_commands.push(command.clone());
             }
-            self.redo_stack.push(redo_commands);
             Ok(())
-        } else {
-            Err(anyhow::anyhow!("No actions to undo"))
-        }
     }
 
-    pub async fn redo(&mut self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<()> {
-        if let Some(mut commands) = self.redo_stack.pop() {
-            let mut undo_commands = vec![];
-            for command in commands.iter_mut().rev() {
-                command.execute(self, state.clone()).await?;
-                undo_commands.push(command.clone());
-            }
-            self.undo_stack.push(undo_commands);
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("No actions to redo"))
+    pub async fn redo(&mut self, commands: Vec<GenericCommand>, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<()> {
+        let mut commands = commands;
+        for command in commands.iter_mut().rev() {
+            command.execute(self, state.clone()).await?;
         }
+        Ok(())
     }
 
     pub fn cleanup(&mut self) {
@@ -405,8 +395,6 @@ impl Board {
         let mut board: Board = from_compressed(store, path.child(format!("{}.board", id))).await?;
         board.board_dir = path;
         board.app_state = Some(app_state.clone());
-        board.redo_stack = Vec::new();
-        board.undo_stack = Vec::new();
         board.logic_nodes = HashMap::new();
         board.fix_pins();
         Ok(board)
@@ -451,7 +439,7 @@ mod tests {
     async fn serialize_board() {
         let state = flow_state().await;
         let base_dir = Path::from("boards");
-        let board = super::Board::new(base_dir, state);
+        let board = super::Board::new(None, base_dir, state);
 
         let ser = bitcode::serialize(&board).unwrap();
         let deser: super::Board = bitcode::deserialize(&ser).unwrap();

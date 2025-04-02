@@ -70,10 +70,10 @@ pub async fn create_app(
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
 
     let bits_map: HashSet<String> = bits.clone().into_iter().collect();
-    let mut new_app = App::new(meta, bits, flow_like_state).await?;
+    let mut new_app = App::new(None, meta, bits, flow_like_state).await?;
 
     if template == "blank" {
-        let board = new_app.create_board().await?;
+        let board = new_app.create_board(None).await?;
         let board = new_app.open_board(board, Some(false)).await?;
         let mut variable = Variable::new(
             "Embedding Models",
@@ -130,7 +130,7 @@ pub async fn create_app_board(
     let variable: Variable = variable.duplicate();
     drop(board);
 
-    let board_id = app.create_board().await?;
+    let board_id = app.create_board(None).await?;
     let board = app.open_board(board_id, Some(false)).await?;
     app.save().await?;
 

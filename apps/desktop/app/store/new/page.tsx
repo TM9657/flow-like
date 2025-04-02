@@ -1,5 +1,4 @@
 "use client";
-import type { QueryObserverResult } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
 	Badge,
@@ -14,6 +13,7 @@ import {
 	Input,
 	Label,
 	Progress,
+	type QueryObserverResult,
 	Textarea,
 	useBackend,
 	useInvoke,

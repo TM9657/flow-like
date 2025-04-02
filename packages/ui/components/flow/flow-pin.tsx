@@ -21,6 +21,7 @@ import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IValueType } from "../../lib/schema/flow/pin";
 import { useBackend } from "../../state/backend-state";
 import { DynamicImage } from "../ui/dynamic-image";
+import { useUndoRedo } from "./flow-history";
 import { PinEdit } from "./flow-pin/pin-edit";
 import { typeToColor } from "./utils";
 
@@ -37,7 +38,8 @@ function FlowPinInnerComponent({
 	appId: string;
 	node: INode;
 }>) {
-	const invalidate = useInvalidateInvoke();
+	const {pushCommand} = useUndoRedo(appId, boardId);
+ 	const invalidate = useInvalidateInvoke();
 	const backend = useBackend();
 	const currentNode = useInternalNode(node.id);
 
@@ -95,12 +97,12 @@ function FlowPinInnerComponent({
 			},
 		});
 
-		await backend.executeCommand(
+		const result = await backend.executeCommand(
 			currentNode.data.appId as string,
 			boardId,
 			command,
-			false,
 		);
+		await pushCommand(result, false)
 		await refetchBoard();
 	}, [pin.id, debouncedDefaultValue, currentNode]);
 

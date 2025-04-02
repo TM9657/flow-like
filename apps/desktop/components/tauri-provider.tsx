@@ -96,17 +96,19 @@ export class TauriBackend implements IBackendState {
 		});
 	}
 
-	async undoBoard(appId: string, boardId: string) {
+	async undoBoard(appId: string, boardId: string, commands: IGeneric[]) {
 		await invoke("undo_board", {
 			appId: appId,
 			boardId: boardId,
+			commands: commands
 		});
 	}
 
-	async redoBoard(appId: string, boardId: string) {
+	async redoBoard(appId: string, boardId: string, commands: IGeneric[]) {
 		await invoke("redo_board", {
 			appId: appId,
 			boardId: boardId,
+			commands: commands
 		});
 	}
 
@@ -151,13 +153,23 @@ export class TauriBackend implements IBackendState {
 		appId: string,
 		boardId: string,
 		command: IGeneric,
-		append: boolean,
-	) {
-		await invoke("execute_command", {
+	): Promise<IGeneric> {
+		return await invoke("execute_command", {
 			appId: appId,
 			boardId: boardId,
 			command: command,
-			append: append,
+		});
+	}
+
+	async executeCommands(
+		appId: string,
+		boardId: string,
+		commands: IGeneric[],
+	): Promise<IGeneric[]> {
+		return await invoke("execute_commands", {
+			appId: appId,
+			boardId: boardId,
+			commands: commands,
 		});
 	}
 

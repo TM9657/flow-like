@@ -1,5 +1,4 @@
 import * as Sentry from "@sentry/nextjs";
-import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
 	Avatar,
@@ -43,13 +42,10 @@ import {
 	SidebarMenuSubItem,
 	SidebarProvider,
 	SidebarRail,
-	Textarea,
-	humanFileSize,
-	useBackend,
+	Textarea, useBackend,
 	useDownloadManager,
 	useInvalidateInvoke,
-	useInvoke,
-	useSidebar,
+	useInvoke, useQueryClient, useSidebar
 } from "@tm9657/flow-like-ui";
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import {
@@ -65,7 +61,6 @@ import {
 	Edit3Icon,
 	ExternalLinkIcon,
 	LayoutGridIcon,
-	Link2Icon,
 	LogInIcon,
 	LogOut,
 	type LucideIcon,
@@ -76,14 +71,12 @@ import {
 	SidebarOpenIcon,
 	Sparkles,
 	Sun,
-	VaultIcon,
-	WorkflowIcon,
+	WorkflowIcon
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import RingLoader from "react-spinners/RingLoader";
 import { toast } from "sonner";
 import { useTauriInvoke } from "./useInvoke";
 

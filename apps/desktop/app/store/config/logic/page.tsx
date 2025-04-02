@@ -1,7 +1,7 @@
 "use client";
-import type { UseQueryResult } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
+	type UseQueryResult,
 	Badge,
 	Button,
 	ContextMenu,

@@ -1,12 +1,10 @@
 "use client";
-import { QueryClient } from "@tanstack/react-query";
-import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { PersistQueryClientProvider, QueryClient, ReactFlowProvider } from "@tm9657/flow-like-ui";
 import { ThemeProvider } from "@tm9657/flow-like-ui/components/theme-provider";
 import { Toaster } from "@tm9657/flow-like-ui/components/ui/sonner";
 import { TooltipProvider } from "@tm9657/flow-like-ui/components/ui/tooltip";
 import "@tm9657/flow-like-ui/globals.css";
 import { createIDBPersister } from "@tm9657/flow-like-ui/lib/persister";
-import { ReactFlowProvider } from "@xyflow/react";
 import { Inter } from "next/font/google";
 import { Suspense } from "react";
 import { AppSidebar } from "../components/app-sidebar";

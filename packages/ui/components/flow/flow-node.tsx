@@ -1,7 +1,6 @@
 "use client";
 
 import { createId } from "@paralleldrive/cuid2";
-import { useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "@uidotdev/usehooks";
 import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import {
@@ -47,6 +46,7 @@ import { ILogLevel, type ITrace } from "../../lib/schema/flow/run";
 import { useBackend } from "../../state/backend-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 import { DynamicImage } from "../ui/dynamic-image";
+import { useUndoRedo } from "./flow-history";
 import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
 import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
@@ -79,6 +79,7 @@ const FlowNodeInner = memo(
 		props: NodeProps<FlowNode>;
 		onHover: (hover: boolean) => void;
 	}) => {
+		const {pushCommand} = useUndoRedo(props.data.appId, props.data.boardId);
 		const { resolvedTheme } = useTheme();
 		const backend = useBackend();
 		const invalidate = useInvalidateInvoke();
@@ -204,12 +205,14 @@ const FlowNodeInner = memo(
 					},
 				});
 
-				await backend.executeCommand(
+				const result = await backend.executeCommand(
 					props.data.appId,
 					props.data.boardId,
 					command,
-					false,
 				);
+
+				await pushCommand(result, false)
+
 				await invalidate(backend.getBoard, [
 					props.data.appId,
 					props.data.boardId,
@@ -240,12 +243,14 @@ const FlowNodeInner = memo(
 					},
 				});
 
-				await backend.executeCommand(
+				const result = await backend.executeCommand(
 					props.data.appId,
 					props.data.boardId,
 					command,
-					false,
 				);
+
+				await pushCommand(result, false);
+
 				await invalidate(backend.getBoard, [
 					props.data.appId,
 					props.data.boardId,
@@ -408,7 +413,7 @@ const FlowNodeInner = memo(
 					[inputPins, props.data.node, props.data.boardId, pinRemoveCallback],
 				)}
 				<div
-					className={`header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b-1 border-b-foreground p-1 justify-between rounded-md rounded-b-none bg-card ${!isExec && "bg-gradient-to-r  from-card via-emerald-300/50 to-emerald-300 dark:via-tertiary/50 dark:to-tertiary"} ${props.data.node.start && "bg-gradient-to-r  from-card via-rose-300/50 to-rose-300 dark:via-primary/50 dark:to-primary"}`}
+					className={`header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b-1 border-b-foreground p-1 justify-between rounded-md rounded-b-none bg-card ${!isExec && "bg-gradient-to-r  from-card via-tertiary/50 to-tertiary"} ${props.data.node.start && "bg-gradient-to-r  from-card via-primary/50 to-primary"}`}
 				>
 					<div className={"flex flex-row items-center gap-1"}>
 						{useMemo(

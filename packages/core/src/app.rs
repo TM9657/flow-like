@@ -61,11 +61,12 @@ impl Clone for App {
 
 impl App {
     pub async fn new(
+        id: Option<String>,
         meta: BitMeta,
         bits: Vec<String>,
         app_state: Arc<Mutex<FlowLikeState>>,
     ) -> anyhow::Result<Self> {
-        let id = cuid2::create_id();
+        let id = id.unwrap_or(cuid2::create_id());
 
         let mut meta_map = std::collections::HashMap::new();
         meta_map.insert("en".to_string(), meta);
@@ -97,13 +98,13 @@ impl App {
         Ok(vault)
     }
 
-    pub async fn create_board(&mut self) -> anyhow::Result<String> {
+    pub async fn create_board(&mut self, id: Option<String>) -> anyhow::Result<String> {
         let storage_root = Path::from("apps").child(self.id.clone());
         let state = self
             .app_state
             .clone()
             .ok_or(anyhow::anyhow!("App state not found"))?;
-        let board = Board::new(storage_root, state);
+        let board = Board::new(id, storage_root, state);
         board.save(None).await?;
         self.boards.push(board.id.clone());
         self.updated_at = SystemTime::now();

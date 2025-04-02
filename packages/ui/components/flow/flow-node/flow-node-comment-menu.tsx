@@ -13,6 +13,7 @@ import { useInvalidateInvoke } from "../../../hooks";
 import { updateNodeCommand } from "../../../lib";
 import type { INode } from "../../../lib/schema/flow/node";
 import { useBackend } from "../../../state/backend-state";
+import { useUndoRedo } from "../flow-history";
 
 export function FlowNodeCommentMenu({
 	node,
@@ -27,6 +28,7 @@ export function FlowNodeCommentMenu({
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }>) {
+	const {pushCommand} = useUndoRedo(appId, boardId)
 	const invalidate = useInvalidateInvoke();
 	const backend = useBackend();
 	const [comment, setComment] = useState("");
@@ -36,7 +38,8 @@ export function FlowNodeCommentMenu({
 			node: { ...node, comment },
 		});
 
-		await backend.executeCommand(appId, boardId, command, false);
+		const result = await backend.executeCommand(appId, boardId, command);
+		await pushCommand(result)
 		onOpenChange(false);
 		setComment("");
 		refetchBoard();

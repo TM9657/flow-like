@@ -253,6 +253,7 @@ pub fn run() {
             functions::flow::board::undo_board,
             functions::flow::board::redo_board,
             functions::flow::board::execute_command,
+            functions::flow::board::execute_commands,
             functions::flow::board::save_board,
             functions::flow::run::create_run,
             functions::flow::run::execute_run,
