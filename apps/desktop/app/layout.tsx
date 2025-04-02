@@ -1,5 +1,9 @@
 "use client";
-import { PersistQueryClientProvider, QueryClient, ReactFlowProvider } from "@tm9657/flow-like-ui";
+import {
+	PersistQueryClientProvider,
+	QueryClient,
+	ReactFlowProvider,
+} from "@tm9657/flow-like-ui";
 import { ThemeProvider } from "@tm9657/flow-like-ui/components/theme-provider";
 import { Toaster } from "@tm9657/flow-like-ui/components/ui/sonner";
 import { TooltipProvider } from "@tm9657/flow-like-ui/components/ui/tooltip";

@@ -158,11 +158,7 @@ export function FlowBoard({
 
 	const executeCommand = useCallback(
 		async (command: IGeneric, append = false): Promise<any> => {
-			const result = await backend.executeCommand(
-				appId,
-				boardId,
-				command,
-			);
+			const result = await backend.executeCommand(appId, boardId, command);
 			await pushCommand(result, append);
 			await board.refetch();
 			return result;
@@ -170,17 +166,16 @@ export function FlowBoard({
 		[board.refetch],
 	);
 
-	const executeCommands = useCallback(async (commands: IGeneric[]) => {
-		if (commands.length === 0) return;
-		const result = await backend.executeCommands(
-			appId,
-			boardId,
-			commands
-		);
-		await pushCommands(result);
-		await board.refetch();
-		return result;
-	}, [board.refetch])
+	const executeCommands = useCallback(
+		async (commands: IGeneric[]) => {
+			if (commands.length === 0) return;
+			const result = await backend.executeCommands(appId, boardId, commands);
+			await pushCommands(result);
+			await board.refetch();
+			return result;
+		},
+		[board.refetch],
+	);
 
 	useEffect(() => {
 		if (!logPanelRef.current) return;
@@ -272,7 +267,7 @@ export function FlowBoard({
 				event.preventDefault();
 				event.stopPropagation();
 				const stack = await undo();
-				if(stack) await backend.undoBoard(appId, boardId, stack);
+				if (stack) await backend.undoBoard(appId, boardId, stack);
 				toastSuccess("Undo", <Undo2Icon className="w-4 h-4" />);
 				await board.refetch();
 				return;
@@ -283,7 +278,7 @@ export function FlowBoard({
 				event.preventDefault();
 				event.stopPropagation();
 				const stack = await redo();
-				if(stack) await backend.redoBoard(appId, boardId, stack);
+				if (stack) await backend.redoBoard(appId, boardId, stack);
 				toastSuccess("Redo", <Redo2Icon className="w-4 h-4" />);
 				await board.refetch();
 			}
@@ -494,8 +489,6 @@ export function FlowBoard({
 		[],
 	);
 	const { screenToFlowPosition } = useReactFlow();
-
-
 
 	const onConnect = useCallback(
 		(params: any) =>

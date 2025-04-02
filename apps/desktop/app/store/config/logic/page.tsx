@@ -1,7 +1,6 @@
 "use client";
 import { invoke } from "@tauri-apps/api/core";
 import {
-	type UseQueryResult,
 	Badge,
 	Button,
 	ContextMenu,
@@ -21,6 +20,7 @@ import {
 	Label,
 	Separator,
 	Textarea,
+	type UseQueryResult,
 	formatRelativeTime,
 	useBackend,
 	useFlowBoardParentState,

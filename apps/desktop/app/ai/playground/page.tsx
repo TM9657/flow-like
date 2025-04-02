@@ -4,7 +4,6 @@ import { Label } from "@radix-ui/react-context-menu";
 import { invoke } from "@tauri-apps/api/core";
 import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
 import {
-	type UseQueryResult,
 	type Bit,
 	Button,
 	Card,
@@ -26,6 +25,7 @@ import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
+	type UseQueryResult,
 	useBackend,
 	useInvoke,
 } from "@tm9657/flow-like-ui";

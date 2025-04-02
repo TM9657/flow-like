@@ -28,7 +28,7 @@ export function FlowNodeRenameMenu({
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }>) {
-	const {pushCommand} = useUndoRedo(appId, boardId);
+	const { pushCommand } = useUndoRedo(appId, boardId);
 	const invalidate = useInvalidateInvoke();
 	const backend = useBackend();
 	const [friendlyName, setFriendlyName] = useState(node.friendly_name);
@@ -39,7 +39,7 @@ export function FlowNodeRenameMenu({
 		});
 
 		const result = await backend.executeCommand(appId, boardId, command);
-		await pushCommand(result)
+		await pushCommand(result);
 		onOpenChange(false);
 		setFriendlyName("");
 		refetchBoard();

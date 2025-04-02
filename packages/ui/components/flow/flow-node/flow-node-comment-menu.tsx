@@ -28,7 +28,7 @@ export function FlowNodeCommentMenu({
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }>) {
-	const {pushCommand} = useUndoRedo(appId, boardId)
+	const { pushCommand } = useUndoRedo(appId, boardId);
 	const invalidate = useInvalidateInvoke();
 	const backend = useBackend();
 	const [comment, setComment] = useState("");
@@ -39,7 +39,7 @@ export function FlowNodeCommentMenu({
 		});
 
 		const result = await backend.executeCommand(appId, boardId, command);
-		await pushCommand(result)
+		await pushCommand(result);
 		onOpenChange(false);
 		setComment("");
 		refetchBoard();

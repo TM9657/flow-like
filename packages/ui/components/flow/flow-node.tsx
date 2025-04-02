@@ -79,7 +79,7 @@ const FlowNodeInner = memo(
 		props: NodeProps<FlowNode>;
 		onHover: (hover: boolean) => void;
 	}) => {
-		const {pushCommand} = useUndoRedo(props.data.appId, props.data.boardId);
+		const { pushCommand } = useUndoRedo(props.data.appId, props.data.boardId);
 		const { resolvedTheme } = useTheme();
 		const backend = useBackend();
 		const invalidate = useInvalidateInvoke();
@@ -211,7 +211,7 @@ const FlowNodeInner = memo(
 					command,
 				);
 
-				await pushCommand(result, false)
+				await pushCommand(result, false);
 
 				await invalidate(backend.getBoard, [
 					props.data.appId,

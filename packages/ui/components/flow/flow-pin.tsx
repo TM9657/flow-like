@@ -38,8 +38,8 @@ function FlowPinInnerComponent({
 	appId: string;
 	node: INode;
 }>) {
-	const {pushCommand} = useUndoRedo(appId, boardId);
- 	const invalidate = useInvalidateInvoke();
+	const { pushCommand } = useUndoRedo(appId, boardId);
+	const invalidate = useInvalidateInvoke();
 	const backend = useBackend();
 	const currentNode = useInternalNode(node.id);
 
@@ -102,7 +102,7 @@ function FlowPinInnerComponent({
 			boardId,
 			command,
 		);
-		await pushCommand(result, false)
+		await pushCommand(result, false);
 		await refetchBoard();
 	}, [pin.id, debouncedDefaultValue, currentNode]);
 

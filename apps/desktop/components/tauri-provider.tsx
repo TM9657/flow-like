@@ -100,7 +100,7 @@ export class TauriBackend implements IBackendState {
 		await invoke("undo_board", {
 			appId: appId,
 			boardId: boardId,
-			commands: commands
+			commands: commands,
 		});
 	}
 
@@ -108,7 +108,7 @@ export class TauriBackend implements IBackendState {
 		await invoke("redo_board", {
 			appId: appId,
 			boardId: boardId,
-			commands: commands
+			commands: commands,
 		});
 	}
 

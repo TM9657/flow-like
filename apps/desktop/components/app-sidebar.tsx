@@ -42,10 +42,13 @@ import {
 	SidebarMenuSubItem,
 	SidebarProvider,
 	SidebarRail,
-	Textarea, useBackend,
+	Textarea,
+	useBackend,
 	useDownloadManager,
 	useInvalidateInvoke,
-	useInvoke, useQueryClient, useSidebar
+	useInvoke,
+	useQueryClient,
+	useSidebar,
 } from "@tm9657/flow-like-ui";
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import {
@@ -71,7 +74,7 @@ import {
 	SidebarOpenIcon,
 	Sparkles,
 	Sun,
-	WorkflowIcon
+	WorkflowIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";

@@ -1,7 +1,12 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { Input, type UseQueryResult, useBackend, useInvalidateInvoke } from "@tm9657/flow-like-ui";
+import {
+	Input,
+	type UseQueryResult,
+	useBackend,
+	useInvalidateInvoke,
+} from "@tm9657/flow-like-ui";
 import { Label } from "@tm9657/flow-like-ui/components/ui/label";
 import { Switch } from "@tm9657/flow-like-ui/components/ui/switch";
 import type { ISettingsProfile, ISystemInfo } from "@tm9657/flow-like-ui/types";
