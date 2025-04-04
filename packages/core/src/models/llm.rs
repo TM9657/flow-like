@@ -1,33 +1,14 @@
 pub mod local;
-pub mod openai;
 
-use crate::{
-    bit::{Bit, BitProvider},
-    state::FlowLikeState,
-    utils::device::get_vram,
-};
+use crate::{bit::Bit, state::FlowLikeState, utils::device::get_vram};
 use anyhow::Result;
 use async_trait::async_trait;
+use flow_like_model_provider::llm::ModelLogic;
 use local::LocalModel;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc, time::SystemTime};
 use tokio::sync::Mutex;
-use tokio::time::{interval, Duration};
-
-use super::{history::History, response::Response, response_chunk::ResponseChunk};
-
-pub type LLMCallback = Arc<
-    dyn Fn(ResponseChunk) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>
-        + Send
-        + Sync
-        + 'static,
->;
-
-#[async_trait]
-pub trait ModelLogic: Send + Sync {
-    async fn invoke(&self, history: &History, lambda: Option<LLMCallback>) -> Result<Response>;
-    fn get_bit(&self) -> Bit;
-}
+use tokio::time::{Duration, interval};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ExecutionSettings {
@@ -92,7 +73,7 @@ impl ModelFactory {
         let provider = provider.ok_or(anyhow::anyhow!("Model type not supported"))?;
         let provider = provider.provider_name;
 
-        if provider == BitProvider::Local {
+        if provider == "Local" {
             if let Some(model) = self.cached_models.get(&bit.id) {
                 // update last used time
                 self.ttl_list.insert(bit.id.clone(), SystemTime::now());

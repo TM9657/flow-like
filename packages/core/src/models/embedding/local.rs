@@ -1,15 +1,16 @@
-use super::EmbeddingModelLogic;
 use crate::{
     bit::{Bit, BitPack, BitTypes, Pooling},
-    flow::execution::Cacheable,
-    state::{FlowLikeState, FlowLikeStore},
-    utils::{local_object_store::LocalObjectStore, tokenizer::load_tokenizer_from_file},
+    state::FlowLikeState,
+    utils::tokenizer::load_tokenizer_from_file,
 };
-use anyhow::{anyhow, Result};
-use async_trait::async_trait;
 use fastembed::{InitOptionsUserDefined, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel};
+use flow_like_model_provider::{
+    embedding::EmbeddingModelLogic,
+    text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter},
+};
+use flow_like_storage::files::store::{FlowLikeStore, local_store::LocalObjectStore};
+use flow_like_types::{Cacheable, Result, anyhow, async_trait};
 use std::{any::Any, sync::Arc};
-use text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
 use tokio::sync::Mutex;
 
 #[derive(Clone)]
@@ -30,21 +31,19 @@ impl Cacheable for LocalEmbeddingModel {
 }
 
 impl LocalEmbeddingModel {
-    pub async fn new(bit: &Bit, app_state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<Arc<Self>> {
+    pub async fn new(bit: &Bit, app_state: Arc<Mutex<FlowLikeState>>) -> Result<Arc<Self>> {
         let bit = Arc::new(bit.clone());
         let bit_store = FlowLikeState::bit_store(&app_state).await?;
 
         let bit_store = match bit_store {
             FlowLikeStore::Local(store) => store,
-            _ => return Err(anyhow::anyhow!("Only local store supported")),
+            _ => return Err(anyhow!("Only local store supported")),
         };
 
         let pack = bit.pack(app_state.clone()).await?;
         pack.download(app_state.clone()).await?;
 
-        let model_path = bit
-            .to_path(&bit_store)
-            .ok_or(anyhow::anyhow!("No model path"))?;
+        let model_path = bit.to_path(&bit_store).ok_or(anyhow!("No model path"))?;
         let loaded_model = std::fs::read(model_path)?;
         let loaded_tokenizer = load_tokenizer(&pack, &bit_store).await?;
 
@@ -52,7 +51,7 @@ impl LocalEmbeddingModel {
 
         let params = bit
             .try_to_embedding()
-            .ok_or(anyhow::anyhow!("Not an Embedding Model"))?;
+            .ok_or(anyhow!("Not an Embedding Model"))?;
 
         if params.pooling == Pooling::CLS {
             pooling = fastembed::Pooling::Cls;
@@ -85,14 +84,18 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
         &self,
         capacity: Option<usize>,
         overlap: Option<usize>,
-    ) -> anyhow::Result<(
-        TextSplitter<tokenizers::Tokenizer>,
-        MarkdownSplitter<tokenizers::Tokenizer>,
+    ) -> Result<(
+        flow_like_model_provider::text_splitter::TextSplitter<
+            flow_like_model_provider::tokenizers::Tokenizer,
+        >,
+        flow_like_model_provider::text_splitter::MarkdownSplitter<
+            flow_like_model_provider::tokenizers::Tokenizer,
+        >,
     )> {
         let params = self
             .bit
             .try_to_embedding()
-            .ok_or(anyhow::anyhow!("Not an Embedding Model"))?;
+            .ok_or(anyhow!("Not an Embedding Model"))?;
         let max_tokens = capacity.unwrap_or(params.input_length as usize);
         let max_tokens = std::cmp::min(max_tokens, params.input_length as usize);
         let overlap = overlap.unwrap_or(20);
@@ -114,7 +117,7 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             Some(params) => params,
             None => {
                 println!("Error getting embedding params");
-                return Err(anyhow::anyhow!("Error getting embedding params"));
+                return Err(anyhow!("Error getting embedding params"));
             }
         };
 
@@ -127,7 +130,7 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             Ok(embeddings) => embeddings,
             Err(e) => {
                 println!("Error embedding text: {}", e);
-                return Err(anyhow::anyhow!("Error embedding text"));
+                return Err(anyhow!("Error embedding text"));
             }
         };
         Ok(embeddings)
@@ -138,7 +141,7 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             Some(params) => params,
             None => {
                 println!("Error getting embedding params");
-                return Err(anyhow::anyhow!("Error getting embedding params"));
+                return Err(anyhow!("Error getting embedding params"));
             }
         };
 
@@ -150,7 +153,7 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             Ok(embeddings) => embeddings,
             Err(e) => {
                 println!("Error embedding text: {}", e);
-                return Err(anyhow::anyhow!("Error embedding text"));
+                return Err(anyhow!("Error embedding text"));
             }
         };
         Ok(embeddings)
@@ -181,25 +184,25 @@ async fn load_tokenizer(
         || tokenizer_config_bit.is_none()
         || special_tokens_bit.is_none()
     {
-        return Err(anyhow::anyhow!("Error loading tokenizer files"));
+        return Err(anyhow!("Error loading tokenizer files"));
     }
 
     let config_bit = config_bit
         .ok_or(anyhow!("Config Bit not found"))?
         .to_path(model_path)
-        .ok_or(anyhow::anyhow!("Config Bit Path not Found"))?;
+        .ok_or(anyhow!("Config Bit Path not Found"))?;
     let tokenizer_bit = tokenizer_bit
         .ok_or(anyhow!("Tokenizer Bit not found"))?
         .to_path(model_path)
-        .ok_or(anyhow::anyhow!("Tokenizer Bit Path not Found"))?;
+        .ok_or(anyhow!("Tokenizer Bit Path not Found"))?;
     let tokenizer_config_bit = tokenizer_config_bit
         .ok_or(anyhow!("Tokenizer Config Bit now found"))?
         .to_path(model_path)
-        .ok_or(anyhow::anyhow!("Tokenizer Config Bit Path not Found"))?;
+        .ok_or(anyhow!("Tokenizer Config Bit Path not Found"))?;
     let special_tokens_bit = special_tokens_bit
         .ok_or(anyhow!("Special Tokens Bit not found"))?
         .to_path(model_path)
-        .ok_or(anyhow::anyhow!("Special Token Bit Path not Found"))?;
+        .ok_or(anyhow!("Special Token Bit Path not Found"))?;
 
     Ok(TokenizerFiles {
         tokenizer_file: std::fs::read(tokenizer_bit).unwrap_or(Vec::new()),
@@ -223,8 +226,8 @@ mod tests {
         let current_dir = temp_dir.path().to_path_buf();
         let store = LocalObjectStore::new(current_dir).unwrap();
         let store = Arc::new(store);
-        config.register_project_store(crate::state::FlowLikeStore::Local(store.clone()));
-        config.register_bits_store(crate::state::FlowLikeStore::Local(store));
+        config.register_project_store(FlowLikeStore::Local(store.clone()));
+        config.register_bits_store(FlowLikeStore::Local(store));
         let (http_client, _refetch_rx) = HTTPClient::new();
         let (flow_like_state, _) = crate::state::FlowLikeState::new(config, http_client);
         Arc::new(Mutex::new(flow_like_state))

@@ -9,8 +9,8 @@ use crate::{
     state::FlowLikeState,
 };
 use async_trait::async_trait;
+use flow_like_storage::object_store::PutPayload;
 use futures::StreamExt;
-use object_store::PutPayload;
 
 #[derive(Default)]
 pub struct CopyNode {}

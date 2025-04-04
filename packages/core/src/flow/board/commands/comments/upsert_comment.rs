@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::{
-    flow::board::{commands::Command, Board, Comment},
+    flow::board::{Board, Comment, commands::Command},
     state::FlowLikeState,
 };
 use serde::{Deserialize, Serialize};

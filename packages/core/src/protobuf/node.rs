@@ -1,4 +1,5 @@
-use super::conversions::{FromProto, ToProto};
+use flow_like_types::{FromProto, Timestamp, ToProto};
+
 use crate::flow::{
     node::{Node, NodeScores},
     pin::{Pin, PinOptions, PinType, ValueType},
@@ -8,9 +9,9 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-impl ToProto<super::types::NodeScores> for NodeScores {
-    fn to_proto(&self) -> super::types::NodeScores {
-        super::types::NodeScores {
+impl ToProto<flow_like_types::proto::NodeScores> for NodeScores {
+    fn to_proto(&self) -> flow_like_types::proto::NodeScores {
+        flow_like_types::proto::NodeScores {
             privacy: self.privacy as u32,
             security: self.security as u32,
             performance: self.performance as u32,
@@ -19,8 +20,8 @@ impl ToProto<super::types::NodeScores> for NodeScores {
     }
 }
 
-impl FromProto<super::types::NodeScores> for NodeScores {
-    fn from_proto(proto: super::types::NodeScores) -> Self {
+impl FromProto<flow_like_types::proto::NodeScores> for NodeScores {
+    fn from_proto(proto: flow_like_types::proto::NodeScores) -> Self {
         NodeScores {
             privacy: proto.privacy as u8,
             security: proto.security as u8,
@@ -30,10 +31,10 @@ impl FromProto<super::types::NodeScores> for NodeScores {
     }
 }
 
-impl ToProto<super::types::Node> for Node {
-    fn to_proto(&self) -> super::types::Node {
+impl ToProto<flow_like_types::proto::Node> for Node {
+    fn to_proto(&self) -> flow_like_types::proto::Node {
         let (coord_x, coord_y, coord_z) = self.coordinates.unwrap_or((0.0, 0.0, 0.0));
-        super::types::Node {
+        flow_like_types::proto::Node {
             id: self.id.clone(),
             name: self.name.clone(),
             friendly_name: self.friendly_name.clone(),
@@ -58,8 +59,8 @@ impl ToProto<super::types::Node> for Node {
     }
 }
 
-impl FromProto<super::types::Node> for Node {
-    fn from_proto(proto: super::types::Node) -> Self {
+impl FromProto<flow_like_types::proto::Node> for Node {
+    fn from_proto(proto: flow_like_types::proto::Node) -> Self {
         Node {
             id: proto.id,
             name: proto.name,

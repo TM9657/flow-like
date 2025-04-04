@@ -7,8 +7,8 @@ use crate::{
     state::FlowLikeState,
 };
 use async_trait::async_trait;
+use flow_like_model_provider::text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
 use serde_json::json;
-use text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
 
 #[derive(Default)]
 pub struct ChunkTextChar {}

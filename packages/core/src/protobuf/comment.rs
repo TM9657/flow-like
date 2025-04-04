@@ -1,6 +1,5 @@
-use super::conversions::{FromProto, ToProto};
 use crate::flow::board::{Comment, CommentType};
-use prost_types::Timestamp;
+use flow_like_types::{FromProto, Timestamp, ToProto};
 use std::time::SystemTime;
 
 impl CommentType {
@@ -22,9 +21,9 @@ impl CommentType {
     }
 }
 
-impl ToProto<super::types::Comment> for Comment {
-    fn to_proto(&self) -> super::types::Comment {
-        super::types::Comment {
+impl ToProto<flow_like_types::proto::Comment> for Comment {
+    fn to_proto(&self) -> flow_like_types::proto::Comment {
+        flow_like_types::proto::Comment {
             id: self.id.clone(),
             author: self.author.clone().unwrap_or_default(),
             content: self.content.clone(),
@@ -37,8 +36,8 @@ impl ToProto<super::types::Comment> for Comment {
     }
 }
 
-impl FromProto<super::types::Comment> for Comment {
-    fn from_proto(proto: super::types::Comment) -> Self {
+impl FromProto<flow_like_types::proto::Comment> for Comment {
+    fn from_proto(proto: flow_like_types::proto::Comment) -> Self {
         Comment {
             id: proto.id,
             author: if proto.author.is_empty() {

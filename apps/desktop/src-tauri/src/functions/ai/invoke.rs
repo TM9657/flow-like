@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use flow_like::{
     bit::{Bit, BitModelPreference},
-    models::{
+    flow_like_model_provider::{
         history::{History, HistoryMessage, Role},
         llm::LLMCallback,
         response::Response,

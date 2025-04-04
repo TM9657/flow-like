@@ -1,15 +1,15 @@
-use super::conversions::{FromProto, ToProto};
 use crate::flow::{
     pin::{Pin, PinOptions, PinType, ValueType},
     variable::{Variable, VariableType},
 };
+use flow_like_types::{FromProto, Timestamp, ToProto};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-impl ToProto<super::types::PinOptions> for PinOptions {
-    fn to_proto(&self) -> super::types::PinOptions {
-        super::types::PinOptions {
+impl ToProto<flow_like_types::proto::PinOptions> for PinOptions {
+    fn to_proto(&self) -> flow_like_types::proto::PinOptions {
+        flow_like_types::proto::PinOptions {
             valid_values: self.valid_values.clone().unwrap_or_default(),
             range_min: self.range.map_or(0.0, |r| r.0),
             range_max: self.range.map_or(0.0, |r| r.1),
@@ -20,8 +20,8 @@ impl ToProto<super::types::PinOptions> for PinOptions {
     }
 }
 
-impl FromProto<super::types::PinOptions> for PinOptions {
-    fn from_proto(proto: super::types::PinOptions) -> Self {
+impl FromProto<flow_like_types::proto::PinOptions> for PinOptions {
+    fn from_proto(proto: flow_like_types::proto::PinOptions) -> Self {
         PinOptions {
             valid_values: if proto.valid_values.is_empty() {
                 None
@@ -52,9 +52,9 @@ impl FromProto<super::types::PinOptions> for PinOptions {
     }
 }
 
-impl ToProto<super::types::Pin> for Pin {
-    fn to_proto(&self) -> super::types::Pin {
-        super::types::Pin {
+impl ToProto<flow_like_types::proto::Pin> for Pin {
+    fn to_proto(&self) -> flow_like_types::proto::Pin {
+        flow_like_types::proto::Pin {
             id: self.id.clone(),
             name: self.name.clone(),
             friendly_name: self.friendly_name.clone(),
@@ -73,8 +73,8 @@ impl ToProto<super::types::Pin> for Pin {
     }
 }
 
-impl FromProto<super::types::Pin> for Pin {
-    fn from_proto(proto: super::types::Pin) -> Self {
+impl FromProto<flow_like_types::proto::Pin> for Pin {
+    fn from_proto(proto: flow_like_types::proto::Pin) -> Self {
         Pin {
             id: proto.id,
             name: proto.name,

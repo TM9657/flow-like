@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     flow::{
-        board::{commands::Command, Board},
+        board::{Board, commands::Command},
         node::Node,
     },
     state::FlowLikeState,

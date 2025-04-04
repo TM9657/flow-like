@@ -10,7 +10,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use bytes::Bytes;
-use object_store::PutPayload;
+use flow_like_storage::object_store::PutPayload;
 
 #[derive(Default)]
 pub struct PutNode {}

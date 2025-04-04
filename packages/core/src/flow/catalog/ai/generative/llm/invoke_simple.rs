@@ -1,8 +1,8 @@
 use std::{
     collections::HashSet,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -10,20 +10,25 @@ use crate::{
     bit::Bit,
     flow::{
         execution::{
+            LogLevel,
             context::ExecutionContext,
             internal_node::InternalNode,
             log::{LogMessage, LogStat},
-            LogLevel,
         },
         node::{Node, NodeLogic},
         pin::PinOptions,
         variable::VariableType,
     },
-    models::{history::History, llm::LLMCallback},
     state::FlowLikeState,
 };
 use async_trait::async_trait;
 use dashmap::DashMap;
+use flow_like_model_provider::{
+    history::{History, HistoryMessage, Role},
+    llm::LLMCallback,
+    response::Response,
+    response_chunk::ResponseChunk,
+};
 use serde_json::json;
 use tokio::sync::Mutex;
 
@@ -99,10 +104,7 @@ impl NodeLogic for InvokeLLMSimpleNode {
 
         let mut history = History::new(model_name.clone(), vec![]);
         history.set_system_prompt(system_prompt.clone());
-        history.push_message(crate::models::history::HistoryMessage::from_string(
-            crate::models::history::Role::User,
-            &prompt,
-        ));
+        history.push_message(HistoryMessage::from_string(Role::User, &prompt));
 
         let on_stream = context.get_pin_by_name("on_stream").await?;
         context.activate_exec_pin_ref(&on_stream).await?;
@@ -123,45 +125,44 @@ impl NodeLogic for InvokeLLMSimpleNode {
         let collection_nodes = connected_nodes.clone();
         let callback_count = Arc::new(AtomicUsize::new(0));
         let collection_callback_count = Arc::clone(&callback_count);
-        let callback: LLMCallback =
-            Arc::new(move |input: crate::models::response_chunk::ResponseChunk| {
-                let ctx = ctx.clone();
-                let parent_node_id = parent_node_id.clone();
-                let connected_nodes = connected_nodes.clone();
-                let callback_count = Arc::clone(&callback_count); // Clone the Arc for use in the callback
-                Box::pin(async move {
-                    let mut recursion_guard = HashSet::new();
-                    recursion_guard.insert(parent_node_id.clone());
-                    let string_token = input.get_streamed_token().unwrap_or("".to_string());
-                    ctx.set_pin_value("token", json!(string_token)).await?;
-                    callback_count.fetch_add(1, Ordering::SeqCst);
-                    for entry in connected_nodes.iter() {
-                        let (id, context) = entry.pair();
-                        let mut context = context.lock().await;
-                        let mut message = LogMessage::new(
-                            &format!("Tracing Token, {:?}", string_token),
-                            LogLevel::Debug,
-                            None,
-                        );
-                        let run = InternalNode::trigger(
-                            &mut context,
-                            &mut Some(recursion_guard.clone()),
-                            true,
-                        )
-                        .await;
-                        message.end();
-                        context.log(message);
-                        context.end_trace();
-                        match run {
-                            Ok(_) => {}
-                            Err(_) => {
-                                println!("Error running stream node {}", id);
-                            }
+        let callback: LLMCallback = Arc::new(move |input: ResponseChunk| {
+            let ctx = ctx.clone();
+            let parent_node_id = parent_node_id.clone();
+            let connected_nodes = connected_nodes.clone();
+            let callback_count = Arc::clone(&callback_count); // Clone the Arc for use in the callback
+            Box::pin(async move {
+                let mut recursion_guard = HashSet::new();
+                recursion_guard.insert(parent_node_id.clone());
+                let string_token = input.get_streamed_token().unwrap_or("".to_string());
+                ctx.set_pin_value("token", json!(string_token)).await?;
+                callback_count.fetch_add(1, Ordering::SeqCst);
+                for entry in connected_nodes.iter() {
+                    let (id, context) = entry.pair();
+                    let mut context = context.lock().await;
+                    let mut message = LogMessage::new(
+                        &format!("Tracing Token, {:?}", string_token),
+                        LogLevel::Debug,
+                        None,
+                    );
+                    let run = InternalNode::trigger(
+                        &mut context,
+                        &mut Some(recursion_guard.clone()),
+                        true,
+                    )
+                    .await;
+                    message.end();
+                    context.log(message);
+                    context.end_trace();
+                    match run {
+                        Ok(_) => {}
+                        Err(_) => {
+                            println!("Error running stream node {}", id);
                         }
                     }
-                    Ok(())
-                })
-            });
+                }
+                Ok(())
+            })
+        });
 
         let mut message = LogMessage::new(
             &format!("Invoking Model, {}", model_name),

@@ -1,10 +1,10 @@
 use crate::state::FlowLikeState;
 use crate::utils::compression::{compress_to_file_json, from_compressed_json};
 use crate::utils::download::download_bit;
-use crate::utils::local_object_store::LocalObjectStore;
-use futures::future::BoxFuture;
+use flow_like_storage::Path;
+use flow_like_storage::files::store::local_store::LocalObjectStore;
 use futures::FutureExt;
-use object_store::path::Path;
+use futures::future::BoxFuture;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -44,17 +44,8 @@ pub enum BitTypes {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
-pub enum BitProvider {
-    Local,
-    AzureOpenAI,
-    Bedrock,
-    OpenAI,
-    Anthropic,
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 pub struct BitProviderModel {
-    pub provider_name: BitProvider,
+    pub provider_name: String,
     pub model_id: Option<String>,
     pub version: Option<String>,
 }

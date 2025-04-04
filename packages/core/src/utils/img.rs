@@ -1,4 +1,4 @@
-use image::{imageops::FilterType, DynamicImage, GenericImageView};
+use image::{DynamicImage, GenericImageView, imageops::FilterType};
 
 pub async fn resize_image(img: &DynamicImage, max_dimension: u32) -> DynamicImage {
     let (width, height) = img.dimensions();
@@ -27,7 +27,7 @@ pub async fn resize_image(img: &DynamicImage, max_dimension: u32) -> DynamicImag
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
 
     #[tokio::test]
     async fn test_resize_image() {

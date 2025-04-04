@@ -1,11 +1,10 @@
-use super::conversions::{FromProto, ToProto};
 use crate::{app::App, bit::BitMeta};
-use prost_types::Timestamp;
+use flow_like_types::{FromProto, Timestamp, ToProto};
 use std::time::SystemTime;
 
-impl ToProto<super::types::App> for App {
-    fn to_proto(&self) -> super::types::App {
-        super::types::App {
+impl ToProto<flow_like_types::proto::App> for App {
+    fn to_proto(&self) -> flow_like_types::proto::App {
+        flow_like_types::proto::App {
             id: self.id.clone(),
             meta: self
                 .meta
@@ -21,8 +20,8 @@ impl ToProto<super::types::App> for App {
     }
 }
 
-impl FromProto<super::types::App> for App {
-    fn from_proto(proto: super::types::App) -> Self {
+impl FromProto<flow_like_types::proto::App> for App {
+    fn from_proto(proto: flow_like_types::proto::App) -> Self {
         App {
             id: proto.id,
             meta: proto

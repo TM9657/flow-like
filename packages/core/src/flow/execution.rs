@@ -3,6 +3,7 @@ use anyhow::anyhow;
 use context::ExecutionContext;
 use cuid2;
 use dashmap::DashMap;
+use flow_like_types::Cacheable;
 use futures::StreamExt;
 use internal_node::InternalNode;
 use internal_pin::InternalPin;
@@ -54,21 +55,6 @@ pub struct Run {
     pub board: Arc<Board>,
     pub log_level: LogLevel,
     pub sub: String,
-}
-
-pub trait Cacheable: Any + Send + Sync {
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-}
-
-impl dyn Cacheable {
-    pub fn downcast_ref<T: Cacheable>(&self) -> Option<&T> {
-        self.as_any().downcast_ref::<T>()
-    }
-
-    pub fn downcast_mut<T: Cacheable>(&mut self) -> Option<&mut T> {
-        self.as_any_mut().downcast_mut::<T>()
-    }
 }
 
 #[derive(Clone)]

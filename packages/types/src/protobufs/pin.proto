@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package flow_like_types;
+
+import "variable.proto";
+
+enum PinType {
+    INPUT = 0;
+    OUTPUT = 1;
+}
+
+message PinOptions {
+  repeated string valid_values = 1;
+  double range_min = 2;
+  double range_max = 3;
+  double step = 4;
+  bool enforce_schema = 5;
+  bool enforce_generic_value_type = 6;
+}
+
+message Pin {
+    string id = 1;
+    string name = 2;
+    string friendly_name = 3;
+    string description = 4;
+    PinType pin_type = 5;
+    VariableType data_type = 6;
+    string schema = 7;
+    repeated string valid_values = 8;
+    ValueType value_type = 9;
+    repeated string depends_on = 10;
+    repeated string connected_to = 11;
+    bytes default_value = 12;
+    uint32 index = 13;
+    PinOptions options = 14;
+}

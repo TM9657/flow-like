@@ -2,7 +2,7 @@ use strsim::hamming;
 
 use crate::{
     flow::{
-        execution::{context::ExecutionContext, LogLevel},
+        execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic},
         variable::VariableType,
     },

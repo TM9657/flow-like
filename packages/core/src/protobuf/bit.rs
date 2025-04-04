@@ -1,9 +1,9 @@
-use super::conversions::{FromProto, ToProto};
 use crate::bit::BitMeta;
+use flow_like_types::{FromProto, Timestamp, ToProto};
 
-impl ToProto<super::types::Meta> for BitMeta {
-    fn to_proto(&self) -> super::types::Meta {
-        super::types::Meta {
+impl ToProto<flow_like_types::proto::Meta> for BitMeta {
+    fn to_proto(&self) -> flow_like_types::proto::Meta {
+        flow_like_types::proto::Meta {
             name: self.name.clone(),
             description: self.description.clone(),
             long_description: self.long_description.clone(),
@@ -13,8 +13,8 @@ impl ToProto<super::types::Meta> for BitMeta {
     }
 }
 
-impl FromProto<super::types::Meta> for BitMeta {
-    fn from_proto(proto: super::types::Meta) -> Self {
+impl FromProto<flow_like_types::proto::Meta> for BitMeta {
+    fn from_proto(proto: flow_like_types::proto::Meta) -> Self {
         BitMeta {
             name: proto.name,
             description: proto.description,

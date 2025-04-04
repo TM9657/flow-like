@@ -1,7 +1,7 @@
+use flow_like_storage::Path;
+use flow_like_storage::object_store::{ObjectStore, PutPayload};
+use flow_like_types::Message;
 use lz4_flex::{compress_prepend_size, decompress_size_prepended};
-use object_store::path::Path;
-use object_store::{ObjectStore, PutPayload};
-use prost::Message;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

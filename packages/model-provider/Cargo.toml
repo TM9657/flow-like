@@ -1,0 +1,11 @@
+[package]
+name = "flow-like-model-provider"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+flow-like-types = { path = "../types" }
+serde = { version = "1.0.219", features = ["derive"] }
+schemars = "0.8.22"
+text-splitter = {version = "0.25.1", features = ["markdown", "tokenizers"]}
+tokenizers = "0.21.1"

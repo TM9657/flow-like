@@ -1,12 +1,14 @@
 use crate::{
     app::App,
     bit::{
-        Bit, BitModelPreference, BitPack, BitProvider, EmbeddingModelParameters,
-        ImageEmbeddingModelParameters, LLMParameters, VLMParameters,
+        Bit, BitModelPreference, BitPack, EmbeddingModelParameters, ImageEmbeddingModelParameters,
+        LLMParameters, VLMParameters,
     },
     flow::{
         board::{
+            Board,
             commands::{
+                GenericCommand,
                 comments::{
                     remove_comment::RemoveCommentCommand, upsert_comment::UpsertCommentCommand,
                 },
@@ -22,9 +24,7 @@ use crate::{
                 variables::{
                     remove_variable::RemoveVariableCommand, upsert_variable::UpsertVariableCommand,
                 },
-                GenericCommand,
             },
-            Board,
         },
         execution::Run,
         node::Node,
@@ -32,12 +32,14 @@ use crate::{
         variable::Variable,
     },
     hub::Hub,
-    models::{history::History, response::Response, response_chunk::ResponseChunk},
     profile::Profile,
     utils::file::FileMetadata,
 };
 use anyhow::Result;
-use schemars::{schema_for, JsonSchema};
+use flow_like_model_provider::{
+    history::History, response::Response, response_chunk::ResponseChunk,
+};
+use schemars::{JsonSchema, schema_for};
 use serde::Serialize;
 use serde_json::to_string_pretty;
 use std::{
@@ -76,7 +78,6 @@ pub fn generate_schema(base_path: PathBuf) -> anyhow::Result<()> {
     )?;
     generate_and_save_schema::<VLMParameters>(&base_path, "bit/bit/vlm-parameters.json")?;
     generate_and_save_schema::<LLMParameters>(&base_path, "bit/bit/llm-parameters.json")?;
-    generate_and_save_schema::<BitProvider>(&base_path, "bit/bit/provider.json")?;
 
     generate_and_save_schema::<Bit>(&base_path, "bit/bit.json")?;
     generate_and_save_schema::<BitModelPreference>(&base_path, "bit/preferences.json")?;

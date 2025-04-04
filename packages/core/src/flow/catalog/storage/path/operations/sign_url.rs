@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::{
     flow::{
         catalog::storage::path::FlowPath,
-        execution::{context::ExecutionContext, LogLevel},
+        execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic},
         pin::PinOptions,
         variable::VariableType,

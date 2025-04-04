@@ -1,11 +1,12 @@
 use crate::flow::node::NodeLogic;
 use crate::{
-    flow::execution::{context::ExecutionContext, Cacheable},
-    state::FlowLikeStore,
-    utils::{hash::hash_string_non_cryptographic, local_object_store::LocalObjectStore},
+    flow::execution::context::ExecutionContext, utils::hash::hash_string_non_cryptographic,
 };
 use anyhow::anyhow;
-use object_store::path::Path;
+use flow_like_storage::Path;
+use flow_like_storage::files::store::FlowLikeStore;
+use flow_like_storage::files::store::local_store::LocalObjectStore;
+use flow_like_types::Cacheable;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};

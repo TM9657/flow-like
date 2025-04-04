@@ -8,11 +8,16 @@ use crate::{
         pin::PinOptions,
         variable::VariableType,
     },
-    models::history::{Content, HistoryMessage, Role},
     state::FlowLikeState,
 };
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use flow_like_model_provider::{
+    history::{Content, ContentType, History, HistoryMessage, Role},
+    llm::LLMCallback,
+    response::{Response, ResponseMessage},
+    response_chunk::ResponseChunk,
+};
+use serde_json::{Value, json};
 
 #[derive(Default)]
 pub struct MakeHistoryMessageNode {}
@@ -92,7 +97,7 @@ impl NodeLogic for MakeHistoryMessageNode {
             "Text" => {
                 let text_pin: String = context.evaluate_pin("text").await?;
                 message.content = vec![Content::Text {
-                    content_type: crate::models::history::ContentType::Text,
+                    content_type: ContentType::Text,
                     text: text_pin,
                 }];
             }
@@ -100,7 +105,7 @@ impl NodeLogic for MakeHistoryMessageNode {
                 let image_pin: String = context.evaluate_pin("image").await?;
                 let mime_pin: String = context.evaluate_pin("mime").await?;
                 message.content = vec![Content::Image {
-                    content_type: crate::models::history::ContentType::ImageUrl,
+                    content_type: ContentType::ImageUrl,
                     data: image_pin,
                     mime_type: mime_pin,
                 }];

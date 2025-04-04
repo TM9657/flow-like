@@ -1,4 +1,3 @@
-pub mod arrow_transforms;
 pub mod cache;
 pub mod compression;
 pub mod data_url;
@@ -13,7 +12,6 @@ pub mod hash;
 pub mod http;
 pub mod img;
 pub mod json;
-pub mod local_object_store;
 pub mod lock;
 pub mod pandoc;
 pub mod pdf;

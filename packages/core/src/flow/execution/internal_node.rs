@@ -11,7 +11,7 @@ use crate::flow::{
     variable::VariableType,
 };
 
-use super::{context::ExecutionContext, internal_pin::InternalPin, log::LogMessage, LogLevel};
+use super::{LogLevel, context::ExecutionContext, internal_pin::InternalPin, log::LogMessage};
 
 #[derive(Debug)]
 pub enum InternalNodeError {

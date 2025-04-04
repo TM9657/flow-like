@@ -8,11 +8,16 @@ use crate::{
         pin::PinOptions,
         variable::VariableType,
     },
-    models::history::{Content, HistoryMessage},
     state::FlowLikeState,
 };
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use flow_like_model_provider::{
+    history::{Content, ContentType, History, HistoryMessage, Role},
+    llm::LLMCallback,
+    response::{Response, ResponseMessage},
+    response_chunk::ResponseChunk,
+};
+use serde_json::{Value, json};
 
 #[derive(Default)]
 pub struct PushContentNode {}
@@ -78,7 +83,7 @@ impl NodeLogic for PushContentNode {
             "Text" => {
                 let text: String = context.evaluate_pin("text").await?;
                 message.content.push(Content::Text {
-                    content_type: crate::models::history::ContentType::Text,
+                    content_type: ContentType::Text,
                     text,
                 });
             }
@@ -86,7 +91,7 @@ impl NodeLogic for PushContentNode {
                 let image: String = context.evaluate_pin("image").await?;
                 let mime: String = context.evaluate_pin("mime").await?;
                 message.content.push(Content::Image {
-                    content_type: crate::models::history::ContentType::ImageUrl,
+                    content_type: ContentType::ImageUrl,
                     data: image,
                     mime_type: mime,
                 });

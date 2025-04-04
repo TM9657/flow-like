@@ -1,18 +1,16 @@
-use super::protobuf::app;
+use crate::{
+    bit::BitMeta,
+    flow::board::Board,
+    state::FlowLikeState,
+    utils::compression::{compress_to_file, from_compressed},
+};
 use cuid2;
-use object_store::path::Path;
+use flow_like_storage::Path;
+use flow_like_types::{FromProto, ToProto};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::SystemTime, vec};
 use tokio::sync::Mutex;
-
-use crate::{
-    bit::BitMeta,
-    flow::board::Board,
-    protobuf::conversions::{FromProto, ToProto},
-    state::FlowLikeState,
-    utils::compression::{compress_to_file, from_compressed},
-};
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub enum StandardInterfaces {
@@ -94,7 +92,7 @@ impl App {
 
         let store = FlowLikeState::project_store(&app_state).await?.as_generic();
 
-        let vault: super::protobuf::types::App =
+        let vault: flow_like_types::proto::App =
             from_compressed(store, storage_root.child("manifest.app")).await?;
         let mut vault = App::from_proto(vault);
         vault.app_state = Some(app_state.clone());
@@ -238,16 +236,17 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use crate::protobuf::conversions::{FromProto, ToProto};
     use crate::{state::FlowLikeConfig, utils::http::HTTPClient};
-    use prost::Message;
+    use flow_like_storage::files::store::FlowLikeStore;
+    use flow_like_types::Message;
+    use flow_like_types::{FromProto, ToProto};
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
     async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
         let mut config: FlowLikeConfig = FlowLikeConfig::new();
-        config.register_project_store(crate::state::FlowLikeStore::Other(Arc::new(
-            object_store::memory::InMemory::new(),
+        config.register_project_store(FlowLikeStore::Other(Arc::new(
+            flow_like_storage::object_store::memory::InMemory::new(),
         )));
         let (http_client, _refetch_rx) = HTTPClient::new();
         let (flow_like_state, _) = crate::state::FlowLikeState::new(config, http_client);
@@ -271,7 +270,7 @@ mod tests {
         let mut buf = Vec::new();
         app.to_proto().encode(&mut buf).unwrap();
         let mut deser =
-            super::App::from_proto(crate::protobuf::types::App::decode(&buf[..]).unwrap());
+            super::App::from_proto(flow_like_types::proto::App::decode(&buf[..]).unwrap());
 
         assert_eq!(app.id, deser.id);
     }

@@ -1,7 +1,7 @@
 use super::variable::VariableType;
-use schemars::{schema_for, JsonSchema};
+use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
-use serde_json::{to_string_pretty, Value};
+use serde_json::{Value, to_string_pretty};
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -139,8 +139,8 @@ impl Pin {}
 #[cfg(test)]
 mod tests {
     use crate::flow::pin::Pin;
-    use crate::protobuf::conversions::{FromProto, ToProto};
-    use prost::Message;
+    use flow_like_types::Message;
+    use flow_like_types::{FromProto, ToProto};
     use std::{collections::HashSet, sync::Arc};
     use tokio::sync::Mutex;
 
@@ -167,7 +167,7 @@ mod tests {
 
         let mut buf = Vec::new();
         pin.to_proto().encode(&mut buf).unwrap();
-        let deser = super::Pin::from_proto(crate::protobuf::types::Pin::decode(&buf[..]).unwrap());
+        let deser = super::Pin::from_proto(flow_like_types::proto::Pin::decode(&buf[..]).unwrap());
 
         assert_eq!(pin.id, deser.id);
     }

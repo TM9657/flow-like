@@ -9,8 +9,8 @@ use crate::{
     state::FlowLikeState,
 };
 use async_trait::async_trait;
+use flow_like_storage::object_store::path::Path;
 use futures::{StreamExt, TryStreamExt};
-use object_store::path::Path;
 
 #[derive(Default)]
 pub struct DeleteNode {}

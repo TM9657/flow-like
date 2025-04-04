@@ -1,4 +1,4 @@
-use object_store::path::Path;
+use flow_like_storage::object_store::path::Path;
 
 #[derive(Clone, Debug)]
 pub enum PathChange {

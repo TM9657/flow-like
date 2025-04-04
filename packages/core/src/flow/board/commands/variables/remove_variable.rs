@@ -5,7 +5,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     flow::{
-        board::{commands::Command, Board},
+        board::{Board, commands::Command},
         variable::Variable,
     },
     state::FlowLikeState,

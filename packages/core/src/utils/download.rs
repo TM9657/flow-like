@@ -1,7 +1,8 @@
-use crate::state::{FlowLikeEvent, FlowLikeState, FlowLikeStore};
+use crate::state::{FlowLikeEvent, FlowLikeState};
 use anyhow::{anyhow, bail};
+use flow_like_storage::Path;
+use flow_like_storage::files::store::FlowLikeStore;
 use futures::StreamExt;
-use object_store::path::Path;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
@@ -9,7 +10,7 @@ use std::fs;
 use std::sync::Arc;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BitDownloadEvent {

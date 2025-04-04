@@ -1,4 +1,7 @@
-use text_splitter::{MarkdownSplitter, TextSplitter};
+use flow_like_model_provider::{
+    text_splitter::{MarkdownSplitter, TextSplitter},
+    tokenizers,
+};
 
 pub fn split_text(
     text: &str,

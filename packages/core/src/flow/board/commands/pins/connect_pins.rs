@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use crate::{
     flow::{
-        board::{commands::Command, Board},
+        board::{Board, commands::Command},
         pin::PinType,
         variable::VariableType,
     },
@@ -113,7 +113,9 @@ pub fn connect_pins(
     }
 
     if from_pin == to_pin {
-        return Err(anyhow::anyhow!("Cannot connect a pin to itself".to_string()));
+        return Err(anyhow::anyhow!(
+            "Cannot connect a pin to itself".to_string()
+        ));
     }
 
     let from_node = match board.nodes.get(from_node) {

@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use fastembed::TokenizerFiles;
-use tokenizers::{AddedToken, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
+use flow_like_model_provider::tokenizers::{
+    self, AddedToken, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams,
+};
 
 pub fn load_tokenizer_from_file(
     tokenizer_files: Arc<TokenizerFiles>,

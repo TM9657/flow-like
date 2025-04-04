@@ -1,11 +1,14 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use flow_like::{
     flow::{board::Board, execution::InternalRun},
     profile::Profile,
     state::{FlowLikeConfig, FlowLikeState},
-    utils::{http::HTTPClient, local_object_store::LocalObjectStore},
+    utils::http::HTTPClient,
 };
-use object_store::path::Path;
+use flow_like_storage::{
+    Path,
+    files::store::{FlowLikeStore, local_store::LocalObjectStore},
+};
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -17,7 +20,7 @@ const START_2: &str = "o0c7fpijhsnbrh8gg3a13irx";
 async fn default_state() -> Arc<Mutex<FlowLikeState>> {
     let mut config: FlowLikeConfig = FlowLikeConfig::new();
     let store = LocalObjectStore::new(PathBuf::from("../../tests")).unwrap();
-    let store = flow_like::state::FlowLikeStore::Local(Arc::new(store));
+    let store = FlowLikeStore::Local(Arc::new(store));
     config.register_bits_store(store.clone());
     config.register_user_store(store.clone());
     config.register_project_store(store);

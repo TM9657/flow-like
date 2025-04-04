@@ -6,7 +6,6 @@ use super::{
 };
 use crate::{
     app::App,
-    protobuf::conversions::{FromProto, ToProto},
     state::FlowLikeState,
     utils::{
         compression::{compress_to_file, from_compressed},
@@ -14,7 +13,8 @@ use crate::{
     },
 };
 use commands::GenericCommand;
-use object_store::{path::Path, ObjectStore};
+use flow_like_storage::object_store::{ObjectStore, path::Path};
+use flow_like_types::{FromProto, ToProto};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -401,7 +401,7 @@ impl Board {
             .ok_or(anyhow::anyhow!("Project store not found"))?
             .as_generic();
 
-        let board: crate::protobuf::types::Board =
+        let board: flow_like_types::proto::Board =
             from_compressed(store, path.child(format!("{}.board", id))).await?;
         let mut board = Board::from_proto(board);
         board.board_dir = path;
@@ -431,16 +431,19 @@ pub struct Comment {
 
 #[cfg(test)]
 mod tests {
-    use crate::protobuf::conversions::{FromProto, ToProto};
     use crate::{state::FlowLikeConfig, utils::http::HTTPClient};
-    use object_store::path::Path;
-    use prost::Message;
+    use flow_like_storage::{
+        files::store::FlowLikeStore,
+        object_store::{self, path::Path},
+    };
+    use flow_like_types::Message;
+    use flow_like_types::{FromProto, ToProto};
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
     async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
         let mut config: FlowLikeConfig = FlowLikeConfig::new();
-        config.register_project_store(crate::state::FlowLikeStore::Other(Arc::new(
+        config.register_project_store(FlowLikeStore::Other(Arc::new(
             object_store::memory::InMemory::new(),
         )));
         let (http_client, _refetch_rx) = HTTPClient::new();
@@ -457,7 +460,7 @@ mod tests {
         let mut buf = Vec::new();
         board.to_proto().encode(&mut buf).unwrap();
         let deser_board =
-            super::Board::from_proto(crate::protobuf::types::Board::decode(&buf[..]).unwrap());
+            super::Board::from_proto(flow_like_types::proto::Board::decode(&buf[..]).unwrap());
 
         assert_eq!(board.id, deser_board.id);
     }

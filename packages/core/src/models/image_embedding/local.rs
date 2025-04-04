@@ -1,16 +1,15 @@
-use super::ImageEmbeddingModelLogic;
 use crate::{
     bit::{Bit, BitTypes},
-    flow::execution::Cacheable,
-    models::{embedding::EmbeddingModelLogic, embedding_factory::EmbeddingFactory},
-    state::{FlowLikeState, FlowLikeStore},
+    models::embedding_factory::EmbeddingFactory,
+    state::FlowLikeState,
 };
-use anyhow::Result;
-use async_trait::async_trait;
 use fastembed::{ImageEmbedding, ImageInitOptionsUserDefined, UserDefinedImageEmbeddingModel};
+use flow_like_model_provider::{
+    embedding::EmbeddingModelLogic, image_embedding::ImageEmbeddingModelLogic,
+};
+use flow_like_storage::files::store::FlowLikeStore;
+use flow_like_types::{Cacheable, Result, async_trait};
 use std::{any::Any, sync::Arc};
-use text_splitter::{MarkdownSplitter, TextSplitter};
-
 use tokio::sync::Mutex;
 
 #[derive(Clone)]
@@ -96,8 +95,12 @@ impl ImageEmbeddingModelLogic for LocalImageEmbeddingModel {
         capacity: Option<usize>,
         overlap: Option<usize>,
     ) -> anyhow::Result<(
-        TextSplitter<tokenizers::Tokenizer>,
-        MarkdownSplitter<tokenizers::Tokenizer>,
+        flow_like_model_provider::text_splitter::TextSplitter<
+            flow_like_model_provider::tokenizers::Tokenizer,
+        >,
+        flow_like_model_provider::text_splitter::MarkdownSplitter<
+            flow_like_model_provider::tokenizers::Tokenizer,
+        >,
     )> {
         return self.text_model.get_splitter(capacity, overlap).await;
     }

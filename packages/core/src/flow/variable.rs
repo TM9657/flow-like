@@ -107,8 +107,8 @@ pub enum VariableType {
 
 #[cfg(test)]
 mod tests {
-    use crate::protobuf::conversions::{FromProto, ToProto};
-    use prost::Message;
+    use flow_like_types::Message;
+    use flow_like_types::{FromProto, ToProto};
 
     #[tokio::test]
     async fn serialize_variable() {
@@ -121,7 +121,7 @@ mod tests {
         let mut buf = Vec::new();
         variable.to_proto().encode(&mut buf).unwrap();
         let deser = super::Variable::from_proto(
-            crate::protobuf::types::Variable::decode(&buf[..]).unwrap(),
+            flow_like_types::proto::Variable::decode(&buf[..]).unwrap(),
         );
 
         assert_eq!(variable.id, deser.id);

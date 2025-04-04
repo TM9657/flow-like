@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     flow::{
-        board::{commands::Command, Board, Comment},
+        board::{Board, Comment, commands::Command},
         node::Node,
     },
     state::FlowLikeState,

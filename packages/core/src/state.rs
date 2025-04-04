@@ -1,22 +1,20 @@
 use anyhow::Ok;
 use dashmap::DashMap;
+use flow_like_storage::files::store::FlowLikeStore;
+use flow_like_storage::lancedb::connection::ConnectBuilder;
+use flow_like_storage::object_store::ObjectStore;
+use flow_like_storage::object_store::path::Path;
 use futures::StreamExt;
-use lancedb::connection::ConnectBuilder;
-use object_store::path::Path;
-use object_store::signer::Signer;
-use object_store::ObjectStore;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use tokio::sync::{mpsc, Mutex, RwLock};
-use url::Url;
+use std::time::SystemTime;
+use tokio::sync::{Mutex, RwLock, mpsc};
 
 #[cfg(feature = "flow-runtime")]
 use crate::flow::board::Board;
-use crate::flow::execution::Cacheable;
 #[cfg(feature = "flow-runtime")]
 use crate::flow::execution::InternalRun;
 use crate::flow::node::Node;
@@ -30,7 +28,6 @@ use crate::models::llm::ModelFactory;
 #[cfg(feature = "bit")]
 use crate::utils::download_manager::DownloadManager;
 use crate::utils::http::HTTPClient;
-use crate::utils::local_object_store::LocalObjectStore;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FlowLikeEvent {
@@ -49,86 +46,6 @@ impl FlowLikeEvent {
             payload: serde_json::to_value(payload).unwrap(),
             timestamp: SystemTime::now(),
         }
-    }
-}
-
-#[derive(Clone)]
-pub enum FlowLikeStore {
-    Local(Arc<LocalObjectStore>),
-    AWS(Arc<object_store::aws::AmazonS3>),
-    Azure(Arc<object_store::azure::MicrosoftAzure>),
-    Google(Arc<object_store::gcp::GoogleCloudStorage>),
-    Other(Arc<dyn ObjectStore>),
-}
-
-impl Cacheable for FlowLikeStore {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-}
-
-impl FlowLikeStore {
-    pub fn as_generic(&self) -> Arc<dyn ObjectStore> {
-        match self {
-            FlowLikeStore::Local(store) => store.clone() as Arc<dyn ObjectStore>,
-            FlowLikeStore::AWS(store) => store.clone() as Arc<dyn ObjectStore>,
-            FlowLikeStore::Azure(store) => store.clone() as Arc<dyn ObjectStore>,
-            FlowLikeStore::Google(store) => store.clone() as Arc<dyn ObjectStore>,
-            FlowLikeStore::Other(store) => store.clone() as Arc<dyn ObjectStore>,
-        }
-    }
-
-    pub async fn sign(
-        &self,
-        method: &str,
-        path: &Path,
-        expires_after: Duration,
-    ) -> anyhow::Result<Url> {
-        let method = match method.to_uppercase().as_str() {
-            "GET" => reqwest::Method::GET,
-            "PUT" => reqwest::Method::PUT,
-            "POST" => reqwest::Method::POST,
-            "DELETE" => reqwest::Method::DELETE,
-            _ => anyhow::bail!("Invalid HTTP Method"),
-        };
-
-        let url: Url = match self {
-            FlowLikeStore::AWS(store) => store.signed_url(method, path, expires_after).await?,
-            FlowLikeStore::Google(store) => store.signed_url(method, path, expires_after).await?,
-            FlowLikeStore::Azure(store) => store.signed_url(method, path, expires_after).await?,
-            FlowLikeStore::Local(store) => {
-                Url::from_directory_path(store.path_to_filesystem(path)?)
-                    .map_err(|_| anyhow::anyhow!("Could not build File System URL"))?
-            }
-            FlowLikeStore::Other(_) => anyhow::bail!("Sign not implemented for this store"),
-        };
-
-        Ok(url)
-    }
-
-    pub async fn hash(&self, path: &Path) -> anyhow::Result<String> {
-        let store = self.as_generic();
-        let meta = store.head(path).await?;
-
-        if let Some(hash) = meta.e_tag {
-            return Ok(hash);
-        }
-
-        let mut hash = blake3::Hasher::new();
-        let mut reader = store.get(path).await?.into_stream();
-
-        while let Some(data) = reader.next().await {
-            let data = data?;
-            hash.update(&data);
-        }
-
-        let finalized = hash.finalize();
-        let finalized = finalized.to_hex().to_lowercase().to_string();
-        Ok(finalized)
     }
 }
 
@@ -550,7 +467,8 @@ impl Default for ToastEvent {
 
 #[cfg(test)]
 mod tests {
-    use object_store::PutPayload;
+    use flow_like_storage::object_store::PutPayload;
+    use flow_like_types::Cacheable;
 
     use super::*;
     use std::path::PathBuf;
@@ -565,7 +483,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_object_store_any_cast() {
-        let memory_store = object_store::memory::InMemory::new();
+        let memory_store = flow_like_storage::object_store::memory::InMemory::new();
         let test_string = b"Hi, I am Testing";
         let test_path = Path::from("test");
         memory_store

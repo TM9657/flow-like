@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use crate::{
     flow::{
         execution::{
-            context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel,
+            LogLevel, context::ExecutionContext, internal_node::InternalNode, log::LogMessage,
         },
         node::{Node, NodeLogic},
         pin::PinOptions,

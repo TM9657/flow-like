@@ -5,10 +5,12 @@ use crate::{
         pin::PinOptions,
         variable::VariableType,
     },
-    models::{response::Response, response_chunk::ResponseChunk},
     state::FlowLikeState,
 };
 use async_trait::async_trait;
+use flow_like_model_provider::{
+    history::History, llm::LLMCallback, response::Response, response_chunk::ResponseChunk,
+};
 use serde_json::json;
 
 #[derive(Default)]

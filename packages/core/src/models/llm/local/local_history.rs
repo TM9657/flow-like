@@ -1,9 +1,6 @@
+use crate::utils::data_url::optimize_data_url;
+use flow_like_model_provider::history::{Content, History, ResponseFormat, Role};
 use serde::{Deserialize, Serialize};
-
-use crate::{
-    models::history::{History, ResponseFormat},
-    utils::data_url::optimize_data_url,
-};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LocalModelHistoryMessage {
@@ -48,9 +45,9 @@ async fn parse_messages(history: &History) -> Vec<LocalModelHistoryMessage> {
     let mut messages = Vec::with_capacity(history.messages.len());
     for message in &history.messages {
         let role = match message.role {
-            crate::models::history::Role::Assistant => "assistant",
-            crate::models::history::Role::User => "user",
-            crate::models::history::Role::System => "system",
+            Role::Assistant => "assistant",
+            Role::User => "user",
+            Role::System => "system",
         };
 
         let mut message_string = String::new();
@@ -58,11 +55,11 @@ async fn parse_messages(history: &History) -> Vec<LocalModelHistoryMessage> {
 
         for content in &message.content {
             match content {
-                crate::models::history::Content::Text { text, .. } => {
+                Content::Text { text, .. } => {
                     message_string.push_str(text);
                     message_string.push(' ');
                 }
-                crate::models::history::Content::Image { data, .. } => {
+                Content::Image { data, .. } => {
                     let optimized_url = optimize_data_url(data).await;
 
                     if let Ok(data_url) = optimized_url {

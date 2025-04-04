@@ -4,8 +4,9 @@ mod settings;
 mod state;
 mod utils;
 use flow_like::{
+    flow_like_storage::files::store::{local_store::LocalObjectStore, FlowLikeStore},
     state::{FlowLikeConfig, FlowLikeState},
-    utils::{http::HTTPClient, local_object_store::LocalObjectStore},
+    utils::http::HTTPClient,
 };
 use object_store::path::Path;
 use serde_json::Value;
@@ -23,13 +24,13 @@ pub fn run() {
     let project_dir = settings_state.project_dir.clone();
 
     let mut config: FlowLikeConfig = FlowLikeConfig::new();
-    config.register_bits_store(flow_like::state::FlowLikeStore::Local(Arc::new(
+    config.register_bits_store(FlowLikeStore::Local(Arc::new(
         LocalObjectStore::new(settings_state.bit_dir.clone()).unwrap(),
     )));
-    config.register_user_store(flow_like::state::FlowLikeStore::Local(Arc::new(
+    config.register_user_store(FlowLikeStore::Local(Arc::new(
         LocalObjectStore::new(settings_state.user_dir.clone()).unwrap(),
     )));
-    config.register_project_store(flow_like::state::FlowLikeStore::Local(Arc::new(
+    config.register_project_store(FlowLikeStore::Local(Arc::new(
         LocalObjectStore::new(project_dir.clone()).unwrap(),
     )));
     config.register_build_project_database(Arc::new(move |path: Path| {

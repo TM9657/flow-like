@@ -9,7 +9,7 @@ use crate::{
     state::FlowLikeState,
 };
 use async_trait::async_trait;
-use object_store::path::Path;
+use flow_like_storage::object_store::path::Path;
 use serde_json::json;
 
 #[derive(Default)]

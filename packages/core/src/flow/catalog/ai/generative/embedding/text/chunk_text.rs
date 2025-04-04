@@ -1,7 +1,7 @@
 use crate::{
     flow::{
         catalog::ai::generative::embedding::{CachedEmbeddingModel, CachedEmbeddingModelObject},
-        execution::{context::ExecutionContext, LogLevel},
+        execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic},
         pin::PinOptions,
         variable::VariableType,

@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use sha2::{Digest, Sha256};
 use std::{
     hash::{Hash, Hasher},

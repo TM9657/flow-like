@@ -15,7 +15,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use regex::Regex;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub struct FormatStringNode {
     regex: Regex,

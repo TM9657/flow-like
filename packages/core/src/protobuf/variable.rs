@@ -1,8 +1,8 @@
-use super::conversions::{FromProto, ToProto};
 use crate::flow::{
     pin::{PinType, ValueType},
     variable::{Variable, VariableType},
 };
+use flow_like_types::{FromProto, Timestamp, ToProto};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -78,9 +78,9 @@ impl PinType {
     }
 }
 
-impl ToProto<super::types::Variable> for Variable {
-    fn to_proto(&self) -> super::types::Variable {
-        super::types::Variable {
+impl ToProto<flow_like_types::proto::Variable> for Variable {
+    fn to_proto(&self) -> flow_like_types::proto::Variable {
+        flow_like_types::proto::Variable {
             id: self.id.clone(),
             name: self.name.clone(),
             category: self.category.clone().unwrap_or_default(),
@@ -95,8 +95,8 @@ impl ToProto<super::types::Variable> for Variable {
     }
 }
 
-impl FromProto<super::types::Variable> for Variable {
-    fn from_proto(proto: super::types::Variable) -> Self {
+impl FromProto<flow_like_types::proto::Variable> for Variable {
+    fn from_proto(proto: flow_like_types::proto::Variable) -> Self {
         Variable {
             id: proto.id,
             name: proto.name,

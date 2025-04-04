@@ -4,7 +4,7 @@ use crate::{
     flow::{
         board::Board,
         execution::{
-            context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel,
+            LogLevel, context::ExecutionContext, internal_node::InternalNode, log::LogMessage,
         },
         node::{Node, NodeLogic},
         pin::{PinOptions, ValueType},

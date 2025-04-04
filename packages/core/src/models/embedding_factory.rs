@@ -1,15 +1,14 @@
 use std::{collections::HashMap, sync::Arc, time::SystemTime};
 
+use flow_like_model_provider::{
+    embedding::EmbeddingModelLogic, image_embedding::ImageEmbeddingModelLogic,
+};
 use tokio::sync::Mutex;
 
-use crate::{
-    bit::{Bit, BitProvider},
-    state::FlowLikeState,
-};
+use crate::{bit::Bit, state::FlowLikeState};
 
 use super::{
-    embedding::{local::LocalEmbeddingModel, EmbeddingModelLogic},
-    image_embedding::{local::LocalImageEmbeddingModel, ImageEmbeddingModelLogic},
+    embedding::local::LocalEmbeddingModel, image_embedding::local::LocalImageEmbeddingModel,
 };
 
 pub struct EmbeddingFactory {
@@ -46,7 +45,7 @@ impl EmbeddingFactory {
         let provider = provider.ok_or(anyhow::anyhow!("Model type not supported"))?;
         let provider = provider.provider_name;
 
-        if provider == BitProvider::Local {
+        if provider == "Local" {
             if let Some(model) = self.cached_text_models.get(&bit.id) {
                 // update last used time
                 self.ttl_list.insert(bit.id.clone(), SystemTime::now());
@@ -76,7 +75,7 @@ impl EmbeddingFactory {
         let provider = provider.ok_or(anyhow::anyhow!("Model type not supported"))?;
         let provider = provider.provider_name;
 
-        if provider == BitProvider::Local {
+        if provider == "Local" {
             if let Some(model) = self.cached_image_models.get(&bit.id) {
                 self.ttl_list.insert(bit.id.clone(), SystemTime::now());
                 return Ok(model.clone());

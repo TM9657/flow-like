@@ -1,15 +1,16 @@
 use std::sync::Arc;
 
 use crate::{
-    db::vector::lancedb::LanceDBVectorStore,
     flow::{
-        execution::{context::ExecutionContext, Cacheable},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         variable::VariableType,
     },
     state::FlowLikeState,
 };
 use async_trait::async_trait;
+use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
+use flow_like_types::Cacheable;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;

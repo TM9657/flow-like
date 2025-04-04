@@ -1,16 +1,12 @@
-use std::{collections::HashMap, time::SystemTime};
-
-use object_store::path::Path;
-use prost_types::Timestamp;
-
 use crate::flow::{
     board::{Board, Comment, ExecutionStage},
     execution::LogLevel,
     node::Node,
     variable::Variable,
 };
-
-use super::conversions::{FromProto, ToProto};
+use flow_like_storage::Path;
+use flow_like_types::{FromProto, Timestamp, ToProto};
+use std::{collections::HashMap, time::SystemTime};
 
 impl ExecutionStage {
     fn to_proto(&self) -> i32 {
@@ -58,9 +54,9 @@ impl LogLevel {
     }
 }
 
-impl ToProto<super::types::Board> for Board {
-    fn to_proto(&self) -> super::types::Board {
-        super::types::Board {
+impl ToProto<flow_like_types::proto::Board> for Board {
+    fn to_proto(&self) -> flow_like_types::proto::Board {
+        flow_like_types::proto::Board {
             id: self.id.clone(),
             name: self.name.clone(),
             description: self.description.clone(),
@@ -94,8 +90,8 @@ impl ToProto<super::types::Board> for Board {
     }
 }
 
-impl FromProto<super::types::Board> for Board {
-    fn from_proto(proto: super::types::Board) -> Self {
+impl FromProto<flow_like_types::proto::Board> for Board {
+    fn from_proto(proto: flow_like_types::proto::Board) -> Self {
         Board {
             id: proto.id,
             name: proto.name,

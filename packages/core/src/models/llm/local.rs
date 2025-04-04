@@ -1,12 +1,17 @@
 use crate::{
     bit::{Bit, BitTypes},
-    models::{
-        history::History, llm::ModelLogic, response::Response, response_chunk::ResponseChunk,
-    },
-    state::{FlowLikeState, FlowLikeStore},
+    models::ModelMeta,
+    state::FlowLikeState,
 };
 use anyhow::Result;
 use async_trait::async_trait;
+use flow_like_model_provider::{
+    history::History,
+    llm::{LLMCallback, ModelLogic},
+    response::Response,
+    response_chunk::ResponseChunk,
+};
+use flow_like_storage::files::store::FlowLikeStore;
 use futures::StreamExt;
 use portpicker::pick_unused_port;
 use std::{
@@ -20,7 +25,7 @@ use std::{
 use tokio::sync::Mutex as TokioMutex;
 use tokio::time::sleep;
 
-use super::{ExecutionSettings, LLMCallback};
+use super::ExecutionSettings;
 
 mod local_history;
 
@@ -32,12 +37,14 @@ pub struct LocalModel {
     pub port: u16,
 }
 
-#[async_trait]
-impl ModelLogic for LocalModel {
+impl ModelMeta for LocalModel {
     fn get_bit(&self) -> Bit {
         self.bit.clone()
     }
+}
 
+#[async_trait]
+impl ModelLogic for LocalModel {
     async fn invoke(&self, history: &History, callback: Option<LLMCallback>) -> Result<Response> {
         let local_history = local_history::LocalModelHistory::from_history(history).await;
         let stream = history.stream.unwrap_or(false);

@@ -5,12 +5,16 @@ use crate::{
         pin::PinOptions,
         variable::VariableType,
     },
-    models::history::History,
     state::FlowLikeState,
 };
 use async_trait::async_trait;
+use flow_like_model_provider::{
+    history::{History, HistoryMessage, Role},
+    llm::LLMCallback,
+    response::{Response, ResponseMessage},
+    response_chunk::ResponseChunk,
+};
 use serde_json::json;
-
 #[derive(Default)]
 pub struct SetHistoryStopWordsNode {}
 

@@ -2,11 +2,11 @@ pub mod image;
 pub mod load;
 pub mod text;
 
-use crate::{
-    bit::BitTypes,
-    flow::{execution::Cacheable, node::NodeLogic},
-    models::{embedding::EmbeddingModelLogic, image_embedding::ImageEmbeddingModelLogic},
+use crate::{bit::BitTypes, flow::node::NodeLogic};
+use flow_like_model_provider::{
+    embedding::EmbeddingModelLogic, image_embedding::ImageEmbeddingModelLogic,
 };
+use flow_like_types::Cacheable;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{any::Any, sync::Arc};
