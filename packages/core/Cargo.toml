@@ -77,7 +77,6 @@ blake3 = {version = "1.5.5", features = ["rayon"]}
 base64 = "0.22.1"
 schemars = "0.8.21"
 tempfile = "3.15.0"
-bitcode = {version = "0.6.3", features = ["serde"] }
 lz4_flex = "0.11.3"
 url = {version = "2.5.4", features = ["serde"]}
 bytes = "1.10.0"
@@ -87,6 +86,8 @@ fasteval = "0.2.4"
 chrono = "0.4.39"
 json5 = "0.4.1"
 deno_core = "0.341.0"
+prost = "0.13.5"
+prost-types = "0.13.5"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
@@ -119,3 +120,6 @@ opt-level = "z"
 
 [profile.dev]
 opt-level = 1
+
+[build-dependencies]
+prost-build = "0.13.5"

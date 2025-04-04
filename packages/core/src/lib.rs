@@ -1,9 +1,9 @@
 pub mod db;
-pub mod state;
-pub mod utils;
-
 #[cfg(feature = "flow")]
 pub mod flow;
+pub mod protobuf;
+pub mod state;
+pub mod utils;
 
 #[cfg(feature = "app")]
 pub mod app;

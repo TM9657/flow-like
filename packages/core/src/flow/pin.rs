@@ -138,11 +138,11 @@ impl Pin {}
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, sync::Arc};
-
-    use tokio::sync::Mutex;
-
     use crate::flow::pin::Pin;
+    use crate::protobuf::conversions::{FromProto, ToProto};
+    use prost::Message;
+    use std::{collections::HashSet, sync::Arc};
+    use tokio::sync::Mutex;
 
     #[tokio::test]
     async fn serialize_pin() {
@@ -165,8 +165,9 @@ mod tests {
         };
         // let pin = super::SerializablePin::from(pin);
 
-        let ser = bitcode::serialize(&pin).unwrap();
-        let deser: Pin = bitcode::deserialize(&ser).unwrap();
+        let mut buf = Vec::new();
+        pin.to_proto().encode(&mut buf).unwrap();
+        let deser = super::Pin::from_proto(crate::protobuf::types::Pin::decode(&buf[..]).unwrap());
 
         assert_eq!(pin.id, deser.id);
     }

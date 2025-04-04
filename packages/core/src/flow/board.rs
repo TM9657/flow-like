@@ -1,5 +1,12 @@
+use super::{
+    execution::LogLevel,
+    node::{Node, NodeLogic},
+    pin::Pin,
+    variable::Variable,
+};
 use crate::{
     app::App,
+    protobuf::conversions::{FromProto, ToProto},
     state::FlowLikeState,
     utils::{
         compression::{compress_to_file, from_compressed},
@@ -16,13 +23,6 @@ use std::{
     time::SystemTime,
 };
 use tokio::sync::Mutex;
-
-use super::{
-    execution::LogLevel,
-    node::{Node, NodeLogic},
-    pin::Pin,
-    variable::Variable,
-};
 
 pub mod commands;
 
@@ -135,7 +135,7 @@ impl Board {
     pub async fn execute_command(
         &mut self,
         command: GenericCommand,
-        state: Arc<Mutex<FlowLikeState>>
+        state: Arc<Mutex<FlowLikeState>>,
     ) -> anyhow::Result<GenericCommand> {
         let mut command = command;
         command.execute(self, state.clone()).await?;
@@ -147,7 +147,7 @@ impl Board {
     pub async fn execute_commands(
         &mut self,
         commands: Vec<GenericCommand>,
-        state: Arc<Mutex<FlowLikeState>>
+        state: Arc<Mutex<FlowLikeState>>,
     ) -> anyhow::Result<Vec<GenericCommand>> {
         let mut commands = commands;
         for command in commands.iter_mut() {
@@ -161,15 +161,23 @@ impl Board {
         Ok(commands)
     }
 
-    pub async fn undo(&mut self, commands: Vec<GenericCommand>, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<()> {
+    pub async fn undo(
+        &mut self,
+        commands: Vec<GenericCommand>,
+        state: Arc<Mutex<FlowLikeState>>,
+    ) -> anyhow::Result<()> {
         let mut commands = commands;
-            for command in commands.iter_mut().rev() {
-                command.undo(self, state.clone()).await?;
-            }
-            Ok(())
+        for command in commands.iter_mut().rev() {
+            command.undo(self, state.clone()).await?;
+        }
+        Ok(())
     }
 
-    pub async fn redo(&mut self, commands: Vec<GenericCommand>, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<()> {
+    pub async fn redo(
+        &mut self,
+        commands: Vec<GenericCommand>,
+        state: Arc<Mutex<FlowLikeState>>,
+    ) -> anyhow::Result<()> {
         let mut commands = commands;
         for command in commands.iter_mut().rev() {
             command.execute(self, state.clone()).await?;
@@ -371,7 +379,8 @@ impl Board {
                 .as_generic(),
         };
 
-        compress_to_file(store, to, self).await?;
+        let board = self.to_proto();
+        compress_to_file(store, to, &board).await?;
         Ok(())
     }
 
@@ -392,7 +401,9 @@ impl Board {
             .ok_or(anyhow::anyhow!("Project store not found"))?
             .as_generic();
 
-        let mut board: Board = from_compressed(store, path.child(format!("{}.board", id))).await?;
+        let board: crate::protobuf::types::Board =
+            from_compressed(store, path.child(format!("{}.board", id))).await?;
+        let mut board = Board::from_proto(board);
         board.board_dir = path;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
@@ -410,18 +421,20 @@ pub enum CommentType {
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct Comment {
-    id: String,
-    author: Option<String>,
-    content: String,
-    comment_type: CommentType,
-    timestamp: SystemTime,
-    coordinates: (f32, f32, f32),
+    pub id: String,
+    pub author: Option<String>,
+    pub content: String,
+    pub comment_type: CommentType,
+    pub timestamp: SystemTime,
+    pub coordinates: (f32, f32, f32),
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::protobuf::conversions::{FromProto, ToProto};
     use crate::{state::FlowLikeConfig, utils::http::HTTPClient};
     use object_store::path::Path;
+    use prost::Message;
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -441,9 +454,11 @@ mod tests {
         let base_dir = Path::from("boards");
         let board = super::Board::new(None, base_dir, state);
 
-        let ser = bitcode::serialize(&board).unwrap();
-        let deser: super::Board = bitcode::deserialize(&ser).unwrap();
+        let mut buf = Vec::new();
+        board.to_proto().encode(&mut buf).unwrap();
+        let deser_board =
+            super::Board::from_proto(crate::protobuf::types::Board::decode(&buf[..]).unwrap());
 
-        assert_eq!(board.id, deser.id);
+        assert_eq!(board.id, deser_board.id);
     }
 }

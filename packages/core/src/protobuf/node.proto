@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package flow_like_protobuf;
+
+import "pin.proto";
+import "variable.proto";
+
+message NodeScores {
+    uint32 privacy = 1;
+    uint32 security = 2;
+    uint32 performance = 3;
+    uint32 governance = 4;
+}
+
+message Node {
+    string id = 1;
+    string name = 2;
+    string friendly_name = 3;
+    string description = 4;
+    float coord_x = 5;
+    float coord_y = 6;
+    float coord_z = 7;
+    string category = 8;
+    NodeScores scores = 9;
+    map<string, Pin> pins = 10;
+    bool start = 11;
+    string icon = 12;
+    string comment = 13;
+    bool long_running = 14;
+    string error = 15;
+    string docs = 16;
+}
+

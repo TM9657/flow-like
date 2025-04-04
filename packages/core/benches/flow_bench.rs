@@ -9,10 +9,10 @@ use object_store::path::Path;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 
-const BOARD_1: &str = "d5i871a8t0qqk318j1yuqkaj";
-const BOARD_2: &str = "t4572r2qskkn5cr8iryaaadw";
-const START_1: &str = "smnz1lcafr1hm498xzi1wjwk";
-const START_2: &str = "kfjvi7m0mloyz1ukirkgwf04";
+const BOARD_1: &str = "dkfxopaxr8863bo22zg1brhc";
+const BOARD_2: &str = "qhrbdzfs80934gg4exask8nu";
+const START_1: &str = "f05f0kh6vxbd79zjc7li5wcy";
+const START_2: &str = "o0c7fpijhsnbrh8gg3a13irx";
 
 async fn default_state() -> Arc<Mutex<FlowLikeState>> {
     let mut config: FlowLikeConfig = FlowLikeConfig::new();
@@ -33,7 +33,7 @@ fn construct_profile() -> Profile {
 }
 
 async fn open_board(id: &str, state: Arc<Mutex<FlowLikeState>>) -> Board {
-    let path = Path::from("flow").child("megy1lzau8c9zfmk0wy6b00x");
+    let path = Path::from("flow").child("q99s8hb4z56mpwz8dscz7qmz");
     Board::load(path, id, state).await.unwrap()
 }
 

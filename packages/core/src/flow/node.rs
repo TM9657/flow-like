@@ -33,10 +33,10 @@ pub enum NodeState {
 /// * `governance` - Indicates compliance with policies and regulations
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct NodeScores {
-    pub privacy: i8,
-    pub security: i8,
-    pub performance: i8,
-    pub governance: i8,
+    pub privacy: u8,
+    pub security: u8,
+    pub performance: u8,
+    pub governance: u8,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -257,13 +257,21 @@ pub trait NodeLogic: Send + Sync {
 
 #[cfg(test)]
 mod tests {
+    use crate::protobuf::conversions::{FromProto, ToProto};
+    use prost::Message;
+    use serde::Serialize;
+
+    use super::Node;
+
     #[tokio::test]
     async fn serialize_node() {
         let node = super::Node::new("Hi", "Test Node", "What a wonderful day", "IDK");
 
-        let ser = bitcode::serialize(&node).unwrap();
-        let deser: super::Node = bitcode::deserialize(&ser).unwrap();
+        let mut buf = Vec::new();
+        node.to_proto().encode(&mut buf).unwrap();
+        let mut deser_node =
+            super::Node::from_proto(crate::protobuf::types::Node::decode(&buf[..]).unwrap());
 
-        assert_eq!(node.id, deser.id);
+        assert_eq!(node.id, deser_node.id);
     }
 }

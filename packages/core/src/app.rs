@@ -1,3 +1,4 @@
+use super::protobuf::app;
 use cuid2;
 use object_store::path::Path;
 use schemars::JsonSchema;
@@ -8,6 +9,7 @@ use tokio::sync::Mutex;
 use crate::{
     bit::BitMeta,
     flow::board::Board,
+    protobuf::conversions::{FromProto, ToProto},
     state::FlowLikeState,
     utils::compression::{compress_to_file, from_compressed},
 };
@@ -92,7 +94,9 @@ impl App {
 
         let store = FlowLikeState::project_store(&app_state).await?.as_generic();
 
-        let mut vault: App = from_compressed(store, storage_root.child("manifest.app")).await?;
+        let vault: super::protobuf::types::App =
+            from_compressed(store, storage_root.child("manifest.app")).await?;
+        let mut vault = App::from_proto(vault);
         vault.app_state = Some(app_state.clone());
 
         Ok(vault)
@@ -225,7 +229,8 @@ impl App {
             .child(self.id.clone())
             .child("manifest.app");
 
-        compress_to_file(store, manifest_path, self).await?;
+        let proto_app = self.to_proto();
+        compress_to_file(store, manifest_path, &proto_app).await?;
 
         Ok(())
     }
@@ -233,7 +238,9 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    use crate::protobuf::conversions::{FromProto, ToProto};
     use crate::{state::FlowLikeConfig, utils::http::HTTPClient};
+    use prost::Message;
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -249,7 +256,7 @@ mod tests {
 
     #[tokio::test]
     async fn serialize_app() {
-        let vault = crate::app::App {
+        let app = crate::app::App {
             id: "id".to_string(),
             meta: std::collections::HashMap::new(),
             authors: vec!["author1".to_string(), "author2".to_string()],
@@ -261,9 +268,11 @@ mod tests {
             frontend: None,
         };
 
-        let ser = bitcode::serialize(&vault).unwrap();
-        let deser: crate::app::App = bitcode::deserialize(&ser).unwrap();
+        let mut buf = Vec::new();
+        app.to_proto().encode(&mut buf).unwrap();
+        let mut deser =
+            super::App::from_proto(crate::protobuf::types::App::decode(&buf[..]).unwrap());
 
-        assert_eq!(vault.id, deser.id);
+        assert_eq!(app.id, deser.id);
     }
 }

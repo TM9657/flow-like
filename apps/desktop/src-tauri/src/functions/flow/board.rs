@@ -167,9 +167,7 @@ pub async fn execute_command(
     let board = flow_like_state.lock().await.get_board(&board_id)?;
 
     let mut board = board.lock().await;
-    let command = board
-        .execute_command(command, flow_like_state)
-        .await?;
+    let command = board.execute_command(command, flow_like_state).await?;
 
     board.save(Some(store)).await?;
     Ok(command)
@@ -188,7 +186,7 @@ pub async fn execute_commands(
     let board = flow_like_state.lock().await.get_board(&board_id)?;
 
     let mut board = board.lock().await;
-    let commands = board.execute_commands(commands,  flow_like_state).await?;
+    let commands = board.execute_commands(commands, flow_like_state).await?;
 
     board.save(Some(store)).await?;
     Ok(commands)
