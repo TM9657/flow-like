@@ -138,7 +138,7 @@ impl Pin {}
 
 #[cfg(test)]
 mod tests {
-    use crate::flow::pin::Pin;
+
     use flow_like_types::Message;
     use flow_like_types::{FromProto, ToProto};
     use std::{collections::HashSet, sync::Arc};

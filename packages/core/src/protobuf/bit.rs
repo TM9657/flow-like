@@ -1,5 +1,5 @@
 use crate::bit::BitMeta;
-use flow_like_types::{FromProto, Timestamp, ToProto};
+use flow_like_types::{FromProto, ToProto};
 
 impl ToProto<flow_like_types::proto::Meta> for BitMeta {
     fn to_proto(&self) -> flow_like_types::proto::Meta {

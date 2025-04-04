@@ -1,13 +1,9 @@
-use flow_like_types::{FromProto, Timestamp, ToProto};
+use flow_like_types::{FromProto, ToProto};
 
 use crate::flow::{
     node::{Node, NodeScores},
-    pin::{Pin, PinOptions, PinType, ValueType},
-    variable::{Variable, VariableType},
+    pin::Pin,
 };
-use serde_json::Value;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 impl ToProto<flow_like_types::proto::NodeScores> for NodeScores {
     fn to_proto(&self) -> flow_like_types::proto::NodeScores {

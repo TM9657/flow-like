@@ -1,11 +1,8 @@
 use crate::flow::{
     pin::{Pin, PinOptions, PinType, ValueType},
-    variable::{Variable, VariableType},
+    variable::VariableType,
 };
-use flow_like_types::{FromProto, Timestamp, ToProto};
-use serde_json::Value;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use flow_like_types::{FromProto, ToProto};
 
 impl ToProto<flow_like_types::proto::PinOptions> for PinOptions {
     fn to_proto(&self) -> flow_like_types::proto::PinOptions {

@@ -2,7 +2,7 @@ use crate::flow::{
     pin::{PinType, ValueType},
     variable::{Variable, VariableType},
 };
-use flow_like_types::{FromProto, Timestamp, ToProto};
+use flow_like_types::{FromProto, ToProto};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;

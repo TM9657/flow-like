@@ -269,8 +269,7 @@ mod tests {
 
         let mut buf = Vec::new();
         app.to_proto().encode(&mut buf).unwrap();
-        let mut deser =
-            super::App::from_proto(flow_like_types::proto::App::decode(&buf[..]).unwrap());
+        let deser = super::App::from_proto(flow_like_types::proto::App::decode(&buf[..]).unwrap());
 
         assert_eq!(app.id, deser.id);
     }

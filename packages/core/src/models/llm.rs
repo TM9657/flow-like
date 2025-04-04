@@ -2,11 +2,10 @@ pub mod local;
 
 use crate::{bit::Bit, state::FlowLikeState, utils::device::get_vram};
 use anyhow::Result;
-use async_trait::async_trait;
 use flow_like_model_provider::llm::ModelLogic;
 use local::LocalModel;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc, time::SystemTime};
+use std::{collections::HashMap, sync::Arc, time::SystemTime};
 use tokio::sync::Mutex;
 use tokio::time::{Duration, interval};
 

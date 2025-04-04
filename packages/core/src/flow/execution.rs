@@ -11,7 +11,6 @@ use num_cpus;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::any::Any;
 use std::time::Instant;
 use std::{
     collections::{HashMap, HashSet},

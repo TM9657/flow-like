@@ -257,10 +257,9 @@ pub trait NodeLogic: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::Node;
+
     use flow_like_types::Message;
     use flow_like_types::{FromProto, ToProto};
-    use serde::Serialize;
 
     #[tokio::test]
     async fn serialize_node() {
@@ -268,7 +267,7 @@ mod tests {
 
         let mut buf = Vec::new();
         node.to_proto().encode(&mut buf).unwrap();
-        let mut deser_node =
+        let deser_node =
             super::Node::from_proto(flow_like_types::proto::Node::decode(&buf[..]).unwrap());
 
         assert_eq!(node.id, deser_node.id);
