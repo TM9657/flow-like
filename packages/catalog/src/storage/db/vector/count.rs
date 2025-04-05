@@ -9,7 +9,6 @@ use flow_like::{
 };
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_types::{async_trait, json::json};
-use futures::StreamExt;
 
 use super::NodeDBConnection;
 

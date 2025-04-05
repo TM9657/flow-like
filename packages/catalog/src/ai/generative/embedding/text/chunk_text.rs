@@ -9,7 +9,6 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::{anyhow, async_trait, json::json};
-use futures::StreamExt;
 
 #[derive(Default)]
 pub struct ChunkText {}

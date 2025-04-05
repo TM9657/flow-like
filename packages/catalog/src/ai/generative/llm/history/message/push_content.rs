@@ -10,7 +10,6 @@ use flow_like::{
 };
 use flow_like_model_provider::history::{Content, ContentType, HistoryMessage};
 use flow_like_types::{Value, async_trait, json::json};
-use futures::StreamExt;
 use std::sync::Arc;
 
 #[derive(Default)]
