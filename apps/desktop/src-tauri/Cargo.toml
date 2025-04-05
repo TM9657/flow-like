@@ -23,7 +23,7 @@ tauri-build = { version = "2.0.3", features = [] }
 flow-like = { path = "../../../packages/core" }
 flow-like-catalog = { path = "../../../packages/catalog" }
 tauri = { version = "2.1.1", features = ["macos-private-api"] }
-tauri-plugin-shell = "2.2.0"
+tauri-plugin-shell = "2.2.1"
 serde_json = "1.0.134"
 tauri-plugin-log = "2.2.0"
 tauri-plugin-notification = "2.2.0"
