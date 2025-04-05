@@ -12,7 +12,7 @@ pub struct Page {
     pub reference: String,
 }
 
-pub fn extract_pdf(file_path: &PathBuf) -> anyhow::Result<Vec<Page>> {
+pub fn extract_pdf(file_path: &PathBuf) -> flow_like_types::Result<Vec<Page>> {
     let parent = file_path.parent().unwrap();
     let pdf_name = file_path.file_stem().unwrap().to_str().unwrap();
     let image_dir = parent.join(pdf_name);
@@ -87,10 +87,12 @@ pub fn extract_pdf(file_path: &PathBuf) -> anyhow::Result<Vec<Page>> {
 mod tests {
     use std::io::Write;
 
+    use flow_like_types::{reqwest, tokio};
+
     use super::*;
 
     #[tokio::test]
-    async fn parse_pdf() -> anyhow::Result<()> {
+    async fn parse_pdf() -> flow_like_types::Result<()> {
         let download_link = "https://de.wikipedia.org/api/rest_v1/page/pdf/BMW";
         let pdf_path = PathBuf::from("./tmp/BMW.pdf");
         let response = reqwest::get(download_link).await?;

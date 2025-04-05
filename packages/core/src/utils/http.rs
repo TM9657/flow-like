@@ -1,7 +1,6 @@
-use dashmap::DashMap;
-use reqwest::Request;
+use flow_like_storage::blake3;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use flow_like_types::{reqwest::{self, Request}, sync::{mpsc, DashMap}, Value};
 use std::{sync::Arc, time::Duration};
 
 use super::cache::{cache_file_exists, read_cache_file, write_cache_file};
@@ -22,15 +21,15 @@ pub struct HTTPClient {
     pub cache: Arc<DashMap<String, Value>>,
 
     #[serde(skip)]
-    sender: Option<tokio::sync::mpsc::Sender<Request>>,
+    sender: Option<mpsc::Sender<Request>>,
 
     #[serde(skip)]
     client: reqwest::Client,
 }
 
 impl HTTPClient {
-    pub fn new() -> (HTTPClient, tokio::sync::mpsc::Receiver<Request>) {
-        let (tx, rx) = tokio::sync::mpsc::channel(1000);
+    pub fn new() -> (HTTPClient, mpsc::Receiver<Request>) {
+        let (tx, rx) = mpsc::channel(1000);
         (
             HTTPClient {
                 cache: Arc::new(DashMap::new()),
@@ -55,23 +54,23 @@ impl HTTPClient {
     }
 
     /// Fastest cache, but not persistent
-    async fn handle_in_memory<T>(&self, request_hash: &str, request: &Request) -> anyhow::Result<T>
+    async fn handle_in_memory<T>(&self, request_hash: &str, request: &Request) -> flow_like_types::Result<T>
     where
         for<'de> T: Deserialize<'de> + Clone,
     {
         let value = self
             .cache
             .get(request_hash)
-            .ok_or(anyhow::anyhow!("Value not found in cache"))?;
+            .ok_or(flow_like_types::anyhow!("Value not found in cache"))?;
         let value = value.value();
-        let value = serde_json::from_value::<T>(value.clone())?;
+        let value = flow_like_types::json::from_value::<T>(value.clone())?;
 
         self.refetch(request).await;
         Ok(value)
     }
 
     /// Slower than in memory cache, but faster than fetching from the network
-    async fn handle_file_cache<T>(&self, request_hash: &str, request: &Request) -> anyhow::Result<T>
+    async fn handle_file_cache<T>(&self, request_hash: &str, request: &Request) -> flow_like_types::Result<T>
     where
         for<'de> T: Deserialize<'de> + Clone,
     {
@@ -79,14 +78,14 @@ impl HTTPClient {
         let file_exists = cache_file_exists(&string_hash);
         if !file_exists {
             println!("Cache file does not exist: {}", string_hash);
-            return Err(anyhow::anyhow!("Cache file does not exist"));
+            return Err(flow_like_types::anyhow!("Cache file does not exist"));
         }
 
         let cache_string = read_cache_file(&string_hash)?;
-        let generic_value = serde_json::from_slice::<Value>(&cache_string)?;
+        let generic_value = flow_like_types::json::from_slice::<Value>(&cache_string)?;
         self.cache
             .insert(request_hash.to_string(), generic_value.clone());
-        let value = serde_json::from_value::<T>(generic_value)?;
+        let value = flow_like_types::json::from_value::<T>(generic_value)?;
         self.refetch(request).await;
         Ok(value)
     }
@@ -125,7 +124,7 @@ impl HTTPClient {
         self.client.clone()
     }
 
-    pub async fn hashed_request<T>(&self, request: Request) -> anyhow::Result<T>
+    pub async fn hashed_request<T>(&self, request: Request) -> flow_like_types::Result<T>
     where
         for<'de> T: Deserialize<'de> + Clone + Serialize,
     {
@@ -145,14 +144,14 @@ impl HTTPClient {
         let response = self.client.execute(request).await?;
         let value = response.json::<Value>().await?;
         let _ = self.put(&request_hash, &value);
-        let value = serde_json::from_value::<T>(value.clone())?;
+        let value = flow_like_types::json::from_value::<T>(value.clone())?;
         Ok(value)
     }
 
-    pub fn put(&self, request_hash: &str, body: &Value) -> anyhow::Result<()> {
+    pub fn put(&self, request_hash: &str, body: &Value) -> flow_like_types::Result<()> {
         let string_hash = format!("http/{}", request_hash);
         self.cache.insert(request_hash.to_string(), body.clone());
-        write_cache_file(&string_hash, &serde_json::to_vec(body)?)?;
+        write_cache_file(&string_hash, &flow_like_types::json::to_vec(body)?)?;
         Ok(())
     }
 }

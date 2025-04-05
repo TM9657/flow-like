@@ -1,8 +1,8 @@
-use async_trait::async_trait;
+use flow_like_types::{async_trait, sync::Mutex};
 use schemars::JsonSchema;
 use std::collections::HashSet;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+
 
 use serde::{Deserialize, Serialize};
 
@@ -35,10 +35,10 @@ impl Command for RemoveNodeCommand {
         &mut self,
         board: &mut Board,
         _state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         let node = match board.nodes.get(&self.node.id) {
             Some(node) => node,
-            None => return Err(anyhow::anyhow!("Node not found".to_string())),
+            None => return Err(flow_like_types::anyhow!("Node not found".to_string())),
         };
 
         let mut connected_pins = HashSet::new();
@@ -105,7 +105,7 @@ impl Command for RemoveNodeCommand {
         &mut self,
         board: &mut Board,
         _state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         board.nodes.insert(self.node.id.clone(), self.node.clone());
 
         for node in &self.connected_nodes {

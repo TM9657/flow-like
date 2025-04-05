@@ -1,8 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use flow_like_types::{create_id, sync::Mutex, Value};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use super::pin::ValueType;
 
@@ -26,7 +25,7 @@ pub struct Variable {
 impl Variable {
     pub fn new(name: &str, data_type: VariableType, value_type: ValueType) -> Self {
         Self {
-            id: cuid2::create_id(),
+            id: create_id(),
             name: name.to_string(),
             category: None,
             description: None,
@@ -42,7 +41,7 @@ impl Variable {
 
     pub fn duplicate(&self) -> Self {
         Self {
-            id: cuid2::create_id(),
+            id: create_id(),
             name: self.name.clone(),
             category: self.category.clone(),
             description: self.description.clone(),
@@ -82,7 +81,7 @@ impl Variable {
     }
 
     pub fn set_default_value(&mut self, default_value: Value) -> &mut Self {
-        self.default_value = Some(serde_json::to_vec(&default_value).unwrap());
+        self.default_value = Some(flow_like_types::json::to_vec(&default_value).unwrap());
         self
     }
 
@@ -107,7 +106,7 @@ pub enum VariableType {
 
 #[cfg(test)]
 mod tests {
-    use flow_like_types::Message;
+    use flow_like_types::{tokio, Message};
     use flow_like_types::{FromProto, ToProto};
 
     #[tokio::test]

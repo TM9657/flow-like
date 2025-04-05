@@ -1,17 +1,13 @@
 use crate::{
     bit::{Bit, BitPack, BitTypes, Pooling},
     state::FlowLikeState,
-    utils::tokenizer::load_tokenizer_from_file,
 };
-use fastembed::{InitOptionsUserDefined, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel};
 use flow_like_model_provider::{
-    embedding::EmbeddingModelLogic,
-    text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter},
+    embedding::EmbeddingModelLogic, fastembed::{self, InitOptionsUserDefined, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel}, text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter}, tokenizer::load_tokenizer_from_file
 };
 use flow_like_storage::files::store::{FlowLikeStore, local_store::LocalObjectStore};
-use flow_like_types::{Cacheable, Result, anyhow, async_trait};
+use flow_like_types::{anyhow, async_trait, sync::Mutex, Cacheable, Result};
 use std::{any::Any, sync::Arc};
-use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct LocalEmbeddingModel {
@@ -214,6 +210,8 @@ async fn load_tokenizer(
 
 #[cfg(test)]
 mod tests {
+    use flow_like_types::{sync::Mutex, tokio};
+
     use super::*;
     use crate::{
         models::embedding_factory::EmbeddingFactory, state::FlowLikeConfig, utils::http::HTTPClient,
@@ -238,7 +236,7 @@ mod tests {
         let app_state = flow_state().await;
         let embedding_bit = PathBuf::from("../../tests/data/embedding-bit.json");
         let embedding_bit = std::fs::read(embedding_bit).unwrap();
-        let bit: Bit = serde_json::from_slice(&embedding_bit).unwrap();
+        let bit: Bit = flow_like_types::json::from_slice(&embedding_bit).unwrap();
         let mut factory = EmbeddingFactory::new();
 
         let model = factory.build_text(&bit, app_state).await.unwrap();
@@ -270,7 +268,7 @@ mod tests {
         let app_state = flow_state().await;
         let embedding_bit = PathBuf::from("../../tests/data/embedding-bit.json");
         let embedding_bit = std::fs::read(embedding_bit).unwrap();
-        let bit: Bit = serde_json::from_slice(&embedding_bit).unwrap();
+        let bit: Bit = flow_like_types::json::from_slice(&embedding_bit).unwrap();
         let mut factory = EmbeddingFactory::new();
 
         let model = factory.build_text(&bit, app_state).await.unwrap();
@@ -297,7 +295,7 @@ mod tests {
         let app_state = flow_state().await;
         let embedding_bit = PathBuf::from("../../tests/data/embedding-bit.json");
         let embedding_bit = std::fs::read(embedding_bit).unwrap();
-        let bit: Bit = serde_json::from_slice(&embedding_bit).unwrap();
+        let bit: Bit = flow_like_types::json::from_slice(&embedding_bit).unwrap();
         let mut factory = EmbeddingFactory::new();
 
         // Create a new LocalImageEmbeddingModel instance

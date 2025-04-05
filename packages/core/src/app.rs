@@ -4,13 +4,11 @@ use crate::{
     state::FlowLikeState,
     utils::compression::{compress_to_file, from_compressed},
 };
-use cuid2;
 use flow_like_storage::Path;
-use flow_like_types::{FromProto, ToProto};
+use flow_like_types::{create_id, sync::Mutex, FromProto, ToProto};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::SystemTime, vec};
-use tokio::sync::Mutex;
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub enum StandardInterfaces {
@@ -65,8 +63,8 @@ impl App {
         meta: BitMeta,
         bits: Vec<String>,
         app_state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<Self> {
-        let id = id.unwrap_or(cuid2::create_id());
+    ) -> flow_like_types::Result<Self> {
+        let id = id.unwrap_or(create_id());
 
         let mut meta_map = std::collections::HashMap::new();
         meta_map.insert("en".to_string(), meta);
@@ -87,7 +85,7 @@ impl App {
         Ok(item)
     }
 
-    pub async fn load(id: String, app_state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<Self> {
+    pub async fn load(id: String, app_state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<Self> {
         let storage_root = Path::from("apps").child(id.clone());
 
         let store = FlowLikeState::project_store(&app_state).await?.as_generic();
@@ -100,12 +98,12 @@ impl App {
         Ok(vault)
     }
 
-    pub async fn create_board(&mut self, id: Option<String>) -> anyhow::Result<String> {
+    pub async fn create_board(&mut self, id: Option<String>) -> flow_like_types::Result<String> {
         let storage_root = Path::from("apps").child(self.id.clone());
         let state = self
             .app_state
             .clone()
-            .ok_or(anyhow::anyhow!("App state not found"))?;
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
         let board = Board::new(id, storage_root, state);
         board.save(None).await?;
         self.boards.push(board.id.clone());
@@ -139,7 +137,7 @@ impl App {
         &self,
         board_id: String,
         register: Option<bool>,
-    ) -> anyhow::Result<Arc<Mutex<Board>>> {
+    ) -> flow_like_types::Result<Arc<Mutex<Board>>> {
         let storage_root = Path::from("apps").child(self.id.clone());
         if let Some(app_state) = &self.app_state {
             let board = app_state.lock().await.get_board(&board_id);
@@ -152,7 +150,7 @@ impl App {
         let state = self
             .app_state
             .clone()
-            .ok_or(anyhow::anyhow!("App state not found"))?;
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
 
         let board = Board::load(storage_root, &board_id, state).await?;
         let board_ref = Arc::new(Mutex::new(board));
@@ -169,12 +167,12 @@ impl App {
         Ok(board_ref)
     }
 
-    pub async fn delete_board(&mut self, board_id: &str) -> anyhow::Result<()> {
+    pub async fn delete_board(&mut self, board_id: &str) -> flow_like_types::Result<()> {
         let board_index = self
             .boards
             .iter()
             .position(|x| x == board_id)
-            .ok_or(anyhow::anyhow!("Board not found"))?;
+            .ok_or(flow_like_types::anyhow!("Board not found"))?;
         let board_id = self.boards.remove(board_index);
         let board_dir = Path::from("apps")
             .child(self.id.clone())
@@ -183,7 +181,7 @@ impl App {
         let state = self
             .app_state
             .clone()
-            .ok_or(anyhow::anyhow!("App state not found"))?;
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
         let store = FlowLikeState::project_store(&state).await?.as_generic();
         store.delete(&board_dir).await?;
 
@@ -195,7 +193,7 @@ impl App {
         Ok(())
     }
 
-    pub async fn save(&self) -> anyhow::Result<()> {
+    pub async fn save(&self) -> flow_like_types::Result<()> {
         if let Some(app_state) = &self.app_state {
             let store = FlowLikeState::project_store(app_state).await?.as_generic();
 
@@ -220,7 +218,7 @@ impl App {
         let store = self
             .app_state
             .clone()
-            .ok_or(anyhow::anyhow!("App state not found"))?;
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
         let store = FlowLikeState::project_store(&store).await?.as_generic();
 
         let manifest_path = Path::from("apps")
@@ -238,10 +236,10 @@ impl App {
 mod tests {
     use crate::{state::FlowLikeConfig, utils::http::HTTPClient};
     use flow_like_storage::files::store::FlowLikeStore;
-    use flow_like_types::Message;
+    use flow_like_types::sync::Mutex;
+    use flow_like_types::{tokio, Message};
     use flow_like_types::{FromProto, ToProto};
     use std::sync::Arc;
-    use tokio::sync::Mutex;
 
     async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
         let mut config: FlowLikeConfig = FlowLikeConfig::new();

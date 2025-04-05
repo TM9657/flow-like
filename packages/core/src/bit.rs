@@ -3,15 +3,15 @@ use crate::utils::compression::{compress_to_file_json, from_compressed_json};
 use crate::utils::download::download_bit;
 use flow_like_storage::Path;
 use flow_like_storage::files::store::local_store::LocalObjectStore;
+use flow_like_types::sync::Mutex;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use flow_like_types::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 pub struct BitMeta {
@@ -136,11 +136,11 @@ pub struct BitModelClassification {
 }
 
 impl BitModelClassification {
-    fn name_similarity(&self, hint: &str, bit: &Bit) -> anyhow::Result<f32> {
+    fn name_similarity(&self, hint: &str, bit: &Bit) -> flow_like_types::Result<f32> {
         let mut similarity: f32 = 0.0;
 
         if bit.meta.is_empty() {
-            return Err(anyhow::anyhow!("No meta data found"));
+            return Err(flow_like_types::anyhow!("No meta data found"));
         }
 
         for meta in bit.meta.values() {
@@ -321,7 +321,7 @@ impl BitPack {
     pub async fn get_installed(
         &self,
         state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<Vec<Bit>> {
+    ) -> flow_like_types::Result<Vec<Bit>> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
         let mut installed_bits = vec![];
@@ -346,7 +346,7 @@ impl BitPack {
         Ok(installed_bits)
     }
 
-    pub async fn download(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<Vec<Bit>> {
+    pub async fn download(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<Vec<Bit>> {
         let mut deduplicated_bits = vec![];
         let mut deduplication_helper = HashSet::new();
         self.bits.iter().for_each(|bit| {
@@ -393,7 +393,7 @@ impl BitPack {
         size
     }
 
-    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<bool> {
+    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<bool> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
         let mut installed = true;
         for bit in self.bits.iter() {
@@ -424,7 +424,7 @@ impl BitPack {
 impl Bit {
     pub fn try_to_llm(&self) -> Option<LLMParameters> {
         if self.bit_type == BitTypes::Llm {
-            let parameters = serde_json::from_value::<LLMParameters>(self.parameters.clone());
+            let parameters = flow_like_types::json::from_value::<LLMParameters>(self.parameters.clone());
             if parameters.is_err() {
                 return None;
             }
@@ -435,7 +435,7 @@ impl Bit {
 
     pub fn try_to_vlm(&self) -> Option<VLMParameters> {
         if self.bit_type == BitTypes::Vlm {
-            let parameters = serde_json::from_value::<VLMParameters>(self.parameters.clone());
+            let parameters = flow_like_types::json::from_value::<VLMParameters>(self.parameters.clone());
             if parameters.is_err() {
                 return None;
             }
@@ -444,7 +444,7 @@ impl Bit {
         None
     }
 
-    pub fn score(&self, preference: &BitModelPreference) -> anyhow::Result<f32> {
+    pub fn score(&self, preference: &BitModelPreference) -> flow_like_types::Result<f32> {
         if let Some(parameters) = self.try_to_llm() {
             return Ok(parameters.model_classification.score(preference, self));
         }
@@ -453,13 +453,13 @@ impl Bit {
             return Ok(parameters.model_classification.score(preference, self));
         }
 
-        Err(anyhow::anyhow!("Not a Model"))
+        Err(flow_like_types::anyhow!("Not a Model"))
     }
 
     pub fn try_to_embedding(&self) -> Option<EmbeddingModelParameters> {
         if self.bit_type == BitTypes::Embedding {
             let parameters =
-                serde_json::from_value::<EmbeddingModelParameters>(self.parameters.clone());
+                flow_like_types::json::from_value::<EmbeddingModelParameters>(self.parameters.clone());
             if parameters.is_err() {
                 return None;
             }
@@ -471,7 +471,7 @@ impl Bit {
     pub fn try_to_image_embedding(&self) -> Option<ImageEmbeddingModelParameters> {
         if self.bit_type == BitTypes::ImageEmbedding {
             let parameters =
-                serde_json::from_value::<ImageEmbeddingModelParameters>(self.parameters.clone());
+                flow_like_types::json::from_value::<ImageEmbeddingModelParameters>(self.parameters.clone());
             if parameters.is_err() {
                 return None;
             }
@@ -516,7 +516,7 @@ impl Bit {
         None
     }
 
-    pub async fn dependencies(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<BitPack> {
+    pub async fn dependencies(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<BitPack> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
         let mut dependencies = vec![];
@@ -570,13 +570,13 @@ impl Bit {
         Ok(bit_pack)
     }
 
-    pub async fn pack(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<BitPack> {
+    pub async fn pack(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<BitPack> {
         let mut dependencies = self.dependencies(state).await?;
         dependencies.bits.push(self.clone());
         Ok(dependencies)
     }
 
-    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> anyhow::Result<bool> {
+    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<bool> {
         let pack = self.pack(state.clone()).await?;
         pack.is_installed(state).await
     }

@@ -18,4 +18,3 @@ pub mod pdf;
 pub mod recursion;
 pub mod symlink;
 pub mod text_splitter;
-pub mod tokenizer;

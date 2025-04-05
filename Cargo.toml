@@ -11,3 +11,8 @@ members = [
     "packages/types",
     "packages/catalog", "packages/storage",
 ]
+
+[workspace.dependencies]
+futures = "0.3.31"
+serde = { version = "1.0.219", features = ["derive", "rc"] }
+schemars = "0.8.22"

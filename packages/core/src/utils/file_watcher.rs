@@ -242,7 +242,7 @@
 //     }
 
 //     #[tokio::test]
-//     async fn test_watch_creation() -> anyhow::Result<()> {
+//     async fn test_watch_creation() -> flow_like_types::Result<()> {
 //         let test_path = PathBuf::from(format!("./tmp/{}", cuid2::create_id()));
 //         let cache_path = PathBuf::from(format!("./tmp/{}", cuid2::create_id()));
 //         std::fs::create_dir_all(&test_path).unwrap();
@@ -262,7 +262,7 @@
 //     }
 
 //     #[tokio::test]
-//     async fn test_watch_new_changed_deleted() -> anyhow::Result<()> {
+//     async fn test_watch_new_changed_deleted() -> flow_like_types::Result<()> {
 //         let test_path = PathBuf::from(format!("./tmp/{}", cuid2::create_id()));
 //         let cache_path = PathBuf::from(format!("./tmp/{}", cuid2::create_id()));
 //         std::fs::create_dir_all(&test_path).unwrap();

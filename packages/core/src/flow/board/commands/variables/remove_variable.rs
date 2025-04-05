@@ -1,7 +1,7 @@
-use async_trait::async_trait;
+use flow_like_types::{async_trait, sync::Mutex};
 use schemars::JsonSchema;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+
 
 use crate::{
     flow::{
@@ -29,7 +29,7 @@ impl Command for RemoveVariableCommand {
         &mut self,
         board: &mut Board,
         _: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         let old_variable = board.variables.remove(&self.variable.id);
 
         if let Some(old_variable) = old_variable {
@@ -37,7 +37,7 @@ impl Command for RemoveVariableCommand {
                 board
                     .variables
                     .insert(old_variable.id.clone(), old_variable);
-                return Err(anyhow::anyhow!("Variable is not editable"));
+                return Err(flow_like_types::anyhow!("Variable is not editable"));
             }
 
             self.variable = old_variable;
@@ -50,7 +50,7 @@ impl Command for RemoveVariableCommand {
         &mut self,
         board: &mut Board,
         _: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         board
             .variables
             .insert(self.variable.id.clone(), self.variable.clone());

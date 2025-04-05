@@ -9,8 +9,9 @@ use flow_like_storage::{
     Path,
     files::store::{FlowLikeStore, local_store::LocalObjectStore},
 };
+use flow_like_types::{sync::Mutex, tokio};
 use std::{path::PathBuf, sync::Arc};
-use tokio::sync::Mutex;
+
 
 const BOARD_1: &str = "dkfxopaxr8863bo22zg1brhc";
 const BOARD_2: &str = "qhrbdzfs80934gg4exask8nu";

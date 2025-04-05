@@ -11,7 +11,6 @@ arrow-array = "54.1"
 arrow-schema = {version="54.1", features = ["serde"] }
 arrow = "54.1"
 serde_arrow = { version = "0.13.1", features = ["arrow-54"] }
-bytes = "1.10.1"
 blake3 = {version = "1.8.1", features = ["rayon"]}
-futures = "0.3.31"
-serde = { version = "1.0.219", features = ["derive", "rc"] }
+futures.workspace = true
+serde = { workspace = true, features = ["derive", "rc"] }

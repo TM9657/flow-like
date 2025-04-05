@@ -4,3 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+flow-like = { path = "../core" }
+flow-like-types = { path = "../types" }
+flow-like-bits = { path = "../bits" }
+flow-like-model-provider = { path = "../model-provider" }
+flow-like-storage = { path = "../storage" }
+fasteval = "0.2.4"
+strsim = "0.11.1"
+regex = "1.11.1"
+chrono = "0.4.39"
+nalgebra = "0.33.2"
+schemars.workspace = true
+futures.workspace = true
+serde = { workspace = true, features = ["derive", "rc"] }

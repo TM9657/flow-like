@@ -2,7 +2,8 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-use tokio::sync::Mutex;
+use flow_like_types::{sync::Mutex, Value};
+
 
 use crate::flow::{
     node::{Node, NodeLogic, NodeState},
@@ -70,7 +71,7 @@ impl InternalNode {
         }
     }
 
-    pub async fn get_pin_by_name(&self, name: &str) -> anyhow::Result<Arc<Mutex<InternalPin>>> {
+    pub async fn get_pin_by_name(&self, name: &str) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
         self.ensure_cache(name).await;
 
         let pin = {
@@ -80,29 +81,29 @@ impl InternalNode {
                 .and_then(|pins_ref| pins_ref.first().cloned())
         };
 
-        let pin = pin.ok_or(anyhow::anyhow!("Pin {} not found", name))?;
+        let pin = pin.ok_or(flow_like_types::anyhow!("Pin {} not found", name))?;
         Ok(pin)
     }
 
     pub async fn get_pins_by_name(
         &self,
         name: &str,
-    ) -> anyhow::Result<Vec<Arc<Mutex<InternalPin>>>> {
+    ) -> flow_like_types::Result<Vec<Arc<Mutex<InternalPin>>>> {
         self.ensure_cache(name).await;
         let cache = self.pin_name_cache.lock().await;
         if let Some(pins_ref) = cache.get(name) {
             return Ok(pins_ref.clone());
         }
 
-        Err(anyhow::anyhow!("Pin {} not found", name))
+        Err(flow_like_types::anyhow!("Pin {} not found", name))
     }
 
-    pub fn get_pin_by_id(&self, id: &str) -> anyhow::Result<Arc<Mutex<InternalPin>>> {
+    pub fn get_pin_by_id(&self, id: &str) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
         if let Some(pin) = self.pins.get(id) {
             return Ok(pin.clone());
         }
 
-        Err(anyhow::anyhow!("Pin {} not found", id))
+        Err(flow_like_types::anyhow!("Pin {} not found", id))
     }
 
     pub async fn orphaned(&self) -> bool {
@@ -122,7 +123,7 @@ impl InternalNode {
         false
     }
 
-    pub async fn is_ready(&self) -> anyhow::Result<bool> {
+    pub async fn is_ready(&self) -> flow_like_types::Result<bool> {
         for pin in self.pins.values() {
             let pin_guard = pin.lock().await;
             let pin = pin_guard.pin.lock().await;
@@ -145,7 +146,7 @@ impl InternalNode {
             for depends_on_pin in depends_on {
                 let depends_on_pin = depends_on_pin
                     .upgrade()
-                    .ok_or(anyhow::anyhow!("Failed to lock Pin"))?;
+                    .ok_or(flow_like_types::anyhow!("Failed to lock Pin"))?;
                 let depends_on_pin_guard = depends_on_pin.lock().await;
                 let depends_on_pin = depends_on_pin_guard.pin.lock().await;
 
@@ -167,7 +168,7 @@ impl InternalNode {
         Ok(true)
     }
 
-    pub async fn get_connected(&self) -> anyhow::Result<Vec<Arc<InternalNode>>> {
+    pub async fn get_connected(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let mut connected = Vec::with_capacity(self.pins.len());
 
         for pin in self.pins.values() {
@@ -185,7 +186,7 @@ impl InternalNode {
             for connected_pin in &connected_pins {
                 let connected_pin_guard = connected_pin
                     .upgrade()
-                    .ok_or(anyhow::anyhow!("Failed to lock Pin"))?;
+                    .ok_or(flow_like_types::anyhow!("Failed to lock Pin"))?;
                 let connected_pin_guard = connected_pin_guard.lock().await;
                 let connected_node = connected_pin_guard.node.upgrade();
 
@@ -201,7 +202,7 @@ impl InternalNode {
     pub async fn get_connected_exec(
         &self,
         filter_valid: bool,
-    ) -> anyhow::Result<Vec<Arc<InternalNode>>> {
+    ) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let mut connected = vec![];
 
         for pin in self.pins.values() {
@@ -212,7 +213,7 @@ impl InternalNode {
             }
 
             let bool_val = match value.unwrap() {
-                serde_json::Value::Bool(b) => b,
+                Value::Bool(b) => b,
                 _ => false,
             };
 
@@ -238,7 +239,7 @@ impl InternalNode {
             for connected_pin in &connected_pins {
                 let connected_pin_guard = connected_pin
                     .upgrade()
-                    .ok_or(anyhow::anyhow!("Failed to lock Pin"))?;
+                    .ok_or(flow_like_types::anyhow!("Failed to lock Pin"))?;
                 let connected_pin_guard = connected_pin_guard.lock().await;
                 let connected_node = connected_pin_guard.node.upgrade();
 
@@ -251,7 +252,7 @@ impl InternalNode {
         Ok(connected)
     }
 
-    pub async fn get_dependencies(&self) -> anyhow::Result<Vec<Arc<InternalNode>>> {
+    pub async fn get_dependencies(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let mut dependencies = Vec::with_capacity(self.pins.len());
 
         for pin in self.pins.values() {
@@ -269,7 +270,7 @@ impl InternalNode {
             for connected_pin in &dependency_pins {
                 let dependency_pin_guard = connected_pin
                     .upgrade()
-                    .ok_or(anyhow::anyhow!("Failed to lock Pin"))?;
+                    .ok_or(flow_like_types::anyhow!("Failed to lock Pin"))?;
                 let dependency_pin_guard = dependency_pin_guard.lock().await;
                 let dependency_pin = dependency_pin_guard.node.upgrade();
 

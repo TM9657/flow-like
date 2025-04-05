@@ -3,14 +3,12 @@ use crate::{
     models::embedding_factory::EmbeddingFactory,
     state::FlowLikeState,
 };
-use fastembed::{ImageEmbedding, ImageInitOptionsUserDefined, UserDefinedImageEmbeddingModel};
 use flow_like_model_provider::{
-    embedding::EmbeddingModelLogic, image_embedding::ImageEmbeddingModelLogic,
+    embedding::EmbeddingModelLogic, fastembed::{self, ImageEmbedding, ImageInitOptionsUserDefined, UserDefinedImageEmbeddingModel}, image_embedding::ImageEmbeddingModelLogic
 };
 use flow_like_storage::files::store::FlowLikeStore;
-use flow_like_types::{Cacheable, Result, async_trait};
+use flow_like_types::{async_trait, sync::Mutex, Cacheable, Result};
 use std::{any::Any, sync::Arc};
-use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct LocalImageEmbeddingModel {
@@ -34,13 +32,13 @@ impl LocalImageEmbeddingModel {
         bit: &Bit,
         app_state: Arc<Mutex<FlowLikeState>>,
         factory: &mut EmbeddingFactory,
-    ) -> anyhow::Result<Arc<Self>> {
+    ) -> flow_like_types::Result<Arc<Self>> {
         let bit = Arc::new(bit.clone());
         let bit_store = FlowLikeState::bit_store(&app_state).await?;
 
         let bit_store = match bit_store {
             FlowLikeStore::Local(store) => store,
-            _ => return Err(anyhow::anyhow!("Only local store supported")),
+            _ => return Err(flow_like_types::anyhow!("Only local store supported")),
         };
 
         let pack = bit.pack(app_state.clone()).await?;
@@ -49,24 +47,24 @@ impl LocalImageEmbeddingModel {
             .bits
             .iter()
             .find(|b| b.bit_type == BitTypes::Embedding)
-            .ok_or(anyhow::anyhow!("Embedding model not found."))?;
+            .ok_or(flow_like_types::anyhow!("Embedding model not found."))?;
         let preprocessor_bit = pack
             .bits
             .iter()
             .find(|b| b.bit_type == BitTypes::PreprocessorConfig)
-            .ok_or(anyhow::anyhow!("Preprocessor bit not found."))?;
+            .ok_or(flow_like_types::anyhow!("Preprocessor bit not found."))?;
         let text_model = factory
             .build_text(embedding_model, app_state.clone())
             .await?;
 
         let model_path = bit
             .to_path(&bit_store)
-            .ok_or(anyhow::anyhow!("No model path"))?;
+            .ok_or(flow_like_types::anyhow!("No model path"))?;
         let loaded_model = std::fs::read(model_path)?;
 
         let preprocessor_path = preprocessor_bit
             .to_path(&bit_store)
-            .ok_or(anyhow::anyhow!("No model path"))?;
+            .ok_or(flow_like_types::anyhow!("No model path"))?;
         let loaded_preprocessor = std::fs::read(preprocessor_path)?;
 
         let user_embedding_model =
@@ -94,7 +92,7 @@ impl ImageEmbeddingModelLogic for LocalImageEmbeddingModel {
         &self,
         capacity: Option<usize>,
         overlap: Option<usize>,
-    ) -> anyhow::Result<(
+    ) -> flow_like_types::Result<(
         flow_like_model_provider::text_splitter::TextSplitter<
             flow_like_model_provider::tokenizers::Tokenizer,
         >,
@@ -118,7 +116,7 @@ impl ImageEmbeddingModelLogic for LocalImageEmbeddingModel {
             Ok(embeddings) => embeddings,
             Err(e) => {
                 println!("Error embedding image: {}", e);
-                return Err(anyhow::anyhow!("Error embedding image"));
+                return Err(flow_like_types::anyhow!("Error embedding image"));
             }
         };
 

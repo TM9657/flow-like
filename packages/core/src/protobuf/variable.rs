@@ -2,10 +2,9 @@ use crate::flow::{
     pin::{PinType, ValueType},
     variable::{Variable, VariableType},
 };
-use flow_like_types::{FromProto, ToProto};
-use serde_json::Value;
+use flow_like_types::{sync::Mutex, FromProto, ToProto};
+use flow_like_types::Value;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 impl VariableType {
     pub fn to_proto(&self) -> i32 {

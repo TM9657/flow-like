@@ -1,0 +1,54 @@
+use std::{collections::{HashMap, HashSet}, sync::Arc};
+use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState};
+use flow_like_types::{async_trait, json::json, reqwest, sync::{DashMap, Mutex}, Value};
+
+use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+
+#[derive(Default)]
+pub struct PowerIntegerNode {}
+
+impl PowerIntegerNode {
+    pub fn new() -> Self {
+        PowerIntegerNode {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for PowerIntegerNode {
+    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+        let mut node = Node::new(
+            "int_power",
+            "Power",
+            "Calculates the power of an integer",
+            "Math/Int",
+        );
+        node.add_icon("/flow/icons/sigma.svg");
+
+        node.add_input_pin("base", "Base", "Base integer", VariableType::Integer);
+        node.add_input_pin(
+            "exponent",
+            "Exponent",
+            "Exponent integer",
+            VariableType::Integer,
+        );
+
+        node.add_output_pin(
+            "power",
+            "Power",
+            "Result of the power calculation",
+            VariableType::Integer,
+        );
+
+        return node;
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+        let base: i64 = context.evaluate_pin("base").await?;
+        let exponent: i64 = context.evaluate_pin("exponent").await?;
+
+        let power = base.pow(exponent as u32);
+        context.set_pin_value("power", json!(power)).await?;
+
+        Ok(())
+    }
+}

@@ -5,11 +5,10 @@ use crate::{
     profile::Profile,
     utils::{http::HTTPClient, recursion::RecursionGuard},
 };
-use anyhow::Result;
-use reqwest::Url;
+use flow_like_types::{sync::Mutex, Result};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
+use url::Url;
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct Hub {
@@ -42,7 +41,7 @@ impl Hub {
             Ok(url) => url,
             Err(e) => {
                 println!("Error parsing URL: {:?}", e);
-                return Err(anyhow::Error::msg("Invalid URL"));
+                return Err(flow_like_types::Error::msg("Invalid URL"));
             }
         };
 
@@ -77,7 +76,7 @@ impl Hub {
             }
         }
 
-        Err(anyhow::Error::msg("Bit not found")) // Return an error if the bit is not found in any of the dependency hubs
+        Err(flow_like_types::Error::msg("Bit not found")) // Return an error if the bit is not found in any of the dependency hubs
     }
 
     pub async fn set_recursion_guard(&mut self, guard: Arc<Mutex<RecursionGuard>>) {
@@ -89,7 +88,7 @@ impl Hub {
         let url = Url::parse(&self.domain).unwrap();
         let url_type = format!(
             "static/{}.json",
-            serde_json::to_string(&bit_type).unwrap().replace("\"", "")
+            flow_like_types::json::to_string(&bit_type).unwrap().replace("\"", "")
         );
         let type_bits_url = url.join(&url_type).unwrap();
         let request = self.http_client().client().get(type_bits_url).build()?;

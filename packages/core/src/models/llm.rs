@@ -1,13 +1,11 @@
 pub mod local;
 
 use crate::{bit::Bit, state::FlowLikeState, utils::device::get_vram};
-use anyhow::Result;
+use flow_like_types::{sync::Mutex, tokio::time::interval, Result};
 use flow_like_model_provider::llm::ModelLogic;
 use local::LocalModel;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, time::SystemTime};
-use tokio::sync::Mutex;
-use tokio::time::{Duration, interval};
+use std::{collections::HashMap, sync::Arc, time::{Duration, SystemTime}};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ExecutionSettings {
@@ -66,10 +64,10 @@ impl ModelFactory {
         let settings = self.execution_settings.clone();
         let provider = bit.try_to_provider();
         if provider.is_none() {
-            return Err(anyhow::anyhow!("Model type not supported"));
+            return Err(flow_like_types::anyhow!("Model type not supported"));
         }
 
-        let provider = provider.ok_or(anyhow::anyhow!("Model type not supported"))?;
+        let provider = provider.ok_or(flow_like_types::anyhow!("Model type not supported"))?;
         let provider = provider.provider_name;
 
         if provider == "Local" {
@@ -91,7 +89,7 @@ impl ModelFactory {
             return Ok(local_model);
         }
 
-        Err(anyhow::anyhow!("Model type not supported"))
+        Err(flow_like_types::anyhow!("Model type not supported"))
     }
 
     pub fn gc(&mut self) {

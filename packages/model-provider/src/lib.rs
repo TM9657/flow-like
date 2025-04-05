@@ -6,3 +6,5 @@ pub mod response;
 pub mod response_chunk;
 pub use text_splitter;
 pub use tokenizers;
+pub use fastembed;
+pub mod tokenizer;

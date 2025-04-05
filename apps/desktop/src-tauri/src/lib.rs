@@ -4,11 +4,8 @@ mod settings;
 mod state;
 mod utils;
 use flow_like::{
-    flow_like_storage::files::store::{local_store::LocalObjectStore, FlowLikeStore},
-    state::{FlowLikeConfig, FlowLikeState},
-    utils::http::HTTPClient,
+    flow_like_storage::{files::store::{local_store::LocalObjectStore, FlowLikeStore}, lancedb, Path}, flow_like_types::sync::DashMap, state::{FlowLikeConfig, FlowLikeState}, utils::http::HTTPClient
 };
-use object_store::path::Path;
 use serde_json::Value;
 use settings::Settings;
 use state::TauriFlowLikeState;
@@ -43,6 +40,19 @@ pub fn run() {
     let (http_client, refetch_rx) = HTTPClient::new();
     let (state, _) = FlowLikeState::new(config, http_client);
     let state_ref = Arc::new(Mutex::new(state));
+
+    let initialized_state = state_ref.clone();
+    tauri::async_runtime::spawn(async move {
+        let weak_ref = Arc::downgrade(&initialized_state);
+        let catalog = flow_like_catalog::get_catalog().await;
+        let state = initialized_state.lock().await;
+        let registry_guard = state.node_registry.clone();
+        drop(state);
+        let mut registry = registry_guard.write().await;
+        registry.initialize(weak_ref);
+        registry.push_nodes(catalog).await.unwrap();
+        println!("Catalog Initialized");
+    });
 
     let sentry_endpoint = std::option_env!("PUBLIC_SENTRY_ENDPOINT");
     let guard = sentry_endpoint.map(|endpoint| {
@@ -122,8 +132,8 @@ pub fn run() {
 
             tauri::async_runtime::spawn(async move {
                 let handle = relay_handle;
-                let buffer: Arc<dashmap::DashMap<Cow<'static, str>, Vec<Value>>> =
-                    Arc::new(dashmap::DashMap::new());
+                let buffer: Arc<DashMap<Cow<'static, str>, Vec<Value>>> =
+                    Arc::new(DashMap::new());
 
                 let mut receiver = {
                     println!("Starting Message Relay");

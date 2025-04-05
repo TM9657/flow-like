@@ -11,7 +11,7 @@ pub async fn compress_to_file<T>(
     store: Arc<dyn ObjectStore>,
     file_path: Path,
     input: &T,
-) -> anyhow::Result<()>
+) -> flow_like_types::Result<()>
 where
     T: Message,
 {
@@ -26,18 +26,18 @@ pub async fn compress_to_file_json<T>(
     store: Arc<dyn ObjectStore>,
     file_path: Path,
     input: &T,
-) -> anyhow::Result<()>
+) -> flow_like_types::Result<()>
 where
     T: Serialize + Deserialize<'static>,
 {
-    let data = serde_json::to_vec(input)?;
+    let data = flow_like_types::json::to_vec(input)?;
     let compressed = compress_prepend_size(&data);
     let _result = store.put(&file_path, PutPayload::from(compressed)).await?;
     Ok(())
 }
 
 /// Read from a compressed file and deserialize it into a Serde Deserializable Struct
-pub async fn from_compressed<T>(store: Arc<dyn ObjectStore>, file_path: Path) -> anyhow::Result<T>
+pub async fn from_compressed<T>(store: Arc<dyn ObjectStore>, file_path: Path) -> flow_like_types::Result<T>
 where
     T: Message + Default,
 {
@@ -52,7 +52,7 @@ where
 pub async fn from_compressed_json<T>(
     store: Arc<dyn ObjectStore>,
     file_path: Path,
-) -> anyhow::Result<T>
+) -> flow_like_types::Result<T>
 where
     T: Serialize + DeserializeOwned,
 {
@@ -60,6 +60,6 @@ where
     let bytes = reader.bytes().await?;
     let data = decompress_size_prepended(&bytes)?;
 
-    let data: T = serde_json::from_slice(&data)?;
+    let data: T = flow_like_types::json::from_slice(&data)?;
     Ok(data)
 }

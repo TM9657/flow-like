@@ -1,5 +1,5 @@
 use super::response_chunk::{Delta, ResponseChunk};
-use flow_like_types::{Deserialize, JsonSchema, Serialize};
+use flow_like_types::{json::{Deserialize, Serialize}, JsonSchema};
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct FunctionCall {

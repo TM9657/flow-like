@@ -3,7 +3,7 @@ use std::sync::Arc;
 use arrow::datatypes::FieldRef;
 use arrow_array::{RecordBatch, RecordBatchIterator};
 use arrow_schema::{DataType, Field};
-use flow_like_types::{Deserialize, Result, Serialize, Value, anyhow, to_value};
+use flow_like_types::{json::{Deserialize, Serialize, to_value}, Value, Result, anyhow };
 use serde_arrow::schema::{SchemaLike, TracingOptions};
 
 pub fn value_to_record_batch(records: Vec<Value>) -> Result<RecordBatch> {
@@ -86,7 +86,7 @@ pub fn record_batch_to_value(record_batch: &RecordBatch) -> Result<Vec<Value>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flow_like_types::{Deserialize, to_value};
+    use flow_like_types::json::{Deserialize, to_value};
 
     #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
     struct TestStruct {

@@ -1,9 +1,9 @@
 use super::log::LogMessage;
 use crate::flow::variable::Variable;
+use flow_like_types::{create_id, sync::Mutex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::SystemTime};
-use tokio::sync::Mutex;
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct Trace {
@@ -20,7 +20,7 @@ pub struct Trace {
 impl Trace {
     pub fn new(node_id: &str) -> Self {
         Trace {
-            id: cuid2::create_id(),
+            id: create_id(),
             node_id: node_id.to_string(),
             logs: vec![],
             start: SystemTime::now(),

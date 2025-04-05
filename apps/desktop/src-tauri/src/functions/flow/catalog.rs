@@ -5,7 +5,6 @@ use crate::{functions::TauriFunctionError, state::TauriFlowLikeState};
 
 #[tauri::command(async)]
 pub async fn get_catalog(handler: AppHandle) -> Result<Vec<Node>, TauriFunctionError> {
-    let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
-    let catalog = flow_like::flow::catalog::load_catalog(flow_like_state.clone()).await;
-    Ok(catalog)
+    let nodes = TauriFlowLikeState::construct(&handler).await?.lock().await.node_registry.read().await.get_nodes()?;
+    Ok(nodes)
 }

@@ -1,15 +1,14 @@
 use std::sync::{Arc, Weak};
 
-use serde_json::Value;
-use tokio::sync::Mutex;
+use flow_like_types::{sync::Mutex, Value};
 
 use super::execution::internal_pin::InternalPin;
 
 pub async fn evaluate_pin_value_reference(
     pin: &Option<Arc<Mutex<InternalPin>>>,
-) -> anyhow::Result<Arc<Mutex<Value>>> {
+) -> flow_like_types::Result<Arc<Mutex<Value>>> {
     if pin.is_none() {
-        return Err(anyhow::anyhow!("Pin is not set"));
+        return Err(flow_like_types::anyhow!("Pin is not set"));
     }
 
     let pin = pin.clone().unwrap();
@@ -28,23 +27,23 @@ pub async fn evaluate_pin_value_reference(
         Some(value) => Ok(value),
         None => {
             if let Some(default_value) = default_value {
-                let value: Value = serde_json::from_slice(&default_value)?;
+                let value: Value = flow_like_types::json::from_slice(&default_value)?;
                 return Ok(Arc::new(Mutex::new(value)));
             }
 
-            Err(anyhow::anyhow!("Pin {} default value is not set", name))
+            Err(flow_like_types::anyhow!("Pin {} default value is not set", name))
         }
     }
 }
 
-pub async fn evaluate_pin_value_weak(pin: &Weak<Mutex<InternalPin>>) -> anyhow::Result<Value> {
+pub async fn evaluate_pin_value_weak(pin: &Weak<Mutex<InternalPin>>) -> flow_like_types::Result<Value> {
     let pin = pin
         .upgrade()
-        .ok_or_else(|| anyhow::anyhow!("Pin is not set"))?;
+        .ok_or_else(|| flow_like_types::anyhow!("Pin is not set"))?;
     evaluate_pin_value(pin).await
 }
 
-pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> anyhow::Result<Value> {
+pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> flow_like_types::Result<Value> {
     let mut current_pin = pin;
     let mut visited_pins = std::collections::HashSet::with_capacity(8);
 
@@ -68,7 +67,7 @@ pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> anyhow::Result<
 
         // Check for circular dependencies
         if !visited_pins.insert(pin_id) {
-            return Err(anyhow::anyhow!("Detected circular dependency in pin chain"));
+            return Err(flow_like_types::anyhow!("Detected circular dependency in pin chain"));
         }
 
         // Case 1: Pin has a value - directly return from here
@@ -86,9 +85,9 @@ pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> anyhow::Result<
 
         // Case 3: Use default value if available
         if let Some(default_value) = default_value {
-            return match serde_json::from_slice(&default_value) {
+            return match flow_like_types::json::from_slice(&default_value) {
                 Ok(value) => Ok(value),
-                Err(e) => Err(anyhow::anyhow!(
+                Err(e) => Err(flow_like_types::anyhow!(
                     "Failed to parse default value for pin '{}': {}",
                     friendly_name,
                     e
@@ -97,7 +96,7 @@ pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> anyhow::Result<
         }
 
         // Case 4: No value found
-        return Err(anyhow::anyhow!(
+        return Err(flow_like_types::anyhow!(
             "Pin '{}' has no value, dependencies, or default value",
             friendly_name
         ));

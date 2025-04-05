@@ -1,5 +1,4 @@
-use bytes::Bytes;
-use flow_like_types::async_trait;
+use flow_like_types::{async_trait, Bytes};
 use futures::stream::BoxStream;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path;
@@ -107,7 +106,7 @@ impl ObjectStore for LocalObjectStore {
         self.store.get_opts(location, opts).await
     }
 
-    async fn get_range(&self, location: &Path, range: Range<usize>) -> Result<bytes::Bytes> {
+    async fn get_range(&self, location: &Path, range: Range<usize>) -> Result<flow_like_types::Bytes> {
         self.store.get_range(location, range).await
     }
 

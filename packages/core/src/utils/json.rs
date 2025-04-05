@@ -1,5 +1,5 @@
 use json5;
-use serde_json::Value;
+use flow_like_types::Value;
 
 fn fix_unbalanced(s: &str) -> String {
     let open_braces = s.chars().filter(|&c| c == '{').count();
@@ -83,9 +83,9 @@ fn extract_json_fragment(input: &str) -> Option<(String, Vec<char>)> {
 }
 
 /// Tries multiple strategies to parse a malformed JSON string into a serde_json::Value.
-pub fn parse_malformed_json(input: &str) -> anyhow::Result<Value> {
+pub fn parse_malformed_json(input: &str) -> flow_like_types::Result<Value> {
     // 1. Direct parse attempt.
-    if let Ok(val) = serde_json::from_str(input) {
+    if let Ok(val) = flow_like_types::json::from_str(input) {
         return Ok(val);
     }
 
@@ -105,7 +105,7 @@ pub fn parse_malformed_json(input: &str) -> anyhow::Result<Value> {
         let candidate = &candidate[..last_valid_index];
 
         // 3. Try strict parsing first.
-        if let Ok(val) = serde_json::from_str(candidate) {
+        if let Ok(val) = flow_like_types::json::from_str(candidate) {
             return Ok(val);
         }
         // 4. Then try the lenient json5 parser.
@@ -115,7 +115,7 @@ pub fn parse_malformed_json(input: &str) -> anyhow::Result<Value> {
 
         // 5. As an extra heuristic, try to fix any unbalanced delimiters in the candidate.
         let fixed_candidate = fix_unbalanced(candidate);
-        if let Ok(val) = serde_json::from_str(&fixed_candidate) {
+        if let Ok(val) = flow_like_types::json::from_str(&fixed_candidate) {
             return Ok(val);
         }
         if let Ok(val) = json5::from_str(&fixed_candidate) {
@@ -132,7 +132,7 @@ pub fn parse_malformed_json(input: &str) -> anyhow::Result<Value> {
         }
     }
 
-    anyhow::bail!("Failed to parse JSON")
+    flow_like_types::bail!("Failed to parse JSON")
 }
 
 #[cfg(test)]
@@ -143,7 +143,7 @@ mod tests {
     fn malformed_json_test_prefix() {
         let input = "Some extraneous text before the JSON {\"name\": \"Alice\", \"age\": 30";
         let result = parse_malformed_json(input).unwrap();
-        let expected = serde_json::json!({"name": "Alice", "age": 30});
+        let expected = flow_like_types::json::json!({"name": "Alice", "age": 30});
         assert_eq!(result, expected);
     }
 
@@ -151,7 +151,7 @@ mod tests {
     fn malformed_json_test_array() {
         let input = "prefix [1, 2, 3, 4, 5] some trailing text";
         let result = parse_malformed_json(input).unwrap();
-        let expected = serde_json::json!([1, 2, 3, 4, 5]);
+        let expected = flow_like_types::json::json!([1, 2, 3, 4, 5]);
         assert_eq!(result, expected);
     }
 
@@ -166,7 +166,7 @@ mod tests {
     fn malformed_json_test_nested() {
         let input = "noise {\"nested\": {\"key\": \"value\", \"list\": [1, 2, 3]";
         let result = parse_malformed_json(input).unwrap();
-        let expected = serde_json::json!({"nested": {"key": "value", "list": [1, 2, 3]}});
+        let expected = flow_like_types::json::json!({"nested": {"key": "value", "list": [1, 2, 3]}});
         assert_eq!(result, expected);
     }
 
@@ -174,7 +174,7 @@ mod tests {
     fn malformed_json_test_trailing_commas() {
         let input = r#"{"items": [1, 2, 3,], "more": {"a": 1, "b": 2,},}"#;
         let result = parse_malformed_json(input).unwrap();
-        let expected = serde_json::json!({"items": [1, 2, 3], "more": {"a": 1, "b": 2}});
+        let expected = flow_like_types::json::json!({"items": [1, 2, 3], "more": {"a": 1, "b": 2}});
         assert_eq!(result, expected);
     }
 
@@ -183,7 +183,7 @@ mod tests {
         let input = r#"{"level1": {"level2": {"level3": [1, 2, {"deep": "value""#;
         let result = parse_malformed_json(input).unwrap();
         let expected =
-            serde_json::json!({"level1": {"level2": {"level3": [1, 2, {"deep": "value"}]}}});
+            flow_like_types::json::json!({"level1": {"level2": {"level3": [1, 2, {"deep": "value"}]}}});
         assert_eq!(result, expected);
     }
 
@@ -195,7 +195,7 @@ mod tests {
             trailing_comma: true,
         }"#;
         let result = parse_malformed_json(input).unwrap();
-        let expected = serde_json::json!({"key": "single quoted string", "trailing_comma": true});
+        let expected = flow_like_types::json::json!({"key": "single quoted string", "trailing_comma": true});
         assert_eq!(result, expected);
     }
 
@@ -203,12 +203,12 @@ mod tests {
     fn malformed_json_test_empty_structures() {
         let input = "garbage {} more garbage";
         let result = parse_malformed_json(input).unwrap();
-        let expected = serde_json::json!({});
+        let expected = flow_like_types::json::json!({});
         assert_eq!(result, expected);
 
         let input = "garbage [] more garbage";
         let result = parse_malformed_json(input).unwrap();
-        let expected = serde_json::json!([]);
+        let expected = flow_like_types::json::json!([]);
         assert_eq!(result, expected);
     }
 
@@ -216,7 +216,7 @@ mod tests {
     fn malformed_json_test_special_characters() {
         let input = r#"{"unicode": "こんにちは世界", "escaped": "line1\nline2"}"#;
         let result = parse_malformed_json(input).unwrap();
-        let expected = serde_json::json!({"unicode": "こんにちは世界", "escaped": "line1\nline2"});
+        let expected = flow_like_types::json::json!({"unicode": "こんにちは世界", "escaped": "line1\nline2"});
         assert_eq!(result, expected);
     }
 
@@ -224,12 +224,12 @@ mod tests {
     fn malformed_json_test_primitive_values() {
         let input = "42";
         let result = parse_malformed_json(input).unwrap();
-        let expected = serde_json::json!(42);
+        let expected = flow_like_types::json::json!(42);
         assert_eq!(result, expected);
 
         let input = "true";
         let result = parse_malformed_json(input).unwrap();
-        let expected = serde_json::json!(true);
+        let expected = flow_like_types::json::json!(true);
         assert_eq!(result, expected);
     }
 }

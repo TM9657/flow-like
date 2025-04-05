@@ -14,7 +14,7 @@ use crate::{
 };
 use commands::GenericCommand;
 use flow_like_storage::object_store::{ObjectStore, path::Path};
-use flow_like_types::{FromProto, ToProto};
+use flow_like_types::{create_id, sync::Mutex, FromProto, ToProto};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -22,7 +22,6 @@ use std::{
     sync::{Arc, Weak},
     time::SystemTime,
 };
-use tokio::sync::Mutex;
 
 pub mod commands;
 
@@ -80,7 +79,7 @@ impl Board {
     /// Create a new board with a unique ID
     /// The board is created in the base directory appended with the ID
     pub fn new(id: Option<String>, base_dir: Path, app_state: Arc<Mutex<FlowLikeState>>) -> Self {
-        let id = id.unwrap_or(cuid2::create_id());
+        let id = id.unwrap_or(create_id());
         let board_dir = base_dir;
 
         Board {
@@ -117,7 +116,6 @@ impl Board {
                         .read()
                         .await
                         .instantiate(node)
-                        .await
                     {
                         Ok(new_logic) => {
                             self.logic_nodes
@@ -136,7 +134,7 @@ impl Board {
         &mut self,
         command: GenericCommand,
         state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<GenericCommand> {
+    ) -> flow_like_types::Result<GenericCommand> {
         let mut command = command;
         command.execute(self, state.clone()).await?;
         self.fixate_node_update(state).await;
@@ -148,7 +146,7 @@ impl Board {
         &mut self,
         commands: Vec<GenericCommand>,
         state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<Vec<GenericCommand>> {
+    ) -> flow_like_types::Result<Vec<GenericCommand>> {
         let mut commands = commands;
         for command in commands.iter_mut() {
             let res = command.execute(self, state.clone()).await;
@@ -165,7 +163,7 @@ impl Board {
         &mut self,
         commands: Vec<GenericCommand>,
         state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         let mut commands = commands;
         for command in commands.iter_mut().rev() {
             command.undo(self, state.clone()).await?;
@@ -177,7 +175,7 @@ impl Board {
         &mut self,
         commands: Vec<GenericCommand>,
         state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         let mut commands = commands;
         for command in commands.iter_mut().rev() {
             command.execute(self, state.clone()).await?;
@@ -359,7 +357,7 @@ impl Board {
         self.variables.get(variable_id)
     }
 
-    pub async fn save(&self, store: Option<Arc<dyn ObjectStore>>) -> anyhow::Result<()> {
+    pub async fn save(&self, store: Option<Arc<dyn ObjectStore>>) -> flow_like_types::Result<()> {
         let to = self.board_dir.child(format!("{}.board", self.id));
         let store = match store {
             Some(store) => store,
@@ -375,7 +373,7 @@ impl Board {
                 .stores
                 .project_store
                 .clone()
-                .ok_or(anyhow::anyhow!("Project store not found"))?
+                .ok_or(flow_like_types::anyhow!("Project store not found"))?
                 .as_generic(),
         };
 
@@ -388,7 +386,7 @@ impl Board {
         path: Path,
         id: &str,
         app_state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<Self> {
+    ) -> flow_like_types::Result<Self> {
         let store = app_state
             .lock()
             .await
@@ -398,7 +396,7 @@ impl Board {
             .stores
             .project_store
             .clone()
-            .ok_or(anyhow::anyhow!("Project store not found"))?
+            .ok_or(flow_like_types::anyhow!("Project store not found"))?
             .as_generic();
 
         let board: flow_like_types::proto::Board =
@@ -436,10 +434,9 @@ mod tests {
         files::store::FlowLikeStore,
         object_store::{self, path::Path},
     };
-    use flow_like_types::Message;
+    use flow_like_types::{sync::Mutex, tokio, Message};
     use flow_like_types::{FromProto, ToProto};
     use std::sync::Arc;
-    use tokio::sync::Mutex;
 
     async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
         let mut config: FlowLikeConfig = FlowLikeConfig::new();

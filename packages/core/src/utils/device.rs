@@ -53,7 +53,7 @@ pub fn info() {
     }
 }
 
-pub fn get_vram() -> anyhow::Result<u64> {
+pub fn get_vram() -> flow_like_types::Result<u64> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
     let mut vram = 0;
     // Enumerate all available adapters (which represent the graphics devices)
@@ -67,13 +67,13 @@ pub fn get_vram() -> anyhow::Result<u64> {
     Ok(vram)
 }
 
-pub fn get_ram() -> anyhow::Result<u64> {
+pub fn get_ram() -> flow_like_types::Result<u64> {
     let mut sys = System::new_all();
     sys.refresh_all();
     Ok(sys.total_memory())
 }
 
-pub fn get_cores() -> anyhow::Result<u64> {
+pub fn get_cores() -> flow_like_types::Result<u64> {
     let mut sys = System::new_all();
     sys.refresh_all();
     Ok(sys.cpus().len() as u64)

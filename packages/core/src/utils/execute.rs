@@ -1,7 +1,8 @@
 // Inspired by the Tauri project implementation
 use std::path::PathBuf;
 use std::process::Command as StdCommand;
-use tokio::process::{self, Command};
+
+use flow_like_types::tokio::process::{self, Command};
 
 pub fn executable_path() -> Option<PathBuf> {
     let path = std::env::current_exe().ok()?;
@@ -9,8 +10,8 @@ pub fn executable_path() -> Option<PathBuf> {
     Some(parent.to_path_buf())
 }
 
-fn side_car_path(command: &PathBuf) -> anyhow::Result<PathBuf> {
-    let executable = executable_path().ok_or(anyhow::anyhow!("Could not get executable path"))?;
+fn side_car_path(command: &PathBuf) -> flow_like_types::Result<PathBuf> {
+    let executable = executable_path().ok_or(flow_like_types::anyhow!("Could not get executable path"))?;
     #[cfg(windows)]
     return Ok(executable.join(&command).with_extension("exe"));
     #[cfg(not(windows))]
@@ -18,15 +19,15 @@ fn side_car_path(command: &PathBuf) -> anyhow::Result<PathBuf> {
 }
 
 // TODO: replace the input with a Bit
-pub async fn sidecar(command: &PathBuf) -> anyhow::Result<StdCommand> {
+pub async fn sidecar(command: &PathBuf) -> flow_like_types::Result<StdCommand> {
     let path = side_car_path(command)?;
 
     if !path.exists() {
-        return Err(anyhow::anyhow!("Sidecar not found at path: {:?}", path));
+        return Err(flow_like_types::anyhow!("Sidecar not found at path: {:?}", path));
     }
 
     if !path.is_file() {
-        return Err(anyhow::anyhow!("Sidecar is not a file: {:?}", path));
+        return Err(flow_like_types::anyhow!("Sidecar is not a file: {:?}", path));
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -44,15 +45,15 @@ pub async fn sidecar(command: &PathBuf) -> anyhow::Result<StdCommand> {
 }
 
 //
-pub async fn async_sidecar(command: &PathBuf) -> anyhow::Result<Command> {
+pub async fn async_sidecar(command: &PathBuf) -> flow_like_types::Result<Command> {
     let path = side_car_path(command)?;
 
     if !path.exists() {
-        return Err(anyhow::anyhow!("Sidecar not found at path: {:?}", path));
+        return Err(flow_like_types::anyhow!("Sidecar not found at path: {:?}", path));
     }
 
     if !path.is_file() {
-        return Err(anyhow::anyhow!("Sidecar is not a file: {:?}", path));
+        return Err(flow_like_types::anyhow!("Sidecar is not a file: {:?}", path));
     }
 
     #[cfg(not(target_os = "linux"))]

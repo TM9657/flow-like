@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use flow_like_types::reqwest;
 use serde::{Deserialize, Serialize};
 
 use crate::bit::Bit;
@@ -43,7 +44,7 @@ impl DownloadManager {
         }
 
         let dl_manager = match std::fs::read_to_string(dir) {
-            Ok(data) => match serde_json::from_str::<DownloadManager>(&data) {
+            Ok(data) => match flow_like_types::json::from_str::<DownloadManager>(&data) {
                 Ok(dl_manager) => dl_manager,
                 Err(e) => {
                     println!("Error loading download manager: {:?}", e);
@@ -88,7 +89,7 @@ impl DownloadManager {
     pub fn save(&self) {
         let dir = get_cache_dir();
         let dir = dir.join("download-manager.bin");
-        let data = serde_json::to_string(self).unwrap();
+        let data = flow_like_types::json::to_string(self).unwrap();
         if let Err(e) = std::fs::write(dir, data) {
             println!("Error saving download manager: {:?}", e);
         }

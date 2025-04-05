@@ -1,9 +1,8 @@
-use serde_json::Value;
+use flow_like_types::{sync::Mutex, Value};
 use std::{
     collections::HashSet,
     sync::{Arc, Weak},
 };
-use tokio::sync::Mutex;
 
 use crate::flow::pin::Pin;
 

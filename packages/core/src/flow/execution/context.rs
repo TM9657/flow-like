@@ -1,13 +1,12 @@
 use flow_like_storage::object_store::path::Path;
-use flow_like_types::Cacheable;
+use flow_like_types::{json::from_value, sync::{mpsc, Mutex, RwLock}, Cacheable};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use serde_json::Value;
+use flow_like_types::Value;
 use std::{
     collections::HashMap,
     fs::File,
     sync::{Arc, Weak},
 };
-use tokio::sync::{Mutex, RwLock};
 
 use super::{
     InternalNode, LogLevel, Run, internal_pin::InternalPin, log::LogMessage, trace::Trace,
@@ -60,7 +59,7 @@ impl ExecutionContextCache {
         })
     }
 
-    pub fn get_user_cache(&self, node: bool) -> anyhow::Result<Path> {
+    pub fn get_user_cache(&self, node: bool) -> flow_like_types::Result<Path> {
         let base = Path::from("users")
             .child(self.sub.clone())
             .child("apps")
@@ -72,7 +71,7 @@ impl ExecutionContextCache {
         Ok(base.child(self.node_id.clone()))
     }
 
-    pub fn get_cache(&self, node: bool) -> anyhow::Result<Path> {
+    pub fn get_cache(&self, node: bool) -> flow_like_types::Result<Path> {
         let base = self.board_dir.child("cache");
 
         if !node {
@@ -82,7 +81,7 @@ impl ExecutionContextCache {
         Ok(base.child(self.node_id.clone()))
     }
 
-    pub fn get_storage(&self, node: bool) -> anyhow::Result<Path> {
+    pub fn get_storage(&self, node: bool) -> flow_like_types::Result<Path> {
         let base = self.board_dir.child("storage");
 
         if !node {
@@ -92,17 +91,17 @@ impl ExecutionContextCache {
         Ok(base.child(self.node_id.clone()))
     }
 
-    pub fn get_upload_dir(&self) -> anyhow::Result<Path> {
+    pub fn get_upload_dir(&self) -> flow_like_types::Result<Path> {
         let base = self.board_dir.child("upload");
         Ok(base)
     }
 
-    pub fn get_tmp_dir(&self) -> anyhow::Result<tempfile::TempDir> {
+    pub fn get_tmp_dir(&self) -> flow_like_types::Result<tempfile::TempDir> {
         let dir = tempfile::tempdir()?;
         Ok(dir)
     }
 
-    pub fn get_tmp_file(&self) -> anyhow::Result<File> {
+    pub fn get_tmp_file(&self) -> flow_like_types::Result<File> {
         let file = tempfile::tempfile()?;
         Ok(file)
     }
@@ -139,7 +138,7 @@ pub struct ExecutionContext {
     pub execution_cache: Option<ExecutionContextCache>,
     run_id: String,
     state: NodeState,
-    sender: tokio::sync::mpsc::Sender<FlowLikeEvent>,
+    sender: mpsc::Sender<FlowLikeEvent>,
 }
 
 impl ExecutionContext {
@@ -152,7 +151,7 @@ impl ExecutionContext {
         log_level: LogLevel,
         stage: ExecutionStage,
         profile: Arc<Profile>,
-        sender: tokio::sync::mpsc::Sender<FlowLikeEvent>,
+        sender: mpsc::Sender<FlowLikeEvent>,
     ) -> Self {
         let (id, execution_cache) = {
             let node_id = node.node.lock().await.id.clone();
@@ -207,12 +206,12 @@ impl ExecutionContext {
         .await
     }
 
-    pub async fn get_variable(&self, variable_id: &str) -> anyhow::Result<Variable> {
+    pub async fn get_variable(&self, variable_id: &str) -> flow_like_types::Result<Variable> {
         if let Some(variable) = self.variables.lock().await.get(variable_id).cloned() {
             return Ok(variable);
         }
 
-        Err(anyhow::anyhow!("Variable not found"))
+        Err(flow_like_types::anyhow!("Variable not found"))
     }
 
     pub async fn set_variable(&self, variable: Variable) {
@@ -220,13 +219,13 @@ impl ExecutionContext {
         variables.insert(variable.id.clone(), variable);
     }
 
-    pub async fn set_variable_value(&self, variable_id: &str, value: Value) -> anyhow::Result<()> {
+    pub async fn set_variable_value(&self, variable_id: &str, value: Value) -> flow_like_types::Result<()> {
         let value_ref = self
             .variables
             .lock()
             .await
             .get(variable_id)
-            .ok_or(anyhow::anyhow!("Variable not found"))?
+            .ok_or(flow_like_types::anyhow!("Variable not found"))?
             .value
             .clone();
         let mut guard = value_ref.lock().await;
@@ -291,36 +290,36 @@ impl ExecutionContext {
         self.state.clone()
     }
 
-    pub async fn get_pin_by_name(&self, name: &str) -> anyhow::Result<Arc<Mutex<InternalPin>>> {
+    pub async fn get_pin_by_name(&self, name: &str) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
         let pin = self.node.get_pin_by_name(name).await?;
         Ok(pin)
     }
 
-    pub async fn evaluate_pin<T: DeserializeOwned>(&self, name: &str) -> anyhow::Result<T> {
+    pub async fn evaluate_pin<T: DeserializeOwned>(&self, name: &str) -> flow_like_types::Result<T> {
         let pin = self.get_pin_by_name(name).await?;
         let value = evaluate_pin_value(pin).await?;
-        let value = serde_json::from_value(value)?;
+        let value = from_value(value)?;
         Ok(value)
     }
 
     pub async fn evaluate_pin_ref<T: DeserializeOwned>(
         &self,
         reference: Arc<Mutex<InternalPin>>,
-    ) -> anyhow::Result<T> {
+    ) -> flow_like_types::Result<T> {
         let value = evaluate_pin_value(reference).await?;
-        let value = serde_json::from_value(value)?;
+        let value = from_value(value)?;
         Ok(value)
     }
 
     pub async fn get_pins_by_name(
         &self,
         name: &str,
-    ) -> anyhow::Result<Vec<Arc<Mutex<InternalPin>>>> {
+    ) -> flow_like_types::Result<Vec<Arc<Mutex<InternalPin>>>> {
         let pins = self.node.get_pins_by_name(name).await?;
         Ok(pins)
     }
 
-    pub async fn get_pin_by_id(&self, id: &str) -> anyhow::Result<Arc<Mutex<InternalPin>>> {
+    pub async fn get_pin_by_id(&self, id: &str) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
         let pin = self.node.get_pin_by_id(id)?;
         Ok(pin)
     }
@@ -329,40 +328,40 @@ impl ExecutionContext {
         &self,
         pin: &Arc<Mutex<InternalPin>>,
         value: Value,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         let pin = pin.lock().await;
         pin.set_value(value).await;
         Ok(())
     }
 
-    pub async fn set_pin_value(&self, pin: &str, value: Value) -> anyhow::Result<()> {
+    pub async fn set_pin_value(&self, pin: &str, value: Value) -> flow_like_types::Result<()> {
         let pin = self.get_pin_by_name(pin).await?;
         self.set_pin_ref_value(&pin, value).await
     }
 
-    pub async fn activate_exec_pin(&self, pin: &str) -> anyhow::Result<()> {
+    pub async fn activate_exec_pin(&self, pin: &str) -> flow_like_types::Result<()> {
         let pin = self.get_pin_by_name(pin).await?;
         self.activate_exec_pin_ref(&pin).await
     }
 
-    pub async fn activate_exec_pin_ref(&self, pin: &Arc<Mutex<InternalPin>>) -> anyhow::Result<()> {
+    pub async fn activate_exec_pin_ref(&self, pin: &Arc<Mutex<InternalPin>>) -> flow_like_types::Result<()> {
         let pin_guard = pin.lock().await;
         let pin = pin_guard.pin.lock().await;
         if pin.data_type != VariableType::Execution {
-            return Err(anyhow::anyhow!("Pin is not of type Execution"));
+            return Err(flow_like_types::anyhow!("Pin is not of type Execution"));
         }
 
         if pin.pin_type != PinType::Output {
-            return Err(anyhow::anyhow!("Pin is not of type Output"));
+            return Err(flow_like_types::anyhow!("Pin is not of type Output"));
         }
 
         drop(pin);
-        pin_guard.set_value(serde_json::json!(true)).await;
+        pin_guard.set_value(flow_like_types::json::json!(true)).await;
 
         Ok(())
     }
 
-    pub async fn deactivate_exec_pin(&self, pin: &str) -> anyhow::Result<()> {
+    pub async fn deactivate_exec_pin(&self, pin: &str) -> flow_like_types::Result<()> {
         let pin = self.get_pin_by_name(pin).await?;
         self.deactivate_exec_pin_ref(&pin).await
     }
@@ -370,19 +369,19 @@ impl ExecutionContext {
     pub async fn deactivate_exec_pin_ref(
         &self,
         pin: &Arc<Mutex<InternalPin>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         let pin_guard = pin.lock().await;
         let pin = pin_guard.pin.lock().await;
         if pin.data_type != VariableType::Execution {
-            return Err(anyhow::anyhow!("Pin is not of type Execution"));
+            return Err(flow_like_types::anyhow!("Pin is not of type Execution"));
         }
 
         if pin.pin_type != PinType::Output {
-            return Err(anyhow::anyhow!("Pin is not of type Output"));
+            return Err(flow_like_types::anyhow!("Pin is not of type Output"));
         }
 
         drop(pin);
-        pin_guard.set_value(serde_json::json!(false)).await;
+        pin_guard.set_value(flow_like_types::json::json!(false)).await;
 
         Ok(())
     }
@@ -403,12 +402,12 @@ impl ExecutionContext {
         traces
     }
 
-    pub fn try_get_run(&self) -> anyhow::Result<Arc<Mutex<Run>>> {
+    pub fn try_get_run(&self) -> flow_like_types::Result<Arc<Mutex<Run>>> {
         if let Some(run) = self.run.upgrade() {
             return Ok(run);
         }
 
-        Err(anyhow::anyhow!("Run not found"))
+        Err(flow_like_types::anyhow!("Run not found"))
     }
 
     pub async fn read_node(&self) -> Node {
@@ -417,7 +416,7 @@ impl ExecutionContext {
         node.clone()
     }
 
-    pub async fn toast_message(&mut self, message: &str, level: ToastLevel) -> anyhow::Result<()> {
+    pub async fn toast_message(&mut self, message: &str, level: ToastLevel) -> flow_like_types::Result<()> {
         let event = FlowLikeEvent::new("toast", ToastEvent::new(message, level));
         let toast_result = self
             .app_state

@@ -1,7 +1,7 @@
-use async_trait::async_trait;
+use flow_like_types::{async_trait, sync::Mutex};
 use schemars::JsonSchema;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+
 
 use crate::{
     flow::board::{Board, Comment, commands::Command},
@@ -30,7 +30,7 @@ impl Command for UpsertCommentCommand {
         &mut self,
         board: &mut Board,
         _: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         if let Some(old_variable) = board
             .comments
             .insert(self.comment.id.clone(), self.comment.clone())
@@ -45,7 +45,7 @@ impl Command for UpsertCommentCommand {
         &mut self,
         board: &mut Board,
         _: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         board.comments.remove(&self.comment.id);
         if let Some(old_comment) = self.old_comment.take() {
             board.comments.insert(old_comment.id.clone(), old_comment);

@@ -7,12 +7,12 @@ use crate::{
     },
     state::FlowLikeState,
 };
-use async_trait::async_trait;
+use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::create_id;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cuid2;
-use tokio::sync::Mutex;
+
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct CopyPasteCommand {
@@ -41,7 +41,7 @@ impl Command for CopyPasteCommand {
         &mut self,
         board: &mut Board,
         _state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         let mut translated_connection = HashMap::new();
         let mut intermediate_nodes = Vec::with_capacity(self.original_nodes.len());
         let offset = self.offset;
@@ -60,7 +60,7 @@ impl Command for CopyPasteCommand {
 
         for comment in self.original_comments.iter() {
             let mut new_comment = comment.clone();
-            new_comment.id = cuid2::create_id();
+            new_comment.id = create_id();
             new_comment.coordinates = (
                 new_comment.coordinates.0 + self.offset.0,
                 new_comment.coordinates.1 + self.offset.1,
@@ -75,7 +75,7 @@ impl Command for CopyPasteCommand {
         for node in self.original_nodes.iter() {
             let mut new_node = node.clone();
             let old_id = new_node.id.clone();
-            let new_id = cuid2::create_id();
+            let new_id = create_id();
             translated_connection.insert(old_id, new_id.clone());
             new_node.id = new_id.clone();
 
@@ -91,7 +91,7 @@ impl Command for CopyPasteCommand {
                 .map(|pin| {
                     let mut pin = pin.clone();
                     let old_pin_id = pin.id.clone();
-                    let new_pin_id = cuid2::create_id();
+                    let new_pin_id = create_id();
                     translated_connection.insert(old_pin_id, new_pin_id.clone());
                     pin.id = new_pin_id.clone();
                     (new_pin_id, pin)
@@ -132,7 +132,7 @@ impl Command for CopyPasteCommand {
         &mut self,
         board: &mut Board,
         _: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         for node in self.new_nodes.iter() {
             board.nodes.remove(&node.id);
         }

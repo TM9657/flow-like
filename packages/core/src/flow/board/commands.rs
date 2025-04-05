@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
+use flow_like_types::{async_trait, sync::Mutex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
+
 
 use crate::{
     flow::node::{Node, NodeLogic},
@@ -23,18 +23,18 @@ pub trait Command: Send + Sync {
         &mut self,
         board: &mut Board,
         state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()>;
+    ) -> flow_like_types::Result<()>;
     async fn undo(
         &mut self,
         board: &mut Board,
         state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()>;
+    ) -> flow_like_types::Result<()>;
 
     async fn node_to_logic(
         &self,
         node: &Node,
         state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<Arc<dyn NodeLogic>> {
+    ) -> flow_like_types::Result<Arc<dyn NodeLogic>> {
         let node_registry = {
             let state_guard = state.lock().await;
             state_guard.node_registry().clone()
@@ -42,7 +42,7 @@ pub trait Command: Send + Sync {
 
         let registry_guard = node_registry.read().await;
 
-        registry_guard.instantiate(node).await
+        registry_guard.instantiate(node)
     }
 }
 
@@ -85,7 +85,7 @@ impl GenericCommand {
         &mut self,
         board: &mut Board,
         state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         let command = match self {
             GenericCommand::RemoveComment(cmd) => cmd.execute(board, state),
             GenericCommand::UpsertComment(cmd) => cmd.execute(board, state),
@@ -107,7 +107,7 @@ impl GenericCommand {
         &mut self,
         board: &mut Board,
         state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         let command = match self {
             GenericCommand::RemoveComment(cmd) => cmd.undo(board, state),
             GenericCommand::UpsertComment(cmd) => cmd.undo(board, state),

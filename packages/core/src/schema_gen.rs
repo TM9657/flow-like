@@ -35,13 +35,12 @@ use crate::{
     profile::Profile,
     utils::file::FileMetadata,
 };
-use anyhow::Result;
+use flow_like_types::{json::to_string_pretty, Result};
 use flow_like_model_provider::{
     history::History, response::Response, response_chunk::ResponseChunk,
 };
 use schemars::{JsonSchema, schema_for};
 use serde::Serialize;
-use serde_json::to_string_pretty;
 use std::{
     fs::write,
     path::{Path, PathBuf},
@@ -63,7 +62,7 @@ fn generate_and_save_schema<T: Serialize + JsonSchema>(base_path: &Path, path: &
 
     save_schema(&schema, &full_path)
 }
-pub fn generate_schema(base_path: PathBuf) -> anyhow::Result<()> {
+pub fn generate_schema(base_path: PathBuf) -> flow_like_types::Result<()> {
     generate_and_save_schema::<History>(&base_path, "llm/history.json")?;
     generate_and_save_schema::<Response>(&base_path, "llm/response.json")?;
     generate_and_save_schema::<ResponseChunk>(&base_path, "llm/response-chunk.json")?;

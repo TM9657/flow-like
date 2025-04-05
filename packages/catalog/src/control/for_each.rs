@@ -1,0 +1,156 @@
+use std::{collections::{HashMap, HashSet}, sync::Arc, time::Duration};
+use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, PinType, ValueType}, variable::{Variable, VariableType}}, state::{FlowLikeState, ToastLevel}};
+use flow_like_types::{async_trait, json::{json, Deserialize, Serialize}, reqwest, sync::{DashMap, Mutex}, Bytes, Error, JsonSchema, Value};
+use nalgebra::DVector;
+use regex::Regex;
+use flow_like_storage::{object_store::PutPayload, Path};
+use futures::StreamExt;
+use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+
+#[derive(Default)]
+pub struct LoopNode {}
+
+impl LoopNode {
+    pub fn new() -> Self {
+        LoopNode {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for LoopNode {
+    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+        let mut node = Node::new(
+            "control_for_each",
+            "For Each",
+            "Loops over an Array",
+            "Control",
+        );
+        node.add_icon("/flow/icons/for-each.svg");
+
+        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.add_input_pin("array", "Array", "Array to Loop", VariableType::Generic)
+            .set_value_type(ValueType::Array)
+            .set_options(
+                PinOptions::new()
+                    .set_enforce_generic_value_type(true)
+                    .build(),
+            );
+
+        node.add_output_pin(
+            "exec_out",
+            "For Each Element",
+            "Executes the current item",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "value",
+            "Value",
+            "The current item Value",
+            VariableType::Generic,
+        );
+        node.add_output_pin(
+            "index",
+            "Index",
+            "Current Array Index",
+            VariableType::Integer,
+        );
+
+        node.add_output_pin(
+            "done",
+            "Done",
+            "Executes once the array is dealt with.",
+            VariableType::Execution,
+        );
+
+        return node;
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+        let array = context.get_pin_by_name("array").await?;
+        let value = context.get_pin_by_name("value").await?;
+        let exec_item = context.get_pin_by_name("exec_out").await?;
+        let index = context.get_pin_by_name("index").await?;
+        let done = context.get_pin_by_name("done").await?;
+
+        let array_value: Value = context.evaluate_pin_ref(array).await?;
+        let array_value = array_value
+            .as_array()
+            .ok_or(flow_like_types::anyhow!("Array value is not an array"))?;
+
+        context.activate_exec_pin_ref(&exec_item).await?;
+        for (i, item) in array_value.iter().enumerate() {
+            let item = item.clone();
+            let item = item.to_owned();
+            value.lock().await.set_value(item).await;
+            index
+                .lock()
+                .await
+                .set_value(flow_like_types::json::json!(i as u64))
+                .await;
+            let flow = exec_item.lock().await.get_connected_nodes().await;
+            for node in flow {
+                let mut sub_context = context.create_sub_context(&node).await;
+                let mut log =
+                    LogMessage::new(&format!("Triggered iteration: {}", i), LogLevel::Info, None);
+                let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
+                log.end();
+                sub_context.log(log);
+                sub_context.end_trace();
+                context.push_sub_context(sub_context);
+
+                if run.is_err() {
+                    let error = run.err().unwrap();
+                    context.log_message(
+                        &format!("Error: {:?} in iteration {}", error, i),
+                        LogLevel::Error,
+                    );
+                }
+            }
+        }
+
+        context.deactivate_exec_pin_ref(&exec_item).await?;
+        context.activate_exec_pin_ref(&done).await?;
+
+        return Ok(());
+    }
+
+    async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
+        let match_type = node.match_type("array", board.clone(), None, Some(ValueType::Array));
+
+        if match_type.is_err() {
+            eprintln!("Error: {:?}", match_type.err());
+        }
+        let pin = node.get_pin_by_name("array").unwrap();
+        let pin_var = pin.value_type.clone();
+        if pin_var != ValueType::Array && pin_var != ValueType::HashSet {
+            if let Some(node) = node.get_pin_mut_by_name("array") {
+                node.value_type = ValueType::Array;
+                node.depends_on.clear();
+            }
+
+            let _res = node.match_type("array", board.clone(), None, Some(ValueType::Array));
+        }
+
+        let match_type = node.match_type("value", board, Some(ValueType::Normal), None);
+
+        if match_type.is_err() {
+            eprintln!("Error: {:?}", match_type.err());
+        }
+
+        let array_pin = node.get_pin_by_name("array").unwrap().clone();
+        if array_pin.data_type != VariableType::Generic {
+            let pin = node.get_pin_mut_by_name("value").unwrap();
+            pin.data_type = array_pin.data_type.clone();
+            pin.schema = array_pin.schema.clone();
+            return;
+        }
+
+        let value_pin = node.get_pin_by_name("value").unwrap().clone();
+        if value_pin.data_type != VariableType::Generic {
+            let pin = node.get_pin_mut_by_name("array").unwrap();
+            pin.data_type = value_pin.data_type.clone();
+            pin.schema = value_pin.schema.clone();
+            return;
+        }
+    }
+}

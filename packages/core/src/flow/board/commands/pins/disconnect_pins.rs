@@ -1,7 +1,7 @@
-use async_trait::async_trait;
+use flow_like_types::{async_trait, sync::Mutex};
 use schemars::JsonSchema;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+
 
 use crate::{
     flow::board::{Board, commands::Command},
@@ -36,7 +36,7 @@ impl Command for DisconnectPinsCommand {
         &mut self,
         board: &mut Board,
         _state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         disconnect_pins(
             board,
             &self.from_node,
@@ -48,13 +48,13 @@ impl Command for DisconnectPinsCommand {
         let from_node = board
             .nodes
             .get(&self.from_node)
-            .ok_or(anyhow::anyhow!("From Node: {} not found", self.from_node))?
+            .ok_or(flow_like_types::anyhow!("From Node: {} not found", self.from_node))?
             .clone();
 
         let to_node = board
             .nodes
             .get(&self.to_node)
-            .ok_or(anyhow::anyhow!("To Node: {} not found", self.to_node))?
+            .ok_or(flow_like_types::anyhow!("To Node: {} not found", self.to_node))?
             .clone();
 
         board.nodes.insert(from_node.id.clone(), from_node);
@@ -67,7 +67,7 @@ impl Command for DisconnectPinsCommand {
         &mut self,
         board: &mut Board,
         _state: Arc<Mutex<FlowLikeState>>,
-    ) -> anyhow::Result<()> {
+    ) -> flow_like_types::Result<()> {
         connect_pins(
             board,
             &self.from_node,
@@ -79,13 +79,13 @@ impl Command for DisconnectPinsCommand {
         let from_node = board
             .nodes
             .get(&self.from_node)
-            .ok_or(anyhow::anyhow!("Node not found"))?
+            .ok_or(flow_like_types::anyhow!("Node not found"))?
             .clone();
 
         let to_node = board
             .nodes
             .get(&self.to_node)
-            .ok_or(anyhow::anyhow!("Node not found"))?
+            .ok_or(flow_like_types::anyhow!("Node not found"))?
             .clone();
 
         board.nodes.insert(from_node.id.clone(), from_node);

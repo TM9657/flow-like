@@ -19,14 +19,14 @@ impl LockFile {
         self.path.exists()
     }
 
-    pub fn create(&self) -> anyhow::Result<()> {
+    pub fn create(&self) -> flow_like_types::Result<()> {
         let mut file = File::create(&self.path)?;
         file.write_all(b"")?;
         file.sync_all()?;
         Ok(())
     }
 
-    pub fn delete(&self) -> anyhow::Result<()> {
+    pub fn delete(&self) -> flow_like_types::Result<()> {
         std::fs::remove_file(&self.path)?;
         Ok(())
     }

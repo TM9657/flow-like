@@ -1,16 +1,14 @@
 use ahash::AHasher;
-use anyhow::anyhow;
 use context::ExecutionContext;
-use cuid2;
-use dashmap::DashMap;
-use flow_like_types::Cacheable;
+use flow_like_types::sync::{mpsc, DashMap, Mutex, RwLock};
+use flow_like_types::{anyhow, create_id, Cacheable};
 use futures::StreamExt;
 use internal_node::InternalNode;
 use internal_pin::InternalPin;
 use num_cpus;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use flow_like_types::Value;
 use std::time::Instant;
 use std::{
     collections::{HashMap, HashSet},
@@ -18,7 +16,6 @@ use std::{
     sync::{Arc, Weak},
     time::SystemTime,
 };
-use tokio::sync::{Mutex, RwLock};
 use trace::Trace;
 pub mod context;
 pub mod internal_node;
@@ -30,7 +27,6 @@ use crate::profile::Profile;
 use crate::state::{FlowLikeEvent, FlowLikeState};
 
 use super::board::ExecutionStage;
-use super::catalog::load_catalog;
 use super::{board::Board, node::NodeState, variable::Variable};
 
 const USE_DEPENDENCY_GRAPH: bool = false;
@@ -106,7 +102,7 @@ pub struct InternalRun {
     pub variables: Arc<Mutex<HashMap<String, Variable>>>,
     pub cache: Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
     pub profile: Arc<Profile>,
-    pub sender: tokio::sync::mpsc::Sender<FlowLikeEvent>,
+    pub sender: mpsc::Sender<FlowLikeEvent>,
 
     stack: Arc<RunStack>,
     concurrency_limit: u64,
@@ -122,11 +118,11 @@ impl InternalRun {
         profile: &Profile,
         start_ids: Vec<String>,
         sub: Option<String>,
-    ) -> anyhow::Result<Self> {
+    ) -> flow_like_types::Result<Self> {
         let before = Instant::now();
         let start_ids_set: HashSet<String> = start_ids.into_iter().collect();
         let sender = handler.lock().await.event_sender.lock().await.clone();
-        let run_id = cuid2::create_id();
+        let run_id = create_id();
 
         let run = Run {
             id: run_id.clone(),
@@ -149,7 +145,7 @@ impl InternalRun {
                 let value = variable
                     .default_value
                     .as_ref()
-                    .map_or(Value::Null, |v| serde_json::from_slice::<Value>(v).unwrap());
+                    .map_or(Value::Null, |v| flow_like_types::json::from_slice::<Value>(v).unwrap());
                 let mut var = variable.clone();
                 var.value = Arc::new(Mutex::new(value));
                 map.insert(variable_id.clone(), var);
@@ -201,10 +197,6 @@ impl InternalRun {
         let mut dependency_map = HashMap::with_capacity(board.nodes.len());
         let mut nodes = HashMap::with_capacity(board.nodes.len());
         let mut stack = RunStack::with_capacity(start_ids_set.len());
-
-        if !handler.lock().await.node_registry.read().await.initialized {
-            load_catalog(handler.clone()).await;
-        }
 
         let registry = handler
             .lock()
@@ -298,9 +290,9 @@ impl InternalRun {
     }
 
     // Reuse the same run, but reset the states
-    pub async fn fork(&mut self) -> anyhow::Result<()> {
+    pub async fn fork(&mut self) -> flow_like_types::Result<()> {
         if self.stack.len() != 0 {
-            return Err(anyhow::anyhow!("Cannot fork a run that is not finished"));
+            return Err(flow_like_types::anyhow!("Cannot fork a run that is not finished"));
         }
 
         self.cache.write().await.clear();
@@ -317,7 +309,7 @@ impl InternalRun {
         }
         for variable in self.variables.lock().await.values_mut() {
             let default = variable.default_value.as_ref();
-            let value = default.map_or(Value::Null, |v| serde_json::from_slice(v).unwrap());
+            let value = default.map_or(Value::Null, |v| flow_like_types::json::from_slice(v).unwrap());
             *variable.value.lock().await = value;
         }
 
@@ -577,9 +569,9 @@ async fn step_core(
     stage: ExecutionStage,
     dependencies: &HashMap<String, Vec<Arc<InternalNode>>>,
     profile: &Arc<Profile>,
-    sender: &tokio::sync::mpsc::Sender<FlowLikeEvent>,
+    sender: &mpsc::Sender<FlowLikeEvent>,
     concurrency_map: Arc<DashMap<String, u64>>,
-) -> anyhow::Result<Vec<(String, Arc<InternalNode>)>> {
+) -> flow_like_types::Result<Vec<(String, Arc<InternalNode>)>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
     {
         let mut limit = concurrency_map

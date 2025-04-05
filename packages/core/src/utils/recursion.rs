@@ -1,6 +1,6 @@
 use std::{collections::HashSet, sync::Arc};
 
-use tokio::sync::Mutex;
+use flow_like_types::sync::Mutex;
 
 #[derive(Debug, Clone, Default)]
 pub struct RecursionGuard {

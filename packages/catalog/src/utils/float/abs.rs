@@ -1,0 +1,47 @@
+use std::{collections::{HashMap, HashSet}, sync::Arc};
+use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState};
+use flow_like_types::{async_trait, json::json, reqwest, sync::{DashMap, Mutex}, Value};
+
+use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+
+#[derive(Default)]
+pub struct AbsFloatNode {}
+
+impl AbsFloatNode {
+    pub fn new() -> Self {
+        AbsFloatNode {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for AbsFloatNode {
+    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+        let mut node = Node::new(
+            "float_abs",
+            "Abs",
+            "Calculates the absolute value of a float",
+            "Math/Float",
+        );
+        node.add_icon("/flow/icons/sigma.svg");
+
+        node.add_input_pin("float", "Float", "Input Float", VariableType::Float);
+
+        node.add_output_pin(
+            "absolute",
+            "Absolute",
+            "The absolute value of the float",
+            VariableType::Float,
+        );
+
+        return node;
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+        let float: f64 = context.evaluate_pin("float").await?;
+
+        let absolute = float.abs();
+
+        context.set_pin_value("absolute", json!(absolute)).await?;
+        Ok(())
+    }
+}

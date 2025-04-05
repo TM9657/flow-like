@@ -360,7 +360,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use flow_like_types::{create_id, from_value, to_value, tokio};
+    use flow_like_types::{json::{from_value, to_value}, create_id, tokio};
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
