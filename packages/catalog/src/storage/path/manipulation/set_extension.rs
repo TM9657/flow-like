@@ -9,10 +9,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_storage::Path;
-use flow_like_types::{
-    async_trait,
-    json::json,
-};
+use flow_like_types::{async_trait, json::json};
 
 #[derive(Default)]
 pub struct SetExtensionNode {}
