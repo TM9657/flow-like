@@ -1,9 +1,19 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
-use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, PinType, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState};
-use flow_like_types::{async_trait, json::json, reqwest, sync::{DashMap, Mutex}, Value};
+use flow_like::{
+    flow::{
+        board::Board,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinType,
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{Value, async_trait, json::json};
 use regex::Regex;
-
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 pub struct FormatStringNode {
     regex: Regex,
@@ -50,7 +60,7 @@ impl NodeLogic for FormatStringNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let format_string: String = context.evaluate_pin("format_string").await?;
         let mut formatted_string = format_string.clone();
 

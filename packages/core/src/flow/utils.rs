@@ -1,6 +1,6 @@
 use std::sync::{Arc, Weak};
 
-use flow_like_types::{sync::Mutex, Value};
+use flow_like_types::{Value, sync::Mutex};
 
 use super::execution::internal_pin::InternalPin;
 
@@ -31,12 +31,17 @@ pub async fn evaluate_pin_value_reference(
                 return Ok(Arc::new(Mutex::new(value)));
             }
 
-            Err(flow_like_types::anyhow!("Pin {} default value is not set", name))
+            Err(flow_like_types::anyhow!(
+                "Pin {} default value is not set",
+                name
+            ))
         }
     }
 }
 
-pub async fn evaluate_pin_value_weak(pin: &Weak<Mutex<InternalPin>>) -> flow_like_types::Result<Value> {
+pub async fn evaluate_pin_value_weak(
+    pin: &Weak<Mutex<InternalPin>>,
+) -> flow_like_types::Result<Value> {
     let pin = pin
         .upgrade()
         .ok_or_else(|| flow_like_types::anyhow!("Pin is not set"))?;
@@ -67,7 +72,9 @@ pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> flow_like_types
 
         // Check for circular dependencies
         if !visited_pins.insert(pin_id) {
-            return Err(flow_like_types::anyhow!("Detected circular dependency in pin chain"));
+            return Err(flow_like_types::anyhow!(
+                "Detected circular dependency in pin chain"
+            ));
         }
 
         // Case 1: Pin has a value - directly return from here

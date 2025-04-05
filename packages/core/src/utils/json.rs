@@ -1,5 +1,5 @@
-use json5;
 use flow_like_types::Value;
+use json5;
 
 fn fix_unbalanced(s: &str) -> String {
     let open_braces = s.chars().filter(|&c| c == '{').count();
@@ -166,7 +166,8 @@ mod tests {
     fn malformed_json_test_nested() {
         let input = "noise {\"nested\": {\"key\": \"value\", \"list\": [1, 2, 3]";
         let result = parse_malformed_json(input).unwrap();
-        let expected = flow_like_types::json::json!({"nested": {"key": "value", "list": [1, 2, 3]}});
+        let expected =
+            flow_like_types::json::json!({"nested": {"key": "value", "list": [1, 2, 3]}});
         assert_eq!(result, expected);
     }
 
@@ -182,8 +183,7 @@ mod tests {
     fn malformed_json_test_deeply_nested_unbalanced() {
         let input = r#"{"level1": {"level2": {"level3": [1, 2, {"deep": "value""#;
         let result = parse_malformed_json(input).unwrap();
-        let expected =
-            flow_like_types::json::json!({"level1": {"level2": {"level3": [1, 2, {"deep": "value"}]}}});
+        let expected = flow_like_types::json::json!({"level1": {"level2": {"level3": [1, 2, {"deep": "value"}]}}});
         assert_eq!(result, expected);
     }
 
@@ -195,7 +195,8 @@ mod tests {
             trailing_comma: true,
         }"#;
         let result = parse_malformed_json(input).unwrap();
-        let expected = flow_like_types::json::json!({"key": "single quoted string", "trailing_comma": true});
+        let expected =
+            flow_like_types::json::json!({"key": "single quoted string", "trailing_comma": true});
         assert_eq!(result, expected);
     }
 
@@ -216,7 +217,8 @@ mod tests {
     fn malformed_json_test_special_characters() {
         let input = r#"{"unicode": "こんにちは世界", "escaped": "line1\nline2"}"#;
         let result = parse_malformed_json(input).unwrap();
-        let expected = flow_like_types::json::json!({"unicode": "こんにちは世界", "escaped": "line1\nline2"});
+        let expected =
+            flow_like_types::json::json!({"unicode": "こんにちは世界", "escaped": "line1\nline2"});
         assert_eq!(result, expected);
     }
 

@@ -1,14 +1,14 @@
 use ahash::AHasher;
 use context::ExecutionContext;
-use flow_like_types::sync::{mpsc, DashMap, Mutex, RwLock};
-use flow_like_types::{anyhow, create_id, Cacheable};
+use flow_like_types::Value;
+use flow_like_types::sync::{DashMap, Mutex, RwLock, mpsc};
+use flow_like_types::{Cacheable, anyhow, create_id};
 use futures::StreamExt;
 use internal_node::InternalNode;
 use internal_pin::InternalPin;
 use num_cpus;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use flow_like_types::Value;
 use std::time::Instant;
 use std::{
     collections::{HashMap, HashSet},
@@ -142,10 +142,9 @@ impl InternalRun {
         let variables = Arc::new(Mutex::new({
             let mut map = HashMap::with_capacity(board.variables.len());
             for (variable_id, variable) in &board.variables {
-                let value = variable
-                    .default_value
-                    .as_ref()
-                    .map_or(Value::Null, |v| flow_like_types::json::from_slice::<Value>(v).unwrap());
+                let value = variable.default_value.as_ref().map_or(Value::Null, |v| {
+                    flow_like_types::json::from_slice::<Value>(v).unwrap()
+                });
                 let mut var = variable.clone();
                 var.value = Arc::new(Mutex::new(value));
                 map.insert(variable_id.clone(), var);
@@ -292,7 +291,9 @@ impl InternalRun {
     // Reuse the same run, but reset the states
     pub async fn fork(&mut self) -> flow_like_types::Result<()> {
         if self.stack.len() != 0 {
-            return Err(flow_like_types::anyhow!("Cannot fork a run that is not finished"));
+            return Err(flow_like_types::anyhow!(
+                "Cannot fork a run that is not finished"
+            ));
         }
 
         self.cache.write().await.clear();
@@ -309,7 +310,9 @@ impl InternalRun {
         }
         for variable in self.variables.lock().await.values_mut() {
             let default = variable.default_value.as_ref();
-            let value = default.map_or(Value::Null, |v| flow_like_types::json::from_slice(v).unwrap());
+            let value = default.map_or(Value::Null, |v| {
+                flow_like_types::json::from_slice(v).unwrap()
+            });
             *variable.value.lock().await = value;
         }
 

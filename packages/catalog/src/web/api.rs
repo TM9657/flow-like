@@ -1,11 +1,9 @@
-use flow_like::flow::{
-    execution::context::ExecutionContext, node::NodeLogic,
-};
+use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
 use flow_like_storage::object_store::PutPayload;
+use flow_like_types::{Value, reqwest};
 use futures::StreamExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use flow_like_types::{reqwest, Value};
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::storage::path::FlowPath;
@@ -17,7 +15,9 @@ pub mod response;
 pub mod streaming_fetch;
 
 pub type StreamingCallback = Arc<
-    dyn Fn(flow_like_types::Bytes) -> Pin<Box<dyn Future<Output = flow_like_types::Result<()>> + Send>>
+    dyn Fn(
+            flow_like_types::Bytes,
+        ) -> Pin<Box<dyn Future<Output = flow_like_types::Result<()>> + Send>>
         + Send
         + Sync
         + 'static,
@@ -77,7 +77,7 @@ impl HttpRequest {
     async fn to_request(
         &self,
         client: &reqwest::Client,
-    ) ->flow_like_types::Result<reqwest::RequestBuilder> {
+    ) -> flow_like_types::Result<reqwest::RequestBuilder> {
         let method: reqwest::Method = match self.method {
             Method::GET => reqwest::Method::GET,
             Method::POST => reqwest::Method::POST,
@@ -111,7 +111,7 @@ impl HttpRequest {
         Ok(request)
     }
 
-    pub async fn trigger(&self, client: &reqwest::Client) ->flow_like_types::Result<HttpResponse> {
+    pub async fn trigger(&self, client: &reqwest::Client) -> flow_like_types::Result<HttpResponse> {
         let request = self.to_request(client).await?;
         let response = request.send().await?;
         let status_code = response.status().as_u16();
@@ -137,7 +137,7 @@ impl HttpRequest {
         &self,
         client: &reqwest::Client,
         callback: Option<StreamingCallback>,
-    ) ->flow_like_types::Result<HttpResponse> {
+    ) -> flow_like_types::Result<HttpResponse> {
         let request = self.to_request(client).await?;
         let response = request.send().await?;
         let status_code = response.status().as_u16();
@@ -174,7 +174,7 @@ impl HttpRequest {
         client: &reqwest::Client,
         path: &FlowPath,
         context: &mut ExecutionContext,
-    ) ->flow_like_types::Result<()> {
+    ) -> flow_like_types::Result<()> {
         let request = self.to_request(client).await?;
         let response = request.send().await?;
         let mut stream = response.bytes_stream();
@@ -217,14 +217,20 @@ impl HttpResponse {
         self.headers.get(key)
     }
 
-    pub fn to_json(&self) ->flow_like_types::Result<Value> {
-        let body = self.body.as_ref().ok_or(flow_like_types::anyhow!("No body"))?;
+    pub fn to_json(&self) -> flow_like_types::Result<Value> {
+        let body = self
+            .body
+            .as_ref()
+            .ok_or(flow_like_types::anyhow!("No body"))?;
         let body: Value = flow_like_types::json::from_slice(body)?;
         Ok(body)
     }
 
-    pub fn to_text(&self) ->flow_like_types::Result<String> {
-        let body = self.body.as_ref().ok_or(flow_like_types::anyhow!("No body"))?;
+    pub fn to_text(&self) -> flow_like_types::Result<String> {
+        let body = self
+            .body
+            .as_ref()
+            .ok_or(flow_like_types::anyhow!("No body"))?;
         let body = String::from_utf8_lossy(body);
         Ok(body.to_string())
     }

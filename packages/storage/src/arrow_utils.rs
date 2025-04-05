@@ -3,7 +3,10 @@ use std::sync::Arc;
 use arrow::datatypes::FieldRef;
 use arrow_array::{RecordBatch, RecordBatchIterator};
 use arrow_schema::{DataType, Field};
-use flow_like_types::{json::{Deserialize, Serialize, to_value}, Value, Result, anyhow };
+use flow_like_types::{
+    Result, Value, anyhow,
+    json::{Deserialize, Serialize, to_value},
+};
 use serde_arrow::schema::{SchemaLike, TracingOptions};
 
 pub fn value_to_record_batch(records: Vec<Value>) -> Result<RecordBatch> {

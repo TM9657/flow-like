@@ -27,7 +27,10 @@ pub async fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {
         storage::register_functions().await,
         bit::register_functions().await,
         web::register_functions().await,
-    ].into_iter().flatten().collect();
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
 
     catalog
 }

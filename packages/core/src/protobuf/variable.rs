@@ -2,8 +2,8 @@ use crate::flow::{
     pin::{PinType, ValueType},
     variable::{Variable, VariableType},
 };
-use flow_like_types::{sync::Mutex, FromProto, ToProto};
 use flow_like_types::Value;
+use flow_like_types::{FromProto, ToProto, sync::Mutex};
 use std::sync::Arc;
 
 impl VariableType {

@@ -1,7 +1,11 @@
 use flow_like_storage::object_store::path::Path;
-use flow_like_types::{json::from_value, sync::{mpsc, Mutex, RwLock}, Cacheable};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use flow_like_types::Value;
+use flow_like_types::{
+    Cacheable,
+    json::from_value,
+    sync::{Mutex, RwLock, mpsc},
+};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::HashMap,
     fs::File,
@@ -219,7 +223,11 @@ impl ExecutionContext {
         variables.insert(variable.id.clone(), variable);
     }
 
-    pub async fn set_variable_value(&self, variable_id: &str, value: Value) -> flow_like_types::Result<()> {
+    pub async fn set_variable_value(
+        &self,
+        variable_id: &str,
+        value: Value,
+    ) -> flow_like_types::Result<()> {
         let value_ref = self
             .variables
             .lock()
@@ -290,12 +298,18 @@ impl ExecutionContext {
         self.state.clone()
     }
 
-    pub async fn get_pin_by_name(&self, name: &str) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
+    pub async fn get_pin_by_name(
+        &self,
+        name: &str,
+    ) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
         let pin = self.node.get_pin_by_name(name).await?;
         Ok(pin)
     }
 
-    pub async fn evaluate_pin<T: DeserializeOwned>(&self, name: &str) -> flow_like_types::Result<T> {
+    pub async fn evaluate_pin<T: DeserializeOwned>(
+        &self,
+        name: &str,
+    ) -> flow_like_types::Result<T> {
         let pin = self.get_pin_by_name(name).await?;
         let value = evaluate_pin_value(pin).await?;
         let value = from_value(value)?;
@@ -319,7 +333,10 @@ impl ExecutionContext {
         Ok(pins)
     }
 
-    pub async fn get_pin_by_id(&self, id: &str) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
+    pub async fn get_pin_by_id(
+        &self,
+        id: &str,
+    ) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
         let pin = self.node.get_pin_by_id(id)?;
         Ok(pin)
     }
@@ -344,7 +361,10 @@ impl ExecutionContext {
         self.activate_exec_pin_ref(&pin).await
     }
 
-    pub async fn activate_exec_pin_ref(&self, pin: &Arc<Mutex<InternalPin>>) -> flow_like_types::Result<()> {
+    pub async fn activate_exec_pin_ref(
+        &self,
+        pin: &Arc<Mutex<InternalPin>>,
+    ) -> flow_like_types::Result<()> {
         let pin_guard = pin.lock().await;
         let pin = pin_guard.pin.lock().await;
         if pin.data_type != VariableType::Execution {
@@ -356,7 +376,9 @@ impl ExecutionContext {
         }
 
         drop(pin);
-        pin_guard.set_value(flow_like_types::json::json!(true)).await;
+        pin_guard
+            .set_value(flow_like_types::json::json!(true))
+            .await;
 
         Ok(())
     }
@@ -381,7 +403,9 @@ impl ExecutionContext {
         }
 
         drop(pin);
-        pin_guard.set_value(flow_like_types::json::json!(false)).await;
+        pin_guard
+            .set_value(flow_like_types::json::json!(false))
+            .await;
 
         Ok(())
     }
@@ -416,7 +440,11 @@ impl ExecutionContext {
         node.clone()
     }
 
-    pub async fn toast_message(&mut self, message: &str, level: ToastLevel) -> flow_like_types::Result<()> {
+    pub async fn toast_message(
+        &mut self,
+        message: &str,
+        level: ToastLevel,
+    ) -> flow_like_types::Result<()> {
         let event = FlowLikeEvent::new("toast", ToastEvent::new(message, level));
         let toast_result = self
             .app_state

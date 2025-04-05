@@ -14,7 +14,7 @@ use crate::{
 };
 use commands::GenericCommand;
 use flow_like_storage::object_store::{ObjectStore, path::Path};
-use flow_like_types::{create_id, sync::Mutex, FromProto, ToProto};
+use flow_like_types::{FromProto, ToProto, create_id, sync::Mutex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -434,8 +434,8 @@ mod tests {
         files::store::FlowLikeStore,
         object_store::{self, path::Path},
     };
-    use flow_like_types::{sync::Mutex, tokio, Message};
     use flow_like_types::{FromProto, ToProto};
+    use flow_like_types::{Message, sync::Mutex, tokio};
     use std::sync::Arc;
 
     async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {

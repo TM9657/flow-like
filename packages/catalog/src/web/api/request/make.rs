@@ -1,8 +1,15 @@
-use std::{collections::HashSet, sync::Arc};
-use flow_like::{flow::{execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::VariableType}, state::FlowLikeState};
-use flow_like_types::{async_trait, reqwest, sync::{DashMap, Mutex}, json::json};
+use flow_like::{
+    flow::{
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{async_trait, json::json};
 
-use crate::{storage::path::FlowPath, web::api::{HttpRequest, HttpResponse, Method}};
+use crate::web::api::{HttpRequest, Method};
 
 #[derive(Default)]
 pub struct MakeRequestNode {}
@@ -56,7 +63,7 @@ impl NodeLogic for MakeRequestNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let method: String = context.evaluate_pin("method").await?;
         let url: String = context.evaluate_pin("url").await?;
 

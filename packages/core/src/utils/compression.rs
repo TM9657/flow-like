@@ -37,7 +37,10 @@ where
 }
 
 /// Read from a compressed file and deserialize it into a Serde Deserializable Struct
-pub async fn from_compressed<T>(store: Arc<dyn ObjectStore>, file_path: Path) -> flow_like_types::Result<T>
+pub async fn from_compressed<T>(
+    store: Arc<dyn ObjectStore>,
+    file_path: Path,
+) -> flow_like_types::Result<T>
 where
     T: Message + Default,
 {

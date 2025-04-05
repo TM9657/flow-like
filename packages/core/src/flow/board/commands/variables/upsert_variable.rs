@@ -2,7 +2,6 @@ use flow_like_types::{async_trait, sync::Mutex};
 use schemars::JsonSchema;
 use std::sync::Arc;
 
-
 use crate::{
     flow::{
         board::{Board, commands::Command},

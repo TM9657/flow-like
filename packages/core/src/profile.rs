@@ -8,7 +8,7 @@ use crate::{
     hub::Hub,
     utils::http::HTTPClient,
 };
-use flow_like_types::{anyhow, tokio::task, Result};
+use flow_like_types::{Result, anyhow, tokio::task};
 use futures::future::join_all;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

@@ -1,9 +1,14 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
-use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, PinType, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState};
-use flow_like_types::{async_trait, json::json, reqwest, sync::{DashMap, Mutex}, Value};
-use regex::Regex;
-
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+use flow_like::{
+    flow::{
+        board::Board,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{Value, async_trait, json::json};
+use std::sync::Arc;
 
 #[derive(Default)]
 
@@ -49,7 +54,7 @@ impl NodeLogic for TryTransformNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let input_value: Value = context.evaluate_pin("type_in").await?;
         let output_value = context.get_pin_by_name("type_out").await?;
         let out_type = output_value.lock().await.pin.lock().await.data_type.clone();

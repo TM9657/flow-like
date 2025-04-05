@@ -20,7 +20,10 @@ pub async fn make_data_url(url: &str) -> flow_like_types::Result<String> {
 
     let status = response.status();
     if !status.is_success() {
-        return Err(flow_like_types::anyhow!("Failed to download image: {}", status));
+        return Err(flow_like_types::anyhow!(
+            "Failed to download image: {}",
+            status
+        ));
     }
     let headers = response.headers().clone();
     let mut content_type = headers

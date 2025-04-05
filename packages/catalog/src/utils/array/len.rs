@@ -1,8 +1,15 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
-use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState};
-use flow_like_types::{async_trait, json::json, reqwest, sync::{DashMap, Mutex}, Value};
-
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+use flow_like::{
+    flow::{
+        board::Board,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::ValueType,
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{async_trait, json::json};
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct ArrayLengthNode {}
@@ -37,7 +44,7 @@ impl NodeLogic for ArrayLengthNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let array: Vec<flow_like_types::Value> = context.evaluate_pin("array").await?;
         let length = array.len() as i64;
         context.set_pin_value("length", json!(length)).await?;

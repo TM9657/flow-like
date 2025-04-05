@@ -3,7 +3,8 @@ use crate::state::{TauriFlowLikeState, TauriSettingsState};
 use flow_like::{
     app::App,
     bit::BitMeta,
-    flow::{board::Board, variable::Variable}, flow_like_storage::Path,
+    flow::{board::Board, variable::Variable},
+    flow_like_storage::Path,
 };
 use futures::{StreamExt, TryStreamExt};
 use serde_json::Value;

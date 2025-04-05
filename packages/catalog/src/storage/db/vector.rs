@@ -1,11 +1,18 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc, time::Duration};
-use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, PinType, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState};
-use flow_like_types::{async_trait, json::{json, Deserialize, Serialize}, reqwest, sync::{DashMap, Mutex, RwLock}, Bytes, Cacheable, Error, JsonSchema, Value};
-use nalgebra::DVector;
-use regex::Regex;
-use flow_like_storage::{databases::vector::lancedb::LanceDBVectorStore, object_store::PutPayload, Path};
-use futures::StreamExt;
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+use flow_like::{
+    flow::{
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
+use flow_like_types::{
+    Cacheable, JsonSchema, Value, async_trait,
+    json::{Deserialize, Serialize},
+    sync::RwLock,
+};
+use std::sync::Arc;
 
 pub mod count;
 pub mod delete;
@@ -45,7 +52,7 @@ impl NodeDBConnection {
         &self,
         context: &mut ExecutionContext,
         cache_key: &str,
-    ) ->flow_like_types::Result<CachedDB> {
+    ) -> flow_like_types::Result<CachedDB> {
         let cached = context
             .cache
             .read()
@@ -107,7 +114,7 @@ impl NodeLogic for CreateLocalDatabaseNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let table: String = context.evaluate_pin("name").await?;
         let cache_key = format!("db_{}", table);
         let cache_set = context.cache.read().await.contains_key(&cache_key);
@@ -118,18 +125,19 @@ impl NodeLogic for CreateLocalDatabaseNode {
                 .ok_or(flow_like_types::anyhow!("No execution cache found"))?
                 .get_storage(false)?;
             let board_dir = board_dir.child("db");
-            let db =
-                context
-                    .app_state
-                    .lock()
-                    .await
-                    .config
-                    .read()
-                    .await
-                    .callbacks
-                    .build_project_database
-                    .clone()
-                    .ok_or(flow_like_types::anyhow!("No database builder found"))?(board_dir);
+            let db = context
+                .app_state
+                .lock()
+                .await
+                .config
+                .read()
+                .await
+                .callbacks
+                .build_project_database
+                .clone()
+                .ok_or(flow_like_types::anyhow!("No database builder found"))?(
+                board_dir
+            );
             let db = db.execute().await?;
             let intermediate = LanceDBVectorStore::from_connection(db, table).await;
             let intermediate = CachedDB {

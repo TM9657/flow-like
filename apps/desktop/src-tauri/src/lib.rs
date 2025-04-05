@@ -4,7 +4,13 @@ mod settings;
 mod state;
 mod utils;
 use flow_like::{
-    flow_like_storage::{files::store::{local_store::LocalObjectStore, FlowLikeStore}, lancedb, Path}, flow_like_types::sync::DashMap, state::{FlowLikeConfig, FlowLikeState}, utils::http::HTTPClient
+    flow_like_storage::{
+        files::store::{local_store::LocalObjectStore, FlowLikeStore},
+        lancedb, Path,
+    },
+    flow_like_types::sync::DashMap,
+    state::{FlowLikeConfig, FlowLikeState},
+    utils::http::HTTPClient,
 };
 use serde_json::Value;
 use settings::Settings;
@@ -132,8 +138,7 @@ pub fn run() {
 
             tauri::async_runtime::spawn(async move {
                 let handle = relay_handle;
-                let buffer: Arc<DashMap<Cow<'static, str>, Vec<Value>>> =
-                    Arc::new(DashMap::new());
+                let buffer: Arc<DashMap<Cow<'static, str>, Vec<Value>>> = Arc::new(DashMap::new());
 
                 let mut receiver = {
                     println!("Starting Message Relay");

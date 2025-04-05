@@ -3,8 +3,6 @@ use crate::{
     models::ModelMeta,
     state::FlowLikeState,
 };
-use flow_like_types::{reqwest, tokio::{self, sync::Mutex as TokioMutex, task::JoinHandle, time::sleep}, Result};
-use flow_like_types::async_trait;
 use flow_like_model_provider::{
     history::History,
     llm::{LLMCallback, ModelLogic},
@@ -12,6 +10,11 @@ use flow_like_model_provider::{
     response_chunk::ResponseChunk,
 };
 use flow_like_storage::files::store::FlowLikeStore;
+use flow_like_types::async_trait;
+use flow_like_types::{
+    Result, reqwest,
+    tokio::{self, sync::Mutex as TokioMutex, task::JoinHandle, time::sleep},
+};
 use futures::StreamExt;
 use portpicker::pick_unused_port;
 use std::{
@@ -21,7 +24,6 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-
 
 use super::ExecutionSettings;
 

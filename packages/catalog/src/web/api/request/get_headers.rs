@@ -1,8 +1,15 @@
-use std::{collections::HashSet, sync::Arc};
-use flow_like::{flow::{execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::VariableType}, state::FlowLikeState};
-use flow_like_types::{async_trait, reqwest, sync::{DashMap, Mutex}, json::json};
+use flow_like::{
+    flow::{
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::{PinOptions, ValueType},
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{async_trait, json::json};
 
-use crate::{storage::path::FlowPath, web::api::{HttpRequest, HttpResponse}};
+use crate::web::api::HttpRequest;
 
 #[derive(Default)]
 pub struct GetHeadersNode {}
@@ -44,7 +51,7 @@ impl NodeLogic for GetHeadersNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let request: HttpRequest = context.evaluate_pin("request").await?;
 
         let headers = request.headers.unwrap_or_default();

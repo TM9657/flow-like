@@ -5,7 +5,7 @@ use crate::{
     profile::Profile,
     utils::{http::HTTPClient, recursion::RecursionGuard},
 };
-use flow_like_types::{sync::Mutex, Result};
+use flow_like_types::{Result, sync::Mutex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -88,7 +88,9 @@ impl Hub {
         let url = Url::parse(&self.domain).unwrap();
         let url_type = format!(
             "static/{}.json",
-            flow_like_types::json::to_string(&bit_type).unwrap().replace("\"", "")
+            flow_like_types::json::to_string(&bit_type)
+                .unwrap()
+                .replace("\"", "")
         );
         let type_bits_url = url.join(&url_type).unwrap();
         let request = self.http_client().client().get(type_bits_url).build()?;

@@ -3,12 +3,12 @@ use crate::utils::compression::{compress_to_file_json, from_compressed_json};
 use crate::utils::download::download_bit;
 use flow_like_storage::Path;
 use flow_like_storage::files::store::local_store::LocalObjectStore;
+use flow_like_types::Value;
 use flow_like_types::sync::Mutex;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use flow_like_types::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -346,7 +346,10 @@ impl BitPack {
         Ok(installed_bits)
     }
 
-    pub async fn download(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<Vec<Bit>> {
+    pub async fn download(
+        &self,
+        state: Arc<Mutex<FlowLikeState>>,
+    ) -> flow_like_types::Result<Vec<Bit>> {
         let mut deduplicated_bits = vec![];
         let mut deduplication_helper = HashSet::new();
         self.bits.iter().for_each(|bit| {
@@ -393,7 +396,10 @@ impl BitPack {
         size
     }
 
-    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<bool> {
+    pub async fn is_installed(
+        &self,
+        state: Arc<Mutex<FlowLikeState>>,
+    ) -> flow_like_types::Result<bool> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
         let mut installed = true;
         for bit in self.bits.iter() {
@@ -424,7 +430,8 @@ impl BitPack {
 impl Bit {
     pub fn try_to_llm(&self) -> Option<LLMParameters> {
         if self.bit_type == BitTypes::Llm {
-            let parameters = flow_like_types::json::from_value::<LLMParameters>(self.parameters.clone());
+            let parameters =
+                flow_like_types::json::from_value::<LLMParameters>(self.parameters.clone());
             if parameters.is_err() {
                 return None;
             }
@@ -435,7 +442,8 @@ impl Bit {
 
     pub fn try_to_vlm(&self) -> Option<VLMParameters> {
         if self.bit_type == BitTypes::Vlm {
-            let parameters = flow_like_types::json::from_value::<VLMParameters>(self.parameters.clone());
+            let parameters =
+                flow_like_types::json::from_value::<VLMParameters>(self.parameters.clone());
             if parameters.is_err() {
                 return None;
             }
@@ -458,8 +466,9 @@ impl Bit {
 
     pub fn try_to_embedding(&self) -> Option<EmbeddingModelParameters> {
         if self.bit_type == BitTypes::Embedding {
-            let parameters =
-                flow_like_types::json::from_value::<EmbeddingModelParameters>(self.parameters.clone());
+            let parameters = flow_like_types::json::from_value::<EmbeddingModelParameters>(
+                self.parameters.clone(),
+            );
             if parameters.is_err() {
                 return None;
             }
@@ -470,8 +479,9 @@ impl Bit {
 
     pub fn try_to_image_embedding(&self) -> Option<ImageEmbeddingModelParameters> {
         if self.bit_type == BitTypes::ImageEmbedding {
-            let parameters =
-                flow_like_types::json::from_value::<ImageEmbeddingModelParameters>(self.parameters.clone());
+            let parameters = flow_like_types::json::from_value::<ImageEmbeddingModelParameters>(
+                self.parameters.clone(),
+            );
             if parameters.is_err() {
                 return None;
             }
@@ -516,7 +526,10 @@ impl Bit {
         None
     }
 
-    pub async fn dependencies(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<BitPack> {
+    pub async fn dependencies(
+        &self,
+        state: Arc<Mutex<FlowLikeState>>,
+    ) -> flow_like_types::Result<BitPack> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
         let mut dependencies = vec![];
@@ -576,7 +589,10 @@ impl Bit {
         Ok(dependencies)
     }
 
-    pub async fn is_installed(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<bool> {
+    pub async fn is_installed(
+        &self,
+        state: Arc<Mutex<FlowLikeState>>,
+    ) -> flow_like_types::Result<bool> {
         let pack = self.pack(state.clone()).await?;
         pack.is_installed(state).await
     }

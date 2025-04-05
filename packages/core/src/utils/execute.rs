@@ -11,7 +11,8 @@ pub fn executable_path() -> Option<PathBuf> {
 }
 
 fn side_car_path(command: &PathBuf) -> flow_like_types::Result<PathBuf> {
-    let executable = executable_path().ok_or(flow_like_types::anyhow!("Could not get executable path"))?;
+    let executable =
+        executable_path().ok_or(flow_like_types::anyhow!("Could not get executable path"))?;
     #[cfg(windows)]
     return Ok(executable.join(&command).with_extension("exe"));
     #[cfg(not(windows))]
@@ -23,11 +24,17 @@ pub async fn sidecar(command: &PathBuf) -> flow_like_types::Result<StdCommand> {
     let path = side_car_path(command)?;
 
     if !path.exists() {
-        return Err(flow_like_types::anyhow!("Sidecar not found at path: {:?}", path));
+        return Err(flow_like_types::anyhow!(
+            "Sidecar not found at path: {:?}",
+            path
+        ));
     }
 
     if !path.is_file() {
-        return Err(flow_like_types::anyhow!("Sidecar is not a file: {:?}", path));
+        return Err(flow_like_types::anyhow!(
+            "Sidecar is not a file: {:?}",
+            path
+        ));
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -49,11 +56,17 @@ pub async fn async_sidecar(command: &PathBuf) -> flow_like_types::Result<Command
     let path = side_car_path(command)?;
 
     if !path.exists() {
-        return Err(flow_like_types::anyhow!("Sidecar not found at path: {:?}", path));
+        return Err(flow_like_types::anyhow!(
+            "Sidecar not found at path: {:?}",
+            path
+        ));
     }
 
     if !path.is_file() {
-        return Err(flow_like_types::anyhow!("Sidecar is not a file: {:?}", path));
+        return Err(flow_like_types::anyhow!(
+            "Sidecar is not a file: {:?}",
+            path
+        ));
     }
 
     #[cfg(not(target_os = "linux"))]

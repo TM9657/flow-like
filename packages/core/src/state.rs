@@ -1,12 +1,12 @@
-use flow_like_types::sync::{mpsc, DashMap, Mutex, RwLock};
-use flow_like_types::Ok;
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::lancedb::connection::ConnectBuilder;
 use flow_like_storage::object_store::path::Path;
+use flow_like_types::Ok;
+use flow_like_types::Value;
+use flow_like_types::sync::{DashMap, Mutex, RwLock, mpsc};
 use futures::future;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use flow_like_types::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use std::time::SystemTime;
@@ -154,10 +154,7 @@ impl FlowNodeRegistry {
         }
     }
 
-    pub fn initialize(
-        &mut self,
-        parent: Weak<Mutex<FlowLikeState>>,
-    ) {
+    pub fn initialize(&mut self, parent: Weak<Mutex<FlowLikeState>>) {
         self.parent = Some(parent);
     }
 
@@ -167,7 +164,8 @@ impl FlowNodeRegistry {
     }
 
     pub async fn push_node(&mut self, logic: Arc<dyn NodeLogic>) -> flow_like_types::Result<()> {
-        let state = self.parent
+        let state = self
+            .parent
             .as_ref()
             .and_then(|weak| weak.upgrade())
             .ok_or(flow_like_types::anyhow!("Parent not found"))?;
@@ -181,29 +179,38 @@ impl FlowNodeRegistry {
         Ok(())
     }
 
-    pub async fn push_nodes(&mut self, nodes: Vec<Arc<dyn NodeLogic>>) -> flow_like_types::Result<()> {
-        let state = self.parent
-        .as_ref()
-        .and_then(|weak| weak.upgrade())
-        .ok_or(flow_like_types::anyhow!("Parent not found"))?;
+    pub async fn push_nodes(
+        &mut self,
+        nodes: Vec<Arc<dyn NodeLogic>>,
+    ) -> flow_like_types::Result<()> {
+        let state = self
+            .parent
+            .as_ref()
+            .and_then(|weak| weak.upgrade())
+            .ok_or(flow_like_types::anyhow!("Parent not found"))?;
         let guard = state.lock().await;
 
         let mut registry = FlowNodeRegistryInner {
             registry: self.node_registry.registry.clone(),
         };
 
-        let num_cpus = std::thread::available_parallelism().map(|p| p.get()).unwrap_or(2);
+        let num_cpus = std::thread::available_parallelism()
+            .map(|p| p.get())
+            .unwrap_or(2);
         let batch_size = std::cmp::min(64, std::cmp::max(4, num_cpus * 4));
 
         for chunk in nodes.chunks(batch_size) {
-            let futures: Vec<_> = chunk.iter().map(|logic| {
-                let logic_clone = logic.clone();
-                let guard_ref = &guard;
-                async move {
-                    let node = logic_clone.get_node(guard_ref).await;
-                    (node, logic_clone)
-                }
-            }).collect();
+            let futures: Vec<_> = chunk
+                .iter()
+                .map(|logic| {
+                    let logic_clone = logic.clone();
+                    let guard_ref = &guard;
+                    async move {
+                        let node = logic_clone.get_node(guard_ref).await;
+                        (node, logic_clone)
+                    }
+                })
+                .collect();
 
             let results = future::join_all(futures).await;
 
@@ -346,12 +353,17 @@ impl FlowLikeState {
 
         match board.try_unwrap() {
             Some(board) => Ok(board.clone()),
-            None => Err(flow_like_types::anyhow!("Board not found or could not be locked")),
+            None => Err(flow_like_types::anyhow!(
+                "Board not found or could not be locked"
+            )),
         }
     }
 
     #[cfg(feature = "flow-runtime")]
-    pub fn remove_board(&self, board_id: &str) -> flow_like_types::Result<Option<Arc<Mutex<Board>>>> {
+    pub fn remove_board(
+        &self,
+        board_id: &str,
+    ) -> flow_like_types::Result<Option<Arc<Mutex<Board>>>> {
         let removed = self.board_registry.remove(board_id);
 
         match removed {
@@ -361,7 +373,11 @@ impl FlowLikeState {
     }
 
     #[cfg(feature = "flow-runtime")]
-    pub fn register_board(&self, board_id: &str, board: Arc<Mutex<Board>>) -> flow_like_types::Result<()> {
+    pub fn register_board(
+        &self,
+        board_id: &str,
+        board: Arc<Mutex<Board>>,
+    ) -> flow_like_types::Result<()> {
         self.board_registry
             .insert(board_id.to_string(), board.clone());
         Ok(())
@@ -389,7 +405,9 @@ impl FlowLikeState {
 
         match run.try_unwrap() {
             Some(run) => Ok(run.clone()),
-            None => Err(flow_like_types::anyhow!("Run not found or could not be locked")),
+            None => Err(flow_like_types::anyhow!(
+                "Run not found or could not be locked"
+            )),
         }
     }
 
@@ -399,7 +417,9 @@ impl FlowLikeState {
     }
 
     #[inline]
-    pub async fn project_store(state: &Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<FlowLikeStore> {
+    pub async fn project_store(
+        state: &Arc<Mutex<FlowLikeState>>,
+    ) -> flow_like_types::Result<FlowLikeStore> {
         state
             .lock()
             .await
@@ -413,7 +433,9 @@ impl FlowLikeState {
     }
 
     #[inline]
-    pub async fn bit_store(state: &Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<FlowLikeStore> {
+    pub async fn bit_store(
+        state: &Arc<Mutex<FlowLikeState>>,
+    ) -> flow_like_types::Result<FlowLikeStore> {
         state
             .lock()
             .await
@@ -427,7 +449,9 @@ impl FlowLikeState {
     }
 
     #[inline]
-    pub async fn user_store(state: &Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<FlowLikeStore> {
+    pub async fn user_store(
+        state: &Arc<Mutex<FlowLikeState>>,
+    ) -> flow_like_types::Result<FlowLikeStore> {
         state
             .lock()
             .await
@@ -477,7 +501,7 @@ impl Default for ToastEvent {
 #[cfg(test)]
 mod tests {
     use flow_like_storage::object_store::{ObjectStore, PutPayload};
-    use flow_like_types::{tokio, Bytes, Cacheable};
+    use flow_like_types::{Bytes, Cacheable, tokio};
 
     use super::*;
     use std::path::PathBuf;

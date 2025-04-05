@@ -1,4 +1,4 @@
-use flow_like_types::{sync::Mutex, Value};
+use flow_like_types::{Value, sync::Mutex};
 use std::{
     collections::HashSet,
     sync::{Arc, Weak},

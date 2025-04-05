@@ -1,9 +1,8 @@
+use flow_like_types::{Value, sync::Mutex};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-use flow_like_types::{sync::Mutex, Value};
-
 
 use crate::flow::{
     node::{Node, NodeLogic, NodeState},
@@ -71,7 +70,10 @@ impl InternalNode {
         }
     }
 
-    pub async fn get_pin_by_name(&self, name: &str) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
+    pub async fn get_pin_by_name(
+        &self,
+        name: &str,
+    ) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
         self.ensure_cache(name).await;
 
         let pin = {

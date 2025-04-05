@@ -1,12 +1,15 @@
-use std::{collections::{HashMap, HashSet}, sync::{atomic::{AtomicUsize, Ordering}, Arc}, time::Duration};
-use flow_like::{bit::{Bit, BitModelPreference, BitTypes}, flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::{LogMessage, LogStat}, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, PinType, ValueType}, variable::{Variable, VariableType}}, state::{FlowLikeState, ToastLevel}};
-use flow_like_model_provider::{history::{History, HistoryMessage, Role}, llm::LLMCallback, response::{Response, ResponseMessage}, response_chunk::ResponseChunk};
-use flow_like_types::{anyhow, async_trait, json::{from_str, json, Deserialize, Serialize}, reqwest, sync::{DashMap, Mutex}, Bytes, Error, JsonSchema, Result, Value};
-use nalgebra::DVector;
-use regex::Regex;
-use flow_like_storage::{object_store::PutPayload, Path};
+use crate::ai::generative::embedding::{CachedEmbeddingModel, CachedEmbeddingModelObject};
+use flow_like::{
+    flow::{
+        execution::{LogLevel, context::ExecutionContext},
+        node::{Node, NodeLogic},
+        pin::{PinOptions, ValueType},
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{anyhow, async_trait, json::json};
 use futures::StreamExt;
-use crate::{ai::generative::embedding::{CachedEmbeddingModel, CachedEmbeddingModelObject}, storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
 
 #[derive(Default)]
 pub struct ChunkText {}
@@ -97,7 +100,7 @@ impl NodeLogic for ChunkText {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         context.activate_exec_pin("failed").await?;
 

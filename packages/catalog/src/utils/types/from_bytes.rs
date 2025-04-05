@@ -1,9 +1,15 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
-use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, PinType, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState};
-use flow_like_types::{async_trait, json::json, reqwest, sync::{DashMap, Mutex}, Value};
-use regex::Regex;
-
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+use flow_like::{
+    flow::{
+        board::Board,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::ValueType,
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{Value, async_trait};
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct FromBytesNode {}
@@ -33,7 +39,7 @@ impl NodeLogic for FromBytesNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let bytes: Vec<u8> = context.evaluate_pin("bytes").await?;
         let value: Value = flow_like_types::json::from_slice(&bytes)?;
         context.set_pin_value("value", value).await?;

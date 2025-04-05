@@ -1,8 +1,13 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
-use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState, utils::json::parse_malformed_json};
-use flow_like_types::{async_trait, json::json, reqwest, sync::{DashMap, Mutex}, Value};
-
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+use flow_like::{
+    flow::{
+        execution::{LogLevel, context::ExecutionContext},
+        node::{Node, NodeLogic},
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+    utils::json::parse_malformed_json,
+};
+use flow_like_types::async_trait;
 
 #[derive(Default)]
 pub struct RepairParseNode {}
@@ -63,7 +68,7 @@ impl NodeLogic for RepairParseNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         context.activate_exec_pin("failed").await?;
 
@@ -76,10 +81,7 @@ impl NodeLogic for RepairParseNode {
                 context.deactivate_exec_pin("failed").await?;
             }
             Err(err) => {
-                context.log_message(
-                    &format!("Failed to parse JSON: {}", err),
-                    LogLevel::Error,
-                );
+                context.log_message(&format!("Failed to parse JSON: {}", err), LogLevel::Error);
             }
         }
 

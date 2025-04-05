@@ -1,8 +1,12 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
-use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState};
-use flow_like_types::{async_trait, json::json, reqwest, sync::{DashMap, Mutex}, Value};
-
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+use flow_like::{
+    flow::{
+        execution::{LogLevel, context::ExecutionContext},
+        node::{Node, NodeLogic},
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{async_trait, json::json};
 
 #[derive(Default)]
 pub struct RootIntegerNode {}
@@ -47,15 +51,12 @@ impl NodeLogic for RootIntegerNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let radicand: i64 = context.evaluate_pin("radicand").await?;
         let degree: i64 = context.evaluate_pin("degree").await?;
 
         if degree <= 0 {
-            context.log_message(
-                "Degree must be a positive integer",
-                LogLevel::Error,
-            );
+            context.log_message("Degree must be a positive integer", LogLevel::Error);
             context.set_pin_value("root", json!(0.0)).await?;
             return Ok(());
         }

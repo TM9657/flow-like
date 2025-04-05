@@ -29,7 +29,7 @@ pub type Timestamp = prost_types::Timestamp;
 
 use std::any::Any;
 
-pub use anyhow::{Result, anyhow, bail, Error, Ok};
+pub use anyhow::{Error, Ok, Result, anyhow, bail};
 pub use async_trait::async_trait;
 pub use cuid2::create_id;
 pub use prost::Message;
@@ -40,18 +40,18 @@ pub use serde_json::Value;
 pub mod json {
     pub use serde::{Deserialize, Serialize, de::DeserializeOwned};
     pub use serde_json::{
-        from_reader, from_slice, from_str, from_value, json, to_string, to_string_pretty,
-        to_value, to_vec, to_vec_pretty, Number, Map
+        Map, Number, from_reader, from_slice, from_str, from_value, json, to_string,
+        to_string_pretty, to_value, to_vec, to_vec_pretty,
     };
 }
 
-pub use tokio;
 pub use bytes::Bytes;
+pub use tokio;
 pub mod sync {
+    pub use dashmap::DashMap;
     pub use tokio::sync::Mutex;
     pub use tokio::sync::RwLock;
     pub use tokio::sync::mpsc;
-    pub use dashmap::DashMap;
 }
 
 pub use rand;

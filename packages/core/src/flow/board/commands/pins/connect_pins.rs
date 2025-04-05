@@ -2,7 +2,6 @@ use flow_like_types::{async_trait, sync::Mutex};
 use schemars::JsonSchema;
 use std::sync::Arc;
 
-
 use std::collections::HashSet;
 
 use crate::{
@@ -134,7 +133,9 @@ pub fn connect_pins(
         Some(pin) => pin,
         None => {
             println!("Node: {:?}, Pin ID: {}", from_node, from_pin);
-            return Err(flow_like_types::anyhow!("Pin not found in node".to_string()));
+            return Err(flow_like_types::anyhow!(
+                "Pin not found in node".to_string()
+            ));
         }
     };
 
@@ -142,16 +143,22 @@ pub fn connect_pins(
         Some(pin) => pin,
         None => {
             println!("Node: {:?}, Pin ID: {}", to_node, to_pin);
-            return Err(flow_like_types::anyhow!("Pin not found in node".to_string()));
+            return Err(flow_like_types::anyhow!(
+                "Pin not found in node".to_string()
+            ));
         }
     };
 
     if from_pin.pin_type == PinType::Input {
-        return Err(flow_like_types::anyhow!("Cannot connect an input pin".to_string()));
+        return Err(flow_like_types::anyhow!(
+            "Cannot connect an input pin".to_string()
+        ));
     }
 
     if to_pin.pin_type == PinType::Output {
-        return Err(flow_like_types::anyhow!("Cannot connect an output pin".to_string()));
+        return Err(flow_like_types::anyhow!(
+            "Cannot connect an output pin".to_string()
+        ));
     }
 
     // If we would allow this, it could introduce race conditions for variable access.
@@ -200,7 +207,12 @@ pub fn disconnect_pins(
 ) -> flow_like_types::Result<()> {
     let mut from_node = match board.nodes.get(from_node) {
         Some(node) => node.clone(),
-        None => return Err(flow_like_types::anyhow!("From Node ({}) not found", from_node)),
+        None => {
+            return Err(flow_like_types::anyhow!(
+                "From Node ({}) not found",
+                from_node
+            ));
+        }
     };
 
     let mut to_node = match board.nodes.get(to_node) {
@@ -210,12 +222,22 @@ pub fn disconnect_pins(
 
     let from_pin = match from_node.pins.get_mut(from_pin) {
         Some(pin) => pin,
-        None => return Err(flow_like_types::anyhow!("From Pin ({}) not found in node", from_pin)),
+        None => {
+            return Err(flow_like_types::anyhow!(
+                "From Pin ({}) not found in node",
+                from_pin
+            ));
+        }
     };
 
     let to_pin = match to_node.pins.get_mut(to_pin) {
         Some(pin) => pin,
-        None => return Err(flow_like_types::anyhow!("To Pin ({}) not found in node", to_pin)),
+        None => {
+            return Err(flow_like_types::anyhow!(
+                "To Pin ({}) not found in node",
+                to_pin
+            ));
+        }
     };
 
     to_pin.depends_on.remove(&from_pin.id);

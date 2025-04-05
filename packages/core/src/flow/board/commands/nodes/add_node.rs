@@ -4,7 +4,6 @@ use flow_like_types::sync::Mutex;
 use schemars::JsonSchema;
 use std::sync::Arc;
 
-
 use crate::{
     flow::{
         board::{Board, commands::Command},
@@ -13,7 +12,6 @@ use crate::{
     state::FlowLikeState,
 };
 use serde::{Deserialize, Serialize};
-
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct AddNodeCommand {

@@ -12,7 +12,6 @@ use flow_like_storage::{
 use flow_like_types::{sync::Mutex, tokio};
 use std::{path::PathBuf, sync::Arc};
 
-
 const BOARD_1: &str = "dkfxopaxr8863bo22zg1brhc";
 const BOARD_2: &str = "qhrbdzfs80934gg4exask8nu";
 const START_1: &str = "f05f0kh6vxbd79zjc7li5wcy";

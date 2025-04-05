@@ -1,12 +1,35 @@
-use std::{collections::{HashMap, HashSet}, sync::{atomic::{AtomicUsize, Ordering}, Arc}, time::Duration};
-use flow_like::{bit::{Bit, BitTypes}, flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::{LogMessage, LogStat}, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, PinType, ValueType}, variable::{Variable, VariableType}}, state::{FlowLikeState, ToastLevel}};
-use flow_like_model_provider::{history::{History, HistoryMessage, Role}, llm::LLMCallback, response::Response, response_chunk::ResponseChunk};
-use flow_like_types::{Result, async_trait, json::{from_str, json, Deserialize, Serialize}, reqwest, sync::{DashMap, Mutex}, Bytes, Error, JsonSchema, Value};
-use nalgebra::DVector;
-use regex::Regex;
-use flow_like_storage::{object_store::PutPayload, Path};
-use futures::StreamExt;
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+use flow_like::{
+    bit::Bit,
+    flow::{
+        execution::{
+            LogLevel,
+            context::ExecutionContext,
+            internal_node::InternalNode,
+            log::{LogMessage, LogStat},
+        },
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_model_provider::{
+    history::{History, HistoryMessage, Role},
+    llm::LLMCallback,
+    response_chunk::ResponseChunk,
+};
+use flow_like_types::{
+    async_trait,
+    json::json,
+    sync::{DashMap, Mutex},
+};
+use std::{
+    collections::HashSet,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 
 #[derive(Default)]
 pub struct InvokeLLMSimpleNode {}
@@ -62,7 +85,7 @@ impl NodeLogic for InvokeLLMSimpleNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("done").await?;
         let model = context.evaluate_pin::<Bit>("model").await?;
         let mut model_name = model.id.clone();
@@ -88,7 +111,9 @@ impl NodeLogic for InvokeLLMSimpleNode {
         let connected_nodes = Arc::new(DashMap::new());
         let connected = on_stream.lock().await.connected_to.clone();
         for pin in connected {
-            let node = pin.upgrade().ok_or(flow_like_types::anyhow!("Pin is not set"))?;
+            let node = pin
+                .upgrade()
+                .ok_or(flow_like_types::anyhow!("Pin is not set"))?;
             let node = node.lock().await.node.clone();
             if let Some(node) = node.upgrade() {
                 let context = Arc::new(Mutex::new(context.create_sub_context(&node).await));

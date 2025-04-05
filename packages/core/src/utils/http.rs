@@ -1,6 +1,10 @@
 use flow_like_storage::blake3;
+use flow_like_types::{
+    Value,
+    reqwest::{self, Request},
+    sync::{DashMap, mpsc},
+};
 use serde::{Deserialize, Serialize};
-use flow_like_types::{reqwest::{self, Request}, sync::{mpsc, DashMap}, Value};
 use std::{sync::Arc, time::Duration};
 
 use super::cache::{cache_file_exists, read_cache_file, write_cache_file};
@@ -54,7 +58,11 @@ impl HTTPClient {
     }
 
     /// Fastest cache, but not persistent
-    async fn handle_in_memory<T>(&self, request_hash: &str, request: &Request) -> flow_like_types::Result<T>
+    async fn handle_in_memory<T>(
+        &self,
+        request_hash: &str,
+        request: &Request,
+    ) -> flow_like_types::Result<T>
     where
         for<'de> T: Deserialize<'de> + Clone,
     {
@@ -70,7 +78,11 @@ impl HTTPClient {
     }
 
     /// Slower than in memory cache, but faster than fetching from the network
-    async fn handle_file_cache<T>(&self, request_hash: &str, request: &Request) -> flow_like_types::Result<T>
+    async fn handle_file_cache<T>(
+        &self,
+        request_hash: &str,
+        request: &Request,
+    ) -> flow_like_types::Result<T>
     where
         for<'de> T: Deserialize<'de> + Clone,
     {

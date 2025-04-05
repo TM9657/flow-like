@@ -1,5 +1,5 @@
 use super::variable::VariableType;
-use flow_like_types::{json::to_string_pretty, sync::Mutex, Value};
+use flow_like_types::{Value, json::to_string_pretty, sync::Mutex};
 use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, sync::Arc};
@@ -139,8 +139,8 @@ impl Pin {}
 mod tests {
 
     use flow_like_types::sync::Mutex;
-    use flow_like_types::{tokio, Message, Value};
     use flow_like_types::{FromProto, ToProto};
+    use flow_like_types::{Message, Value, tokio};
     use std::{collections::HashSet, sync::Arc};
 
     #[tokio::test]

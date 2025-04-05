@@ -61,7 +61,11 @@ pub fn read_file(file: &PathBuf) -> Result<Vec<u8>> {
 }
 
 pub fn write_file(file: &PathBuf, data: &[u8]) -> Result<()> {
-    if !file.parent().ok_or(flow_like_types::anyhow!("No parent"))?.exists() {
+    if !file
+        .parent()
+        .ok_or(flow_like_types::anyhow!("No parent"))?
+        .exists()
+    {
         std::fs::create_dir_all(file.parent().unwrap())?;
     }
     let mut file = File::create(file)?;

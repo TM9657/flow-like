@@ -35,10 +35,10 @@ use crate::{
     profile::Profile,
     utils::file::FileMetadata,
 };
-use flow_like_types::{json::to_string_pretty, Result};
 use flow_like_model_provider::{
     history::History, response::Response, response_chunk::ResponseChunk,
 };
+use flow_like_types::{Result, json::to_string_pretty};
 use schemars::{JsonSchema, schema_for};
 use serde::Serialize;
 use std::{

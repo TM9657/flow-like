@@ -1,10 +1,14 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
-use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, PinType, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState};
-use flow_like_types::{async_trait, json::json, reqwest, sync::{DashMap, Mutex}, Value};
+use flow_like::{
+    flow::{
+        execution::{LogLevel, context::ExecutionContext},
+        node::{Node, NodeLogic},
+        pin::ValueType,
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{async_trait, json::json};
 use nalgebra::DVector;
-use regex::Regex;
-
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
 
 #[derive(Default)]
 pub struct FloatVectorCrossProductNode {}
@@ -52,7 +56,7 @@ impl NodeLogic for FloatVectorCrossProductNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let vector1: Vec<f64> = context.evaluate_pin("vector1").await?;
         let vector2: Vec<f64> = context.evaluate_pin("vector2").await?;
 

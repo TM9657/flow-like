@@ -1,6 +1,6 @@
+use flow_like_types::{Value, create_id, sync::Mutex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use flow_like_types::{create_id, sync::Mutex, Value};
 use std::sync::Arc;
 
 use super::pin::ValueType;
@@ -106,8 +106,8 @@ pub enum VariableType {
 
 #[cfg(test)]
 mod tests {
-    use flow_like_types::{tokio, Message};
     use flow_like_types::{FromProto, ToProto};
+    use flow_like_types::{Message, tokio};
 
     #[tokio::test]
     async fn serialize_variable() {

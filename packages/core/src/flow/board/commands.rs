@@ -4,7 +4,6 @@ use flow_like_types::{async_trait, sync::Mutex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-
 use crate::{
     flow::node::{Node, NodeLogic},
     state::FlowLikeState,

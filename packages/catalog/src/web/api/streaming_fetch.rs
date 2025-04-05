@@ -1,6 +1,21 @@
+use flow_like::{
+    flow::{
+        execution::{
+            LogLevel, context::ExecutionContext, internal_node::InternalNode, log::LogMessage,
+        },
+        node::{Node, NodeLogic},
+        pin::{PinOptions, ValueType},
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{
+    async_trait,
+    json::json,
+    reqwest,
+    sync::{DashMap, Mutex},
+};
 use std::{collections::HashSet, sync::Arc};
-use flow_like::{flow::{execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::VariableType}, state::FlowLikeState};
-use flow_like_types::{async_trait, reqwest, sync::{DashMap, Mutex}, json::json};
 
 use super::{HttpRequest, HttpResponse, StreamingCallback};
 
@@ -77,7 +92,7 @@ impl NodeLogic for StreamingHttpFetchNode {
         node
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_success").await?;
         context.activate_exec_pin("exec_error").await?;
 
@@ -90,7 +105,9 @@ impl NodeLogic for StreamingHttpFetchNode {
         let connected_nodes = Arc::new(DashMap::new());
         let connected = streaming_pin.lock().await.connected_to.clone();
         for pin in connected {
-            let node = pin.upgrade().ok_or(flow_like_types::anyhow!("Pin is not set"))?;
+            let node = pin
+                .upgrade()
+                .ok_or(flow_like_types::anyhow!("Pin is not set"))?;
             let node = node.lock().await.node.clone();
             if let Some(node) = node.upgrade() {
                 let context = Arc::new(Mutex::new(context.create_sub_context(&node).await));

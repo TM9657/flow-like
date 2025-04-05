@@ -1,8 +1,15 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
-use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState};
-use flow_like_types::{async_trait, json::json, reqwest, sync::{DashMap, Mutex}, Value};
-
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+use flow_like::{
+    flow::{
+        board::Board,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::ValueType,
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{Value, async_trait, json::json};
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct SetIndexArrayNode {}
@@ -53,7 +60,7 @@ impl NodeLogic for SetIndexArrayNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.activate_exec_pin("failed").await?;
         context.deactivate_exec_pin("exec_out").await?;
         let array_in: Vec<Value> = context.evaluate_pin("array_in").await?;

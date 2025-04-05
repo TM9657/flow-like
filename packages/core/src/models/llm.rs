@@ -1,11 +1,15 @@
 pub mod local;
 
 use crate::{bit::Bit, state::FlowLikeState, utils::device::get_vram};
-use flow_like_types::{sync::Mutex, tokio::time::interval, Result};
 use flow_like_model_provider::llm::ModelLogic;
+use flow_like_types::{Result, sync::Mutex, tokio::time::interval};
 use local::LocalModel;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, time::{Duration, SystemTime}};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ExecutionSettings {

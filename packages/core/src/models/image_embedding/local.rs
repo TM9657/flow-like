@@ -4,10 +4,14 @@ use crate::{
     state::FlowLikeState,
 };
 use flow_like_model_provider::{
-    embedding::EmbeddingModelLogic, fastembed::{self, ImageEmbedding, ImageInitOptionsUserDefined, UserDefinedImageEmbeddingModel}, image_embedding::ImageEmbeddingModelLogic
+    embedding::EmbeddingModelLogic,
+    fastembed::{
+        self, ImageEmbedding, ImageInitOptionsUserDefined, UserDefinedImageEmbeddingModel,
+    },
+    image_embedding::ImageEmbeddingModelLogic,
 };
 use flow_like_storage::files::store::FlowLikeStore;
-use flow_like_types::{async_trait, sync::Mutex, Cacheable, Result};
+use flow_like_types::{Cacheable, Result, async_trait, sync::Mutex};
 use std::{any::Any, sync::Arc};
 
 #[derive(Clone)]

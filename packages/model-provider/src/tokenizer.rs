@@ -3,7 +3,6 @@ use std::sync::Arc;
 use fastembed::TokenizerFiles;
 use tokenizers::{AddedToken, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
 
-
 pub fn load_tokenizer_from_file(
     tokenizer_files: Arc<TokenizerFiles>,
     max_length: usize,
@@ -19,20 +18,24 @@ pub fn load_tokenizer_from_file(
                 base_error_message.replace("{}", "config.json"),
             )
         })?;
-    let special_tokens_map: flow_like_types::Value =
-        flow_like_types::json::from_slice(&tokenizer_files.special_tokens_map_file).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                base_error_message.replace("{}", "special_tokens_map.json"),
-            )
-        })?;
-    let tokenizer_config: flow_like_types::Value =
-        flow_like_types::json::from_slice(&tokenizer_files.tokenizer_config_file).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                base_error_message.replace("{}", "tokenizer_config.json"),
-            )
-        })?;
+    let special_tokens_map: flow_like_types::Value = flow_like_types::json::from_slice(
+        &tokenizer_files.special_tokens_map_file,
+    )
+    .map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            base_error_message.replace("{}", "special_tokens_map.json"),
+        )
+    })?;
+    let tokenizer_config: flow_like_types::Value = flow_like_types::json::from_slice(
+        &tokenizer_files.tokenizer_config_file,
+    )
+    .map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            base_error_message.replace("{}", "tokenizer_config.json"),
+        )
+    })?;
     let mut tokenizer: tokenizers::Tokenizer = tokenizers::Tokenizer::from_bytes(
         tokenizer_files.tokenizer_file.clone(),
     )

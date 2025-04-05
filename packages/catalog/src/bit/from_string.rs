@@ -1,11 +1,13 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc, time::Duration};
-use flow_like::{bit::Bit, flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, PinType, ValueType}, variable::{Variable, VariableType}}, state::{FlowLikeState, ToastLevel}};
-use flow_like_types::{async_trait, json::{json, Deserialize, Serialize}, reqwest, sync::{DashMap, Mutex}, Bytes, Error, JsonSchema, Value};
-use nalgebra::DVector;
-use regex::Regex;
-use flow_like_storage::{object_store::PutPayload, Path};
-use futures::StreamExt;
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+use flow_like::{
+    bit::Bit,
+    flow::{
+        execution::{LogLevel, context::ExecutionContext},
+        node::{Node, NodeLogic},
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{async_trait, json::json};
 
 #[derive(Default)]
 pub struct BitFromStringNode {}
@@ -56,7 +58,7 @@ impl NodeLogic for BitFromStringNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.activate_exec_pin("failed").await?;
         context.deactivate_exec_pin("exec_out").await?;
         let bit_id: String = context.evaluate_pin("bit_id").await?;
@@ -71,10 +73,7 @@ impl NodeLogic for BitFromStringNode {
         }
 
         let err = bit.err().unwrap();
-        context.log_message(
-            &format!("Bit not found: {}", err),
-            LogLevel::Error,
-        );
+        context.log_message(&format!("Bit not found: {}", err), LogLevel::Error);
         Ok(())
     }
 }

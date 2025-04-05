@@ -5,7 +5,7 @@ use crate::{
     utils::compression::{compress_to_file, from_compressed},
 };
 use flow_like_storage::Path;
-use flow_like_types::{create_id, sync::Mutex, FromProto, ToProto};
+use flow_like_types::{FromProto, ToProto, create_id, sync::Mutex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::SystemTime, vec};
@@ -85,7 +85,10 @@ impl App {
         Ok(item)
     }
 
-    pub async fn load(id: String, app_state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<Self> {
+    pub async fn load(
+        id: String,
+        app_state: Arc<Mutex<FlowLikeState>>,
+    ) -> flow_like_types::Result<Self> {
         let storage_root = Path::from("apps").child(id.clone());
 
         let store = FlowLikeState::project_store(&app_state).await?.as_generic();
@@ -237,8 +240,8 @@ mod tests {
     use crate::{state::FlowLikeConfig, utils::http::HTTPClient};
     use flow_like_storage::files::store::FlowLikeStore;
     use flow_like_types::sync::Mutex;
-    use flow_like_types::{tokio, Message};
     use flow_like_types::{FromProto, ToProto};
+    use flow_like_types::{Message, tokio};
     use std::sync::Arc;
 
     async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {

@@ -1,10 +1,14 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
-use flow_like::{flow::{board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, log::LogMessage, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, PinType, ValueType}, variable::{Variable, VariableType}}, state::FlowLikeState};
-use flow_like_types::{async_trait, json::json, reqwest, sync::{DashMap, Mutex}, Value};
-use nalgebra::DVector;
-use regex::Regex;
-
-use crate::{storage::path::FlowPath, web::api::{HttpBody, HttpRequest, HttpResponse, Method}};
+use flow_like::{
+    flow::{
+        board::Board,
+        execution::{LogLevel, context::ExecutionContext},
+        node::{Node, NodeLogic},
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::async_trait;
+use std::{collections::HashMap, sync::Arc};
 
 #[derive(Default)]
 pub struct GetStructFieldNode {}
@@ -46,14 +50,11 @@ impl NodeLogic for GetStructFieldNode {
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) ->flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let struct_value = context
             .evaluate_pin::<HashMap<String, flow_like_types::Value>>("struct")
             .await?;
-        context.log_message(
-            &format!("Got Value: {:?}", struct_value),
-            LogLevel::Debug,
-        );
+        context.log_message(&format!("Got Value: {:?}", struct_value), LogLevel::Debug);
         let field = context.evaluate_pin::<String>("field").await?;
 
         let value = struct_value.get(&field);

@@ -258,8 +258,8 @@ pub trait NodeLogic: Send + Sync {
 #[cfg(test)]
 mod tests {
 
-    use flow_like_types::{tokio, Message};
     use flow_like_types::{FromProto, ToProto};
+    use flow_like_types::{Message, tokio};
 
     #[tokio::test]
     async fn serialize_node() {

@@ -2,7 +2,6 @@ use flow_like_types::{async_trait, sync::Mutex};
 use schemars::JsonSchema;
 use std::sync::Arc;
 
-
 use crate::{
     flow::board::{Board, commands::Command},
     state::FlowLikeState,
@@ -34,7 +33,12 @@ impl Command for MoveNodeCommand {
     ) -> flow_like_types::Result<()> {
         let node = match board.nodes.get_mut(&self.node_id) {
             Some(node) => node,
-            None => return Err(flow_like_types::anyhow!(format!("Node {} not found", self.node_id))),
+            None => {
+                return Err(flow_like_types::anyhow!(format!(
+                    "Node {} not found",
+                    self.node_id
+                )));
+            }
         };
 
         self.from_coordinates = node.coordinates;
