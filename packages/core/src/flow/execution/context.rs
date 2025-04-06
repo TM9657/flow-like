@@ -1,9 +1,10 @@
 use flow_like_storage::object_store::path::Path;
 use flow_like_types::Value;
+use flow_like_types::intercom::{InterComCallback, InterComEvent};
 use flow_like_types::{
     Cacheable,
     json::from_value,
-    sync::{Mutex, RwLock, mpsc},
+    sync::{Mutex, RwLock},
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
@@ -24,7 +25,7 @@ use crate::{
         variable::{Variable, VariableType},
     },
     profile::Profile,
-    state::{FlowLikeEvent, FlowLikeState, FlowLikeStores, ToastEvent, ToastLevel},
+    state::{FlowLikeState, FlowLikeStores, ToastEvent, ToastLevel},
 };
 
 #[derive(Clone)]
@@ -142,7 +143,7 @@ pub struct ExecutionContext {
     pub execution_cache: Option<ExecutionContextCache>,
     run_id: String,
     state: NodeState,
-    sender: mpsc::Sender<FlowLikeEvent>,
+    callback: InterComCallback,
 }
 
 impl ExecutionContext {
@@ -155,7 +156,7 @@ impl ExecutionContext {
         log_level: LogLevel,
         stage: ExecutionStage,
         profile: Arc<Profile>,
-        sender: mpsc::Sender<FlowLikeEvent>,
+        callback: InterComCallback,
     ) -> Self {
         let (id, execution_cache) = {
             let node_id = node.node.lock().await.id.clone();
@@ -189,7 +190,7 @@ impl ExecutionContext {
             sub_traces: vec![],
             trace,
             profile,
-            sender,
+            callback,
             execution_cache,
             state: NodeState::Idle,
         }
@@ -205,7 +206,7 @@ impl ExecutionContext {
             self.log_level.clone(),
             self.stage.clone(),
             self.profile.clone(),
-            self.sender.clone(),
+            self.callback.clone(),
         )
         .await
     }
@@ -286,11 +287,13 @@ impl ExecutionContext {
             method,
         };
 
-        let event = FlowLikeEvent::new(&format!("run:{}", self.run_id), update_event);
-        let res = self.sender.send(event).await;
+        let event = InterComEvent::with_type(&format!("run:{}", self.run_id), update_event);
 
-        if let Err(e) = res {
-            println!("Failed to send run update event: {:?}", e);
+        if let Err(err) = event.call(&self.callback).await {
+            self.log_message(
+                &format!("Failed to send run update event: {}", err),
+                LogLevel::Error,
+            );
         }
     }
 
@@ -445,22 +448,13 @@ impl ExecutionContext {
         message: &str,
         level: ToastLevel,
     ) -> flow_like_types::Result<()> {
-        let event = FlowLikeEvent::new("toast", ToastEvent::new(message, level));
-        let toast_result = self
-            .app_state
-            .lock()
-            .await
-            .event_sender
-            .lock()
-            .await
-            .send(event)
-            .await;
-
-        if toast_result.is_err() {
-            let error_msg = format!("Failed to send toast event: {:?}", toast_result.err());
-            self.log_message(&error_msg, LogLevel::Error);
+        let event = InterComEvent::with_type("toast", ToastEvent::new(message, level));
+        if let Err(err) = event.call(&self.callback).await {
+            self.log_message(
+                &format!("Failed to send toast event: {}", err),
+                LogLevel::Error,
+            );
         }
-
         Ok(())
     }
 }

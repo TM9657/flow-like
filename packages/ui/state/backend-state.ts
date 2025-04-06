@@ -8,7 +8,8 @@ import type {
 	IDownloadProgress,
 	IExecutionStage,
 	IFileMetadata,
-	IGeneric,
+	IGenericCommand,
+	IIntercomEvent,
 	ILogLevel,
 	INode,
 	IProfile,
@@ -27,27 +28,24 @@ export interface IBackendState {
 	getOpenBoards(): Promise<[string, string][]>;
 	getBoardSettings(): Promise<"straight" | "step" | "simpleBezier">;
 
-	createRun(
+	executeBoard(
 		appId: string,
 		boardId: string,
 		startIds: string[],
+		cb?: (event: IIntercomEvent[]) => void,
 	): Promise<string>;
-	executeRun(
-		appId: string,
-		runId: string,
-		cb?: (event: IRunUpdateEvent[]) => void,
-	): Promise<void>;
+
 	getRun(appId: string, runId: string): Promise<IRun>;
 	finalizeRun(appId: string, runId: string): Promise<void>;
 	undoBoard(
 		appId: string,
 		boardId: string,
-		commands: IGeneric[],
+		commands: IGenericCommand[],
 	): Promise<void>;
 	redoBoard(
 		appId: string,
 		boardId: string,
-		commands: IGeneric[],
+		commands: IGenericCommand[],
 	): Promise<void>;
 
 	updateBoardMeta(
@@ -69,14 +67,14 @@ export interface IBackendState {
 	executeCommand(
 		appId: string,
 		boardId: string,
-		command: IGeneric,
-	): Promise<IGeneric>;
+		command: IGenericCommand,
+	): Promise<IGenericCommand>;
 
 	executeCommands(
 		appId: string,
 		boardId: string,
-		commands: IGeneric[],
-	): Promise<IGeneric[]>;
+		commands: IGenericCommand[],
+	): Promise<IGenericCommand[]>;
 
 	// Additional Functionality
 	getPathMeta(folderPath: string): Promise<IFileMetadata[]>;

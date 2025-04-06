@@ -1,8 +1,9 @@
-use crate::state::{FlowLikeEvent, FlowLikeState};
+use crate::state::FlowLikeState;
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::{Path, blake3};
+use flow_like_types::intercom::{InterComCallback, InterComEvent};
 use flow_like_types::reqwest::Client;
-use flow_like_types::sync::{Mutex, mpsc};
+use flow_like_types::sync::Mutex;
 use flow_like_types::tokio::fs::OpenOptions;
 use flow_like_types::tokio::io::AsyncWriteExt;
 use flow_like_types::{anyhow, bail, reqwest};
@@ -36,11 +37,11 @@ async fn get_remote_size(client: &Client, url: &str) -> flow_like_types::Result<
 
 async fn publish_progress(
     bit: &crate::bit::Bit,
-    sender: &mpsc::Sender<FlowLikeEvent>,
+    callback: &InterComCallback,
     downloaded: u64,
     path: &Path,
 ) -> flow_like_types::Result<()> {
-    let event = FlowLikeEvent::new(
+    let event = InterComEvent::with_type(
         &format!("download:{}", &bit.hash),
         BitDownloadEvent {
             hash: bit.hash.to_string(),
@@ -50,7 +51,10 @@ async fn publish_progress(
         },
     );
 
-    sender.send(event).await?;
+    if let Err(err) = event.call(callback).await {
+        println!("Error publishing progress: {}", err);
+    }
+
     Ok(())
 }
 
@@ -63,6 +67,7 @@ pub async fn download_bit(
     bit: &crate::bit::Bit,
     app_state: Arc<Mutex<FlowLikeState>>,
     retries: usize,
+    callback: &InterComCallback,
 ) -> flow_like_types::Result<Path> {
     let file_store = FlowLikeState::bit_store(&app_state).await?;
 
@@ -75,11 +80,6 @@ pub async fn download_bit(
         Path::from(bit.hash.clone()).child(bit.file_name.clone().ok_or(anyhow!("No file name"))?);
     let path_name = file_store.path_to_filesystem(&store_path)?;
     let url = bit.download_link.clone().unwrap();
-    let sender = {
-        let sender = app_state.lock().await.event_sender.lock().await.clone();
-        sender.clone()
-    };
-    let sender = sender.clone();
 
     // Another download of that type already exists
     let exists = {
@@ -112,7 +112,7 @@ pub async fn download_bit(
             let _rem = remove_download(bit, &app_state).await;
             let _ = publish_progress(
                 bit,
-                &sender,
+                callback,
                 path_name.metadata().unwrap().len(),
                 &store_path,
             )
@@ -130,7 +130,7 @@ pub async fn download_bit(
         local_size = path_name.metadata().unwrap().len();
         if local_size == remote_size {
             let _rem = remove_download(bit, &app_state).await;
-            let _ = publish_progress(bit, &sender, remote_size, &store_path).await;
+            let _ = publish_progress(bit, callback, remote_size, &store_path).await;
             return Ok(store_path);
         }
 
@@ -227,7 +227,7 @@ pub async fn download_bit(
             }
         }
 
-        let _res = publish_progress(bit, &sender, new, &store_path).await;
+        let _res = publish_progress(bit, callback, new, &store_path).await;
     }
 
     let _ = file.flush().await;
@@ -244,7 +244,7 @@ pub async fn download_bit(
         fs::remove_file(&path_name).unwrap();
         if retries > 0 {
             println!("Retrying download: {}", bit.hash);
-            let result = Box::pin(download_bit(bit, app_state, retries - 1));
+            let result = Box::pin(download_bit(bit, app_state, retries - 1, callback));
             return result.await;
         }
         bail!("Error downloading file, hash does not match");

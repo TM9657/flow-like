@@ -42,7 +42,7 @@ impl LocalEmbeddingModel {
         };
 
         let pack = bit.pack(app_state.clone()).await?;
-        pack.download(app_state.clone()).await?;
+        pack.download(app_state.clone(), None).await?;
 
         let model_path = bit.to_path(&bit_store).ok_or(anyhow!("No model path"))?;
         let loaded_model = std::fs::read(model_path)?;
@@ -232,7 +232,7 @@ mod tests {
         config.register_project_store(FlowLikeStore::Local(store.clone()));
         config.register_bits_store(FlowLikeStore::Local(store));
         let (http_client, _refetch_rx) = HTTPClient::new();
-        let (flow_like_state, _) = crate::state::FlowLikeState::new(config, http_client);
+        let flow_like_state = crate::state::FlowLikeState::new(config, http_client);
         Arc::new(Mutex::new(flow_like_state))
     }
 

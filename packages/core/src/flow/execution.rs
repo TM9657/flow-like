@@ -1,7 +1,12 @@
+use super::board::ExecutionStage;
+use super::{board::Board, node::NodeState, variable::Variable};
+use crate::profile::Profile;
+use crate::state::FlowLikeState;
 use ahash::AHasher;
 use context::ExecutionContext;
 use flow_like_types::Value;
-use flow_like_types::sync::{DashMap, Mutex, RwLock, mpsc};
+use flow_like_types::intercom::InterComCallback;
+use flow_like_types::sync::{DashMap, Mutex, RwLock};
 use flow_like_types::{Cacheable, anyhow, create_id};
 use futures::StreamExt;
 use internal_node::InternalNode;
@@ -17,17 +22,12 @@ use std::{
     time::SystemTime,
 };
 use trace::Trace;
+
 pub mod context;
 pub mod internal_node;
 pub mod internal_pin;
 pub mod log;
 pub mod trace;
-
-use crate::profile::Profile;
-use crate::state::{FlowLikeEvent, FlowLikeState};
-
-use super::board::ExecutionStage;
-use super::{board::Board, node::NodeState, variable::Variable};
 
 const USE_DEPENDENCY_GRAPH: bool = false;
 
@@ -102,7 +102,7 @@ pub struct InternalRun {
     pub variables: Arc<Mutex<HashMap<String, Variable>>>,
     pub cache: Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
     pub profile: Arc<Profile>,
-    pub sender: mpsc::Sender<FlowLikeEvent>,
+    pub callback: InterComCallback,
 
     stack: Arc<RunStack>,
     concurrency_limit: u64,
@@ -118,10 +118,10 @@ impl InternalRun {
         profile: &Profile,
         start_ids: Vec<String>,
         sub: Option<String>,
+        callback: InterComCallback,
     ) -> flow_like_types::Result<Self> {
         let before = Instant::now();
         let start_ids_set: HashSet<String> = start_ids.into_iter().collect();
-        let sender = handler.lock().await.event_sender.lock().await.clone();
         let run_id = create_id();
 
         let run = Run {
@@ -281,7 +281,7 @@ impl InternalRun {
             concurrency_limit: 2_000_000,
             concurrency_map: Arc::new(DashMap::with_capacity(board.nodes.len())),
             cpus: num_cpus::get(),
-            sender,
+            callback,
             dependencies,
             log_level: board.log_level.clone(),
             profile: Arc::new(profile.clone()),
@@ -331,8 +331,8 @@ impl InternalRun {
         let dependencies = self.dependencies.clone();
         let run = self.run.clone();
         let profile = self.profile.clone();
-        let sender = self.sender.clone();
         let concurrency_limit = self.concurrency_limit;
+        let callback = self.callback.clone();
 
         let new_stack = futures::stream::iter(stack.stack.clone())
             .map(|node| {
@@ -341,7 +341,7 @@ impl InternalRun {
                 let handler = handler.clone();
                 let run = run.clone();
                 let profile = profile.clone();
-                let sender = sender.clone();
+                let callback = callback.clone();
                 let stage = stage.clone();
                 let log_level = log_level.clone();
                 let concurrency_map = self.concurrency_map.clone();
@@ -358,7 +358,7 @@ impl InternalRun {
                         stage,
                         &dependencies,
                         &profile,
-                        &sender,
+                        &callback,
                         concurrency_map,
                     )
                     .await
@@ -404,7 +404,7 @@ impl InternalRun {
             stage.clone(),
             &self.dependencies,
             &self.profile,
-            &self.sender,
+            &self.callback,
             self.concurrency_map.clone(),
         )
         .await;
@@ -572,7 +572,7 @@ async fn step_core(
     stage: ExecutionStage,
     dependencies: &HashMap<String, Vec<Arc<InternalNode>>>,
     profile: &Arc<Profile>,
-    sender: &mpsc::Sender<FlowLikeEvent>,
+    callback: &InterComCallback,
     concurrency_map: Arc<DashMap<String, u64>>,
 ) -> flow_like_types::Result<Vec<(String, Arc<InternalNode>)>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
@@ -597,7 +597,7 @@ async fn step_core(
         log_level.clone(),
         stage.clone(),
         profile.clone(),
-        sender.clone(),
+        callback.clone(),
     )
     .await;
 

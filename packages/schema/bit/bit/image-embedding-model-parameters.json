@@ -23,10 +23,6 @@
 		}
 	},
 	"definitions": {
-		"BitProvider": {
-			"type": "string",
-			"enum": ["Local", "AzureOpenAI", "Bedrock", "OpenAI", "Anthropic"]
-		},
 		"BitProviderModel": {
 			"type": "object",
 			"required": ["provider_name"],
@@ -35,7 +31,7 @@
 					"type": ["string", "null"]
 				},
 				"provider_name": {
-					"$ref": "#/definitions/BitProvider"
+					"type": "string"
 				},
 				"version": {
 					"type": ["string", "null"]

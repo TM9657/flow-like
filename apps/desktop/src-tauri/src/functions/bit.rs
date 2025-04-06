@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use super::TauriFunctionError;
 use crate::state::{TauriFlowLikeState, TauriSettingsState};
 use flow_like::bit::{Bit, BitPack, BitTypes};
-use tauri::AppHandle;
+use flow_like_types::intercom::BufferedInterComHandler;
+use tauri::{AppHandle, Emitter};
 
 #[tauri::command(async)]
 pub async fn get_bit_by_id(
@@ -67,7 +70,27 @@ pub async fn download_bit(app_handle: AppHandle, bit: Bit) -> Result<Vec<Bit>, T
     println!("Downloading bit: {}", bit.id);
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
     let pack = bit.pack(flow_like_state.clone()).await?;
-    let result = pack.download(flow_like_state).await?;
+    let buffered_sender = Arc::new(BufferedInterComHandler::new(
+        Arc::new(move |event| {
+            let app_handle = app_handle.clone();
+            Box::pin({
+                async move {
+                    let first_event = event.first();
+                    if let Some(first_event) = first_event {
+                        if let Err(err) = app_handle.emit(&first_event.event_type, event.clone()) {
+                            println!("Error emitting event: {}", err);
+                        }
+                    }
+                    Ok(())
+                }
+            })
+        }),
+        Some(20),
+        Some(100),
+    ));
+    let result = pack
+        .download(flow_like_state, buffered_sender.into_callback())
+        .await?;
     Ok(result)
 }
 

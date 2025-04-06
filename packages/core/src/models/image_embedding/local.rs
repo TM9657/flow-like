@@ -46,7 +46,7 @@ impl LocalImageEmbeddingModel {
         };
 
         let pack = bit.pack(app_state.clone()).await?;
-        pack.download(app_state.clone()).await?;
+        pack.download(app_state.clone(), None).await?;
         let embedding_model = pack
             .bits
             .iter()

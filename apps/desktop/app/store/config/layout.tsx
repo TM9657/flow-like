@@ -57,15 +57,19 @@ export default function Id({
 	const { addRun, removeRun } = useRunExecutionStore();
 
 	async function executeBoard(boardId: string, node: INode) {
+		if (!id) return;
 		await invoke("get_app_board", {
 			appId: id,
 			boardId: boardId,
 			pushToRegistry: true,
 		});
-		const runId: string | undefined = await invoke("create_run", {
-			boardId: boardId,
-			startIds: [node.id],
-		});
+		const runId = await backend.executeBoard(
+			id,
+			boardId,
+			[node.id],
+			(events) => {},
+		);
+
 		if (!runId) {
 			toastError(
 				"Failed to execute board",

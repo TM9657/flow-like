@@ -21,15 +21,7 @@ export interface IBitModelClassification {
 
 export interface IBitProviderModel {
 	model_id?: null | string;
-	provider_name: IBitProvider;
+	provider_name: string;
 	version?: null | string;
 	[property: string]: any;
-}
-
-export enum IBitProvider {
-	Anthropic = "Anthropic",
-	AzureOpenAI = "AzureOpenAI",
-	Bedrock = "Bedrock",
-	Local = "Local",
-	OpenAI = "OpenAI",
 }

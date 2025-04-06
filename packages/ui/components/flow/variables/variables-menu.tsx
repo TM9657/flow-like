@@ -41,7 +41,7 @@ import {
 } from "../../../components/ui/sheet";
 import { Switch } from "../../../components/ui/switch";
 import {
-	type IGeneric,
+	type IGenericCommand,
 	removeVariableCommand,
 	upsertVariableCommand,
 } from "../../../lib";
@@ -57,7 +57,7 @@ export function VariablesMenu({
 	executeCommand,
 }: Readonly<{
 	board: IBoard;
-	executeCommand: (command: IGeneric, append: boolean) => Promise<any>;
+	executeCommand: (command: IGenericCommand, append: boolean) => Promise<any>;
 }>) {
 	async function upsertVariable(variable: IVariable) {
 		const command = upsertVariableCommand({

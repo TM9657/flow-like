@@ -2,14 +2,11 @@ use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::lancedb::connection::ConnectBuilder;
 use flow_like_storage::object_store::path::Path;
 use flow_like_types::Ok;
-use flow_like_types::Value;
-use flow_like_types::sync::{DashMap, Mutex, RwLock, mpsc};
+use flow_like_types::sync::{DashMap, Mutex, RwLock};
 use futures::future;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
-use std::time::SystemTime;
 
 #[cfg(feature = "flow-runtime")]
 use crate::flow::board::Board;
@@ -26,26 +23,6 @@ use crate::models::llm::ModelFactory;
 #[cfg(feature = "bit")]
 use crate::utils::download_manager::DownloadManager;
 use crate::utils::http::HTTPClient;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FlowLikeEvent {
-    pub event_id: String,
-    pub payload: Value,
-    pub timestamp: SystemTime,
-}
-
-impl FlowLikeEvent {
-    pub fn new<T>(event_id: &str, payload: T) -> Self
-    where
-        T: Serialize + DeserializeOwned,
-    {
-        FlowLikeEvent {
-            event_id: event_id.to_string(),
-            payload: flow_like_types::json::to_value(payload).unwrap(),
-            timestamp: SystemTime::now(),
-        }
-    }
-}
 
 #[derive(Clone, Default)]
 pub struct FlowLikeStores {
@@ -259,72 +236,30 @@ pub struct FlowLikeState {
     pub board_registry: Arc<DashMap<String, Arc<Mutex<Board>>>>, // TODO: should board be wrapped in RWLock or Mutex?
     #[cfg(feature = "flow-runtime")]
     pub board_run_registry: Arc<DashMap<String, Arc<Mutex<InternalRun>>>>,
-
-    pub event_sender: Arc<Mutex<mpsc::Sender<FlowLikeEvent>>>,
 }
 
 impl FlowLikeState {
-    pub fn new(
-        config: FlowLikeConfig,
-        client: HTTPClient,
-    ) -> (Self, mpsc::Receiver<FlowLikeEvent>) {
-        let (event_sender, event_receiver) = mpsc::channel(1000);
+    pub fn new(config: FlowLikeConfig, client: HTTPClient) -> Self {
+        FlowLikeState {
+            config: Arc::new(RwLock::new(config)),
+            http_client: Arc::new(client),
 
-        (
-            FlowLikeState {
-                config: Arc::new(RwLock::new(config)),
-                http_client: Arc::new(client),
+            #[cfg(feature = "bit")]
+            download_manager: Arc::new(Mutex::new(DownloadManager::new())),
 
-                #[cfg(feature = "bit")]
-                download_manager: Arc::new(Mutex::new(DownloadManager::new())),
+            #[cfg(feature = "model")]
+            model_factory: Arc::new(Mutex::new(ModelFactory::new())),
 
-                #[cfg(feature = "model")]
-                model_factory: Arc::new(Mutex::new(ModelFactory::new())),
+            #[cfg(feature = "model")]
+            embedding_factory: Arc::new(Mutex::new(EmbeddingFactory::new())),
 
-                #[cfg(feature = "model")]
-                embedding_factory: Arc::new(Mutex::new(EmbeddingFactory::new())),
-
-                #[cfg(feature = "flow-runtime")]
-                node_registry: Arc::new(RwLock::new(FlowNodeRegistry::new())),
-                #[cfg(feature = "flow-runtime")]
-                board_registry: Arc::new(DashMap::new()),
-                #[cfg(feature = "flow-runtime")]
-                board_run_registry: Arc::new(DashMap::new()),
-                event_sender: Arc::new(Mutex::new(event_sender)),
-            },
-            event_receiver,
-        )
-    }
-
-    pub fn instance(
-        config: FlowLikeConfig,
-        client: HTTPClient,
-    ) -> (Arc<Mutex<Self>>, mpsc::Receiver<FlowLikeEvent>) {
-        let (state, receiver) = Self::new(config, client);
-
-        (Arc::new(Mutex::new(state)), receiver)
-    }
-
-    pub async fn emit<T>(&self, event_id: &str, payload: T) -> flow_like_types::Result<()>
-    where
-        T: Serialize + DeserializeOwned,
-    {
-        let event = FlowLikeEvent {
-            event_id: event_id.to_string(),
-            payload: flow_like_types::json::to_value(payload).unwrap(),
-            timestamp: SystemTime::now(),
-        };
-
-        let event_sender = self.event_sender.lock().await;
-        Ok(event_sender.send(event).await?)
-    }
-
-    /// Create a new instance of a subscriber, BE CAREFUL; THIS WILL OVERWRITE THE OLD SUBSCRIBER
-    /// Use Cases: API where you want to listen to changes and send them to the client in a streaming scenario; Every API call needs separate callback handling.
-    pub fn re_subscribe(&mut self) -> mpsc::Receiver<FlowLikeEvent> {
-        let (event_sender, event_receiver) = mpsc::channel(1000);
-        self.event_sender = Arc::new(Mutex::new(event_sender));
-        event_receiver
+            #[cfg(feature = "flow-runtime")]
+            node_registry: Arc::new(RwLock::new(FlowNodeRegistry::new())),
+            #[cfg(feature = "flow-runtime")]
+            board_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            board_run_registry: Arc::new(DashMap::new()),
+        }
     }
 
     #[cfg(feature = "bit")]

@@ -7,9 +7,9 @@ use flow_like::{
         llm::LLMCallback,
         response::Response,
     },
-    state::FlowLikeEvent,
+    flow_like_types::intercom::{BufferedInterComHandler, InterComEvent},
 };
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 use crate::{
     functions::TauriFunctionError,
@@ -46,27 +46,46 @@ pub async fn predict(
     history.push_message(HistoryMessage::from_string(Role::User, &prompt));
     history.set_stream(true);
 
-    let sender = {
-        let sender = TauriFlowLikeState::construct(&app_handle).await?;
-        let sender = sender.lock().await;
+    let buffered_sender = Arc::new(BufferedInterComHandler::new(
+        Arc::new(move |event| {
+            let app_handle = app_handle.clone();
+            Box::pin({
+                async move {
+                    let first_event = event.first();
+                    if let Some(first_event) = first_event {
+                        if let Err(err) = app_handle.emit(&first_event.event_type, event.clone()) {
+                            println!("Error emitting event: {}", err);
+                        }
+                    }
+                    Ok(())
+                }
+            })
+        }),
+        Some(20),
+        Some(100),
+    ));
 
-        sender.event_sender.clone()
-    };
-
+    let finalized = buffered_sender.clone();
     let callback: LLMCallback = Arc::new(move |response| {
         let callback_id = id.clone();
-        let callback_sender = sender.clone();
+        let buffered_handler = buffered_sender.clone();
         Box::pin({
             async move {
-                let event = FlowLikeEvent::new(&format!("streaming_out:{}", callback_id), response);
+                let handler = buffered_handler.clone();
+                let event = InterComEvent::with_type(
+                    &format!("streaming_out:{}", callback_id),
+                    response.clone(),
+                );
 
-                let _ = callback_sender.lock().await.send(event).await;
+                handler.send(event).await?;
                 Ok(())
             }
         })
     });
 
     let res = model.invoke(&history, Some(callback)).await?;
+
+    finalized.flush().await?;
 
     Ok(res)
 }

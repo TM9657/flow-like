@@ -1,10 +1,10 @@
 import Dexie from "dexie";
-import type { IGeneric } from "../../lib";
+import type { IGenericCommand } from "../../lib";
 
 interface IStackItem {
 	key: string;
-	undoStack: IGeneric[][];
-	redoStack: IGeneric[][];
+	undoStack: IGenericCommand[][];
+	redoStack: IGenericCommand[][];
 }
 
 class UndoRedoDB extends Dexie {
@@ -25,7 +25,7 @@ const MAX_STACK_SIZE = 100;
 export const useUndoRedo = (appId: string, boardId: string) => {
 	const key = `${appId}_${boardId}`;
 
-	const pushCommand = async (command: IGeneric, append = false) => {
+	const pushCommand = async (command: IGenericCommand, append = false) => {
 		await db.transaction("rw", db.stacks, async () => {
 			const data = await db.stacks.get(key);
 			const currentUndoStack = data?.undoStack || [];
@@ -53,7 +53,7 @@ export const useUndoRedo = (appId: string, boardId: string) => {
 		});
 	};
 
-	const pushCommands = async (commands: IGeneric[]) => {
+	const pushCommands = async (commands: IGenericCommand[]) => {
 		await db.transaction("rw", db.stacks, async () => {
 			const data = await db.stacks.get(key);
 			const currentUndoStack = data?.undoStack || [];

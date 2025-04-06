@@ -8,7 +8,7 @@ import {
 	upsertCommentCommand,
 } from "./command/generic-command";
 import { toastSuccess } from "./messages";
-import type { IGeneric } from "./schema";
+import type { IGenericCommand } from "./schema";
 import { type IBoard, type IComment, ICommentType } from "./schema/flow/board";
 import type { INode } from "./schema/flow/node";
 import type { IPin } from "./schema/flow/pin";
@@ -92,7 +92,7 @@ export function parseBoard(
 	appId: string,
 	executeBoard: (node: INode) => Promise<void>,
 	openTraces: (node: INode, traces: ITrace[]) => Promise<void>,
-	executeCommand: (command: IGeneric, append: boolean) => Promise<any>,
+	executeCommand: (command: IGenericCommand, append: boolean) => Promise<any>,
 	selected: Set<string>,
 	run?: IRun,
 	connectionMode?: string,
@@ -263,7 +263,7 @@ export async function handlePaste(
 	event: ClipboardEvent,
 	cursorPosition: { x: number; y: number },
 	boardId: string,
-	executeCommand: (command: IGeneric, append?: boolean) => Promise<any>,
+	executeCommand: (command: IGenericCommand, append?: boolean) => Promise<any>,
 ) {
 	const activeElement = document.activeElement;
 	if (

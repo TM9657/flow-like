@@ -106,7 +106,7 @@ impl LocalModel {
             .to_path(&bit_store)
             .ok_or(flow_like_types::anyhow!("No model path"))?;
         let pack = bit.pack(app_state.clone()).await?;
-        pack.download(app_state).await?;
+        pack.download(app_state, None).await?;
 
         let projection_bit = pack
             .bits

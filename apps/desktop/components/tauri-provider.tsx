@@ -1,5 +1,5 @@
 "use client";
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
@@ -12,7 +12,8 @@ import {
 	type IDownloadProgress,
 	type IExecutionStage,
 	type IFileMetadata,
-	type IGeneric,
+	type IGenericCommand,
+	type IIntercomEvent,
 	type ILogLevel,
 	type INode,
 	type IProfile,
@@ -48,37 +49,26 @@ export class TauriBackend implements IBackendState {
 		return profile.flow_settings.connection_mode;
 	}
 
-	async createRun(
+	async executeBoard(
 		appId: string,
 		boardId: string,
 		startIds: string[],
+		cb?: (event: IIntercomEvent[]) => void,
 	): Promise<string> {
-		const runId: string = await invoke("create_run", {
+		const channel = new Channel<IIntercomEvent[]>();
+
+		channel.onmessage = (events: IIntercomEvent[]) => {
+			if (cb) cb(events);
+		};
+
+		const runId: string = await invoke("execute_board", {
 			appId: appId,
 			boardId: boardId,
 			startIds: startIds,
+			events: channel,
 		});
+
 		return runId;
-	}
-
-	async executeRun(
-		appId: string,
-		runId: string,
-		cb?: (event: IRunUpdateEvent[]) => void,
-	) {
-		const listenEvent = await listen(
-			`run:${runId}`,
-			(event: Event<IRunUpdateEvent[]>) => {
-				if (cb) cb(event.payload);
-			},
-		);
-
-		await invoke("execute_run", {
-			appId: appId,
-			runId: runId,
-		});
-
-		listenEvent();
 	}
 
 	async getRun(appId: string, runId: string): Promise<IRun> {
@@ -96,7 +86,7 @@ export class TauriBackend implements IBackendState {
 		});
 	}
 
-	async undoBoard(appId: string, boardId: string, commands: IGeneric[]) {
+	async undoBoard(appId: string, boardId: string, commands: IGenericCommand[]) {
 		await invoke("undo_board", {
 			appId: appId,
 			boardId: boardId,
@@ -104,7 +94,7 @@ export class TauriBackend implements IBackendState {
 		});
 	}
 
-	async redoBoard(appId: string, boardId: string, commands: IGeneric[]) {
+	async redoBoard(appId: string, boardId: string, commands: IGenericCommand[]) {
 		await invoke("redo_board", {
 			appId: appId,
 			boardId: boardId,
@@ -152,8 +142,8 @@ export class TauriBackend implements IBackendState {
 	async executeCommand(
 		appId: string,
 		boardId: string,
-		command: IGeneric,
-	): Promise<IGeneric> {
+		command: IGenericCommand,
+	): Promise<IGenericCommand> {
 		return await invoke("execute_command", {
 			appId: appId,
 			boardId: boardId,
@@ -164,8 +154,8 @@ export class TauriBackend implements IBackendState {
 	async executeCommands(
 		appId: string,
 		boardId: string,
-		commands: IGeneric[],
-	): Promise<IGeneric[]> {
+		commands: IGenericCommand[],
+	): Promise<IGenericCommand[]> {
 		return await invoke("execute_commands", {
 			appId: appId,
 			boardId: boardId,
@@ -204,8 +194,11 @@ export class TauriBackend implements IBackendState {
 			unlistenFn.push(
 				await listen(
 					`download:${deps.hash}`,
-					(event: Event<IDownloadProgress[]>) => {
-						if (cb) cb(event.payload);
+					(event: Event<IIntercomEvent[]>) => {
+						const downloadProgressEvents = event.payload.map(
+							(item) => item.payload,
+						);
+						if (cb) cb(downloadProgressEvents);
 					},
 				),
 			);

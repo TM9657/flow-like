@@ -6,8 +6,8 @@ import type { ICopyPaste } from "../schema/flow/board/commands/copy-paste";
 import type { IDisconnectPins } from "../schema/flow/board/commands/disconnect-pins";
 import {
 	ICommandType,
-	type IGeneric,
-} from "../schema/flow/board/commands/generic";
+	type IGenericCommand,
+} from "../schema/flow/board/commands/generic-command";
 import type { IMoveNode } from "../schema/flow/board/commands/move-node";
 import type { IRemoveComment } from "../schema/flow/board/commands/remove-comment";
 import type { IRemoveNode } from "../schema/flow/board/commands/remove-node";
@@ -18,7 +18,7 @@ import type { IUpsertPin } from "../schema/flow/board/commands/upsert-pin";
 import type { IUpsertVariable } from "../schema/flow/board/commands/upsert-variable";
 
 export function addNodeCommand(command: IAddNode): {
-	command: IGeneric;
+	command: IGenericCommand;
 	node: INode;
 } {
 	command.node.id = createId();
@@ -42,7 +42,7 @@ export function addNodeCommand(command: IAddNode): {
 	};
 }
 
-export function removeCommentCommand(command: IRemoveComment): IGeneric {
+export function removeCommentCommand(command: IRemoveComment): IGenericCommand {
 	const generic_command = {
 		...command,
 		command_type: ICommandType.RemoveComment,
@@ -51,7 +51,7 @@ export function removeCommentCommand(command: IRemoveComment): IGeneric {
 	return generic_command as any;
 }
 
-export function upsertCommentCommand(command: IUpsertComment): IGeneric {
+export function upsertCommentCommand(command: IUpsertComment): IGenericCommand {
 	const generic_command = {
 		...command,
 		command_type: ICommandType.UpsertComment,
@@ -60,7 +60,7 @@ export function upsertCommentCommand(command: IUpsertComment): IGeneric {
 	return generic_command as any;
 }
 
-export function copyPasteCommand(command: ICopyPaste): IGeneric {
+export function copyPasteCommand(command: ICopyPaste): IGenericCommand {
 	const generic_command = {
 		...command,
 		command_type: ICommandType.CopyPaste,
@@ -69,7 +69,7 @@ export function copyPasteCommand(command: ICopyPaste): IGeneric {
 	return generic_command as any;
 }
 
-export function moveNodeCommand(command: IMoveNode): IGeneric {
+export function moveNodeCommand(command: IMoveNode): IGenericCommand {
 	const generic_command = {
 		...command,
 		command_type: ICommandType.MoveNode,
@@ -78,7 +78,7 @@ export function moveNodeCommand(command: IMoveNode): IGeneric {
 	return generic_command as any;
 }
 
-export function removeNodeCommand(command: IRemoveNode): IGeneric {
+export function removeNodeCommand(command: IRemoveNode): IGenericCommand {
 	const generic_command = {
 		...command,
 		command_type: ICommandType.RemoveNode,
@@ -87,7 +87,7 @@ export function removeNodeCommand(command: IRemoveNode): IGeneric {
 	return generic_command as any;
 }
 
-export function updateNodeCommand(command: IUpdateNode): IGeneric {
+export function updateNodeCommand(command: IUpdateNode): IGenericCommand {
 	const generic_command = {
 		...command,
 		command_type: ICommandType.UpdateNode,
@@ -96,7 +96,7 @@ export function updateNodeCommand(command: IUpdateNode): IGeneric {
 	return generic_command as any;
 }
 
-export function connectPinsCommand(command: IConnectPins): IGeneric {
+export function connectPinsCommand(command: IConnectPins): IGenericCommand {
 	const generic_command = {
 		...command,
 		command_type: ICommandType.ConnectPin,
@@ -105,7 +105,9 @@ export function connectPinsCommand(command: IConnectPins): IGeneric {
 	return generic_command as any;
 }
 
-export function disconnectPinsCommand(command: IDisconnectPins): IGeneric {
+export function disconnectPinsCommand(
+	command: IDisconnectPins,
+): IGenericCommand {
 	const generic_command = {
 		...command,
 		command_type: ICommandType.DisconnectPin,
@@ -114,7 +116,7 @@ export function disconnectPinsCommand(command: IDisconnectPins): IGeneric {
 	return generic_command as any;
 }
 
-export function upsertPinCommand(command: IUpsertPin): IGeneric {
+export function upsertPinCommand(command: IUpsertPin): IGenericCommand {
 	const generic_command = {
 		...command,
 		command_type: ICommandType.UpsertPin,
@@ -123,7 +125,9 @@ export function upsertPinCommand(command: IUpsertPin): IGeneric {
 	return generic_command as any;
 }
 
-export function upsertVariableCommand(command: IUpsertVariable): IGeneric {
+export function upsertVariableCommand(
+	command: IUpsertVariable,
+): IGenericCommand {
 	const generic_command = {
 		...command,
 		command_type: ICommandType.UpsertVariable,
@@ -132,7 +136,9 @@ export function upsertVariableCommand(command: IUpsertVariable): IGeneric {
 	return generic_command as any;
 }
 
-export function removeVariableCommand(command: IRemoveVariable): IGeneric {
+export function removeVariableCommand(
+	command: IRemoveVariable,
+): IGenericCommand {
 	const generic_command = {
 		...command,
 		command_type: ICommandType.RemoveVariable,

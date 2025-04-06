@@ -4,6 +4,7 @@ use crate::utils::download::download_bit;
 use flow_like_storage::Path;
 use flow_like_storage::files::store::local_store::LocalObjectStore;
 use flow_like_types::Value;
+use flow_like_types::intercom::InterComCallback;
 use flow_like_types::sync::Mutex;
 use futures::FutureExt;
 use futures::future::BoxFuture;
@@ -349,6 +350,7 @@ impl BitPack {
     pub async fn download(
         &self,
         state: Arc<Mutex<FlowLikeState>>,
+        callback: InterComCallback,
     ) -> flow_like_types::Result<Vec<Bit>> {
         let mut deduplicated_bits = vec![];
         let mut deduplication_helper = HashSet::new();
@@ -371,7 +373,7 @@ impl BitPack {
 
         let download_futures: Vec<_> = deduplicated_bits
             .iter()
-            .map(|bit| download_bit(bit, state.clone(), 3))
+            .map(|bit| download_bit(bit, state.clone(), 3, &callback))
             .collect();
 
         let results = futures::future::join_all(download_futures).await;

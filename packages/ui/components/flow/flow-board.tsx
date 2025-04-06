@@ -56,7 +56,7 @@ import {
 } from "../../components/ui/resizable";
 import { useInvoke } from "../../hooks/use-invoke";
 import {
-	type IGeneric,
+	type IGenericCommand,
 	addNodeCommand,
 	connectPinsCommand,
 	disconnectPinsCommand,
@@ -157,7 +157,7 @@ export function FlowBoard({
 	);
 
 	const executeCommand = useCallback(
-		async (command: IGeneric, append = false): Promise<any> => {
+		async (command: IGenericCommand, append = false): Promise<any> => {
 			const result = await backend.executeCommand(appId, boardId, command);
 			await pushCommand(result, append);
 			await board.refetch();
@@ -167,7 +167,7 @@ export function FlowBoard({
 	);
 
 	const executeCommands = useCallback(
-		async (commands: IGeneric[]) => {
+		async (commands: IGenericCommand[]) => {
 			if (commands.length === 0) return;
 			const result = await backend.executeCommands(appId, boardId, commands);
 			await pushCommands(result);
@@ -204,10 +204,24 @@ export function FlowBoard({
 	const executeBoard = useCallback(
 		async (node: INode) => {
 			setCurrentRun(undefined);
-			const runId: string | undefined = await backend.createRun(
+			let added = false;
+			const runId: string | undefined = await backend.executeBoard(
 				appId,
 				boardId,
 				[node.id],
+				(update) => {
+					const runUpdates = update
+						.filter((item) => item.event_type.startsWith("run:"))
+						.map((item) => item.payload);
+					if (runUpdates.length === 0) return;
+					const firstItem = runUpdates[0];
+					if (!added) {
+						addRun(firstItem.run_id, boardId, [node.id]);
+						added = true;
+					}
+
+					pushUpdate(firstItem.run_id, runUpdates);
+				},
 			);
 			if (!runId) {
 				toastError(
@@ -216,10 +230,6 @@ export function FlowBoard({
 				);
 				return;
 			}
-			await addRun(runId, boardId, [node.id]);
-			await backend.executeRun(appId, runId, (update) => {
-				pushUpdate(runId, update);
-			});
 			removeRun(runId);
 			const result: IRun | undefined = await backend.getRun(appId, runId);
 			setCurrentRun(result);

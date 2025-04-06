@@ -250,7 +250,7 @@ mod tests {
             flow_like_storage::object_store::memory::InMemory::new(),
         )));
         let (http_client, _refetch_rx) = HTTPClient::new();
-        let (flow_like_state, _) = crate::state::FlowLikeState::new(config, http_client);
+        let flow_like_state = crate::state::FlowLikeState::new(config, http_client);
         Arc::new(Mutex::new(flow_like_state))
     }
 

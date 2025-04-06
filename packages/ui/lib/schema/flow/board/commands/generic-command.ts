@@ -1,4 +1,4 @@
-export interface IGeneric {
+export interface IGenericCommand {
 	command_type: ICommandType;
 	comment?: IComment;
 	old_comment?: null | IComment;
@@ -103,7 +103,7 @@ export enum IVariableType {
 	Date = "Date",
 	Execution = "Execution",
 	Float = "Float",
-	IGeneric = "Generic",
+	Generic = "Generic",
 	Integer = "Integer",
 	PathBuf = "PathBuf",
 	String = "String",
