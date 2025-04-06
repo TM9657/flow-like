@@ -1,8 +1,8 @@
 pub mod branch_node;
+pub mod delay;
 pub mod for_each;
 pub mod par_execution;
 pub mod sequence;
-pub mod delay;
 
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;

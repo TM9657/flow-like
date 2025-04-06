@@ -1,6 +1,7 @@
 use crate::state::FlowLikeState;
 use crate::utils::compression::{compress_to_file_json, from_compressed_json};
 use crate::utils::download::download_bit;
+use flow_like_model_provider::provider::ModelProvider;
 use flow_like_storage::Path;
 use flow_like_storage::files::store::local_store::LocalObjectStore;
 use flow_like_types::Value;
@@ -43,14 +44,6 @@ pub enum BitTypes {
     Board,
     Other,
 }
-
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
-pub struct BitProviderModel {
-    pub provider_name: String,
-    pub model_id: Option<String>,
-    pub version: Option<String>,
-}
-
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct BitModelPreference {
     pub cost_weight: Option<f32>,
@@ -241,7 +234,7 @@ pub struct EmbeddingModelParameters {
     pub input_length: u32,
     pub prefix: Prefix,
     pub pooling: Pooling,
-    pub provider: BitProviderModel,
+    pub provider: ModelProvider,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -262,20 +255,20 @@ pub struct ImageEmbeddingModelParameters {
     pub languages: Vec<String>,
     pub vector_length: u32,
     pub pooling: Pooling,
-    pub provider: BitProviderModel,
+    pub provider: ModelProvider,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 pub struct LLMParameters {
     pub context_length: u32,
-    pub provider: BitProviderModel,
+    pub provider: ModelProvider,
     pub model_classification: BitModelClassification,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 pub struct VLMParameters {
     pub context_length: u32,
-    pub provider: BitProviderModel,
+    pub provider: ModelProvider,
     pub model_classification: BitModelClassification,
 }
 
@@ -492,7 +485,7 @@ impl Bit {
         None
     }
 
-    pub fn try_to_provider(&self) -> Option<BitProviderModel> {
+    pub fn try_to_provider(&self) -> Option<ModelProvider> {
         if let Some(parameters) = self.try_to_llm() {
             return Some(parameters.provider);
         }
@@ -504,7 +497,7 @@ impl Bit {
         None
     }
 
-    pub fn try_to_embedding_provider(&self) -> Option<BitProviderModel> {
+    pub fn try_to_embedding_provider(&self) -> Option<ModelProvider> {
         if let Some(parameters) = self.try_to_embedding() {
             return Some(parameters.provider);
         }

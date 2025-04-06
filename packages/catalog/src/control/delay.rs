@@ -1,7 +1,6 @@
 use flow_like::{
     flow::{
-        execution::context::ExecutionContext
-        ,
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         variable::VariableType,
     },
@@ -32,7 +31,12 @@ impl NodeLogic for DelayNode {
         node.add_icon("/flow/icons/clock.svg");
 
         node.add_input_pin("exec_in", "Execute", "Execution", VariableType::Execution);
-        node.add_input_pin("time", "Time (ms)", "Delay time in milliseconds", VariableType::Float)
+        node.add_input_pin(
+            "time",
+            "Time (ms)",
+            "Delay time in milliseconds",
+            VariableType::Float,
+        )
         .set_default_value(Some(flow_like_types::json::json!(1000.0)));
 
         node.add_output_pin("exec_out", "Done", "Execution", VariableType::Execution);

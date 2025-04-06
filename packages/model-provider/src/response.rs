@@ -63,11 +63,11 @@ pub struct TopLogProbs {
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct Choice {
-    index: i32,
-    finish_reason: String,
-    message: ResponseMessage,
+    pub index: i32,
+    pub finish_reason: String,
+    pub message: ResponseMessage,
     #[serde(skip_serializing_if = "Option::is_none")]
-    logprobs: Option<LogProbs>,
+    pub logprobs: Option<LogProbs>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -175,13 +175,13 @@ impl ResponseMessage {
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, Default)]
 pub struct Usage {
-    completion_tokens: u32,
-    prompt_tokens: u32,
-    total_tokens: u32,
+    pub completion_tokens: u32,
+    pub prompt_tokens: u32,
+    pub total_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    prompt_tokens_details: Option<PromptTokenDetails>,
+    pub prompt_tokens_details: Option<PromptTokenDetails>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    completion_tokens_details: Option<CompletionTokenDetails>,
+    pub completion_tokens_details: Option<CompletionTokenDetails>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -201,19 +201,19 @@ pub struct CompletionTokenDetails {
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, Default)]
 pub struct Response {
     #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
-    choices: Vec<Choice>,
+    pub id: Option<String>,
+    pub choices: Vec<Choice>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    created: Option<u64>,
+    pub created: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    model: Option<String>,
+    pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    service_tier: Option<String>,
+    pub service_tier: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system_fingerprint: Option<String>,
+    pub system_fingerprint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    object: Option<String>,
-    usage: Usage,
+    pub object: Option<String>,
+    pub usage: Usage,
 }
 
 impl Response {

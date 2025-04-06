@@ -82,6 +82,9 @@ impl NodeLogic for MakeHistoryMessageNode {
         let mut message: HistoryMessage = HistoryMessage {
             content: vec![],
             role: Role::User,
+            name: None,
+            tool_call_id: None,
+            tool_calls: None,
         };
 
         message.role = role;

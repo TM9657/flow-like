@@ -48,6 +48,8 @@ async fn parse_messages(history: &History) -> Vec<LocalModelHistoryMessage> {
             Role::Assistant => "assistant",
             Role::User => "user",
             Role::System => "system",
+            Role::Function => "function",
+            Role::Tool => "tool",
         };
 
         let mut message_string = String::new();
