@@ -16,7 +16,6 @@ import type {
 	IRun,
 } from "../lib";
 import type { ISettingsProfile } from "../types";
-import type { IRunUpdateEvent } from "./run-execution-state";
 
 export interface IBackendState {
 	getApps(): Promise<IApp[]>;

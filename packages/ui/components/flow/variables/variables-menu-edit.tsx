@@ -26,6 +26,7 @@ export function VariablesMenuEdit({
 	const [intermediateValue, setIntermediateValue] = useState(variable);
 
 	useEffect(() => {
+		if (intermediateValue === variable) return;
 		updateVariable(intermediateValue);
 	}, [intermediateValue]);
 

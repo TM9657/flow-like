@@ -3,13 +3,12 @@ import { createId } from "@paralleldrive/cuid2";
 import { useDebounce } from "@uidotdev/usehooks";
 import {
 	CirclePlusIcon,
-	DeleteIcon,
 	EllipsisVerticalIcon,
 	EyeIcon,
 	EyeOffIcon,
 	GripIcon,
 	ListIcon,
-	Trash2Icon,
+	Trash2Icon
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
