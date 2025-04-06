@@ -11,3 +11,4 @@ schemars.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
 fastembed = {version="4.6.0", default-features = false, features = ["ort-download-binaries"] }
+openai-api-rs = "6.0.3"
