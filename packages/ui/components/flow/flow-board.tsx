@@ -721,7 +721,7 @@ export function FlowBoard({
 
 	const onNodeDragStop = useCallback(
 		async (event: any, node: any, nodes: any) => {
-			let first = true;
+			const commands: IGenericCommand[] = [];
 			for await (const node of nodes) {
 				console.log(
 					`Moving node ${node.id} to ${node.position.x}, ${node.position.y}`,
@@ -736,8 +736,7 @@ export function FlowBoard({
 							coordinates: [node.position.x, node.position.y, 0],
 						},
 					});
-
-					await executeCommand(command, !first);
+					commands.push(command);
 				}
 
 				if (!comment) {
@@ -746,13 +745,13 @@ export function FlowBoard({
 						to_coordinates: [node.position.x, node.position.y, 0],
 					});
 
-					await executeCommand(command, !first);
+					commands.push(command);
 				}
-				first = false;
 			}
+			await executeCommands(commands);
 			await board.refetch();
 		},
-		[boardId, executeCommand],
+		[boardId, executeCommands],
 	);
 
 	const isValidConnectionCB = useCallback(

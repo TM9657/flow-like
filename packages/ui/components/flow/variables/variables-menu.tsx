@@ -11,7 +11,7 @@ import {
 	ListIcon,
 	Trash2Icon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import {
 	DropdownMenu,
@@ -59,20 +59,23 @@ export function VariablesMenu({
 	board: IBoard;
 	executeCommand: (command: IGenericCommand, append: boolean) => Promise<any>;
 }>) {
-	async function upsertVariable(variable: IVariable) {
+
+	const upsertVariable = useCallback(async (variable: IVariable) => {
+		const oldVariable = board.variables[variable.id];
+		if (oldVariable === variable) return;
 		const command = upsertVariableCommand({
 			variable,
 		});
 
 		await executeCommand(command, false);
-	}
+	}, [board])
 
-	async function removeVariable(variable: IVariable) {
+	const removeVariable = useCallback(async (variable: IVariable) => {
 		const command = removeVariableCommand({
 			variable,
 		});
 		await executeCommand(command, false);
-	}
+	}, [board])
 
 	return (
 		<div className="flex flex-col gap-2 p-4">
