@@ -20,7 +20,10 @@ export interface IHistory {
 
 export interface IHistoryMessage {
 	content: IContent[];
+	name?: null | string;
 	role: IRole;
+	tool_call_id?: null | string;
+	tool_calls?: IToolCall[] | null;
 	[property: string]: any;
 }
 
@@ -39,8 +42,23 @@ export enum IContentType {
 
 export enum IRole {
 	Assistant = "assistant",
+	Function = "function",
 	System = "system",
+	ITool = "tool",
 	User = "user",
+}
+
+export interface IToolCall {
+	function: IToolCallFunction;
+	id: string;
+	type: string;
+	[property: string]: any;
+}
+
+export interface IToolCallFunction {
+	arguments?: null | string;
+	name?: null | string;
+	[property: string]: any;
 }
 
 export interface IStreamOptions {
@@ -57,9 +75,34 @@ export interface IToolChoice {
 export interface IHistoryFunction {
 	description?: null | string;
 	name: string;
-	parameters?: any;
-	strict?: boolean | null;
+	parameters: IHistoryFunctionParameters;
 	[property: string]: any;
+}
+
+export interface IHistoryFunctionParameters {
+	properties?: { [key: string]: IHistoryJSONSchemaDefine } | null;
+	required?: string[] | null;
+	type: IHistoryJSONSchemaType;
+	[property: string]: any;
+}
+
+export interface IHistoryJSONSchemaDefine {
+	description?: null | string;
+	enum_values?: string[] | null;
+	items?: null | IHistoryJSONSchemaDefine;
+	properties?: { [key: string]: IHistoryJSONSchemaDefine } | null;
+	required?: string[] | null;
+	type?: IHistoryJSONSchemaType | null;
+	[property: string]: any;
+}
+
+export enum IHistoryJSONSchemaType {
+	Array = "array",
+	Boolean = "boolean",
+	Null = "null",
+	Number = "number",
+	Object = "object",
+	String = "string",
 }
 
 export enum IToolType {

@@ -1042,6 +1042,9 @@ export function FlowBoard({
 										onConnect={onConnect}
 										onReconnect={onReconnect}
 										onReconnectStart={onReconnectStart}
+										// onEdgeDoubleClick={(e, edge) => {
+										// 	console.dir({e, edge})
+										// }}
 										onReconnectEnd={onReconnectEnd}
 										onConnectEnd={onConnectEnd}
 										fitView

@@ -1,6 +1,63 @@
-export interface IRemoveNode {
-	connected_nodes: INode[];
-	node: INode;
+export interface IGeneric {
+	command_type: ICommandType;
+	comment?: IComment;
+	old_comment?: null | IComment;
+	node?: INode;
+	new_comments?: IComment[];
+	new_nodes?: INode[];
+	offset?: number[];
+	original_comments?: IComment[];
+	original_nodes?: INode[];
+	from_coordinates?: number[] | null;
+	node_id?: string;
+	to_coordinates?: number[];
+	connected_nodes?: INode[];
+	old_node?: null | INode;
+	from_node?: string;
+	from_pin?: string;
+	to_node?: string;
+	to_pin?: string;
+	old_pin?: null | IPin;
+	pin?: IPin;
+	variable?: IVariable;
+	old_variable?: null | IVariable;
+	[property: string]: any;
+}
+
+export enum ICommandType {
+	AddNode = "AddNode",
+	ConnectPin = "ConnectPin",
+	CopyPaste = "CopyPaste",
+	DisconnectPin = "DisconnectPin",
+	MoveNode = "MoveNode",
+	RemoveComment = "RemoveComment",
+	RemoveNode = "RemoveNode",
+	RemoveVariable = "RemoveVariable",
+	UpdateNode = "UpdateNode",
+	UpsertComment = "UpsertComment",
+	UpsertPin = "UpsertPin",
+	UpsertVariable = "UpsertVariable",
+}
+
+export interface IComment {
+	author?: null | string;
+	comment_type: ICommentType;
+	content: string;
+	coordinates: number[];
+	id: string;
+	timestamp: ISystemTime;
+	[property: string]: any;
+}
+
+export enum ICommentType {
+	Image = "Image",
+	Text = "Text",
+	Video = "Video",
+}
+
+export interface ISystemTime {
+	nanos_since_epoch: number;
+	secs_since_epoch: number;
 	[property: string]: any;
 }
 
@@ -35,6 +92,7 @@ export interface IPin {
 	options?: null | IPinOptions;
 	pin_type: IPinType;
 	schema?: null | string;
+	valid_values?: string[] | null;
 	value_type: IValueType;
 	[property: string]: any;
 }
@@ -45,7 +103,7 @@ export enum IVariableType {
 	Date = "Date",
 	Execution = "Execution",
 	Float = "Float",
-	Generic = "Generic",
+	IGeneric = "Generic",
 	Integer = "Integer",
 	PathBuf = "PathBuf",
 	String = "String",
@@ -87,5 +145,19 @@ export interface INodeScores {
 	performance: number;
 	privacy: number;
 	security: number;
+	[property: string]: any;
+}
+
+export interface IVariable {
+	category?: null | string;
+	data_type: IVariableType;
+	default_value?: number[] | null;
+	description?: null | string;
+	editable: boolean;
+	exposed: boolean;
+	id: string;
+	name: string;
+	secret: boolean;
+	value_type: IValueType;
 	[property: string]: any;
 }

@@ -4,6 +4,7 @@ package flow_like_types;
 
 import "google/protobuf/timestamp.proto";
 import "node.proto";
+import "pin.proto";
 import "variable.proto";
 import "comment.proto";
 
@@ -21,6 +22,26 @@ enum LogLevel {
   WARN = 2;
   ERROR = 3;
   FATAL = 4;
+}
+
+enum LayerType {
+  FUNCTION = 0;
+  MACRO = 1;
+  COLLAPSED = 2;
+}
+
+message Layer {
+  string id = 1;
+  string parent_id = 2;
+  string name = 3;
+  LayerType type = 4;
+  map<string, Node> nodes = 5;
+  map<string, Variable> variables = 6;
+  map<string, Comment> comments = 7;
+  float coord_x = 8;
+  float coord_y = 9;
+  float coord_z = 10;
+  map<string, Pin> pins = 11;
 }
 
 message Board {
@@ -41,4 +62,5 @@ message Board {
   map<string, string> refs = 15;
   google.protobuf.Timestamp created_at = 16;
   google.protobuf.Timestamp updated_at = 17;
+  map<string, Layer> layers = 18;
 }

@@ -35,6 +35,11 @@ export function doPinsMatch(
 	targetPin: IPin,
 	refs: { [key: string]: string },
 ) {
+	if (sourcePin.name === "route_in" || targetPin.name === "route_in")
+		return true;
+	if (targetPin.name === "route_out" || sourcePin.name === "route_out")
+		return true;
+
 	if (sourcePin.pin_type === targetPin.pin_type) return false;
 
 	let schemaSource = sourcePin.schema;

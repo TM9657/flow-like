@@ -1,7 +1,7 @@
 export interface IImageEmbeddingModelParameters {
 	languages: string[];
 	pooling: IPooling;
-	provider: IBitProviderModel;
+	provider: IModelProvider;
 	vector_length: number;
 	[property: string]: any;
 }
@@ -12,7 +12,7 @@ export enum IPooling {
 	None = "None",
 }
 
-export interface IBitProviderModel {
+export interface IModelProvider {
 	model_id?: null | string;
 	provider_name: string;
 	version?: null | string;

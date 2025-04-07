@@ -29,5 +29,6 @@ message Node {
     bool long_running = 14;
     string error = 15;
     string docs = 16;
+    optional string layer = 17;
 }
 

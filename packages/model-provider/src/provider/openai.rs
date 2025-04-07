@@ -198,9 +198,6 @@ impl OpenAIClient {
 
         let client = Client::builder();
 
-        #[cfg(feature = "rustls")]
-        let client = client.use_rustls_tls();
-
         let client = if let Some(timeout) = self.timeout {
             client.timeout(std::time::Duration::from_secs(timeout))
         } else {

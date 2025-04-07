@@ -51,6 +51,7 @@ impl ToProto<flow_like_types::proto::Node> for Node {
             long_running: self.long_running.unwrap_or(false),
             error: self.error.clone().unwrap_or_default(),
             docs: self.docs.clone().unwrap_or_default(),
+            layer: None,
         }
     }
 }

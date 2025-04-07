@@ -13,7 +13,7 @@
 			"$ref": "#/definitions/BitModelClassification"
 		},
 		"provider": {
-			"$ref": "#/definitions/BitProviderModel"
+			"$ref": "#/definitions/ModelProvider"
 		}
 	},
 	"definitions": {
@@ -74,7 +74,7 @@
 				}
 			}
 		},
-		"BitProviderModel": {
+		"ModelProvider": {
 			"type": "object",
 			"required": ["provider_name"],
 			"properties": {

@@ -200,12 +200,6 @@
 				"schema": {
 					"type": ["string", "null"]
 				},
-				"valid_values": {
-					"type": ["array", "null"],
-					"items": {
-						"type": "string"
-					}
-				},
 				"value_type": {
 					"$ref": "#/definitions/ValueType"
 				}

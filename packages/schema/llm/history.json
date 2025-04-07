@@ -131,7 +131,7 @@
 		},
 		"HistoryFunction": {
 			"type": "object",
-			"required": ["name"],
+			"required": ["name", "parameters"],
 			"properties": {
 				"description": {
 					"type": ["string", "null"]
@@ -139,11 +139,81 @@
 				"name": {
 					"type": "string"
 				},
-				"parameters": true,
-				"strict": {
-					"type": ["boolean", "null"]
+				"parameters": {
+					"$ref": "#/definitions/HistoryFunctionParameters"
 				}
 			}
+		},
+		"HistoryFunctionParameters": {
+			"type": "object",
+			"required": ["type"],
+			"properties": {
+				"properties": {
+					"type": ["object", "null"],
+					"additionalProperties": {
+						"$ref": "#/definitions/HistoryJSONSchemaDefine"
+					}
+				},
+				"required": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
+				},
+				"type": {
+					"$ref": "#/definitions/HistoryJSONSchemaType"
+				}
+			}
+		},
+		"HistoryJSONSchemaDefine": {
+			"type": "object",
+			"properties": {
+				"description": {
+					"type": ["string", "null"]
+				},
+				"enum_values": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
+				},
+				"items": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/HistoryJSONSchemaDefine"
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"properties": {
+					"type": ["object", "null"],
+					"additionalProperties": {
+						"$ref": "#/definitions/HistoryJSONSchemaDefine"
+					}
+				},
+				"required": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
+				},
+				"type": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/HistoryJSONSchemaType"
+						},
+						{
+							"type": "null"
+						}
+					]
+				}
+			}
+		},
+		"HistoryJSONSchemaType": {
+			"type": "string",
+			"enum": ["object", "number", "string", "array", "null", "boolean"]
 		},
 		"HistoryMessage": {
 			"type": "object",
@@ -155,8 +225,20 @@
 						"$ref": "#/definitions/Content"
 					}
 				},
+				"name": {
+					"type": ["string", "null"]
+				},
 				"role": {
 					"$ref": "#/definitions/Role"
+				},
+				"tool_call_id": {
+					"type": ["string", "null"]
+				},
+				"tool_calls": {
+					"type": ["array", "null"],
+					"items": {
+						"$ref": "#/definitions/ToolCall"
+					}
 				}
 			}
 		},
@@ -170,7 +252,7 @@
 		},
 		"Role": {
 			"type": "string",
-			"enum": ["system", "user", "assistant"]
+			"enum": ["system", "user", "assistant", "function", "tool"]
 		},
 		"StreamOptions": {
 			"type": "object",
@@ -190,6 +272,32 @@
 				},
 				"type": {
 					"$ref": "#/definitions/ToolType"
+				}
+			}
+		},
+		"ToolCall": {
+			"type": "object",
+			"required": ["function", "id", "type"],
+			"properties": {
+				"function": {
+					"$ref": "#/definitions/ToolCallFunction"
+				},
+				"id": {
+					"type": "string"
+				},
+				"type": {
+					"type": "string"
+				}
+			}
+		},
+		"ToolCallFunction": {
+			"type": "object",
+			"properties": {
+				"arguments": {
+					"type": ["string", "null"]
+				},
+				"name": {
+					"type": ["string", "null"]
 				}
 			}
 		},

@@ -1,7 +1,7 @@
 export interface ILlmParameters {
 	context_length: number;
 	model_classification: IBitModelClassification;
-	provider: IBitProviderModel;
+	provider: IModelProvider;
 	[property: string]: any;
 }
 
@@ -19,7 +19,7 @@ export interface IBitModelClassification {
 	[property: string]: any;
 }
 
-export interface IBitProviderModel {
+export interface IModelProvider {
 	model_id?: null | string;
 	provider_name: string;
 	version?: null | string;

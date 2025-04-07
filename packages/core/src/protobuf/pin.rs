@@ -59,7 +59,6 @@ impl ToProto<flow_like_types::proto::Pin> for Pin {
             pin_type: self.pin_type.to_proto(),
             data_type: self.data_type.to_proto(),
             schema: self.schema.clone().unwrap_or_default(),
-            valid_values: self.valid_values.clone().unwrap_or_default(),
             value_type: self.value_type.to_proto(),
             depends_on: self.depends_on.iter().cloned().collect(),
             connected_to: self.connected_to.iter().cloned().collect(),
@@ -83,11 +82,6 @@ impl FromProto<flow_like_types::proto::Pin> for Pin {
                 None
             } else {
                 Some(proto.schema)
-            },
-            valid_values: if proto.valid_values.is_empty() {
-                None
-            } else {
-                Some(proto.valid_values)
             },
             value_type: ValueType::from_proto(proto.value_type),
             depends_on: proto.depends_on.into_iter().collect(),

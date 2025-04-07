@@ -86,6 +86,7 @@ impl ToProto<flow_like_types::proto::Board> for Board {
             refs: self.refs.clone(),
             created_at: Some(Timestamp::from(self.created_at)),
             updated_at: Some(Timestamp::from(self.updated_at)),
+            layers: HashMap::new(),
         }
     }
 }

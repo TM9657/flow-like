@@ -1,6 +1,6 @@
 {
 	"$schema": "http://json-schema.org/draft-07/schema#",
-	"title": "ImageEmbeddingModelParameters",
+	"title": "ImageEmbeddingModelProvider",
 	"type": "object",
 	"required": ["languages", "pooling", "provider", "vector_length"],
 	"properties": {
@@ -14,7 +14,7 @@
 			"$ref": "#/definitions/Pooling"
 		},
 		"provider": {
-			"$ref": "#/definitions/BitProviderModel"
+			"$ref": "#/definitions/ModelProvider"
 		},
 		"vector_length": {
 			"type": "integer",
@@ -23,7 +23,7 @@
 		}
 	},
 	"definitions": {
-		"BitProviderModel": {
+		"ModelProvider": {
 			"type": "object",
 			"required": ["provider_name"],
 			"properties": {

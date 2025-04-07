@@ -46,17 +46,24 @@ function FlowPinInnerComponent({
 	const [defaultValue, setDefaultValue] = useState(pin.default_value);
 	const debouncedDefaultValue = useDebounce(defaultValue, 200);
 
-	const handleStyle = useMemo(
-		() => ({
+	const handleStyle = useMemo(() => {
+		if (node.name === "reroute") {
+			return {
+				// marginTop: "0.5rem",
+				// top: index * 15,
+				background: typeToColor(pin.data_type),
+			};
+		}
+
+		return {
 			marginTop: "1.75rem",
 			top: index * 15,
 			background:
 				pin.data_type === "Execution" || pin.value_type !== IValueType.Normal
 					? "transparent"
 					: typeToColor(pin.data_type),
-		}),
-		[pin.data_type, pin.value_type, index],
-	);
+		};
+	}, [pin.data_type, pin.value_type, index, node.name]);
 
 	const iconStyle = useMemo(
 		() => ({
@@ -71,8 +78,9 @@ function FlowPinInnerComponent({
 		() =>
 			pin.name !== "exec_in" &&
 			pin.name !== "exec_out" &&
-			pin.name !== "var_ref",
-		[pin.name],
+			pin.name !== "var_ref" &&
+			node.name !== "reroute",
+		[pin.name, node.name],
 	);
 
 	const pinEditContainerClassName = useMemo(
@@ -130,7 +138,7 @@ function FlowPinInnerComponent({
 	const pinIcons = useMemo(
 		() => (
 			<>
-				{pin.data_type === "Execution" && (
+				{pin.data_type === "Execution" && node.name !== "reroute" && (
 					<DynamicImage
 						url="/flow/pin.svg"
 						className="w-2 h-2 absolute left-0 -translate-x-[15%] pointer-events-none bg-foreground"
@@ -159,7 +167,7 @@ function FlowPinInnerComponent({
 				)}
 			</>
 		),
-		[pin.data_type, pin.value_type, iconStyle],
+		[pin.data_type, pin.value_type, iconStyle, node.name],
 	);
 
 	return (

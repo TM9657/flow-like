@@ -51,6 +51,7 @@ import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
 import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
 import { FlowPin } from "./flow-pin";
+import { typeToColor } from "./utils";
 
 export interface IPinAction {
 	action: "create";
@@ -122,6 +123,17 @@ const FlowNodeInner = memo(
 
 			return severity;
 		}, [props.data.traces]);
+		const isReroute = useMemo(() => {
+			return props.data.node.name === "reroute";
+		}, [props.data.node.name]);
+		const nodeStyle = useMemo(
+			() => ({
+				backgroundColor: typeToColor(
+					Object.values(props.data.node.pins)[0].data_type,
+				),
+			}),
+			[isReroute],
+		);
 
 		const sortPins = useCallback((a: IPin, b: IPin) => {
 			// Step 1: Compare by type - Input comes before Output
@@ -134,9 +146,12 @@ const FlowNodeInner = memo(
 
 		useEffect(() => {
 			const height = Math.max(inputPins.length, outputPins.length);
+			if (isReroute) {
+				return;
+			}
 			if (div.current)
 				div.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
-		}, [inputPins, outputPins]);
+		}, [isReroute, inputPins, outputPins]);
 
 		useEffect(() => {
 			parsePins(Object.values(props.data.node?.pins || []));
@@ -345,7 +360,8 @@ const FlowNodeInner = memo(
 			<div
 				key={`${props.id}__node`}
 				ref={div}
-				className={`bg-card p-2 react-flow__node-default selectable focus:ring-2 relative rounded-md group ${props.selected && "!border-primary border-2"} ${isExec ? "" : "bg-emerald-900"} ${executionState === "done" ? "opacity-60" : "opacity-100"}`}
+				className={`bg-card p-2 react-flow__node-default selectable focus:ring-2 relative rounded-md group ${props.selected && "!border-primary border-2"} ${executionState === "done" ? "opacity-60" : "opacity-100"} ${isReroute && "w-4 max-w-4 !max-h-3 overflow-y !rounded-lg !p-[0.4rem]"}`}
+				style={isReroute ? nodeStyle : {}}
 				onMouseEnter={() => onHover(true)}
 				onMouseLeave={() => onHover(false)}
 			>
@@ -412,74 +428,76 @@ const FlowNodeInner = memo(
 							),
 					[inputPins, props.data.node, props.data.boardId, pinRemoveCallback],
 				)}
-				<div
-					className={`header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b-1 border-b-foreground p-1 justify-between rounded-md rounded-b-none bg-card ${!isExec && "bg-gradient-to-r  from-card via-tertiary/50 to-tertiary"} ${props.data.node.start && "bg-gradient-to-r  from-card via-primary/50 to-primary"}`}
-				>
-					<div className={"flex flex-row items-center gap-1"}>
-						{useMemo(
-							() =>
-								props.data.node?.icon ? (
-									<DynamicImage
-										className="w-2 h-2 bg-foreground"
-										url={props.data.node.icon}
+				{!isReroute && (
+					<div
+						className={`header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b-1 border-b-foreground p-1 justify-between rounded-md rounded-b-none bg-card ${!isExec && "bg-gradient-to-r  from-card via-tertiary/50 to-tertiary"} ${props.data.node.start && "bg-gradient-to-r  from-card via-primary/50 to-primary"} ${isReroute && "w-6"}`}
+					>
+						<div className={"flex flex-row items-center gap-1"}>
+							{useMemo(
+								() =>
+									props.data.node?.icon ? (
+										<DynamicImage
+											className="w-2 h-2 bg-foreground"
+											url={props.data.node.icon}
+										/>
+									) : (
+										<WorkflowIcon className="w-2 h-2" />
+									),
+								[props.data.node?.icon],
+							)}
+							<small className="font-medium leading-none text-start line-clamp-1">
+								{props.data.node?.friendly_name}
+							</small>
+						</div>
+						<div className="flex flex-row items-center gap-1">
+							{useMemo(() => {
+								return props.data.traces.length > 0 ? (
+									<ScrollTextIcon
+										onClick={() => props.data.openTrace(props.data.traces)}
+										className="w-2 h-2 cursor-pointer hover:text-primary"
 									/>
-								) : (
-									<WorkflowIcon className="w-2 h-2" />
-								),
-							[props.data.node?.icon],
-						)}
-						<small className="font-medium leading-none text-start line-clamp-1">
-							{props.data.node?.friendly_name}
-						</small>
+								) : null;
+							}, [props.data.traces.length, props.data.openTrace])}
+
+							{useMemo(() => {
+								if (!props.data.node.start || executing) return null;
+								return (
+									<PlayCircleIcon
+										className="w-2 h-2 cursor-pointer hover:text-primary"
+										onClick={async (e) => {
+											if (executing) return;
+											setExecuting(true);
+											await props.data.onExecute(props.data.node);
+											setExecuting(false);
+										}}
+									/>
+								);
+							}, [
+								props.data.node.start,
+								executing,
+								props.data.onExecute,
+								props.data.node,
+							])}
+
+							{useMemo(() => {
+								if (debouncedExecutionState !== "running") return null;
+								return (
+									<PuffLoader
+										color={resolvedTheme === "dark" ? "white" : "black"}
+										size={10}
+										speedMultiplier={1}
+									/>
+								);
+							}, [debouncedExecutionState, resolvedTheme])}
+
+							{useMemo(() => {
+								return debouncedExecutionState === "done" ? (
+									<SquareCheckIcon className="w-2 h-2 text-primary" />
+								) : null;
+							}, [debouncedExecutionState])}
+						</div>
 					</div>
-					<div className="flex flex-row items-center gap-1">
-						{useMemo(() => {
-							return props.data.traces.length > 0 ? (
-								<ScrollTextIcon
-									onClick={() => props.data.openTrace(props.data.traces)}
-									className="w-2 h-2 cursor-pointer hover:text-primary"
-								/>
-							) : null;
-						}, [props.data.traces.length, props.data.openTrace])}
-
-						{useMemo(() => {
-							if (!props.data.node.start || executing) return null;
-							return (
-								<PlayCircleIcon
-									className="w-2 h-2 cursor-pointer hover:text-primary"
-									onClick={async (e) => {
-										if (executing) return;
-										setExecuting(true);
-										await props.data.onExecute(props.data.node);
-										setExecuting(false);
-									}}
-								/>
-							);
-						}, [
-							props.data.node.start,
-							executing,
-							props.data.onExecute,
-							props.data.node,
-						])}
-
-						{useMemo(() => {
-							if (debouncedExecutionState !== "running") return null;
-							return (
-								<PuffLoader
-									color={resolvedTheme === "dark" ? "white" : "black"}
-									size={10}
-									speedMultiplier={1}
-								/>
-							);
-						}, [debouncedExecutionState, resolvedTheme])}
-
-						{useMemo(() => {
-							return debouncedExecutionState === "done" ? (
-								<SquareCheckIcon className="w-2 h-2 text-primary" />
-							) : null;
-						}, [debouncedExecutionState])}
-					</div>
-				</div>
+				)}
 				{useMemo(
 					() =>
 						outputPins.map((pin, index) =>

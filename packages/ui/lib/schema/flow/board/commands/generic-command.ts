@@ -92,7 +92,6 @@ export interface IPin {
 	options?: null | IPinOptions;
 	pin_type: IPinType;
 	schema?: null | string;
-	valid_values?: string[] | null;
 	value_type: IValueType;
 	[property: string]: any;
 }
