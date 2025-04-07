@@ -45,7 +45,7 @@ impl ModelLogic for OpenAIModel {
             let mut client = self.client.lock().await;
             client.chat_completion(request, callback).await?
         };
-        let response = Response::from(completion);
+        let response = completion;
         Ok(response)
     }
 }
@@ -93,7 +93,7 @@ mod tests {
         );
         history.set_stream(false);
         let response = model.invoke(&history, None).await.unwrap();
-        assert!(response.choices.len() > 0);
+        assert!(!response.choices.is_empty());
     }
 
     #[tokio::test]
@@ -128,7 +128,7 @@ mod tests {
         history.set_stream(false);
         let response = model.invoke(&history, None).await.unwrap();
         println!("Final response: {:?}", response.last_message());
-        assert!(response.choices.len() > 0);
+        assert!(!response.choices.is_empty());
     }
 
     #[tokio::test]
@@ -171,7 +171,7 @@ mod tests {
         let response = model.invoke(&history, Some(callback)).await.unwrap();
         println!("Final response: {:?}", response.last_message());
         println!("Chunks: {}", counter.load(Ordering::SeqCst));
-        assert!(response.choices.len() > 0);
+        assert!(!response.choices.is_empty());
         assert!(counter.load(Ordering::SeqCst) > 1);
     }
 
@@ -216,7 +216,7 @@ mod tests {
         let response = model.invoke(&history, Some(callback)).await.unwrap();
         println!("Final response: {:?}", response.last_message());
         println!("Chunks: {}", counter.load(Ordering::SeqCst));
-        assert!(response.choices.len() > 0);
+        assert!(!response.choices.is_empty());
         assert!(counter.load(Ordering::SeqCst) > 1);
     }
 }

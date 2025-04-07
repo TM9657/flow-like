@@ -42,7 +42,7 @@ async fn publish_progress(
     path: &Path,
 ) -> flow_like_types::Result<()> {
     let event = InterComEvent::with_type(
-        &format!("download:{}", &bit.hash),
+        format!("download:{}", &bit.hash),
         BitDownloadEvent {
             hash: bit.hash.to_string(),
             max: bit.size.unwrap(),

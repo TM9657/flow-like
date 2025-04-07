@@ -288,7 +288,7 @@ impl ExecutionContext {
             method,
         };
 
-        let event = InterComEvent::with_type(&format!("run:{}", self.run_id), update_event);
+        let event = InterComEvent::with_type(format!("run:{}", self.run_id), update_event);
 
         if let Err(err) = event.call(&self.callback).await {
             self.log_message(

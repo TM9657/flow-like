@@ -138,7 +138,7 @@ mod tests {
             provider_name: "openai".to_string(),
         };
         let provider = EmbeddingModelProvider {
-            provider: provider,
+            provider,
             input_length: 4096,
             prefix: Prefix {
                 paragraph: "".to_string(),
@@ -179,7 +179,7 @@ mod tests {
             provider_name: "openai".to_string(),
         };
         let provider = EmbeddingModelProvider {
-            provider: provider,
+            provider,
             input_length: 4096,
             prefix: Prefix {
                 paragraph: "".to_string(),
@@ -228,7 +228,7 @@ mod tests {
             bedrock_config: vec![],
         };
         let provider = EmbeddingModelProvider {
-            provider: provider,
+            provider,
             input_length: 4096,
             prefix: Prefix {
                 paragraph: "".to_string(),

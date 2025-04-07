@@ -73,7 +73,7 @@ pub async fn predict(
             async move {
                 let handler = buffered_handler.clone();
                 let event = InterComEvent::with_type(
-                    &format!("streaming_out:{}", callback_id),
+                    format!("streaming_out:{}", callback_id),
                     response.clone(),
                 );
 

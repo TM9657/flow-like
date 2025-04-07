@@ -1,13 +1,10 @@
-use futures::{StreamExt, stream};
-use openai_api_rs::v1::assistant::{
-    AssistantFileObject, AssistantFileRequest, AssistantObject, AssistantRequest, DeletionStatus,
-    ListAssistant, ListAssistantFile,
-};
+use futures::StreamExt;
+use openai_api_rs::v1::assistant::{AssistantObject, AssistantRequest, DeletionStatus};
 use openai_api_rs::v1::audio::{
     AudioSpeechRequest, AudioSpeechResponse, AudioTranscriptionRequest, AudioTranscriptionResponse,
     AudioTranslationRequest, AudioTranslationResponse,
 };
-use openai_api_rs::v1::batch::{BatchResponse, CreateBatchRequest, ListBatchResponse};
+use openai_api_rs::v1::batch::{BatchResponse, ListBatchResponse};
 use openai_api_rs::v1::chat_completion::{ChatCompletionRequest, ChatCompletionResponse};
 use openai_api_rs::v1::common;
 use openai_api_rs::v1::completion::{CompletionRequest, CompletionResponse};
@@ -27,16 +24,7 @@ use openai_api_rs::v1::image::{
     ImageEditRequest, ImageEditResponse, ImageGenerationRequest, ImageGenerationResponse,
     ImageVariationRequest, ImageVariationResponse,
 };
-use openai_api_rs::v1::message::{
-    CreateMessageRequest, ListMessage, ListMessageFile, MessageFileObject, MessageObject,
-    ModifyMessageRequest,
-};
 use openai_api_rs::v1::moderation::{CreateModerationRequest, CreateModerationResponse};
-use openai_api_rs::v1::run::{
-    CreateRunRequest, CreateThreadAndRunRequest, ListRun, ListRunStep, ModifyRunRequest, RunObject,
-    RunStepObject,
-};
-use openai_api_rs::v1::thread::{CreateThreadRequest, ModifyThreadRequest, ThreadObject};
 
 use flow_like_types::Bytes;
 use flow_like_types::Value;

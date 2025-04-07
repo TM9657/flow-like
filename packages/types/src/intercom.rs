@@ -48,13 +48,13 @@ impl BufferedInterComHandler {
         let capacity = capacity.unwrap_or(200);
         let last_tick_ms = Arc::new(AtomicU64::new(0));
 
-        return Self {
+        Self {
             buffer: Arc::new(DashMap::with_capacity(capacity as usize)),
             callback,
             interval_ms,
             capacity,
             last_tick_ms,
-        };
+        }
     }
 
     pub fn into_callback(&self) -> InterComCallback {

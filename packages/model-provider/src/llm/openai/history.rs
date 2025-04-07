@@ -85,7 +85,7 @@ impl From<History> for ChatCompletionRequest {
 
         let tools = history
             .tools
-            .map(|tools| tools.into_iter().map(|tool| Tool::from(tool)).collect());
+            .map(|tools| tools.into_iter().map(Tool::from).collect());
 
         let tool_choice = history.tool_choice.map(|tc| match tc {
             ToolChoice::None => openai_api_rs::v1::chat_completion::ToolChoiceType::None,
@@ -116,7 +116,7 @@ impl From<History> for ChatCompletionRequest {
             n: history.n.map(|n| n as i64),
             response_format: history.response_format.map(|rf| match rf {
                 ResponseFormat::String(s) => flow_like_types::Value::String(s),
-                ResponseFormat::Object(v) => v.into(), // Assuming flow_like_types::Value implements Into<serde_json::Value>
+                ResponseFormat::Object(v) => v, // Assuming flow_like_types::Value implements Into<serde_json::Value>
             }),
             stream: history.stream,
             stop: history.stop,
