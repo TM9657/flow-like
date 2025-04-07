@@ -1,3 +1,4 @@
+use flow_like_model_provider::provider::ModelProviderConfiguration;
 use flow_like_storage::object_store::path::Path;
 use flow_like_types::Value;
 use flow_like_types::intercom::{InterComCallback, InterComEvent};
@@ -307,6 +308,13 @@ impl ExecutionContext {
     ) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
         let pin = self.node.get_pin_by_name(name).await?;
         Ok(pin)
+    }
+
+    pub async fn get_model_config(
+        &self,
+    ) -> flow_like_types::Result<Arc<ModelProviderConfiguration>> {
+        let config = self.app_state.lock().await.model_provider_config.clone();
+        Ok(config)
     }
 
     pub async fn evaluate_pin<T: DeserializeOwned>(

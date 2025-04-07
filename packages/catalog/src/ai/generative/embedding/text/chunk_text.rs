@@ -135,16 +135,10 @@ impl NodeLogic for ChunkText {
             };
 
         let chunks = if markdown {
-            md_splitter
-                .chunks(&text)
-                .map(|c| c.to_string())
-                .collect::<Vec<String>>()
+            md_splitter.chunks(&text)
         } else {
-            text_splitter
-                .chunks(&text)
-                .map(|c| c.to_string())
-                .collect::<Vec<String>>()
-        };
+            text_splitter.chunks(&text)
+        }?;
 
         context.set_pin_value("chunks", json!(chunks)).await?;
         context.activate_exec_pin("exec_out").await?;

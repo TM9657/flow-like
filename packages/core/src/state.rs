@@ -19,10 +19,11 @@ use crate::flow::node::NodeLogic;
 use crate::models::embedding_factory::EmbeddingFactory;
 #[cfg(feature = "model")]
 use crate::models::llm::ModelFactory;
-
 #[cfg(feature = "bit")]
 use crate::utils::download_manager::DownloadManager;
 use crate::utils::http::HTTPClient;
+#[cfg(feature = "model")]
+use flow_like_model_provider::provider::ModelProviderConfiguration;
 
 #[derive(Clone, Default)]
 pub struct FlowLikeStores {
@@ -225,8 +226,10 @@ pub struct FlowLikeState {
     pub download_manager: Arc<Mutex<DownloadManager>>,
 
     #[cfg(feature = "model")]
-    pub model_factory: Arc<Mutex<ModelFactory>>,
+    pub model_provider_config: Arc<ModelProviderConfiguration>,
 
+    #[cfg(feature = "model")]
+    pub model_factory: Arc<Mutex<ModelFactory>>,
     #[cfg(feature = "model")]
     pub embedding_factory: Arc<Mutex<EmbeddingFactory>>,
 
@@ -247,6 +250,8 @@ impl FlowLikeState {
             #[cfg(feature = "bit")]
             download_manager: Arc::new(Mutex::new(DownloadManager::new())),
 
+            #[cfg(feature = "model")]
+            model_provider_config: Arc::new(ModelProviderConfiguration::default()),
             #[cfg(feature = "model")]
             model_factory: Arc::new(Mutex::new(ModelFactory::new())),
 

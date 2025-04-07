@@ -5,7 +5,7 @@ on:
     branches:
       - dev
   pull_request:
-    branches: 
+    branches:
       - dev
       - main
       - int
@@ -23,7 +23,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-environment
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}          
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Rust tests
         run: cargo test
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}

@@ -1,7 +1,9 @@
 use crate::state::FlowLikeState;
 use crate::utils::compression::{compress_to_file_json, from_compressed_json};
 use crate::utils::download::download_bit;
-use flow_like_model_provider::provider::ModelProvider;
+use flow_like_model_provider::provider::{
+    EmbeddingModelProvider, ImageEmbeddingModelProvider, ModelProvider,
+};
 use flow_like_storage::Path;
 use flow_like_storage::files::store::local_store::LocalObjectStore;
 use flow_like_types::Value;
@@ -228,37 +230,6 @@ pub struct Bit {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
-pub struct EmbeddingModelParameters {
-    pub languages: Vec<String>,
-    pub vector_length: u32,
-    pub input_length: u32,
-    pub prefix: Prefix,
-    pub pooling: Pooling,
-    pub provider: ModelProvider,
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
-pub struct Prefix {
-    pub query: String,
-    pub paragraph: String,
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
-pub enum Pooling {
-    CLS,
-    Mean,
-    None,
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
-pub struct ImageEmbeddingModelParameters {
-    pub languages: Vec<String>,
-    pub vector_length: u32,
-    pub pooling: Pooling,
-    pub provider: ModelProvider,
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 pub struct LLMParameters {
     pub context_length: u32,
     pub provider: ModelProvider,
@@ -459,9 +430,9 @@ impl Bit {
         Err(flow_like_types::anyhow!("Not a Model"))
     }
 
-    pub fn try_to_embedding(&self) -> Option<EmbeddingModelParameters> {
+    pub fn try_to_embedding(&self) -> Option<EmbeddingModelProvider> {
         if self.bit_type == BitTypes::Embedding {
-            let parameters = flow_like_types::json::from_value::<EmbeddingModelParameters>(
+            let parameters = flow_like_types::json::from_value::<EmbeddingModelProvider>(
                 self.parameters.clone(),
             );
             if parameters.is_err() {
@@ -472,9 +443,9 @@ impl Bit {
         None
     }
 
-    pub fn try_to_image_embedding(&self) -> Option<ImageEmbeddingModelParameters> {
+    pub fn try_to_image_embedding(&self) -> Option<ImageEmbeddingModelProvider> {
         if self.bit_type == BitTypes::ImageEmbedding {
-            let parameters = flow_like_types::json::from_value::<ImageEmbeddingModelParameters>(
+            let parameters = flow_like_types::json::from_value::<ImageEmbeddingModelProvider>(
                 self.parameters.clone(),
             );
             if parameters.is_err() {

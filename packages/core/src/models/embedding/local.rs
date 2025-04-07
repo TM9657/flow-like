@@ -1,12 +1,13 @@
 use crate::{
-    bit::{Bit, BitPack, BitTypes, Pooling},
+    bit::{Bit, BitPack, BitTypes},
     state::FlowLikeState,
 };
 use flow_like_model_provider::{
-    embedding::EmbeddingModelLogic,
+    embedding::{EmbeddingModelLogic, GeneralTextSplitter},
     fastembed::{
         self, InitOptionsUserDefined, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel,
     },
+    provider::Pooling,
     text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter},
     tokenizer::load_tokenizer_from_file,
 };
@@ -85,14 +86,7 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
         &self,
         capacity: Option<usize>,
         overlap: Option<usize>,
-    ) -> Result<(
-        flow_like_model_provider::text_splitter::TextSplitter<
-            flow_like_model_provider::tokenizers::Tokenizer,
-        >,
-        flow_like_model_provider::text_splitter::MarkdownSplitter<
-            flow_like_model_provider::tokenizers::Tokenizer,
-        >,
-    )> {
+    ) -> flow_like_types::Result<(GeneralTextSplitter, GeneralTextSplitter)> {
         let params = self
             .bit
             .try_to_embedding()
@@ -110,7 +104,11 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .with_sizer(tokenizer)
             .with_overlap(overlap)?;
 
-        return Ok((TextSplitter::new(config), MarkdownSplitter::new(config_md)));
+        let text_splitter = GeneralTextSplitter::TextTokenizer(Arc::new(TextSplitter::new(config)));
+        let markdown_splitter =
+            GeneralTextSplitter::MarkdownTokenizer(Arc::new(MarkdownSplitter::new(config_md)));
+
+        return Ok((text_splitter, markdown_splitter));
     }
 
     async fn text_embed_query(&self, texts: &Vec<String>) -> Result<Vec<Vec<f32>>> {

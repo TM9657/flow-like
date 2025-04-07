@@ -53,7 +53,7 @@ use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 
-use super::response;
+use super::{ModelProvider, ModelProviderConfiguration, random_provider};
 
 const API_URL_V1: &str = "https://api.openai.com/v1";
 
@@ -63,6 +63,7 @@ pub struct OpenAIClientBuilder {
     api_key: Option<String>,
     organization: Option<String>,
     proxy: Option<String>,
+    version: Option<String>,
     timeout: Option<u64>,
     headers: Option<HeaderMap>,
 }
@@ -73,12 +74,18 @@ pub struct OpenAIClient {
     organization: Option<String>,
     proxy: Option<String>,
     timeout: Option<u64>,
+    version: Option<String>,
     pub headers: Option<HeaderMap>,
 }
 
 impl OpenAIClientBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_version(mut self, version: impl Into<String>) -> Self {
+        self.version = Some(version.into());
+        self
     }
 
     pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
@@ -126,6 +133,7 @@ impl OpenAIClientBuilder {
             api_key,
             organization: self.organization,
             proxy: self.proxy,
+            version: self.version,
             timeout: self.timeout,
             headers: self.headers,
         })
@@ -137,12 +145,69 @@ impl OpenAIClient {
         OpenAIClientBuilder::new()
     }
 
+    pub async fn from_config(
+        provider: &ModelProvider,
+        config: &ModelProviderConfiguration,
+    ) -> flow_like_types::Result<OpenAIClient> {
+        let openai_config = random_provider(&config.openai_config)?;
+
+        let mut client = OpenAIClient::builder();
+
+        if let Some(api_key) = &openai_config.api_key {
+            client = client.with_api_key(api_key);
+        }
+
+        if let Some(organization_id) = &openai_config.organization {
+            client = client.with_organization(organization_id.clone());
+        }
+
+        if let Some(endpoint) = &openai_config.endpoint {
+            client = client.with_endpoint(endpoint.clone());
+
+            if provider.provider_name == "azure" {
+                let model_id = provider.model_id.clone().ok_or_else(|| {
+                    flow_like_types::anyhow!("ModelID Required for Azure Deployments")
+                })?;
+                let api_key = openai_config.api_key.clone().ok_or_else(|| {
+                    flow_like_types::anyhow!("API key required for Azure Deployments")
+                })?;
+                let version = provider.version.clone().ok_or_else(|| {
+                    flow_like_types::anyhow!("Version required for Azure Deployments")
+                })?;
+                let endpoint = if endpoint.ends_with('/') {
+                    endpoint.to_string()
+                } else {
+                    format!("{}/", endpoint)
+                };
+                let endpoint = format!("{}openai/deployments/{}", endpoint, model_id);
+                client = client.with_endpoint(endpoint);
+                client = client.with_version(version);
+                client = client.with_header("api-key", api_key.clone());
+            }
+        }
+
+        if let Some(proxy) = &openai_config.proxy {
+            client = client.with_proxy(proxy.clone());
+        }
+
+        let client = client
+            .build()
+            .map_err(|e| flow_like_types::anyhow!("Failed to create OpenAI client: {}", e))?;
+
+        Ok(client)
+    }
+
     async fn build_request(
         &self,
         method: Method,
         path: &str,
     ) -> flow_like_types::reqwest::RequestBuilder {
-        let url = format!("{}/{}", self.api_endpoint, path);
+        let mut url = format!("{}/{}", self.api_endpoint, path);
+
+        if let Some(version) = &self.version {
+            url = format!("{}?api-version={}", url, version);
+        }
+
         let client = Client::builder();
 
         #[cfg(feature = "rustls")]
@@ -351,19 +416,40 @@ impl OpenAIClient {
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
                 Ok(chunk) => {
-                    let chunk = &chunk[6..];
-                    match flow_like_types::json::from_slice::<ResponseChunk>(chunk) {
-                        Ok(parsed_chunk) => {
-                            if let Some(callback) = &callback {
-                                callback(parsed_chunk.clone()).await.map_err(|e| {
-                                    APIError::CustomError {
-                                        message: format!("Callback error: {}", e),
-                                    }
-                                })?;
-                            }
-                            output.push_chunk(parsed_chunk);
+                    let chunk_str = match std::str::from_utf8(&chunk) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            println!("Invalid UTF-8 sequence: {:?}", e);
+                            continue;
                         }
-                        Err(_) => println!("Failed to parse chunk."),
+                    };
+
+                    for line in chunk_str.lines() {
+                        if line.trim().is_empty() || !line.starts_with("data: ") {
+                            continue;
+                        }
+
+                        let json_str = &line[6..];
+
+                        if json_str == "[DONE]" {
+                            break;
+                        }
+
+                        match flow_like_types::json::from_str::<ResponseChunk>(json_str) {
+                            Ok(parsed_chunk) => {
+                                if let Some(callback) = &callback {
+                                    callback(parsed_chunk.clone()).await.map_err(|e| {
+                                        APIError::CustomError {
+                                            message: format!("Callback error: {}", e),
+                                        }
+                                    })?;
+                                }
+                                output.push_chunk(parsed_chunk);
+                            }
+                            Err(err) => {
+                                println!("Failed to parse chunk: {:?} \nerr:{:?}", json_str, err)
+                            }
+                        }
                     }
                 }
                 Err(_) => println!("Failed to get chunk."),

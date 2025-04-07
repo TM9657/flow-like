@@ -1,7 +1,7 @@
 pub mod local;
 
 use crate::{bit::Bit, state::FlowLikeState, utils::device::get_vram};
-use flow_like_model_provider::llm::ModelLogic;
+use flow_like_model_provider::llm::{ModelLogic, openai::OpenAIModel};
 use flow_like_types::{Result, sync::Mutex, tokio::time::interval};
 use local::LocalModel;
 use serde::{Deserialize, Serialize};
@@ -36,7 +36,7 @@ impl ExecutionSettings {
 
 // TODO: implement DashMap
 pub struct ModelFactory {
-    pub cached_models: HashMap<String, Arc<LocalModel>>,
+    pub cached_models: HashMap<String, Arc<dyn ModelLogic>>,
     pub ttl_list: HashMap<String, SystemTime>,
     pub execution_settings: ExecutionSettings,
 }
@@ -65,18 +65,19 @@ impl ModelFactory {
         bit: &Bit,
         app_state: Arc<Mutex<FlowLikeState>>,
     ) -> Result<Arc<dyn ModelLogic>> {
+        let provider_config = app_state.lock().await.model_provider_config.clone();
         let settings = self.execution_settings.clone();
         let provider = bit.try_to_provider();
         if provider.is_none() {
             return Err(flow_like_types::anyhow!("Model type not supported"));
         }
 
-        let provider = provider.ok_or(flow_like_types::anyhow!("Model type not supported"))?;
-        let provider = provider.provider_name;
+        let model_provider =
+            provider.ok_or(flow_like_types::anyhow!("Model type not supported"))?;
+        let provider = model_provider.provider_name.clone();
 
         if provider == "Local" {
             if let Some(model) = self.cached_models.get(&bit.id) {
-                // update last used time
                 self.ttl_list.insert(bit.id.clone(), SystemTime::now());
                 return Ok(model.clone());
             }
@@ -91,6 +92,20 @@ impl ModelFactory {
             self.cached_models
                 .insert(bit.id.clone(), local_model.clone());
             return Ok(local_model);
+        }
+
+        if provider == "azure" || provider == "openai" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = OpenAIModel::new(&model_provider, &provider_config).await?;
+
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
         }
 
         Err(flow_like_types::anyhow!("Model type not supported"))
