@@ -3,7 +3,6 @@ use flow_like::{
         board::Board,
         execution::context::ExecutionContext,
         node::{Node, NodeLogic},
-        pin::ValueType,
         variable::VariableType,
     },
     state::FlowLikeState,

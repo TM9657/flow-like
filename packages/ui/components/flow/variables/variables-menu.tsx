@@ -8,7 +8,7 @@ import {
 	EyeOffIcon,
 	GripIcon,
 	ListIcon,
-	Trash2Icon
+	Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
@@ -58,23 +58,28 @@ export function VariablesMenu({
 	board: IBoard;
 	executeCommand: (command: IGenericCommand, append: boolean) => Promise<any>;
 }>) {
+	const upsertVariable = useCallback(
+		async (variable: IVariable) => {
+			const oldVariable = board.variables[variable.id];
+			if (oldVariable === variable) return;
+			const command = upsertVariableCommand({
+				variable,
+			});
 
-	const upsertVariable = useCallback(async (variable: IVariable) => {
-		const oldVariable = board.variables[variable.id];
-		if (oldVariable === variable) return;
-		const command = upsertVariableCommand({
-			variable,
-		});
+			await executeCommand(command, false);
+		},
+		[board],
+	);
 
-		await executeCommand(command, false);
-	}, [board])
-
-	const removeVariable = useCallback(async (variable: IVariable) => {
-		const command = removeVariableCommand({
-			variable,
-		});
-		await executeCommand(command, false);
-	}, [board])
+	const removeVariable = useCallback(
+		async (variable: IVariable) => {
+			const command = removeVariableCommand({
+				variable,
+			});
+			await executeCommand(command, false);
+		},
+		[board],
+	);
 
 	return (
 		<div className="flex flex-col gap-2 p-4">
