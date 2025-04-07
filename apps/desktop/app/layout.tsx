@@ -1,4 +1,5 @@
 "use client";
+import "@tm9657/flow-like-ui/globals.css";
 import {
 	PersistQueryClientProvider,
 	QueryClient,
@@ -7,7 +8,6 @@ import {
 import { ThemeProvider } from "@tm9657/flow-like-ui/components/theme-provider";
 import { Toaster } from "@tm9657/flow-like-ui/components/ui/sonner";
 import { TooltipProvider } from "@tm9657/flow-like-ui/components/ui/tooltip";
-import "@tm9657/flow-like-ui/globals.css";
 import { createIDBPersister } from "@tm9657/flow-like-ui/lib/persister";
 import { Inter } from "next/font/google";
 import { Suspense } from "react";

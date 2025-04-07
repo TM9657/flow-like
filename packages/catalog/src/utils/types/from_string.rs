@@ -39,7 +39,7 @@ impl NodeLogic for FromStringNode {
         );
 
         node.add_output_pin(
-            "value",
+            "value_ref",
             "Value",
             "Value of the Generic",
             VariableType::Generic,
@@ -50,27 +50,12 @@ impl NodeLogic for FromStringNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let string: String = context.evaluate_pin("string").await?;
         let value: Value = from_str(&string)?;
-        context.set_pin_value("value", value).await?;
+        context.set_pin_value("value_ref", value).await?;
         Ok(())
     }
 
     async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
-        let mut value_type = ValueType::Normal;
-        let var_type = node.get_pin_by_name("type").unwrap().default_value.clone();
-
-        if let Some(var_type) = var_type {
-            let parsed: Value = flow_like_types::json::from_slice(&var_type).unwrap();
-            let parsed: String = flow_like_types::json::from_value(parsed).unwrap();
-            match parsed.as_str() {
-                "Normal" => value_type = ValueType::Normal,
-                "Array" => value_type = ValueType::Array,
-                "HashSet" => value_type = ValueType::HashSet,
-                "HashMap" => value_type = ValueType::HashMap,
-                _ => value_type = ValueType::Normal,
-            }
-        }
-
-        let match_type = node.match_type("value", board, Some(value_type), None);
+        let match_type = node.match_type("value_ref", board, None, None);
 
         if match_type.is_err() {
             eprintln!("Error: {:?}", match_type.err());
