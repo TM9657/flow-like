@@ -5,18 +5,19 @@ mod state;
 mod utils;
 use flow_like::{
     flow_like_storage::{
-        files::store::{local_store::LocalObjectStore, FlowLikeStore},
-        lancedb, Path,
+        Path,
+        files::store::{FlowLikeStore, local_store::LocalObjectStore},
+        lancedb,
     },
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
+use flow_like_types::{sync::Mutex, tokio::time::interval};
 use settings::Settings;
 use state::TauriFlowLikeState;
 use std::{sync::Arc, time::Duration};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
-use tokio::{sync::Mutex, time::interval};
 use tracing_subscriber::prelude::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

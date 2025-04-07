@@ -36,7 +36,7 @@ pub async fn predict(
                 return Err(TauriFunctionError::new(&format!(
                     "Error building model: {}",
                     e
-                )))
+                )));
             }
         }
     };
@@ -63,6 +63,7 @@ pub async fn predict(
         }),
         Some(20),
         Some(100),
+        Some(true),
     ));
 
     let finalized = buffered_sender.clone();

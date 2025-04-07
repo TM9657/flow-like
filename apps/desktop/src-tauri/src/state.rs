@@ -4,9 +4,9 @@ use flow_like::{
     state::FlowLikeState,
     utils::http::HTTPClient,
 };
+use flow_like_types::sync::Mutex;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
-use tokio::sync::Mutex;
 
 use crate::{profile::UserProfile, settings::Settings};
 

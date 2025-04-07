@@ -1,8 +1,8 @@
-use flow_like::flow::execution::{trace::Trace, InternalRun, Run, RunStatus};
+use flow_like::flow::execution::{InternalRun, Run, RunStatus, trace::Trace};
 use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
+use flow_like_types::sync::Mutex;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::Mutex;
 
 use crate::{
     functions::TauriFunctionError,
@@ -45,6 +45,7 @@ pub async fn execute_board(
         }),
         Some(1),
         Some(100),
+        Some(true),
     ));
 
     let mut internal_run = InternalRun::new(

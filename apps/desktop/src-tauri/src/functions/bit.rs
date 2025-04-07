@@ -87,6 +87,7 @@ pub async fn download_bit(app_handle: AppHandle, bit: Bit) -> Result<Vec<Bit>, T
         }),
         Some(20),
         Some(100),
+        Some(true),
     ));
     let result = pack
         .download(flow_like_state, buffered_sender.into_callback())

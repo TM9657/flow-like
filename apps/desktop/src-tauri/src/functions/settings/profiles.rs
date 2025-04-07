@@ -4,10 +4,10 @@ use crate::{
     state::{TauriFlowLikeState, TauriSettingsState},
 };
 use flow_like::{bit::Bit, hub::Hub, profile::Profile, utils::http::HTTPClient};
+use flow_like_types::tokio::task::JoinHandle;
 use futures::future::join_all;
 use std::{collections::HashMap, sync::Arc};
 use tauri::AppHandle;
-use tokio::task::JoinHandle;
 use tracing::instrument;
 
 #[instrument(skip_all)]
@@ -113,7 +113,7 @@ pub async fn get_bits_in_current_profile(
         let hub = hub.clone();
         let bit = bit.clone();
         let http_client = http_client.clone();
-        let task = tokio::spawn(async move {
+        let task = flow_like_types::tokio::spawn(async move {
             let hub = Hub::new(&hub, http_client).await.ok()?;
             let bit = hub.get_bit_by_id(&bit).await.ok()?;
             Some(bit)

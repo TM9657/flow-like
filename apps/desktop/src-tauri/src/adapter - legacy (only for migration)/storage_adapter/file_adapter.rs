@@ -37,7 +37,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::Emitter;
-use tokio::sync::Mutex;
+use flow_like_types::sync::Mutex;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VectorDBFileEntry {

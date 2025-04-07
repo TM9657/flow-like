@@ -2,15 +2,15 @@ use crate::{functions::TauriFunctionError, state::TauriFlowLikeState};
 use flow_like::{
     app::App,
     flow::{
-        board::{commands::GenericCommand, Board, ExecutionStage},
+        board::{Board, ExecutionStage, commands::GenericCommand},
         execution::LogLevel,
     },
     flow_like_storage::Path,
 };
+use flow_like_types::sync::Mutex;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
-use tokio::sync::Mutex;
 
 #[tauri::command(async)]
 pub async fn save_board(handler: AppHandle, board_id: String) -> Result<(), TauriFunctionError> {

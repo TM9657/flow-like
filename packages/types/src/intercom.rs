@@ -1,6 +1,6 @@
 use std::{
     sync::{
-        Arc,
+        Arc, Weak,
         atomic::{AtomicU64, Ordering},
     },
     time::SystemTime,
@@ -33,6 +33,14 @@ pub type BatchedCallback = Arc<
         + Sync,
 >;
 
+/// A buffered handler for inter-component communication events.
+/// Collects events into batches by type and periodically sends them to the provided callback.
+///
+/// # Features
+/// - Batches events by type for efficient processing
+/// - Configurable flush interval and capacity limits
+/// - Automatic background flushing
+/// - Thread-safe for concurrent use
 #[derive(Clone)]
 pub struct BufferedInterComHandler {
     callback: BatchedCallback,
@@ -43,20 +51,48 @@ pub struct BufferedInterComHandler {
 }
 
 impl BufferedInterComHandler {
-    pub fn new(callback: BatchedCallback, interval_ms: Option<u64>, capacity: Option<u64>) -> Self {
+    /// Creates a new buffered handler with the specified configuration.
+    ///
+    /// # Arguments
+    /// * `callback` - The function to call when flushing event batches
+    /// * `interval_ms` - Optional interval in milliseconds between automatic flushes (default: 20ms)
+    /// * `capacity` - Optional maximum number of total events before forcing a flush (default: 200)
+    /// * `background_check` - Optional flag to enable background flush checking (default: false)
+    /// * `per_type_capacity` - Optional maximum number of events per type (default: 50)
+    ///
+    /// # Returns
+    /// An Arc-wrapped instance of BufferedInterComHandler
+    pub fn new(
+        callback: BatchedCallback,
+        interval_ms: Option<u64>,
+        capacity: Option<u64>,
+        background_check: Option<bool>,
+    ) -> Arc<Self> {
+        let background_check = background_check.unwrap_or(false);
         let interval_ms = interval_ms.unwrap_or(20);
         let capacity = capacity.unwrap_or(200);
         let last_tick_ms = Arc::new(AtomicU64::new(0));
 
-        Self {
+        let handler = Self {
             buffer: Arc::new(DashMap::with_capacity(capacity as usize)),
             callback,
             interval_ms,
             capacity,
             last_tick_ms,
+        };
+
+        let handler = Arc::new(handler);
+        let downgraded_handler = Arc::downgrade(&handler);
+        if background_check {
+            BufferedInterComHandler::spawn_idle_check_task(downgraded_handler, interval_ms);
         }
+        handler
     }
 
+    /// Converts this handler into a callback suitable for processing individual events.
+    ///
+    /// # Returns
+    /// An InterComCallback that buffers events through this handler
     pub fn into_callback(&self) -> InterComCallback {
         let buffered_sender = self.clone();
         Some(Arc::new(move |response| {
@@ -71,6 +107,27 @@ impl BufferedInterComHandler {
         }))
     }
 
+    fn spawn_idle_check_task(handler: Weak<Self>, interval_ms: u64) {
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_millis(interval_ms));
+
+            loop {
+                interval.tick().await;
+                if let Some(handler) = handler.upgrade() {
+                    let now = Self::now_as_millis();
+                    let last_event = handler.last_tick_ms.load(Ordering::Relaxed);
+
+                    if !handler.buffer.is_empty() && now - last_event >= 2 * interval_ms {
+                        let _ = handler.flush().await;
+                    }
+                } else {
+                    break;
+                }
+            }
+        });
+    }
+
     fn now_as_millis() -> u64 {
         let start = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -78,6 +135,18 @@ impl BufferedInterComHandler {
         start.as_millis() as u64
     }
 
+    /// Sends an event through the buffered handler.
+    ///
+    /// The event will be buffered until either:
+    /// - The configured interval has passed
+    /// - The buffer reaches capacity
+    /// - This is the first event
+    ///
+    /// # Arguments
+    /// * `event` - The event to send
+    ///
+    /// # Returns
+    /// Result indicating success or failure
     pub async fn send(&self, event: InterComEvent) -> anyhow::Result<()> {
         self.buffer
             .entry(event.event_type.clone())
@@ -101,6 +170,10 @@ impl BufferedInterComHandler {
         Ok(())
     }
 
+    /// Flushes all buffered events immediately.
+    ///
+    /// # Returns
+    /// Result indicating success or failure
     pub async fn flush(&self) -> anyhow::Result<()> {
         if self.buffer.is_empty() {
             return Ok(());
