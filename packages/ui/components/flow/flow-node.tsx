@@ -52,6 +52,7 @@ import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
 import { FlowPin } from "./flow-pin";
 import { typeToColor } from "./utils";
+import { BorderWidthIcon } from "@radix-ui/react-icons";
 
 export interface IPinAction {
 	action: "create";
@@ -123,16 +124,23 @@ const FlowNodeInner = memo(
 
 			return severity;
 		}, [props.data.traces]);
+
 		const isReroute = useMemo(() => {
 			return props.data.node.name === "reroute";
 		}, [props.data.node.name]);
+
 		const nodeStyle = useMemo(
 			() => ({
-				backgroundColor: typeToColor(
+				backgroundColor: props.selected ? typeToColor(
+					Object.values(props.data.node.pins)[0].data_type,
+				) : undefined,
+				borderColor: typeToColor(
 					Object.values(props.data.node.pins)[0].data_type,
 				),
+				borderWidth: "1px",
+				borderStyle: "solid",
 			}),
-			[isReroute],
+			[isReroute, props.selected],
 		);
 
 		const sortPins = useCallback((a: IPin, b: IPin) => {
