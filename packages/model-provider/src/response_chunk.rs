@@ -2,7 +2,7 @@ use super::response::{FunctionCall, LogProbs, Usage};
 use flow_like_types::JsonSchema;
 use flow_like_types::serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, Default)]
 pub struct ResponseChunk {
     pub id: String,
     pub choices: Vec<ResponseChunkChoice>,

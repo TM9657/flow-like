@@ -52,7 +52,6 @@ import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
 import { FlowPin } from "./flow-pin";
 import { typeToColor } from "./utils";
-import { BorderWidthIcon } from "@radix-ui/react-icons";
 
 export interface IPinAction {
 	action: "create";

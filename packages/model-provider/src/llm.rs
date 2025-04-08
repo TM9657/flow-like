@@ -4,6 +4,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 
 use super::{history::History, response::Response, response_chunk::ResponseChunk};
 
+pub mod bedrock;
 pub mod openai;
 
 pub type LLMCallback = Arc<

@@ -28,7 +28,6 @@ pub async fn resize_image(img: &DynamicImage, max_dimension: u32) -> DynamicImag
 mod tests {
     use super::*;
     use base64::{Engine as _, engine::general_purpose::STANDARD};
-    use flow_like_types::tokio;
 
     #[tokio::test]
     async fn test_resize_image() {

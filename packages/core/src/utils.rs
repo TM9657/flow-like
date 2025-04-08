@@ -1,6 +1,5 @@
 pub mod cache;
 pub mod compression;
-pub mod data_url;
 pub mod device;
 pub mod dir;
 pub mod download;
@@ -10,7 +9,6 @@ pub mod file;
 pub mod file_watcher;
 pub mod hash;
 pub mod http;
-pub mod img;
 pub mod json;
 pub mod lock;
 pub mod pandoc;

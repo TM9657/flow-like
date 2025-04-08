@@ -1,5 +1,5 @@
-use crate::utils::data_url::optimize_data_url;
 use flow_like_model_provider::history::{Content, History, ResponseFormat, Role};
+use flow_like_types::utils::data_url::optimize_data_url;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

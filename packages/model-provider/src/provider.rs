@@ -1,3 +1,4 @@
+use aws_config::SdkConfig;
 use flow_like_types::{
     json::{Deserialize, Serialize},
     rand::{self, Rng},
@@ -44,7 +45,7 @@ pub enum Pooling {
     None,
 }
 
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Clone, Default, Debug)]
 pub struct ModelProviderConfiguration {
     pub openai_config: Vec<OpenAIConfig>,
     pub bedrock_config: Vec<BedrockConfig>,
@@ -58,11 +59,9 @@ pub struct OpenAIConfig {
     pub proxy: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct BedrockConfig {
-    pub api_key: String,
-    pub api_base: Option<String>,
-    pub model_id: String,
+    pub config: SdkConfig,
 }
 
 pub fn random_provider<T>(vec: &[T]) -> flow_like_types::Result<T>
