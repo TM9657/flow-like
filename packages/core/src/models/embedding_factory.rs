@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc, time::SystemTime};
 
 use flow_like_model_provider::{
-    embedding::EmbeddingModelLogic, image_embedding::ImageEmbeddingModelLogic,
+    embedding::{openai::OpenAIEmbeddingModel, EmbeddingModelLogic}, image_embedding::ImageEmbeddingModelLogic,
 };
 use flow_like_types::sync::Mutex;
 
@@ -37,15 +37,17 @@ impl EmbeddingFactory {
         bit: &Bit,
         app_state: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<Arc<dyn EmbeddingModelLogic>> {
-        let provider = bit.try_to_embedding_provider();
-        if provider.is_none() {
-            return Err(flow_like_types::anyhow!("Model type not supported"));
-        }
+        let provider_config = app_state.lock().await.model_provider_config.clone();
 
-        let provider = provider.ok_or(flow_like_types::anyhow!("Model type not supported"))?;
-        let provider = provider.provider_name;
+        let provider = bit.try_to_embedding_provider().ok_or(
+            flow_like_types::anyhow!("Model type not supported"),
+        )?;
+        let embedding_provider = bit.try_to_embedding().ok_or(
+            flow_like_types::anyhow!("Model type not supported"),
+        )?;
+        let provider_name = provider.provider_name;
 
-        if provider == "Local" {
+        if provider_name == "Local" {
             if let Some(model) = self.cached_text_models.get(&bit.id) {
                 // update last used time
                 self.ttl_list.insert(bit.id.clone(), SystemTime::now());
@@ -57,6 +59,11 @@ impl EmbeddingFactory {
             self.cached_text_models
                 .insert(bit.id.clone(), local_model.clone());
             return Ok(local_model);
+        }
+
+        if provider_name == "openai" || provider_name == "azure" {
+            let local_model = OpenAIEmbeddingModel::new(&embedding_provider, &provider_config).await?;
+            return Ok(Arc::new(local_model));
         }
 
         Err(flow_like_types::anyhow!("Model type not supported"))
