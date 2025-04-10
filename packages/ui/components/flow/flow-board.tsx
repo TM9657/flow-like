@@ -749,7 +749,6 @@ export function FlowBoard({
 				}
 			}
 			await executeCommands(commands);
-			await board.refetch();
 		},
 		[boardId, executeCommands],
 	);

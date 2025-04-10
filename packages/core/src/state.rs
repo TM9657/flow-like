@@ -97,7 +97,7 @@ impl FlowNodeRegistryInner {
         let node = self.registry.get(node_id);
         match node {
             Some(node) => Ok(node.0.clone()),
-            None => Err(flow_like_types::anyhow!("Node not found")),
+            None => Err(flow_like_types::anyhow!("Node not found - Get Node")),
         }
     }
 
@@ -106,7 +106,7 @@ impl FlowNodeRegistryInner {
         let node = self.registry.get(&node.name);
         match node {
             Some(node) => Ok(node.1.clone()),
-            None => Err(flow_like_types::anyhow!("Node not found")),
+            None => Err(flow_like_types::anyhow!("Node not found - Instancing")),
         }
     }
 }
