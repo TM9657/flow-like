@@ -540,18 +540,6 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	const [commentMenu, setCommentMenu] = useState(false);
 	const [renameMenu, setRenameMenu] = useState(false);
 	const flow = useReactFlow();
-	const scope = useMemo(() => {
-		const selected = flow.getNodes().filter((node) => node.selected);
-		const self = selected.find((node) => node.id === props.id);
-		if (!self) {
-			return [
-				...selected,
-				flow.getNodes().filter((node) => node.id === props.id)[0],
-			];
-		}
-
-		return selected;
-	}, [flow]);
 
 	const copy = useCallback(async () => {
 		handleCopy(flow.getNodes());
@@ -570,7 +558,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 				</ContextMenuTrigger>
 				<ContextMenuContent className="max-w-20">
 					<ContextMenuLabel>Node Actions</ContextMenuLabel>
-					{scope.length <= 1 && props.data.node.start && (
+					{flow.getNodes().filter((node) => node.selected).length <= 1 && props.data.node.start && (
 						<ContextMenuItem onClick={() => setRenameMenu(true)}>
 							<div className="flex flex-row items-center gap-2 text-nowrap">
 								<SquarePenIcon className="w-4 h-4" />
@@ -578,7 +566,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 							</div>
 						</ContextMenuItem>
 					)}
-					{scope.length <= 1 && (
+					{flow.getNodes().filter((node) => node.selected).length <= 1 && (
 						<ContextMenuItem onClick={() => setCommentMenu(true)}>
 							<div className="flex flex-row items-center gap-2 text-nowrap">
 								<MessageSquareIcon className="w-4 h-4" />
@@ -592,7 +580,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 							Copy
 						</div>
 					</ContextMenuItem>
-					{scope.length > 1 && (
+					{flow.getNodes().filter((node) => node.selected).length > 1 && (
 						<>
 							<ContextMenuSeparator />
 							<ContextMenuSub>

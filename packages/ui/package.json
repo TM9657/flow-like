@@ -35,7 +35,7 @@
 		"@tanstack/react-table": "^8.20.6",
 		"@uidotdev/usehooks": "^2.4.1",
 		"@vitejs/plugin-react": "^4.3.4",
-		"@xyflow/react": "^12.4.4",
+		"@xyflow/react": "^12.5.5",
 		"add": "^2.0.6",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",

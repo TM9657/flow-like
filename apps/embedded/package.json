@@ -10,7 +10,7 @@
 	},
 	"dependencies": {
 		"@tm9657/flow-like-ui": "workspace:*",
-		"@xyflow/react": "^12.4.4",
+		"@xyflow/react": "^12.5.5",
 		"comlink": "^4.4.2",
 		"next": "15.2.4",
 		"react": "^19.0.0",
