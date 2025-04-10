@@ -3,6 +3,7 @@ export interface IRun {
 	end: ISystemTime;
 	id: string;
 	log_level: ILogLevel;
+	payload: { [key: string]: IRunPayload };
 	start: ISystemTime;
 	status: IRunStatus;
 	sub: string;
@@ -162,6 +163,12 @@ export interface IVariable {
 	name: string;
 	secret: boolean;
 	value_type: IValueType;
+	[property: string]: any;
+}
+
+export interface IRunPayload {
+	id: string;
+	payload?: any;
 	[property: string]: any;
 }
 

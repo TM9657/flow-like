@@ -3,27 +3,22 @@ use crate::{
     bit::{Bit, BitModelPreference, BitPack, LLMParameters, VLMParameters},
     flow::{
         board::{
-            Board,
             commands::{
-                GenericCommand,
                 comments::{
                     remove_comment::RemoveCommentCommand, upsert_comment::UpsertCommentCommand,
-                },
-                nodes::{
+                }, nodes::{
                     add_node::AddNodeCommand, copy_paste::CopyPasteCommand,
                     move_node::MoveNodeCommand, remove_node::RemoveNodeCommand,
                     update_node::UpdateNodeCommand,
-                },
-                pins::{
+                }, pins::{
                     connect_pins::ConnectPinsCommand, disconnect_pins::DisconnectPinsCommand,
                     upsert_pin::UpsertPinCommand,
-                },
-                variables::{
+                }, variables::{
                     remove_variable::RemoveVariableCommand, upsert_variable::UpsertVariableCommand,
-                },
-            },
+                }, GenericCommand
+            }, Board
         },
-        execution::Run,
+        execution::{Run, RunPayload},
         node::Node,
         pin::Pin,
         variable::Variable,
@@ -84,6 +79,7 @@ pub fn generate_schema(base_path: PathBuf) -> flow_like_types::Result<()> {
     generate_and_save_schema::<BitModelPreference>(&base_path, "bit/preferences.json")?;
     generate_and_save_schema::<BitPack>(&base_path, "bit/bit-pack.json")?;
 
+    generate_and_save_schema::<RunPayload>(&base_path, "flow/run-payload.json")?;
     generate_and_save_schema::<Board>(&base_path, "flow/board.json")?;
     generate_and_save_schema::<GenericCommand>(
         &base_path,

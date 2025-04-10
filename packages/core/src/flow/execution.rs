@@ -49,6 +49,7 @@ pub struct Run {
     pub end: SystemTime,
     pub board: Arc<Board>,
     pub log_level: LogLevel,
+    pub payload: Arc<HashMap<String, RunPayload>>,
     pub sub: String,
 }
 
@@ -111,17 +112,28 @@ pub struct InternalRun {
     log_level: LogLevel,
 }
 
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct RunPayload {
+    pub id: String,
+    pub payload: Option<Value>
+}
+
 impl InternalRun {
     pub async fn new(
         board: Arc<Board>,
         handler: &Arc<Mutex<FlowLikeState>>,
         profile: &Profile,
-        start_ids: Vec<String>,
+        payload: Vec<RunPayload>,
         sub: Option<String>,
         callback: InterComCallback,
     ) -> flow_like_types::Result<Self> {
         let before = Instant::now();
-        let start_ids_set: HashSet<String> = start_ids.into_iter().collect();
+        let mut payloads = HashMap::with_capacity(payload.len());
+        for payload in payload {
+            payloads.insert(payload.id.clone(), payload);
+        }
+        let payload = Arc::new(payloads);
+
         let run_id = create_id();
 
         let run = Run {
@@ -132,6 +144,7 @@ impl InternalRun {
             end: SystemTime::now(),
             log_level: board.log_level.clone(),
             board: board.clone(),
+            payload: payload.clone(),
             sub: sub.unwrap_or_else(|| "local".to_string()),
         };
 
@@ -195,7 +208,7 @@ impl InternalRun {
 
         let mut dependency_map = HashMap::with_capacity(board.nodes.len());
         let mut nodes = HashMap::with_capacity(board.nodes.len());
-        let mut stack = RunStack::with_capacity(start_ids_set.len());
+        let mut stack = RunStack::with_capacity(payload.len());
 
         let registry = handler
             .lock()
@@ -243,7 +256,7 @@ impl InternalRun {
                 pin_guard.node = Arc::downgrade(&internal_node);
             }
 
-            if start_ids_set.contains(&node.id) {
+            if payload.contains_key(&node.id) {
                 stack.push(&node.id, internal_node.clone());
             }
 

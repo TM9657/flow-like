@@ -7,6 +7,7 @@
 		"end",
 		"id",
 		"log_level",
+		"payload",
 		"start",
 		"status",
 		"sub",
@@ -24,6 +25,12 @@
 		},
 		"log_level": {
 			"$ref": "#/definitions/LogLevel"
+		},
+		"payload": {
+			"type": "object",
+			"additionalProperties": {
+				"$ref": "#/definitions/RunPayload"
+			}
 		},
 		"start": {
 			"$ref": "#/definitions/SystemTime"
@@ -477,6 +484,16 @@
 		"PinType": {
 			"type": "string",
 			"enum": ["Input", "Output"]
+		},
+		"RunPayload": {
+			"type": "object",
+			"required": ["id"],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"payload": true
+			}
 		},
 		"RunStatus": {
 			"type": "string",

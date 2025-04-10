@@ -1,4 +1,5 @@
 export * from "./events/intercom-event";
+export type { IRunPayload } from "./flow/run-payload";
 export * from "./bit/bit";
 export type {
 	IBitPack,

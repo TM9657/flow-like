@@ -1,3 +1,17 @@
+use super::{
+    internal_pin::InternalPin, log::LogMessage, trace::Trace, InternalNode, LogLevel, Run, RunPayload
+};
+use crate::{
+    flow::{
+        board::ExecutionStage,
+        node::{Node, NodeState},
+        pin::PinType,
+        utils::evaluate_pin_value,
+        variable::{Variable, VariableType},
+    },
+    profile::Profile,
+    state::{FlowLikeState, FlowLikeStores, ToastEvent, ToastLevel},
+};
 use flow_like_model_provider::provider::ModelProviderConfiguration;
 use flow_like_storage::object_store::path::Path;
 use flow_like_types::Value;
@@ -12,21 +26,6 @@ use std::{
     collections::HashMap,
     fs::File,
     sync::{Arc, Weak},
-};
-
-use super::{
-    InternalNode, LogLevel, Run, internal_pin::InternalPin, log::LogMessage, trace::Trace,
-};
-use crate::{
-    flow::{
-        board::ExecutionStage,
-        node::{Node, NodeState},
-        pin::PinType,
-        utils::evaluate_pin_value,
-        variable::{Variable, VariableType},
-    },
-    profile::Profile,
-    state::{FlowLikeState, FlowLikeStores, ToastEvent, ToastLevel},
 };
 
 #[derive(Clone)]
@@ -218,6 +217,17 @@ impl ExecutionContext {
         }
 
         Err(flow_like_types::anyhow!("Variable not found"))
+    }
+
+    pub async fn get_payload(&self, node_id: &str) -> flow_like_types::Result<RunPayload> {
+        let payload = self.run.upgrade().ok_or_else(|| {
+            flow_like_types::anyhow!("Run not found")
+        })?.lock().await.payload.get(node_id).cloned();
+
+        if let Some(payload) = payload {
+            return Ok(payload);
+        }
+        Err(flow_like_types::anyhow!("Payload not found"))
     }
 
     pub async fn set_variable(&self, variable: Variable) {

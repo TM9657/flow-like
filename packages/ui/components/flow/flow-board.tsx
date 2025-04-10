@@ -208,7 +208,9 @@ export function FlowBoard({
 			const runId: string | undefined = await backend.executeBoard(
 				appId,
 				boardId,
-				[node.id],
+				[{
+					id: node.id
+				}],
 				(update) => {
 					const runUpdates = update
 						.filter((item) => item.event_type.startsWith("run:"))
@@ -870,15 +872,15 @@ export function FlowBoard({
 					items={[
 						...(typeof parentRegister.boardParents[boardId] === "string"
 							? [
-									{
-										icon: <ArrowBigLeftDashIcon />,
-										title: "Back",
-										onClick: async () => {
-											const urlWithQuery = parentRegister.boardParents[boardId];
-											router.push(urlWithQuery);
-										},
+								{
+									icon: <ArrowBigLeftDashIcon />,
+									title: "Back",
+									onClick: async () => {
+										const urlWithQuery = parentRegister.boardParents[boardId];
+										router.push(urlWithQuery);
 									},
-								]
+								},
+							]
 							: []),
 						{
 							icon: <VariableIcon />,
@@ -896,18 +898,18 @@ export function FlowBoard({
 						},
 						...(currentRun
 							? [
-									{
-										icon: <ScrollIcon />,
-										title: "Logs",
-										onClick: async () => {
-											setTraces((old) =>
-												old
-													? undefined
-													: { node: undefined, traces: currentRun.traces },
-											);
-										},
+								{
+									icon: <ScrollIcon />,
+									title: "Logs",
+									onClick: async () => {
+										setTraces((old) =>
+											old
+												? undefined
+												: { node: undefined, traces: currentRun.traces },
+										);
 									},
-								]
+								},
+							]
 							: ([] as any)),
 					]}
 				/>
@@ -1067,8 +1069,8 @@ export function FlowBoard({
 											<Variable
 												variable={active?.data?.current as IVariable}
 												preview
-												onVariableChange={() => {}}
-												onVariableDeleted={() => {}}
+												onVariableChange={() => { }}
+												onVariableDeleted={() => { }}
 											/>
 										)}
 									</DragOverlay>

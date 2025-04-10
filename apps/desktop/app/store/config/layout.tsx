@@ -66,7 +66,9 @@ export default function Id({
 		const runId = await backend.executeBoard(
 			id,
 			boardId,
-			[node.id],
+			[{
+				id: node.id
+			}],
 			(events) => {},
 		);
 

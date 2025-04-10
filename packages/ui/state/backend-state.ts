@@ -15,6 +15,7 @@ import type {
 	IProfile,
 	IRun,
 } from "../lib";
+import type { IRunPayload } from "../lib/schema/flow/run";
 import type { ISettingsProfile } from "../types";
 
 export interface IBackendState {
@@ -30,7 +31,7 @@ export interface IBackendState {
 	executeBoard(
 		appId: string,
 		boardId: string,
-		startIds: string[],
+		payload: IRunPayload[],
 		cb?: (event: IIntercomEvent[]) => void,
 	): Promise<string>;
 

@@ -130,9 +130,9 @@ const FlowNodeInner = memo(
 
 		const nodeStyle = useMemo(
 			() => ({
-				backgroundColor: props.selected ? typeToColor(
-					Object.values(props.data.node.pins)[0].data_type,
-				) : undefined,
+				backgroundColor: props.selected
+					? typeToColor(Object.values(props.data.node.pins)[0].data_type)
+					: undefined,
 				borderColor: typeToColor(
 					Object.values(props.data.node.pins)[0].data_type,
 				),

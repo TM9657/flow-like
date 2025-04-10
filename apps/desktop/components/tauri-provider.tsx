@@ -18,6 +18,7 @@ import {
 	type INode,
 	type IProfile,
 	type IRun,
+	IRunPayload,
 	type IRunUpdateEvent,
 	type ISettingsProfile,
 	useBackendStore,
@@ -52,21 +53,25 @@ export class TauriBackend implements IBackendState {
 	async executeBoard(
 		appId: string,
 		boardId: string,
-		startIds: string[],
+		payload: IRunPayload[],
 		cb?: (event: IIntercomEvent[]) => void,
 	): Promise<string> {
 		const channel = new Channel<IIntercomEvent[]>();
+		let closed = false
 
 		channel.onmessage = (events: IIntercomEvent[]) => {
+			if (closed) return;
 			if (cb) cb(events);
 		};
 
 		const runId: string = await invoke("execute_board", {
 			appId: appId,
 			boardId: boardId,
-			startIds: startIds,
+			payload: payload,
 			events: channel,
 		});
+
+		closed = true;
 
 		return runId;
 	}

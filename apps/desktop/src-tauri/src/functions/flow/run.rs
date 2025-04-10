@@ -1,3 +1,4 @@
+use flow_like::flow::execution::RunPayload;
 use flow_like::flow::execution::{InternalRun, Run, RunStatus, trace::Trace};
 use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
 use flow_like_types::sync::Mutex;
@@ -14,7 +15,7 @@ pub async fn execute_board(
     app_handle: AppHandle,
     app_id: String,
     board_id: String,
-    start_ids: Vec<String>,
+    payload: Vec<RunPayload>,
     events: tauri::ipc::Channel<Vec<InterComEvent>>,
 ) -> Result<String, TauriFunctionError> {
     let (board, flow_like_state) =
@@ -52,7 +53,7 @@ pub async fn execute_board(
         board,
         &flow_like_state,
         &profile.hub_profile,
-        start_ids,
+        payload,
         None,
         buffered_sender.into_callback(),
     )
