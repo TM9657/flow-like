@@ -25,6 +25,11 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
+import { useReactFlow } from "@xyflow/react";
+
+interface IEnrichedLogMessage extends ILogMessage {
+	node_id: string;
+}
 
 export function Traces({
 	traces,
@@ -37,6 +42,7 @@ export function Traces({
 	result: IRun;
 	onOpenChange: (open: boolean) => void;
 }>) {
+	const {fitView, updateNode, getNodes} = useReactFlow()
 	const [traceFilter, setTraceFilter] = useState<ITrace | null>(null);
 	const [logFilter, setLogFilter] = useState<Set<ILogLevel>>(
 		new Set([
@@ -47,8 +53,8 @@ export function Traces({
 			ILogLevel.Fatal,
 		]),
 	);
-	const [items, setItems] = useState<ILogMessage[]>([]);
-	const [logs, setLogs] = useState<ILogMessage[]>([]);
+	const [items, setItems] = useState<IEnrichedLogMessage[]>([]);
+	const [logs, setLogs] = useState<IEnrichedLogMessage[]>([]);
 	const [search, setSearch] = useState<string>("");
 	const rowHeights = useRef(new Map());
 	const listRef = useRef<VariableSizeList>(null);
@@ -56,11 +62,12 @@ export function Traces({
 	const miniSearch = useMemo(
 		() =>
 			new MiniSearch({
-				fields: ["message", "operation_id", "log_level", "start", "end", "id"],
+				fields: ["message", "operation_id", "log_level", "start", "end", "id", "node_id"],
 				storeFields: [
 					"message",
 					"operation_id",
 					"log_level",
+					"node_id",
 					"start",
 					"end",
 					"id",
@@ -78,7 +85,7 @@ export function Traces({
 			? result.traces.filter((trace) => traceFilter.id === trace.id)
 			: result.traces;
 		const logMessages = filteredTraces
-			.flatMap((trace) => trace.logs)
+			.flatMap((trace) => trace.logs.map((log => ({ ...log, node_id: trace.node_id }))))
 			.filter((log) => logFilter.has(log.log_level))
 			.sort((a, b) => a.start.nanos_since_epoch - b.start.nanos_since_epoch);
 
@@ -119,6 +126,26 @@ export function Traces({
 				index={index}
 				style={style}
 				onSetHeight={(index, height) => setRowHeight(index, height)}
+				onSelectNode={(nodeId) => {
+					console.log("select node", nodeId);
+					const nodes = getNodes();
+
+					nodes.filter(node => node.selected && node.id !== nodeId).forEach(node => {
+						updateNode(node.id, {
+							selected: false,
+						})
+					})
+
+					updateNode(nodeId, {
+						selected: true,
+					})
+
+					fitView({
+						nodes: [{
+							id: nodeId,
+						}]
+					})
+				}}
 			/>
 		);
 	}
@@ -307,11 +334,13 @@ function LogMessage({
 	style,
 	index,
 	onSetHeight,
+	onSelectNode,
 }: Readonly<{
-	log: ILogMessage;
+	log: IEnrichedLogMessage;
 	style: any;
 	index: number;
 	onSetHeight: (index: number, height: number) => void;
+	onSelectNode: (nodeId: string) => void;
 }>) {
 	const rowRef = useRef<HTMLDivElement>(null);
 
@@ -322,7 +351,7 @@ function LogMessage({
 	}, [rowRef]);
 
 	return (
-		<div style={style} className="scrollbar-gutter-stable">
+		<button style={style} className="scrollbar-gutter-stable" onClick={() => onSelectNode(log.node_id)}>
 			<div
 				ref={rowRef}
 				className={`flex flex-col items-center border rounded-md ${logLevelToColor(log.log_level)}`}
@@ -347,7 +376,7 @@ function LogMessage({
 					</div>
 				)}
 			</div>
-		</div>
+		</button>
 	);
 }
 

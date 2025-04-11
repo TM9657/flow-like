@@ -2,7 +2,7 @@
 
 import { createId } from "@paralleldrive/cuid2";
 import { useDebounce } from "@uidotdev/usehooks";
-import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
+import { getOutgoers, type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import {
 	AlignCenterVerticalIcon,
 	AlignEndVerticalIcon,
@@ -541,6 +541,14 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	const [renameMenu, setRenameMenu] = useState(false);
 	const flow = useReactFlow();
 
+	// const selectChildren = useCallback(() => {
+	// 	const nodes = flow.getNodes();
+	// 	const selectedNodes = nodes.filter((node) => node.selected);
+	// 	if (selectedNodes.length > 0) {
+	// 		getOutgoers({id: props.id}, flow.getNodes(), flow.getEdges())
+	// 	}
+	// }, [])
+
 	const copy = useCallback(async () => {
 		handleCopy(flow.getNodes());
 	}, [flow]);
@@ -574,6 +582,14 @@ function FlowNode(props: NodeProps<FlowNode>) {
 							</div>
 						</ContextMenuItem>
 					)}
+					{/* {flow.getNodes().filter((node) => node.selected).length <= 1 && (
+						<ContextMenuItem onClick={() => setCommentMenu(true)}>
+							<div className="flex flex-row items-center gap-2 text-nowrap">
+								<MessageSquareIcon className="w-4 h-4" />
+								Select Children
+							</div>
+						</ContextMenuItem>
+					)} */}
 					<ContextMenuItem onClick={async () => await copy()}>
 						<div className="flex flex-row items-center gap-2 text-nowrap">
 							<CopyIcon className="w-4 h-4" />
