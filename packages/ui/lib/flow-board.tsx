@@ -8,7 +8,8 @@ import {
 	upsertCommentCommand,
 } from "./command/generic-command";
 import { toastSuccess } from "./messages";
-import type { IGenericCommand } from "./schema";
+import { type IGenericCommand } from "./schema";
+import { IVariableType } from "./schema/flow/node";
 import { type IBoard, type IComment, ICommentType } from "./schema/flow/board";
 import type { INode } from "./schema/flow/node";
 import type { IPin } from "./schema/flow/pin";
@@ -35,9 +36,9 @@ export function doPinsMatch(
 	targetPin: IPin,
 	refs: { [key: string]: string },
 ) {
-	if (sourcePin.name === "route_in" || targetPin.name === "route_in")
+	if ((sourcePin.name === "route_in" && sourcePin.data_type === IVariableType.Generic) || (targetPin.name === "route_in" && targetPin.data_type === IVariableType.Generic))
 		return true;
-	if (targetPin.name === "route_out" || sourcePin.name === "route_out")
+	if ((targetPin.name === "route_out" && targetPin.data_type === IVariableType.Generic) || (sourcePin.name === "route_out" && sourcePin.data_type === IVariableType.Generic))
 		return true;
 
 	if (sourcePin.pin_type === targetPin.pin_type) return false;

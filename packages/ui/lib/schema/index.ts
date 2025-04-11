@@ -1,4 +1,4 @@
-export * from "./events/intercom-event";
+export {type IIntercomEvent} from "./events/intercom-event";
 export type { IRunPayload } from "./flow/run-payload";
 export * from "./bit/bit";
 export type {
@@ -15,8 +15,10 @@ export type { IProvider } from "./bit/bit/provider";
 
 export * from "./files/file-metadata";
 export * from "./flow/node";
-export type {
+export {
 	IValueType,
+} from "./flow/variable";
+export type {
 	IVariable,
 	IVariableType,
 } from "./flow/variable";

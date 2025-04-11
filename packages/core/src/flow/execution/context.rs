@@ -475,4 +475,22 @@ impl ExecutionContext {
         }
         Ok(())
     }
+
+    pub async fn stream_response<T>(
+        &mut self,
+        event_type: &str,
+        event: T
+    ) -> flow_like_types::Result<()>
+    where
+        T: Serialize + DeserializeOwned,
+    {
+        let event = InterComEvent::with_type(event_type, event);
+        if let Err(err) = event.call(&self.callback).await {
+            self.log_message(
+                &format!("Failed to send event: {}", err),
+                LogLevel::Error,
+            );
+        }
+        Ok(())
+    }
 }
