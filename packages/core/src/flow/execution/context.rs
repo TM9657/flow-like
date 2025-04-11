@@ -1,5 +1,6 @@
 use super::{
-    internal_pin::InternalPin, log::LogMessage, trace::Trace, InternalNode, LogLevel, Run, RunPayload
+    InternalNode, LogLevel, Run, RunPayload, internal_pin::InternalPin, log::LogMessage,
+    trace::Trace,
 };
 use crate::{
     flow::{
@@ -220,9 +221,15 @@ impl ExecutionContext {
     }
 
     pub async fn get_payload(&self, node_id: &str) -> flow_like_types::Result<RunPayload> {
-        let payload = self.run.upgrade().ok_or_else(|| {
-            flow_like_types::anyhow!("Run not found")
-        })?.lock().await.payload.get(node_id).cloned();
+        let payload = self
+            .run
+            .upgrade()
+            .ok_or_else(|| flow_like_types::anyhow!("Run not found"))?
+            .lock()
+            .await
+            .payload
+            .get(node_id)
+            .cloned();
 
         if let Some(payload) = payload {
             return Ok(payload);
@@ -479,17 +486,14 @@ impl ExecutionContext {
     pub async fn stream_response<T>(
         &mut self,
         event_type: &str,
-        event: T
+        event: T,
     ) -> flow_like_types::Result<()>
     where
         T: Serialize + DeserializeOwned,
     {
         let event = InterComEvent::with_type(event_type, event);
         if let Err(err) = event.call(&self.callback).await {
-            self.log_message(
-                &format!("Failed to send event: {}", err),
-                LogLevel::Error,
-            );
+            self.log_message(&format!("Failed to send event: {}", err), LogLevel::Error);
         }
         Ok(())
     }

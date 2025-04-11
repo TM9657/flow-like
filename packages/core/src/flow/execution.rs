@@ -115,7 +115,7 @@ pub struct InternalRun {
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct RunPayload {
     pub id: String,
-    pub payload: Option<Value>
+    pub payload: Option<Value>,
 }
 
 impl InternalRun {

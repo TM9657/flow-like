@@ -3833,6 +3833,7 @@ dependencies = [
  "flow-like-types",
  "futures",
  "nalgebra",
+ "rayon",
  "regex",
  "schemars",
  "serde",

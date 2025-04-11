@@ -1,7 +1,8 @@
 use std::{collections::HashMap, sync::Arc, time::SystemTime};
 
 use flow_like_model_provider::{
-    embedding::{openai::OpenAIEmbeddingModel, EmbeddingModelLogic}, image_embedding::ImageEmbeddingModelLogic,
+    embedding::{EmbeddingModelLogic, openai::OpenAIEmbeddingModel},
+    image_embedding::ImageEmbeddingModelLogic,
 };
 use flow_like_types::sync::Mutex;
 
@@ -39,12 +40,12 @@ impl EmbeddingFactory {
     ) -> flow_like_types::Result<Arc<dyn EmbeddingModelLogic>> {
         let provider_config = app_state.lock().await.model_provider_config.clone();
 
-        let provider = bit.try_to_embedding_provider().ok_or(
-            flow_like_types::anyhow!("Model type not supported"),
-        )?;
-        let embedding_provider = bit.try_to_embedding().ok_or(
-            flow_like_types::anyhow!("Model type not supported"),
-        )?;
+        let provider = bit
+            .try_to_embedding_provider()
+            .ok_or(flow_like_types::anyhow!("Model type not supported"))?;
+        let embedding_provider = bit
+            .try_to_embedding()
+            .ok_or(flow_like_types::anyhow!("Model type not supported"))?;
         let provider_name = provider.provider_name;
 
         if provider_name == "Local" {
@@ -62,7 +63,8 @@ impl EmbeddingFactory {
         }
 
         if provider_name == "openai" || provider_name == "azure" {
-            let local_model = OpenAIEmbeddingModel::new(&embedding_provider, &provider_config).await?;
+            let local_model =
+                OpenAIEmbeddingModel::new(&embedding_provider, &provider_config).await?;
             return Ok(Arc::new(local_model));
         }
 

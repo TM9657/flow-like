@@ -19,10 +19,7 @@ pub async fn make_data_url(url: &str) -> anyhow::Result<String> {
 
     let status = response.status();
     if !status.is_success() {
-        return Err(anyhow::anyhow!(
-            "Failed to download image: {}",
-            status
-        ));
+        return Err(anyhow::anyhow!("Failed to download image: {}", status));
     }
     let headers = response.headers().clone();
     let mut content_type = headers

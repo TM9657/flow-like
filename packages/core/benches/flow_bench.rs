@@ -1,6 +1,9 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use flow_like::{
-    flow::{board::Board, execution::{InternalRun, RunPayload}},
+    flow::{
+        board::Board,
+        execution::{InternalRun, RunPayload},
+    },
     profile::Profile,
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
@@ -44,11 +47,11 @@ async fn run_board(id: &str, start_ids: Vec<String>) {
     let state = default_state().await;
     let board = Arc::new(open_board(id, state.clone()).await);
     let profile = construct_profile();
-    let payload : Vec<RunPayload> = start_ids
+    let payload: Vec<RunPayload> = start_ids
         .iter()
         .map(|start_id| RunPayload {
             id: start_id.clone(),
-            payload: None
+            payload: None,
         })
         .collect();
 
@@ -64,13 +67,13 @@ async fn run_shared_board(
     profile: Profile,
     start_ids: Vec<String>,
 ) {
-    let payload : Vec<RunPayload> = start_ids
-    .iter()
-    .map(|start_id| RunPayload {
-        id: start_id.clone(),
-        payload: None
-    })
-    .collect();
+    let payload: Vec<RunPayload> = start_ids
+        .iter()
+        .map(|start_id| RunPayload {
+            id: start_id.clone(),
+            payload: None,
+        })
+        .collect();
     let mut run = InternalRun::new(board, &state, &profile, payload, None, None)
         .await
         .unwrap();

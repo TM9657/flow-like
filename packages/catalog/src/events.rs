@@ -1,7 +1,7 @@
-pub mod simple_event;
-pub mod mail_event;
 pub mod api_event;
 pub mod chat_event;
+pub mod mail_event;
+pub mod simple_event;
 
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;

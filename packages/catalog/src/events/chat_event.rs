@@ -20,12 +20,7 @@ impl SimpleEventNode {
 #[async_trait]
 impl NodeLogic for SimpleEventNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
-        let mut node = Node::new(
-            "events_chat",
-            "Chat Event",
-            "A simple Chat event",
-            "Events",
-        );
+        let mut node = Node::new("events_chat", "Chat Event", "A simple Chat event", "Events");
         node.add_icon("/flow/icons/event.svg");
         node.set_start(true);
 

@@ -1,10 +1,10 @@
 pub mod branch_node;
 pub mod delay;
 pub mod for_each;
+pub mod gather;
 pub mod par_execution;
 pub mod reroute;
 pub mod sequence;
-pub mod gather;
 
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;

@@ -17,3 +17,4 @@ nalgebra = "0.33.2"
 schemars.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
+rayon = "1.10.0"
