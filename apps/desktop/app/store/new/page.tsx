@@ -226,7 +226,7 @@ function MetadataCreation({
 					<Label htmlFor="description">Description</Label>
 					<Textarea
 						value={creationDialog.meta.description}
-						cols={12}
+						rows={8}
 						id="description"
 						placeholder="Description"
 						onChange={(e) => {

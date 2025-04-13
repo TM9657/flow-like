@@ -1,6 +1,6 @@
 use super::{
-    InternalNode, LogLevel, Run, RunPayload, internal_pin::InternalPin, log::LogMessage,
-    trace::Trace,
+    EventTrigger, InternalNode, LogLevel, Run, RunPayload, internal_pin::InternalPin,
+    log::LogMessage, trace::Trace,
 };
 use crate::{
     flow::{
@@ -142,6 +142,7 @@ pub struct ExecutionContext {
     pub log_level: LogLevel,
     pub trace: Trace,
     pub execution_cache: Option<ExecutionContextCache>,
+    pub completion_callbacks: Arc<RwLock<Vec<EventTrigger>>>,
     run_id: String,
     state: NodeState,
     callback: InterComCallback,
@@ -158,6 +159,7 @@ impl ExecutionContext {
         stage: ExecutionStage,
         profile: Arc<Profile>,
         callback: InterComCallback,
+        completion_callbacks: Arc<RwLock<Vec<EventTrigger>>>,
     ) -> Self {
         let (id, execution_cache) = {
             let node_id = node.node.lock().await.id.clone();
@@ -194,6 +196,7 @@ impl ExecutionContext {
             callback,
             execution_cache,
             state: NodeState::Idle,
+            completion_callbacks,
         }
     }
 
@@ -208,6 +211,7 @@ impl ExecutionContext {
             self.stage.clone(),
             self.profile.clone(),
             self.callback.clone(),
+            self.completion_callbacks.clone(),
         )
         .await
     }
@@ -220,7 +224,7 @@ impl ExecutionContext {
         Err(flow_like_types::anyhow!("Variable not found"))
     }
 
-    pub async fn get_payload(&self, node_id: &str) -> flow_like_types::Result<RunPayload> {
+    pub async fn get_payload(&self) -> flow_like_types::Result<RunPayload> {
         let payload = self
             .run
             .upgrade()
@@ -228,13 +232,18 @@ impl ExecutionContext {
             .lock()
             .await
             .payload
-            .get(node_id)
+            .get(&self.id)
             .cloned();
 
         if let Some(payload) = payload {
             return Ok(payload);
         }
         Err(flow_like_types::anyhow!("Payload not found"))
+    }
+
+    pub async fn hook_completion_event(&mut self, cb: EventTrigger) {
+        let mut callbacks = self.completion_callbacks.write().await;
+        callbacks.push(cb);
     }
 
     pub async fn set_variable(&self, variable: Variable) {

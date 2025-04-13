@@ -45,6 +45,9 @@
 		"error": {
 			"type": ["string", "null"]
 		},
+		"event_callback": {
+			"type": ["boolean", "null"]
+		},
 		"friendly_name": {
 			"type": "string"
 		},

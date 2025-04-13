@@ -5,6 +5,7 @@ export interface INode {
 	description: string;
 	docs?: null | string;
 	error?: null | string;
+	event_callback?: boolean | null;
 	friendly_name: string;
 	icon?: null | string;
 	id: string;

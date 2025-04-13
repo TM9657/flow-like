@@ -23,6 +23,8 @@ pub async fn execute_board(
     let board = Arc::new(board.lock().await.clone());
     let profile = TauriSettingsState::current_profile(&app_handle).await?;
 
+    println!("Executing board: {:?}", payload);
+
     let buffered_sender = Arc::new(BufferedInterComHandler::new(
         Arc::new(move |event| {
             let events_cb = events.clone();

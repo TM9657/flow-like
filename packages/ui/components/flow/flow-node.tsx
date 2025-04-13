@@ -2,7 +2,12 @@
 
 import { createId } from "@paralleldrive/cuid2";
 import { useDebounce } from "@uidotdev/usehooks";
-import { getOutgoers, type Node, type NodeProps, useReactFlow } from "@xyflow/react";
+import {
+	type Node,
+	type NodeProps,
+	getOutgoers,
+	useReactFlow,
+} from "@xyflow/react";
 import {
 	AlignCenterVerticalIcon,
 	AlignEndVerticalIcon,
@@ -45,6 +50,17 @@ import type { IPin } from "../../lib/schema/flow/pin";
 import { ILogLevel, type ITrace } from "../../lib/schema/flow/run";
 import { useBackend } from "../../state/backend-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
+import {
+	Button,
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+	Input,
+	Textarea,
+} from "../ui";
 import { DynamicImage } from "../ui/dynamic-image";
 import { useUndoRedo } from "./flow-history";
 import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
@@ -66,7 +82,7 @@ export type FlowNode = Node<
 		boardId: string;
 		appId: string;
 		traces: ITrace[];
-		onExecute: (node: INode) => Promise<void>;
+		onExecute: (node: INode, payload?: object) => Promise<void>;
 		openTrace: (trace: ITrace[]) => Promise<void>;
 	},
 	"node"
@@ -84,7 +100,10 @@ const FlowNodeInner = memo(
 		const { resolvedTheme } = useTheme();
 		const backend = useBackend();
 		const invalidate = useInvalidateInvoke();
-
+		const [payload, setPayload] = useState({
+			open: false,
+			payload: "",
+		});
 		const [executing, setExecuting] = useState(false);
 		const [isExec, setIsExec] = useState(false);
 		const [inputPins, setInputPins] = useState<(IPin | IPinAction)[]>([]);
@@ -437,7 +456,7 @@ const FlowNodeInner = memo(
 				)}
 				{!isReroute && (
 					<div
-						className={`header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b-1 border-b-foreground p-1 justify-between rounded-md rounded-b-none bg-card ${!isExec && "bg-gradient-to-r  from-card via-tertiary/50 to-tertiary"} ${props.data.node.start && "bg-gradient-to-r  from-card via-primary/50 to-primary"} ${isReroute && "w-6"}`}
+						className={`header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b-1 border-b-foreground p-1 justify-between rounded-md rounded-b-none bg-card ${props.data.node.event_callback && "bg-gradient-to-l  from-card via-primary/50 to-primary"} ${!isExec && "bg-gradient-to-r  from-card via-tertiary/50 to-tertiary"} ${props.data.node.start && "bg-gradient-to-r  from-card via-primary/50 to-primary"} ${isReroute && "w-6"}`}
 					>
 						<div className={"flex flex-row items-center gap-1"}>
 							{useMemo(
@@ -468,19 +487,68 @@ const FlowNodeInner = memo(
 
 							{useMemo(() => {
 								if (!props.data.node.start || executing) return null;
+								if (Object.keys(props.data.node.pins).length <= 1)
+									return (
+										<PlayCircleIcon
+											className="w-2 h-2 cursor-pointer hover:text-primary"
+											onClick={async (e) => {
+												if (executing) return;
+												setExecuting(true);
+												await props.data.onExecute(props.data.node);
+												setExecuting(false);
+											}}
+										/>
+									);
+
 								return (
-									<PlayCircleIcon
-										className="w-2 h-2 cursor-pointer hover:text-primary"
-										onClick={async (e) => {
-											if (executing) return;
-											setExecuting(true);
-											await props.data.onExecute(props.data.node);
-											setExecuting(false);
-										}}
-									/>
+									<Dialog
+										open={payload.open}
+										onOpenChange={(open) =>
+											setPayload((old) => ({ ...old, open }))
+										}
+									>
+										<DialogTrigger asChild>
+											<PlayCircleIcon className="w-2 h-2 cursor-pointer hover:text-primary" />
+										</DialogTrigger>
+										<DialogContent>
+											<DialogHeader>
+												<DialogTitle>Execution Payload</DialogTitle>
+												<DialogDescription>
+													JSON Payload for the Event. Please have a look at the
+													documentation for example Payloads.
+												</DialogDescription>
+											</DialogHeader>
+											<Textarea
+												rows={10}
+												placeholder="JSON payload"
+												value={payload.payload}
+												onChange={(e) =>
+													setPayload((old) => ({
+														...old,
+														payload: e.target.value,
+													}))
+												}
+											/>
+											<Button
+												onClick={async () => {
+													if (executing) return;
+													setExecuting(true);
+													await props.data.onExecute(
+														props.data.node,
+														JSON.parse(payload.payload),
+													);
+													setExecuting(false);
+													setPayload((old) => ({ ...old, open: false }));
+												}}
+											>
+												Send
+											</Button>
+										</DialogContent>
+									</Dialog>
 								);
 							}, [
 								props.data.node.start,
+								payload,
 								executing,
 								props.data.onExecute,
 								props.data.node,
@@ -566,14 +634,15 @@ function FlowNode(props: NodeProps<FlowNode>) {
 				</ContextMenuTrigger>
 				<ContextMenuContent className="max-w-20">
 					<ContextMenuLabel>Node Actions</ContextMenuLabel>
-					{flow.getNodes().filter((node) => node.selected).length <= 1 && props.data.node.start && (
-						<ContextMenuItem onClick={() => setRenameMenu(true)}>
-							<div className="flex flex-row items-center gap-2 text-nowrap">
-								<SquarePenIcon className="w-4 h-4" />
-								Rename
-							</div>
-						</ContextMenuItem>
-					)}
+					{flow.getNodes().filter((node) => node.selected).length <= 1 &&
+						props.data.node.start && (
+							<ContextMenuItem onClick={() => setRenameMenu(true)}>
+								<div className="flex flex-row items-center gap-2 text-nowrap">
+									<SquarePenIcon className="w-4 h-4" />
+									Rename
+								</div>
+							</ContextMenuItem>
+						)}
 					{flow.getNodes().filter((node) => node.selected).length <= 1 && (
 						<ContextMenuItem onClick={() => setCommentMenu(true)}>
 							<div className="flex flex-row items-center gap-2 text-nowrap">

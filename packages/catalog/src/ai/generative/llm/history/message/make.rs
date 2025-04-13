@@ -8,7 +8,9 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::history::{Content, ContentType, HistoryMessage, Role};
+use flow_like_model_provider::history::{
+    Content, ContentType, HistoryMessage, MessageContent, Role,
+};
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
@@ -80,7 +82,7 @@ impl NodeLogic for MakeHistoryMessageNode {
         };
 
         let mut message: HistoryMessage = HistoryMessage {
-            content: vec![],
+            content: MessageContent::Contents(vec![]),
             role: Role::User,
             name: None,
             tool_call_id: None,
@@ -92,19 +94,19 @@ impl NodeLogic for MakeHistoryMessageNode {
         match message_type.as_str() {
             "Text" => {
                 let text_pin: String = context.evaluate_pin("text").await?;
-                message.content = vec![Content::Text {
+                message.content = MessageContent::Contents(vec![Content::Text {
                     content_type: ContentType::Text,
                     text: text_pin,
-                }];
+                }]);
             }
             "Image" => {
                 let image_pin: String = context.evaluate_pin("image").await?;
                 let mime_pin: String = context.evaluate_pin("mime").await?;
-                message.content = vec![Content::Image {
+                message.content = MessageContent::Contents(vec![Content::Image {
                     content_type: ContentType::ImageUrl,
                     data: image_pin,
                     mime_type: mime_pin,
-                }];
+                }]);
             }
             _ => {}
         }

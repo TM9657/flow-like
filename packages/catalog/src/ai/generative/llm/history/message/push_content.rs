@@ -8,7 +8,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::history::{Content, ContentType, HistoryMessage};
+use flow_like_model_provider::history::{Content, ContentType, HistoryMessage, MessageContent};
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
@@ -75,19 +75,35 @@ impl NodeLogic for PushContentNode {
         match content_type.as_str() {
             "Text" => {
                 let text: String = context.evaluate_pin("text").await?;
-                message.content.push(Content::Text {
+                let mut content = match message.content {
+                    MessageContent::String(text) => vec![Content::Text {
+                        content_type: ContentType::Text,
+                        text,
+                    }],
+                    MessageContent::Contents(contents) => contents.clone(),
+                };
+                content.push(Content::Text {
                     content_type: ContentType::Text,
                     text,
                 });
+                message.content = MessageContent::Contents(content);
             }
             "Image" => {
                 let image: String = context.evaluate_pin("image").await?;
                 let mime: String = context.evaluate_pin("mime").await?;
-                message.content.push(Content::Image {
+                let mut content = match message.content {
+                    MessageContent::String(text) => vec![Content::Text {
+                        content_type: ContentType::Text,
+                        text,
+                    }],
+                    MessageContent::Contents(contents) => contents.clone(),
+                };
+                content.push(Content::Image {
                     content_type: ContentType::ImageUrl,
                     data: image,
                     mime_type: mime,
                 });
+                message.content = MessageContent::Contents(content);
             }
             _ => {}
         }

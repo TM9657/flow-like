@@ -1,4 +1,6 @@
-use crate::history::{Content as HistoryContent, History, ResponseFormat, Role, ToolChoice};
+use crate::history::{
+    self, Content as HistoryContent, History, MessageContent, ResponseFormat, Role, ToolChoice,
+};
 use openai_api_rs::v1::{
     chat_completion::{
         ChatCompletionMessage, ChatCompletionRequest, Content, ContentType, ImageUrl, ImageUrlType,
@@ -22,7 +24,14 @@ impl From<History> for ChatCompletionRequest {
                     Role::Tool => MessageRole::tool,
                 },
                 content: {
-                    let mut content_vec: Vec<HistoryContent> = msg.content;
+                    let mut content_vec: Vec<HistoryContent> = match msg.content {
+                        MessageContent::String(ref text) => vec![HistoryContent::Text {
+                            content_type: history::ContentType::Text,
+                            text: text.clone(),
+                        }],
+                        MessageContent::Contents(ref contents) => contents.clone(),
+                    };
+
                     if content_vec.len() == 1 {
                         match content_vec.pop().unwrap() {
                             HistoryContent::Text {

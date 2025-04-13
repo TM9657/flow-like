@@ -20,12 +20,12 @@ import {
 	type ITrace,
 } from "../../lib/schema/flow/run";
 import "react-virtualized/styles.css";
+import { useReactFlow } from "@xyflow/react";
 import { VariableSizeList as List, type VariableSizeList } from "react-window";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
-import { useReactFlow } from "@xyflow/react";
 
 interface IEnrichedLogMessage extends ILogMessage {
 	node_id: string;
@@ -42,7 +42,7 @@ export function Traces({
 	result: IRun;
 	onOpenChange: (open: boolean) => void;
 }>) {
-	const {fitView, updateNode, getNodes} = useReactFlow()
+	const { fitView, updateNode, getNodes } = useReactFlow();
 	const [traceFilter, setTraceFilter] = useState<ITrace | null>(null);
 	const [logFilter, setLogFilter] = useState<Set<ILogLevel>>(
 		new Set([
@@ -62,7 +62,15 @@ export function Traces({
 	const miniSearch = useMemo(
 		() =>
 			new MiniSearch({
-				fields: ["message", "operation_id", "log_level", "start", "end", "id", "node_id"],
+				fields: [
+					"message",
+					"operation_id",
+					"log_level",
+					"start",
+					"end",
+					"id",
+					"node_id",
+				],
 				storeFields: [
 					"message",
 					"operation_id",
@@ -85,7 +93,9 @@ export function Traces({
 			? result.traces.filter((trace) => traceFilter.id === trace.id)
 			: result.traces;
 		const logMessages = filteredTraces
-			.flatMap((trace) => trace.logs.map((log => ({ ...log, node_id: trace.node_id }))))
+			.flatMap((trace) =>
+				trace.logs.map((log) => ({ ...log, node_id: trace.node_id })),
+			)
 			.filter((log) => logFilter.has(log.log_level))
 			.sort((a, b) => a.start.nanos_since_epoch - b.start.nanos_since_epoch);
 
@@ -130,21 +140,25 @@ export function Traces({
 					console.log("select node", nodeId);
 					const nodes = getNodes();
 
-					nodes.filter(node => node.selected && node.id !== nodeId).forEach(node => {
-						updateNode(node.id, {
-							selected: false,
-						})
-					})
+					nodes
+						.filter((node) => node.selected && node.id !== nodeId)
+						.forEach((node) => {
+							updateNode(node.id, {
+								selected: false,
+							});
+						});
 
 					updateNode(nodeId, {
 						selected: true,
-					})
+					});
 
 					fitView({
-						nodes: [{
-							id: nodeId,
-						}]
-					})
+						nodes: [
+							{
+								id: nodeId,
+							},
+						],
+					});
 				}}
 			/>
 		);
@@ -351,7 +365,11 @@ function LogMessage({
 	}, [rowRef]);
 
 	return (
-		<button style={style} className="scrollbar-gutter-stable" onClick={() => onSelectNode(log.node_id)}>
+		<button
+			style={style}
+			className="scrollbar-gutter-stable"
+			onClick={() => onSelectNode(log.node_id)}
+		>
 			<div
 				ref={rowRef}
 				className={`flex flex-col items-center border rounded-md ${logLevelToColor(log.log_level)}`}

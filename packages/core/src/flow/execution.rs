@@ -9,6 +9,7 @@ use flow_like_types::intercom::InterComCallback;
 use flow_like_types::sync::{DashMap, Mutex, RwLock};
 use flow_like_types::{Cacheable, anyhow, create_id};
 use futures::StreamExt;
+use futures::future::BoxFuture;
 use internal_node::InternalNode;
 use internal_pin::InternalPin;
 use num_cpus;
@@ -94,6 +95,9 @@ impl RunStack {
     }
 }
 
+pub type EventTrigger =
+    Arc<dyn Fn(&InternalRun) -> BoxFuture<'_, flow_like_types::Result<()>> + Send + Sync>;
+
 #[derive(Clone)]
 pub struct InternalRun {
     pub run: Arc<Mutex<Run>>,
@@ -110,6 +114,7 @@ pub struct InternalRun {
     concurrency_map: Arc<DashMap<String, u64>>,
     cpus: usize,
     log_level: LogLevel,
+    completion_callbacks: Arc<RwLock<Vec<EventTrigger>>>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -298,6 +303,7 @@ impl InternalRun {
             dependencies,
             log_level: board.log_level.clone(),
             profile: Arc::new(profile.clone()),
+            completion_callbacks: Arc::new(RwLock::new(vec![])),
         })
     }
 
@@ -358,6 +364,7 @@ impl InternalRun {
                 let stage = stage.clone();
                 let log_level = log_level.clone();
                 let concurrency_map = self.concurrency_map.clone();
+                let completion_callbacks = self.completion_callbacks.clone();
 
                 async move {
                     step_core(
@@ -373,6 +380,7 @@ impl InternalRun {
                         &profile,
                         &callback,
                         concurrency_map,
+                        &completion_callbacks,
                     )
                     .await
                 }
@@ -419,6 +427,7 @@ impl InternalRun {
             &self.profile,
             &self.callback,
             self.concurrency_map.clone(),
+            &self.completion_callbacks,
         )
         .await;
 
@@ -473,6 +482,7 @@ impl InternalRun {
             stack_hash = new_stack_hash;
         }
 
+        self.trigger_completion_callbacks().await;
         self.run.lock().await.end = SystemTime::now();
         self.run.lock().await.status = if errored {
             RunStatus::Failed
@@ -524,6 +534,15 @@ impl InternalRun {
 
     pub async fn get_status(&self) -> RunStatus {
         self.run.lock().await.status.clone()
+    }
+
+    async fn trigger_completion_callbacks(&self) {
+        let callbacks = self.completion_callbacks.read().await;
+        for callback in callbacks.iter() {
+            if let Err(err) = callback(self).await {
+                eprintln!("[Error] executing completion callback: {:?}", err);
+            }
+        }
     }
 }
 
@@ -587,6 +606,7 @@ async fn step_core(
     profile: &Arc<Profile>,
     callback: &InterComCallback,
     concurrency_map: Arc<DashMap<String, u64>>,
+    completion_callbacks: &Arc<RwLock<Vec<EventTrigger>>>,
 ) -> flow_like_types::Result<Vec<(String, Arc<InternalNode>)>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
     {
@@ -611,6 +631,7 @@ async fn step_core(
         stage.clone(),
         profile.clone(),
         callback.clone(),
+        completion_callbacks.clone(),
     )
     .await;
 

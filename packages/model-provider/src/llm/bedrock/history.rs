@@ -19,43 +19,50 @@ impl History {
             };
 
             let mut content: Vec<ContentBlock> = Vec::new();
-            for history_content in message.content.iter() {
-                match history_content {
-                    crate::history::Content::Text { text, .. } => {
-                        content.push(ContentBlock::Text(text.clone()));
-                    }
-                    crate::history::Content::Image { data, .. } => {
-                        let url = match make_data_url(data).await {
-                            Ok(url) => url,
-                            Err(err) => {
-                                println!("Error creating data URL: {}", err);
-                                continue;
+            match message.content {
+                crate::history::MessageContent::String(ref text) => {
+                    content.push(ContentBlock::Text(text.clone()));
+                }
+                crate::history::MessageContent::Contents(ref msg_content) => {
+                    for history_content in msg_content.iter() {
+                        match history_content {
+                            crate::history::Content::Text { text, .. } => {
+                                content.push(ContentBlock::Text(text.clone()));
                             }
-                        };
+                            crate::history::Content::Image { data, .. } => {
+                                let url = match make_data_url(data).await {
+                                    Ok(url) => url,
+                                    Err(err) => {
+                                        println!("Error creating data URL: {}", err);
+                                        continue;
+                                    }
+                                };
 
-                        let bytes = match data_url_to_bytes(&url).await {
-                            Ok(bytes) => bytes,
-                            Err(err) => {
-                                println!("Error converting data URL to bytes: {}", err);
-                                continue;
+                                let bytes = match data_url_to_bytes(&url).await {
+                                    Ok(bytes) => bytes,
+                                    Err(err) => {
+                                        println!("Error converting data URL to bytes: {}", err);
+                                        continue;
+                                    }
+                                };
+
+                                let blob = Blob::new(bytes);
+
+                                let img_block = match ImageBlock::builder()
+                                    .set_format(Some(ImageFormat::Jpeg))
+                                    .set_source(Some(ImageSource::Bytes(blob)))
+                                    .build()
+                                {
+                                    Ok(block) => block,
+                                    Err(err) => {
+                                        println!("Error creating image block: {}", err);
+                                        continue;
+                                    }
+                                };
+
+                                content.push(ContentBlock::Image(img_block));
                             }
-                        };
-
-                        let blob = Blob::new(bytes);
-
-                        let img_block = match ImageBlock::builder()
-                            .set_format(Some(ImageFormat::Jpeg))
-                            .set_source(Some(ImageSource::Bytes(blob)))
-                            .build()
-                        {
-                            Ok(block) => block,
-                            Err(err) => {
-                                println!("Error creating image block: {}", err);
-                                continue;
-                            }
-                        };
-
-                        content.push(ContentBlock::Image(img_block));
+                        }
                     }
                 }
             }

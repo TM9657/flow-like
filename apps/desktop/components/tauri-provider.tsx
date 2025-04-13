@@ -18,7 +18,7 @@ import {
 	type INode,
 	type IProfile,
 	type IRun,
-	IRunPayload,
+	type IRunPayload,
 	type IRunUpdateEvent,
 	type ISettingsProfile,
 	useBackendStore,
@@ -57,7 +57,7 @@ export class TauriBackend implements IBackendState {
 		cb?: (event: IIntercomEvent[]) => void,
 	): Promise<string> {
 		const channel = new Channel<IIntercomEvent[]>();
-		let closed = false
+		let closed = false;
 
 		channel.onmessage = (events: IIntercomEvent[]) => {
 			if (closed) return;

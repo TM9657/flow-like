@@ -30,5 +30,6 @@ message Node {
     string error = 15;
     string docs = 16;
     optional string layer = 17;
+    bool event_callback = 18;
 }
 

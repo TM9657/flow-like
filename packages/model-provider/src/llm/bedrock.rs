@@ -95,13 +95,20 @@ async fn build_stream(
     request = request.set_messages(Some(messages));
 
     if let Some(system_prompt) = system_prompt {
-        for content in &system_prompt.content {
-            match content {
-                crate::history::Content::Text { text, .. } => {
-                    request =
-                        request.set_system(Some(vec![SystemContentBlock::Text(text.clone())]));
+        match system_prompt.content {
+            crate::history::MessageContent::String(ref text) => {
+                request = request.set_system(Some(vec![SystemContentBlock::Text(text.clone())]));
+            }
+            crate::history::MessageContent::Contents(ref contents) => {
+                for content in contents {
+                    match content {
+                        crate::history::Content::Text { text, .. } => {
+                            request = request
+                                .set_system(Some(vec![SystemContentBlock::Text(text.clone())]));
+                        }
+                        _ => continue,
+                    }
                 }
-                _ => continue,
             }
         }
     }
@@ -144,13 +151,20 @@ async fn build(
     request = request.set_messages(Some(messages));
 
     if let Some(system_prompt) = system_prompt {
-        for content in &system_prompt.content {
-            match content {
-                crate::history::Content::Text { text, .. } => {
-                    request =
-                        request.set_system(Some(vec![SystemContentBlock::Text(text.clone())]));
+        match system_prompt.content {
+            crate::history::MessageContent::String(ref text) => {
+                request = request.set_system(Some(vec![SystemContentBlock::Text(text.clone())]));
+            }
+            crate::history::MessageContent::Contents(ref contents) => {
+                for content in contents {
+                    match content {
+                        crate::history::Content::Text { text, .. } => {
+                            request = request
+                                .set_system(Some(vec![SystemContentBlock::Text(text.clone())]));
+                        }
+                        _ => continue,
+                    }
                 }
-                _ => continue,
             }
         }
     }

@@ -8,9 +8,9 @@ import {
 	upsertCommentCommand,
 } from "./command/generic-command";
 import { toastSuccess } from "./messages";
-import { type IGenericCommand } from "./schema";
-import { IVariableType } from "./schema/flow/node";
+import type { IGenericCommand } from "./schema";
 import { type IBoard, type IComment, ICommentType } from "./schema/flow/board";
+import { IVariableType } from "./schema/flow/node";
 import type { INode } from "./schema/flow/node";
 import type { IPin } from "./schema/flow/pin";
 import type { IRun, ITrace } from "./schema/flow/run";
@@ -36,9 +36,19 @@ export function doPinsMatch(
 	targetPin: IPin,
 	refs: { [key: string]: string },
 ) {
-	if ((sourcePin.name === "route_in" && sourcePin.data_type === IVariableType.Generic) || (targetPin.name === "route_in" && targetPin.data_type === IVariableType.Generic))
+	if (
+		(sourcePin.name === "route_in" &&
+			sourcePin.data_type === IVariableType.Generic) ||
+		(targetPin.name === "route_in" &&
+			targetPin.data_type === IVariableType.Generic)
+	)
 		return true;
-	if ((targetPin.name === "route_out" && targetPin.data_type === IVariableType.Generic) || (sourcePin.name === "route_out" && sourcePin.data_type === IVariableType.Generic))
+	if (
+		(targetPin.name === "route_out" &&
+			targetPin.data_type === IVariableType.Generic) ||
+		(sourcePin.name === "route_out" &&
+			sourcePin.data_type === IVariableType.Generic)
+	)
 		return true;
 
 	if (sourcePin.pin_type === targetPin.pin_type) return false;
@@ -96,7 +106,7 @@ function hashNode(node: INode | IComment, traces?: ITrace[]) {
 export function parseBoard(
 	board: IBoard,
 	appId: string,
-	executeBoard: (node: INode) => Promise<void>,
+	executeBoard: (node: INode, payload?: object) => Promise<void>,
 	openTraces: (node: INode, traces: ITrace[]) => Promise<void>,
 	executeCommand: (command: IGenericCommand, append: boolean) => Promise<any>,
 	selected: Set<string>,
@@ -148,8 +158,8 @@ export function parseBoard(
 					hash: hash,
 					boardId: board.id,
 					appId: appId,
-					onExecute: async (node: INode) => {
-						await executeBoard(node);
+					onExecute: async (node: INode, payload?: object) => {
+						await executeBoard(node, payload);
 					},
 					openTrace: async (traces: ITrace[]) => {
 						await openTraces(node, traces);

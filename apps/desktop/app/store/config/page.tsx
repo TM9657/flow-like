@@ -102,7 +102,7 @@ export default function Id() {
 			<div className="grid w-full max-w-sm items-center gap-1.5">
 				<Label htmlFor="description">Description</Label>
 				<Textarea
-					cols={5}
+					rows={5}
 					id="description"
 					placeholder="Description"
 					value={app.data?.meta.en.description}
