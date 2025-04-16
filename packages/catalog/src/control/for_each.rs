@@ -2,7 +2,7 @@ use flow_like::{
     flow::{
         board::Board,
         execution::{
-            LogLevel, context::ExecutionContext, internal_node::InternalNode, log::LogMessage,
+            LogLevel, context::ExecutionContext, internal_node::InternalNode,
         },
         node::{Node, NodeLogic},
         pin::{PinOptions, ValueType},
@@ -96,11 +96,7 @@ impl NodeLogic for LoopNode {
             let flow = exec_item.lock().await.get_connected_nodes().await;
             for node in flow {
                 let mut sub_context = context.create_sub_context(&node).await;
-                let mut log =
-                    LogMessage::new(&format!("Triggered iteration: {}", i), LogLevel::Info, None);
                 let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
-                log.end();
-                sub_context.log(log);
                 sub_context.end_trace();
                 context.push_sub_context(sub_context);
 

@@ -1,7 +1,9 @@
 import {
 	Select,
 	SelectContent,
+	SelectGroup,
 	SelectItem,
+	SelectLabel,
 	SelectTrigger,
 } from "../../../../components/ui/select";
 import type { IPin } from "../../../../lib/schema/flow/pin";
@@ -32,13 +34,16 @@ export function EnumVariable({
 					</small>
 				</SelectTrigger>
 				<SelectContent>
-					{pin.options?.valid_values?.map((option) => {
-						return (
-							<SelectItem key={option} value={option}>
-								{option}
-							</SelectItem>
-						);
-					})}
+					<SelectGroup>
+						<SelectLabel>{pin.friendly_name}</SelectLabel>
+						{pin.options?.valid_values?.map((option) => {
+							return (
+								<SelectItem key={option} value={option}>
+									{option}
+								</SelectItem>
+							);
+						})}
+					</SelectGroup>
 				</SelectContent>
 			</Select>
 		</div>

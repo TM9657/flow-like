@@ -70,6 +70,11 @@ impl NodeLogic for SetExtensionNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let path: FlowPath = context.evaluate_pin("path").await?;
         let extension: String = context.evaluate_pin("extension").await?;
+        let extension = if extension.starts_with('.') {
+            extension[1..].to_string()
+        } else {
+            extension
+        };
 
         let mut path = path.to_runtime(context).await?;
         let current_extension = path.path.extension().unwrap_or_default().to_string();
