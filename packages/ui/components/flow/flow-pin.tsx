@@ -44,7 +44,6 @@ function FlowPinInnerComponent({
 	const currentNode = useInternalNode(node.id);
 
 	const [defaultValue, setDefaultValue] = useState(pin.default_value);
-	const debouncedDefaultValue = useDebounce(defaultValue, 200);
 
 	const handleStyle = useMemo(() => {
 		if (node.name === "reroute") {
@@ -90,9 +89,9 @@ function FlowPinInnerComponent({
 	);
 
 	const updateNode = useCallback(async () => {
-		if (debouncedDefaultValue === undefined) return;
-		if (debouncedDefaultValue === null) return;
-		if (debouncedDefaultValue === pin.default_value) return;
+		if (defaultValue === undefined) return;
+		if (defaultValue === null) return;
+		if (defaultValue === pin.default_value) return;
 		if (!currentNode) return;
 		const command = updateNodeCommand({
 			node: {
@@ -100,7 +99,7 @@ function FlowPinInnerComponent({
 				coordinates: [currentNode.position.x, currentNode.position.y, 0],
 				pins: {
 					...node.pins,
-					[pin.id]: { ...pin, default_value: debouncedDefaultValue },
+					[pin.id]: { ...pin, default_value: defaultValue },
 				},
 			},
 		});
@@ -112,11 +111,11 @@ function FlowPinInnerComponent({
 		);
 		await pushCommand(result, false);
 		await refetchBoard();
-	}, [pin.id, debouncedDefaultValue, currentNode]);
+	}, [pin.id, defaultValue, currentNode]);
 
 	useEffect(() => {
 		updateNode();
-	}, [debouncedDefaultValue]);
+	}, [defaultValue]);
 
 	useEffect(() => {
 		setDefaultValue(pin.default_value);
