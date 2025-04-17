@@ -39,6 +39,7 @@ tracing = { version = "0.1.41", features = ["async-await", "attributes"] }
 dirs-next = "2.0.0"
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
+tauri-plugin = "2.2.0"
 
 [profile.release]
 panic = "abort"
