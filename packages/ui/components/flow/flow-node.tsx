@@ -210,6 +210,7 @@ const FlowNodeInner = memo(
 			eventRegistration,
 			props.data.appId,
 			props.data.boardId,
+			props.data.node,
 			pushCommand,
 			invalidate,
 		]);
@@ -462,10 +463,7 @@ const FlowNodeInner = memo(
 				onMouseEnter={() => onHover(true)}
 				onMouseLeave={() => onHover(false)}
 			>
-				{useMemo(
-					() =>
-						!eventRegistration ? null : (
-							<Dialog open={typeof eventRegistration !== "undefined"}>
+				{eventRegistration && <Dialog open={typeof eventRegistration !== "undefined"}>
 								<DialogContent>
 									<DialogHeader>
 										<DialogTitle>Event Registration</DialogTitle>
@@ -486,19 +484,12 @@ const FlowNodeInner = memo(
 											onChange={(e) => setEventId(e.target.value)}
 										/>
 									</div>
-									<Button onClick={async () => registerEvent}>
+									<Button onClick={async () => await registerEvent()}>
 										Register Event
 									</Button>
 								</DialogContent>
 							</Dialog>
-						),
-					[
-						eventRegistration,
-						eventId,
-						registerEvent,
-						props.data.node.start,
-					],
-				)}
+						}
 				{props.data.node.long_running && (
 					<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(-50%)] left-0 text-center bg-background rounded-full">
 						{useMemo(
