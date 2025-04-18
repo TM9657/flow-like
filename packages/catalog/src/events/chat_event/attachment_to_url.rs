@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -9,16 +7,9 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::{
-    history::{HistoryMessage, Role},
-    response::Response,
-    response_chunk::ResponseChunk,
-};
-use flow_like_types::{Value, async_trait, json::json, sync::Mutex};
+use flow_like_types::{Value, async_trait, json::json};
 
-use crate::events::chat_event::ChatResponse;
-
-use super::{Attachment, CachedChatResponse, ChatStreamingResponse, Reasoning};
+use super::Attachment;
 
 #[derive(Default)]
 pub struct AttachmentToUrlNode {}
@@ -49,19 +40,9 @@ impl NodeLogic for AttachmentToUrlNode {
         .set_schema::<Attachment>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin(
-            "signed_url",
-            "Signed URL",
-            "",
-            VariableType::String,
-        );
+        node.add_output_pin("signed_url", "Signed URL", "", VariableType::String);
 
-        node.add_output_pin(
-            "success",
-            "Success",
-            "",
-            VariableType::Boolean,
-        );
+        node.add_output_pin("success", "Success", "", VariableType::Boolean);
 
         return node;
     }
@@ -71,12 +52,16 @@ impl NodeLogic for AttachmentToUrlNode {
 
         match attachment {
             Attachment::Url(url) => {
-                context.set_pin_value("signed_url", Value::String(url));
-                context.set_pin_value("success", json!(true));
+                context
+                    .set_pin_value("signed_url", Value::String(url))
+                    .await?;
+                context.set_pin_value("success", json!(true)).await?;
             }
             _ => {
-                context.set_pin_value("signed_url", Value::String("".to_string()));
-                context.set_pin_value("success", json!(false));
+                context
+                    .set_pin_value("signed_url", Value::String("".to_string()))
+                    .await?;
+                context.set_pin_value("success", json!(false)).await?;
             }
         }
 

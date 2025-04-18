@@ -23,12 +23,12 @@ use flow_like_types::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub mod attachment_from_url;
+pub mod attachment_to_url;
 pub mod push_attachment;
 pub mod push_attachments;
 pub mod push_chunk;
 pub mod push_response;
-pub mod attachment_to_url;
-pub mod attachment_from_url;
 #[derive(Default)]
 pub struct ChatEventNode {}
 
@@ -118,10 +118,10 @@ impl NodeLogic for ChatEventNode {
             )
             .await?;
         context
-            .set_pin_value("actions", json!(chat.actions.unwrap_or(vec![])))
+            .set_pin_value("actions", json!(chat.actions.unwrap_or_default()))
             .await?;
         context
-            .set_pin_value("attachments", json!(chat.attachments.unwrap_or(vec![])))
+            .set_pin_value("attachments", json!(chat.attachments.unwrap_or_default()))
             .await?;
         context
             .set_pin_value("user", json!(chat.user.unwrap_or_default()))

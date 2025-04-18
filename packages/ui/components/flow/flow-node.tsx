@@ -463,33 +463,33 @@ const FlowNodeInner = memo(
 				onMouseEnter={() => onHover(true)}
 				onMouseLeave={() => onHover(false)}
 			>
-				{eventRegistration && <Dialog open={typeof eventRegistration !== "undefined"}>
-								<DialogContent>
-									<DialogHeader>
-										<DialogTitle>Event Registration</DialogTitle>
-										<DialogDescription>
-											The Node you placed requires an Event Configuration.
-											Please provide a unique{" "}
-											{eventRegistration.pin.friendly_name}.
-											{eventRegistration.pin.description}
-										</DialogDescription>
-									</DialogHeader>
-									<div className="grid w-full items-center gap-1.5">
-										<Label htmlFor="eventid">
-											{eventRegistration.pin.friendly_name}
-										</Label>
-										<Input
-											id="eventid"
-											value={eventId}
-											onChange={(e) => setEventId(e.target.value)}
-										/>
-									</div>
-									<Button onClick={async () => await registerEvent()}>
-										Register Event
-									</Button>
-								</DialogContent>
-							</Dialog>
-						}
+				{eventRegistration && (
+					<Dialog open={typeof eventRegistration !== "undefined"}>
+						<DialogContent>
+							<DialogHeader>
+								<DialogTitle>Event Registration</DialogTitle>
+								<DialogDescription>
+									The Node you placed requires an Event Configuration. Please
+									provide a unique {eventRegistration.pin.friendly_name}.
+									{eventRegistration.pin.description}
+								</DialogDescription>
+							</DialogHeader>
+							<div className="grid w-full items-center gap-1.5">
+								<Label htmlFor="eventid">
+									{eventRegistration.pin.friendly_name}
+								</Label>
+								<Input
+									id="eventid"
+									value={eventId}
+									onChange={(e) => setEventId(e.target.value)}
+								/>
+							</div>
+							<Button onClick={async () => await registerEvent()}>
+								Register Event
+							</Button>
+						</DialogContent>
+					</Dialog>
+				)}
 				{props.data.node.long_running && (
 					<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(-50%)] left-0 text-center bg-background rounded-full">
 						{useMemo(
@@ -529,7 +529,8 @@ const FlowNodeInner = memo(
 				)}
 				{useMemo(
 					() =>
-						!(props.data.node.start ?? false) && inputPins
+						!(props.data.node.start ?? false) &&
+						inputPins
 							.filter((pin) => isPinAction(pin) || pin.name !== "var_ref")
 							.map((pin, index) =>
 								isPinAction(pin) ? (
