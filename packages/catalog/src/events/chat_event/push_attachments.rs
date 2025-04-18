@@ -38,7 +38,7 @@ impl NodeLogic for PushAttachmentsNode {
             "Pushes a response chunk to the chat",
             "Events/Chat",
         );
-        node.add_icon("/flow/icons/event.svg");
+        node.add_icon("/flow/icons/paperclip.svg");
         node.set_event_callback(true);
 
         node.add_input_pin(

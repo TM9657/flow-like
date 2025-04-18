@@ -21,32 +21,24 @@ use crate::events::chat_event::ChatResponse;
 use super::{Attachment, CachedChatResponse, ChatStreamingResponse, Reasoning};
 
 #[derive(Default)]
-pub struct PushAttachmentNode {}
+pub struct AttachmentToUrlNode {}
 
-impl PushAttachmentNode {
+impl AttachmentToUrlNode {
     pub fn new() -> Self {
-        PushAttachmentNode {}
+        AttachmentToUrlNode {}
     }
 }
 
 #[async_trait]
-impl NodeLogic for PushAttachmentNode {
+impl NodeLogic for AttachmentToUrlNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "events_chat_push_attachment",
-            "Push Attachment",
-            "Pushes a response chunk to the chat",
-            "Events/Chat",
+            "events_chat_attachment_to_signed_url",
+            "To Signed URL",
+            "Get the URL from an attachment",
+            "Events/Chat/Attachments",
         );
         node.add_icon("/flow/icons/paperclip.svg");
-        node.set_event_callback(true);
-
-        node.add_input_pin(
-            "exec_in",
-            "Input",
-            "Initiate Execution",
-            VariableType::Execution,
-        );
 
         node.add_input_pin(
             "attachment",
@@ -58,10 +50,17 @@ impl NodeLogic for PushAttachmentNode {
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
-            "exec_out",
-            "Output",
-            "Done with the Execution",
-            VariableType::Execution,
+            "signed_url",
+            "Signed URL",
+            "",
+            VariableType::String,
+        );
+
+        node.add_output_pin(
+            "success",
+            "Success",
+            "",
+            VariableType::Boolean,
         );
 
         return node;
@@ -69,23 +68,17 @@ impl NodeLogic for PushAttachmentNode {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let attachment: Attachment = context.evaluate_pin("attachment").await?;
-        let cached_response = CachedChatResponse::load(context).await?;
-        {
-            let mut mutable_response = cached_response.response.lock().await;
-            mutable_response.attachments.push(attachment.clone());
+
+        match attachment {
+            Attachment::Url(url) => {
+                context.set_pin_value("signed_url", Value::String(url));
+                context.set_pin_value("success", json!(true));
+            }
+            _ => {
+                context.set_pin_value("signed_url", Value::String("".to_string()));
+                context.set_pin_value("success", json!(false));
+            }
         }
-
-        let streaming_response = ChatStreamingResponse {
-            actions: vec![],
-            attachments: vec![attachment],
-            chunk: None,
-            plan: None,
-        };
-
-        context
-            .stream_response("chat_stream_partial", streaming_response)
-            .await?;
-        context.activate_exec_pin("exec_out").await?;
 
         return Ok(());
     }

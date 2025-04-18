@@ -27,7 +27,8 @@ pub mod push_attachment;
 pub mod push_attachments;
 pub mod push_chunk;
 pub mod push_response;
-
+pub mod attachment_to_url;
+pub mod attachment_from_url;
 #[derive(Default)]
 pub struct ChatEventNode {}
 
@@ -272,5 +273,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(push_chunk::PushChunkNode::default()) as Arc<dyn NodeLogic>,
         Arc::new(push_attachment::PushAttachmentNode::default()) as Arc<dyn NodeLogic>,
         Arc::new(push_attachments::PushAttachmentsNode::default()) as Arc<dyn NodeLogic>,
+        Arc::new(attachment_to_url::AttachmentToUrlNode::default()) as Arc<dyn NodeLogic>,
+        Arc::new(attachment_from_url::AttachmentFromUrlNode::default()) as Arc<dyn NodeLogic>,
     ]
 }
