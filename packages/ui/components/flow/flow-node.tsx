@@ -492,7 +492,12 @@ const FlowNodeInner = memo(
 								</DialogContent>
 							</Dialog>
 						),
-					[],
+					[
+						eventRegistration,
+						eventId,
+						registerEvent,
+						props.data.node.start,
+					],
 				)}
 				{props.data.node.long_running && (
 					<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(-50%)] left-0 text-center bg-background rounded-full">
