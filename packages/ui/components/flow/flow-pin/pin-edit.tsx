@@ -77,7 +77,7 @@ function WithMenuInner({
 	defaultValue: number[] | undefined | null;
 	changeDefaultValue: (value: any) => void;
 }>) {
-	const [defaultValueState, setDefaultValueState] = useState(defaultValue)
+	const [defaultValueState, setDefaultValueState] = useState(defaultValue);
 	return (
 		<>
 			<VariableDescription pin={pin} />
@@ -86,11 +86,13 @@ function WithMenuInner({
 				variant={"ghost"}
 				className="w-fit h-fit text-foreground"
 			>
-				<Dialog onOpenChange={open => {
-					if (!open) {
-						changeDefaultValue(defaultValueState);
-					}
-				}}>
+				<Dialog
+					onOpenChange={(open) => {
+						if (!open) {
+							changeDefaultValue(defaultValueState);
+						}
+					}}
+				>
 					<DialogTrigger asChild>
 						<VariableIcon
 							className={`w-[0.45rem] h-[0.45rem] min-w-[0.45rem] min-h-[0.45rem] ${(typeof defaultValue === "undefined" || defaultValue === null) && "text-primary"}`}

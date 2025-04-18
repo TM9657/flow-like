@@ -25,7 +25,7 @@ impl NodeLogic for HttpFetchNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
             "http_fetch",
-            "HTTP Fetch",
+            "API Call",
             "Performs an HTTP request",
             "Web/API",
         );

@@ -10,7 +10,9 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_model_provider::{
-    history::HistoryMessage, response::Response, response_chunk::ResponseChunk,
+    history::{History, HistoryMessage},
+    response::Response,
+    response_chunk::ResponseChunk,
 };
 use flow_like_types::{
     Cacheable, Value, anyhow, async_trait,
@@ -50,8 +52,7 @@ impl NodeLogic for ChatEventNode {
         );
 
         node.add_output_pin("history", "History", "Chat History", VariableType::Struct)
-            .set_schema::<HistoryMessage>()
-            .set_value_type(flow_like::flow::pin::ValueType::Array)
+            .set_schema::<History>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
@@ -98,7 +99,10 @@ impl NodeLogic for ChatEventNode {
             .map_err(|e| anyhow!("Failed to deserialize payload: {}", e))?;
 
         context
-            .set_pin_value("history", json!(chat.messages))
+            .set_pin_value(
+                "history",
+                json!(History::new("".to_string(), chat.messages)),
+            )
             .await?;
         context
             .set_pin_value(
@@ -149,6 +153,7 @@ impl NodeLogic for ChatEventNode {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[serde(untagged)]
 pub enum Attachment {
     Url(String),
     Reference { id: String, resource_type: String },

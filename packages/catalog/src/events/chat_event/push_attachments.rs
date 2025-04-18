@@ -33,8 +33,8 @@ impl PushAttachmentsNode {
 impl NodeLogic for PushAttachmentsNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "events_chat_push_attachment",
-            "Push Attachment",
+            "events_chat_push_attachments",
+            "Push Attachments",
             "Pushes a response chunk to the chat",
             "Events/Chat",
         );

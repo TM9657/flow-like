@@ -1,9 +1,7 @@
 use flow_like::{
     flow::{
         board::Board,
-        execution::{
-            LogLevel, context::ExecutionContext, internal_node::InternalNode,
-        },
+        execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
         node::{Node, NodeLogic},
         pin::{PinOptions, ValueType},
         variable::VariableType,
