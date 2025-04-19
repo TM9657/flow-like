@@ -40,7 +40,8 @@ impl NodeLogic for SetHistoryStreamNode {
             .set_schema::<History>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("stream", "Stream", "Stream Value", VariableType::Boolean);
+        node.add_input_pin("stream", "Stream", "Stream Value", VariableType::Boolean)
+            .set_default_value(Some(json!(true)));
 
         node.add_output_pin(
             "exec_out",

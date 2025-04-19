@@ -7,7 +7,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{Value, async_trait};
+use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -36,7 +36,8 @@ impl NodeLogic for ToStringNode {
             "Pretty?",
             "Should the struct be pretty printed?",
             VariableType::Boolean,
-        );
+        )
+        .set_default_value(Some(json!(true)));
 
         node.add_output_pin("string", "String", "Output String", VariableType::String);
 

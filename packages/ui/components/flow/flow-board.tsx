@@ -266,9 +266,9 @@ export function FlowBoard({
 
 	const handleCopyCB = useCallback(
 		(event: ClipboardEvent) => {
-			handleCopy(nodes, event, board.data?.refs);
+			handleCopy(nodes, event);
 		},
-		[nodes, board.data?.refs],
+		[nodes],
 	);
 
 	const shortcutHandler = useCallback(
