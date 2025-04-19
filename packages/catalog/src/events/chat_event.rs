@@ -10,7 +10,9 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_model_provider::{
-    history::HistoryMessage, response::Response, response_chunk::ResponseChunk,
+    history::{History, HistoryMessage},
+    response::Response,
+    response_chunk::ResponseChunk,
 };
 use flow_like_types::{
     Cacheable, Value, anyhow, async_trait,
@@ -21,11 +23,12 @@ use flow_like_types::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub mod attachment_from_url;
+pub mod attachment_to_url;
 pub mod push_attachment;
 pub mod push_attachments;
 pub mod push_chunk;
 pub mod push_response;
-
 #[derive(Default)]
 pub struct ChatEventNode {}
 
@@ -50,8 +53,7 @@ impl NodeLogic for ChatEventNode {
         );
 
         node.add_output_pin("history", "History", "Chat History", VariableType::Struct)
-            .set_schema::<HistoryMessage>()
-            .set_value_type(flow_like::flow::pin::ValueType::Array)
+            .set_schema::<History>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
@@ -98,7 +100,10 @@ impl NodeLogic for ChatEventNode {
             .map_err(|e| anyhow!("Failed to deserialize payload: {}", e))?;
 
         context
-            .set_pin_value("history", json!(chat.messages))
+            .set_pin_value(
+                "history",
+                json!(History::new("".to_string(), chat.messages)),
+            )
             .await?;
         context
             .set_pin_value(
@@ -113,10 +118,10 @@ impl NodeLogic for ChatEventNode {
             )
             .await?;
         context
-            .set_pin_value("actions", json!(chat.actions.unwrap_or(vec![])))
+            .set_pin_value("actions", json!(chat.actions.unwrap_or_default()))
             .await?;
         context
-            .set_pin_value("attachments", json!(chat.attachments.unwrap_or(vec![])))
+            .set_pin_value("attachments", json!(chat.attachments.unwrap_or_default()))
             .await?;
         context
             .set_pin_value("user", json!(chat.user.unwrap_or_default()))
@@ -149,6 +154,7 @@ impl NodeLogic for ChatEventNode {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[serde(untagged)]
 pub enum Attachment {
     Url(String),
     Reference { id: String, resource_type: String },
@@ -267,5 +273,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(push_chunk::PushChunkNode::default()) as Arc<dyn NodeLogic>,
         Arc::new(push_attachment::PushAttachmentNode::default()) as Arc<dyn NodeLogic>,
         Arc::new(push_attachments::PushAttachmentsNode::default()) as Arc<dyn NodeLogic>,
+        Arc::new(attachment_to_url::AttachmentToUrlNode::default()) as Arc<dyn NodeLogic>,
+        Arc::new(attachment_from_url::AttachmentFromUrlNode::default()) as Arc<dyn NodeLogic>,
     ]
 }

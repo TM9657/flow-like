@@ -48,7 +48,7 @@ impl NodeLogic for SetStringBodyNode {
         );
 
         node.add_output_pin(
-            "request",
+            "request_out",
             "Request",
             "The http request",
             VariableType::Struct,
@@ -64,7 +64,7 @@ impl NodeLogic for SetStringBodyNode {
 
         request.body = Some(HttpBody::String(body));
 
-        context.set_pin_value("request", json!(request)).await?;
+        context.set_pin_value("request_out", json!(request)).await?;
 
         Ok(())
     }

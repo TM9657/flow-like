@@ -33,7 +33,7 @@ impl NodeLogic for StreamingHttpFetchNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
             "streaming_http_fetch",
-            "Streaming HTTP Fetch",
+            "Streaming API Call",
             "Performs an HTTP request",
             "Web/API",
         );

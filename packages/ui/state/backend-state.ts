@@ -76,6 +76,17 @@ export interface IBackendState {
 		commands: IGenericCommand[],
 	): Promise<IGenericCommand[]>;
 
+	registerEvent(
+		appId: string,
+		boardId: string,
+		nodeId: string,
+		eventType: string,
+		eventId: string,
+		ttl?: number,
+	): Promise<void>;
+
+	removeEvent(eventId: string, eventType: string): Promise<void>;
+
 	// Additional Functionality
 	getPathMeta(folderPath: string): Promise<IFileMetadata[]>;
 	openFileOrFolderMenu(

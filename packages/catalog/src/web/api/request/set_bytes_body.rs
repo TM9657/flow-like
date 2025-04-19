@@ -49,7 +49,7 @@ impl NodeLogic for SetBytesBodyNode {
         .set_value_type(ValueType::Array);
 
         node.add_output_pin(
-            "request",
+            "request_out",
             "Request",
             "The http request",
             VariableType::Struct,
@@ -65,7 +65,7 @@ impl NodeLogic for SetBytesBodyNode {
 
         request.body = Some(HttpBody::Bytes(body));
 
-        context.set_pin_value("request", json!(request)).await?;
+        context.set_pin_value("request_out", json!(request)).await?;
 
         Ok(())
     }

@@ -55,7 +55,7 @@ impl NodeLogic for SetHeaderNode {
         );
 
         node.add_output_pin(
-            "request",
+            "request_out",
             "Request",
             "The http request",
             VariableType::Struct,
@@ -72,7 +72,7 @@ impl NodeLogic for SetHeaderNode {
 
         request.set_header(name, value);
 
-        context.set_pin_value("request", json!(request)).await?;
+        context.set_pin_value("request_out", json!(request)).await?;
 
         Ok(())
     }

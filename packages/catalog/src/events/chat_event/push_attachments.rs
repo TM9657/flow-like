@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -9,16 +7,9 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::{
-    history::{HistoryMessage, Role},
-    response::Response,
-    response_chunk::ResponseChunk,
-};
-use flow_like_types::{Value, async_trait, json::json, sync::Mutex};
+use flow_like_types::async_trait;
 
-use crate::events::chat_event::ChatResponse;
-
-use super::{Attachment, CachedChatResponse, ChatStreamingResponse, Reasoning};
+use super::{Attachment, CachedChatResponse, ChatStreamingResponse};
 
 #[derive(Default)]
 pub struct PushAttachmentsNode {}
@@ -33,12 +24,12 @@ impl PushAttachmentsNode {
 impl NodeLogic for PushAttachmentsNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "events_chat_push_attachment",
-            "Push Attachment",
+            "events_chat_push_attachments",
+            "Push Attachments",
             "Pushes a response chunk to the chat",
             "Events/Chat",
         );
-        node.add_icon("/flow/icons/event.svg");
+        node.add_icon("/flow/icons/paperclip.svg");
         node.set_event_callback(true);
 
         node.add_input_pin(
@@ -78,7 +69,7 @@ impl NodeLogic for PushAttachmentsNode {
 
         let streaming_response = ChatStreamingResponse {
             actions: vec![],
-            attachments: attachments,
+            attachments,
             chunk: None,
             plan: None,
         };

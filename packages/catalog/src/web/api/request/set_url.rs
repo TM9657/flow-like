@@ -43,7 +43,7 @@ impl NodeLogic for SetUrlNode {
         node.add_input_pin("url", "Url", "The url of the request", VariableType::String);
 
         node.add_output_pin(
-            "request",
+            "request_out",
             "Request",
             "The http request",
             VariableType::Struct,
@@ -59,7 +59,7 @@ impl NodeLogic for SetUrlNode {
 
         request.url = url;
 
-        context.set_pin_value("request", json!(request)).await?;
+        context.set_pin_value("request_out", json!(request)).await?;
 
         Ok(())
     }

@@ -60,7 +60,7 @@ impl NodeLogic for SetMethodNode {
         .set_default_value(Some(json!("GET")));
 
         node.add_output_pin(
-            "request",
+            "request_out",
             "Request",
             "The http request",
             VariableType::Struct,
@@ -83,7 +83,7 @@ impl NodeLogic for SetMethodNode {
             _ => return Err(flow_like_types::anyhow!("Invalid method")),
         };
 
-        context.set_pin_value("request", json!(request)).await?;
+        context.set_pin_value("request_out", json!(request)).await?;
 
         Ok(())
     }

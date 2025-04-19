@@ -76,7 +76,7 @@ impl HistoryMessage {
         };
 
         Self {
-            role: role,
+            role,
             content: MessageContent::Contents(vec![Content::Text {
                 content_type: ContentType::Text,
                 text: content.unwrap_or_default(),

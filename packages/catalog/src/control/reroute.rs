@@ -64,7 +64,7 @@ impl NodeLogic for RerouteNode {
         }
         .clone();
 
-        if input.depends_on.len() > 0 && found_input_type != VariableType::Generic {
+        if !input.depends_on.is_empty() && found_input_type != VariableType::Generic {
             let output = node.get_pin_mut_by_name("route_out").unwrap();
             output.value_type = input.value_type.clone();
             output.data_type = found_input_type.clone();
@@ -73,7 +73,7 @@ impl NodeLogic for RerouteNode {
             return;
         }
 
-        if output.connected_to.len() > 0 && found_output_type != VariableType::Generic {
+        if !output.connected_to.is_empty() && found_output_type != VariableType::Generic {
             let input = node.get_pin_mut_by_name("route_in").unwrap();
             input.value_type = output.value_type.clone();
             input.data_type = found_output_type.clone();
