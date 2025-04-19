@@ -168,6 +168,21 @@ export class TauriBackend implements IBackendState {
 		});
 	}
 
+	registerEvent(
+		appId: string,
+		boardId: string,
+		nodeId: string,
+		eventType: string,
+		eventId: string,
+		ttl?: number,
+	): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
+
+	removeEvent(eventId: string, eventType: string): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
+
 	async getPathMeta(path: string): Promise<IFileMetadata[]> {
 		return await invoke("get_path_meta", {
 			path: path,

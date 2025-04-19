@@ -279,7 +279,9 @@ export function Variable({
 		>
 			<div className="flex flex-row gap-2 items-center" data-no-dnd>
 				{isArrayDropdown}
-				<p className={`${!variable.editable ? "text-muted-foreground" : ""}`}>
+				<p
+					className={`text-start line-clamp-2 ${!variable.editable ? "text-muted-foreground" : ""}`}
+				>
 					{localVariable.name}
 				</p>
 			</div>
