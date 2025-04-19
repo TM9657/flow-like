@@ -9,7 +9,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_storage::Path;
-use flow_like_types::async_trait;
+use flow_like_types::{async_trait, json::json};
 use futures::{StreamExt, TryStreamExt};
 
 #[derive(Default)]
@@ -48,7 +48,8 @@ impl NodeLogic for DeleteNode {
             "Recursive",
             "Delete directories recursively",
             VariableType::Boolean,
-        );
+        )
+        .set_default_value(Some(json!(false)));
 
         node.add_output_pin(
             "exec_out",

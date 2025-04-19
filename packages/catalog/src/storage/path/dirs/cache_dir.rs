@@ -51,7 +51,8 @@ impl NodeLogic for PathFromCacheDirNode {
             "Node Scope",
             "Is this node in the node scope?",
             VariableType::Boolean,
-        );
+        )
+        .set_default_value(Some(json!(false)));
 
         node.add_output_pin(
             "failed",

@@ -35,7 +35,8 @@ impl NodeLogic for LevenshteinDistanceNode {
             "Normalize",
             "Normalize the Distance",
             VariableType::Boolean,
-        );
+        )
+        .set_default_value(Some(json!(true)));
 
         node.add_output_pin(
             "distance",

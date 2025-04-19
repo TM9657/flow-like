@@ -2,13 +2,15 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     flow::{
-        board::{commands::Command, Board, Comment},
-        node::Node, pin::PinType, variable::Variable,
+        board::{Board, Comment, commands::Command},
+        node::Node,
+        pin::PinType,
+        variable::Variable,
     },
     state::FlowLikeState,
 };
-use flow_like_types::{create_id, json::from_slice};
 use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::{create_id, json::from_slice};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -76,7 +78,10 @@ impl Command for CopyPasteCommand {
 
         for node in self.original_nodes.iter() {
             let mut new_node = node.clone();
-            let blueprint_node = node_registry.get_node(&node.name).ok().unwrap_or(node.clone());
+            let blueprint_node = node_registry
+                .get_node(&node.name)
+                .ok()
+                .unwrap_or(node.clone());
             let old_id = new_node.id.clone();
             let new_id = create_id();
             translated_connection.insert(old_id, new_id.clone());
@@ -99,7 +104,12 @@ impl Command for CopyPasteCommand {
                 .map(|pin| {
                     let mut pin = pin.clone();
                     let old_pin_id = pin.id.clone();
-                    let (_, blueprint_pin) = blueprint_node.pins.iter().find(|(_, p)| p.name == pin.name && pin.pin_type == p.pin_type).unwrap_or((&format!(""), &pin)).clone();
+                    let (_, blueprint_pin) = blueprint_node
+                        .pins
+                        .iter()
+                        .find(|(_, p)| p.name == pin.name && pin.pin_type == p.pin_type)
+                        .unwrap_or((&format!(""), &pin))
+                        .clone();
                     let blueprint_pin = blueprint_pin.clone();
                     let new_pin_id = create_id();
                     translated_connection.insert(old_pin_id, new_pin_id.clone());
@@ -113,8 +123,15 @@ impl Command for CopyPasteCommand {
                                 let variable_ref = board.variables.get(&var_ref);
                                 if variable_ref.is_none() {
                                     let var_name = new_node.friendly_name.replace("Get ", "");
-                                    println!("Creating new variable: {}, friendly name: {}", var_name, new_node.friendly_name);
-                                    let mut new_var = Variable::new(&var_name, pin.data_type.clone(), pin.value_type.clone());
+                                    println!(
+                                        "Creating new variable: {}, friendly name: {}",
+                                        var_name, new_node.friendly_name
+                                    );
+                                    let mut new_var = Variable::new(
+                                        &var_name,
+                                        pin.data_type.clone(),
+                                        pin.value_type.clone(),
+                                    );
                                     new_var.id = var_ref.clone();
                                     board.variables.insert(var_ref.clone(), new_var);
                                 }
@@ -125,7 +142,10 @@ impl Command for CopyPasteCommand {
                     pin.schema = blueprint_pin.schema.clone();
                     pin.options = blueprint_pin.options.clone();
 
-                    if new_node.start.unwrap_or(false) && pin.pin_type == PinType::Input && pin.name != "type" {
+                    if new_node.start.unwrap_or(false)
+                        && pin.pin_type == PinType::Input
+                        && pin.name != "type"
+                    {
                         pin.default_value = None;
                     }
 
