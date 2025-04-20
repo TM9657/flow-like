@@ -49,6 +49,22 @@ impl NodeLogic for ReadImagePathNode {
             .set_schema::<FlowPath>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
+        node.add_input_pin(
+            "apply_exif", 
+            "Apply Exif", 
+            "Apply Exif Orientation", 
+            VariableType::Boolean,
+        )
+            .set_default_value(Some(json!(true)));
+
+        node.add_input_pin(
+            "guess_format", 
+            "Guess Format", 
+            "Decode-Encode with Guessed Format", 
+            VariableType::Boolean,
+        )
+            .set_default_value(Some(json!(true)));
+
         // outputs
         node.add_output_pin(
             "exec_out",
@@ -78,23 +94,36 @@ impl NodeLogic for ReadImagePathNode {
             .bytes().await?
             .to_vec();
 
+        let guess_format: bool = context.evaluate_pin("guess_format").await?;
+        let apply_exif: bool = context.evaluate_pin("apply_exif").await?;
         // todo: fallback to format from extension when guessing fails
-        let format = ImageFormat::from_extension(path_runtime.path.extension().unwrap()).unwrap();
+        // let format = ImageFormat::from_extension(path_runtime.path.extension().unwrap()).unwrap();
 
-        let mut bytes_out: Vec<u8> = Vec::new();
-        {
-            // dyn ImageDecoder isn't a Send so we can't use it in-between .awaits
-            let reader = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?;
-            let guessed_format = reader.format().unwrap();
-            let mut decoder = reader.into_decoder()?;
-            let orientation = decoder.orientation()?;
-            let mut img = DynamicImage::from_decoder(decoder)?;
-            img.apply_orientation(orientation);  // compensate potential rotations from metadata
-            img.write_to(&mut Cursor::new(&mut bytes_out), guessed_format)?;  // encode & write to bytes (might be expensive?)
-        }
+        let bytes_out = if guess_format {
+            // decode-encode image with correct format
+            let mut tmp_bytes_out: Vec<u8> = Vec::new();
+            {
+                // dyn ImageDecoder isn't a Send so we can't use it in-between .awaits but have to wrap it in a {} block
+                let reader = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?;
+                let guessed_format = reader.format().unwrap();
+                if apply_exif {
+                    let mut decoder = reader.into_decoder()?;
+                    let orientation = decoder.orientation()?;
+                    let mut img = DynamicImage::from_decoder(decoder)?;
+                    img.apply_orientation(orientation);  // compensate potential rotations from metadata
+                    img.write_to(&mut Cursor::new(&mut tmp_bytes_out), guessed_format)?;  // encode & write to bytes (might be expensive?)
+                } else {
+                    let img = reader.decode()?;
+                    img.write_to(&mut Cursor::new(&mut tmp_bytes_out), guessed_format)?;
+                }
+            }
+            tmp_bytes_out
+        } else {
+            bytes
+        };
 
+        // set outputs
         let node_img = NodeImage::from_bytes(bytes_out)?;
-
         context.set_pin_value("image_out", json!(node_img)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())

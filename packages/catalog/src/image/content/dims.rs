@@ -75,7 +75,7 @@ impl NodeLogic for ImageDimsNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let node_image: NodeImage = context.evaluate_pin("image_in").await?;
-        let img = node_image.get_image(context).await?;
+        let img = node_image.as_image(context).await?;
         let (width, height) = img.dimensions();
 
         context.set_pin_value("width", json!(width)).await?;
