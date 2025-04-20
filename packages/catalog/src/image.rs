@@ -1,8 +1,7 @@
 
-use flow_like::flow::execution::context::ExecutionContext;
 use flow_like::flow::node::NodeLogic;
 use flow_like_types::Result;
-use flow_like_types::image::{DynamicImage, ImageReader};
+use flow_like_types::image::{DynamicImage, ImageFormat, ImageReader};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -13,29 +12,38 @@ pub mod transform;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 pub struct NodeImage {
-    pub image_bytes: Vec<u8>
+    pub encoded: Vec<u8>
 }
 
 impl NodeImage {
-
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self> {
-        Ok(Self {
-            image_bytes: bytes,
-        })
+    /// construct NodeImage from already encoded image - make sure to have used correct format
+    pub fn from_encoded(encoded: Vec<u8>) -> Result<Self> {
+        Ok(Self { encoded })
     }
 
-    pub async fn as_image(&self, context: &mut ExecutionContext) -> Result<DynamicImage> {
-        let dynamic_image = ImageReader::new(Cursor::new(&self.image_bytes))
-            .with_guessed_format()?
-            .decode()?;  // decode image (might be expensive?)
-        Ok(dynamic_image)
+    /// construct NodeImage from image::DynamicImage to vec with correct format
+    pub fn from_decoded(decoded: &DynamicImage, format: ImageFormat) -> Result<Self> {
+        let mut encoded: Vec<u8> = Vec::new();
+        decoded.write_to(&mut Cursor::new(&mut encoded), format)?;
+        Ok(Self { encoded: encoded })
+    }
+
+    /// retrieve as decoded image::DynamicImage + guessed format for downstream re-encoding
+    pub fn as_decoded_with_format(&self) -> Result<(DynamicImage, ImageFormat)> {
+        // todo: fallback to format from extension when guessing fails
+        let reader = ImageReader::new(Cursor::new(&self.encoded)).with_guessed_format()?;
+        let guessed_format = reader.format().expect("with_guessed_format always sets format");
+        let img = reader.decode()?;
+        Ok((img, guessed_format))
     }
 }
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let nodes: Vec<Arc<dyn NodeLogic>> = vec![
-        Arc::new(content::read_from_path::ReadImagePathNode::default()),
+        Arc::new(content::as_jpg::AsJpgNode::default()),
         Arc::new(content::dims::ImageDimsNode::default()),
+        Arc::new(content::read_from_path::ReadImagePathNode::default()),
+        Arc::new(content::write_to_path::WriteImageNode::default()),
         Arc::new(transform::resize::ResizeImageNode::default()),
     ];
     nodes

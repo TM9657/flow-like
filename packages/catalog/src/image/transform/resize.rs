@@ -9,7 +9,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, image::{self, imageops::FilterType, GenericImageView}, json::json, Ok, Error};
+use flow_like_types::{async_trait, image::{imageops::FilterType, GenericImageView}, json::json, Ok};
 
 #[derive(Default)]
 pub struct ResizeImageNode {}
@@ -156,7 +156,7 @@ impl NodeLogic for ResizeImageNode {
         }?;
 
         // get image
-        let img = node_img.as_image(context).await?;
+        let (img, format) = node_img.as_decoded_with_format()?;
 
         // resize image
         let resized_img = {
@@ -166,8 +166,8 @@ impl NodeLogic for ResizeImageNode {
                 _ => img.resize(target_width, target_height, filter),
             }
         };  
-        let (result_width, result_height) = resized_img.dimensions();        
-        let resized_node_img = NodeImage::from_bytes(resized_img.as_bytes().to_vec())?;
+        let (result_width, result_height) = resized_img.dimensions();
+        let resized_node_img = NodeImage::from_decoded(&resized_img, format)?;
 
         // set outputs
         context.set_pin_value("image_out", json!(resized_node_img)).await?;

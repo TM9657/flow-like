@@ -72,16 +72,18 @@ impl NodeLogic for ImageDimsNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        // get inputs
         context.deactivate_exec_pin("exec_out").await?;
-
         let node_image: NodeImage = context.evaluate_pin("image_in").await?;
-        let img = node_image.as_image(context).await?;
+
+        // get dimensions
+        let (img, _format) = node_image.as_decoded_with_format()?;
         let (width, height) = img.dimensions();
 
+        // set outputs
         context.set_pin_value("width", json!(width)).await?;
         context.set_pin_value("height", json!(height)).await?;
         context.activate_exec_pin("exec_out").await?;
-
         Ok(())
     }
 }
