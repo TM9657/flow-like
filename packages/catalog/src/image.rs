@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::io::Cursor;
 
 pub mod content;
+pub mod metadata;
 pub mod transform;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -47,7 +48,7 @@ impl NodeImage {
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let nodes: Vec<Arc<dyn NodeLogic>> = vec![
-        Arc::new(content::dims::ImageDimsNode::default()),
+        Arc::new(metadata::dims::ImageDimsNode::default()),
         Arc::new(content::read_from_path::ReadImagePathNode::default()),
         Arc::new(content::write_to_path::WriteImageNode::default()),
         Arc::new(transform::resize::ResizeImageNode::default()),

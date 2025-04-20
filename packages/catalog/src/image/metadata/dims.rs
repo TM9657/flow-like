@@ -27,7 +27,7 @@ impl NodeLogic for ImageDimsNode {
             "get_dimensions",
             "Get Dimensions",
             "Get Image Dimensions",
-            "Image/Content",
+            "Image/Metadata",
         );
         node.add_icon("/flow/icons/dir.svg");
         

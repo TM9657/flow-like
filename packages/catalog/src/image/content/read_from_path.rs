@@ -9,7 +9,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader}, json::json, Ok};
+use flow_like_types::{async_trait, image::{self, DynamicImage, ImageDecoder, ImageFormat, ImageReader}, json::json, Ok};
 use std::io::Cursor;
 
 
