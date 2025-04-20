@@ -135,8 +135,8 @@ export default function Id({
 					{app.data?.meta.en.description}
 				</p>
 			</div>
-			<div className="grid w-full items-start gap-6 md:grid-cols-[180px_1fr] lg:grid-cols-[250px_1fr] mt-8 h-full flex-grow overflow-auto">
-				<nav className="flex flex-col gap-4 text-sm text-muted-foreground border-r h-full">
+			<div className="grid w-full items-start gap-6 md:grid-cols-[180px_1fr] lg:grid-cols-[250px_1fr] mt-8 h-full flex-grow overflow-hidden max-h-full">
+				<nav className="flex flex-col gap-4 text-sm text-muted-foreground border-r h-full max-h-full overflow-hidden">
 					<Link
 						href={`/store/config?id=${app.data?.id}`}
 						className={
@@ -230,7 +230,7 @@ export default function Id({
 					<Separator className="my-2 w-[95%]" />
 					<div
 						id="actions"
-						className="w-full pr-5 flex flex-col items-stretch gap-2"
+						className="w-full pr-5 flex flex-col items-stretch gap-2 flex-grow max-h-full overflow-y-auto"
 					>
 						{boards.data
 							?.flatMap((board) =>
@@ -267,7 +267,7 @@ export default function Id({
 							))}
 					</div>
 				</nav>
-				<div className="pb-4 pl-2 flex-grow max-h-full h-full overflow-y-auto">
+				<div className="pb-4 pl-2 flex-grow max-h-full h-full overflow-auto">
 					<Suspense>{children}</Suspense>
 				</div>
 			</div>
