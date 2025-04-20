@@ -10,7 +10,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_storage::object_store::PutPayload;
-use flow_like_types::{async_trait, Bytes};
+use flow_like_types::{async_trait, image::{codecs::jpeg::JpegEncoder, ImageFormat}, Bytes, json::json};
 use std::io::Cursor;
 
 #[derive(Default)]
@@ -65,6 +65,20 @@ impl NodeLogic for WriteImageNode {
                 .build()
         );
 
+        node.add_input_pin(
+            "quality", 
+            "Quality", 
+            "JPEG Encoding Quality", 
+            VariableType::Integer,
+        )
+            .set_options(PinOptions::new()
+                .set_enforce_schema(true)
+                .set_range((0., 100.))
+                .build()
+            )
+            .set_default_value(Some(json!(100))
+        );
+
         // outputs
         node.add_output_pin(
             "exec_out",
@@ -83,15 +97,24 @@ impl NodeLogic for WriteImageNode {
         let path: FlowPath = context.evaluate_pin("path").await?;
         let path = path.to_runtime(context).await?;
         let node_image: NodeImage = context.evaluate_pin("image_in").await?;
+        let format = ImageFormat::from_extension(path.path.extension().unwrap()).unwrap();
 
         // encode image based on path extension
-        let (img, format) = node_image.as_decoded_with_format()?;
-        let mut bytes_out: Vec<u8> = Vec::new();
-        img.write_to(&mut Cursor::new(&mut bytes_out), format)?;
+        let (img, _format) = node_image.as_decoded_with_format()?;
+        let mut encoded: Vec<u8> = Vec::new();
+        if format == ImageFormat::Jpeg {
+            // optional: if jpeg, encode with quality flag
+            let quality: u8 = context.evaluate_pin("quality").await?;
+            let cursor: Cursor<&mut Vec<u8>> = Cursor::new(&mut encoded);
+            let encoder = JpegEncoder::new_with_quality(cursor, quality);
+            img.write_with_encoder(encoder)?;
+        } else {
+            img.write_to(&mut Cursor::new(&mut encoded), format)?;
+        }
 
         // write image to path
         let store = path.store.as_generic();
-        let payload = PutPayload::from_bytes(Bytes::from(bytes_out));
+        let payload = PutPayload::from_bytes(Bytes::from(encoded));
         store.put(&path.path, payload).await?;
 
         // set outputs

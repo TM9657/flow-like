@@ -46,7 +46,6 @@ impl NodeImage {
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let nodes: Vec<Arc<dyn NodeLogic>> = vec![
-        Arc::new(content::as_jpg::AsJpgNode::default()),
         Arc::new(content::dims::ImageDimsNode::default()),
         Arc::new(content::read_from_path::ReadImagePathNode::default()),
         Arc::new(content::write_to_path::WriteImageNode::default()),
