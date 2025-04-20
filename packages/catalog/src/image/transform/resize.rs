@@ -9,7 +9,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, image::{self, imageops::FilterType, GenericImageView}, json::json, Ok};
+use flow_like_types::{async_trait, image::{self, imageops::FilterType, GenericImageView}, json::json, Ok, Error};
 
 #[derive(Default)]
 pub struct ResizeImageNode {}
@@ -45,19 +45,63 @@ impl NodeLogic for ResizeImageNode {
             VariableType::Struct,
         )
             .set_schema::<NodeImage>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+            .set_options(PinOptions::new()
+                .set_enforce_schema(true)
+                .build()
+            );
 
         node.add_input_pin(
-            "width",
-            "Target Width",
+            "mode", 
+            "Resize Mode", 
+            "Resize Mode", 
+            VariableType::String,
+        )
+            .set_options(PinOptions::new()
+                .set_valid_values(vec![
+                    "keep_aspect".to_string(),
+                    "exact".to_string(),
+                    "to_fill".to_string()
+                ])
+                .build()
+            )
+            .set_default_value(Some(json!("keep_aspect"))
+        );
+
+        node.add_input_pin(
+            "filter",
+            "Filter",
+            "Resize Filter Algorithm",
+            VariableType::String,
+        )
+            .set_options(PinOptions::new()
+                .set_valid_values(vec![
+                    "Nearest".to_string(),
+                    "Triangle".to_string(),
+                    "CatmullRom".to_string(),
+                    "Gaussian".to_string(),
+                    "Lanczos3".to_string(),
+                ])
+                .build()
+            )
+            .set_default_value(Some(json!("Lanczos3"))
+        );
+
+        node.add_input_pin(
+            "width_in",
+            "Width",
             "Resized Image Target Width",
             VariableType::Integer,
+        )
+            .set_default_value(Some(json!(512))
         );
+
         node.add_input_pin(
-            "height",
-            "Target Height",
+            "height_in",
+            "Height",
             "Resized Image Target Height",
             VariableType::Integer,
+        )
+            .set_default_value(Some(json!(512))
         );
 
         // outputs
@@ -76,14 +120,14 @@ impl NodeLogic for ResizeImageNode {
             .set_schema::<NodeImage>();
 
         node.add_output_pin(
-            "result_width",
-            "Result Width",
+            "width_out",
+            "Width",
             "Resized Image Result Width",
             VariableType::Integer,
         );
         node.add_output_pin(
-            "result_height",
-            "Result Height",
+            "height_out",
+            "Height",
             "Resized Image Result Height",
             VariableType::Integer,
         );
@@ -96,23 +140,39 @@ impl NodeLogic for ResizeImageNode {
 
         // get inputs
         let node_img: NodeImage = context.evaluate_pin("image_in").await?;
-        let target_width: u32 = context.evaluate_pin("width").await?;
-        let target_height: u32 = context.evaluate_pin("height").await?;
-        // todo: allow resize_exact and resize_to_fill via enum
-        // todo: allow filters via FilterType
+        let target_width: u32 = context.evaluate_pin("width_in").await?;
+        let target_height: u32 = context.evaluate_pin("height_in").await?;
+        let mode: String = context.evaluate_pin("mode").await?;
+        let filter_in: String = context.evaluate_pin("filter").await?;
+        let filter = {
+            match filter_in.as_str() {
+                "Nearest" => Ok(FilterType::Nearest),
+                "Triangle" => Ok(FilterType::Triangle),
+                "CatmullRom" => Ok(FilterType::CatmullRom),
+                "Gaussian" => Ok(FilterType::Gaussian),
+                "Lanczos3" => Ok(FilterType::Lanczos3),
+                _ => Ok(FilterType::Lanczos3),
+            }
+        }?;
 
         // get image
-        let img = node_img.get_image(context).await?;
+        let img = node_img.as_image(context).await?;
 
         // resize image
-        let resized_img = img.resize(target_width, target_height, FilterType::Lanczos3);
+        let resized_img = {
+            match mode.as_str() {
+                "exact" => img.resize_exact(target_width, target_height, filter),
+                "to_fill" => img.resize_to_fill(target_width, target_height, filter),
+                _ => img.resize(target_width, target_height, filter),
+            }
+        };  
         let (result_width, result_height) = resized_img.dimensions();        
         let resized_node_img = NodeImage::from_bytes(resized_img.as_bytes().to_vec())?;
 
         // set outputs
         context.set_pin_value("image_out", json!(resized_node_img)).await?;
-        context.set_pin_value("result_width", json!(result_width)).await?;
-        context.set_pin_value("result_height", json!(result_height)).await?;
+        context.set_pin_value("width_out", json!(result_width)).await?;
+        context.set_pin_value("height_out", json!(result_height)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
