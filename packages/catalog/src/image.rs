@@ -24,7 +24,7 @@ impl NodeImage {
         })
     }
 
-    async fn get_image(&self, context: &mut ExecutionContext) -> Result<DynamicImage> {
+    pub async fn as_image(&self, context: &mut ExecutionContext) -> Result<DynamicImage> {
         let dynamic_image = ImageReader::new(Cursor::new(&self.image_bytes))
             .with_guessed_format()?
             .decode()?;  // decode image (might be expensive?)
