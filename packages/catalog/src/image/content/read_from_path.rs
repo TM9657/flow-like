@@ -9,7 +9,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, codecs::jpeg::JpegEncoder}, json::json, Ok};
+use flow_like_types::{async_trait, image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader}, json::json, Ok};
 use std::io::Cursor;
 
 
@@ -55,7 +55,7 @@ impl NodeLogic for ReadImagePathNode {
             "Apply Exif Orientation", 
             VariableType::Boolean,
         )
-            .set_default_value(Some(json!(true)));
+            .set_default_value(Some(json!(false)));
 
         // outputs
         node.add_output_pin(
@@ -93,19 +93,11 @@ impl NodeLogic for ReadImagePathNode {
             // decode-encode image to apply exif-orientation
             let mut tmp_bytes_out: Vec<u8> = Vec::new();
             let reader = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?;
-            let guessed_format = reader.format().unwrap();
             let mut decoder = reader.into_decoder()?;
             let orientation = decoder.orientation()?;
             let mut img = DynamicImage::from_decoder(decoder)?;
             img.apply_orientation(orientation);  // compensate potential rotations from metadata
-            let mut cursor = Cursor::new(&mut tmp_bytes_out);
-            if guessed_format == ImageFormat::Jpeg {
-                // avoid lossy re-encoding
-                let encoder = JpegEncoder::new_with_quality(cursor, 100);
-                img.write_with_encoder(encoder)?;
-            } else {
-                img.write_to(&mut cursor, guessed_format)?;  // encode & write to bytes (might be expensive)
-            }
+            img.write_to(&mut Cursor::new(&mut tmp_bytes_out), ImageFormat::Png)?;  // encode & write to bytes (might be expensive)
             tmp_bytes_out
         } else {
             // pass-on encoded as no transform required

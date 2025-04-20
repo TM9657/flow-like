@@ -9,7 +9,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, image::{imageops::FilterType, GenericImageView}, json::json, Ok};
+use flow_like_types::{async_trait, image::{imageops::FilterType, GenericImageView, ImageFormat}, json::json, Ok};
 
 #[derive(Default)]
 pub struct ResizeImageNode {}
@@ -156,7 +156,7 @@ impl NodeLogic for ResizeImageNode {
         }?;
 
         // get image
-        let (img, format) = node_img.as_decoded_with_format()?;
+        let (img, _format) = node_img.as_decoded_with_format()?;
 
         // resize image
         let resized_img = {
@@ -167,7 +167,7 @@ impl NodeLogic for ResizeImageNode {
             }
         };  
         let (result_width, result_height) = resized_img.dimensions();
-        let resized_node_img = NodeImage::from_decoded(&resized_img, format)?;
+        let resized_node_img = NodeImage::from_decoded(&resized_img, ImageFormat::Png)?;
         // todo: how to avoid potential decode-encode loss by passing DynamicImage directly between nodes
 
         // set outputs
