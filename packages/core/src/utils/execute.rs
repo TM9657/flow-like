@@ -47,7 +47,7 @@ pub async fn sidecar(command: &PathBuf) -> flow_like_types::Result<StdCommand> {
     {
         let mut sidecar = StdCommand::new("bash");
         sidecar.arg(path);
-        return Ok(sidecar);
+        Ok(sidecar)
     }
 }
 
@@ -79,7 +79,7 @@ pub async fn async_sidecar(command: &PathBuf) -> flow_like_types::Result<Command
     {
         let mut sidecar = process::Command::new("bash");
         sidecar.arg(path);
-        return Ok(sidecar);
+        Ok(sidecar)
     }
 }
 

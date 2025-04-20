@@ -23,6 +23,7 @@ impl NodeImage {
 
     /// construct NodeImage from image::DynamicImage with encoded image as vec<u8>
     pub fn from_decoded(decoded: &DynamicImage, format: ImageFormat) -> Result<Self> {
+        // todo: this is expensive and potentially lossy
         let mut encoded: Vec<u8> = Vec::new();
         if format == ImageFormat::Jpeg {
             let cursor = Cursor::new(&mut encoded);
