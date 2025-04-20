@@ -9,7 +9,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, json::json, Ok, image::GenericImageView};
+use flow_like_types::{async_trait, image::GenericImageView, json::json, Ok};
 
 #[derive(Default)]
 pub struct ImageDimsNode {}

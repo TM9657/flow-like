@@ -1,7 +1,7 @@
 
 use flow_like::flow::node::NodeLogic;
 use flow_like_types::Result;
-use flow_like_types::image::{DynamicImage, ImageFormat, ImageReader};
+use flow_like_types::image::{DynamicImage, ImageFormat, ImageReader, codecs::jpeg::JpegEncoder};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -21,11 +21,17 @@ impl NodeImage {
         Ok(Self { encoded })
     }
 
-    /// construct NodeImage from image::DynamicImage to vec with correct format
+    /// construct NodeImage from image::DynamicImage with encoded image as vec<u8>
     pub fn from_decoded(decoded: &DynamicImage, format: ImageFormat) -> Result<Self> {
         let mut encoded: Vec<u8> = Vec::new();
-        decoded.write_to(&mut Cursor::new(&mut encoded), format)?;
-        Ok(Self { encoded: encoded })
+        if format == ImageFormat::Jpeg {
+            let cursor = Cursor::new(&mut encoded);
+            let encoder = JpegEncoder::new_with_quality(cursor, 100);
+            decoded.write_with_encoder(encoder)?;
+        } else {
+            decoded.write_to(&mut Cursor::new(&mut encoded), format)?;
+        }
+        Ok(Self { encoded })
     }
 
     /// retrieve as decoded image::DynamicImage + guessed format for downstream re-encoding

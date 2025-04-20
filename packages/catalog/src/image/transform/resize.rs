@@ -168,6 +168,7 @@ impl NodeLogic for ResizeImageNode {
         };  
         let (result_width, result_height) = resized_img.dimensions();
         let resized_node_img = NodeImage::from_decoded(&resized_img, format)?;
+        // todo: how to avoid potential decode-encode loss by passing DynamicImage directly between nodes
 
         // set outputs
         context.set_pin_value("image_out", json!(resized_node_img)).await?;

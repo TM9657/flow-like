@@ -9,7 +9,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, image::{DynamicImage, ImageDecoder, ImageReader}, json::json, Ok};
+use flow_like_types::{async_trait, image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, codecs::jpeg::JpegEncoder}, json::json, Ok};
 use std::io::Cursor;
 
 
@@ -98,7 +98,14 @@ impl NodeLogic for ReadImagePathNode {
             let orientation = decoder.orientation()?;
             let mut img = DynamicImage::from_decoder(decoder)?;
             img.apply_orientation(orientation);  // compensate potential rotations from metadata
-            img.write_to(&mut Cursor::new(&mut tmp_bytes_out), guessed_format)?;  // encode & write to bytes (might be expensive)
+            let mut cursor = Cursor::new(&mut tmp_bytes_out);
+            if guessed_format == ImageFormat::Jpeg {
+                // avoid lossy re-encoding
+                let encoder = JpegEncoder::new_with_quality(cursor, 100);
+                img.write_with_encoder(encoder)?;
+            } else {
+                img.write_to(&mut cursor, guessed_format)?;  // encode & write to bytes (might be expensive)
+            }
             tmp_bytes_out
         } else {
             // pass-on encoded as no transform required
