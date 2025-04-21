@@ -14,7 +14,6 @@
 		"tauri": "dotenv -- tauri"
 	},
 	"dependencies": {
-		"@tm9657/flow-like-ui": "workspace:*",
 		"@dnd-kit/core": "^6.3.1",
 		"@floating-ui/react": "^0.27.3",
 		"@paralleldrive/cuid2": "^2.2.2",
@@ -44,11 +43,13 @@
 		"@tanstack/query-async-storage-persister": "^5.62.16",
 		"@tanstack/react-table": "^8.20.6",
 		"@tauri-apps/api": "^2.2.0",
+		"@tauri-apps/plugin-clipboard-manager": "^2.2.2",
 		"@tauri-apps/plugin-deep-link": "^2.2.0",
 		"@tauri-apps/plugin-dialog": "^2.2.0",
 		"@tauri-apps/plugin-global-shortcut": "^2.2.0",
 		"@tauri-apps/plugin-log": "^2.2.0",
 		"@tauri-apps/plugin-shell": "^2.2.0",
+		"@tm9657/flow-like-ui": "workspace:*",
 		"@uidotdev/usehooks": "^2.4.1",
 		"@vitejs/plugin-react": "^4.3.4",
 		"@xyflow/react": "^12.5.5",

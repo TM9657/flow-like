@@ -23,6 +23,7 @@ export function StorageBreadcrumbs({
 			<BreadcrumbList>
 				<BreadcrumbItem>
 					<BreadcrumbLink
+						className="cursor-pointer"
 						onClick={(e) => {
 							e.preventDefault();
 							updatePrefix("");
@@ -36,6 +37,8 @@ export function StorageBreadcrumbs({
 						<BreadcrumbSeparator />
 						<BreadcrumbItem>
 							<BreadcrumbLink
+								key={index + part}
+								className="cursor-pointer"
 								onClick={(e) => {
 									e.preventDefault();
 									const newPrefix = segments.slice(0, index + 1).join("/");

@@ -24,7 +24,7 @@
 			}
 		],
 		"security": {
-			"csp": "default-src 'self' data: ipc: http://ipc.localhost https: http:; img-src 'self' asset: http://asset.localhost data: https: http:; connect-src 'self' https: http: ws: wss:; style-src 'self' 'unsafe-inline' https: http:; font-src 'self' data: https: http:; media-src 'self' https: http: blob: data:;",
+			"csp": null,
 			"assetProtocol": {
 				"enable": true,
 				"scope": ["**/*"]

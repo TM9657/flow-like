@@ -92,6 +92,7 @@ pub fn run() {
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             let relay_handle = app.app_handle().clone();
             let gc_handle = relay_handle.clone();

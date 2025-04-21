@@ -9,6 +9,7 @@ use flow_like_types::{
     tokio::io::{AsyncReadExt, BufReader},
     utils::data_url::pathbuf_to_data_url,
 };
+use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
@@ -238,6 +239,15 @@ pub async fn storage_remove(
     prefix: String,
 ) -> Result<(), TauriFunctionError> {
     let (store, path) = construct_storage(&app_handle, &app_id, &prefix, false).await?;
+    let generic = store.as_generic();
+
+    let locations = generic.list(Some(&path)).map_ok(|m| m.location).boxed();
+    generic.delete_stream(locations).try_collect::<Vec<Path>>().await.map_err(|e| {
+        anyhow!("Failed to delete stream: {}", e)
+    })?;
+    generic.delete(&path).await.map_err(|e| {
+        anyhow!("Failed to delete path: {}", e)
+    })?;
     Ok(())
 }
 
@@ -248,6 +258,8 @@ pub async fn storage_rename(
     prefix: String,
 ) -> Result<(), TauriFunctionError> {
     let (store, path) = construct_storage(&app_handle, &app_id, &prefix, false).await?;
+
+
     Ok(())
 }
 

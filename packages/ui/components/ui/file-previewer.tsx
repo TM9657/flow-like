@@ -41,9 +41,9 @@ export function isCode(file: string) {
 
 export function getCodeLanguage(file: string) {
 	return (
-		/\.(json|xml|css|js|jsx|ts|tsx|py|java|c|cpp|h|hpp|cs|go|rb|php|swift|kt|rs|html|yml|yaml|toml|sql|sh|bash|scss|sass|less|vue|svelte)$/i.exec(
-			rawFileName(file),
-		)?.[0] ?? "text"
+		/\.(json|xml|css|js|jsx|ts|tsx|py|java|c|cpp|h|hpp|cs|go|rb|php|swift|kt|rs|html|yml|yaml|toml|sql|sh|bash|scss|sass|less|vue|svelte)$/i
+			.exec(rawFileName(file))?.[0]
+			?.replaceAll(".", "") ?? "text"
 	);
 }
 
@@ -174,11 +174,7 @@ export function FilePreviewer({
 	if (isCode(url)) {
 		return (
 			<MarkdownComponent
-				content={`
-            \`\`\`${getCodeLanguage(url)}
-            ${content}
-            \`\`\`
-            `}
+				content={`\n\`\`\`${getCodeLanguage(url)}\n${content}\n\`\`\`\n`}
 			/>
 		);
 	}

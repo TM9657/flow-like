@@ -21,7 +21,9 @@ export function StorageSystem({
 	fileToUrl,
 	uploadFile,
 	deleteFile,
+	shareFile,
 	moveFile,
+	downloadFile,
 }: Readonly<{
 	appId: string;
 	prefix: string;
@@ -30,7 +32,9 @@ export function StorageSystem({
 	fileToUrl: (prefix: string) => Promise<string>;
 	uploadFile: (prefix: string, folder: boolean) => Promise<void>;
 	deleteFile: (prefix: string) => Promise<void>;
+	shareFile: (prefix: string) => Promise<void>;
 	moveFile: (prefix: string, newPrefix: string) => Promise<void>;
+	downloadFile?: (prefix: string) => Promise<void>;
 }>) {
 	const [preview, setPreview] = useState({
 		url: "",
@@ -107,7 +111,7 @@ export function StorageSystem({
 				</div>
 			)}
 			{files.length > 0 && (
-				<div className="flex flex-col gap-2 mt-2 flex-grow max-h-full h-full overflow-y-auto">
+				<div className="flex flex-col gap-2 mt-2 flex-grow max-h-full h-full overflow-y-hidden">
 					{preview.url !== "" && (
 						<ResizablePanelGroup
 							direction="horizontal"
@@ -123,12 +127,23 @@ export function StorageSystem({
 											updatePrefix(`${prefix}/${new_prefix}`)
 										}
 										loadFile={(file) => loadFile(file)}
+										deleteFile={(file) => {
+											const filePrefix = `${prefix}/${file}`;
+											deleteFile(filePrefix);
+										}}
+										shareFile={(file) => {
+											const filePrefix = `${prefix}/${file}`;
+											shareFile(filePrefix);
+										}}
+										downloadFile={downloadFile}
 									/>
 								))}
 							</ResizablePanel>
 							<ResizableHandle className="mx-2" />
-							<ResizablePanel>
-								<FilePreviewer url={preview.url} page={2} />
+							<ResizablePanel className="flex flex-col gap-2 flex-grow overflow-y-hidden max-h-full h-full">
+								<div className="flex flex-col flex-grow overflow-auto max-h-full h-full bg-background">
+									<FilePreviewer url={preview.url} page={2} />
+								</div>
 							</ResizablePanel>
 						</ResizablePanelGroup>
 					)}
@@ -146,6 +161,15 @@ export function StorageSystem({
 									updatePrefix(`${prefix}/${new_prefix}`);
 								}}
 								loadFile={loadFile}
+								deleteFile={(file) => {
+									const filePrefix = `${prefix}/${file}`;
+									deleteFile(filePrefix);
+								}}
+								shareFile={(file) => {
+									const filePrefix = `${prefix}/${file}`;
+									shareFile(filePrefix);
+								}}
+								downloadFile={downloadFile}
 							/>
 						))}
 				</div>

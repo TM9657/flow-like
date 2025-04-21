@@ -40,6 +40,7 @@ dirs-next = "2.0.0"
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
 tauri-plugin = "2.2.0"
+tauri-plugin-clipboard-manager = "2.2.2"
 
 [profile.release]
 panic = "abort"
