@@ -1,4 +1,4 @@
-use flow_like_types::{Value, sync::Mutex};
+use flow_like_types::{Value, json::json, sync::Mutex};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -254,6 +254,50 @@ impl InternalNode {
         Ok(connected)
     }
 
+    pub async fn get_error_handled_nodes(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
+        let mut connected = vec![];
+
+        let pin = self.get_pin_by_name("auto_handle_error").await?;
+        let active = evaluate_pin_value(pin.clone()).await?;
+
+        let active = match active {
+            Value::Bool(b) => b,
+            _ => false,
+        };
+
+        if !active {
+            return Err(flow_like_types::anyhow!("Error Pin not active"));
+        }
+
+        let pin_guard = pin.lock().await;
+        let pin = pin_guard.pin.lock().await;
+
+        if pin.pin_type != PinType::Output {
+            return Err(flow_like_types::anyhow!("Pin is not an output pin"));
+        }
+
+        if pin.data_type != VariableType::Execution {
+            return Err(flow_like_types::anyhow!("Pin is not an execution pin"));
+        }
+
+        drop(pin);
+        let connected_pins = pin_guard.connected_to.clone();
+
+        for connected_pin in &connected_pins {
+            let connected_pin_guard = connected_pin
+                .upgrade()
+                .ok_or(flow_like_types::anyhow!("Failed to lock Pin"))?;
+            let connected_pin_guard = connected_pin_guard.lock().await;
+            let connected_node = connected_pin_guard.node.upgrade();
+
+            if let Some(connected_node) = connected_node {
+                connected.push(connected_node);
+            }
+        }
+
+        Ok(connected)
+    }
+
     pub async fn get_dependencies(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let mut dependencies = Vec::with_capacity(self.pins.len());
 
@@ -389,6 +433,56 @@ impl InternalNode {
         true
     }
 
+    pub async fn handle_error(
+        context: &mut ExecutionContext,
+        error: &str,
+        recursion_guard: &mut Option<HashSet<String>>,
+    ) -> Result<(), InternalNodeError> {
+        let _ = context.activate_exec_pin("auto_handle_error").await;
+        let _ = context
+            .set_pin_value("auto_handle_error_string", json!(error))
+            .await;
+        let connected = context
+            .node
+            .get_error_handled_nodes()
+            .await
+            .map_err(|err| {
+                context.log_message(
+                    &format!("Failed to get error handling nodes: {}", err),
+                    LogLevel::Error,
+                );
+                InternalNodeError::ExecutionFailed(context.id.clone())
+            })?;
+        if connected.is_empty() {
+            context.log_message(
+                &format!("No error handling nodes found for: {}", &context.id),
+                LogLevel::Error,
+            );
+            return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
+        }
+
+        for successor in connected {
+            let mut sub_context = context.create_sub_context(&successor).await;
+            let result = Box::pin(InternalNode::trigger(
+                &mut sub_context,
+                recursion_guard,
+                true,
+            ))
+            .await;
+            sub_context.end_trace();
+            context.push_sub_context(sub_context);
+            if result.is_err() {
+                let err_string = format!("{:?}", result.err());
+                let _ = context
+                    .set_pin_value("auto_handle_error_string", json!(err_string))
+                    .await;
+                return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
+            }
+        }
+        context.set_state(NodeState::Error).await;
+        Ok(())
+    }
+
     pub async fn trigger(
         context: &mut ExecutionContext,
         recursion_guard: &mut Option<HashSet<String>>,
@@ -396,7 +490,6 @@ impl InternalNode {
     ) -> Result<(), InternalNodeError> {
         context.set_state(NodeState::Running).await;
         let node = context.read_node().await;
-
         // create recursion guard if not present
         if recursion_guard.is_none() {
             *recursion_guard = Some(HashSet::new());
@@ -422,6 +515,12 @@ impl InternalNode {
         if !success {
             context.log_message("Failed to trigger missing dependencies", LogLevel::Error);
             context.end_trace();
+            InternalNode::handle_error(
+                context,
+                "Failed to trigger missing dependencies",
+                recursion_guard,
+            )
+            .await?;
             return Err(InternalNodeError::DependencyFailed(node.id));
         }
 
@@ -435,14 +534,16 @@ impl InternalNode {
         let result = logic.run(context).await;
         drop(logic);
         if result.is_err() {
+            let err_string = format!("{:?}", result.err());
             context.log_message(
-                &format!("Failed to execute node: {:?}", result.err()),
+                &format!("Failed to execute node: {}", &err_string),
                 LogLevel::Error,
             );
             log_message.end();
             context.log(log_message);
             context.end_trace();
             context.set_state(NodeState::Error).await;
+            InternalNode::handle_error(context, &err_string, recursion_guard).await?;
             return Err(InternalNodeError::ExecutionFailed(node.id));
         }
         context.set_state(NodeState::Success).await;
@@ -454,10 +555,12 @@ impl InternalNode {
             let successors = match context.node.get_connected_exec(true).await {
                 Ok(nodes) => nodes,
                 Err(err) => {
+                    let err_string = format!("{:?}", err);
                     context.log_message(
-                        &format!("Failed to get successors: {:?}", err),
+                        &format!("Failed to get successors: {}", err_string.clone()),
                         LogLevel::Error,
                     );
+                    InternalNode::handle_error(context, &err_string, recursion_guard).await?;
                     return Err(InternalNodeError::ExecutionFailed(node.id));
                 }
             };
@@ -473,6 +576,11 @@ impl InternalNode {
                 sub_context.end_trace();
                 context.push_sub_context(sub_context);
                 if result.is_err() {
+                    let err_string = format!("{:?}", result.err());
+                    let _ = context.activate_exec_pin("auto_handle_error").await;
+                    let _ = context
+                        .set_pin_value("auto_handle_error_string", json!(err_string))
+                        .await;
                     return Err(InternalNodeError::ExecutionFailed(node.id));
                 }
             }
@@ -529,6 +637,8 @@ impl InternalNode {
                 sub_context.end_trace();
                 context.push_sub_context(sub_context);
                 if result.is_err() {
+                    let err_string = format!("{:?}", result.err());
+                    InternalNode::handle_error(context, &err_string, recursion_guard).await?;
                     return Err(InternalNodeError::DependencyFailed(node.id));
                 }
             }
@@ -544,14 +654,16 @@ impl InternalNode {
         let result = logic.run(context).await;
 
         if result.is_err() {
+            let err_string = format!("{:?}", result.err());
             context.log_message(
-                &format!("Failed to execute node: {:?}", result.err()),
+                &format!("Failed to execute node: {}", err_string.clone()),
                 LogLevel::Error,
             );
             log_message.end();
             context.log(log_message);
             context.end_trace();
             context.set_state(NodeState::Error).await;
+            InternalNode::handle_error(context, &err_string, recursion_guard).await?;
             return Err(InternalNodeError::ExecutionFailed(node.id));
         }
         context.set_state(NodeState::Success).await;
@@ -563,10 +675,12 @@ impl InternalNode {
             let successors = match context.node.get_connected_exec(true).await {
                 Ok(nodes) => nodes,
                 Err(err) => {
+                    let err_string = format!("{:?}", err);
                     context.log_message(
-                        &format!("Failed to get successors: {:?}", err),
+                        &format!("Failed to get successors: {}", err_string.clone()),
                         LogLevel::Error,
                     );
+                    InternalNode::handle_error(context, &err_string, recursion_guard).await?;
                     return Err(InternalNodeError::ExecutionFailed(node.id));
                 }
             };
@@ -583,6 +697,8 @@ impl InternalNode {
                 sub_context.end_trace();
                 context.push_sub_context(sub_context);
                 if result.is_err() {
+                    let err_string = format!("{:?}", result.err());
+                    InternalNode::handle_error(context, &err_string, recursion_guard).await?;
                     return Err(InternalNodeError::ExecutionFailed(node.id));
                 }
             }

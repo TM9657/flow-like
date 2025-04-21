@@ -45,9 +45,9 @@ import {
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
 import { useInvalidateInvoke } from "../../hooks";
-import { IPinType, handleCopy, updateNodeCommand } from "../../lib";
+import { IPinType, IValueType, handleCopy, updateNodeCommand, upsertPinCommand } from "../../lib";
 import type { INode } from "../../lib/schema/flow/node";
-import type { IPin } from "../../lib/schema/flow/pin";
+import { IVariableType, type IPin } from "../../lib/schema/flow/pin";
 import { ILogLevel, type ITrace } from "../../lib/schema/flow/run";
 import {
 	convertJsonToUint8Array,
@@ -703,11 +703,19 @@ const FlowNodeInner = memo(
 );
 
 function FlowNode(props: NodeProps<FlowNode>) {
+	const backend = useBackend();
 	const [isHovered, setIsHovered] = useState(false);
 	const [isOpen, setIsOpen] = useState(false);
 	const [commentMenu, setCommentMenu] = useState(false);
 	const [renameMenu, setRenameMenu] = useState(false);
 	const flow = useReactFlow();
+	const { pushCommand } = useUndoRedo(props.data.appId, props.data.boardId);
+	const invalidate = useInvalidateInvoke();
+	const errorHandled = useMemo(() => {
+		return Object.values(props.data.node.pins).some(
+			(pin) => pin.name === "auto_handle_error" && pin.pin_type === IPinType.Output,
+		);
+	}, [props.data.node.pins]);
 
 	// const selectChildren = useCallback(() => {
 	// 	const nodes = flow.getNodes();
@@ -721,6 +729,84 @@ function FlowNode(props: NodeProps<FlowNode>) {
 		handleCopy(flow.getNodes());
 	}, [flow]);
 
+	const handleError = useCallback( async () => {
+		const node = flow.getNodes().find((node) => node.id === props.id);
+		if (!node) return;
+
+		const innerNode = node.data.node as INode;
+
+		const handleErrorPin = Object.values(innerNode.pins).find(
+			(pin) => pin.name === "auto_handle_error" && pin.pin_type === IPinType.Output,
+		);
+
+		if (handleErrorPin) {
+			const filteredPins = Object.values(innerNode.pins).filter(
+				(pin) => pin.name !== "auto_handle_error" && pin.name !== "auto_handle_error_string",
+			);
+			innerNode.pins = {};
+			filteredPins.toSorted((a, b) => a.index - b.index).forEach(
+				(pin, index) => (innerNode.pins[pin.id] = { ...pin, index: index }),
+			);
+			const updateNode = updateNodeCommand({
+				node: {
+					...innerNode,
+				}
+			})
+
+			await backend.executeCommand(props.data.appId, props.data.boardId, updateNode)
+			await pushCommand(updateNode, false)
+			invalidate(backend.getBoard, [props.data.appId, props.data.boardId]);
+			return;
+		}
+
+		const newPin: IPin = {
+			name: "auto_handle_error",
+			description: "Handles Node Errors for you.",
+			pin_type: IPinType.Output,
+			value_type: IValueType.Normal,
+			data_type: IVariableType.Execution,
+			id: createId(),
+			index: 0,
+			connected_to: [],
+			depends_on: [],
+			friendly_name: "On Error",
+			default_value: convertJsonToUint8Array(false),
+		}
+
+		const stringPin: IPin = {
+			name: "auto_handle_error_string",
+			description: "Handles Node Errors for you.",
+			pin_type: IPinType.Output,
+			value_type: IValueType.Normal,
+			data_type: IVariableType.String,
+			id: createId(),
+			index: 0,
+			connected_to: [],
+			depends_on: [],
+			friendly_name: "Error",
+			default_value: convertJsonToUint8Array(""),
+		}
+
+		const command = upsertPinCommand({
+			node_id: innerNode.id,
+			pin: newPin,
+		})
+
+		const stringCommand = upsertPinCommand({
+			node_id: innerNode.id,
+			pin: stringPin,
+		})
+
+
+		await backend.executeCommand(props.data.appId, props.data.boardId, command)
+		await backend.executeCommand(props.data.appId, props.data.boardId, stringCommand)
+		await pushCommand(command, false)
+		await pushCommand(stringCommand, true)
+
+		invalidate(backend.getBoard, [props.data.appId, props.data.boardId]);
+
+	}, [backend, props.data.node, props.data.appId, props.data.boardId, flow])
+
 	if (isOpen || isHovered) {
 		return (
 			<ContextMenu
@@ -732,7 +818,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 				<ContextMenuTrigger>
 					<FlowNodeInner props={props} onHover={setIsHovered} />
 				</ContextMenuTrigger>
-				<ContextMenuContent className="max-w-20">
+				<ContextMenuContent className="">
 					<ContextMenuLabel>Node Actions</ContextMenuLabel>
 					{flow.getNodes().filter((node) => node.selected).length <= 1 &&
 						props.data.node.start && (
@@ -748,6 +834,14 @@ function FlowNode(props: NodeProps<FlowNode>) {
 							<div className="flex flex-row items-center gap-2 text-nowrap">
 								<MessageSquareIcon className="w-4 h-4" />
 								Comment
+							</div>
+						</ContextMenuItem>
+					)}
+					{flow.getNodes().filter((node) => node.selected).length <= 1 && (
+						<ContextMenuItem onClick={() => handleError()}>
+							<div className="flex flex-row items-center gap-2 text-nowrap">
+								<CircleXIcon className="w-4 h-4" />
+								{errorHandled ? "Remove Handling" : "Handle Errors"}
 							</div>
 						</ContextMenuItem>
 					)}

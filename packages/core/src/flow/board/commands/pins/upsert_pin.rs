@@ -1,4 +1,4 @@
-use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::{async_trait, create_id, sync::Mutex};
 use schemars::JsonSchema;
 use std::sync::Arc;
 
@@ -40,7 +40,25 @@ impl Command for UpsertPinCommand {
             None => return Err(flow_like_types::anyhow!("Node not found".to_string())),
         };
 
-        self.old_pin = node.pins.insert(self.pin.id.clone(), self.pin.clone());
+        if node.pins.contains_key(&self.pin.id) {
+            self.old_pin = node.pins.insert(self.pin.id.clone(), self.pin.clone());
+            board.fix_pins();
+            return Ok(());
+        }
+
+        let mut pin = self.pin.clone();
+        pin.id = create_id();
+
+        let num_pins = node
+            .pins
+            .iter()
+            .filter(|(_, v)| v.pin_type == pin.pin_type)
+            .count();
+
+        pin.index = num_pins as u16 + 1;
+
+        node.pins.insert(pin.id.clone(), pin.clone());
+        self.pin = pin;
 
         board.fix_pins();
 
