@@ -8,14 +8,14 @@ interface EmptyStateProps {
 	description: string;
 	icons?: LucideIcon[];
 	action?:
-	| {
-		label: string;
-		onClick: () => void;
-	}
-	| {
-		label: string;
-		onClick: () => void;
-	}[];
+		| {
+				label: string;
+				onClick: () => void;
+		  }
+		| {
+				label: string;
+				onClick: () => void;
+		  }[];
 	className?: string;
 }
 

@@ -1,4 +1,3 @@
-
 use crate::image::NodeImage;
 use flow_like::{
     flow::{
@@ -9,14 +8,14 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, image::GenericImageView, json::json, Ok};
+use flow_like_types::{Ok, async_trait, image::GenericImageView, json::json};
 
 #[derive(Default)]
 pub struct ImageDimsNode {}
 
 impl ImageDimsNode {
     pub fn new() -> Self {
-        ImageDimsNode{}
+        ImageDimsNode {}
     }
 }
 
@@ -38,12 +37,7 @@ impl NodeLogic for ImageDimsNode {
             "Initiate Execution",
             VariableType::Execution,
         );
-        node.add_input_pin(
-            "image_in",
-            "Image",
-            "Image object",
-            VariableType::Struct,
-        )
+        node.add_input_pin("image_in", "Image", "Image object", VariableType::Struct)
             .set_schema::<NodeImage>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
@@ -55,27 +49,15 @@ impl NodeLogic for ImageDimsNode {
             "Done with the Execution",
             VariableType::Execution,
         );
-        node.add_output_pin(
-            "width",
-            "width",
-            "Image Width",
-            VariableType::Integer,
-        );
-        node.add_output_pin(
-            "height",
-            "height",
-            "Image Height",
-            VariableType::Integer,
-        );
+        node.add_output_pin("width", "width", "Image Width", VariableType::Integer);
+        node.add_output_pin("height", "height", "Image Height", VariableType::Integer);
         node
-
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         // get inputs
         context.deactivate_exec_pin("exec_out").await?;
         let node_image: NodeImage = context.evaluate_pin("image_in").await?;
-
 
         let img = node_image.get_image(context).await?;
         let (width, height) = {

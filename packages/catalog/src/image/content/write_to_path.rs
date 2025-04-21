@@ -1,15 +1,36 @@
-
 use std::sync::Arc;
 
 use crate::{image::NodeImage, storage::path::FlowPath};
 use flow_like::{
     flow::{
-        board::Board, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::{Pin, PinOptions}, variable::VariableType
+        board::Board,
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        pin::{Pin, PinOptions},
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
 use flow_like_storage::object_store::PutPayload;
-use flow_like_types::{anyhow, async_trait, image::codecs::{avif::AvifEncoder, bmp::BmpEncoder, farbfeld::FarbfeldEncoder, gif::GifEncoder, hdr::HdrEncoder, ico::IcoEncoder, jpeg::JpegEncoder, openexr::OpenExrEncoder, png::{CompressionType, FilterType, PngEncoder}, pnm::PnmEncoder, qoi::QoiEncoder, tga::TgaEncoder, webp::WebPEncoder}, json::json, Bytes};
+use flow_like_types::{
+    Bytes, anyhow, async_trait,
+    image::codecs::{
+        avif::AvifEncoder,
+        bmp::BmpEncoder,
+        farbfeld::FarbfeldEncoder,
+        gif::GifEncoder,
+        hdr::HdrEncoder,
+        ico::IcoEncoder,
+        jpeg::JpegEncoder,
+        openexr::OpenExrEncoder,
+        png::{CompressionType, FilterType, PngEncoder},
+        pnm::PnmEncoder,
+        qoi::QoiEncoder,
+        tga::TgaEncoder,
+        webp::WebPEncoder,
+    },
+    json::json,
+};
 #[derive(Default)]
 pub struct WriteImageNode {}
 
@@ -43,50 +64,35 @@ impl NodeLogic for WriteImageNode {
             "The image to write to path",
             VariableType::Struct,
         )
-            .set_schema::<NodeImage>()
-            .set_options(PinOptions::new()
-                .set_enforce_schema(true)
-                .build()
-        );
+        .set_schema::<NodeImage>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin(
-            "path",
-            "Path",
-            "FlowPath",
-            VariableType::Struct
-        )
+        node.add_input_pin("path", "Path", "FlowPath", VariableType::Struct)
             .set_schema::<FlowPath>()
-            .set_options(PinOptions::new()
-                .set_enforce_schema(true)
-                .build()
-        );
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin(
-            "type",
-            "Type",
-            "Image Type",
-            VariableType::String
-        )
-            .set_options(PinOptions::new()
-                .set_valid_values(vec![
-                    "JPEG".to_string(),
-                    "PNG".to_string(),
-                    "TIFF".to_string(),
-                    "WebP".to_string(),
-                    // "Gif".to_string(), // CURRENTLY NOT SUPPORTED
-                    "AVIF".to_string(),
-                    "BMP".to_string(),
-                    "ICO".to_string(),
-                    "PNM".to_string(),
-                    "QOI".to_string(),
-                    "TGA".to_string(),
-                    "Farbfeld".to_string(),
-                    "HDR".to_string(),
-                    // "OpenExr".to_string(), // CURRENTLY NOT SUPPORTED
-                ])
-            .build()
-        )
-        .set_default_value(Some(json!("JPEG")));
+        node.add_input_pin("type", "Type", "Image Type", VariableType::String)
+            .set_options(
+                PinOptions::new()
+                    .set_valid_values(vec![
+                        "JPEG".to_string(),
+                        "PNG".to_string(),
+                        "TIFF".to_string(),
+                        "WebP".to_string(),
+                        // "Gif".to_string(), // CURRENTLY NOT SUPPORTED
+                        "AVIF".to_string(),
+                        "BMP".to_string(),
+                        "ICO".to_string(),
+                        "PNM".to_string(),
+                        "QOI".to_string(),
+                        "TGA".to_string(),
+                        "Farbfeld".to_string(),
+                        "HDR".to_string(),
+                        // "OpenExr".to_string(), // CURRENTLY NOT SUPPORTED
+                    ])
+                    .build(),
+            )
+            .set_default_value(Some(json!("JPEG")));
 
         node.add_input_pin(
             "quality",
@@ -94,12 +100,8 @@ impl NodeLogic for WriteImageNode {
             "Encoding Quality",
             VariableType::Integer,
         )
-            .set_options(PinOptions::new()
-                .set_range((0., 100.))
-                .build()
-            )
-            .set_default_value(Some(json!(100))
-        );
+        .set_options(PinOptions::new().set_range((0., 100.)).build())
+        .set_default_value(Some(json!(100)));
 
         node.add_output_pin(
             "exec_out",
@@ -132,7 +134,8 @@ impl NodeLogic for WriteImageNode {
             "HDR" => path.set_extension(context, "hdr"),
             "OpenExr" => path.set_extension(context, "exr"),
             _ => return Err(anyhow!("Unsupported image type")),
-        }.await?;
+        }
+        .await?;
 
         let path = path.to_runtime(context).await?;
         let node_image: NodeImage = context.evaluate_pin("image_in").await?;
@@ -235,7 +238,8 @@ impl NodeLogic for WriteImageNode {
             .get_pin_by_name("type")
             .and_then(|pin| pin.default_value.clone())
             .and_then(|bytes| flow_like_types::json::from_slice::<String>(&bytes).ok())
-            .unwrap_or_default().clone();
+            .unwrap_or_default()
+            .clone();
 
         // jpeg + avif
         let quality_pin = node.get_pin_by_name("quality").cloned();
@@ -257,17 +261,14 @@ impl NodeLogic for WriteImageNode {
                 remove_pin(node, speed);
                 remove_pin(node, threads);
 
-                if let None = quality_pin {
+                if quality_pin.is_none() {
                     node.add_input_pin(
                         "quality",
                         "Quality",
                         "Encoding Quality",
                         VariableType::Integer,
                     )
-                    .set_options(PinOptions::new()
-                        .set_range((0., 100.))
-                        .build()
-                    )
+                    .set_options(PinOptions::new().set_range((0., 100.)).build())
                     .set_default_value(Some(json!(100)));
                 }
             }
@@ -276,43 +277,40 @@ impl NodeLogic for WriteImageNode {
                 remove_pin(node, speed);
                 remove_pin(node, threads);
 
-                if let None = compression_type {
+                if compression_type.is_none() {
                     node.add_input_pin(
                         "compression_type",
                         "Compression Type",
                         "Compression Type",
                         VariableType::String,
                     )
-                    .set_options(PinOptions::new()
-                        .set_valid_values(vec![
-                            "Best".to_string(),
-                            "Fast".to_string(),
-                            "Default".to_string(),
-                        ])
-                        .build()
+                    .set_options(
+                        PinOptions::new()
+                            .set_valid_values(vec![
+                                "Best".to_string(),
+                                "Fast".to_string(),
+                                "Default".to_string(),
+                            ])
+                            .build(),
                     )
                     .set_default_value(Some(json!("Default")));
                 }
 
-                if let None = filter {
-                    node.add_input_pin(
-                        "filter",
-                        "Filter",
-                        "Filter Type",
-                        VariableType::String,
-                    )
-                    .set_options(PinOptions::new()
-                        .set_valid_values(vec![
-                            "NoFilter".to_string(),
-                            "Sub".to_string(),
-                            "Up".to_string(),
-                            "Average".to_string(),
-                            "Adaptive".to_string(),
-                            "Paeth".to_string(),
-                        ])
-                        .build()
-                    )
-                    .set_default_value(Some(json!("Adaptive")));
+                if filter.is_none() {
+                    node.add_input_pin("filter", "Filter", "Filter Type", VariableType::String)
+                        .set_options(
+                            PinOptions::new()
+                                .set_valid_values(vec![
+                                    "NoFilter".to_string(),
+                                    "Sub".to_string(),
+                                    "Up".to_string(),
+                                    "Average".to_string(),
+                                    "Adaptive".to_string(),
+                                    "Paeth".to_string(),
+                                ])
+                                .build(),
+                        )
+                        .set_default_value(Some(json!("Adaptive")));
                 }
             }
             "GIF" => {
@@ -321,18 +319,10 @@ impl NodeLogic for WriteImageNode {
                 remove_pin(node, threads);
                 remove_pin(node, quality_pin);
 
-                if let None = speed {
-                    node.add_input_pin(
-                        "speed",
-                        "Speed",
-                        "Encoding Speed",
-                        VariableType::Integer,
-                    )
-                    .set_options(PinOptions::new()
-                        .set_range((0., 10.))
-                        .build()
-                    )
-                    .set_default_value(Some(json!(10)));
+                if speed.is_none() {
+                    node.add_input_pin("speed", "Speed", "Encoding Speed", VariableType::Integer)
+                        .set_options(PinOptions::new().set_range((0., 10.)).build())
+                        .set_default_value(Some(json!(10)));
                 }
             }
             "AVIF" => {
@@ -340,31 +330,20 @@ impl NodeLogic for WriteImageNode {
                 remove_pin(node, filter);
                 remove_pin(node, quality_pin);
 
-                if let None = speed {
-                    node.add_input_pin(
-                        "speed",
-                        "Speed",
-                        "Encoding Speed",
-                        VariableType::Integer,
-                    )
-                    .set_options(PinOptions::new()
-                        .set_range((0., 10.))
-                        .build()
-                    )
-                    .set_default_value(Some(json!(10)));
+                if speed.is_none() {
+                    node.add_input_pin("speed", "Speed", "Encoding Speed", VariableType::Integer)
+                        .set_options(PinOptions::new().set_range((0., 10.)).build())
+                        .set_default_value(Some(json!(10)));
                 }
 
-                if let None = threads {
+                if threads.is_none() {
                     node.add_input_pin(
                         "threads",
                         "Threads",
                         "Number of Threads",
                         VariableType::Integer,
                     )
-                    .set_options(PinOptions::new()
-                        .set_range((1., 16.))
-                        .build()
-                    )
+                    .set_options(PinOptions::new().set_range((1., 16.)).build())
                     .set_default_value(Some(json!(1)));
                 }
             }
@@ -379,10 +358,7 @@ impl NodeLogic for WriteImageNode {
     }
 }
 
-fn remove_pin(
-    node: &mut Node,
-    pin: Option<Pin>,
-) {
+fn remove_pin(node: &mut Node, pin: Option<Pin>) {
     if let Some(pin) = pin {
         node.pins.remove(&pin.id);
     }

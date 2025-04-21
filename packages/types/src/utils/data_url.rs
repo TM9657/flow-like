@@ -78,7 +78,7 @@ pub fn data_url_to_base64(url: &str) -> anyhow::Result<&str> {
 }
 
 pub async fn pathbuf_to_data_url(path: &std::path::PathBuf) -> anyhow::Result<String> {
-    let mime = mime_guess::from_path(&path).first_or_octet_stream();
+    let mime = mime_guess::from_path(path).first_or_octet_stream();
     let base64 = std::fs::read(path)?;
     let base64 = STANDARD.encode(&base64);
     let data_url = format!("data:{};base64,{}", mime, base64);

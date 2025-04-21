@@ -1,4 +1,3 @@
-
 use crate::image::NodeImage;
 use flow_like::{
     flow::{
@@ -9,7 +8,11 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, image::{imageops::FilterType, GenericImageView}, json::json, Ok};
+use flow_like_types::{
+    Ok, async_trait,
+    image::{GenericImageView, imageops::FilterType},
+    json::json,
+};
 
 #[derive(Default)]
 pub struct ResizeImageNode {}
@@ -38,42 +41,29 @@ impl NodeLogic for ResizeImageNode {
             "Initiate Execution",
             VariableType::Execution,
         );
-        node.add_input_pin(
-            "image_in",
-            "Image",
-            "Image object",
-            VariableType::Struct,
-        )
+        node.add_input_pin("image_in", "Image", "Image object", VariableType::Struct)
             .set_schema::<NodeImage>()
-            .set_options(PinOptions::new()
-                .set_enforce_schema(true)
-                .build()
-            );
-
-            node.add_input_pin(
-                "use_ref",
-                "Use Reference",
-                "Use Reference of the image, transforming the original instead of a copy",
-                VariableType::Boolean,
-            )
-            .set_default_value(Some(json!(true)));
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
-            "mode",
-            "Resize Mode",
-            "Resize Mode",
-            VariableType::String,
+            "use_ref",
+            "Use Reference",
+            "Use Reference of the image, transforming the original instead of a copy",
+            VariableType::Boolean,
         )
-            .set_options(PinOptions::new()
-                .set_valid_values(vec![
-                    "keep_aspect".to_string(),
-                    "exact".to_string(),
-                    "to_fill".to_string()
-                ])
-                .build()
+        .set_default_value(Some(json!(true)));
+
+        node.add_input_pin("mode", "Resize Mode", "Resize Mode", VariableType::String)
+            .set_options(
+                PinOptions::new()
+                    .set_valid_values(vec![
+                        "keep_aspect".to_string(),
+                        "exact".to_string(),
+                        "to_fill".to_string(),
+                    ])
+                    .build(),
             )
-            .set_default_value(Some(json!("keep_aspect"))
-        );
+            .set_default_value(Some(json!("keep_aspect")));
 
         node.add_input_pin(
             "filter",
@@ -81,7 +71,8 @@ impl NodeLogic for ResizeImageNode {
             "Resize Filter Algorithm",
             VariableType::String,
         )
-            .set_options(PinOptions::new()
+        .set_options(
+            PinOptions::new()
                 .set_valid_values(vec![
                     "Nearest".to_string(),
                     "Triangle".to_string(),
@@ -89,10 +80,9 @@ impl NodeLogic for ResizeImageNode {
                     "Gaussian".to_string(),
                     "Lanczos3".to_string(),
                 ])
-                .build()
-            )
-            .set_default_value(Some(json!("Lanczos3"))
-        );
+                .build(),
+        )
+        .set_default_value(Some(json!("Lanczos3")));
 
         node.add_input_pin(
             "width_in",
@@ -100,8 +90,7 @@ impl NodeLogic for ResizeImageNode {
             "Resized Image Target Width",
             VariableType::Integer,
         )
-            .set_default_value(Some(json!(512))
-        );
+        .set_default_value(Some(json!(512)));
 
         node.add_input_pin(
             "height_in",
@@ -109,8 +98,7 @@ impl NodeLogic for ResizeImageNode {
             "Resized Image Target Height",
             VariableType::Integer,
         )
-            .set_default_value(Some(json!(512))
-        );
+        .set_default_value(Some(json!(512)));
 
         // outputs
         node.add_output_pin(
@@ -119,12 +107,7 @@ impl NodeLogic for ResizeImageNode {
             "Done with the Execution",
             VariableType::Execution,
         );
-        node.add_output_pin(
-            "image_out",
-            "Image",
-            "Image object",
-            VariableType::Struct,
-        )
+        node.add_output_pin("image_out", "Image", "Image object", VariableType::Struct)
             .set_schema::<NodeImage>();
 
         node.add_output_pin(
@@ -140,7 +123,6 @@ impl NodeLogic for ResizeImageNode {
             VariableType::Integer,
         );
         node
-
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
@@ -186,8 +168,12 @@ impl NodeLogic for ResizeImageNode {
         };
 
         context.set_pin_value("image_out", json!(node_img)).await?;
-        context.set_pin_value("width_out", json!(result_width)).await?;
-        context.set_pin_value("height_out", json!(result_height)).await?;
+        context
+            .set_pin_value("width_out", json!(result_width))
+            .await?;
+        context
+            .set_pin_value("height_out", json!(result_height))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }

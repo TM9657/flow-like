@@ -1,7 +1,7 @@
 use flow_like_types::{
-    Cacheable, Result, anyhow, bail,
+    Cacheable, Result, bail,
     reqwest::{self, Url},
-    utils::data_url::{data_url_to_base64, pathbuf_to_data_url},
+    utils::data_url::pathbuf_to_data_url,
 };
 use futures::StreamExt;
 use local_store::LocalObjectStore;

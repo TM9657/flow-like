@@ -57,7 +57,11 @@ impl FlowPath {
         })
     }
 
-    pub async fn set_extension(&self, context: &mut ExecutionContext, extension: &str) -> flow_like_types::Result<Self> {
+    pub async fn set_extension(
+        &self,
+        context: &mut ExecutionContext,
+        extension: &str,
+    ) -> flow_like_types::Result<Self> {
         let extension = if extension.starts_with('.') {
             extension[1..].to_string()
         } else {

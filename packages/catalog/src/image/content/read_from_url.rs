@@ -1,4 +1,3 @@
-
 use crate::image::NodeImage;
 use flow_like::{
     flow::{
@@ -8,7 +7,11 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, image::{DynamicImage, ImageDecoder, ImageReader}, json::json, Ok};
+use flow_like_types::{
+    Ok, async_trait,
+    image::{DynamicImage, ImageDecoder, ImageReader},
+    json::json,
+};
 use std::io::Cursor;
 
 #[derive(Default)]
@@ -50,7 +53,7 @@ impl NodeLogic for ReadImageFromUrlNode {
             "Apply Exif Orientation",
             VariableType::Boolean,
         )
-            .set_default_value(Some(json!(false)));
+        .set_default_value(Some(json!(false)));
 
         node.add_output_pin(
             "exec_out",
@@ -58,22 +61,20 @@ impl NodeLogic for ReadImageFromUrlNode {
             "Done with the Execution",
             VariableType::Execution,
         );
-        node.add_output_pin(
-            "image_out",
-            "Image",
-            "Image object",
-            VariableType::Struct,
-        )
+        node.add_output_pin("image_out", "Image", "Image object", VariableType::Struct)
             .set_schema::<NodeImage>();
 
         node
-
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         let signed_url: String = context.evaluate_pin("signed_url").await?;
-        let bytes = flow_like_types::reqwest::get(&signed_url).await?.bytes().await?.to_vec();
+        let bytes = flow_like_types::reqwest::get(&signed_url)
+            .await?
+            .bytes()
+            .await?
+            .to_vec();
         let apply_exif: bool = context.evaluate_pin("apply_exif").await?;
 
         let image = {

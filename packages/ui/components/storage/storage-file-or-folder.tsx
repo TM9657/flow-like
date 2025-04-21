@@ -1,32 +1,35 @@
 import { IconBinary, IconPdf } from "@tabler/icons-react";
 import {
-    BracesIcon,
-    EllipsisVerticalIcon,
-    FileIcon,
-    FolderIcon,
-    HeadphonesIcon,
-    ImageIcon,
-    LetterTextIcon,
-    VideoIcon,
+	BracesIcon,
+	EllipsisVerticalIcon,
+	FileIcon,
+	FolderIcon,
+	HeadphonesIcon,
+	ImageIcon,
+	LetterTextIcon,
+	VideoIcon,
 } from "lucide-react";
-import { humanFileSize, type INode } from "../../lib";
-import {
-    Button,
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuTrigger,
-    canPreview,
-    isAudio,
-    isCode,
-    isImage,
-    isText,
-    isVideo,
-} from "../ui";
 import { useCallback } from "react";
-import { parseUint8ArrayToJson, convertJsonToUint8Array } from "../../lib/uint8";
 import { toast } from "sonner";
+import { type INode, humanFileSize } from "../../lib";
+import {
+	convertJsonToUint8Array,
+	parseUint8ArrayToJson,
+} from "../../lib/uint8";
+import {
+	Button,
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuTrigger,
+	canPreview,
+	isAudio,
+	isCode,
+	isImage,
+	isText,
+	isVideo,
+} from "../ui";
 
 const TEMPLATE = JSON.parse(`{
   "nodes": [
@@ -118,7 +121,7 @@ const TEMPLATE = JSON.parse(`{
     }
   ],
   "comments": []
-}`)
+}`);
 
 export interface IStorageItem {
 	location: string;
@@ -145,26 +148,31 @@ export function FileOrFolder({
 	deleteFile?: (file: string) => void;
 	downloadFile?: (file: string) => void;
 }>) {
+	const copyPath = useCallback(
+		(isFolder: boolean) => {
+			const childNode = (TEMPLATE.nodes as INode[]).findIndex(
+				(node) => node.name === "child",
+			);
+			if (childNode === -1) return;
 
-	const copyPath = useCallback((isFolder: boolean) => {
-		const childNode = (TEMPLATE.nodes as INode[]).findIndex((node) => node.name === "child");
-		if(childNode === -1) return;
+			if (isFolder) {
+				const location = file.location.split("/").pop()?.slice(1, -7) ?? "";
+				const parentPath = file.location.split("/").slice(3, -1).join("/");
+				TEMPLATE.nodes[childNode].pins[
+					"w8k4qi9sq7265ium4c3l6qg8"
+				].default_value = convertJsonToUint8Array(`${parentPath}/${location}`);
+				navigator.clipboard.writeText(JSON.stringify(TEMPLATE));
+				toast.success("Path copied to clipboard");
+				return;
+			}
 
-		if (isFolder) {
-			const location = file.location.split("/").pop()?.slice(1, -7) ?? "";
-			const parentPath = file.location.split("/").slice(3, -1).join("/");
-			TEMPLATE.nodes[childNode].pins["w8k4qi9sq7265ium4c3l6qg8"].default_value = convertJsonToUint8Array(`${parentPath}/${location}`);
-			navigator.clipboard.writeText(JSON.stringify(TEMPLATE))
+			TEMPLATE.nodes[childNode].pins["x56ex8kn2uoq37rd8xitawbh"].default_value =
+				convertJsonToUint8Array(file.location.split("/").slice(3).join("/"));
+			navigator.clipboard.writeText(JSON.stringify(TEMPLATE));
 			toast.success("Path copied to clipboard");
-			return;
-		}
-
-		TEMPLATE.nodes[childNode].pins["x56ex8kn2uoq37rd8xitawbh"].default_value = convertJsonToUint8Array(file.location.split("/").slice(3).join("/"));
-		navigator.clipboard.writeText(JSON.stringify(TEMPLATE))
-		toast.success("Path copied to clipboard");
-	}, [
-		file.location
-	]);
+		},
+		[file.location],
+	);
 
 	if (file.location.endsWith("._path")) {
 		return (
@@ -197,14 +205,14 @@ export function FileOrFolder({
 					<DropdownMenuContent>
 						<DropdownMenuLabel>Folder Actions</DropdownMenuLabel>
 						<DropdownMenuItem
-								onClick={(e) => {
-									e.preventDefault();
-									e.stopPropagation();
-									copyPath(true);
-								}}
-							>
-								Copy Path
-							</DropdownMenuItem>
+							onClick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								copyPath(true);
+							}}
+						>
+							Copy Path
+						</DropdownMenuItem>
 						{typeof deleteFile !== "undefined" && (
 							<DropdownMenuItem
 								onClick={(e) => {
@@ -259,14 +267,14 @@ export function FileOrFolder({
 					<DropdownMenuContent>
 						<DropdownMenuLabel>File Actions</DropdownMenuLabel>
 						<DropdownMenuItem
-								onClick={(e) => {
-									e.preventDefault();
-									e.stopPropagation();
-									copyPath(false);
-								}}
-							>
-								Copy Path
-							</DropdownMenuItem>
+							onClick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								copyPath(false);
+							}}
+						>
+							Copy Path
+						</DropdownMenuItem>
 						{typeof downloadFile !== "undefined" && (
 							<DropdownMenuItem
 								onClick={(e) => {

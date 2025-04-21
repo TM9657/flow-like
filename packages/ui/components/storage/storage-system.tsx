@@ -3,12 +3,12 @@
 import { FilesIcon, LayoutGridIcon, LinkIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import {
-    Button,
-    EmptyState,
-    FilePreviewer,
-    ResizableHandle,
-    ResizablePanel,
-    ResizablePanelGroup,
+	Button,
+	EmptyState,
+	FilePreviewer,
+	ResizableHandle,
+	ResizablePanel,
+	ResizablePanelGroup,
 } from "../ui";
 import { StorageBreadcrumbs } from "./storage-breadcrumbs";
 import { FileOrFolder, type IStorageItem } from "./storage-file-or-folder";

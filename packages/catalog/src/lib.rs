@@ -7,6 +7,7 @@ pub mod bit;
 pub mod control;
 pub mod events;
 pub mod http;
+pub mod image;
 pub mod logging;
 pub mod math;
 pub mod storage;
@@ -14,7 +15,6 @@ pub mod structs;
 pub mod utils;
 pub mod variables;
 pub mod web;
-pub mod image;
 
 pub async fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {
     let catalog: Vec<Arc<dyn NodeLogic>> = vec![

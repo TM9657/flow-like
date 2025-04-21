@@ -7,7 +7,6 @@ use flow_like::flow_like_storage::{
 use flow_like_types::{
     Bytes,
     tokio::io::{AsyncReadExt, BufReader},
-    utils::data_url::pathbuf_to_data_url,
 };
 use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
@@ -37,7 +36,7 @@ async fn construct_storage(
     prefix: &str,
     construct_dirs: bool,
 ) -> Result<(FlowLikeStore, Path), TauriFunctionError> {
-    let state = TauriFlowLikeState::construct(&app_handle).await?;
+    let state = TauriFlowLikeState::construct(app_handle).await?;
     let project_store = state
         .lock()
         .await
@@ -242,12 +241,15 @@ pub async fn storage_remove(
     let generic = store.as_generic();
 
     let locations = generic.list(Some(&path)).map_ok(|m| m.location).boxed();
-    generic.delete_stream(locations).try_collect::<Vec<Path>>().await.map_err(|e| {
-        anyhow!("Failed to delete stream: {}", e)
-    })?;
-    generic.delete(&path).await.map_err(|e| {
-        anyhow!("Failed to delete path: {}", e)
-    })?;
+    generic
+        .delete_stream(locations)
+        .try_collect::<Vec<Path>>()
+        .await
+        .map_err(|e| anyhow!("Failed to delete stream: {}", e))?;
+    generic
+        .delete(&path)
+        .await
+        .map_err(|e| anyhow!("Failed to delete path: {}", e))?;
     Ok(())
 }
 
@@ -258,7 +260,6 @@ pub async fn storage_rename(
     prefix: String,
 ) -> Result<(), TauriFunctionError> {
     let (store, path) = construct_storage(&app_handle, &app_id, &prefix, false).await?;
-
 
     Ok(())
 }
@@ -291,7 +292,7 @@ pub async fn storage_get(
         .await
         .map_err(|e| anyhow!("Failed to sign URL: {}", e))?;
     let url = signed_url.to_string();
-    return Ok(url);
+    Ok(url)
 }
 
 #[tauri::command(async)]
