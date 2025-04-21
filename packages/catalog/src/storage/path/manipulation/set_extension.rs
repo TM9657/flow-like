@@ -8,7 +8,6 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_storage::Path;
 use flow_like_types::{async_trait, json::json};
 
 #[derive(Default)]
@@ -70,21 +69,7 @@ impl NodeLogic for SetExtensionNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let path: FlowPath = context.evaluate_pin("path").await?;
         let extension: String = context.evaluate_pin("extension").await?;
-        let extension = if extension.starts_with('.') {
-            extension[1..].to_string()
-        } else {
-            extension
-        };
-
-        let mut path = path.to_runtime(context).await?;
-        let current_extension = path.path.extension().unwrap_or_default().to_string();
-        let mut current_path = path.path.as_ref().to_string();
-        if !current_extension.is_empty() {
-            current_path = current_path.replace(&format!(".{}", current_extension), "");
-        }
-        let new_path = format!("{}.{}", current_path, extension);
-        path.path = Path::from(new_path);
-        let path = path.serialize().await;
+        let path = path.set_extension(context, &extension).await?;
 
         context.set_pin_value("path_out", json!(path)).await?;
         context.activate_exec_pin("exec_out").await?;

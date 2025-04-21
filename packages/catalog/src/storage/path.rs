@@ -57,6 +57,25 @@ impl FlowPath {
         })
     }
 
+    pub async fn set_extension(&self, context: &mut ExecutionContext, extension: &str) -> flow_like_types::Result<Self> {
+        let extension = if extension.starts_with('.') {
+            extension[1..].to_string()
+        } else {
+            extension.to_string()
+        };
+
+        let mut runtime = self.to_runtime(context).await?;
+        let current_extension = runtime.path.extension().unwrap_or_default().to_string();
+        let mut current_path = runtime.path.as_ref().to_string();
+        if !current_extension.is_empty() {
+            current_path = current_path.replace(&format!(".{}", current_extension), "");
+        }
+        let new_path = format!("{}.{}", current_path, extension);
+        runtime.path = Path::from(new_path);
+        let path = runtime.serialize().await;
+        Ok(path)
+    }
+
     pub async fn from_pathbuf(
         path: PathBuf,
         context: &mut ExecutionContext,

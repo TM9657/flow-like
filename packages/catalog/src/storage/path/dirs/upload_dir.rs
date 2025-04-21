@@ -29,42 +29,17 @@ impl NodeLogic for PathFromUploadDirNode {
         );
         node.add_icon("/flow/icons/path.svg");
 
-        node.add_input_pin(
-            "exec_in",
-            "Input",
-            "Initiate Execution",
-            VariableType::Execution,
-        );
-
-        node.add_output_pin(
-            "exec_out",
-            "Output",
-            "Done with the Execution",
-            VariableType::Execution,
-        );
-
         node.add_output_pin("path", "Path", "Output Path", VariableType::Struct)
             .set_schema::<FlowPath>();
-
-        node.add_output_pin(
-            "failed",
-            "Failed",
-            "Not possible, for example on server, certain directories are not accessible",
-            VariableType::Execution,
-        );
 
         return node;
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        context.activate_exec_pin("failed").await?;
-        context.deactivate_exec_pin("exec_out").await?;
-
         let path = FlowPath::from_upload_dir(context).await?;
         context.set_pin_value("path", json!(path)).await?;
 
-        context.activate_exec_pin("exec_out").await?;
-        context.deactivate_exec_pin("failed").await?;
+        let _ = context.activate_exec_pin("exec_out").await;
         Ok(())
     }
 }

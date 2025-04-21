@@ -9,7 +9,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, image::{imageops::FilterType, GenericImageView, ImageFormat}, json::json, Ok};
+use flow_like_types::{async_trait, image::{imageops::FilterType, GenericImageView}, json::json, Ok};
 
 #[derive(Default)]
 pub struct ResizeImageNode {}
@@ -50,10 +50,18 @@ impl NodeLogic for ResizeImageNode {
                 .build()
             );
 
+            node.add_input_pin(
+                "use_ref",
+                "Use Reference",
+                "Use Reference of the image, transforming the original instead of a copy",
+                VariableType::Boolean,
+            )
+            .set_default_value(Some(json!(true)));
+
         node.add_input_pin(
-            "mode", 
-            "Resize Mode", 
-            "Resize Mode", 
+            "mode",
+            "Resize Mode",
+            "Resize Mode",
             VariableType::String,
         )
             .set_options(PinOptions::new()
@@ -138,8 +146,13 @@ impl NodeLogic for ResizeImageNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
-        // get inputs
-        let node_img: NodeImage = context.evaluate_pin("image_in").await?;
+        let mut node_img: NodeImage = context.evaluate_pin("image_in").await?;
+        let use_ref: bool = context.evaluate_pin("use_ref").await?;
+
+        if !use_ref {
+            node_img = node_img.copy_image(context).await?;
+        }
+
         let target_width: u32 = context.evaluate_pin("width_in").await?;
         let target_height: u32 = context.evaluate_pin("height_in").await?;
         let mode: String = context.evaluate_pin("mode").await?;
@@ -155,23 +168,24 @@ impl NodeLogic for ResizeImageNode {
             }
         }?;
 
-        // get image
-        let (img, _format) = node_img.as_decoded_with_format()?;
+        let img = node_img.get_image(context).await?;
 
-        // resize image
-        let resized_img = {
-            match mode.as_str() {
-                "exact" => img.resize_exact(target_width, target_height, filter),
-                "to_fill" => img.resize_to_fill(target_width, target_height, filter),
-                _ => img.resize(target_width, target_height, filter),
-            }
-        };  
-        let (result_width, result_height) = resized_img.dimensions();
-        let resized_node_img = NodeImage::from_decoded(&resized_img, ImageFormat::Png)?;
-        // todo: how to avoid potential decode-encode loss by passing DynamicImage directly between nodes
+        let (result_width, result_height) = {
+            let mut img_guard = img.lock().await;
 
-        // set outputs
-        context.set_pin_value("image_out", json!(resized_node_img)).await?;
+            let resized_img = match mode.as_str() {
+                "exact" => img_guard.resize_exact(target_width, target_height, filter),
+                "to_fill" => img_guard.resize_to_fill(target_width, target_height, filter),
+                _ => img_guard.resize(target_width, target_height, filter),
+            };
+
+            *img_guard = resized_img;
+
+            let (result_width, result_height) = img_guard.dimensions();
+            (result_width, result_height)
+        };
+
+        context.set_pin_value("image_out", json!(node_img)).await?;
         context.set_pin_value("width_out", json!(result_width)).await?;
         context.set_pin_value("height_out", json!(result_height)).await?;
         context.activate_exec_pin("exec_out").await?;

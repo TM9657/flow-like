@@ -1,18 +1,15 @@
 
+use std::sync::Arc;
+
 use crate::{image::NodeImage, storage::path::FlowPath};
 use flow_like::{
     flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::PinOptions,
-        variable::VariableType,
+        board::Board, execution::context::ExecutionContext, node::{Node, NodeLogic}, pin::{Pin, PinOptions}, variable::VariableType
     },
     state::FlowLikeState,
 };
 use flow_like_storage::object_store::PutPayload;
-use flow_like_types::{async_trait, image::{codecs::jpeg::JpegEncoder, ImageFormat}, Bytes, json::json};
-use std::io::Cursor;
-
+use flow_like_types::{anyhow, async_trait, image::codecs::{avif::AvifEncoder, bmp::BmpEncoder, farbfeld::FarbfeldEncoder, gif::GifEncoder, hdr::HdrEncoder, ico::IcoEncoder, jpeg::JpegEncoder, openexr::OpenExrEncoder, png::{CompressionType, FilterType, PngEncoder}, pnm::PnmEncoder, qoi::QoiEncoder, tga::TgaEncoder, webp::WebPEncoder}, json::json, Bytes};
 #[derive(Default)]
 pub struct WriteImageNode {}
 
@@ -31,9 +28,8 @@ impl NodeLogic for WriteImageNode {
             "Write image to path",
             "Image/Content",
         );
-        node.add_icon("/flow/icons/dir.svg"); // Consider a more appropriate icon
+        node.add_icon("/flow/icons/image.svg");
 
-        // inputs
         node.add_input_pin(
             "exec_in",
             "Input",
@@ -54,9 +50,9 @@ impl NodeLogic for WriteImageNode {
         );
 
         node.add_input_pin(
-            "path", 
-            "Path", 
-            "FlowPath", 
+            "path",
+            "Path",
+            "FlowPath",
             VariableType::Struct
         )
             .set_schema::<FlowPath>()
@@ -66,20 +62,45 @@ impl NodeLogic for WriteImageNode {
         );
 
         node.add_input_pin(
-            "quality", 
-            "Quality", 
-            "JPEG Encoding Quality", 
+            "type",
+            "Type",
+            "Image Type",
+            VariableType::String
+        )
+            .set_options(PinOptions::new()
+                .set_valid_values(vec![
+                    "JPEG".to_string(),
+                    "PNG".to_string(),
+                    "TIFF".to_string(),
+                    "WebP".to_string(),
+                    // "Gif".to_string(), // CURRENTLY NOT SUPPORTED
+                    "AVIF".to_string(),
+                    "BMP".to_string(),
+                    "ICO".to_string(),
+                    "PNM".to_string(),
+                    "QOI".to_string(),
+                    "TGA".to_string(),
+                    "Farbfeld".to_string(),
+                    "HDR".to_string(),
+                    // "OpenExr".to_string(), // CURRENTLY NOT SUPPORTED
+                ])
+            .build()
+        )
+        .set_default_value(Some(json!("JPEG")));
+
+        node.add_input_pin(
+            "quality",
+            "Quality",
+            "Encoding Quality",
             VariableType::Integer,
         )
             .set_options(PinOptions::new()
-                .set_enforce_schema(true)
                 .set_range((0., 100.))
                 .build()
             )
             .set_default_value(Some(json!(100))
         );
 
-        // outputs
         node.add_output_pin(
             "exec_out",
             "Output",
@@ -92,33 +113,277 @@ impl NodeLogic for WriteImageNode {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
-
-        // get inputs
+        let image_type: String = context.evaluate_pin("type").await?;
         let path: FlowPath = context.evaluate_pin("path").await?;
+
+        let path = match image_type.as_str() {
+            "JPEG" => path.set_extension(context, "jpeg"),
+            "PNG" => path.set_extension(context, "png"),
+            "TIFF" => path.set_extension(context, "tiff"),
+            "WebP" => path.set_extension(context, "webp"),
+            "Gif" => path.set_extension(context, "gif"),
+            "AVIF" => path.set_extension(context, "avif"),
+            "BMP" => path.set_extension(context, "bmp"),
+            "ICO" => path.set_extension(context, "ico"),
+            "PNM" => path.set_extension(context, "pnm"),
+            "QOI" => path.set_extension(context, "qoi"),
+            "TGA" => path.set_extension(context, "tga"),
+            "Farbfeld" => path.set_extension(context, "ff"),
+            "HDR" => path.set_extension(context, "hdr"),
+            "OpenExr" => path.set_extension(context, "exr"),
+            _ => return Err(anyhow!("Unsupported image type")),
+        }.await?;
+
         let path = path.to_runtime(context).await?;
         let node_image: NodeImage = context.evaluate_pin("image_in").await?;
-        let format = ImageFormat::from_extension(path.path.extension().unwrap()).unwrap();
 
-        // encode image based on path extension
-        let (img, _format) = node_image.as_decoded_with_format()?;
-        let mut encoded: Vec<u8> = Vec::new();
-        if format == ImageFormat::Jpeg {
-            // optional: if jpeg, encode with quality flag
-            let quality: u8 = context.evaluate_pin("quality").await?;
-            let cursor: Cursor<&mut Vec<u8>> = Cursor::new(&mut encoded);
-            let encoder = JpegEncoder::new_with_quality(cursor, quality);
-            img.write_with_encoder(encoder)?;
-        } else {
-            img.write_to(&mut Cursor::new(&mut encoded), format)?;
-        }
+        let image = node_image.get_image(context).await?;
+        let img = image.lock().await;
 
-        // write image to path
+        let mut encoded = Vec::with_capacity(img.width() as usize * img.height() as usize * 4);
+
+        match image_type.as_str() {
+            "JPEG" => {
+                let quality: u8 = context.evaluate_pin("quality").await?;
+                let encoder = JpegEncoder::new_with_quality(&mut encoded, quality);
+                img.write_with_encoder(encoder)?;
+            }
+            "PNG" => {
+                let compression_type: String = context.evaluate_pin("compression_type").await?;
+                let compression = match compression_type.as_str() {
+                    "Best" => CompressionType::Best,
+                    "Fast" => CompressionType::Fast,
+                    "Default" => CompressionType::Default,
+                    _ => CompressionType::Default,
+                };
+                let filter: String = context.evaluate_pin("filter").await?;
+                let filter = match filter.as_str() {
+                    "NoFilter" => FilterType::NoFilter,
+                    "Sub" => FilterType::Sub,
+                    "Up" => FilterType::Up,
+                    "Average" => FilterType::Avg,
+                    "Adaptive" => FilterType::Adaptive,
+                    "Paeth" => FilterType::Paeth,
+                    _ => FilterType::Adaptive,
+                };
+                let encoder = PngEncoder::new_with_quality(&mut encoded, compression, filter);
+                img.write_with_encoder(encoder)?;
+            }
+            "WebP" => {
+                let encoder = WebPEncoder::new_lossless(&mut encoded);
+                img.write_with_encoder(encoder)?;
+            }
+            "Gif" => {
+                let speed: i32 = context.evaluate_pin("speed").await?;
+
+                let encoder = GifEncoder::new_with_speed(&mut encoded, speed);
+                // encoder.encode_frame(img.as_ref())?;
+            }
+            "AVIF" => {
+                let quality: u8 = context.evaluate_pin("quality").await?;
+                let speed: u8 = context.evaluate_pin("speed").await?;
+                let threads: usize = context.evaluate_pin("threads").await?;
+
+                let mut encoder = AvifEncoder::new_with_speed_quality(&mut encoded, speed, quality);
+                encoder = encoder.with_num_threads(Some(threads));
+                img.write_with_encoder(encoder)?;
+            }
+            "BMP" => {
+                let encoder = BmpEncoder::new(&mut encoded);
+                img.write_with_encoder(encoder)?;
+            }
+            "ICO" => {
+                let encoder = IcoEncoder::new(&mut encoded);
+                img.write_with_encoder(encoder)?;
+            }
+            "PNM" => {
+                let encoder = PnmEncoder::new(&mut encoded);
+                img.write_with_encoder(encoder)?;
+            }
+            "QOI" => {
+                let encoder = QoiEncoder::new(&mut encoded);
+                img.write_with_encoder(encoder)?;
+            }
+            "TGA" => {
+                let encoder = TgaEncoder::new(&mut encoded);
+                img.write_with_encoder(encoder)?;
+            }
+            "Farbfeld" => {
+                let encoder = FarbfeldEncoder::new(&mut encoded);
+                img.write_with_encoder(encoder)?;
+            }
+            "HDR" => {
+                let encoder = HdrEncoder::new(&mut encoded);
+                img.write_with_encoder(encoder)?;
+            }
+            "OpenExr" => {
+                let encoder = OpenExrEncoder::new(&mut encoded);
+            }
+            _ => return Err(anyhow!("Unsupported image type")),
+        };
+
         let store = path.store.as_generic();
         let payload = PutPayload::from_bytes(Bytes::from(encoded));
         store.put(&path.path, payload).await?;
 
-        // set outputs
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
+        let image_type = node
+            .get_pin_by_name("type")
+            .and_then(|pin| pin.default_value.clone())
+            .and_then(|bytes| flow_like_types::json::from_slice::<String>(&bytes).ok())
+            .unwrap_or_default().clone();
+
+        // jpeg + avif
+        let quality_pin = node.get_pin_by_name("quality").cloned();
+
+        // png
+        let compression_type = node.get_pin_by_name("compression_type").cloned();
+        let filter = node.get_pin_by_name("filter").cloned();
+
+        // gif + avif
+        let speed = node.get_pin_by_name("speed").cloned();
+
+        // avif
+        let threads = node.get_pin_by_name("threads").cloned();
+
+        match image_type.as_str() {
+            "JPEG" => {
+                remove_pin(node, compression_type);
+                remove_pin(node, filter);
+                remove_pin(node, speed);
+                remove_pin(node, threads);
+
+                if let None = quality_pin {
+                    node.add_input_pin(
+                        "quality",
+                        "Quality",
+                        "Encoding Quality",
+                        VariableType::Integer,
+                    )
+                    .set_options(PinOptions::new()
+                        .set_range((0., 100.))
+                        .build()
+                    )
+                    .set_default_value(Some(json!(100)));
+                }
+            }
+            "PNG" => {
+                remove_pin(node, quality_pin);
+                remove_pin(node, speed);
+                remove_pin(node, threads);
+
+                if let None = compression_type {
+                    node.add_input_pin(
+                        "compression_type",
+                        "Compression Type",
+                        "Compression Type",
+                        VariableType::String,
+                    )
+                    .set_options(PinOptions::new()
+                        .set_valid_values(vec![
+                            "Best".to_string(),
+                            "Fast".to_string(),
+                            "Default".to_string(),
+                        ])
+                        .build()
+                    )
+                    .set_default_value(Some(json!("Default")));
+                }
+
+                if let None = filter {
+                    node.add_input_pin(
+                        "filter",
+                        "Filter",
+                        "Filter Type",
+                        VariableType::String,
+                    )
+                    .set_options(PinOptions::new()
+                        .set_valid_values(vec![
+                            "NoFilter".to_string(),
+                            "Sub".to_string(),
+                            "Up".to_string(),
+                            "Average".to_string(),
+                            "Adaptive".to_string(),
+                            "Paeth".to_string(),
+                        ])
+                        .build()
+                    )
+                    .set_default_value(Some(json!("Adaptive")));
+                }
+            }
+            "GIF" => {
+                remove_pin(node, compression_type);
+                remove_pin(node, filter);
+                remove_pin(node, threads);
+                remove_pin(node, quality_pin);
+
+                if let None = speed {
+                    node.add_input_pin(
+                        "speed",
+                        "Speed",
+                        "Encoding Speed",
+                        VariableType::Integer,
+                    )
+                    .set_options(PinOptions::new()
+                        .set_range((0., 10.))
+                        .build()
+                    )
+                    .set_default_value(Some(json!(10)));
+                }
+            }
+            "AVIF" => {
+                remove_pin(node, compression_type);
+                remove_pin(node, filter);
+                remove_pin(node, quality_pin);
+
+                if let None = speed {
+                    node.add_input_pin(
+                        "speed",
+                        "Speed",
+                        "Encoding Speed",
+                        VariableType::Integer,
+                    )
+                    .set_options(PinOptions::new()
+                        .set_range((0., 10.))
+                        .build()
+                    )
+                    .set_default_value(Some(json!(10)));
+                }
+
+                if let None = threads {
+                    node.add_input_pin(
+                        "threads",
+                        "Threads",
+                        "Number of Threads",
+                        VariableType::Integer,
+                    )
+                    .set_options(PinOptions::new()
+                        .set_range((1., 16.))
+                        .build()
+                    )
+                    .set_default_value(Some(json!(1)));
+                }
+            }
+            _ => {
+                remove_pin(node, compression_type);
+                remove_pin(node, filter);
+                remove_pin(node, speed);
+                remove_pin(node, threads);
+                remove_pin(node, quality_pin);
+            }
+        }
+    }
+}
+
+fn remove_pin(
+    node: &mut Node,
+    pin: Option<Pin>,
+) {
+    if let Some(pin) = pin {
+        node.pins.remove(&pin.id);
     }
 }

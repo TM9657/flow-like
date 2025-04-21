@@ -30,8 +30,8 @@ impl NodeLogic for ImageDimsNode {
             "Image/Metadata",
         );
         node.add_icon("/flow/icons/dir.svg");
-        
-        // inputs 
+
+        // inputs
         node.add_input_pin(
             "exec_in",
             "Input",
@@ -76,11 +76,13 @@ impl NodeLogic for ImageDimsNode {
         context.deactivate_exec_pin("exec_out").await?;
         let node_image: NodeImage = context.evaluate_pin("image_in").await?;
 
-        // get dimensions
-        let (img, _format) = node_image.as_decoded_with_format()?;
-        let (width, height) = img.dimensions();
 
-        // set outputs
+        let img = node_image.get_image(context).await?;
+        let (width, height) = {
+            let img_guard = img.lock().await;
+            img_guard.dimensions()
+        };
+
         context.set_pin_value("width", json!(width)).await?;
         context.set_pin_value("height", json!(height)).await?;
         context.activate_exec_pin("exec_out").await?;

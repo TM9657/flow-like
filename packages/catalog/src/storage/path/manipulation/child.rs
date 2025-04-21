@@ -31,13 +31,6 @@ impl NodeLogic for ChildNode {
         node.add_icon("/flow/icons/path.svg");
 
         node.add_input_pin(
-            "exec_in",
-            "Input",
-            "Initiate Execution",
-            VariableType::Execution,
-        );
-
-        node.add_input_pin(
             "parent_path",
             "Path",
             "Parent FlowPath",
@@ -51,13 +44,6 @@ impl NodeLogic for ChildNode {
             "Child",
             "Name of the child",
             VariableType::String,
-        );
-
-        node.add_output_pin(
-            "exec_out",
-            "Output",
-            "Done with the Execution",
-            VariableType::Execution,
         );
 
         node.add_output_pin("path", "Path", "Child Path", VariableType::Struct)
@@ -81,7 +67,7 @@ impl NodeLogic for ChildNode {
         let path = path.serialize().await;
 
         context.set_pin_value("path", json!(path)).await?;
-        context.activate_exec_pin("exec_out").await?;
+        let _ = context.activate_exec_pin("exec_out").await;
         Ok(())
     }
 }
