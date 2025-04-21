@@ -20,6 +20,7 @@ dashmap = { version="6.1.0", features = ["serde", "rayon", "inline"] }
 futures.workspace = true
 image = "0.25.6"
 base64 = "0.22.1"
+mime_guess = "2.0.5"
 
 [build-dependencies]
 prost-build = "0.13.5"

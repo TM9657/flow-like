@@ -1,73 +1,70 @@
 "use client";
-import { invoke } from "@tauri-apps/api/core";
-import {
-	Breadcrumb,
-	BreadcrumbItem,
-	BreadcrumbLink,
-	BreadcrumbList,
-	BreadcrumbPage,
-	BreadcrumbSeparator,
-	Button
-} from "@tm9657/flow-like-ui";
-import { useSearchParams } from "next/navigation";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { StorageSystem } from "@tm9657/flow-like-ui";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback } from "react";
 import { useTauriInvoke } from "../../../../components/useInvoke";
+
+interface IStorageItem {
+	location: string;
+	last_modified: string;
+	size: number;
+	e_tag?: string;
+	version?: string;
+}
 
 export default function Page() {
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
 	const prefix = searchParams.get("prefix") ?? "";
-	const files = useTauriInvoke<any>("storage_list", { appId: id, prefix }, [id ?? "", prefix], typeof id === "string");
+	const files = useTauriInvoke<IStorageItem[]>(
+		"storage_list",
+		{ appId: id, prefix },
+		[id ?? "", prefix],
+		typeof id === "string",
+	);
+	const router = useRouter();
 
-	return <main>
-		<div className="flex flex-row items-end justify-between">
-			<Breadcrumbs />
-			<div className="flex flex-row items-center gap-2">
-				<Button variant={"outline"} onClick={() => {
-					invoke("storage_add", {
-						appId: id,
-						prefix: prefix,
-						folder: false
-					})
-				}}>
-					Upload Files
-				</Button>
-				<Button variant={"outline"} onClick={() => {
-					invoke("storage_add", {
-						appId: id,
-						prefix: prefix,
-						folder: true
-					})
-				}}>
-					Upload Folder
-				</Button>
-			</div>
-		</div>
-		{files.data && <p>{JSON.stringify(files.data)}</p>}
-	</main>
-}
+	const fileToUrl = useCallback(
+		async (file: string) => {
+			const url = await invoke<string>("storage_to_fullpath", {
+				appId: id,
+				prefix: file.split("/").slice(3).join("/"),
+			});
+			return convertFileSrc(url);
+		},
+		[id],
+	);
 
-function Breadcrumbs() {
-	const searchParams = useSearchParams();
-	const id = searchParams.get("id");
-	const prefix = searchParams.get("prefix") ?? "";
+	const uploadFile = useCallback(
+		async (file: string, folder: boolean) => {
+			await invoke<string>("storage_add", {
+				appId: id,
+				prefix: file,
+				folder,
+			});
+			await files.refetch();
+		},
+		[id],
+	);
 
-	return <Breadcrumb>
-		<BreadcrumbList>
-			<BreadcrumbItem>
-				<BreadcrumbLink href={`/store/config/storage?id=${id}`}>Uploads</BreadcrumbLink>
-			</BreadcrumbItem>
-			{decodeURIComponent(prefix).split("/").slice(0, -1).map((part, index) => (
-				<>
-					<BreadcrumbSeparator />
-					<BreadcrumbItem>
-						<BreadcrumbLink href={`/store/config/storage?id=${id}&prefix=${encodeURIComponent(prefix.split("/").slice(0, index).join("/"))}`}>{part}</BreadcrumbLink>
-					</BreadcrumbItem>
-				</>
-			))}
-			{decodeURIComponent(prefix).split("/").pop() && <><BreadcrumbSeparator />
-				<BreadcrumbItem>
-					<BreadcrumbPage>{decodeURIComponent(prefix).split("/").pop()}</BreadcrumbPage>
-				</BreadcrumbItem></>}
-		</BreadcrumbList>
-	</Breadcrumb>
+	return (
+		<main className="flex flex-col gap-2 h-full max-h-full w-full flex-grow overflow-hidden">
+			<StorageSystem
+				appId={id ?? ""}
+				prefix={decodeURIComponent(prefix)}
+				files={files.data ?? []}
+				deleteFile={async (file) => {}}
+				fileToUrl={fileToUrl}
+				moveFile={async (file, newPrefix) => {}}
+				uploadFile={uploadFile}
+				updatePrefix={(prefix) => {
+					router.push(
+						`/store/config/storage?id=${id}&prefix=${encodeURIComponent(prefix)}`,
+					);
+				}}
+				key={`${id}-${prefix}`}
+			/>
+		</main>
+	);
 }

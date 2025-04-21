@@ -7,10 +7,15 @@ interface EmptyStateProps {
 	title: string;
 	description: string;
 	icons?: LucideIcon[];
-	action?: {
-		label: string;
-		onClick: () => void;
-	};
+	action?:
+		| {
+				label: string;
+				onClick: () => void;
+		  }
+		| {
+				label: string;
+				onClick: () => void;
+		  }[];
 	className?: string;
 }
 
@@ -62,7 +67,7 @@ export function EmptyState({
 			<p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">
 				{description}
 			</p>
-			{action && (
+			{action && !Array.isArray(action) && (
 				<Button
 					onClick={action.onClick}
 					variant="outline"
@@ -70,6 +75,20 @@ export function EmptyState({
 				>
 					{action.label}
 				</Button>
+			)}
+
+			{action && Array.isArray(action) && (
+				<div className="flex flex-row justify-center gap-2 mt-4">
+					{action.map((action, index) => (
+						<Button
+							onClick={action.onClick}
+							variant="outline"
+							className={cn("shadow-sm active:shadow-none")}
+						>
+							{action.label}
+						</Button>
+					))}
+				</div>
 			)}
 		</div>
 	);

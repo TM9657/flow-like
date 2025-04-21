@@ -1,9 +1,17 @@
 use anyhow::anyhow;
-use flow_like::flow_like_storage::{files::store::FlowLikeStore, object_store::{MultipartUpload, ObjectMeta, PutPayload}, Path};
+use flow_like::flow_like_storage::{
+    Path,
+    files::store::FlowLikeStore,
+    object_store::{MultipartUpload, ObjectMeta, PutPayload},
+};
+use flow_like_types::{
+    Bytes,
+    tokio::io::{AsyncReadExt, BufReader},
+    utils::data_url::pathbuf_to_data_url,
+};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
-use flow_like_types::{tokio::io::{AsyncReadExt, BufReader}, Bytes};
 
 use crate::{functions::TauriFunctionError, state::TauriFlowLikeState};
 
@@ -14,9 +22,11 @@ async fn folder_placeholder(
 ) -> Result<(), TauriFunctionError> {
     let content = b"0";
     let dir_path = path.child(format!("_{}_._path", folder_name));
-    store.as_generic().put(&dir_path, PutPayload::from_static(content)).await.map_err(|e| {
-        anyhow!("Failed to create directory: {}", e)
-    })?;
+    store
+        .as_generic()
+        .put(&dir_path, PutPayload::from_static(content))
+        .await
+        .map_err(|e| anyhow!("Failed to create directory: {}", e))?;
     Ok(())
 }
 
@@ -24,12 +34,19 @@ async fn construct_storage(
     app_handle: &AppHandle,
     app_id: &str,
     prefix: &str,
-    construct_dirs: bool
+    construct_dirs: bool,
 ) -> Result<(FlowLikeStore, Path), TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
-    let project_store = state.lock().await.config.read().await.stores.project_store.clone().ok_or(
-        anyhow!("Project store not found")
-    )?;
+    let project_store = state
+        .lock()
+        .await
+        .config
+        .read()
+        .await
+        .stores
+        .project_store
+        .clone()
+        .ok_or(anyhow!("Project store not found"))?;
     let mut base_path = Path::from("apps").child(app_id).child("upload");
 
     for prefix in prefix.split('/') {
@@ -38,7 +55,10 @@ async fn construct_storage(
         }
 
         if construct_dirs {
-            let exists = project_store.as_generic().head(&base_path.child(prefix)).await;
+            let exists = project_store
+                .as_generic()
+                .head(&base_path.child(prefix))
+                .await;
             if exists.is_err() {
                 folder_placeholder(&project_store, &base_path, prefix).await?;
             }
@@ -54,69 +74,81 @@ async fn copy_large_file(
     from_path: &std::path::Path,
     to_path: &Path,
 ) -> Result<(), TauriFunctionError> {
-    let mut reader = BufReader::new(flow_like_types::tokio::fs::File::open(from_path).await.map_err(|e| {
-        anyhow!("Failed to open file: {}", e)
-    })?);
-    let mut upload_stream = store.as_generic().put_multipart(to_path).await.map_err(|e| {
-        anyhow!("Failed to create multipart upload: {}", e)
-    })?;
+    let mut reader = BufReader::new(
+        flow_like_types::tokio::fs::File::open(from_path)
+            .await
+            .map_err(|e| anyhow!("Failed to open file: {}", e))?,
+    );
+    let mut upload_stream = store
+        .as_generic()
+        .put_multipart(to_path)
+        .await
+        .map_err(|e| anyhow!("Failed to create multipart upload: {}", e))?;
 
     let mut buffer = vec![0; 8 * 1024 * 1024];
     loop {
-        let bytes_read = reader.read(&mut buffer).await.map_err(|e| {
-            anyhow!("Failed to read file: {}", e)
-        })?;
+        let bytes_read = reader
+            .read(&mut buffer)
+            .await
+            .map_err(|e| anyhow!("Failed to read file: {}", e))?;
         if bytes_read == 0 {
             break;
         }
 
         let chunk = Bytes::copy_from_slice(&buffer[..bytes_read]);
 
-        upload_stream.put_part(PutPayload::from_bytes(chunk)).await.map_err(|e| {
-            anyhow!("Failed to upload file part: {}", e)
-        })?;
+        upload_stream
+            .put_part(PutPayload::from_bytes(chunk))
+            .await
+            .map_err(|e| anyhow!("Failed to upload file part: {}", e))?;
     }
 
-    upload_stream.complete().await.map_err(|e| {
-        anyhow!("Failed to complete upload: {}", e)
-    })?;
+    upload_stream
+        .complete()
+        .await
+        .map_err(|e| anyhow!("Failed to complete upload: {}", e))?;
     Ok(())
 }
-
 
 async fn copy_directory_recursively(
     store: &FlowLikeStore,
     src_path: &std::path::Path,
     dest_path: &Path,
 ) -> Result<(), TauriFunctionError> {
-    let dir_entries = flow_like_types::tokio::fs::read_dir(src_path).await.map_err(|e| {
-        anyhow!("Failed to read directory: {}", e)
-    })?;
+    let dir_entries = flow_like_types::tokio::fs::read_dir(src_path)
+        .await
+        .map_err(|e| anyhow!("Failed to read directory: {}", e))?;
 
     let mut entries = Vec::new();
     let mut dir_handle = dir_entries;
 
-    while let Some(entry) = dir_handle.next_entry().await.map_err(|e| {
-        anyhow!("Failed to read directory entry: {}", e)
-    })? {
+    while let Some(entry) = dir_handle
+        .next_entry()
+        .await
+        .map_err(|e| anyhow!("Failed to read directory entry: {}", e))?
+    {
         entries.push(entry);
     }
 
     for entry in entries {
         let entry_path = entry.path();
-        let file_name = entry_path.file_name().ok_or(anyhow!("Invalid file name"))?.to_string_lossy();
+        let file_name = entry_path
+            .file_name()
+            .ok_or(anyhow!("Invalid file name"))?
+            .to_string_lossy();
         let target_path = dest_path.child(file_name.as_ref());
 
-        let metadata = entry.metadata().await.map_err(|e| {
-            anyhow!("Failed to read metadata: {}", e)
-        })?;
+        let metadata = entry
+            .metadata()
+            .await
+            .map_err(|e| anyhow!("Failed to read metadata: {}", e))?;
 
         if metadata.is_dir() {
             folder_placeholder(store, dest_path, &file_name).await?;
             Box::pin(copy_directory_recursively(store, &entry_path, &target_path)).await?;
         } else if metadata.is_file() {
             match copy_large_file(store, &entry_path, &target_path).await {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     println!("Error copying file {}: {:?}", file_name, e);
                     continue;
@@ -150,7 +182,12 @@ impl From<ObjectMeta> for StorageItem {
 }
 
 #[tauri::command(async)]
-pub async fn storage_add(app_handle: AppHandle, app_id: String, prefix: String, folder: bool) -> Result<(), TauriFunctionError> {
+pub async fn storage_add(
+    app_handle: AppHandle,
+    app_id: String,
+    prefix: String,
+    folder: bool,
+) -> Result<(), TauriFunctionError> {
     let (store, path) = construct_storage(&app_handle, &app_id, &prefix, true).await?;
 
     let files = {
@@ -159,10 +196,14 @@ pub async fn storage_add(app_handle: AppHandle, app_id: String, prefix: String, 
         } else {
             app_handle.dialog().file().blocking_pick_files()
         }
-    }.ok_or(anyhow!("No files selected"))?;
+    }
+    .ok_or(anyhow!("No files selected"))?;
 
     for file in files {
-        let buf = file.as_path().ok_or(anyhow!("Invalid file buffer"))?.to_path_buf();
+        let buf = file
+            .as_path()
+            .ok_or(anyhow!("Invalid file buffer"))?
+            .to_path_buf();
         let file_path = file.as_path().ok_or(anyhow!("Invalid file path"))?;
         let file_name = file_path.file_name().ok_or(anyhow!("Invalid file name"))?;
 
@@ -170,9 +211,10 @@ pub async fn storage_add(app_handle: AppHandle, app_id: String, prefix: String, 
             let file_name = file_name.to_string_lossy();
             let file_path = path.child(file_name.as_ref());
 
-            match copy_large_file(&store, &buf, &file_path).await.map_err(|e| {
-                anyhow!("Failed to copy file: {:?}", e)
-            }) {
+            match copy_large_file(&store, &buf, &file_path)
+                .await
+                .map_err(|e| anyhow!("Failed to copy file: {:?}", e))
+            {
                 Ok(_) => continue,
                 Err(e) => {
                     println!("Error copying file: {:?}", e);
@@ -190,27 +232,72 @@ pub async fn storage_add(app_handle: AppHandle, app_id: String, prefix: String, 
 }
 
 #[tauri::command(async)]
-pub async fn storage_remove(app_handle: AppHandle, app_id: String, prefix: String) -> Result<(), TauriFunctionError> {
+pub async fn storage_remove(
+    app_handle: AppHandle,
+    app_id: String,
+    prefix: String,
+) -> Result<(), TauriFunctionError> {
     let (store, path) = construct_storage(&app_handle, &app_id, &prefix, false).await?;
     Ok(())
 }
 
 #[tauri::command(async)]
-pub async fn storage_rename(app_handle: AppHandle, app_id: String, prefix: String) -> Result<(), TauriFunctionError> {
+pub async fn storage_rename(
+    app_handle: AppHandle,
+    app_id: String,
+    prefix: String,
+) -> Result<(), TauriFunctionError> {
     let (store, path) = construct_storage(&app_handle, &app_id, &prefix, false).await?;
     Ok(())
 }
 
 #[tauri::command(async)]
-pub async fn storage_list(app_handle: AppHandle, app_id: String, prefix: String) -> Result<Vec<StorageItem>, TauriFunctionError> {
+pub async fn storage_list(
+    app_handle: AppHandle,
+    app_id: String,
+    prefix: String,
+) -> Result<Vec<StorageItem>, TauriFunctionError> {
     let (store, path) = construct_storage(&app_handle, &app_id, &prefix, false).await?;
-    let items = store.as_generic().list_with_delimiter(Some(&path)).await.map_err(|e| {
-        anyhow!("Failed to list items: {}", e)
-    })?;
-    let items: Vec<StorageItem> = items
-        .objects
-        .into_iter()
-        .map(StorageItem::from)
-        .collect();
+    let items = store
+        .as_generic()
+        .list_with_delimiter(Some(&path))
+        .await
+        .map_err(|e| anyhow!("Failed to list items: {}", e))?;
+    let items: Vec<StorageItem> = items.objects.into_iter().map(StorageItem::from).collect();
     Ok(items)
+}
+
+#[tauri::command(async)]
+pub async fn storage_get(
+    app_handle: AppHandle,
+    app_id: String,
+    prefix: String,
+) -> Result<String, TauriFunctionError> {
+    let (store, path) = construct_storage(&app_handle, &app_id, &prefix, false).await?;
+    let signed_url = store
+        .sign("GET", &path, std::time::Duration::from_secs(60 * 60))
+        .await
+        .map_err(|e| anyhow!("Failed to sign URL: {}", e))?;
+    let url = signed_url.to_string();
+    return Ok(url);
+}
+
+#[tauri::command(async)]
+pub async fn storage_to_fullpath(
+    app_handle: AppHandle,
+    app_id: String,
+    prefix: String,
+) -> Result<String, TauriFunctionError> {
+    let (store, path) = construct_storage(&app_handle, &app_id, &prefix, false).await?;
+    let url = match store {
+        FlowLikeStore::Local(store) => {
+            let local_path = store
+                .path_to_filesystem(&path)
+                .map_err(|e| anyhow!("Failed to get local path: {}", e))?;
+            let local_path = local_path.to_string_lossy();
+            Ok(local_path.to_string())
+        }
+        _ => Err(anyhow!("Not a local store")),
+    }?;
+    Ok(url)
 }

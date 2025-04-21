@@ -1,12 +1,12 @@
 use flow_like_types::{
     Cacheable, Result, anyhow, bail,
     reqwest::{self, Url},
+    utils::data_url::{data_url_to_base64, pathbuf_to_data_url},
 };
 use futures::StreamExt;
 use local_store::LocalObjectStore;
 use object_store::{ObjectStore, path::Path, signer::Signer};
 use std::{sync::Arc, time::Duration};
-
 pub mod local_store;
 
 #[derive(Clone)]
@@ -53,8 +53,10 @@ impl FlowLikeStore {
             FlowLikeStore::Google(store) => store.signed_url(method, path, expires_after).await?,
             FlowLikeStore::Azure(store) => store.signed_url(method, path, expires_after).await?,
             FlowLikeStore::Local(store) => {
-                Url::from_directory_path(store.path_to_filesystem(path)?)
-                    .map_err(|_| anyhow!("Could not build File System URL"))?
+                let local_path = store.path_to_filesystem(path)?;
+                println!("Local path: {:?}", local_path);
+                let data_url = pathbuf_to_data_url(&local_path).await?;
+                return Ok(Url::parse(&data_url)?);
             }
             FlowLikeStore::Other(_) => bail!("Sign not implemented for this store"),
         };
