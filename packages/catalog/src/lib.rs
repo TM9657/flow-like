@@ -14,6 +14,7 @@ pub mod structs;
 pub mod utils;
 pub mod variables;
 pub mod web;
+pub mod image;
 
 pub async fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {
     let catalog: Vec<Arc<dyn NodeLogic>> = vec![
@@ -27,6 +28,7 @@ pub async fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {
         storage::register_functions().await,
         bit::register_functions().await,
         web::register_functions().await,
+        image::register_functions().await,
     ]
     .into_iter()
     .flatten()

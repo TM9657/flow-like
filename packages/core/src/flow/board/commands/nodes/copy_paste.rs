@@ -91,7 +91,7 @@ impl Command for CopyPasteCommand {
             new_node.description = blueprint_node.description.clone();
             new_node.icon = blueprint_node.icon.clone();
             new_node.scores = blueprint_node.scores.clone();
-            new_node.start = blueprint_node.start.clone();
+            new_node.start = blueprint_node.start;
             new_node.coordinates = Some((
                 new_node.coordinates.unwrap_or((0.0, 0.0, 0.0)).0 + offset.0,
                 new_node.coordinates.unwrap_or((0.0, 0.0, 0.0)).1 + offset.1,
@@ -108,8 +108,7 @@ impl Command for CopyPasteCommand {
                         .pins
                         .iter()
                         .find(|(_, p)| p.name == pin.name && pin.pin_type == p.pin_type)
-                        .unwrap_or((&format!(""), &pin))
-                        .clone();
+                        .unwrap_or((&String::new(), &pin));
                     let blueprint_pin = blueprint_pin.clone();
                     let new_pin_id = create_id();
                     translated_connection.insert(old_pin_id, new_pin_id.clone());
