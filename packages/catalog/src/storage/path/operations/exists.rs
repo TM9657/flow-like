@@ -67,8 +67,10 @@ impl NodeLogic for PathExistsNode {
         let exists = store.head(&dynamic.path).await.is_ok();
 
         if exists {
+            context.deactivate_exec_pin("exec_out_missing").await?;
             context.activate_exec_pin("exec_out_exists").await?;
         } else {
+            context.deactivate_exec_pin("exec_out_exists").await?;
             context.activate_exec_pin("exec_out_missing").await?;
         }
 

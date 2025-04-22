@@ -117,7 +117,8 @@ export function StorageSystem({
 							direction="horizontal"
 							autoSaveId={"file_viewer"}
 						>
-							<ResizablePanel className="flex flex-col gap-2">
+							<ResizablePanel className="flex flex-col gap-2 flex-grow overflow-y-auto max-h-full h-full">
+								<div className="flex flex-col flex-grow max-h-full h-full overflow-auto gap-2">
 								{files.map((file) => (
 									<FileOrFolder
 										highlight={preview.file === file.location}
@@ -138,6 +139,7 @@ export function StorageSystem({
 										downloadFile={downloadFile}
 									/>
 								))}
+								</div>
 							</ResizablePanel>
 							<ResizableHandle className="mx-2" />
 							<ResizablePanel className="flex flex-col gap-2 flex-grow overflow-y-hidden max-h-full h-full">
@@ -147,8 +149,8 @@ export function StorageSystem({
 							</ResizablePanel>
 						</ResizablePanelGroup>
 					)}
-					{preview.url === "" &&
-						files.map((file) => (
+					{preview.url === "" && <div className="flex flex-col flex-grow max-h-full h-full overflow-auto gap-2">
+						{files.map((file) => (
 							<FileOrFolder
 								highlight={preview.file === file.location}
 								key={file.location}
@@ -172,6 +174,7 @@ export function StorageSystem({
 								downloadFile={downloadFile}
 							/>
 						))}
+						</div>}
 				</div>
 			)}
 		</div>
