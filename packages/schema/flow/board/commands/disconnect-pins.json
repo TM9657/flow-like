@@ -4,16 +4,16 @@
 	"type": "object",
 	"required": ["from_node", "from_pin", "to_node", "to_pin"],
 	"properties": {
-		"from_node": {
-			"type": "string"
-		},
 		"from_pin": {
 			"type": "string"
 		},
-		"to_node": {
+		"to_pin": {
 			"type": "string"
 		},
-		"to_pin": {
+		"from_node": {
+			"type": "string"
+		},
+		"to_node": {
 			"type": "string"
 		}
 	}

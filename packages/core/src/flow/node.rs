@@ -56,6 +56,7 @@ pub struct Node {
     pub error: Option<String>,
     pub docs: Option<String>,
     pub event_callback: Option<bool>,
+    pub layer: Option<String>,
 }
 
 impl Node {
@@ -76,6 +77,7 @@ impl Node {
             error: None,
             docs: None,
             event_callback: None,
+            layer: None,
         }
     }
 

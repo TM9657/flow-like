@@ -11,26 +11,26 @@
 		"thumbnail"
 	],
 	"properties": {
-		"dependencies": {
-			"type": "array",
-			"items": {
-				"type": "string"
-			}
+		"name": {
+			"type": "string"
 		},
 		"description": {
 			"type": "string"
 		},
-		"domain": {
+		"thumbnail": {
 			"type": "string"
 		},
 		"icon": {
 			"type": "string"
 		},
-		"name": {
+		"domain": {
 			"type": "string"
 		},
-		"thumbnail": {
-			"type": "string"
+		"dependencies": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			}
 		}
 	}
 }

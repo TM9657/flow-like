@@ -11,6 +11,30 @@
 		"updated"
 	],
 	"properties": {
+		"id": {
+			"default": "ajopvqg5t9ap8prhr1evglu9",
+			"type": "string"
+		},
+		"name": {
+			"type": "string"
+		},
+		"description": {
+			"type": "string"
+		},
+		"thumbnail": {
+			"type": "string"
+		},
+		"hub": {
+			"default": "",
+			"type": "string"
+		},
+		"hubs": {
+			"default": [],
+			"type": "array",
+			"items": {
+				"type": "string"
+			}
+		},
 		"bits": {
 			"type": "array",
 			"items": {
@@ -27,34 +51,10 @@
 				"minItems": 2
 			}
 		},
-		"created": {
-			"type": "string"
-		},
-		"description": {
-			"type": "string"
-		},
-		"hub": {
-			"default": "",
-			"type": "string"
-		},
-		"hubs": {
-			"default": [],
-			"type": "array",
-			"items": {
-				"type": "string"
-			}
-		},
-		"id": {
-			"default": "p8wyfvk4syy38gshklzvt1vv",
-			"type": "string"
-		},
-		"name": {
-			"type": "string"
-		},
-		"thumbnail": {
-			"type": "string"
-		},
 		"updated": {
+			"type": "string"
+		},
+		"created": {
 			"type": "string"
 		}
 	}

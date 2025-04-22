@@ -296,7 +296,7 @@ impl InternalRun {
             variables,
             cache: Arc::new(RwLock::new(HashMap::new())),
             stack: Arc::new(stack),
-            concurrency_limit: 2_000_000,
+            concurrency_limit: 10,
             concurrency_map: Arc::new(DashMap::with_capacity(board.nodes.len())),
             cpus: num_cpus::get(),
             callback,

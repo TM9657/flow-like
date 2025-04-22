@@ -11,45 +11,42 @@
 		"vector_length"
 	],
 	"properties": {
-		"input_length": {
-			"type": "integer",
-			"format": "uint32",
-			"minimum": 0.0
-		},
 		"languages": {
 			"type": "array",
 			"items": {
 				"type": "string"
 			}
 		},
-		"pooling": {
-			"$ref": "#/definitions/Pooling"
-		},
-		"prefix": {
-			"$ref": "#/definitions/Prefix"
-		},
-		"provider": {
-			"$ref": "#/definitions/ModelProvider"
-		},
 		"vector_length": {
 			"type": "integer",
 			"format": "uint32",
 			"minimum": 0.0
+		},
+		"input_length": {
+			"type": "integer",
+			"format": "uint32",
+			"minimum": 0.0
+		},
+		"prefix": {
+			"$ref": "#/definitions/Prefix"
+		},
+		"pooling": {
+			"$ref": "#/definitions/Pooling"
+		},
+		"provider": {
+			"$ref": "#/definitions/ModelProvider"
 		}
 	},
 	"definitions": {
-		"ModelProvider": {
+		"Prefix": {
 			"type": "object",
-			"required": ["provider_name"],
+			"required": ["paragraph", "query"],
 			"properties": {
-				"model_id": {
-					"type": ["string", "null"]
-				},
-				"provider_name": {
+				"query": {
 					"type": "string"
 				},
-				"version": {
-					"type": ["string", "null"]
+				"paragraph": {
+					"type": "string"
 				}
 			}
 		},
@@ -57,15 +54,18 @@
 			"type": "string",
 			"enum": ["CLS", "Mean", "None"]
 		},
-		"Prefix": {
+		"ModelProvider": {
 			"type": "object",
-			"required": ["paragraph", "query"],
+			"required": ["provider_name"],
 			"properties": {
-				"paragraph": {
+				"provider_name": {
 					"type": "string"
 				},
-				"query": {
-					"type": "string"
+				"model_id": {
+					"type": ["string", "null"]
+				},
+				"version": {
+					"type": ["string", "null"]
 				}
 			}
 		}

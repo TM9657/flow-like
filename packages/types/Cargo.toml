@@ -21,6 +21,7 @@ futures.workspace = true
 image = "0.25.6"
 base64 = "0.22.1"
 mime_guess = "2.0.5"
+reqwest-eventsource = "0.6.0"
 
 [build-dependencies]
 prost-build = "0.13.5"

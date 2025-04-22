@@ -31,13 +31,52 @@
 				"version"
 			],
 			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"type": {
+					"$ref": "#/definitions/BitTypes"
+				},
+				"meta": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/BitMeta"
+					}
+				},
 				"authors": {
 					"type": "array",
 					"items": {
 						"type": "string"
 					}
 				},
-				"created": {
+				"repository": {
+					"type": ["string", "null"]
+				},
+				"download_link": {
+					"type": ["string", "null"]
+				},
+				"file_name": {
+					"type": ["string", "null"]
+				},
+				"hash": {
+					"type": "string"
+				},
+				"size": {
+					"type": ["integer", "null"],
+					"format": "uint64",
+					"minimum": 0.0
+				},
+				"hub": {
+					"type": "string"
+				},
+				"parameters": true,
+				"icon": {
+					"type": "string"
+				},
+				"version": {
+					"type": "string"
+				},
+				"license": {
 					"type": "string"
 				},
 				"dependencies": {
@@ -59,79 +98,10 @@
 				"dependency_tree_hash": {
 					"type": "string"
 				},
-				"download_link": {
-					"type": ["string", "null"]
-				},
-				"file_name": {
-					"type": ["string", "null"]
-				},
-				"hash": {
+				"created": {
 					"type": "string"
-				},
-				"hub": {
-					"type": "string"
-				},
-				"icon": {
-					"type": "string"
-				},
-				"id": {
-					"type": "string"
-				},
-				"license": {
-					"type": "string"
-				},
-				"meta": {
-					"type": "object",
-					"additionalProperties": {
-						"$ref": "#/definitions/BitMeta"
-					}
-				},
-				"parameters": true,
-				"repository": {
-					"type": ["string", "null"]
-				},
-				"size": {
-					"type": ["integer", "null"],
-					"format": "uint64",
-					"minimum": 0.0
-				},
-				"type": {
-					"$ref": "#/definitions/BitTypes"
 				},
 				"updated": {
-					"type": "string"
-				},
-				"version": {
-					"type": "string"
-				}
-			}
-		},
-		"BitMeta": {
-			"type": "object",
-			"required": [
-				"description",
-				"long_description",
-				"name",
-				"tags",
-				"use_case"
-			],
-			"properties": {
-				"description": {
-					"type": "string"
-				},
-				"long_description": {
-					"type": "string"
-				},
-				"name": {
-					"type": "string"
-				},
-				"tags": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					}
-				},
-				"use_case": {
 					"type": "string"
 				}
 			}
@@ -157,6 +127,36 @@
 				"Board",
 				"Other"
 			]
+		},
+		"BitMeta": {
+			"type": "object",
+			"required": [
+				"description",
+				"long_description",
+				"name",
+				"tags",
+				"use_case"
+			],
+			"properties": {
+				"name": {
+					"type": "string"
+				},
+				"description": {
+					"type": "string"
+				},
+				"long_description": {
+					"type": "string"
+				},
+				"tags": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"use_case": {
+					"type": "string"
+				}
+			}
 		}
 	}
 }

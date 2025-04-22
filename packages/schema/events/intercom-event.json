@@ -20,14 +20,14 @@
 			"type": "object",
 			"required": ["nanos_since_epoch", "secs_since_epoch"],
 			"properties": {
-				"nanos_since_epoch": {
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0.0
-				},
 				"secs_since_epoch": {
 					"type": "integer",
 					"format": "uint64",
+					"minimum": 0.0
+				},
+				"nanos_since_epoch": {
+					"type": "integer",
+					"format": "uint32",
 					"minimum": 0.0
 				}
 			}

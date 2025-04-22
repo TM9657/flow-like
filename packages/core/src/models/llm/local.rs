@@ -10,10 +10,13 @@ use flow_like_model_provider::{
     response_chunk::ResponseChunk,
 };
 use flow_like_storage::files::store::FlowLikeStore;
-use flow_like_types::async_trait;
 use flow_like_types::{
     Result, reqwest,
     tokio::{self, sync::Mutex as TokioMutex, task::JoinHandle, time::sleep},
+};
+use flow_like_types::{
+    async_trait,
+    reqwest_eventsource::{Event, RequestBuilderExt},
 };
 use futures::StreamExt;
 use portpicker::pick_unused_port;
@@ -57,33 +60,41 @@ impl ModelLogic for LocalModel {
             ))
             .json(&local_history);
 
-        let response = request.send().await?;
-
         if !stream {
+            let response = request.send().await?;
             let response = response.json::<Response>().await?;
             return Ok(response);
         }
+        let mut stream = request.eventsource()?;
 
         let mut output = Response::default();
-        let mut stream = response.bytes_stream();
 
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(chunk) => {
-                    let chunk = &chunk[6..];
-                    match flow_like_types::json::from_slice::<ResponseChunk>(chunk) {
-                        Ok(parsed_chunk) => {
-                            if let Some(callback) = &callback {
-                                callback(parsed_chunk.clone()).await?;
-                            }
-                            output.push_chunk(parsed_chunk);
+        while let Some(event) = stream.next().await {
+            if let Ok(event) = event {
+                match event {
+                    Event::Message(event) => {
+                        let data = &event.data;
+                        if data == "[DONE]" {
+                            break;
                         }
-                        Err(_) => println!("Failed to parse chunk."),
+                        let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
+                            Ok(chunk) => chunk,
+                            Err(e) => {
+                                eprintln!("Failed to parse chunk: {}", e);
+                                continue;
+                            }
+                        };
+                        output.push_chunk(chunk.clone());
+                        if let Some(callback) = &callback {
+                            callback(chunk).await?;
+                        }
                     }
+                    _ => {}
                 }
-                Err(_) => println!("Failed to get chunk."),
             }
         }
+
+        stream.close();
 
         Ok(output)
     }

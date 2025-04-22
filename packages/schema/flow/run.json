@@ -14,14 +14,26 @@
 		"traces"
 	],
 	"properties": {
-		"board": {
-			"$ref": "#/definitions/Board"
+		"id": {
+			"type": "string"
+		},
+		"traces": {
+			"type": "array",
+			"items": {
+				"$ref": "#/definitions/Trace"
+			}
+		},
+		"status": {
+			"$ref": "#/definitions/RunStatus"
+		},
+		"start": {
+			"$ref": "#/definitions/SystemTime"
 		},
 		"end": {
 			"$ref": "#/definitions/SystemTime"
 		},
-		"id": {
-			"type": "string"
+		"board": {
+			"$ref": "#/definitions/Board"
 		},
 		"log_level": {
 			"$ref": "#/definitions/LogLevel"
@@ -32,23 +44,185 @@
 				"$ref": "#/definitions/RunPayload"
 			}
 		},
-		"start": {
-			"$ref": "#/definitions/SystemTime"
-		},
-		"status": {
-			"$ref": "#/definitions/RunStatus"
-		},
 		"sub": {
 			"type": "string"
-		},
-		"traces": {
-			"type": "array",
-			"items": {
-				"$ref": "#/definitions/Trace"
-			}
 		}
 	},
 	"definitions": {
+		"Trace": {
+			"type": "object",
+			"required": ["end", "id", "logs", "node_id", "start"],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"node_id": {
+					"type": "string"
+				},
+				"logs": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/LogMessage"
+					}
+				},
+				"start": {
+					"$ref": "#/definitions/SystemTime"
+				},
+				"end": {
+					"$ref": "#/definitions/SystemTime"
+				},
+				"variables": {
+					"type": ["object", "null"],
+					"additionalProperties": {
+						"$ref": "#/definitions/Variable"
+					}
+				}
+			}
+		},
+		"LogMessage": {
+			"type": "object",
+			"required": ["end", "log_level", "message", "start"],
+			"properties": {
+				"message": {
+					"type": "string"
+				},
+				"operation_id": {
+					"type": ["string", "null"]
+				},
+				"log_level": {
+					"$ref": "#/definitions/LogLevel"
+				},
+				"stats": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/LogStat"
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"start": {
+					"$ref": "#/definitions/SystemTime"
+				},
+				"end": {
+					"$ref": "#/definitions/SystemTime"
+				}
+			}
+		},
+		"LogLevel": {
+			"type": "string",
+			"enum": ["Debug", "Info", "Warn", "Error", "Fatal"]
+		},
+		"LogStat": {
+			"type": "object",
+			"properties": {
+				"token_in": {
+					"type": ["integer", "null"],
+					"format": "uint64",
+					"minimum": 0.0
+				},
+				"token_out": {
+					"type": ["integer", "null"],
+					"format": "uint64",
+					"minimum": 0.0
+				},
+				"bit_ids": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"SystemTime": {
+			"type": "object",
+			"required": ["nanos_since_epoch", "secs_since_epoch"],
+			"properties": {
+				"secs_since_epoch": {
+					"type": "integer",
+					"format": "uint64",
+					"minimum": 0.0
+				},
+				"nanos_since_epoch": {
+					"type": "integer",
+					"format": "uint32",
+					"minimum": 0.0
+				}
+			}
+		},
+		"Variable": {
+			"type": "object",
+			"required": [
+				"data_type",
+				"editable",
+				"exposed",
+				"id",
+				"name",
+				"secret",
+				"value_type"
+			],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
+				"category": {
+					"type": ["string", "null"]
+				},
+				"description": {
+					"type": ["string", "null"]
+				},
+				"default_value": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "integer",
+						"format": "uint8",
+						"minimum": 0.0
+					}
+				},
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
+				},
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
+				},
+				"exposed": {
+					"type": "boolean"
+				},
+				"secret": {
+					"type": "boolean"
+				},
+				"editable": {
+					"type": "boolean"
+				}
+			}
+		},
+		"VariableType": {
+			"type": "string",
+			"enum": [
+				"Execution",
+				"String",
+				"Integer",
+				"Float",
+				"Boolean",
+				"Date",
+				"PathBuf",
+				"Generic",
+				"Struct",
+				"Byte"
+			]
+		},
+		"ValueType": {
+			"type": "string",
+			"enum": ["Array", "Normal", "HashMap", "HashSet"]
+		},
+		"RunStatus": {
+			"type": "string",
+			"enum": ["Running", "Success", "Failed", "Stopped"]
+		},
 		"Board": {
 			"type": "object",
 			"required": [
@@ -56,6 +230,7 @@
 				"created_at",
 				"description",
 				"id",
+				"layers",
 				"log_level",
 				"name",
 				"nodes",
@@ -67,25 +242,13 @@
 				"viewport"
 			],
 			"properties": {
-				"comments": {
-					"type": "object",
-					"additionalProperties": {
-						"$ref": "#/definitions/Comment"
-					}
-				},
-				"created_at": {
-					"$ref": "#/definitions/SystemTime"
-				},
-				"description": {
-					"type": "string"
-				},
 				"id": {
 					"type": "string"
 				},
-				"log_level": {
-					"$ref": "#/definitions/LogLevel"
-				},
 				"name": {
+					"type": "string"
+				},
+				"description": {
 					"type": "string"
 				},
 				"nodes": {
@@ -94,23 +257,36 @@
 						"$ref": "#/definitions/Node"
 					}
 				},
-				"refs": {
-					"type": "object",
-					"additionalProperties": {
-						"type": "string"
-					}
-				},
-				"stage": {
-					"$ref": "#/definitions/ExecutionStage"
-				},
-				"updated_at": {
-					"$ref": "#/definitions/SystemTime"
-				},
 				"variables": {
 					"type": "object",
 					"additionalProperties": {
 						"$ref": "#/definitions/Variable"
 					}
+				},
+				"comments": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Comment"
+					}
+				},
+				"viewport": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"version": {
 					"type": "array",
@@ -134,128 +310,29 @@
 					"maxItems": 3,
 					"minItems": 3
 				},
-				"viewport": {
-					"type": "array",
-					"items": [
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						}
-					],
-					"maxItems": 3,
-					"minItems": 3
-				}
-			}
-		},
-		"Comment": {
-			"type": "object",
-			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
-			"properties": {
-				"author": {
-					"type": ["string", "null"]
-				},
-				"comment_type": {
-					"$ref": "#/definitions/CommentType"
-				},
-				"content": {
-					"type": "string"
-				},
-				"coordinates": {
-					"type": "array",
-					"items": [
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						}
-					],
-					"maxItems": 3,
-					"minItems": 3
-				},
-				"id": {
-					"type": "string"
-				},
-				"timestamp": {
-					"$ref": "#/definitions/SystemTime"
-				}
-			}
-		},
-		"CommentType": {
-			"type": "string",
-			"enum": ["Text", "Image", "Video"]
-		},
-		"ExecutionStage": {
-			"type": "string",
-			"enum": ["Dev", "Int", "QA", "PreProd", "Prod"]
-		},
-		"LogLevel": {
-			"type": "string",
-			"enum": ["Debug", "Info", "Warn", "Error", "Fatal"]
-		},
-		"LogMessage": {
-			"type": "object",
-			"required": ["end", "log_level", "message", "start"],
-			"properties": {
-				"end": {
-					"$ref": "#/definitions/SystemTime"
+				"stage": {
+					"$ref": "#/definitions/ExecutionStage"
 				},
 				"log_level": {
 					"$ref": "#/definitions/LogLevel"
 				},
-				"message": {
-					"type": "string"
-				},
-				"operation_id": {
-					"type": ["string", "null"]
-				},
-				"start": {
-					"$ref": "#/definitions/SystemTime"
-				},
-				"stats": {
-					"anyOf": [
-						{
-							"$ref": "#/definitions/LogStat"
-						},
-						{
-							"type": "null"
-						}
-					]
-				}
-			}
-		},
-		"LogStat": {
-			"type": "object",
-			"properties": {
-				"bit_ids": {
-					"type": ["array", "null"],
-					"items": {
+				"refs": {
+					"type": "object",
+					"additionalProperties": {
 						"type": "string"
 					}
 				},
-				"token_in": {
-					"type": ["integer", "null"],
-					"format": "uint64",
-					"minimum": 0.0
+				"layers": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Layer"
+					}
 				},
-				"token_out": {
-					"type": ["integer", "null"],
-					"format": "uint64",
-					"minimum": 0.0
+				"created_at": {
+					"$ref": "#/definitions/SystemTime"
+				},
+				"updated_at": {
+					"$ref": "#/definitions/SystemTime"
 				}
 			}
 		},
@@ -270,11 +347,17 @@
 				"pins"
 			],
 			"properties": {
-				"category": {
+				"id": {
 					"type": "string"
 				},
-				"comment": {
-					"type": ["string", "null"]
+				"name": {
+					"type": "string"
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"description": {
+					"type": "string"
 				},
 				"coordinates": {
 					"type": ["array", "null"],
@@ -295,38 +378,8 @@
 					"maxItems": 3,
 					"minItems": 3
 				},
-				"description": {
+				"category": {
 					"type": "string"
-				},
-				"docs": {
-					"type": ["string", "null"]
-				},
-				"error": {
-					"type": ["string", "null"]
-				},
-				"event_callback": {
-					"type": ["boolean", "null"]
-				},
-				"friendly_name": {
-					"type": "string"
-				},
-				"icon": {
-					"type": ["string", "null"]
-				},
-				"id": {
-					"type": "string"
-				},
-				"long_running": {
-					"type": ["boolean", "null"]
-				},
-				"name": {
-					"type": "string"
-				},
-				"pins": {
-					"type": "object",
-					"additionalProperties": {
-						"$ref": "#/definitions/Pin"
-					}
 				},
 				"scores": {
 					"anyOf": [
@@ -338,8 +391,35 @@
 						}
 					]
 				},
+				"pins": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Pin"
+					}
+				},
 				"start": {
 					"type": ["boolean", "null"]
+				},
+				"icon": {
+					"type": ["string", "null"]
+				},
+				"comment": {
+					"type": ["string", "null"]
+				},
+				"long_running": {
+					"type": ["boolean", "null"]
+				},
+				"error": {
+					"type": ["string", "null"]
+				},
+				"docs": {
+					"type": ["string", "null"]
+				},
+				"event_callback": {
+					"type": ["boolean", "null"]
+				},
+				"layer": {
+					"type": ["string", "null"]
 				}
 			}
 		},
@@ -348,7 +428,12 @@
 			"type": "object",
 			"required": ["governance", "performance", "privacy", "security"],
 			"properties": {
-				"governance": {
+				"privacy": {
+					"type": "integer",
+					"format": "uint8",
+					"minimum": 0.0
+				},
+				"security": {
 					"type": "integer",
 					"format": "uint8",
 					"minimum": 0.0
@@ -358,12 +443,7 @@
 					"format": "uint8",
 					"minimum": 0.0
 				},
-				"privacy": {
-					"type": "integer",
-					"format": "uint8",
-					"minimum": 0.0
-				},
-				"security": {
+				"governance": {
 					"type": "integer",
 					"format": "uint8",
 					"minimum": 0.0
@@ -385,15 +465,43 @@
 				"value_type"
 			],
 			"properties": {
-				"connected_to": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"description": {
+					"type": "string"
+				},
+				"pin_type": {
+					"$ref": "#/definitions/PinType"
+				},
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
+				},
+				"schema": {
+					"type": ["string", "null"]
+				},
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
+				},
+				"depends_on": {
 					"type": "array",
 					"items": {
 						"type": "string"
 					},
 					"uniqueItems": true
 				},
-				"data_type": {
-					"$ref": "#/definitions/VariableType"
+				"connected_to": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
 				},
 				"default_value": {
 					"type": ["array", "null"],
@@ -403,29 +511,10 @@
 						"minimum": 0.0
 					}
 				},
-				"depends_on": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					},
-					"uniqueItems": true
-				},
-				"description": {
-					"type": "string"
-				},
-				"friendly_name": {
-					"type": "string"
-				},
-				"id": {
-					"type": "string"
-				},
 				"index": {
 					"type": "integer",
 					"format": "uint16",
 					"minimum": 0.0
-				},
-				"name": {
-					"type": "string"
 				},
 				"options": {
 					"anyOf": [
@@ -436,26 +525,21 @@
 							"type": "null"
 						}
 					]
-				},
-				"pin_type": {
-					"$ref": "#/definitions/PinType"
-				},
-				"schema": {
-					"type": ["string", "null"]
-				},
-				"value_type": {
-					"$ref": "#/definitions/ValueType"
 				}
 			}
+		},
+		"PinType": {
+			"type": "string",
+			"enum": ["Input", "Output"]
 		},
 		"PinOptions": {
 			"type": "object",
 			"properties": {
-				"enforce_generic_value_type": {
-					"type": ["boolean", "null"]
-				},
-				"enforce_schema": {
-					"type": ["boolean", "null"]
+				"valid_values": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
 				},
 				"range": {
 					"type": ["array", "null"],
@@ -476,17 +560,135 @@
 					"type": ["number", "null"],
 					"format": "double"
 				},
-				"valid_values": {
-					"type": ["array", "null"],
-					"items": {
-						"type": "string"
+				"enforce_schema": {
+					"type": ["boolean", "null"]
+				},
+				"enforce_generic_value_type": {
+					"type": ["boolean", "null"]
+				}
+			}
+		},
+		"Comment": {
+			"type": "object",
+			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"author": {
+					"type": ["string", "null"]
+				},
+				"content": {
+					"type": "string"
+				},
+				"comment_type": {
+					"$ref": "#/definitions/CommentType"
+				},
+				"timestamp": {
+					"$ref": "#/definitions/SystemTime"
+				},
+				"coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				}
+			}
+		},
+		"CommentType": {
+			"type": "string",
+			"enum": ["Text", "Image", "Video"]
+		},
+		"ExecutionStage": {
+			"type": "string",
+			"enum": ["Dev", "Int", "QA", "PreProd", "Prod"]
+		},
+		"Layer": {
+			"type": "object",
+			"required": [
+				"comments",
+				"coordinates",
+				"id",
+				"name",
+				"nodes",
+				"pins",
+				"type",
+				"variables"
+			],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"parent_id": {
+					"type": ["string", "null"]
+				},
+				"name": {
+					"type": "string"
+				},
+				"type": {
+					"$ref": "#/definitions/LayerType"
+				},
+				"nodes": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Node"
+					}
+				},
+				"variables": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Variable"
+					}
+				},
+				"comments": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Comment"
+					}
+				},
+				"coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"pins": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Pin"
 					}
 				}
 			}
 		},
-		"PinType": {
+		"LayerType": {
 			"type": "string",
-			"enum": ["Input", "Output"]
+			"enum": ["Function", "Macro", "Collapsed"]
 		},
 		"RunPayload": {
 			"type": "object",
@@ -497,124 +699,6 @@
 				},
 				"payload": true
 			}
-		},
-		"RunStatus": {
-			"type": "string",
-			"enum": ["Running", "Success", "Failed", "Stopped"]
-		},
-		"SystemTime": {
-			"type": "object",
-			"required": ["nanos_since_epoch", "secs_since_epoch"],
-			"properties": {
-				"nanos_since_epoch": {
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0.0
-				},
-				"secs_since_epoch": {
-					"type": "integer",
-					"format": "uint64",
-					"minimum": 0.0
-				}
-			}
-		},
-		"Trace": {
-			"type": "object",
-			"required": ["end", "id", "logs", "node_id", "start"],
-			"properties": {
-				"end": {
-					"$ref": "#/definitions/SystemTime"
-				},
-				"id": {
-					"type": "string"
-				},
-				"logs": {
-					"type": "array",
-					"items": {
-						"$ref": "#/definitions/LogMessage"
-					}
-				},
-				"node_id": {
-					"type": "string"
-				},
-				"start": {
-					"$ref": "#/definitions/SystemTime"
-				},
-				"variables": {
-					"type": ["object", "null"],
-					"additionalProperties": {
-						"$ref": "#/definitions/Variable"
-					}
-				}
-			}
-		},
-		"ValueType": {
-			"type": "string",
-			"enum": ["Array", "Normal", "HashMap", "HashSet"]
-		},
-		"Variable": {
-			"type": "object",
-			"required": [
-				"data_type",
-				"editable",
-				"exposed",
-				"id",
-				"name",
-				"secret",
-				"value_type"
-			],
-			"properties": {
-				"category": {
-					"type": ["string", "null"]
-				},
-				"data_type": {
-					"$ref": "#/definitions/VariableType"
-				},
-				"default_value": {
-					"type": ["array", "null"],
-					"items": {
-						"type": "integer",
-						"format": "uint8",
-						"minimum": 0.0
-					}
-				},
-				"description": {
-					"type": ["string", "null"]
-				},
-				"editable": {
-					"type": "boolean"
-				},
-				"exposed": {
-					"type": "boolean"
-				},
-				"id": {
-					"type": "string"
-				},
-				"name": {
-					"type": "string"
-				},
-				"secret": {
-					"type": "boolean"
-				},
-				"value_type": {
-					"$ref": "#/definitions/ValueType"
-				}
-			}
-		},
-		"VariableType": {
-			"type": "string",
-			"enum": [
-				"Execution",
-				"String",
-				"Integer",
-				"Float",
-				"Boolean",
-				"Date",
-				"PathBuf",
-				"Generic",
-				"Struct",
-				"Byte"
-			]
 		}
 	}
 }

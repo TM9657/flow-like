@@ -23,14 +23,20 @@
 			"type": "object",
 			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
 			"properties": {
+				"id": {
+					"type": "string"
+				},
 				"author": {
 					"type": ["string", "null"]
+				},
+				"content": {
+					"type": "string"
 				},
 				"comment_type": {
 					"$ref": "#/definitions/CommentType"
 				},
-				"content": {
-					"type": "string"
+				"timestamp": {
+					"$ref": "#/definitions/SystemTime"
 				},
 				"coordinates": {
 					"type": "array",
@@ -50,12 +56,6 @@
 					],
 					"maxItems": 3,
 					"minItems": 3
-				},
-				"id": {
-					"type": "string"
-				},
-				"timestamp": {
-					"$ref": "#/definitions/SystemTime"
 				}
 			}
 		},
@@ -67,14 +67,14 @@
 			"type": "object",
 			"required": ["nanos_since_epoch", "secs_since_epoch"],
 			"properties": {
-				"nanos_since_epoch": {
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0.0
-				},
 				"secs_since_epoch": {
 					"type": "integer",
 					"format": "uint64",
+					"minimum": 0.0
+				},
+				"nanos_since_epoch": {
+					"type": "integer",
+					"format": "uint32",
 					"minimum": 0.0
 				}
 			}

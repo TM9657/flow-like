@@ -10,7 +10,24 @@
 		"mime_type"
 	],
 	"properties": {
-		"access_time": {
+		"file_name": {
+			"type": "string"
+		},
+		"file_path": {
+			"type": "string"
+		},
+		"file_extension": {
+			"type": "string"
+		},
+		"file_size": {
+			"type": "integer",
+			"format": "uint64",
+			"minimum": 0.0
+		},
+		"mime_type": {
+			"type": "string"
+		},
+		"creation_time": {
 			"anyOf": [
 				{
 					"$ref": "#/definitions/SystemTime"
@@ -20,27 +37,17 @@
 				}
 			]
 		},
-		"album": {
-			"type": ["string", "null"]
+		"modification_time": {
+			"anyOf": [
+				{
+					"$ref": "#/definitions/SystemTime"
+				},
+				{
+					"type": "null"
+				}
+			]
 		},
-		"artist": {
-			"type": ["string", "null"]
-		},
-		"author": {
-			"type": ["string", "null"]
-		},
-		"bitrate": {
-			"type": ["integer", "null"],
-			"format": "uint32",
-			"minimum": 0.0
-		},
-		"camera_make": {
-			"type": ["string", "null"]
-		},
-		"camera_model": {
-			"type": ["string", "null"]
-		},
-		"creation_time": {
+		"access_time": {
 			"anyOf": [
 				{
 					"$ref": "#/definitions/SystemTime"
@@ -53,34 +60,25 @@
 		"creator": {
 			"type": ["string", "null"]
 		},
-		"duration": {
-			"type": ["integer", "null"],
-			"format": "uint32",
-			"minimum": 0.0
+		"producer": {
+			"type": ["string", "null"]
 		},
-		"file_extension": {
-			"type": "string"
+		"author": {
+			"type": ["string", "null"]
 		},
-		"file_name": {
-			"type": "string"
+		"title": {
+			"type": ["string", "null"]
 		},
-		"file_path": {
-			"type": "string"
-		},
-		"file_size": {
-			"type": "integer",
-			"format": "uint64",
-			"minimum": 0.0
-		},
-		"frame_rate": {
-			"type": ["number", "null"],
-			"format": "float"
-		},
-		"genre": {
+		"subject": {
 			"type": ["string", "null"]
 		},
 		"keywords": {
 			"type": ["string", "null"]
+		},
+		"pages": {
+			"type": ["integer", "null"],
+			"format": "uint32",
+			"minimum": 0.0
 		},
 		"location": {
 			"type": ["array", "null"],
@@ -97,30 +95,10 @@
 			"maxItems": 2,
 			"minItems": 2
 		},
-		"mime_type": {
-			"type": "string"
+		"camera_make": {
+			"type": ["string", "null"]
 		},
-		"modification_time": {
-			"anyOf": [
-				{
-					"$ref": "#/definitions/SystemTime"
-				},
-				{
-					"type": "null"
-				}
-			]
-		},
-		"orientation": {
-			"type": ["integer", "null"],
-			"format": "uint16",
-			"minimum": 0.0
-		},
-		"pages": {
-			"type": ["integer", "null"],
-			"format": "uint32",
-			"minimum": 0.0
-		},
-		"producer": {
+		"camera_model": {
 			"type": ["string", "null"]
 		},
 		"resolution": {
@@ -140,28 +118,50 @@
 			"maxItems": 2,
 			"minItems": 2
 		},
-		"sample_rate": {
+		"orientation": {
 			"type": ["integer", "null"],
-			"format": "uint32",
+			"format": "uint16",
 			"minimum": 0.0
 		},
-		"subject": {
+		"artist": {
 			"type": ["string", "null"]
 		},
-		"title": {
+		"album": {
 			"type": ["string", "null"]
+		},
+		"track_title": {
+			"type": ["string", "null"]
+		},
+		"genre": {
+			"type": ["string", "null"]
+		},
+		"year": {
+			"type": ["integer", "null"],
+			"format": "int32"
 		},
 		"track_number": {
 			"type": ["integer", "null"],
 			"format": "uint32",
 			"minimum": 0.0
 		},
-		"track_title": {
-			"type": ["string", "null"]
-		},
-		"year": {
+		"duration": {
 			"type": ["integer", "null"],
-			"format": "int32"
+			"format": "uint32",
+			"minimum": 0.0
+		},
+		"bitrate": {
+			"type": ["integer", "null"],
+			"format": "uint32",
+			"minimum": 0.0
+		},
+		"sample_rate": {
+			"type": ["integer", "null"],
+			"format": "uint32",
+			"minimum": 0.0
+		},
+		"frame_rate": {
+			"type": ["number", "null"],
+			"format": "float"
 		}
 	},
 	"definitions": {
@@ -169,14 +169,14 @@
 			"type": "object",
 			"required": ["nanos_since_epoch", "secs_since_epoch"],
 			"properties": {
-				"nanos_since_epoch": {
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0.0
-				},
 				"secs_since_epoch": {
 					"type": "integer",
 					"format": "uint64",
+					"minimum": 0.0
+				},
+				"nanos_since_epoch": {
+					"type": "integer",
+					"format": "uint32",
 					"minimum": 0.0
 				}
 			}

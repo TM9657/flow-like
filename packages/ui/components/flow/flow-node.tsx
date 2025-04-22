@@ -2,12 +2,7 @@
 
 import { createId } from "@paralleldrive/cuid2";
 import { useDebounce } from "@uidotdev/usehooks";
-import {
-	type Node,
-	type NodeProps,
-	getOutgoers,
-	useReactFlow,
-} from "@xyflow/react";
+import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import {
 	AlignCenterVerticalIcon,
 	AlignEndVerticalIcon,
@@ -45,9 +40,15 @@ import {
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
 import { useInvalidateInvoke } from "../../hooks";
-import { IPinType, IValueType, handleCopy, updateNodeCommand, upsertPinCommand } from "../../lib";
+import {
+	IPinType,
+	IValueType,
+	handleCopy,
+	updateNodeCommand,
+	upsertPinCommand,
+} from "../../lib";
 import type { INode } from "../../lib/schema/flow/node";
-import { IVariableType, type IPin } from "../../lib/schema/flow/pin";
+import { type IPin, IVariableType } from "../../lib/schema/flow/pin";
 import { ILogLevel, type ITrace } from "../../lib/schema/flow/run";
 import {
 	convertJsonToUint8Array,
@@ -713,48 +714,56 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	const invalidate = useInvalidateInvoke();
 	const errorHandled = useMemo(() => {
 		return Object.values(props.data.node.pins).some(
-			(pin) => pin.name === "auto_handle_error" && pin.pin_type === IPinType.Output,
+			(pin) =>
+				pin.name === "auto_handle_error" && pin.pin_type === IPinType.Output,
 		);
 	}, [props.data.node.pins]);
 
-	// const selectChildren = useCallback(() => {
-	// 	const nodes = flow.getNodes();
-	// 	const selectedNodes = nodes.filter((node) => node.selected);
-	// 	if (selectedNodes.length > 0) {
-	// 		getOutgoers({id: props.id}, flow.getNodes(), flow.getEdges())
-	// 	}
-	// }, [])
+	const isExec = useMemo(() => {
+		return Object.values(props.data.node.pins).some(
+			(pin) => pin.data_type === IVariableType.Execution,
+		);
+	}, [props.data.node.pins]);
 
 	const copy = useCallback(async () => {
 		handleCopy(flow.getNodes());
 	}, [flow]);
 
-	const handleError = useCallback( async () => {
+	const handleError = useCallback(async () => {
 		const node = flow.getNodes().find((node) => node.id === props.id);
 		if (!node) return;
 
 		const innerNode = node.data.node as INode;
 
 		const handleErrorPin = Object.values(innerNode.pins).find(
-			(pin) => pin.name === "auto_handle_error" && pin.pin_type === IPinType.Output,
+			(pin) =>
+				pin.name === "auto_handle_error" && pin.pin_type === IPinType.Output,
 		);
 
 		if (handleErrorPin) {
 			const filteredPins = Object.values(innerNode.pins).filter(
-				(pin) => pin.name !== "auto_handle_error" && pin.name !== "auto_handle_error_string",
+				(pin) =>
+					pin.name !== "auto_handle_error" &&
+					pin.name !== "auto_handle_error_string",
 			);
 			innerNode.pins = {};
-			filteredPins.toSorted((a, b) => a.index - b.index).forEach(
-				(pin, index) => (innerNode.pins[pin.id] = { ...pin, index: index }),
-			);
+			filteredPins
+				.toSorted((a, b) => a.index - b.index)
+				.forEach(
+					(pin, index) => (innerNode.pins[pin.id] = { ...pin, index: index }),
+				);
 			const updateNode = updateNodeCommand({
 				node: {
 					...innerNode,
-				}
-			})
+				},
+			});
 
-			await backend.executeCommand(props.data.appId, props.data.boardId, updateNode)
-			await pushCommand(updateNode, false)
+			await backend.executeCommand(
+				props.data.appId,
+				props.data.boardId,
+				updateNode,
+			);
+			await pushCommand(updateNode, false);
 			invalidate(backend.getBoard, [props.data.appId, props.data.boardId]);
 			return;
 		}
@@ -771,7 +780,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 			depends_on: [],
 			friendly_name: "On Error",
 			default_value: convertJsonToUint8Array(false),
-		}
+		};
 
 		const stringPin: IPin = {
 			name: "auto_handle_error_string",
@@ -785,27 +794,29 @@ function FlowNode(props: NodeProps<FlowNode>) {
 			depends_on: [],
 			friendly_name: "Error",
 			default_value: convertJsonToUint8Array(""),
-		}
+		};
 
 		const command = upsertPinCommand({
 			node_id: innerNode.id,
 			pin: newPin,
-		})
+		});
 
 		const stringCommand = upsertPinCommand({
 			node_id: innerNode.id,
 			pin: stringPin,
-		})
+		});
 
-
-		await backend.executeCommand(props.data.appId, props.data.boardId, command)
-		await backend.executeCommand(props.data.appId, props.data.boardId, stringCommand)
-		await pushCommand(command, false)
-		await pushCommand(stringCommand, true)
+		await backend.executeCommand(props.data.appId, props.data.boardId, command);
+		await backend.executeCommand(
+			props.data.appId,
+			props.data.boardId,
+			stringCommand,
+		);
+		await pushCommand(command, false);
+		await pushCommand(stringCommand, true);
 
 		invalidate(backend.getBoard, [props.data.appId, props.data.boardId]);
-
-	}, [backend, props.data.node, props.data.appId, props.data.boardId, flow])
+	}, [backend, props.data.node, props.data.appId, props.data.boardId, flow]);
 
 	if (isOpen || isHovered) {
 		return (
@@ -837,22 +848,15 @@ function FlowNode(props: NodeProps<FlowNode>) {
 							</div>
 						</ContextMenuItem>
 					)}
-					{flow.getNodes().filter((node) => node.selected).length <= 1 && (
-						<ContextMenuItem onClick={() => handleError()}>
-							<div className="flex flex-row items-center gap-2 text-nowrap">
-								<CircleXIcon className="w-4 h-4" />
-								{errorHandled ? "Remove Handling" : "Handle Errors"}
-							</div>
-						</ContextMenuItem>
-					)}
-					{/* {flow.getNodes().filter((node) => node.selected).length <= 1 && (
-						<ContextMenuItem onClick={() => setCommentMenu(true)}>
-							<div className="flex flex-row items-center gap-2 text-nowrap">
-								<MessageSquareIcon className="w-4 h-4" />
-								Select Children
-							</div>
-						</ContextMenuItem>
-					)} */}
+					{isExec &&
+						flow.getNodes().filter((node) => node.selected).length <= 1 && (
+							<ContextMenuItem onClick={() => handleError()}>
+								<div className="flex flex-row items-center gap-2 text-nowrap">
+									<CircleXIcon className="w-4 h-4" />
+									{errorHandled ? "Remove Handling" : "Handle Errors"}
+								</div>
+							</ContextMenuItem>
+						)}
 					<ContextMenuItem onClick={async () => await copy()}>
 						<div className="flex flex-row items-center gap-2 text-nowrap">
 							<CopyIcon className="w-4 h-4" />

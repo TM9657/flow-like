@@ -20,11 +20,17 @@
 				"pins"
 			],
 			"properties": {
-				"category": {
+				"id": {
 					"type": "string"
 				},
-				"comment": {
-					"type": ["string", "null"]
+				"name": {
+					"type": "string"
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"description": {
+					"type": "string"
 				},
 				"coordinates": {
 					"type": ["array", "null"],
@@ -45,38 +51,8 @@
 					"maxItems": 3,
 					"minItems": 3
 				},
-				"description": {
+				"category": {
 					"type": "string"
-				},
-				"docs": {
-					"type": ["string", "null"]
-				},
-				"error": {
-					"type": ["string", "null"]
-				},
-				"event_callback": {
-					"type": ["boolean", "null"]
-				},
-				"friendly_name": {
-					"type": "string"
-				},
-				"icon": {
-					"type": ["string", "null"]
-				},
-				"id": {
-					"type": "string"
-				},
-				"long_running": {
-					"type": ["boolean", "null"]
-				},
-				"name": {
-					"type": "string"
-				},
-				"pins": {
-					"type": "object",
-					"additionalProperties": {
-						"$ref": "#/definitions/Pin"
-					}
 				},
 				"scores": {
 					"anyOf": [
@@ -88,8 +64,35 @@
 						}
 					]
 				},
+				"pins": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Pin"
+					}
+				},
 				"start": {
 					"type": ["boolean", "null"]
+				},
+				"icon": {
+					"type": ["string", "null"]
+				},
+				"comment": {
+					"type": ["string", "null"]
+				},
+				"long_running": {
+					"type": ["boolean", "null"]
+				},
+				"error": {
+					"type": ["string", "null"]
+				},
+				"docs": {
+					"type": ["string", "null"]
+				},
+				"event_callback": {
+					"type": ["boolean", "null"]
+				},
+				"layer": {
+					"type": ["string", "null"]
 				}
 			}
 		},
@@ -98,7 +101,12 @@
 			"type": "object",
 			"required": ["governance", "performance", "privacy", "security"],
 			"properties": {
-				"governance": {
+				"privacy": {
+					"type": "integer",
+					"format": "uint8",
+					"minimum": 0.0
+				},
+				"security": {
 					"type": "integer",
 					"format": "uint8",
 					"minimum": 0.0
@@ -108,12 +116,7 @@
 					"format": "uint8",
 					"minimum": 0.0
 				},
-				"privacy": {
-					"type": "integer",
-					"format": "uint8",
-					"minimum": 0.0
-				},
-				"security": {
+				"governance": {
 					"type": "integer",
 					"format": "uint8",
 					"minimum": 0.0
@@ -135,15 +138,43 @@
 				"value_type"
 			],
 			"properties": {
-				"connected_to": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"description": {
+					"type": "string"
+				},
+				"pin_type": {
+					"$ref": "#/definitions/PinType"
+				},
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
+				},
+				"schema": {
+					"type": ["string", "null"]
+				},
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
+				},
+				"depends_on": {
 					"type": "array",
 					"items": {
 						"type": "string"
 					},
 					"uniqueItems": true
 				},
-				"data_type": {
-					"$ref": "#/definitions/VariableType"
+				"connected_to": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
 				},
 				"default_value": {
 					"type": ["array", "null"],
@@ -153,29 +184,10 @@
 						"minimum": 0.0
 					}
 				},
-				"depends_on": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					},
-					"uniqueItems": true
-				},
-				"description": {
-					"type": "string"
-				},
-				"friendly_name": {
-					"type": "string"
-				},
-				"id": {
-					"type": "string"
-				},
 				"index": {
 					"type": "integer",
 					"format": "uint16",
 					"minimum": 0.0
-				},
-				"name": {
-					"type": "string"
 				},
 				"options": {
 					"anyOf": [
@@ -186,26 +198,40 @@
 							"type": "null"
 						}
 					]
-				},
-				"pin_type": {
-					"$ref": "#/definitions/PinType"
-				},
-				"schema": {
-					"type": ["string", "null"]
-				},
-				"value_type": {
-					"$ref": "#/definitions/ValueType"
 				}
 			}
+		},
+		"PinType": {
+			"type": "string",
+			"enum": ["Input", "Output"]
+		},
+		"VariableType": {
+			"type": "string",
+			"enum": [
+				"Execution",
+				"String",
+				"Integer",
+				"Float",
+				"Boolean",
+				"Date",
+				"PathBuf",
+				"Generic",
+				"Struct",
+				"Byte"
+			]
+		},
+		"ValueType": {
+			"type": "string",
+			"enum": ["Array", "Normal", "HashMap", "HashSet"]
 		},
 		"PinOptions": {
 			"type": "object",
 			"properties": {
-				"enforce_generic_value_type": {
-					"type": ["boolean", "null"]
-				},
-				"enforce_schema": {
-					"type": ["boolean", "null"]
+				"valid_values": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
 				},
 				"range": {
 					"type": ["array", "null"],
@@ -226,36 +252,13 @@
 					"type": ["number", "null"],
 					"format": "double"
 				},
-				"valid_values": {
-					"type": ["array", "null"],
-					"items": {
-						"type": "string"
-					}
+				"enforce_schema": {
+					"type": ["boolean", "null"]
+				},
+				"enforce_generic_value_type": {
+					"type": ["boolean", "null"]
 				}
 			}
-		},
-		"PinType": {
-			"type": "string",
-			"enum": ["Input", "Output"]
-		},
-		"ValueType": {
-			"type": "string",
-			"enum": ["Array", "Normal", "HashMap", "HashSet"]
-		},
-		"VariableType": {
-			"type": "string",
-			"enum": [
-				"Execution",
-				"String",
-				"Integer",
-				"Float",
-				"Boolean",
-				"Date",
-				"PathBuf",
-				"Generic",
-				"Struct",
-				"Byte"
-			]
 		}
 	}
 }

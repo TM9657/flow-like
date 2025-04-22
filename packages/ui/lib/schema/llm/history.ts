@@ -19,7 +19,7 @@ export interface IHistory {
 }
 
 export interface IHistoryMessage {
-	content: IContent[];
+	content: IContent[] | string;
 	name?: null | string;
 	role: IRole;
 	tool_call_id?: null | string;

@@ -12,6 +12,7 @@ import {
 	CardHeader,
 	CardTitle,
 	type IDownloadProgress,
+	type IIntercomEvent,
 	type IPreferences,
 	type IResponse,
 	type IResponseChunk,
@@ -66,16 +67,6 @@ export default function Home() {
 		});
 	}
 
-	function fixEncoding(corruptedText: string) {
-		// Step 1: Encode the corrupted text as Latin-1 bytes
-		const bytes = Buffer.from(corruptedText, "latin1");
-
-		// Step 2: Decode those bytes back into UTF-8
-		const fixedText = bytes.toString("utf8");
-
-		return fixedText;
-	}
-
 	function base64FilesToString(files: string[]) {
 		if (files.length === 0) return "";
 
@@ -121,8 +112,9 @@ export default function Home() {
 
 		const streaming_subscription = listen(
 			`streaming_out:${id}`,
-			(event: Event<IResponseChunk[]>) => {
-				for (const chunk of event.payload) {
+			(event: Event<IIntercomEvent[]>) => {
+				for (const ev of event.payload) {
+					const chunk = ev.payload as IResponseChunk;
 					if (chunk.x_prefill_progress) {
 						setProgress(chunk.x_prefill_progress ?? 0);
 						continue;
@@ -135,7 +127,7 @@ export default function Home() {
 					IRole.Assistant,
 				);
 				if (lastMessage) {
-					setResponse(fixEncoding(lastMessage.content ?? ""));
+					setResponse(lastMessage.content ?? "");
 				}
 			},
 		);
@@ -158,10 +150,7 @@ export default function Home() {
 			}),
 		);
 
-		console.dir(response);
-		setResponse(
-			fixEncoding(response.lastMessageOfRole(IRole.Assistant)?.content ?? ""),
-		);
+		setResponse(response.lastMessageOfRole(IRole.Assistant)?.content ?? "");
 
 		if (fileInput?.current) fileInput.current.value = null;
 		setPrompt("");

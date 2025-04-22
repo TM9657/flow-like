@@ -4,6 +4,9 @@
 	"type": "object",
 	"required": ["node_id", "to_coordinates"],
 	"properties": {
+		"node_id": {
+			"type": "string"
+		},
 		"from_coordinates": {
 			"type": ["array", "null"],
 			"items": [
@@ -22,9 +25,6 @@
 			],
 			"maxItems": 3,
 			"minItems": 3
-		},
-		"node_id": {
-			"type": "string"
 		},
 		"to_coordinates": {
 			"type": "array",

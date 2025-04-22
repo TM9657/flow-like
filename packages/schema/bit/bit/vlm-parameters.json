@@ -9,14 +9,29 @@
 			"format": "uint32",
 			"minimum": 0.0
 		},
-		"model_classification": {
-			"$ref": "#/definitions/BitModelClassification"
-		},
 		"provider": {
 			"$ref": "#/definitions/ModelProvider"
+		},
+		"model_classification": {
+			"$ref": "#/definitions/BitModelClassification"
 		}
 	},
 	"definitions": {
+		"ModelProvider": {
+			"type": "object",
+			"required": ["provider_name"],
+			"properties": {
+				"provider_name": {
+					"type": "string"
+				},
+				"model_id": {
+					"type": ["string", "null"]
+				},
+				"version": {
+					"type": ["string", "null"]
+				}
+			}
+		},
 		"BitModelClassification": {
 			"type": "object",
 			"required": [
@@ -32,11 +47,15 @@
 				"speed"
 			],
 			"properties": {
-				"coding": {
+				"cost": {
 					"type": "number",
 					"format": "float"
 				},
-				"cost": {
+				"speed": {
+					"type": "number",
+					"format": "float"
+				},
+				"reasoning": {
 					"type": "number",
 					"format": "float"
 				},
@@ -52,7 +71,7 @@
 					"type": "number",
 					"format": "float"
 				},
-				"multilinguality": {
+				"safety": {
 					"type": "number",
 					"format": "float"
 				},
@@ -60,32 +79,13 @@
 					"type": "number",
 					"format": "float"
 				},
-				"reasoning": {
+				"multilinguality": {
 					"type": "number",
 					"format": "float"
 				},
-				"safety": {
+				"coding": {
 					"type": "number",
 					"format": "float"
-				},
-				"speed": {
-					"type": "number",
-					"format": "float"
-				}
-			}
-		},
-		"ModelProvider": {
-			"type": "object",
-			"required": ["provider_name"],
-			"properties": {
-				"model_id": {
-					"type": ["string", "null"]
-				},
-				"provider_name": {
-					"type": "string"
-				},
-				"version": {
-					"type": ["string", "null"]
 				}
 			}
 		}

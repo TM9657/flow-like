@@ -7,6 +7,7 @@
 		"created_at",
 		"description",
 		"id",
+		"layers",
 		"log_level",
 		"name",
 		"nodes",
@@ -18,25 +19,13 @@
 		"viewport"
 	],
 	"properties": {
-		"comments": {
-			"type": "object",
-			"additionalProperties": {
-				"$ref": "#/definitions/Comment"
-			}
-		},
-		"created_at": {
-			"$ref": "#/definitions/SystemTime"
-		},
-		"description": {
-			"type": "string"
-		},
 		"id": {
 			"type": "string"
 		},
-		"log_level": {
-			"$ref": "#/definitions/LogLevel"
-		},
 		"name": {
+			"type": "string"
+		},
+		"description": {
 			"type": "string"
 		},
 		"nodes": {
@@ -45,23 +34,36 @@
 				"$ref": "#/definitions/Node"
 			}
 		},
-		"refs": {
-			"type": "object",
-			"additionalProperties": {
-				"type": "string"
-			}
-		},
-		"stage": {
-			"$ref": "#/definitions/ExecutionStage"
-		},
-		"updated_at": {
-			"$ref": "#/definitions/SystemTime"
-		},
 		"variables": {
 			"type": "object",
 			"additionalProperties": {
 				"$ref": "#/definitions/Variable"
 			}
+		},
+		"comments": {
+			"type": "object",
+			"additionalProperties": {
+				"$ref": "#/definitions/Comment"
+			}
+		},
+		"viewport": {
+			"type": "array",
+			"items": [
+				{
+					"type": "number",
+					"format": "float"
+				},
+				{
+					"type": "number",
+					"format": "float"
+				},
+				{
+					"type": "number",
+					"format": "float"
+				}
+			],
+			"maxItems": 3,
+			"minItems": 3
 		},
 		"version": {
 			"type": "array",
@@ -85,79 +87,32 @@
 			"maxItems": 3,
 			"minItems": 3
 		},
-		"viewport": {
-			"type": "array",
-			"items": [
-				{
-					"type": "number",
-					"format": "float"
-				},
-				{
-					"type": "number",
-					"format": "float"
-				},
-				{
-					"type": "number",
-					"format": "float"
-				}
-			],
-			"maxItems": 3,
-			"minItems": 3
+		"stage": {
+			"$ref": "#/definitions/ExecutionStage"
+		},
+		"log_level": {
+			"$ref": "#/definitions/LogLevel"
+		},
+		"refs": {
+			"type": "object",
+			"additionalProperties": {
+				"type": "string"
+			}
+		},
+		"layers": {
+			"type": "object",
+			"additionalProperties": {
+				"$ref": "#/definitions/Layer"
+			}
+		},
+		"created_at": {
+			"$ref": "#/definitions/SystemTime"
+		},
+		"updated_at": {
+			"$ref": "#/definitions/SystemTime"
 		}
 	},
 	"definitions": {
-		"Comment": {
-			"type": "object",
-			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
-			"properties": {
-				"author": {
-					"type": ["string", "null"]
-				},
-				"comment_type": {
-					"$ref": "#/definitions/CommentType"
-				},
-				"content": {
-					"type": "string"
-				},
-				"coordinates": {
-					"type": "array",
-					"items": [
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						}
-					],
-					"maxItems": 3,
-					"minItems": 3
-				},
-				"id": {
-					"type": "string"
-				},
-				"timestamp": {
-					"$ref": "#/definitions/SystemTime"
-				}
-			}
-		},
-		"CommentType": {
-			"type": "string",
-			"enum": ["Text", "Image", "Video"]
-		},
-		"ExecutionStage": {
-			"type": "string",
-			"enum": ["Dev", "Int", "QA", "PreProd", "Prod"]
-		},
-		"LogLevel": {
-			"type": "string",
-			"enum": ["Debug", "Info", "Warn", "Error", "Fatal"]
-		},
 		"Node": {
 			"type": "object",
 			"required": [
@@ -169,11 +124,17 @@
 				"pins"
 			],
 			"properties": {
-				"category": {
+				"id": {
 					"type": "string"
 				},
-				"comment": {
-					"type": ["string", "null"]
+				"name": {
+					"type": "string"
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"description": {
+					"type": "string"
 				},
 				"coordinates": {
 					"type": ["array", "null"],
@@ -194,38 +155,8 @@
 					"maxItems": 3,
 					"minItems": 3
 				},
-				"description": {
+				"category": {
 					"type": "string"
-				},
-				"docs": {
-					"type": ["string", "null"]
-				},
-				"error": {
-					"type": ["string", "null"]
-				},
-				"event_callback": {
-					"type": ["boolean", "null"]
-				},
-				"friendly_name": {
-					"type": "string"
-				},
-				"icon": {
-					"type": ["string", "null"]
-				},
-				"id": {
-					"type": "string"
-				},
-				"long_running": {
-					"type": ["boolean", "null"]
-				},
-				"name": {
-					"type": "string"
-				},
-				"pins": {
-					"type": "object",
-					"additionalProperties": {
-						"$ref": "#/definitions/Pin"
-					}
 				},
 				"scores": {
 					"anyOf": [
@@ -237,8 +168,35 @@
 						}
 					]
 				},
+				"pins": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Pin"
+					}
+				},
 				"start": {
 					"type": ["boolean", "null"]
+				},
+				"icon": {
+					"type": ["string", "null"]
+				},
+				"comment": {
+					"type": ["string", "null"]
+				},
+				"long_running": {
+					"type": ["boolean", "null"]
+				},
+				"error": {
+					"type": ["string", "null"]
+				},
+				"docs": {
+					"type": ["string", "null"]
+				},
+				"event_callback": {
+					"type": ["boolean", "null"]
+				},
+				"layer": {
+					"type": ["string", "null"]
 				}
 			}
 		},
@@ -247,7 +205,12 @@
 			"type": "object",
 			"required": ["governance", "performance", "privacy", "security"],
 			"properties": {
-				"governance": {
+				"privacy": {
+					"type": "integer",
+					"format": "uint8",
+					"minimum": 0.0
+				},
+				"security": {
 					"type": "integer",
 					"format": "uint8",
 					"minimum": 0.0
@@ -257,12 +220,7 @@
 					"format": "uint8",
 					"minimum": 0.0
 				},
-				"privacy": {
-					"type": "integer",
-					"format": "uint8",
-					"minimum": 0.0
-				},
-				"security": {
+				"governance": {
 					"type": "integer",
 					"format": "uint8",
 					"minimum": 0.0
@@ -284,15 +242,43 @@
 				"value_type"
 			],
 			"properties": {
-				"connected_to": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"description": {
+					"type": "string"
+				},
+				"pin_type": {
+					"$ref": "#/definitions/PinType"
+				},
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
+				},
+				"schema": {
+					"type": ["string", "null"]
+				},
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
+				},
+				"depends_on": {
 					"type": "array",
 					"items": {
 						"type": "string"
 					},
 					"uniqueItems": true
 				},
-				"data_type": {
-					"$ref": "#/definitions/VariableType"
+				"connected_to": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
 				},
 				"default_value": {
 					"type": ["array", "null"],
@@ -302,29 +288,10 @@
 						"minimum": 0.0
 					}
 				},
-				"depends_on": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					},
-					"uniqueItems": true
-				},
-				"description": {
-					"type": "string"
-				},
-				"friendly_name": {
-					"type": "string"
-				},
-				"id": {
-					"type": "string"
-				},
 				"index": {
 					"type": "integer",
 					"format": "uint16",
 					"minimum": 0.0
-				},
-				"name": {
-					"type": "string"
 				},
 				"options": {
 					"anyOf": [
@@ -335,26 +302,40 @@
 							"type": "null"
 						}
 					]
-				},
-				"pin_type": {
-					"$ref": "#/definitions/PinType"
-				},
-				"schema": {
-					"type": ["string", "null"]
-				},
-				"value_type": {
-					"$ref": "#/definitions/ValueType"
 				}
 			}
+		},
+		"PinType": {
+			"type": "string",
+			"enum": ["Input", "Output"]
+		},
+		"VariableType": {
+			"type": "string",
+			"enum": [
+				"Execution",
+				"String",
+				"Integer",
+				"Float",
+				"Boolean",
+				"Date",
+				"PathBuf",
+				"Generic",
+				"Struct",
+				"Byte"
+			]
+		},
+		"ValueType": {
+			"type": "string",
+			"enum": ["Array", "Normal", "HashMap", "HashSet"]
 		},
 		"PinOptions": {
 			"type": "object",
 			"properties": {
-				"enforce_generic_value_type": {
-					"type": ["boolean", "null"]
-				},
-				"enforce_schema": {
-					"type": ["boolean", "null"]
+				"valid_values": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
 				},
 				"range": {
 					"type": ["array", "null"],
@@ -375,37 +356,13 @@
 					"type": ["number", "null"],
 					"format": "double"
 				},
-				"valid_values": {
-					"type": ["array", "null"],
-					"items": {
-						"type": "string"
-					}
-				}
-			}
-		},
-		"PinType": {
-			"type": "string",
-			"enum": ["Input", "Output"]
-		},
-		"SystemTime": {
-			"type": "object",
-			"required": ["nanos_since_epoch", "secs_since_epoch"],
-			"properties": {
-				"nanos_since_epoch": {
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0.0
+				"enforce_schema": {
+					"type": ["boolean", "null"]
 				},
-				"secs_since_epoch": {
-					"type": "integer",
-					"format": "uint64",
-					"minimum": 0.0
+				"enforce_generic_value_type": {
+					"type": ["boolean", "null"]
 				}
 			}
-		},
-		"ValueType": {
-			"type": "string",
-			"enum": ["Array", "Normal", "HashMap", "HashSet"]
 		},
 		"Variable": {
 			"type": "object",
@@ -419,11 +376,17 @@
 				"value_type"
 			],
 			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
 				"category": {
 					"type": ["string", "null"]
 				},
-				"data_type": {
-					"$ref": "#/definitions/VariableType"
+				"description": {
+					"type": ["string", "null"]
 				},
 				"default_value": {
 					"type": ["array", "null"],
@@ -433,43 +396,164 @@
 						"minimum": 0.0
 					}
 				},
-				"description": {
-					"type": ["string", "null"]
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
 				},
-				"editable": {
-					"type": "boolean"
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
 				},
 				"exposed": {
 					"type": "boolean"
 				},
+				"secret": {
+					"type": "boolean"
+				},
+				"editable": {
+					"type": "boolean"
+				}
+			}
+		},
+		"Comment": {
+			"type": "object",
+			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
+			"properties": {
 				"id": {
 					"type": "string"
+				},
+				"author": {
+					"type": ["string", "null"]
+				},
+				"content": {
+					"type": "string"
+				},
+				"comment_type": {
+					"$ref": "#/definitions/CommentType"
+				},
+				"timestamp": {
+					"$ref": "#/definitions/SystemTime"
+				},
+				"coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				}
+			}
+		},
+		"CommentType": {
+			"type": "string",
+			"enum": ["Text", "Image", "Video"]
+		},
+		"SystemTime": {
+			"type": "object",
+			"required": ["nanos_since_epoch", "secs_since_epoch"],
+			"properties": {
+				"secs_since_epoch": {
+					"type": "integer",
+					"format": "uint64",
+					"minimum": 0.0
+				},
+				"nanos_since_epoch": {
+					"type": "integer",
+					"format": "uint32",
+					"minimum": 0.0
+				}
+			}
+		},
+		"ExecutionStage": {
+			"type": "string",
+			"enum": ["Dev", "Int", "QA", "PreProd", "Prod"]
+		},
+		"LogLevel": {
+			"type": "string",
+			"enum": ["Debug", "Info", "Warn", "Error", "Fatal"]
+		},
+		"Layer": {
+			"type": "object",
+			"required": [
+				"comments",
+				"coordinates",
+				"id",
+				"name",
+				"nodes",
+				"pins",
+				"type",
+				"variables"
+			],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"parent_id": {
+					"type": ["string", "null"]
 				},
 				"name": {
 					"type": "string"
 				},
-				"secret": {
-					"type": "boolean"
+				"type": {
+					"$ref": "#/definitions/LayerType"
 				},
-				"value_type": {
-					"$ref": "#/definitions/ValueType"
+				"nodes": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Node"
+					}
+				},
+				"variables": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Variable"
+					}
+				},
+				"comments": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Comment"
+					}
+				},
+				"coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"pins": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Pin"
+					}
 				}
 			}
 		},
-		"VariableType": {
+		"LayerType": {
 			"type": "string",
-			"enum": [
-				"Execution",
-				"String",
-				"Integer",
-				"Float",
-				"Boolean",
-				"Date",
-				"PathBuf",
-				"Generic",
-				"Struct",
-				"Byte"
-			]
+			"enum": ["Function", "Macro", "Collapsed"]
 		}
 	}
 }

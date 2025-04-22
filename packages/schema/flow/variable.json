@@ -12,11 +12,17 @@
 		"value_type"
 	],
 	"properties": {
+		"id": {
+			"type": "string"
+		},
+		"name": {
+			"type": "string"
+		},
 		"category": {
 			"type": ["string", "null"]
 		},
-		"data_type": {
-			"$ref": "#/definitions/VariableType"
+		"description": {
+			"type": ["string", "null"]
 		},
 		"default_value": {
 			"type": ["array", "null"],
@@ -26,33 +32,23 @@
 				"minimum": 0.0
 			}
 		},
-		"description": {
-			"type": ["string", "null"]
+		"data_type": {
+			"$ref": "#/definitions/VariableType"
 		},
-		"editable": {
-			"type": "boolean"
+		"value_type": {
+			"$ref": "#/definitions/ValueType"
 		},
 		"exposed": {
 			"type": "boolean"
 		},
-		"id": {
-			"type": "string"
-		},
-		"name": {
-			"type": "string"
-		},
 		"secret": {
 			"type": "boolean"
 		},
-		"value_type": {
-			"$ref": "#/definitions/ValueType"
+		"editable": {
+			"type": "boolean"
 		}
 	},
 	"definitions": {
-		"ValueType": {
-			"type": "string",
-			"enum": ["Array", "Normal", "HashMap", "HashSet"]
-		},
 		"VariableType": {
 			"type": "string",
 			"enum": [
@@ -67,6 +63,10 @@
 				"Struct",
 				"Byte"
 			]
+		},
+		"ValueType": {
+			"type": "string",
+			"enum": ["Array", "Normal", "HashMap", "HashSet"]
 		}
 	}
 }

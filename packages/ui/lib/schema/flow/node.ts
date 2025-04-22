@@ -9,6 +9,7 @@ export interface INode {
 	friendly_name: string;
 	icon?: null | string;
 	id: string;
+	layer?: null | string;
 	long_running?: boolean | null;
 	name: string;
 	pins: { [key: string]: IPin };

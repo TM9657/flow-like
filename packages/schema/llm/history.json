@@ -4,52 +4,13 @@
 	"type": "object",
 	"required": ["messages", "model"],
 	"properties": {
-		"frequency_penalty": {
-			"type": ["number", "null"],
-			"format": "float"
-		},
-		"max_completion_tokens": {
-			"type": ["integer", "null"],
-			"format": "uint32",
-			"minimum": 0.0
+		"model": {
+			"type": "string"
 		},
 		"messages": {
 			"type": "array",
 			"items": {
 				"$ref": "#/definitions/HistoryMessage"
-			}
-		},
-		"model": {
-			"type": "string"
-		},
-		"n": {
-			"type": ["integer", "null"],
-			"format": "uint32",
-			"minimum": 0.0
-		},
-		"presence_penalty": {
-			"type": ["number", "null"],
-			"format": "float"
-		},
-		"response_format": {
-			"anyOf": [
-				{
-					"$ref": "#/definitions/ResponseFormat"
-				},
-				{
-					"type": "null"
-				}
-			]
-		},
-		"seed": {
-			"type": ["integer", "null"],
-			"format": "uint32",
-			"minimum": 0.0
-		},
-		"stop": {
-			"type": ["array", "null"],
-			"items": {
-				"type": "string"
 			}
 		},
 		"stream": {
@@ -65,9 +26,61 @@
 				}
 			]
 		},
+		"max_completion_tokens": {
+			"type": ["integer", "null"],
+			"format": "uint32",
+			"minimum": 0.0
+		},
+		"top_p": {
+			"type": ["number", "null"],
+			"format": "float"
+		},
 		"temperature": {
 			"type": ["number", "null"],
 			"format": "float"
+		},
+		"seed": {
+			"type": ["integer", "null"],
+			"format": "uint32",
+			"minimum": 0.0
+		},
+		"presence_penalty": {
+			"type": ["number", "null"],
+			"format": "float"
+		},
+		"frequency_penalty": {
+			"type": ["number", "null"],
+			"format": "float"
+		},
+		"user": {
+			"type": ["string", "null"]
+		},
+		"stop": {
+			"type": ["array", "null"],
+			"items": {
+				"type": "string"
+			}
+		},
+		"response_format": {
+			"anyOf": [
+				{
+					"$ref": "#/definitions/ResponseFormat"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"n": {
+			"type": ["integer", "null"],
+			"format": "uint32",
+			"minimum": 0.0
+		},
+		"tools": {
+			"type": ["array", "null"],
+			"items": {
+				"$ref": "#/definitions/Tool"
+			}
 		},
 		"tool_choice": {
 			"anyOf": [
@@ -78,33 +91,61 @@
 					"type": "null"
 				}
 			]
-		},
-		"tools": {
-			"type": ["array", "null"],
-			"items": {
-				"$ref": "#/definitions/Tool"
-			}
-		},
-		"top_p": {
-			"type": ["number", "null"],
-			"format": "float"
-		},
-		"user": {
-			"type": ["string", "null"]
 		}
 	},
 	"definitions": {
+		"HistoryMessage": {
+			"type": "object",
+			"required": ["content", "role"],
+			"properties": {
+				"role": {
+					"$ref": "#/definitions/Role"
+				},
+				"content": {
+					"$ref": "#/definitions/MessageContent"
+				},
+				"name": {
+					"type": ["string", "null"]
+				},
+				"tool_calls": {
+					"type": ["array", "null"],
+					"items": {
+						"$ref": "#/definitions/ToolCall"
+					}
+				},
+				"tool_call_id": {
+					"type": ["string", "null"]
+				}
+			}
+		},
+		"Role": {
+			"type": "string",
+			"enum": ["system", "user", "assistant", "function", "tool"]
+		},
+		"MessageContent": {
+			"anyOf": [
+				{
+					"type": "string"
+				},
+				{
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Content"
+					}
+				}
+			]
+		},
 		"Content": {
 			"anyOf": [
 				{
 					"type": "object",
 					"required": ["text", "type"],
 					"properties": {
-						"text": {
-							"type": "string"
-						},
 						"type": {
 							"$ref": "#/definitions/ContentType"
+						},
+						"text": {
+							"type": "string"
 						}
 					}
 				},
@@ -112,14 +153,14 @@
 					"type": "object",
 					"required": ["data", "mime_type", "type"],
 					"properties": {
+						"type": {
+							"$ref": "#/definitions/ContentType"
+						},
 						"data": {
 							"type": "string"
 						},
 						"mime_type": {
 							"type": "string"
-						},
-						"type": {
-							"$ref": "#/definitions/ContentType"
 						}
 					}
 				}
@@ -129,15 +170,74 @@
 			"type": "string",
 			"enum": ["text", "image_url"]
 		},
+		"ToolCall": {
+			"type": "object",
+			"required": ["function", "id", "type"],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"type": {
+					"type": "string"
+				},
+				"function": {
+					"$ref": "#/definitions/ToolCallFunction"
+				}
+			}
+		},
+		"ToolCallFunction": {
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": ["string", "null"]
+				},
+				"arguments": {
+					"type": ["string", "null"]
+				}
+			}
+		},
+		"StreamOptions": {
+			"type": "object",
+			"required": ["include_usage"],
+			"properties": {
+				"include_usage": {
+					"type": "boolean"
+				}
+			}
+		},
+		"ResponseFormat": {
+			"anyOf": [
+				{
+					"type": "string"
+				},
+				true
+			]
+		},
+		"Tool": {
+			"type": "object",
+			"required": ["function", "type"],
+			"properties": {
+				"type": {
+					"$ref": "#/definitions/ToolType"
+				},
+				"function": {
+					"$ref": "#/definitions/HistoryFunction"
+				}
+			}
+		},
+		"ToolType": {
+			"type": "string",
+			"enum": ["function"]
+		},
 		"HistoryFunction": {
 			"type": "object",
 			"required": ["name", "parameters"],
 			"properties": {
-				"description": {
-					"type": ["string", "null"]
-				},
 				"name": {
 					"type": "string"
+				},
+				"description": {
+					"type": ["string", "null"]
 				},
 				"parameters": {
 					"$ref": "#/definitions/HistoryFunctionParameters"
@@ -148,6 +248,9 @@
 			"type": "object",
 			"required": ["type"],
 			"properties": {
+				"type": {
+					"$ref": "#/definitions/HistoryJSONSchemaType"
+				},
 				"properties": {
 					"type": ["object", "null"],
 					"additionalProperties": {
@@ -159,19 +262,42 @@
 					"items": {
 						"type": "string"
 					}
-				},
-				"type": {
-					"$ref": "#/definitions/HistoryJSONSchemaType"
 				}
 			}
+		},
+		"HistoryJSONSchemaType": {
+			"type": "string",
+			"enum": ["object", "number", "string", "array", "null", "boolean"]
 		},
 		"HistoryJSONSchemaDefine": {
 			"type": "object",
 			"properties": {
+				"type": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/HistoryJSONSchemaType"
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
 				"description": {
 					"type": ["string", "null"]
 				},
 				"enum_values": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
+				},
+				"properties": {
+					"type": ["object", "null"],
+					"additionalProperties": {
+						"$ref": "#/definitions/HistoryJSONSchemaDefine"
+					}
+				},
+				"required": {
 					"type": ["array", "null"],
 					"items": {
 						"type": "string"
@@ -186,118 +312,6 @@
 							"type": "null"
 						}
 					]
-				},
-				"properties": {
-					"type": ["object", "null"],
-					"additionalProperties": {
-						"$ref": "#/definitions/HistoryJSONSchemaDefine"
-					}
-				},
-				"required": {
-					"type": ["array", "null"],
-					"items": {
-						"type": "string"
-					}
-				},
-				"type": {
-					"anyOf": [
-						{
-							"$ref": "#/definitions/HistoryJSONSchemaType"
-						},
-						{
-							"type": "null"
-						}
-					]
-				}
-			}
-		},
-		"HistoryJSONSchemaType": {
-			"type": "string",
-			"enum": ["object", "number", "string", "array", "null", "boolean"]
-		},
-		"HistoryMessage": {
-			"type": "object",
-			"required": ["content", "role"],
-			"properties": {
-				"content": {
-					"type": "array",
-					"items": {
-						"$ref": "#/definitions/Content"
-					}
-				},
-				"name": {
-					"type": ["string", "null"]
-				},
-				"role": {
-					"$ref": "#/definitions/Role"
-				},
-				"tool_call_id": {
-					"type": ["string", "null"]
-				},
-				"tool_calls": {
-					"type": ["array", "null"],
-					"items": {
-						"$ref": "#/definitions/ToolCall"
-					}
-				}
-			}
-		},
-		"ResponseFormat": {
-			"anyOf": [
-				{
-					"type": "string"
-				},
-				true
-			]
-		},
-		"Role": {
-			"type": "string",
-			"enum": ["system", "user", "assistant", "function", "tool"]
-		},
-		"StreamOptions": {
-			"type": "object",
-			"required": ["include_usage"],
-			"properties": {
-				"include_usage": {
-					"type": "boolean"
-				}
-			}
-		},
-		"Tool": {
-			"type": "object",
-			"required": ["function", "type"],
-			"properties": {
-				"function": {
-					"$ref": "#/definitions/HistoryFunction"
-				},
-				"type": {
-					"$ref": "#/definitions/ToolType"
-				}
-			}
-		},
-		"ToolCall": {
-			"type": "object",
-			"required": ["function", "id", "type"],
-			"properties": {
-				"function": {
-					"$ref": "#/definitions/ToolCallFunction"
-				},
-				"id": {
-					"type": "string"
-				},
-				"type": {
-					"type": "string"
-				}
-			}
-		},
-		"ToolCallFunction": {
-			"type": "object",
-			"properties": {
-				"arguments": {
-					"type": ["string", "null"]
-				},
-				"name": {
-					"type": ["string", "null"]
 				}
 			}
 		},
@@ -316,19 +330,15 @@
 					"type": "object",
 					"required": ["function", "type"],
 					"properties": {
-						"function": {
-							"$ref": "#/definitions/HistoryFunction"
-						},
 						"type": {
 							"$ref": "#/definitions/ToolType"
+						},
+						"function": {
+							"$ref": "#/definitions/HistoryFunction"
 						}
 					}
 				}
 			]
-		},
-		"ToolType": {
-			"type": "string",
-			"enum": ["function"]
 		}
 	}
 }

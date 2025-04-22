@@ -66,6 +66,18 @@
 					"type": "string",
 					"enum": ["CopyPaste"]
 				},
+				"original_nodes": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Node"
+					}
+				},
+				"original_comments": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Comment"
+					}
+				},
 				"new_comments": {
 					"type": "array",
 					"items": {
@@ -96,18 +108,6 @@
 					],
 					"maxItems": 3,
 					"minItems": 3
-				},
-				"original_comments": {
-					"type": "array",
-					"items": {
-						"$ref": "#/definitions/Comment"
-					}
-				},
-				"original_nodes": {
-					"type": "array",
-					"items": {
-						"$ref": "#/definitions/Node"
-					}
 				}
 			}
 		},
@@ -118,6 +118,9 @@
 				"command_type": {
 					"type": "string",
 					"enum": ["MoveNode"]
+				},
+				"node_id": {
+					"type": "string"
 				},
 				"from_coordinates": {
 					"type": ["array", "null"],
@@ -137,9 +140,6 @@
 					],
 					"maxItems": 3,
 					"minItems": 3
-				},
-				"node_id": {
-					"type": "string"
 				},
 				"to_coordinates": {
 					"type": "array",
@@ -170,14 +170,14 @@
 					"type": "string",
 					"enum": ["RemoveNode"]
 				},
+				"node": {
+					"$ref": "#/definitions/Node"
+				},
 				"connected_nodes": {
 					"type": "array",
 					"items": {
 						"$ref": "#/definitions/Node"
 					}
-				},
-				"node": {
-					"$ref": "#/definitions/Node"
 				}
 			}
 		},
@@ -189,9 +189,6 @@
 					"type": "string",
 					"enum": ["UpdateNode"]
 				},
-				"node": {
-					"$ref": "#/definitions/Node"
-				},
 				"old_node": {
 					"anyOf": [
 						{
@@ -201,6 +198,9 @@
 							"type": "null"
 						}
 					]
+				},
+				"node": {
+					"$ref": "#/definitions/Node"
 				}
 			}
 		},
@@ -218,16 +218,16 @@
 					"type": "string",
 					"enum": ["DisconnectPin"]
 				},
-				"from_node": {
-					"type": "string"
-				},
 				"from_pin": {
 					"type": "string"
 				},
-				"to_node": {
+				"to_pin": {
 					"type": "string"
 				},
-				"to_pin": {
+				"from_node": {
+					"type": "string"
+				},
+				"to_node": {
 					"type": "string"
 				}
 			}
@@ -246,16 +246,16 @@
 					"type": "string",
 					"enum": ["ConnectPin"]
 				},
-				"from_node": {
-					"type": "string"
-				},
 				"from_pin": {
 					"type": "string"
 				},
-				"to_node": {
+				"to_pin": {
 					"type": "string"
 				},
-				"to_pin": {
+				"from_node": {
+					"type": "string"
+				},
+				"to_node": {
 					"type": "string"
 				}
 			}
@@ -271,6 +271,9 @@
 				"node_id": {
 					"type": "string"
 				},
+				"pin": {
+					"$ref": "#/definitions/Pin"
+				},
 				"old_pin": {
 					"anyOf": [
 						{
@@ -280,9 +283,6 @@
 							"type": "null"
 						}
 					]
-				},
-				"pin": {
-					"$ref": "#/definitions/Pin"
 				}
 			}
 		},
@@ -307,6 +307,9 @@
 					"type": "string",
 					"enum": ["UpsertVariable"]
 				},
+				"variable": {
+					"$ref": "#/definitions/Variable"
+				},
 				"old_variable": {
 					"anyOf": [
 						{
@@ -316,9 +319,6 @@
 							"type": "null"
 						}
 					]
-				},
-				"variable": {
-					"$ref": "#/definitions/Variable"
 				}
 			}
 		}
@@ -328,14 +328,20 @@
 			"type": "object",
 			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
 			"properties": {
+				"id": {
+					"type": "string"
+				},
 				"author": {
 					"type": ["string", "null"]
+				},
+				"content": {
+					"type": "string"
 				},
 				"comment_type": {
 					"$ref": "#/definitions/CommentType"
 				},
-				"content": {
-					"type": "string"
+				"timestamp": {
+					"$ref": "#/definitions/SystemTime"
 				},
 				"coordinates": {
 					"type": "array",
@@ -355,18 +361,28 @@
 					],
 					"maxItems": 3,
 					"minItems": 3
-				},
-				"id": {
-					"type": "string"
-				},
-				"timestamp": {
-					"$ref": "#/definitions/SystemTime"
 				}
 			}
 		},
 		"CommentType": {
 			"type": "string",
 			"enum": ["Text", "Image", "Video"]
+		},
+		"SystemTime": {
+			"type": "object",
+			"required": ["nanos_since_epoch", "secs_since_epoch"],
+			"properties": {
+				"secs_since_epoch": {
+					"type": "integer",
+					"format": "uint64",
+					"minimum": 0.0
+				},
+				"nanos_since_epoch": {
+					"type": "integer",
+					"format": "uint32",
+					"minimum": 0.0
+				}
+			}
 		},
 		"Node": {
 			"type": "object",
@@ -379,11 +395,17 @@
 				"pins"
 			],
 			"properties": {
-				"category": {
+				"id": {
 					"type": "string"
 				},
-				"comment": {
-					"type": ["string", "null"]
+				"name": {
+					"type": "string"
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"description": {
+					"type": "string"
 				},
 				"coordinates": {
 					"type": ["array", "null"],
@@ -404,38 +426,8 @@
 					"maxItems": 3,
 					"minItems": 3
 				},
-				"description": {
+				"category": {
 					"type": "string"
-				},
-				"docs": {
-					"type": ["string", "null"]
-				},
-				"error": {
-					"type": ["string", "null"]
-				},
-				"event_callback": {
-					"type": ["boolean", "null"]
-				},
-				"friendly_name": {
-					"type": "string"
-				},
-				"icon": {
-					"type": ["string", "null"]
-				},
-				"id": {
-					"type": "string"
-				},
-				"long_running": {
-					"type": ["boolean", "null"]
-				},
-				"name": {
-					"type": "string"
-				},
-				"pins": {
-					"type": "object",
-					"additionalProperties": {
-						"$ref": "#/definitions/Pin"
-					}
 				},
 				"scores": {
 					"anyOf": [
@@ -447,8 +439,35 @@
 						}
 					]
 				},
+				"pins": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Pin"
+					}
+				},
 				"start": {
 					"type": ["boolean", "null"]
+				},
+				"icon": {
+					"type": ["string", "null"]
+				},
+				"comment": {
+					"type": ["string", "null"]
+				},
+				"long_running": {
+					"type": ["boolean", "null"]
+				},
+				"error": {
+					"type": ["string", "null"]
+				},
+				"docs": {
+					"type": ["string", "null"]
+				},
+				"event_callback": {
+					"type": ["boolean", "null"]
+				},
+				"layer": {
+					"type": ["string", "null"]
 				}
 			}
 		},
@@ -457,7 +476,12 @@
 			"type": "object",
 			"required": ["governance", "performance", "privacy", "security"],
 			"properties": {
-				"governance": {
+				"privacy": {
+					"type": "integer",
+					"format": "uint8",
+					"minimum": 0.0
+				},
+				"security": {
 					"type": "integer",
 					"format": "uint8",
 					"minimum": 0.0
@@ -467,12 +491,7 @@
 					"format": "uint8",
 					"minimum": 0.0
 				},
-				"privacy": {
-					"type": "integer",
-					"format": "uint8",
-					"minimum": 0.0
-				},
-				"security": {
+				"governance": {
 					"type": "integer",
 					"format": "uint8",
 					"minimum": 0.0
@@ -494,15 +513,43 @@
 				"value_type"
 			],
 			"properties": {
-				"connected_to": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"description": {
+					"type": "string"
+				},
+				"pin_type": {
+					"$ref": "#/definitions/PinType"
+				},
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
+				},
+				"schema": {
+					"type": ["string", "null"]
+				},
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
+				},
+				"depends_on": {
 					"type": "array",
 					"items": {
 						"type": "string"
 					},
 					"uniqueItems": true
 				},
-				"data_type": {
-					"$ref": "#/definitions/VariableType"
+				"connected_to": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
 				},
 				"default_value": {
 					"type": ["array", "null"],
@@ -512,29 +559,10 @@
 						"minimum": 0.0
 					}
 				},
-				"depends_on": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					},
-					"uniqueItems": true
-				},
-				"description": {
-					"type": "string"
-				},
-				"friendly_name": {
-					"type": "string"
-				},
-				"id": {
-					"type": "string"
-				},
 				"index": {
 					"type": "integer",
 					"format": "uint16",
 					"minimum": 0.0
-				},
-				"name": {
-					"type": "string"
 				},
 				"options": {
 					"anyOf": [
@@ -545,26 +573,40 @@
 							"type": "null"
 						}
 					]
-				},
-				"pin_type": {
-					"$ref": "#/definitions/PinType"
-				},
-				"schema": {
-					"type": ["string", "null"]
-				},
-				"value_type": {
-					"$ref": "#/definitions/ValueType"
 				}
 			}
+		},
+		"PinType": {
+			"type": "string",
+			"enum": ["Input", "Output"]
+		},
+		"VariableType": {
+			"type": "string",
+			"enum": [
+				"Execution",
+				"String",
+				"Integer",
+				"Float",
+				"Boolean",
+				"Date",
+				"PathBuf",
+				"Generic",
+				"Struct",
+				"Byte"
+			]
+		},
+		"ValueType": {
+			"type": "string",
+			"enum": ["Array", "Normal", "HashMap", "HashSet"]
 		},
 		"PinOptions": {
 			"type": "object",
 			"properties": {
-				"enforce_generic_value_type": {
-					"type": ["boolean", "null"]
-				},
-				"enforce_schema": {
-					"type": ["boolean", "null"]
+				"valid_values": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
 				},
 				"range": {
 					"type": ["array", "null"],
@@ -585,37 +627,13 @@
 					"type": ["number", "null"],
 					"format": "double"
 				},
-				"valid_values": {
-					"type": ["array", "null"],
-					"items": {
-						"type": "string"
-					}
-				}
-			}
-		},
-		"PinType": {
-			"type": "string",
-			"enum": ["Input", "Output"]
-		},
-		"SystemTime": {
-			"type": "object",
-			"required": ["nanos_since_epoch", "secs_since_epoch"],
-			"properties": {
-				"nanos_since_epoch": {
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0.0
+				"enforce_schema": {
+					"type": ["boolean", "null"]
 				},
-				"secs_since_epoch": {
-					"type": "integer",
-					"format": "uint64",
-					"minimum": 0.0
+				"enforce_generic_value_type": {
+					"type": ["boolean", "null"]
 				}
 			}
-		},
-		"ValueType": {
-			"type": "string",
-			"enum": ["Array", "Normal", "HashMap", "HashSet"]
 		},
 		"Variable": {
 			"type": "object",
@@ -629,11 +647,17 @@
 				"value_type"
 			],
 			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
 				"category": {
 					"type": ["string", "null"]
 				},
-				"data_type": {
-					"$ref": "#/definitions/VariableType"
+				"description": {
+					"type": ["string", "null"]
 				},
 				"default_value": {
 					"type": ["array", "null"],
@@ -643,43 +667,22 @@
 						"minimum": 0.0
 					}
 				},
-				"description": {
-					"type": ["string", "null"]
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
 				},
-				"editable": {
-					"type": "boolean"
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
 				},
 				"exposed": {
 					"type": "boolean"
 				},
-				"id": {
-					"type": "string"
-				},
-				"name": {
-					"type": "string"
-				},
 				"secret": {
 					"type": "boolean"
 				},
-				"value_type": {
-					"$ref": "#/definitions/ValueType"
+				"editable": {
+					"type": "boolean"
 				}
 			}
-		},
-		"VariableType": {
-			"type": "string",
-			"enum": [
-				"Execution",
-				"String",
-				"Integer",
-				"Float",
-				"Boolean",
-				"Date",
-				"PathBuf",
-				"Generic",
-				"Struct",
-				"Byte"
-			]
 		}
 	}
 }

@@ -34,6 +34,7 @@ pub use async_trait::async_trait;
 pub use cuid2::create_id;
 pub use prost::Message;
 pub use reqwest;
+pub use reqwest_eventsource;
 pub use schemars::JsonSchema;
 pub use serde;
 pub use serde_json::Value;

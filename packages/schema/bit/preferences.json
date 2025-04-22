@@ -3,11 +3,15 @@
 	"title": "BitModelPreference",
 	"type": "object",
 	"properties": {
-		"coding_weight": {
+		"cost_weight": {
 			"type": ["number", "null"],
 			"format": "float"
 		},
-		"cost_weight": {
+		"speed_weight": {
+			"type": ["number", "null"],
+			"format": "float"
+		},
+		"reasoning_weight": {
 			"type": ["number", "null"],
 			"format": "float"
 		},
@@ -23,10 +27,7 @@
 			"type": ["number", "null"],
 			"format": "float"
 		},
-		"model_hint": {
-			"type": ["string", "null"]
-		},
-		"multilinguality_weight": {
+		"safety_weight": {
 			"type": ["number", "null"],
 			"format": "float"
 		},
@@ -34,17 +35,16 @@
 			"type": ["number", "null"],
 			"format": "float"
 		},
-		"reasoning_weight": {
+		"multilinguality_weight": {
 			"type": ["number", "null"],
 			"format": "float"
 		},
-		"safety_weight": {
+		"coding_weight": {
 			"type": ["number", "null"],
 			"format": "float"
 		},
-		"speed_weight": {
-			"type": ["number", "null"],
-			"format": "float"
+		"model_hint": {
+			"type": ["string", "null"]
 		}
 	}
 }

@@ -1,3 +1,5 @@
+use flow_like_types::reqwest_eventsource::retry::RetryPolicy;
+use flow_like_types::reqwest_eventsource::{Event, RequestBuilderExt};
 use futures::StreamExt;
 use openai_api_rs::v1::assistant::{AssistantObject, AssistantRequest, DeletionStatus};
 use openai_api_rs::v1::audio::{
@@ -392,54 +394,43 @@ impl OpenAIClient {
 
         // Streaming case
         let request = self.build_request(Method::POST, "chat/completions").await;
-        let request = request.json(&req);
-        let response = request.send().await?;
+        let mut stream = request
+            .json(&req)
+            .eventsource()
+            .map_err(|e| APIError::CustomError {
+                message: format!("Failed to create eventsource stream: {}", e),
+            })?;
 
         let mut output = crate::response::Response::default();
-        let mut stream = response.bytes_stream();
 
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(chunk) => {
-                    let chunk_str = match std::str::from_utf8(&chunk) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            println!("Invalid UTF-8 sequence: {:?}", e);
-                            continue;
-                        }
-                    };
-
-                    for line in chunk_str.lines() {
-                        if line.trim().is_empty() || !line.starts_with("data: ") {
-                            continue;
-                        }
-
-                        let json_str = &line[6..];
-
-                        if json_str == "[DONE]" {
+        while let Some(event) = stream.next().await {
+            if let Ok(event) = event {
+                match event {
+                    Event::Message(event) => {
+                        let data = &event.data;
+                        if data == "[DONE]" {
                             break;
                         }
-
-                        match flow_like_types::json::from_str::<ResponseChunk>(json_str) {
-                            Ok(parsed_chunk) => {
-                                if let Some(callback) = &callback {
-                                    callback(parsed_chunk.clone()).await.map_err(|e| {
-                                        APIError::CustomError {
-                                            message: format!("Callback error: {}", e),
-                                        }
-                                    })?;
-                                }
-                                output.push_chunk(parsed_chunk);
+                        let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
+                            Ok(chunk) => chunk,
+                            Err(e) => {
+                                eprintln!("Failed to parse chunk: {}", e);
+                                continue;
                             }
-                            Err(err) => {
-                                println!("Failed to parse chunk: {:?} \nerr:{:?}", json_str, err)
-                            }
+                        };
+                        output.push_chunk(chunk.clone());
+                        if let Some(callback) = &callback {
+                            callback(chunk).await.map_err(|e| APIError::CustomError {
+                                message: format!("Callback error: {}", e),
+                            })?;
                         }
                     }
+                    _ => {}
                 }
-                Err(_) => println!("Failed to get chunk."),
             }
         }
+
+        stream.close();
 
         Ok(output)
     }

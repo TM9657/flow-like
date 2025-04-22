@@ -38,6 +38,24 @@ pub enum ExecutionStage {
     PreProd,
     Prod,
 }
+#[derive(Serialize, Deserialize, JsonSchema, Clone)]
+pub enum LayerType {
+    Function,
+    Macro,
+    Collapsed,
+}
+#[derive(Serialize, Deserialize, JsonSchema, Clone)]
+pub struct Layer {
+    pub id: String,
+    pub parent_id: Option<String>,
+    pub name: String,
+    pub r#type: LayerType,
+    pub nodes: HashMap<String, Node>,
+    pub variables: HashMap<String, Variable>,
+    pub comments: HashMap<String, Comment>,
+    pub coordinates: (f32, f32, f32),
+    pub pins: HashMap<String, Pin>,
+}
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct Board {
@@ -52,6 +70,7 @@ pub struct Board {
     pub stage: ExecutionStage,
     pub log_level: LogLevel,
     pub refs: HashMap<String, String>,
+    pub layers: HashMap<String, Layer>,
 
     pub created_at: SystemTime,
     pub updated_at: SystemTime,
@@ -95,6 +114,7 @@ impl Board {
             version: (0, 0, 1),
             created_at: SystemTime::now(),
             updated_at: SystemTime::now(),
+            layers: HashMap::new(),
             refs: HashMap::new(),
             parent: None,
             board_dir,

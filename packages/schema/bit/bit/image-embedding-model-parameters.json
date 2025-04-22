@@ -10,37 +10,37 @@
 				"type": "string"
 			}
 		},
+		"vector_length": {
+			"type": "integer",
+			"format": "uint32",
+			"minimum": 0.0
+		},
 		"pooling": {
 			"$ref": "#/definitions/Pooling"
 		},
 		"provider": {
 			"$ref": "#/definitions/ModelProvider"
-		},
-		"vector_length": {
-			"type": "integer",
-			"format": "uint32",
-			"minimum": 0.0
 		}
 	},
 	"definitions": {
+		"Pooling": {
+			"type": "string",
+			"enum": ["CLS", "Mean", "None"]
+		},
 		"ModelProvider": {
 			"type": "object",
 			"required": ["provider_name"],
 			"properties": {
-				"model_id": {
-					"type": ["string", "null"]
-				},
 				"provider_name": {
 					"type": "string"
+				},
+				"model_id": {
+					"type": ["string", "null"]
 				},
 				"version": {
 					"type": ["string", "null"]
 				}
 			}
-		},
-		"Pooling": {
-			"type": "string",
-			"enum": ["CLS", "Mean", "None"]
 		}
 	}
 }

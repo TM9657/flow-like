@@ -4,6 +4,9 @@
 	"type": "object",
 	"required": ["variable"],
 	"properties": {
+		"variable": {
+			"$ref": "#/definitions/Variable"
+		},
 		"old_variable": {
 			"anyOf": [
 				{
@@ -13,16 +16,9 @@
 					"type": "null"
 				}
 			]
-		},
-		"variable": {
-			"$ref": "#/definitions/Variable"
 		}
 	},
 	"definitions": {
-		"ValueType": {
-			"type": "string",
-			"enum": ["Array", "Normal", "HashMap", "HashSet"]
-		},
 		"Variable": {
 			"type": "object",
 			"required": [
@@ -35,11 +31,17 @@
 				"value_type"
 			],
 			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
 				"category": {
 					"type": ["string", "null"]
 				},
-				"data_type": {
-					"$ref": "#/definitions/VariableType"
+				"description": {
+					"type": ["string", "null"]
 				},
 				"default_value": {
 					"type": ["array", "null"],
@@ -49,26 +51,20 @@
 						"minimum": 0.0
 					}
 				},
-				"description": {
-					"type": ["string", "null"]
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
 				},
-				"editable": {
-					"type": "boolean"
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
 				},
 				"exposed": {
 					"type": "boolean"
 				},
-				"id": {
-					"type": "string"
-				},
-				"name": {
-					"type": "string"
-				},
 				"secret": {
 					"type": "boolean"
 				},
-				"value_type": {
-					"$ref": "#/definitions/ValueType"
+				"editable": {
+					"type": "boolean"
 				}
 			}
 		},
@@ -86,6 +82,10 @@
 				"Struct",
 				"Byte"
 			]
+		},
+		"ValueType": {
+			"type": "string",
+			"enum": ["Array", "Normal", "HashMap", "HashSet"]
 		}
 	}
 }

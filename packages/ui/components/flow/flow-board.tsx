@@ -271,6 +271,16 @@ export function FlowBoard({
 		[nodes],
 	);
 
+	const placeNodeShortcut = useCallback(
+		async (node: INode) => {
+			await placeNode(node, {
+				x: mousePosition.x,
+				y: mousePosition.y,
+			});
+		},
+		[mousePosition],
+	);
+
 	const shortcutHandler = useCallback(
 		async (event: KeyboardEvent) => {
 			// Undo
@@ -296,6 +306,68 @@ export function FlowBoard({
 				if (stack) await backend.redoBoard(appId, boardId, stack);
 				toastSuccess("Redo", <Redo2Icon className="w-4 h-4" />);
 				await board.refetch();
+			}
+
+			// Place Branch
+			if (
+				(event.metaKey || event.ctrlKey) &&
+				event.key === "b" &&
+				!event.shiftKey
+			) {
+				event.preventDefault();
+				event.stopPropagation();
+				const node = catalog.data?.find(
+					(node) => node.name === "control_branch",
+				);
+				if (!node) return;
+				await placeNodeShortcut(node);
+				await board.refetch();
+				return;
+			}
+
+			// Place For Each
+			if (
+				(event.metaKey || event.ctrlKey) &&
+				event.key === "f" &&
+				!event.shiftKey
+			) {
+				event.preventDefault();
+				event.stopPropagation();
+				const node = catalog.data?.find(
+					(node) => node.name === "control_for_each",
+				);
+				if (!node) return;
+				await placeNodeShortcut(node);
+				await board.refetch();
+				return;
+			}
+
+			if (
+				(event.metaKey || event.ctrlKey) &&
+				event.key === "p" &&
+				!event.shiftKey
+			) {
+				event.preventDefault();
+				event.stopPropagation();
+				const node = catalog.data?.find((node) => node.name === "log_info");
+				if (!node) return;
+				await placeNodeShortcut(node);
+				await board.refetch();
+				return;
+			}
+
+			if (
+				(event.metaKey || event.ctrlKey) &&
+				event.key === "s" &&
+				!event.shiftKey
+			) {
+				event.preventDefault();
+				event.stopPropagation();
+				const node = catalog.data?.find((node) => node.name === "reroute");
+				if (!node) return;
+				await placeNodeShortcut(node);
+				await board.refetch();
+				return;
 			}
 		},
 		[boardId, board, backend],

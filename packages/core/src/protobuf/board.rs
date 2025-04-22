@@ -1,7 +1,8 @@
 use crate::flow::{
-    board::{Board, Comment, ExecutionStage},
+    board::{Board, Comment, ExecutionStage, Layer, LayerType},
     execution::LogLevel,
     node::Node,
+    pin::Pin,
     variable::Variable,
 };
 use flow_like_storage::Path;
@@ -27,6 +28,25 @@ impl ExecutionStage {
             3 => ExecutionStage::PreProd,
             4 => ExecutionStage::Prod,
             _ => ExecutionStage::Dev, // Default
+        }
+    }
+}
+
+impl LayerType {
+    fn to_proto(&self) -> i32 {
+        match self {
+            LayerType::Function => 0,
+            LayerType::Macro => 1,
+            LayerType::Collapsed => 2,
+        }
+    }
+
+    fn from_proto(value: i32) -> Self {
+        match value {
+            0 => LayerType::Function,
+            1 => LayerType::Macro,
+            2 => LayerType::Collapsed,
+            _ => LayerType::Function,
         }
     }
 }
@@ -75,6 +95,11 @@ impl ToProto<flow_like_types::proto::Board> for Board {
                 .iter()
                 .map(|(k, v)| (k.clone(), v.to_proto()))
                 .collect(),
+            layers: self
+                .layers
+                .iter()
+                .map(|(layer_id, layer)| (layer_id.clone(), layer.to_proto()))
+                .collect(),
             viewport_x: self.viewport.0,
             viewport_y: self.viewport.1,
             viewport_zoom: self.viewport.2,
@@ -86,7 +111,6 @@ impl ToProto<flow_like_types::proto::Board> for Board {
             refs: self.refs.clone(),
             created_at: Some(Timestamp::from(self.created_at)),
             updated_at: Some(Timestamp::from(self.updated_at)),
-            layers: HashMap::new(),
         }
     }
 }
@@ -118,6 +142,11 @@ impl FromProto<flow_like_types::proto::Board> for Board {
                 proto.version_minor as u8,
                 proto.version_patch as u8,
             ),
+            layers: proto
+                .layers
+                .into_iter()
+                .map(|(layer_id, layer)| (layer_id, Layer::from_proto(layer)))
+                .collect(),
             stage: ExecutionStage::from_proto(proto.stage),
             log_level: LogLevel::from_proto(proto.log_level),
             refs: proto.refs,
@@ -133,6 +162,71 @@ impl FromProto<flow_like_types::proto::Board> for Board {
             board_dir: Path::from("/default"), // Placeholder, set as needed
             logic_nodes: HashMap::new(),
             app_state: None,
+        }
+    }
+}
+
+impl ToProto<flow_like_types::proto::Layer> for Layer {
+    fn to_proto(&self) -> flow_like_types::proto::Layer {
+        flow_like_types::proto::Layer {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            comments: self
+                .comments
+                .iter()
+                .map(|(k, v)| (k.clone(), v.to_proto()))
+                .collect(),
+            coord_x: self.coordinates.0,
+            coord_y: self.coordinates.1,
+            coord_z: self.coordinates.2,
+            parent_id: self.parent_id.clone().unwrap_or_default(),
+            pins: self
+                .pins
+                .iter()
+                .map(|(k, v)| (k.clone(), v.to_proto()))
+                .collect(),
+            r#type: self.r#type.to_proto(),
+            nodes: self
+                .nodes
+                .iter()
+                .map(|(k, v)| (k.clone(), v.to_proto()))
+                .collect(),
+            variables: self
+                .variables
+                .iter()
+                .map(|(k, v)| (k.clone(), v.to_proto()))
+                .collect(),
+        }
+    }
+}
+impl FromProto<flow_like_types::proto::Layer> for Layer {
+    fn from_proto(proto: flow_like_types::proto::Layer) -> Self {
+        Layer {
+            id: proto.id,
+            name: proto.name,
+            comments: proto
+                .comments
+                .into_iter()
+                .map(|(k, v)| (k, Comment::from_proto(v)))
+                .collect(),
+            coordinates: (proto.coord_x, proto.coord_y, proto.coord_z),
+            parent_id: Some(proto.parent_id),
+            pins: proto
+                .pins
+                .into_iter()
+                .map(|(k, v)| (k, Pin::from_proto(v)))
+                .collect(),
+            r#type: LayerType::from_proto(proto.r#type),
+            nodes: proto
+                .nodes
+                .into_iter()
+                .map(|(k, v)| (k, Node::from_proto(v)))
+                .collect(),
+            variables: proto
+                .variables
+                .into_iter()
+                .map(|(k, v)| (k, Variable::from_proto(v)))
+                .collect(),
         }
     }
 }
