@@ -1,5 +1,3 @@
-use arrow::ipc::convert::try_schema_from_flatbuffer_bytes;
-use arrow::json::reader::infer_json_schema;
 use arrow_array::RecordBatch;
 use flow_like_types::Cacheable;
 use flow_like_types::async_trait;
@@ -14,7 +12,6 @@ use lancedb::{
     query::{ExecutableQuery, QueryBase},
     table::{CompactionOptions, Duration, OptimizeOptions},
 };
-use serde_arrow::schema;
 use std::{any::Any, path::PathBuf, sync::Arc};
 
 use crate::arrow_utils::record_batch_to_value;

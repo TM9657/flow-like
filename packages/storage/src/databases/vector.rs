@@ -147,6 +147,6 @@ pub trait VectorStore: Send + Sync {
     /// * `Err(anyhow::Error)` - If the count operation fails.
     async fn count(&self, filter: Option<String>) -> Result<usize>;
 
-    async fn schema(&self) -> Result<(arrow_schema::Schema)>;
+    async fn schema(&self) -> Result<arrow_schema::Schema>;
 
 }
