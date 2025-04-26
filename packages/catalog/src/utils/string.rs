@@ -16,6 +16,7 @@ pub mod to_uppercase;
 pub mod trim;
 pub mod unequal;
 pub mod utf_8_lossy;
+pub mod template;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let mut items: Vec<Arc<dyn NodeLogic>> = vec![
@@ -33,6 +34,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(ends_with::StringEndsWithNode::default()),
         Arc::new(utf_8_lossy::ParseUtf8LossyNode::default()),
         Arc::new(contains::StringContainsNode::default()),
+        Arc::new(template::TemplateStringNode::default()),
     ];
 
     items.append(&mut similarity::register_functions().await);
