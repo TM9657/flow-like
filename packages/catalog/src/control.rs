@@ -5,6 +5,7 @@ pub mod gather;
 pub mod par_execution;
 pub mod reroute;
 pub mod sequence;
+pub mod while_loop;
 
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;
@@ -18,5 +19,6 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(delay::DelayNode::default()),
         Arc::new(gather::GatherExecutionNode::default()),
         Arc::new(reroute::RerouteNode::default()),
+        Arc::new(while_loop::WhileLoopNode::default()),
     ]
 }
