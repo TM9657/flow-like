@@ -146,4 +146,7 @@ pub trait VectorStore: Send + Sync {
     /// * `Ok(usize)` - The total count of items in the vector store.
     /// * `Err(anyhow::Error)` - If the count operation fails.
     async fn count(&self, filter: Option<String>) -> Result<usize>;
+
+    async fn schema(&self) -> Result<(arrow_schema::Schema)>;
+
 }

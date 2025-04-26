@@ -26,6 +26,7 @@ pub mod optimize;
 pub mod purge;
 pub mod upsert;
 pub mod vector_search;
+pub mod schema;
 
 #[derive(Default, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct NodeDBConnection {

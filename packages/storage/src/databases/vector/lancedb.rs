@@ -1,3 +1,5 @@
+use arrow::ipc::convert::try_schema_from_flatbuffer_bytes;
+use arrow::json::reader::infer_json_schema;
 use arrow_array::RecordBatch;
 use flow_like_types::Cacheable;
 use flow_like_types::async_trait;
@@ -12,6 +14,7 @@ use lancedb::{
     query::{ExecutableQuery, QueryBase},
     table::{CompactionOptions, Duration, OptimizeOptions},
 };
+use serde_arrow::schema;
 use std::{any::Any, path::PathBuf, sync::Arc};
 
 use crate::arrow_utils::record_batch_to_value;
@@ -352,6 +355,12 @@ impl VectorStore for LanceDBVectorStore {
     async fn count(&self, filter: Option<String>) -> Result<usize> {
         let table = self.table.clone().ok_or(anyhow!("Table not initialized"))?;
         Ok(table.count_rows(filter).await?)
+    }
+
+    async fn schema(&self) -> Result<arrow_schema::Schema> {
+        let table = self.table.clone().ok_or(anyhow!("Table not initialized"))?;
+        let schema = Arc::try_unwrap(table.schema().await?).unwrap();
+        Ok(schema)
     }
 }
 

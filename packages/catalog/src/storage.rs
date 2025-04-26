@@ -21,6 +21,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(db::vector::filter::FilterLocalDatabaseNode::default()),
         Arc::new(db::vector::delete::DeleteLocalDatabaseNode::default()),
         Arc::new(db::vector::count::CountLocalDatabaseNode::default()),
+        Arc::new(db::vector::schema::GetSchemaLocalDatabaseNode::default()),
     ];
 
     nodes.extend(path::register_functions().await);
