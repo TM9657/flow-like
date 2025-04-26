@@ -1,6 +1,4 @@
 
-/// # Render Jinja Templates
-
 use flow_like::{
     flow::{
         board::Board,
@@ -19,6 +17,7 @@ use std::{
 
 
 #[derive(Default)]
+#[doc = "Render jinja templates based on a template string and dynamic placeholder inputs."]
 pub struct TemplateStringNode {}
 
 impl TemplateStringNode {
