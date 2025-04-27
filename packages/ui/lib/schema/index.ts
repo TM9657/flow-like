@@ -53,6 +53,8 @@ export type { IUpdateNode } from "./flow/board/commands/update-node";
 export type { IUpsertComment } from "./flow/board/commands/upsert-comment";
 export type { IUpsertPin } from "./flow/board/commands/upsert-pin";
 export type { IUpsertVariable } from "./flow/board/commands/upsert-variable";
+export type { IUpsertLayer } from "./flow/board/commands/upsert-layer";
+export type { IRemoveLayer } from "./flow/board/commands/remove-layer";
 export * from "./hub/hub";
 export * from "./llm/history";
 export * from "./llm/response";

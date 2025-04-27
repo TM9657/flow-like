@@ -321,6 +321,85 @@
 					]
 				}
 			}
+		},
+		{
+			"type": "object",
+			"required": ["command_type", "layer", "node_ids"],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["UpsertLayer"]
+				},
+				"old_layer": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/Layer"
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"layer": {
+					"$ref": "#/definitions/Layer"
+				},
+				"node_ids": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": [
+				"child_layers",
+				"command_type",
+				"layer",
+				"layer_nodes",
+				"layers",
+				"nodes",
+				"preserve_nodes"
+			],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["RemoveLayer"]
+				},
+				"layer": {
+					"$ref": "#/definitions/Layer"
+				},
+				"layer_nodes": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
+				},
+				"child_layers": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
+				},
+				"layers": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Layer"
+					}
+				},
+				"nodes": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Node"
+					}
+				},
+				"preserve_nodes": {
+					"type": "boolean"
+				}
+			}
 		}
 	],
 	"definitions": {
@@ -683,6 +762,80 @@
 					"type": "boolean"
 				}
 			}
+		},
+		"Layer": {
+			"type": "object",
+			"required": [
+				"comments",
+				"coordinates",
+				"id",
+				"name",
+				"nodes",
+				"pins",
+				"type",
+				"variables"
+			],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"parent_id": {
+					"type": ["string", "null"]
+				},
+				"name": {
+					"type": "string"
+				},
+				"type": {
+					"$ref": "#/definitions/LayerType"
+				},
+				"nodes": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Node"
+					}
+				},
+				"variables": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Variable"
+					}
+				},
+				"comments": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Comment"
+					}
+				},
+				"coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"pins": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Pin"
+					}
+				}
+			}
+		},
+		"LayerType": {
+			"type": "string",
+			"enum": ["Function", "Macro", "Collapsed"]
 		}
 	}
 }

@@ -9,7 +9,7 @@ import {
 } from "./command/generic-command";
 import { toastSuccess } from "./messages";
 import type { IGenericCommand, IValueType } from "./schema";
-import { type IBoard, type IComment, ICommentType } from "./schema/flow/board";
+import { type IBoard, type IComment, ICommentType, type ILayer } from "./schema/flow/board";
 import { IVariableType } from "./schema/flow/node";
 import type { INode } from "./schema/flow/node";
 import type { IPin, IPinType } from "./schema/flow/pin";
@@ -181,7 +181,7 @@ export function doPinsMatch(
 	return true;
 }
 
-function hashNode(node: INode | IComment, traces?: ITrace[]) {
+function hashNode(node: INode | IComment | ILayer, traces?: ITrace[]) {
 	const hash = crypto.createHash("md5");
 	hash.update(JSON.stringify(node));
 	if (traces) {
@@ -201,7 +201,9 @@ export function parseBoard(
 	connectionMode?: string,
 	oldNodes?: any[],
 	oldEdges?: any[],
+	currentLayer?: string
 ) {
+	console.dir(board)
 	const nodes: any[] = [];
 	const edges: any[] = [];
 	const cache = new Map<string, [IPin, INode]>();
@@ -227,6 +229,11 @@ export function parseBoard(
 	}
 
 	for (const node of Object.values(board.nodes)) {
+		for (const pin of Object.values(node.pins)) {
+			cache.set(pin.id, [pin, node]);
+		}
+		const nodeLayer = ((node.layer ?? "") === "") ? undefined : node.layer;
+		if (nodeLayer !== currentLayer) continue;
 		const hash = hashNode(node, traces.get(node.id));
 		const oldNode = oldNodesMap.get(hash);
 		if (oldNode) {
@@ -255,10 +262,6 @@ export function parseBoard(
 				},
 				selected: selected.has(node.id),
 			});
-		}
-
-		for (const pin of Object.values(node.pins)) {
-			cache.set(pin.id, [pin, node]);
 		}
 	}
 
@@ -317,6 +320,29 @@ export function parseBoard(
 				},
 			},
 			selected: selected.has(comment.id),
+		});
+	}
+
+	for (const layer of Object.values(board.layers)) {
+		const hash = hashNode(layer);
+		const oldNode = oldNodesMap.get(hash);
+		if (oldNode) {
+			nodes.push(oldNode);
+			continue;
+		}
+
+		nodes.push({
+			id: layer.id,
+			type: "layerNode",
+			position: { x: layer.coordinates[0], y: layer.coordinates[1] },
+			data: {
+				label: layer.id,
+				boardId: board.id,
+				appId: appId,
+				hash: hash,
+				layer: layer,
+			},
+			selected: selected.has(layer.id),
 		});
 	}
 

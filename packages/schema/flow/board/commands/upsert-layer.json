@@ -1,0 +1,463 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "UpsertLayerCommand",
+	"type": "object",
+	"required": ["layer", "node_ids"],
+	"properties": {
+		"old_layer": {
+			"anyOf": [
+				{
+					"$ref": "#/definitions/Layer"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"layer": {
+			"$ref": "#/definitions/Layer"
+		},
+		"node_ids": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			}
+		}
+	},
+	"definitions": {
+		"Layer": {
+			"type": "object",
+			"required": [
+				"comments",
+				"coordinates",
+				"id",
+				"name",
+				"nodes",
+				"pins",
+				"type",
+				"variables"
+			],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"parent_id": {
+					"type": ["string", "null"]
+				},
+				"name": {
+					"type": "string"
+				},
+				"type": {
+					"$ref": "#/definitions/LayerType"
+				},
+				"nodes": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Node"
+					}
+				},
+				"variables": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Variable"
+					}
+				},
+				"comments": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Comment"
+					}
+				},
+				"coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"pins": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Pin"
+					}
+				}
+			}
+		},
+		"LayerType": {
+			"type": "string",
+			"enum": ["Function", "Macro", "Collapsed"]
+		},
+		"Node": {
+			"type": "object",
+			"required": [
+				"category",
+				"description",
+				"friendly_name",
+				"id",
+				"name",
+				"pins"
+			],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"description": {
+					"type": "string"
+				},
+				"coordinates": {
+					"type": ["array", "null"],
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"category": {
+					"type": "string"
+				},
+				"scores": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/NodeScores"
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"pins": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Pin"
+					}
+				},
+				"start": {
+					"type": ["boolean", "null"]
+				},
+				"icon": {
+					"type": ["string", "null"]
+				},
+				"comment": {
+					"type": ["string", "null"]
+				},
+				"long_running": {
+					"type": ["boolean", "null"]
+				},
+				"error": {
+					"type": ["string", "null"]
+				},
+				"docs": {
+					"type": ["string", "null"]
+				},
+				"event_callback": {
+					"type": ["boolean", "null"]
+				},
+				"layer": {
+					"type": ["string", "null"]
+				}
+			}
+		},
+		"NodeScores": {
+			"description": "Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores indicate worse performance in each category.\n\n# Score Categories * `privacy` - Measures data protection and confidentiality level * `security` - Assesses resistance against potential attacks * `performance` - Evaluates computational efficiency and speed * `governance` - Indicates compliance with policies and regulations",
+			"type": "object",
+			"required": ["governance", "performance", "privacy", "security"],
+			"properties": {
+				"privacy": {
+					"type": "integer",
+					"format": "uint8",
+					"minimum": 0.0
+				},
+				"security": {
+					"type": "integer",
+					"format": "uint8",
+					"minimum": 0.0
+				},
+				"performance": {
+					"type": "integer",
+					"format": "uint8",
+					"minimum": 0.0
+				},
+				"governance": {
+					"type": "integer",
+					"format": "uint8",
+					"minimum": 0.0
+				}
+			}
+		},
+		"Pin": {
+			"type": "object",
+			"required": [
+				"connected_to",
+				"data_type",
+				"depends_on",
+				"description",
+				"friendly_name",
+				"id",
+				"index",
+				"name",
+				"pin_type",
+				"value_type"
+			],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
+				"friendly_name": {
+					"type": "string"
+				},
+				"description": {
+					"type": "string"
+				},
+				"pin_type": {
+					"$ref": "#/definitions/PinType"
+				},
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
+				},
+				"schema": {
+					"type": ["string", "null"]
+				},
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
+				},
+				"depends_on": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
+				},
+				"connected_to": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
+				},
+				"default_value": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "integer",
+						"format": "uint8",
+						"minimum": 0.0
+					}
+				},
+				"index": {
+					"type": "integer",
+					"format": "uint16",
+					"minimum": 0.0
+				},
+				"options": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/PinOptions"
+						},
+						{
+							"type": "null"
+						}
+					]
+				}
+			}
+		},
+		"PinType": {
+			"type": "string",
+			"enum": ["Input", "Output"]
+		},
+		"VariableType": {
+			"type": "string",
+			"enum": [
+				"Execution",
+				"String",
+				"Integer",
+				"Float",
+				"Boolean",
+				"Date",
+				"PathBuf",
+				"Generic",
+				"Struct",
+				"Byte"
+			]
+		},
+		"ValueType": {
+			"type": "string",
+			"enum": ["Array", "Normal", "HashMap", "HashSet"]
+		},
+		"PinOptions": {
+			"type": "object",
+			"properties": {
+				"valid_values": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "string"
+					}
+				},
+				"range": {
+					"type": ["array", "null"],
+					"items": [
+						{
+							"type": "number",
+							"format": "double"
+						},
+						{
+							"type": "number",
+							"format": "double"
+						}
+					],
+					"maxItems": 2,
+					"minItems": 2
+				},
+				"step": {
+					"type": ["number", "null"],
+					"format": "double"
+				},
+				"enforce_schema": {
+					"type": ["boolean", "null"]
+				},
+				"enforce_generic_value_type": {
+					"type": ["boolean", "null"]
+				}
+			}
+		},
+		"Variable": {
+			"type": "object",
+			"required": [
+				"data_type",
+				"editable",
+				"exposed",
+				"id",
+				"name",
+				"secret",
+				"value_type"
+			],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
+				"category": {
+					"type": ["string", "null"]
+				},
+				"description": {
+					"type": ["string", "null"]
+				},
+				"default_value": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "integer",
+						"format": "uint8",
+						"minimum": 0.0
+					}
+				},
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
+				},
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
+				},
+				"exposed": {
+					"type": "boolean"
+				},
+				"secret": {
+					"type": "boolean"
+				},
+				"editable": {
+					"type": "boolean"
+				}
+			}
+		},
+		"Comment": {
+			"type": "object",
+			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"author": {
+					"type": ["string", "null"]
+				},
+				"content": {
+					"type": "string"
+				},
+				"comment_type": {
+					"$ref": "#/definitions/CommentType"
+				},
+				"timestamp": {
+					"$ref": "#/definitions/SystemTime"
+				},
+				"coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				}
+			}
+		},
+		"CommentType": {
+			"type": "string",
+			"enum": ["Text", "Image", "Video"]
+		},
+		"SystemTime": {
+			"type": "object",
+			"required": ["nanos_since_epoch", "secs_since_epoch"],
+			"properties": {
+				"secs_since_epoch": {
+					"type": "integer",
+					"format": "uint64",
+					"minimum": 0.0
+				},
+				"nanos_since_epoch": {
+					"type": "integer",
+					"format": "uint32",
+					"minimum": 0.0
+				}
+			}
+		}
+	}
+}

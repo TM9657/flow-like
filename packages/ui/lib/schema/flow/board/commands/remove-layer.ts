@@ -1,52 +1,24 @@
-export interface IGenericCommand {
-	command_type: ICommandType;
-	comment?: IComment;
-	old_comment?: null | IComment;
-	node?: INode;
-	new_comments?: IComment[];
-	new_nodes?: INode[];
-	offset?: number[];
-	original_comments?: IComment[];
-	original_nodes?: INode[];
-	from_coordinates?: number[] | null;
-	node_id?: string;
-	to_coordinates?: number[];
-	connected_nodes?: INode[];
-	old_node?: null | INode;
-	from_node?: string;
-	from_pin?: string;
-	to_node?: string;
-	to_pin?: string;
-	old_pin?: null | IPin;
-	pin?: IPin;
-	variable?: IVariable;
-	old_variable?: null | IVariable;
-	layer?: ILayer;
-	node_ids?: string[];
-	old_layer?: null | ILayer;
-	child_layers?: string[];
-	layer_nodes?: string[];
-	layers?: ILayer[];
-	nodes?: INode[];
-	preserve_nodes?: boolean;
+export interface IRemoveLayer {
+	child_layers: string[];
+	layer: ILayer;
+	layer_nodes: string[];
+	layers: ILayer[];
+	nodes: INode[];
+	preserve_nodes: boolean;
 	[property: string]: any;
 }
 
-export enum ICommandType {
-	AddNode = "AddNode",
-	ConnectPin = "ConnectPin",
-	CopyPaste = "CopyPaste",
-	DisconnectPin = "DisconnectPin",
-	MoveNode = "MoveNode",
-	RemoveComment = "RemoveComment",
-	RemoveLayer = "RemoveLayer",
-	RemoveNode = "RemoveNode",
-	RemoveVariable = "RemoveVariable",
-	UpdateNode = "UpdateNode",
-	UpsertComment = "UpsertComment",
-	UpsertLayer = "UpsertLayer",
-	UpsertPin = "UpsertPin",
-	UpsertVariable = "UpsertVariable",
+export interface ILayer {
+	comments: { [key: string]: IComment };
+	coordinates: number[];
+	id: string;
+	name: string;
+	nodes: { [key: string]: INode };
+	parent_id?: null | string;
+	pins: { [key: string]: IPin };
+	type: ILayerType;
+	variables: { [key: string]: IVariable };
+	[property: string]: any;
 }
 
 export interface IComment {
@@ -156,19 +128,6 @@ export interface INodeScores {
 	performance: number;
 	privacy: number;
 	security: number;
-	[property: string]: any;
-}
-
-export interface ILayer {
-	comments: { [key: string]: IComment };
-	coordinates: number[];
-	id: string;
-	name: string;
-	nodes: { [key: string]: INode };
-	parent_id?: null | string;
-	pins: { [key: string]: IPin };
-	type: ILayerType;
-	variables: { [key: string]: IVariable };
 	[property: string]: any;
 }
 

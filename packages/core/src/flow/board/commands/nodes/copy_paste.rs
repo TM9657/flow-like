@@ -178,7 +178,7 @@ impl Command for CopyPasteCommand {
             self.new_nodes.push(new_node);
         }
 
-        board.fix_pins();
+        board.fix_pins_set_layer();
 
         Ok(())
     }
@@ -195,7 +195,7 @@ impl Command for CopyPasteCommand {
         for comment in self.new_comments.iter() {
             board.comments.remove(&comment.id);
         }
-        board.fix_pins();
+        board.fix_pins_set_layer();
         Ok(())
     }
 }

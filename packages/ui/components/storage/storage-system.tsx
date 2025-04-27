@@ -119,26 +119,26 @@ export function StorageSystem({
 						>
 							<ResizablePanel className="flex flex-col gap-2 flex-grow overflow-y-auto max-h-full h-full">
 								<div className="flex flex-col flex-grow max-h-full h-full overflow-auto gap-2">
-								{files.map((file) => (
-									<FileOrFolder
-										highlight={preview.file === file.location}
-										key={file.location}
-										file={file}
-										changePrefix={(new_prefix) =>
-											updatePrefix(`${prefix}/${new_prefix}`)
-										}
-										loadFile={(file) => loadFile(file)}
-										deleteFile={(file) => {
-											const filePrefix = `${prefix}/${file}`;
-											deleteFile(filePrefix);
-										}}
-										shareFile={(file) => {
-											const filePrefix = `${prefix}/${file}`;
-											shareFile(filePrefix);
-										}}
-										downloadFile={downloadFile}
-									/>
-								))}
+									{files.map((file) => (
+										<FileOrFolder
+											highlight={preview.file === file.location}
+											key={file.location}
+											file={file}
+											changePrefix={(new_prefix) =>
+												updatePrefix(`${prefix}/${new_prefix}`)
+											}
+											loadFile={(file) => loadFile(file)}
+											deleteFile={(file) => {
+												const filePrefix = `${prefix}/${file}`;
+												deleteFile(filePrefix);
+											}}
+											shareFile={(file) => {
+												const filePrefix = `${prefix}/${file}`;
+												shareFile(filePrefix);
+											}}
+											downloadFile={downloadFile}
+										/>
+									))}
 								</div>
 							</ResizablePanel>
 							<ResizableHandle className="mx-2" />
@@ -149,32 +149,34 @@ export function StorageSystem({
 							</ResizablePanel>
 						</ResizablePanelGroup>
 					)}
-					{preview.url === "" && <div className="flex flex-col flex-grow max-h-full h-full overflow-auto gap-2">
-						{files.map((file) => (
-							<FileOrFolder
-								highlight={preview.file === file.location}
-								key={file.location}
-								file={file}
-								changePrefix={(new_prefix) => {
-									setPreview({
-										url: "",
-										file: "",
-									});
-									updatePrefix(`${prefix}/${new_prefix}`);
-								}}
-								loadFile={loadFile}
-								deleteFile={(file) => {
-									const filePrefix = `${prefix}/${file}`;
-									deleteFile(filePrefix);
-								}}
-								shareFile={(file) => {
-									const filePrefix = `${prefix}/${file}`;
-									shareFile(filePrefix);
-								}}
-								downloadFile={downloadFile}
-							/>
-						))}
-						</div>}
+					{preview.url === "" && (
+						<div className="flex flex-col flex-grow max-h-full h-full overflow-auto gap-2">
+							{files.map((file) => (
+								<FileOrFolder
+									highlight={preview.file === file.location}
+									key={file.location}
+									file={file}
+									changePrefix={(new_prefix) => {
+										setPreview({
+											url: "",
+											file: "",
+										});
+										updatePrefix(`${prefix}/${new_prefix}`);
+									}}
+									loadFile={loadFile}
+									deleteFile={(file) => {
+										const filePrefix = `${prefix}/${file}`;
+										deleteFile(filePrefix);
+									}}
+									shareFile={(file) => {
+										const filePrefix = `${prefix}/${file}`;
+										shareFile(filePrefix);
+									}}
+									downloadFile={downloadFile}
+								/>
+							))}
+						</div>
+					)}
 				</div>
 			)}
 		</div>

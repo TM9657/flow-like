@@ -16,6 +16,7 @@ import {
 	CircleXIcon,
 	ClockIcon,
 	CopyIcon,
+	FoldVerticalIcon,
 	MessageSquareIcon,
 	PlayCircleIcon,
 	ScrollTextIcon,
@@ -45,6 +46,7 @@ import {
 	IValueType,
 	handleCopy,
 	updateNodeCommand,
+	upsertLayerCommand,
 	upsertPinCommand,
 } from "../../lib";
 import type { INode } from "../../lib/schema/flow/node";
@@ -75,6 +77,7 @@ import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
 import { FlowPin } from "./flow-pin";
 import { typeToColor } from "./utils";
+import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
 
 export interface IPinAction {
 	action: "create";
@@ -710,7 +713,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	const [commentMenu, setCommentMenu] = useState(false);
 	const [renameMenu, setRenameMenu] = useState(false);
 	const flow = useReactFlow();
-	const { pushCommand } = useUndoRedo(props.data.appId, props.data.boardId);
+	const { pushCommand, pushCommands } = useUndoRedo(props.data.appId, props.data.boardId);
 	const invalidate = useInvalidateInvoke();
 	const errorHandled = useMemo(() => {
 		return Object.values(props.data.node.pins).some(
@@ -752,13 +755,13 @@ function FlowNode(props: NodeProps<FlowNode>) {
 				.forEach(
 					(pin, index) => (innerNode.pins[pin.id] = { ...pin, index: index }),
 				);
-			const updateNode = updateNodeCommand({
+			let updateNode = updateNodeCommand({
 				node: {
 					...innerNode,
 				},
 			});
 
-			await backend.executeCommand(
+			updateNode = await backend.executeCommand(
 				props.data.appId,
 				props.data.boardId,
 				updateNode,
@@ -806,17 +809,40 @@ function FlowNode(props: NodeProps<FlowNode>) {
 			pin: stringPin,
 		});
 
-		await backend.executeCommand(props.data.appId, props.data.boardId, command);
-		await backend.executeCommand(
-			props.data.appId,
-			props.data.boardId,
-			stringCommand,
-		);
-		await pushCommand(command, false);
-		await pushCommand(stringCommand, true);
+		const commands = await backend.executeCommands(props.data.appId, props.data.boardId, [command, stringCommand]);
+
+		await pushCommands(commands);
 
 		invalidate(backend.getBoard, [props.data.appId, props.data.boardId]);
 	}, [backend, props.data.node, props.data.appId, props.data.boardId, flow]);
+
+	const handleCollapse = useCallback(async (x: number, y: number) => {
+		const selectedNodes = flow.getNodes().filter((node) => node.selected);
+		const flowCords = flow.screenToFlowPosition({
+			x: x,
+			y: y,
+		});
+		if (selectedNodes.length <= 1) return;
+
+		const nodeIds = selectedNodes.map((node) => (node.data.node as INode).id);
+		const command = upsertLayerCommand({
+			layer: {
+				id: createId(),
+				comments: {},
+				nodes: {},
+				pins: {},
+				coordinates: [flowCords.x, flowCords.y, 0],
+				name: "Collapsed",
+				type: ILayerType.Collapsed,
+				variables: {},
+			},
+			node_ids: nodeIds,
+		})
+
+		const result = await backend.executeCommand(props.data.appId, props.data.boardId, command)
+		await pushCommand(result, false);
+		await invalidate(backend.getBoard, [props.data.appId, props.data.boardId]);
+	}, [backend, flow])
 
 	if (isOpen || isHovered) {
 		return (
@@ -845,6 +871,20 @@ function FlowNode(props: NodeProps<FlowNode>) {
 							<div className="flex flex-row items-center gap-2 text-nowrap">
 								<MessageSquareIcon className="w-4 h-4" />
 								Comment
+							</div>
+						</ContextMenuItem>
+					)}
+					{flow.getNodes().filter((node) => node.selected).length > 1 && (
+						<ContextMenuItem onClick={(e) => {
+							e.preventDefault();
+							const screenCoords = e.currentTarget.getBoundingClientRect();
+							const x = screenCoords.x + screenCoords.width / 2;
+							const y = screenCoords.y + screenCoords.height / 2;
+							handleCollapse(x,y);
+						}}>
+							<div className="flex flex-row items-center gap-2 text-nowrap">
+								<FoldVerticalIcon className="w-4 h-4" />
+								Collapse
 							</div>
 						</ContextMenuItem>
 					)}

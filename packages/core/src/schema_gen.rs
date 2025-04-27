@@ -3,25 +3,20 @@ use crate::{
     bit::{Bit, BitModelPreference, BitPack, LLMParameters, VLMParameters},
     flow::{
         board::{
-            Board,
             commands::{
-                GenericCommand,
                 comments::{
                     remove_comment::RemoveCommentCommand, upsert_comment::UpsertCommentCommand,
-                },
-                nodes::{
+                }, layer::{remove_layer::RemoveLayerCommand, upsert_layer::UpsertLayerCommand}, nodes::{
                     add_node::AddNodeCommand, copy_paste::CopyPasteCommand,
                     move_node::MoveNodeCommand, remove_node::RemoveNodeCommand,
                     update_node::UpdateNodeCommand,
-                },
-                pins::{
+                }, pins::{
                     connect_pins::ConnectPinsCommand, disconnect_pins::DisconnectPinsCommand,
                     upsert_pin::UpsertPinCommand,
-                },
-                variables::{
+                }, variables::{
                     remove_variable::RemoveVariableCommand, upsert_variable::UpsertVariableCommand,
-                },
-            },
+                }, GenericCommand
+            }, Board
         },
         execution::{Run, RunPayload},
         node::Node,
@@ -131,6 +126,14 @@ pub fn generate_schema(base_path: PathBuf) -> flow_like_types::Result<()> {
     generate_and_save_schema::<UpsertVariableCommand>(
         &base_path,
         "flow/board/commands/upsert-variable.json",
+    )?;
+    generate_and_save_schema::<UpsertLayerCommand>(
+        &base_path,
+        "flow/board/commands/upsert-layer.json",
+    )?;
+    generate_and_save_schema::<RemoveLayerCommand>(
+        &base_path,
+        "flow/board/commands/remove-layer.json",
     )?;
     generate_and_save_schema::<Node>(&base_path, "flow/node.json")?;
     generate_and_save_schema::<Pin>(&base_path, "flow/pin.json")?;

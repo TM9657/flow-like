@@ -104,6 +104,7 @@ import {
 	Textarea,
 } from "../ui";
 import { useUndoRedo } from "./flow-history";
+import { LayerNode } from "./layer-node";
 export function FlowBoard({
 	appId,
 	boardId,
@@ -150,7 +151,7 @@ export function FlowBoard({
 		stage: "Dev",
 		logLevel: "Debug",
 	});
-
+	const [layer, setLayer] = useState<string | undefined>();
 	const colorMode = useMemo(
 		() => (resolvedTheme === "dark" ? "dark" : "light"),
 		[resolvedTheme],
@@ -523,6 +524,7 @@ export function FlowBoard({
 			currentProfile.data?.flow_settings.connection_mode,
 			nodes,
 			edges,
+			layer
 		);
 
 		setNodes(parsed.nodes);
@@ -534,7 +536,7 @@ export function FlowBoard({
 			stage: board.data.stage,
 			logLevel: board.data.log_level,
 		});
-	}, [board.data, currentRun]);
+	}, [board.data, currentRun, layer]);
 
 	const miniSearch = useMemo(
 		() =>
@@ -572,7 +574,7 @@ export function FlowBoard({
 	}, [catalog.data]);
 
 	const nodeTypes = useMemo(
-		() => ({ flowNode: FlowNode, commentNode: CommentNode, node: FlowNode }),
+		() => ({ flowNode: FlowNode, commentNode: CommentNode, layerNode: LayerNode, node: FlowNode }),
 		[],
 	);
 	const { screenToFlowPosition } = useReactFlow();
