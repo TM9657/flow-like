@@ -331,6 +331,12 @@ export function parseBoard(
 			continue;
 		}
 
+		const lookup: Record<string, INode> = {}
+		for (const pin of Object.values(layer.pins)) {
+			let [_, node] = cache.get(pin.id) || [];
+			if(node) lookup[pin.id] = node;
+		}
+
 		nodes.push({
 			id: layer.id,
 			type: "layerNode",
@@ -341,6 +347,7 @@ export function parseBoard(
 				appId: appId,
 				hash: hash,
 				layer: layer,
+				pinLookup: lookup,
 			},
 			selected: selected.has(layer.id),
 		});

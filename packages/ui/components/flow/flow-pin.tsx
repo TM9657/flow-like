@@ -31,12 +31,14 @@ function FlowPinInnerComponent({
 	boardId,
 	appId,
 	node,
+	skipOffset
 }: Readonly<{
 	pin: IPin;
 	index: number;
 	boardId: string;
 	appId: string;
 	node: INode;
+	skipOffset?: boolean;
 }>) {
 	const { pushCommand } = useUndoRedo(appId, boardId);
 	const invalidate = useInvalidateInvoke();
@@ -51,6 +53,17 @@ function FlowPinInnerComponent({
 				// marginTop: "0.5rem",
 				// top: index * 15,
 				background: typeToColor(pin.data_type),
+			};
+		}
+
+		if (skipOffset) {
+			return {
+				marginTop: "1.75rem",
+				top: index * 15,
+				background:
+					pin.data_type === "Execution" || pin.value_type !== IValueType.Normal
+						? "transparent"
+						: typeToColor(pin.data_type),
 			};
 		}
 
@@ -212,12 +225,14 @@ function FlowPin({
 	appId,
 	node,
 	onPinRemove,
+	skipOffset,
 }: Readonly<{
 	pin: IPin;
 	index: number;
 	boardId: string;
 	appId: string;
 	node: INode;
+	skipOffset?: boolean;
 	onPinRemove: (pin: IPin) => Promise<void>;
 }>) {
 	if (pin.dynamic)
@@ -230,6 +245,7 @@ function FlowPin({
 						index={index}
 						boardId={boardId}
 						node={node}
+						skipOffset={skipOffset}
 					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent>
@@ -252,6 +268,7 @@ function FlowPin({
 			index={index}
 			boardId={boardId}
 			node={node}
+			skipOffset={skipOffset}
 		/>
 	);
 }

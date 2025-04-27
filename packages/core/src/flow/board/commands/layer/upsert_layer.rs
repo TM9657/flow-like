@@ -39,6 +39,12 @@ impl Command for UpsertLayerCommand {
             }
         }
 
+        for layer in board.layers.values_mut() {
+            if nodes_set.contains(&layer.id) {
+                layer.parent_id = Some(self.layer.id.clone());
+            }
+        }
+
         board.fix_pins_set_layer();
 
         Ok(())

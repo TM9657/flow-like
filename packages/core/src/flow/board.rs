@@ -271,8 +271,7 @@ impl Board {
             }
         }
 
-        let mut layers: HashMap<String, Layer> = self.layers.clone();
-        for layer in layers.values_mut() {
+        for layer in self.layers.values_mut() {
             layer.pins.clear();
         }
 
@@ -300,7 +299,7 @@ impl Board {
                         if let Some(layer) = layer_pins.get(connected_to) {
                             if layer != &node.layer.as_ref().unwrap_or(&default_layer) {
                                 if let Some(layer) = &node.layer {
-                                    if let Some(layer) = layers.get_mut(layer) {
+                                    if let Some(layer) = self.layers.get_mut(layer) {
                                         layer.pins.insert(pin.id.clone(), pin.clone());
                                     }
                                 }
@@ -330,7 +329,7 @@ impl Board {
                         if let Some(layer) = layer_pins.get(depends_on) {
                             if layer != &node.layer.as_ref().unwrap_or(&default_layer) {
                                 if let Some(layer) = &node.layer {
-                                    if let Some(layer) = layers.get_mut(layer) {
+                                    if let Some(layer) = self.layers.get_mut(layer) {
                                         layer.pins.insert(pin.id.clone(), pin.clone());
                                     }
                                 }
