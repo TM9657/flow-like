@@ -22,7 +22,7 @@ impl WhileLoopNode {
 impl NodeLogic for WhileLoopNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "while_loop",
+            "control_while_loop",
             "While Loop",
             "Loop downstream execution in while loop",
             "Control",
@@ -31,7 +31,7 @@ impl NodeLogic for WhileLoopNode {
 
         // inputs
         node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
-        
+
         node.add_input_pin(
             "condition",
             "Condition",
@@ -79,10 +79,13 @@ impl NodeLogic for WhileLoopNode {
         let iter = context.get_pin_by_name("iter").await?;
         let done = context.get_pin_by_name("done").await?;
         let max_iter: u64 = context.evaluate_pin("max_iter").await?;
+        let condition_pin = context.get_pin_by_name("condition").await?;
 
         context.activate_exec_pin_ref(&exec_item).await?;
+        let flow = exec_item.lock().await.get_connected_nodes().await;
+
         for i in 0..max_iter {
-            let condition = context.evaluate_pin::<bool>("condition").await?;
+            let condition = context.evaluate_pin_ref::<bool>(condition_pin.clone()).await?;
             if !condition {
                 break;
             }
@@ -91,9 +94,8 @@ impl NodeLogic for WhileLoopNode {
                 .await
                 .set_value(flow_like_types::json::json!(i))
                 .await;
-            let flow = exec_item.lock().await.get_connected_nodes().await;
-            for node in flow {
-                let mut sub_context = context.create_sub_context(&node).await;
+            for node in &flow {
+                let mut sub_context = context.create_sub_context(node).await;
                 let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
                 sub_context.end_trace();
                 context.push_sub_context(sub_context);

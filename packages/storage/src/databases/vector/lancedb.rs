@@ -356,7 +356,8 @@ impl VectorStore for LanceDBVectorStore {
 
     async fn schema(&self) -> Result<arrow_schema::Schema> {
         let table = self.table.clone().ok_or(anyhow!("Table not initialized"))?;
-        let schema = Arc::try_unwrap(table.schema().await?).unwrap();
+        let schema = table.schema().await?;
+        let schema = schema.as_ref().clone();
         Ok(schema)
     }
 }

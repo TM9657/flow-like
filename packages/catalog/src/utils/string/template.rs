@@ -31,7 +31,7 @@ impl TemplateStringNode {
 impl NodeLogic for TemplateStringNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "render_template",
+            "string_render_template",
             "Render Template",
             "Template Engine based on Jinja Templates",
             "Utils/String",
@@ -62,13 +62,13 @@ impl NodeLogic for TemplateStringNode {
         // load inputs & templates
         let template_string: String = context.evaluate_pin("template").await?;
         let mut jinja_env = minijinja::Environment::new();
-        
+
         // collect placeholders & values
         jinja_env.add_template("template", &template_string).unwrap();
         let template = jinja_env.get_template("template").unwrap();
         let placeholders = template.undeclared_variables(false);
         context.log_message(&format!("extracted placholders: {:?}", placeholders), LogLevel::Debug);
-        
+
         let mut template_context = HashMap::new();
         for placeholder in placeholders {
             let value: flow_like_types::Value = context.evaluate_pin(&placeholder).await?;
