@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::flow::board::Layer;
 use crate::{
-    flow:: board::{Board, commands::Command},
+    flow::board::{Board, commands::Command},
     state::FlowLikeState,
 };
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,11 @@ pub struct UpsertLayerCommand {
 
 impl UpsertLayerCommand {
     pub fn new(layer: Layer) -> Self {
-        UpsertLayerCommand { layer, old_layer: None, node_ids: vec![] }
+        UpsertLayerCommand {
+            layer,
+            old_layer: None,
+            node_ids: vec![],
+        }
     }
 }
 
@@ -32,7 +36,9 @@ impl Command for UpsertLayerCommand {
         _state: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
         let nodes_set: HashSet<String> = HashSet::from_iter(self.node_ids.iter().cloned());
-        self.old_layer = board.layers.insert(self.layer.id.clone(), self.layer.clone());
+        self.old_layer = board
+            .layers
+            .insert(self.layer.id.clone(), self.layer.clone());
         for node in board.nodes.values_mut() {
             if nodes_set.contains(&node.id) {
                 node.layer = Some(self.layer.id.clone());

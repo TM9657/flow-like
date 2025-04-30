@@ -12,10 +12,10 @@ use crate::{
 use super::Board;
 
 pub mod comments;
+pub mod layer;
 pub mod nodes;
 pub mod pins;
 pub mod variables;
-pub mod layer;
 
 macro_rules! impl_command_methods {
     ($($variant:ident),*) => {
@@ -50,9 +50,20 @@ macro_rules! impl_command_methods {
 }
 
 impl_command_methods!(
-    RemoveComment, UpsertComment, AddNode, CopyPaste, MoveNode,
-    RemoveNode, UpdateNode, DisconnectPin, ConnectPin, UpsertPin,
-    RemoveVariable, UpsertVariable, UpsertLayer, RemoveLayer
+    RemoveComment,
+    UpsertComment,
+    AddNode,
+    CopyPaste,
+    MoveNode,
+    RemoveNode,
+    UpdateNode,
+    DisconnectPin,
+    ConnectPin,
+    UpsertPin,
+    RemoveVariable,
+    UpsertVariable,
+    UpsertLayer,
+    RemoveLayer
 );
 
 #[async_trait]

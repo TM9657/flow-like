@@ -23,7 +23,7 @@ pub struct ToolCallFunction {
     pub arguments: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum MessageContent {
     String(String),
@@ -98,7 +98,7 @@ pub enum Role {
     Tool,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 #[serde(untagged)]
 pub enum Content {
@@ -115,7 +115,7 @@ pub enum Content {
     },
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ContentType {
     Text,
