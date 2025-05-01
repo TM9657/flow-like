@@ -30,6 +30,7 @@ import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 import { toast } from "sonner";
+import { useLogAggregation } from "../..";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -52,6 +53,7 @@ import {
 	upsertLayerCommand,
 	upsertPinCommand,
 } from "../../lib";
+import { logLevelFromNumber } from "../../lib/log-level";
 import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
 import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IVariableType } from "../../lib/schema/flow/pin";
@@ -80,8 +82,6 @@ import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
 import { FlowPin } from "./flow-pin";
 import { typeToColor } from "./utils";
-import { useLogAggregation } from "../..";
-import { logLevelFromNumber } from "../../lib/log-level";
 
 export interface IPinAction {
 	action: "create";
@@ -457,12 +457,15 @@ const FlowNodeInner = memo(
 			if (!props.data.node.start || executing) return null;
 			if (Object.keys(props.data.node.pins).length <= 1)
 				return (
-					<button className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 bottom-50 top-50 translate-x-[calc(-120%)]" onClick={async (e) => {
-						if (executing) return;
-						setExecuting(true);
-						await props.data.onExecute(props.data.node);
-						setExecuting(false);
-					}}>
+					<button
+						className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 bottom-50 top-50 translate-x-[calc(-120%)]"
+						onClick={async (e) => {
+							if (executing) return;
+							setExecuting(true);
+							await props.data.onExecute(props.data.node);
+							setExecuting(false);
+						}}
+					>
 						<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
 					</button>
 				);
@@ -470,14 +473,12 @@ const FlowNodeInner = memo(
 			return (
 				<Dialog
 					open={payload.open}
-					onOpenChange={(open) =>
-						setPayload((old) => ({ ...old, open }))
-					}
+					onOpenChange={(open) => setPayload((old) => ({ ...old, open }))}
 				>
 					<DialogTrigger>
-					<button className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 bottom-50 top-50 translate-y-[150%] translate-x-[calc(-120%)]">
-						<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
-					</button>
+						<button className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 bottom-50 top-50 translate-y-[150%] translate-x-[calc(-120%)]">
+							<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+						</button>
 					</DialogTrigger>
 					<DialogContent>
 						<DialogHeader>
@@ -521,7 +522,7 @@ const FlowNodeInner = memo(
 			executing,
 			props.data.onExecute,
 			props.data.node,
-		])
+		]);
 
 		return (
 			<div
@@ -646,10 +647,12 @@ const FlowNodeInner = memo(
 							</small>
 						</div>
 						<div className="flex flex-row items-center gap-1">
-							{executed && <ScrollTextIcon
-								// onClick={() => props.data.openTrace(props.data.traces)}
-								className="w-2 h-2 cursor-pointer hover:text-primary"
-							/>}
+							{executed && (
+								<ScrollTextIcon
+									// onClick={() => props.data.openTrace(props.data.traces)}
+									className="w-2 h-2 cursor-pointer hover:text-primary"
+								/>
+							)}
 							{/* {useMemo(() => {
 								return props.data.traces.length > 0 ? (
 									<ScrollTextIcon
@@ -868,8 +871,8 @@ function FlowNode(props: NodeProps<FlowNode>) {
 		const commands = nodes.map((node) => {
 			return removeNodeCommand({
 				node: node.data.node as INode,
-				connected_nodes: []
-			})
+				connected_nodes: [],
+			});
 		});
 
 		const result = await backend.executeCommands(
@@ -879,11 +882,8 @@ function FlowNode(props: NodeProps<FlowNode>) {
 		);
 		setIsOpen(false);
 		await pushCommands(result);
-		await invalidate(backend.getBoard, [
-			props.data.appId,
-			props.data.boardId,
-		]);
-	}, [backend, invalidate, props.data.node])
+		await invalidate(backend.getBoard, [props.data.appId, props.data.boardId]);
+	}, [backend, invalidate, props.data.node]);
 
 	if (isOpen || isHovered) {
 		return (
@@ -941,13 +941,13 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					{isExec &&
 						flow.getNodes().filter((node) => node.selected).length <= 1 && (
 							<>
-					<ContextMenuSeparator />
-							<ContextMenuItem onClick={() => handleError()}>
-								<div className="flex flex-row items-center gap-2 text-nowrap">
-									<CircleXIcon className="w-4 h-4" />
-									{errorHandled ? "Remove Handling" : "Handle Errors"}
-								</div>
-							</ContextMenuItem>
+								<ContextMenuSeparator />
+								<ContextMenuItem onClick={() => handleError()}>
+									<div className="flex flex-row items-center gap-2 text-nowrap">
+										<CircleXIcon className="w-4 h-4" />
+										{errorHandled ? "Remove Handling" : "Handle Errors"}
+									</div>
+								</ContextMenuItem>
 							</>
 						)}
 					<ContextMenuSeparator />

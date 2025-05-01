@@ -224,7 +224,8 @@ impl ExecutionContext {
             .ok_or_else(|| flow_like_types::anyhow!("Run not found"))?
             .lock()
             .await
-            .payload.clone();
+            .payload
+            .clone();
 
         if payload.id == self.id {
             return Ok(payload);

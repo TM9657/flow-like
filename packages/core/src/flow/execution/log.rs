@@ -1,8 +1,18 @@
-use flow_like_storage::{arrow_array::RecordBatch, lancedb::arrow::{self, arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit}, IntoArrow, RecordBatchReader}, serde_arrow::{self, schema::{SchemaLike, TracingOptions}}};
+use flow_like_storage::{
+    arrow_array::RecordBatch,
+    lancedb::arrow::{
+        self, IntoArrow, RecordBatchReader,
+        arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit},
+    },
+    serde_arrow::{
+        self,
+        schema::{SchemaLike, TracingOptions},
+    },
+};
+use once_cell::sync::Lazy;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
-use once_cell::sync::Lazy;
 
 use super::LogLevel;
 
@@ -80,8 +90,16 @@ impl From<LogMessage> for StoredLogMessage {
             token_in,
             token_out,
             bit_ids,
-            start: log.start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
-            end: log.end.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+            start: log
+                .start
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            end: log
+                .end
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
         }
     }
 }
@@ -104,7 +122,6 @@ impl From<StoredLogMessage> for LogMessage {
         }
     }
 }
-
 
 impl LogMessage {
     pub fn new(message: &str, log_level: LogLevel, operation_id: Option<String>) -> Self {
@@ -130,14 +147,15 @@ impl LogMessage {
 
     pub fn into_arrow<I>(logs: I) -> flow_like_types::Result<RecordBatch>
     where
-    I: IntoIterator<Item = LogMessage>,
+        I: IntoIterator<Item = LogMessage>,
     {
-        let stored = logs.into_iter()
-        .map(StoredLogMessage::from)
-        .collect::<Vec<StoredLogMessage>>();
+        let stored = logs
+            .into_iter()
+            .map(StoredLogMessage::from)
+            .collect::<Vec<StoredLogMessage>>();
 
         let fields = &*STORED_LOG_MESSAGE_FIELDS;
-        let batch = serde_arrow::to_record_batch(fields,&stored)?;
+        let batch = serde_arrow::to_record_batch(fields, &stored)?;
         Ok(batch)
     }
 }

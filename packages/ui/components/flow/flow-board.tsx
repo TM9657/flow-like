@@ -41,6 +41,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
+import { useLogAggregation } from "../..";
 import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
@@ -107,7 +108,6 @@ import {
 import { useUndoRedo } from "./flow-history";
 import { FlowRuns } from "./flow-runs";
 import { LayerNode } from "./layer-node";
-import { useLogAggregation } from "../..";
 export function FlowBoard({
 	appId,
 	boardId,
@@ -1196,7 +1196,14 @@ export function FlowBoard({
 					collapsedSize={0}
 					ref={runsPanelRef}
 				>
-					{board.data && <FlowRuns executeBoard={executeBoard} nodes={board.data.nodes} appId={appId} boardId={boardId} />}
+					{board.data && (
+						<FlowRuns
+							executeBoard={executeBoard}
+							nodes={board.data.nodes}
+							appId={appId}
+							boardId={boardId}
+						/>
+					)}
 				</ResizablePanel>
 			</ResizablePanelGroup>
 		</div>

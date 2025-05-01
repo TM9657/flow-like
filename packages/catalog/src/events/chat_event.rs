@@ -98,7 +98,10 @@ impl NodeLogic for ChatEventNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let exec_out_pin = context.get_pin_by_name("exec_out").await?;
         let payload = context.get_payload().await?;
-        let chat = payload.payload.clone().ok_or(anyhow!("Failed to get payload"))?;
+        let chat = payload
+            .payload
+            .clone()
+            .ok_or(anyhow!("Failed to get payload"))?;
         let chat: Chat = flow_like_types::json::from_value(chat)
             .map_err(|e| anyhow!("Failed to deserialize payload: {}", e))?;
 

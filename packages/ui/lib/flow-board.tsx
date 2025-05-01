@@ -249,7 +249,7 @@ export function parseBoard(
 		}
 	}
 
-	const activeLayer = new Set()
+	const activeLayer = new Set();
 	for (const layer of Object.values(board.layers)) {
 		const hash = hashNode(layer);
 		const oldNode = oldNodesMap.get(hash);
@@ -258,14 +258,13 @@ export function parseBoard(
 			continue;
 		}
 
-
 		const lookup: Record<string, INode> = {};
 		for (const pin of Object.values(layer.pins)) {
 			const [_, node] = cache.get(pin.id) || [];
 			if (node) lookup[pin.id] = node;
 		}
 
-		activeLayer.add(layer.id)
+		activeLayer.add(layer.id);
 		nodes.push({
 			id: layer.id,
 			type: "layerNode",
@@ -296,8 +295,12 @@ export function parseBoard(
 				continue;
 			}
 
-			const sourceNode = activeLayer.has(node.layer ?? "") ? node.layer : node.id;
-			const connectedNodeId = activeLayer.has(connectedNode.layer ?? "") ? connectedNode.layer : connectedNode.id;
+			const sourceNode = activeLayer.has(node.layer ?? "")
+				? node.layer
+				: node.id;
+			const connectedNodeId = activeLayer.has(connectedNode.layer ?? "")
+				? connectedNode.layer
+				: connectedNode.id;
 			edges.push({
 				id: `${pin.id}-${connectedTo}`,
 				source: sourceNode,
@@ -341,8 +344,6 @@ export function parseBoard(
 			selected: selected.has(comment.id),
 		});
 	}
-
-
 
 	return { nodes, edges, cache };
 }

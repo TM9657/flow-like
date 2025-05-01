@@ -271,10 +271,6 @@ impl Board {
             }
         }
 
-        for layer in self.layers.values_mut() {
-            layer.pins.clear();
-        }
-
         let mut node_pins_to_remove = HashMap::new();
         let mut node_pins_connected_to_remove = HashMap::new();
         let mut node_pins_depends_on_remove = HashMap::new();
@@ -300,7 +296,9 @@ impl Board {
                             if layer != &node.layer.as_ref().unwrap_or(&default_layer) {
                                 if let Some(layer) = &node.layer {
                                     if let Some(layer) = self.layers.get_mut(layer) {
-                                        layer.pins.insert(pin.id.clone(), pin.clone());
+                                        if !layer.pins.contains_key(&pin.id) {
+                                            layer.pins.insert(pin.id.clone(), pin.clone());
+                                        }
                                     }
                                 }
                             }
@@ -330,7 +328,9 @@ impl Board {
                             if layer != &node.layer.as_ref().unwrap_or(&default_layer) {
                                 if let Some(layer) = &node.layer {
                                     if let Some(layer) = self.layers.get_mut(layer) {
-                                        layer.pins.insert(pin.id.clone(), pin.clone());
+                                        if !layer.pins.contains_key(&pin.id) {
+                                            layer.pins.insert(pin.id.clone(), pin.clone());
+                                        }
                                     }
                                 }
                             }

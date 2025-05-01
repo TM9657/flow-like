@@ -1,8 +1,11 @@
-use crate::{functions::TauriFunctionError, state::{TauriFlowLikeState, TauriSettingsState}};
+use crate::{
+    functions::TauriFunctionError,
+    state::{TauriFlowLikeState, TauriSettingsState},
+};
 use flow_like::{
     app::App,
     flow::{
-        board::{self, commands::GenericCommand, Board, ExecutionStage},
+        board::{self, Board, ExecutionStage, commands::GenericCommand},
         execution::LogLevel,
     },
     flow_like_storage::Path,
@@ -105,7 +108,7 @@ pub async fn get_open_boards(
     let mut boards = Vec::with_capacity(board_state.len());
     for entry in board_state.iter() {
         let value = entry.value();
-        let board_id =  entry.key().clone();
+        let board_id = entry.key().clone();
         let board = value.lock().await;
         if let Some(app_id) = board_app_lookup.get(&board_id) {
             boards.push((app_id.clone(), board_id, board.name.clone()));

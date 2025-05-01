@@ -5,21 +5,21 @@ use crate::state::FlowLikeState;
 use ahash::AHasher;
 use context::ExecutionContext;
 use flow_like_model_provider::tokenizers::decoders::metaspace::Metaspace;
+use flow_like_storage::arrow_array::{RecordBatch, RecordBatchIterator};
 use flow_like_storage::arrow_schema::FieldRef;
+use flow_like_storage::files::store::FlowLikeStore;
+use flow_like_storage::lancedb::Connection;
 use flow_like_storage::lancedb::arrow::IntoArrowStream;
 use flow_like_storage::lancedb::index::scalar::BitmapIndexBuilder;
 use flow_like_storage::lancedb::query::{ExecutableQuery, QueryBase};
 use flow_like_storage::lancedb::table::Duration;
-use flow_like_storage::lancedb::Connection;
-use flow_like_storage::serde_arrow::schema::{SchemaLike, TracingOptions};
-use flow_like_storage::{serde_arrow, Path};
-use flow_like_storage::arrow_array::{RecordBatch, RecordBatchIterator};
-use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::object_store::PutPayload;
-use flow_like_types::json::{self, to_vec};
-use flow_like_types::{Bytes, Value};
+use flow_like_storage::serde_arrow::schema::{SchemaLike, TracingOptions};
+use flow_like_storage::{Path, serde_arrow};
 use flow_like_types::intercom::InterComCallback;
+use flow_like_types::json::{self, to_vec};
 use flow_like_types::sync::{DashMap, Mutex, RwLock};
+use flow_like_types::{Bytes, Value};
 use flow_like_types::{Cacheable, anyhow, create_id};
 use futures::StreamExt;
 use futures::future::BoxFuture;
@@ -48,12 +48,16 @@ pub mod trace;
 const USE_DEPENDENCY_GRAPH: bool = false;
 static STORED_META_FIELDS: Lazy<Vec<FieldRef>> = Lazy::new(|| {
     Vec::<FieldRef>::from_type::<LogMeta>(
-        TracingOptions::default().allow_null_fields(true).strings_as_large_utf8(false),
+        TracingOptions::default()
+            .allow_null_fields(true)
+            .strings_as_large_utf8(false),
     )
     .expect("derive FieldRef for StoredLogMessage")
 });
 
-#[derive(Serialize, Deserialize, JsonSchema, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Serialize, Deserialize, JsonSchema, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub enum LogLevel {
     Debug = 0,
     Info = 1,
@@ -106,7 +110,6 @@ impl LogLevel {
     }
 }
 
-
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct LogMeta {
     pub app_id: String,
@@ -119,29 +122,21 @@ pub struct LogMeta {
     pub nodes: Option<Vec<(String, u8)>>,
     pub logs: Option<u64>,
     pub node_id: String,
-    pub payload: Vec<u8>
+    pub payload: Vec<u8>,
 }
 
 impl LogMeta {
-    fn into_arrow(&self) -> flow_like_types::Result<RecordBatch>
-    {
+    fn into_arrow(&self) -> flow_like_types::Result<RecordBatch> {
         let fields = &*STORED_META_FIELDS;
         let batch = serde_arrow::to_record_batch(fields, &vec![self])?;
         Ok(batch)
     }
 
-    pub async fn flush(
-        &self,
-        db: Connection
-    ) -> flow_like_types::Result<()>
-    {
+    pub async fn flush(&self, db: Connection) -> flow_like_types::Result<()> {
         let arrow_batch = self.into_arrow()?;
         let schema = arrow_batch.schema();
 
-        let table = db
-            .open_table("runs")
-            .execute()
-            .await;
+        let table = db.open_table("runs").execute().await;
 
         if let Err(err) = table {
             let table = db
@@ -150,9 +145,29 @@ impl LogMeta {
                 .await?;
             let iter = RecordBatchIterator::new(vec![arrow_batch].into_iter().map(Ok), schema);
             table.add(iter).execute().await?;
-            table.create_index(&["node_id"], flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {})).execute().await?;
-            table.create_index(&["log_level"], flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {})).execute().await?;
-            table.create_index(&["start"], flow_like_storage::lancedb::index::Index::BTree(flow_like_storage::lancedb::index::scalar::BTreeIndexBuilder {})).execute().await?;
+            table
+                .create_index(
+                    &["node_id"],
+                    flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
+                )
+                .execute()
+                .await?;
+            table
+                .create_index(
+                    &["log_level"],
+                    flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
+                )
+                .execute()
+                .await?;
+            table
+                .create_index(
+                    &["start"],
+                    flow_like_storage::lancedb::index::Index::BTree(
+                        flow_like_storage::lancedb::index::scalar::BTreeIndexBuilder {},
+                    ),
+                )
+                .execute()
+                .await?;
             return Ok(());
         }
         let table = table?;
@@ -247,12 +262,23 @@ impl Run {
         // 3) write meta file
         let vs = &self.board.version;
         let version_string = format!("v{}-{}-{}", vs.0, vs.1, vs.2);
-        let start_micros = self.start.duration_since(SystemTime::UNIX_EPOCH)?.as_micros().try_into()
-        .map_err(|_| anyhow!("start timestamp overflowed u64"))?;
-        let end_micros = self.end.duration_since(SystemTime::UNIX_EPOCH)?.as_micros().try_into()
-        .map_err(|_| anyhow!("end timestamp overflowed u64"))?;
-        let payload = to_vec(&self.payload.payload.clone().unwrap_or(Value::Null)).unwrap_or_default();
-        let visited_nodes = self.visited_nodes.drain()
+        let start_micros = self
+            .start
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_micros()
+            .try_into()
+            .map_err(|_| anyhow!("start timestamp overflowed u64"))?;
+        let end_micros = self
+            .end
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_micros()
+            .try_into()
+            .map_err(|_| anyhow!("end timestamp overflowed u64"))?;
+        let payload =
+            to_vec(&self.payload.payload.clone().unwrap_or(Value::Null)).unwrap_or_default();
+        let visited_nodes = self
+            .visited_nodes
+            .drain()
             .map(|(k, v)| (k, v.to_u8()))
             .collect::<Vec<(String, u8)>>();
 
@@ -733,11 +759,13 @@ impl InternalRun {
         let meta = {
             let mut run = self.run.lock().await;
             run.end = SystemTime::now();
-            run.status = if errored { RunStatus::Failed } else { RunStatus::Success };
+            run.status = if errored {
+                RunStatus::Failed
+            } else {
+                RunStatus::Success
+            };
             match run.flush_logs(true).await {
-                Ok(Some(meta)) => {
-                    Some(meta)
-                }
+                Ok(Some(meta)) => Some(meta),
                 Ok(None) => None,
                 Err(err) => {
                     eprintln!("[Error] flushing logs (final): {:?}", err);

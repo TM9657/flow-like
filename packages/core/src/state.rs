@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 #[cfg(feature = "flow-runtime")]
-use crate::flow::execution::{LogMeta, LogLevel, log::LogMessage};
+use crate::flow::execution::{LogLevel, LogMeta, log::LogMessage};
 
 #[cfg(feature = "flow-runtime")]
 use crate::flow::board::Board;
@@ -373,8 +373,17 @@ impl FlowLikeState {
     }
 
     #[cfg(feature = "flow-runtime")]
-    pub async fn query_run(&self, meta: &LogMeta, query: &str, limit: Option<usize>, offset: Option<usize>) -> flow_like_types::Result<Vec<LogMessage>> {
-        use flow_like_storage::{lancedb::query::{ExecutableQuery, QueryBase}, serde_arrow};
+    pub async fn query_run(
+        &self,
+        meta: &LogMeta,
+        query: &str,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> flow_like_types::Result<Vec<LogMessage>> {
+        use flow_like_storage::{
+            lancedb::query::{ExecutableQuery, QueryBase},
+            serde_arrow,
+        };
         use flow_like_types::anyhow;
         use futures::TryStreamExt;
 
@@ -398,16 +407,26 @@ impl FlowLikeState {
         let db = db_fn(base_path.clone()).execute().await?;
 
         let db = db.open_table(meta.run_id.clone()).execute().await?;
-        let results = db.query().only_if(query).limit(limit).offset(offset).execute().await?;
+        let results = db
+            .query()
+            .only_if(query)
+            .limit(limit)
+            .offset(offset)
+            .execute()
+            .await?;
         let results = results.try_collect::<Vec<_>>().await?;
 
         let mut log_messages = Vec::with_capacity(results.len() * 10);
         for result in results {
-            let result = serde_arrow::from_record_batch::<Vec<StoredLogMessage>>(&result).unwrap_or(vec![]);
-            let result = result.into_iter().map(|log| {
-                let log: LogMessage = log.into();
-                log
-            }).collect::<Vec<_>>();
+            let result =
+                serde_arrow::from_record_batch::<Vec<StoredLogMessage>>(&result).unwrap_or(vec![]);
+            let result = result
+                .into_iter()
+                .map(|log| {
+                    let log: LogMessage = log.into();
+                    log
+                })
+                .collect::<Vec<_>>();
             log_messages.extend(result);
         }
 
