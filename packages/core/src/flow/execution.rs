@@ -4,7 +4,12 @@ use crate::profile::Profile;
 use crate::state::FlowLikeState;
 use ahash::AHasher;
 use context::ExecutionContext;
-use flow_like_types::Value;
+use flow_like_storage::Path;
+use flow_like_storage::arrow_array::RecordBatchIterator;
+use flow_like_storage::files::store::FlowLikeStore;
+use flow_like_storage::object_store::PutPayload;
+use flow_like_types::json::{self, to_vec};
+use flow_like_types::{Bytes, Value};
 use flow_like_types::intercom::InterComCallback;
 use flow_like_types::sync::{DashMap, Mutex, RwLock};
 use flow_like_types::{Cacheable, anyhow, create_id};
@@ -12,6 +17,7 @@ use futures::StreamExt;
 use futures::future::BoxFuture;
 use internal_node::InternalNode;
 use internal_pin::InternalPin;
+use log::LogMessage;
 use num_cpus;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -32,7 +38,7 @@ pub mod trace;
 
 const USE_DEPENDENCY_GRAPH: bool = false;
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq, PartialOrd)]
+#[derive(Serialize, Deserialize, JsonSchema, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {
     Debug = 0,
     Info = 1,
@@ -41,9 +47,32 @@ pub enum LogLevel {
     Fatal = 4,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct LogMeta {
+    pub app_id: String,
+    pub run_id: String,
+    pub board_id: String,
+    pub start: u64,
+    pub end: u64,
+    pub log_level: LogLevel,
+    pub version: String,
+    pub nodes: Option<HashMap<String, LogLevel>>,
+    pub logs: Option<u64>,
+}
+
+impl LogMeta {
+    pub fn to_file_name(&self) -> String {
+        format!(
+            "{}_{}_{}_{}_{}.json",
+            self.run_id, self.version, self.start, self.end, self.log_level as u8
+        )
+    }
+}
+
+#[derive(Clone)]
 pub struct Run {
     pub id: String,
+    pub app_id: String,
     pub traces: Vec<Trace>,
     pub status: RunStatus,
     pub start: SystemTime,
@@ -52,6 +81,112 @@ pub struct Run {
     pub log_level: LogLevel,
     pub payload: Arc<HashMap<String, RunPayload>>,
     pub sub: String,
+    pub highest_log_level: LogLevel,
+    pub log_initialized: bool,
+    pub logs: u64,
+
+    pub visited_nodes: HashMap<String, LogLevel>,
+    pub log_store: Option<FlowLikeStore>,
+    pub log_db: Option<
+        Arc<dyn Fn(Path) -> flow_like_storage::lancedb::connection::ConnectBuilder + Send + Sync>,
+    >,
+}
+
+impl Run {
+    pub async fn flush_logs(&mut self, finalize: bool) -> flow_like_types::Result<()> {
+        let store = self
+            .log_store
+            .as_ref()
+            .ok_or_else(|| anyhow!("No log store configured"))?;
+        let db_fn = self
+            .log_db
+            .as_ref()
+            .ok_or_else(|| anyhow!("No log database configured"))?;
+        let base_path = Path::from("runs")
+            .child(self.app_id.clone())
+            .child(self.board.id.clone());
+        let db = db_fn(base_path.clone()).execute().await?;
+
+        // 1) pre‑count total logs, reserve once, and find highest level in one pass
+        let total = self.traces.iter().map(|t| t.logs.len()).sum();
+        let mut logs = Vec::with_capacity(total);
+        let mut highest = self.highest_log_level.clone();
+        for trace in &self.traces {
+            let node_level = self
+                .visited_nodes
+                .entry(trace.node_id.clone())
+                .or_insert(LogLevel::Debug);
+
+            for log in &trace.logs {
+                let lvl = log.log_level;
+
+                if lvl > highest {
+                    highest = lvl;
+                }
+
+                if lvl > *node_level {
+                    *node_level = lvl;
+                }
+
+                logs.push(log.clone());
+            }
+        }
+        self.logs = self.logs.saturating_add(logs.len() as u64);
+        self.highest_log_level = highest;
+        self.traces.clear();
+
+        // 2) write arrow batches
+        let arrow_batch = LogMessage::into_arrow(&logs)?;
+        let schema = arrow_batch.schema();
+        let table = if self.log_initialized {
+            db.open_table(&self.id).execute().await?
+        } else {
+            let t = db
+                .create_empty_table(&self.id, schema.clone())
+                .execute()
+                .await?;
+            self.log_initialized = true;
+            t
+        };
+        let iter = RecordBatchIterator::new(vec![arrow_batch].into_iter().map(Ok), schema);
+        table.add(iter).execute().await?;
+
+        if !finalize {
+            return Ok(());
+        }
+
+        // 3) write meta file
+        let vs = &self.board.version;
+        let version_string = format!("v{}-{}-{}", vs.0, vs.1, vs.2);
+        let start_secs = self.start.duration_since(SystemTime::UNIX_EPOCH)?.as_secs();
+        let end_secs = self.end.duration_since(SystemTime::UNIX_EPOCH)?.as_secs();
+        let meta = format!(
+            "{}_{}_{}_{}_{}.json",
+            self.id, version_string, start_secs, end_secs, self.highest_log_level as u8
+        );
+
+        let content = LogMeta {
+            app_id: self.app_id.clone(),
+            run_id: self.id.clone(),
+            board_id: self.board.id.clone(),
+            start: start_secs,
+            end: end_secs,
+            log_level: self.highest_log_level.clone(),
+            version: version_string,
+            nodes: Some(self.visited_nodes.clone()),
+            logs: Some(self.logs),
+        };
+
+        let content = to_vec(&content)?;
+        let content = Bytes::from(content);
+
+        store
+            .as_generic()
+            .put(&base_path.child(meta), PutPayload::from_bytes(content))
+            .await?;
+
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -125,6 +260,7 @@ pub struct RunPayload {
 
 impl InternalRun {
     pub async fn new(
+        app_id: &str,
         board: Arc<Board>,
         handler: &Arc<Mutex<FlowLikeState>>,
         profile: &Profile,
@@ -141,8 +277,17 @@ impl InternalRun {
 
         let run_id = create_id();
 
+        let (log_store, db) = {
+            let state = handler.lock().await;
+            let guard = state.config.read().await;
+            let log_store = guard.stores.log_store.clone();
+            let db = guard.callbacks.build_logs_database.clone();
+            (log_store, db)
+        };
+
         let run = Run {
             id: run_id.clone(),
+            app_id: app_id.to_string(),
             traces: vec![],
             status: RunStatus::Running,
             start: SystemTime::now(),
@@ -151,6 +296,13 @@ impl InternalRun {
             board: board.clone(),
             payload: payload.clone(),
             sub: sub.unwrap_or_else(|| "local".to_string()),
+            highest_log_level: LogLevel::Debug,
+            log_initialized: false,
+            logs: 0,
+
+            visited_nodes: HashMap::with_capacity(board.nodes.len()),
+            log_store,
+            log_db: db,
         };
 
         let run = Arc::new(Mutex::new(run));
@@ -465,13 +617,28 @@ impl InternalRun {
 
     pub async fn execute(&mut self, handler: Arc<Mutex<FlowLikeState>>) {
         let start = Instant::now();
-        self.run.lock().await.start = SystemTime::now();
+
+        {
+            let mut run = self.run.lock().await;
+            run.start = SystemTime::now();
+        }
+
         let mut stack_hash = self.stack.hash();
         let mut current_stack_len = self.stack.len();
-
         let mut errored = false;
+        let mut iter = 0;
+
         while current_stack_len > 0 {
             self.step(handler.clone()).await;
+            iter += 1;
+
+            if iter % 50 == 0 {
+                let mut run = self.run.lock().await;
+                if let Err(err) = run.flush_logs(false).await {
+                    eprintln!("[Error] flushing logs: {:?}", err);
+                }
+            }
+
             current_stack_len = self.stack.len();
             let new_stack_hash = self.stack.hash();
             if new_stack_hash == stack_hash {
@@ -483,12 +650,15 @@ impl InternalRun {
         }
 
         self.trigger_completion_callbacks().await;
-        self.run.lock().await.end = SystemTime::now();
-        self.run.lock().await.status = if errored {
-            RunStatus::Failed
-        } else {
-            RunStatus::Success
-        };
+
+        {
+            let mut run = self.run.lock().await;
+            run.end = SystemTime::now();
+            run.status = if errored { RunStatus::Failed } else { RunStatus::Success };
+            if let Err(err) = run.flush_logs(true).await {
+                eprintln!("[Error] flushing logs (final): {:?}", err);
+            }
+        }
 
         if self.log_level == LogLevel::Info {
             println!("InternalRun::execute took {:?}", start.elapsed());

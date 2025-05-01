@@ -55,7 +55,7 @@ async fn run_board(id: &str, start_ids: Vec<String>) {
         })
         .collect();
 
-    let mut run = InternalRun::new(board, &state, &profile, payload, None, None)
+    let mut run = InternalRun::new("bench", board, &state, &profile, payload, None, None)
         .await
         .unwrap();
     run.execute(state.clone()).await;
@@ -74,7 +74,7 @@ async fn run_shared_board(
             payload: None,
         })
         .collect();
-    let mut run = InternalRun::new(board, &state, &profile, payload, None, None)
+    let mut run = InternalRun::new("bench", board, &state, &profile, payload, None, None)
         .await
         .unwrap();
     run.execute(state.clone()).await;

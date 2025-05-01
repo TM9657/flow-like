@@ -24,19 +24,37 @@ use tracing_subscriber::prelude::*;
 pub fn run() {
     let mut settings_state = Settings::new();
     let project_dir = settings_state.project_dir.clone();
+    let logs_dir = settings_state.logs_dir.clone();
+    let temporary_dir = settings_state.temporary_dir.clone();
 
     let mut config: FlowLikeConfig = FlowLikeConfig::new();
     config.register_bits_store(FlowLikeStore::Local(Arc::new(
         LocalObjectStore::new(settings_state.bit_dir.clone()).unwrap(),
     )));
+
     config.register_user_store(FlowLikeStore::Local(Arc::new(
         LocalObjectStore::new(settings_state.user_dir.clone()).unwrap(),
     )));
+
     config.register_project_store(FlowLikeStore::Local(Arc::new(
         LocalObjectStore::new(project_dir.clone()).unwrap(),
     )));
+
+    config.register_log_store(FlowLikeStore::Local(Arc::new(
+        LocalObjectStore::new(logs_dir.clone()).unwrap(),
+    )));
+
+    config.register_temporary_store(FlowLikeStore::Local(Arc::new(
+        LocalObjectStore::new(temporary_dir.clone()).unwrap(),
+    )));
+
     config.register_build_project_database(Arc::new(move |path: Path| {
         let directory = project_dir.join(path.to_string());
+        lancedb::connect(directory.to_str().unwrap())
+    }));
+
+    config.register_build_logs_database(Arc::new(move |path: Path| {
+        let directory = logs_dir.join(path.to_string());
         lancedb::connect(directory.to_str().unwrap())
     }));
 
@@ -243,8 +261,9 @@ pub fn run() {
             functions::flow::run::execute_board,
             functions::flow::run::debug_step_run,
             functions::flow::run::get_run_status,
-            functions::flow::run::get_run,
-            functions::flow::run::get_run_traces,
+            functions::flow::run::list_runs,
+            functions::flow::run::get_run_meta,
+            functions::flow::run::query_run,
             functions::flow::run::finalize_run,
         ]);
 

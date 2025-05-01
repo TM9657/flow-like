@@ -3,28 +3,22 @@ use crate::{
     bit::{Bit, BitModelPreference, BitPack, LLMParameters, VLMParameters},
     flow::{
         board::{
-            Board,
             commands::{
-                GenericCommand,
                 comments::{
                     remove_comment::RemoveCommentCommand, upsert_comment::UpsertCommentCommand,
-                },
-                layer::{remove_layer::RemoveLayerCommand, upsert_layer::UpsertLayerCommand},
-                nodes::{
+                }, layer::{remove_layer::RemoveLayerCommand, upsert_layer::UpsertLayerCommand}, nodes::{
                     add_node::AddNodeCommand, copy_paste::CopyPasteCommand,
                     move_node::MoveNodeCommand, remove_node::RemoveNodeCommand,
                     update_node::UpdateNodeCommand,
-                },
-                pins::{
+                }, pins::{
                     connect_pins::ConnectPinsCommand, disconnect_pins::DisconnectPinsCommand,
                     upsert_pin::UpsertPinCommand,
-                },
-                variables::{
+                }, variables::{
                     remove_variable::RemoveVariableCommand, upsert_variable::UpsertVariableCommand,
-                },
-            },
+                }, GenericCommand
+            }, Board
         },
-        execution::{Run, RunPayload},
+        execution::{log::LogMessage, LogMeta, RunPayload},
         node::Node,
         pin::Pin,
         variable::Variable,
@@ -144,7 +138,8 @@ pub fn generate_schema(base_path: PathBuf) -> flow_like_types::Result<()> {
     generate_and_save_schema::<Node>(&base_path, "flow/node.json")?;
     generate_and_save_schema::<Pin>(&base_path, "flow/pin.json")?;
     generate_and_save_schema::<Variable>(&base_path, "flow/variable.json")?;
-    generate_and_save_schema::<Run>(&base_path, "flow/run.json")?;
+    generate_and_save_schema::<LogMessage>(&base_path, "flow/log.json")?;
+    generate_and_save_schema::<LogMeta>(&base_path, "flow/log-metadata.json")?;
 
     generate_and_save_schema::<Profile>(&base_path, "profile/profile.json")?;
 

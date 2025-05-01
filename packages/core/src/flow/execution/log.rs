@@ -1,3 +1,4 @@
+use flow_like_storage::{arrow_array::RecordBatch, lancedb::arrow::{self, arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit}, IntoArrow, RecordBatchReader}, serde_arrow::{self, schema::{SchemaLike, TracingOptions}}};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
@@ -29,6 +30,7 @@ impl LogStat {
 pub struct LogMessage {
     pub message: String,
     pub operation_id: Option<String>,
+    pub node_id: Option<String>,
     pub log_level: LogLevel,
     pub stats: Option<LogStat>,
     pub start: SystemTime,
@@ -41,6 +43,7 @@ impl LogMessage {
         LogMessage {
             message: message.to_string(),
             log_level,
+            node_id: None,
             operation_id,
             stats: None,
             start: now,
@@ -54,5 +57,11 @@ impl LogMessage {
 
     pub fn end(&mut self) {
         self.end = SystemTime::now();
+    }
+
+    pub fn into_arrow(logs: &Vec<LogMessage>) -> flow_like_types::Result<RecordBatch> {
+        let fields = Vec::<FieldRef>::from_type::<LogMessage>(TracingOptions::default())?;
+        let batch = serde_arrow::to_record_batch(&fields,logs)?;
+        Ok(batch)
     }
 }

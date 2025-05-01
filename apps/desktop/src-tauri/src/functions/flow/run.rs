@@ -1,4 +1,5 @@
-use flow_like::flow::execution::RunPayload;
+use flow_like::flow::execution::log::LogMessage;
+use flow_like::flow::execution::{LogMeta, RunPayload};
 use flow_like::flow::execution::{InternalRun, Run, RunStatus, trace::Trace};
 use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
 use flow_like_types::sync::Mutex;
@@ -52,6 +53,7 @@ pub async fn execute_board(
     ));
 
     let mut internal_run = InternalRun::new(
+        &app_id,
         board,
         &flow_like_state,
         &profile.hub_profile,
@@ -95,27 +97,36 @@ pub async fn get_run_status(
 }
 
 #[tauri::command(async)]
-pub async fn get_run(
+pub async fn list_runs(
     app_handle: AppHandle,
     app_id: String,
-    run_id: String,
-) -> Result<Run, TauriFunctionError> {
-    let (run, _) = TauriFlowLikeState::get_run_and_state(&app_handle, &run_id).await?;
-    let run = run.lock().await;
-
-    let run = run.get_run().await;
-    Ok(run)
+    board_id: String,
+) -> Result<Vec<LogMeta>, TauriFunctionError> {
+    let state = TauriFlowLikeState::construct(&app_handle).await?;
+    let runs = state.lock().await.list_runs(&app_id, &board_id).await?;
+    Ok(runs)
 }
 
 #[tauri::command(async)]
-pub async fn get_run_traces(
+pub async fn get_run_meta(
     app_handle: AppHandle,
-    id: String,
-) -> Result<Vec<Trace>, TauriFunctionError> {
-    let (run, _) = TauriFlowLikeState::get_run_and_state(&app_handle, &id).await?;
-    let run = run.lock().await;
-    let traces = run.get_traces().await;
-    Ok(traces)
+    log_meta: LogMeta
+) -> Result<LogMeta, TauriFunctionError> {
+    let state = TauriFlowLikeState::construct(&app_handle).await?;
+    let meta = state.lock().await.get_run_meta(&log_meta).await?;
+    Ok(meta)
+}
+#[tauri::command(async)]
+pub async fn query_run(
+    app_handle: AppHandle,
+    log_meta: LogMeta,
+    query: String,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<Vec<LogMessage>, TauriFunctionError> {
+    let state = TauriFlowLikeState::construct(&app_handle).await?;
+    let logs = state.lock().await.query_run(&log_meta, &query, limit, offset).await?;
+    Ok(logs)
 }
 
 #[tauri::command(async)]

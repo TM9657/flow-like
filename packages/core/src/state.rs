@@ -9,6 +9,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 #[cfg(feature = "flow-runtime")]
+use crate::flow::execution::{LogMeta, LogLevel, log::LogMessage};
+
+#[cfg(feature = "flow-runtime")]
 use crate::flow::board::Board;
 #[cfg(feature = "flow-runtime")]
 use crate::flow::execution::InternalRun;
@@ -30,11 +33,14 @@ pub struct FlowLikeStores {
     pub bits_store: Option<FlowLikeStore>,
     pub user_store: Option<FlowLikeStore>,
     pub project_store: Option<FlowLikeStore>,
+    pub temporary_store: Option<FlowLikeStore>,
+    pub log_store: Option<FlowLikeStore>,
 }
 
 #[derive(Clone, Default)]
 pub struct FlowLikeCallbacks {
     pub build_project_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
+    pub build_logs_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
 }
 
 #[derive(Clone, Default)]
@@ -63,11 +69,26 @@ impl FlowLikeConfig {
         self.stores.bits_store = Some(store);
     }
 
+    pub fn register_temporary_store(&mut self, store: FlowLikeStore) {
+        self.stores.temporary_store = Some(store);
+    }
+
+    pub fn register_log_store(&mut self, store: FlowLikeStore) {
+        self.stores.log_store = Some(store);
+    }
+
     pub fn register_build_project_database(
         &mut self,
         callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
     ) {
         self.callbacks.build_project_database = Some(callback);
+    }
+
+    pub fn register_build_logs_database(
+        &mut self,
+        callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
+    ) {
+        self.callbacks.build_logs_database = Some(callback);
     }
 }
 
@@ -349,6 +370,133 @@ impl FlowLikeState {
                 "Run not found or could not be locked"
             )),
         }
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub async fn list_runs(
+        &self,
+        app_id: &str,
+        board_id: &str,
+    ) -> flow_like_types::Result<Vec<LogMeta>> {
+        let logs_store = self
+            .config
+            .read()
+            .await
+            .stores
+            .log_store
+            .clone()
+            .ok_or(flow_like_types::anyhow!("No log store found"))?;
+
+        let path = Path::from("").child("runs").child(app_id).child(board_id);
+        let runs = logs_store.as_generic().list_with_delimiter(Some(&path)).await?;
+        let mut run_metas = Vec::with_capacity(runs.objects.len());
+
+        for run in runs.objects.iter() {
+            let file_name = match run.location.filename() {
+                Some(name) => name,
+                None => continue,
+            };
+
+            if !file_name.ends_with(".json") {
+                continue;
+            }
+
+            let parts: Vec<_> = file_name.split('_').collect();
+            if let [
+                run_id,
+                version_string,
+                start_secs,
+                end_secs,
+                log_level_with_ext,
+            ] = parts.as_slice()
+            {
+                let log_level = log_level_with_ext.trim_end_matches(".json");
+                let log_level = log_level.parse::<u8>().unwrap_or(0);
+                let log_level = match log_level {
+                    0 => LogLevel::Debug,
+                    1 => LogLevel::Info,
+                    2 => LogLevel::Warn,
+                    3 => LogLevel::Error,
+                    4 => LogLevel::Fatal,
+                    _ => LogLevel::Debug,
+                };
+
+                let run_meta = LogMeta {
+                    app_id: app_id.to_string(),
+                    board_id: board_id.to_string(),
+                    run_id: run_id.to_string(),
+                    version: version_string.to_string(),
+                    nodes: None,
+                    logs: None,
+                    end: end_secs.parse::<u64>().unwrap_or(0),
+                    start: start_secs.parse::<u64>().unwrap_or(0),
+                    log_level,
+                };
+                run_metas.push(run_meta);
+            }
+        }
+        Ok(run_metas)
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub async fn get_run_meta(&self, meta: &LogMeta) -> flow_like_types::Result<LogMeta> {
+        use flow_like_types::json::from_slice;
+
+        let logs_store = self
+            .config
+            .read()
+            .await
+            .stores
+            .log_store
+            .clone()
+            .ok_or(flow_like_types::anyhow!("No log store found"))?;
+
+        let file_name = meta.to_file_name();
+        let path = Path::from("").child("runs").child(meta.app_id.clone()).child(meta.board_id.clone()).child(file_name);
+        let meta = logs_store
+            .as_generic()
+            .get(&path)
+            .await?.bytes()
+            .await?;
+
+        let meta = from_slice::<LogMeta>(&meta)?;
+        Ok(meta)
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub async fn query_run(&self, meta: &LogMeta, query: &str, limit: Option<usize>, offset: Option<usize>) -> flow_like_types::Result<Vec<LogMessage>> {
+        use flow_like_storage::{lancedb::query::{ExecutableQuery, QueryBase}, serde_arrow};
+        use flow_like_types::anyhow;
+        use futures::TryStreamExt;
+
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+
+        let db = {
+            let guard = self.config.read().await;
+            let db = guard.callbacks.build_logs_database.clone();
+            db
+        };
+
+        let db_fn = db
+            .as_ref()
+            .ok_or_else(|| anyhow!("No log database configured"))?;
+        let base_path = Path::from("runs")
+            .child(meta.app_id.clone())
+            .child(meta.board_id.clone());
+        let db = db_fn(base_path.clone()).execute().await?;
+
+        let db = db.open_table(meta.run_id.clone()).execute().await?;
+        let results = db.query().only_if(query).limit(limit).offset(offset).execute().await?;
+        let results = results.try_collect::<Vec<_>>().await?;
+
+        let mut log_messages = Vec::with_capacity(results.len() * 10);
+        for result in results {
+            let result = serde_arrow::from_record_batch::<Vec<LogMessage>>(&result).unwrap_or(vec![]);
+            log_messages.extend(result);
+        }
+
+        Ok(log_messages)
     }
 
     #[inline]
