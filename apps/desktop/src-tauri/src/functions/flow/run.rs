@@ -1,8 +1,11 @@
 use flow_like::flow::execution::log::LogMessage;
-use flow_like::flow::execution::{LogMeta, RunPayload};
+use flow_like::flow::execution::{LogLevel, LogMeta, RunPayload};
 use flow_like::flow::execution::{InternalRun, Run, RunStatus, trace::Trace};
+use flow_like::flow_like_storage::lancedb::query::{ExecutableQuery, QueryBase};
+use flow_like::flow_like_storage::{serde_arrow, Path};
 use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
 use flow_like_types::sync::Mutex;
+use futures::TryStreamExt;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
@@ -16,9 +19,9 @@ pub async fn execute_board(
     app_handle: AppHandle,
     app_id: String,
     board_id: String,
-    payload: Vec<RunPayload>,
+    payload: RunPayload,
     events: tauri::ipc::Channel<Vec<InterComEvent>>,
-) -> Result<String, TauriFunctionError> {
+) -> Result<Option<LogMeta>, TauriFunctionError> {
     let (board, flow_like_state) =
         TauriFlowLikeState::get_board_and_state(&app_handle, &board_id).await?;
     let board = Arc::new(board.lock().await.clone());
@@ -63,9 +66,30 @@ pub async fn execute_board(
     )
     .await?;
     let run_id = internal_run.run.lock().await.id.clone();
-    internal_run.execute(flow_like_state.clone()).await;
+    let meta = internal_run.execute(flow_like_state.clone()).await;
     if let Err(err) = buffered_sender.flush().await {
         println!("Error flushing buffered sender: {}", err);
+    }
+
+    if let Some(meta) = &meta {
+        let db = {
+            let guard =  flow_like_state.lock().await;
+            let guard = guard.config.read().await;
+            let db = guard.callbacks.build_logs_database.clone();
+            db
+        };
+        let db_fn = db
+                .as_ref()
+                .ok_or_else(|| flow_like_types::anyhow!("No log database configured"))?;
+        let base_path = Path::from("runs")
+            .child(app_id)
+            .child(board_id);
+        let db = db_fn(base_path.clone()).execute().await.map_err(|_| {
+            flow_like_types::anyhow!("Failed to open database: {}", base_path)
+        })?;
+        meta.flush(db).await.map_err(|_| {
+            flow_like_types::anyhow!("Failed to flush run: {}", base_path)
+        })?;
     }
 
     flow_like_state
@@ -73,7 +97,7 @@ pub async fn execute_board(
         .await
         .register_run(&run_id, Arc::new(Mutex::new(internal_run)));
 
-    Ok(run_id)
+    Ok(meta)
 }
 
 #[tauri::command(async)]
@@ -101,21 +125,54 @@ pub async fn list_runs(
     app_handle: AppHandle,
     app_id: String,
     board_id: String,
+    node_id: Option<String>,
+    from: Option<u64>,
+    to: Option<u64>,
+    status: Option<LogLevel>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    last_meta: Option<LogMeta>,
 ) -> Result<Vec<LogMeta>, TauriFunctionError> {
+    let limit = limit.unwrap_or(100);
+    let offset = offset.unwrap_or(0);
     let state = TauriFlowLikeState::construct(&app_handle).await?;
-    let runs = state.lock().await.list_runs(&app_id, &board_id).await?;
-    Ok(runs)
+    let db = {
+        let guard =  state.lock().await;
+        let guard = guard.config.read().await;
+        let db = guard.callbacks.build_logs_database.clone();
+        db
+    };
+    let db_fn = db
+            .as_ref()
+            .ok_or_else(|| flow_like_types::anyhow!("No log database configured"))?;
+    let base_path = Path::from("runs")
+        .child(app_id)
+        .child(board_id);
+    let db = db_fn(base_path.clone()).execute().await.map_err(|_| {
+        flow_like_types::anyhow!("Failed to open database: {}", base_path)
+    })?;
+    let db = db.open_table("runs").execute().await.map_err(|_| {
+        flow_like_types::anyhow!("Failed to open table: runs")
+    })?;
+    let mut query = db.query();
+    let runs = query
+        .limit(limit)
+        .offset(offset)
+        .execute()
+        .await.map_err(|_| {
+            flow_like_types::anyhow!("Failed to execute query")
+        })?;
+    let results = runs.try_collect::<Vec<_>>().await.map_err(|_| {
+        flow_like_types::anyhow!("Failed to collect results")
+    })?;
+    let mut log_meta = Vec::with_capacity(results.len() * 10);
+    for result in results {
+        let result = serde_arrow::from_record_batch::<Vec<LogMeta>>(&result).unwrap_or(vec![]);
+        log_meta.extend(result);
+    }
+    Ok(log_meta)
 }
 
-#[tauri::command(async)]
-pub async fn get_run_meta(
-    app_handle: AppHandle,
-    log_meta: LogMeta
-) -> Result<LogMeta, TauriFunctionError> {
-    let state = TauriFlowLikeState::construct(&app_handle).await?;
-    let meta = state.lock().await.get_run_meta(&log_meta).await?;
-    Ok(meta)
-}
 #[tauri::command(async)]
 pub async fn query_run(
     app_handle: AppHandle,

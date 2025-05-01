@@ -31,7 +31,7 @@ function FlowPinInnerComponent({
 	boardId,
 	appId,
 	node,
-	skipOffset
+	skipOffset,
 }: Readonly<{
 	pin: IPin;
 	index: number;

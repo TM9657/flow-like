@@ -262,7 +262,6 @@ pub fn run() {
             functions::flow::run::debug_step_run,
             functions::flow::run::get_run_status,
             functions::flow::run::list_runs,
-            functions::flow::run::get_run_meta,
             functions::flow::run::query_run,
             functions::flow::run::finalize_run,
         ]);

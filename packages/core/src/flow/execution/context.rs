@@ -217,18 +217,16 @@ impl ExecutionContext {
         Err(flow_like_types::anyhow!("Variable not found"))
     }
 
-    pub async fn get_payload(&self) -> flow_like_types::Result<RunPayload> {
+    pub async fn get_payload(&self) -> flow_like_types::Result<Arc<RunPayload>> {
         let payload = self
             .run
             .upgrade()
             .ok_or_else(|| flow_like_types::anyhow!("Run not found"))?
             .lock()
             .await
-            .payload
-            .get(&self.id)
-            .cloned();
+            .payload.clone();
 
-        if let Some(payload) = payload {
+        if payload.id == self.id {
             return Ok(payload);
         }
         Err(flow_like_types::anyhow!("Payload not found"))

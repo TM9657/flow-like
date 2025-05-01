@@ -2,8 +2,23 @@ use flow_like_storage::{arrow_array::RecordBatch, lancedb::arrow::{self, arrow_s
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
+use once_cell::sync::Lazy;
 
 use super::LogLevel;
+
+static STORED_LOG_MESSAGE_FIELDS: Lazy<Vec<FieldRef>> = Lazy::new(|| {
+    Vec::<FieldRef>::from_type::<StoredLogMessage>(
+        TracingOptions::default().allow_null_fields(true),
+    )
+    .expect("derive FieldRef for StoredLogMessage")
+});
+
+pub fn into_arrow<I>(logs: I) -> flow_like_types::Result<RecordBatch>
+where
+    I: IntoIterator<Item = LogMessage>,
+{
+    LogMessage::into_arrow(logs)
+}
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct LogStat {
@@ -37,6 +52,60 @@ pub struct LogMessage {
     pub end: SystemTime,
 }
 
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct StoredLogMessage {
+    pub message: String,
+    pub operation_id: Option<String>,
+    pub node_id: Option<String>,
+    pub log_level: u8,
+    pub token_in: Option<u64>,
+    pub token_out: Option<u64>,
+    pub bit_ids: Option<Vec<String>>,
+    pub start: u64,
+    pub end: u64,
+}
+
+impl From<LogMessage> for StoredLogMessage {
+    fn from(log: LogMessage) -> Self {
+        let log_level = log.log_level.to_u8();
+        let token_in = log.stats.as_ref().and_then(|s| s.token_in);
+        let token_out = log.stats.as_ref().and_then(|s| s.token_out);
+        let bit_ids = log.stats.and_then(|s| s.bit_ids);
+
+        StoredLogMessage {
+            message: log.message,
+            operation_id: log.operation_id,
+            node_id: log.node_id,
+            log_level,
+            token_in,
+            token_out,
+            bit_ids,
+            start: log.start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+            end: log.end.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+        }
+    }
+}
+
+impl From<StoredLogMessage> for LogMessage {
+    fn from(log: StoredLogMessage) -> Self {
+        let log_level = LogLevel::from_u8(log.log_level);
+        let token_in = log.token_in;
+        let token_out = log.token_out;
+        let bit_ids = log.bit_ids;
+
+        LogMessage {
+            message: log.message,
+            operation_id: log.operation_id,
+            node_id: log.node_id,
+            log_level,
+            stats: Some(LogStat::new(token_in, token_out, bit_ids)),
+            start: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(log.start),
+            end: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(log.end),
+        }
+    }
+}
+
+
 impl LogMessage {
     pub fn new(message: &str, log_level: LogLevel, operation_id: Option<String>) -> Self {
         let now = SystemTime::now();
@@ -59,9 +128,16 @@ impl LogMessage {
         self.end = SystemTime::now();
     }
 
-    pub fn into_arrow(logs: &Vec<LogMessage>) -> flow_like_types::Result<RecordBatch> {
-        let fields = Vec::<FieldRef>::from_type::<LogMessage>(TracingOptions::default())?;
-        let batch = serde_arrow::to_record_batch(&fields,logs)?;
+    pub fn into_arrow<I>(logs: I) -> flow_like_types::Result<RecordBatch>
+    where
+    I: IntoIterator<Item = LogMessage>,
+    {
+        let stored = logs.into_iter()
+        .map(StoredLogMessage::from)
+        .collect::<Vec<StoredLogMessage>>();
+
+        let fields = &*STORED_LOG_MESSAGE_FIELDS;
+        let batch = serde_arrow::to_record_batch(fields,&stored)?;
         Ok(batch)
     }
 }

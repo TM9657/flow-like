@@ -14,12 +14,12 @@ import {
 	type IFileMetadata,
 	type IGenericCommand,
 	type IIntercomEvent,
+	type ILog,
 	type ILogLevel,
+	type ILogMetadata,
 	type INode,
 	type IProfile,
-	type IRun,
 	type IRunPayload,
-	type IRunUpdateEvent,
 	type ISettingsProfile,
 	useBackendStore,
 	useDownloadManager,
@@ -40,8 +40,8 @@ export class TauriBackend implements IBackendState {
 		return board;
 	}
 
-	async getOpenBoards(): Promise<[string, string][]> {
-		const boards: [string, string][] = await invoke("get_open_boards");
+	async getOpenBoards(): Promise<[string, string, string][]> {
+		const boards: [string, string, string][] = await invoke("get_open_boards");
 		return boards;
 	}
 
@@ -53,9 +53,9 @@ export class TauriBackend implements IBackendState {
 	async executeBoard(
 		appId: string,
 		boardId: string,
-		payload: IRunPayload[],
+		payload: IRunPayload,
 		cb?: (event: IIntercomEvent[]) => void,
-	): Promise<string> {
+	): Promise<ILogMetadata | undefined> {
 		const channel = new Channel<IIntercomEvent[]>();
 		let closed = false;
 
@@ -64,7 +64,7 @@ export class TauriBackend implements IBackendState {
 			if (cb) cb(events);
 		};
 
-		const runId: string = await invoke("execute_board", {
+		const runId: ILogMetadata | undefined = await invoke("execute_board", {
 			appId: appId,
 			boardId: boardId,
 			payload: payload,
@@ -76,12 +76,44 @@ export class TauriBackend implements IBackendState {
 		return runId;
 	}
 
-	async getRun(appId: string, runId: string): Promise<IRun> {
-		const run: IRun = await invoke("get_run", {
+	async listRuns(
+		appId: string,
+		boardId: string,
+		nodeId?: string,
+		from?: number,
+		to?: number,
+		status?: ILogLevel,
+		limit?: number,
+		offset?: number,
+		lastMeta?: ILogMetadata,
+	): Promise<ILogMetadata[]> {
+		const runs: ILogMetadata[] = await invoke("list_runs", {
 			appId: appId,
-			runId: runId,
+			boardId: boardId,
+			nodeId: nodeId,
+			from: from,
+			to: to,
+			status: status,
+			limit: limit,
+			offset: offset,
+			lastMeta: lastMeta,
 		});
-		return run;
+		return runs;
+	}
+
+	async queryRun(
+		logMeta: ILogMetadata,
+		query: string,
+		limit?: number,
+		offset?: number,
+	): Promise<ILog[]> {
+		const runs: ILog[] = await invoke("query_run", {
+			logMeta: logMeta,
+			query: query,
+			limit: limit,
+			offset: offset,
+		});
+		return runs;
 	}
 
 	async finalizeRun(appId: string, runId: string) {

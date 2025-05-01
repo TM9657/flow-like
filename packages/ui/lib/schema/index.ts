@@ -33,12 +33,10 @@ export {
 	IPinType,
 } from "./flow/pin";
 export type {
-	IRun,
-	ITrace,
-	ILogMessage,
+	ILog,
 	ILogStat,
-	IRunStatus,
-} from "./flow/run";
+} from "./flow/log";
+export type { ILogMetadata } from "./flow/log-metadata";
 
 export type { IAddNode } from "./flow/board/commands/add-node";
 export type { IConnectPins } from "./flow/board/commands/connect-pins";

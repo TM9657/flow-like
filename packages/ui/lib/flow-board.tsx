@@ -9,11 +9,15 @@ import {
 } from "./command/generic-command";
 import { toastSuccess } from "./messages";
 import type { IGenericCommand, IValueType } from "./schema";
-import { type IBoard, type IComment, ICommentType, type ILayer } from "./schema/flow/board";
+import {
+	type IBoard,
+	type IComment,
+	ICommentType,
+	type ILayer,
+} from "./schema/flow/board";
 import { IVariableType } from "./schema/flow/node";
 import type { INode } from "./schema/flow/node";
 import type { IPin, IPinType } from "./schema/flow/pin";
-import type { IRun, ITrace } from "./schema/flow/run";
 
 interface ISerializedPin {
 	id: string;
@@ -181,12 +185,9 @@ export function doPinsMatch(
 	return true;
 }
 
-function hashNode(node: INode | IComment | ILayer, traces?: ITrace[]) {
+function hashNode(node: INode | IComment | ILayer) {
 	const hash = crypto.createHash("md5");
 	hash.update(JSON.stringify(node));
-	if (traces) {
-		hash.update(JSON.stringify(traces));
-	}
 	return hash.digest("hex");
 }
 
@@ -194,20 +195,16 @@ export function parseBoard(
 	board: IBoard,
 	appId: string,
 	executeBoard: (node: INode, payload?: object) => Promise<void>,
-	openTraces: (node: INode, traces: ITrace[]) => Promise<void>,
 	executeCommand: (command: IGenericCommand, append: boolean) => Promise<any>,
 	selected: Set<string>,
-	run?: IRun,
 	connectionMode?: string,
 	oldNodes?: any[],
 	oldEdges?: any[],
-	currentLayer?: string
+	currentLayer?: string,
 ) {
-	console.dir(board)
 	const nodes: any[] = [];
 	const edges: any[] = [];
 	const cache = new Map<string, [IPin, INode]>();
-	const traces = new Map<string, ITrace[]>();
 	const oldNodesMap = new Map<string, any>();
 	const oldEdgesMap = new Map<string, any>();
 
@@ -219,22 +216,13 @@ export function parseBoard(
 		oldEdgesMap.set(edge.id, edge);
 	}
 
-	for (const trace of run?.traces ?? []) {
-		if (traces.has(trace.node_id)) {
-			traces.get(trace.node_id)?.push(trace);
-			continue;
-		}
-
-		traces.set(trace.node_id, [trace]);
-	}
-
 	for (const node of Object.values(board.nodes)) {
 		for (const pin of Object.values(node.pins)) {
 			cache.set(pin.id, [pin, node]);
 		}
-		const nodeLayer = ((node.layer ?? "") === "") ? undefined : node.layer;
+		const nodeLayer = (node.layer ?? "") === "" ? undefined : node.layer;
 		if (nodeLayer !== currentLayer) continue;
-		const hash = hashNode(node, traces.get(node.id));
+		const hash = hashNode(node);
 		const oldNode = oldNodesMap.get(hash);
 		if (oldNode) {
 			nodes.push(oldNode);
@@ -255,14 +243,43 @@ export function parseBoard(
 					onExecute: async (node: INode, payload?: object) => {
 						await executeBoard(node, payload);
 					},
-					openTrace: async (traces: ITrace[]) => {
-						await openTraces(node, traces);
-					},
-					traces: traces.get(node.id) || [],
 				},
 				selected: selected.has(node.id),
 			});
 		}
+	}
+
+	const activeLayer = new Set()
+	for (const layer of Object.values(board.layers)) {
+		const hash = hashNode(layer);
+		const oldNode = oldNodesMap.get(hash);
+		if (oldNode) {
+			nodes.push(oldNode);
+			continue;
+		}
+
+
+		const lookup: Record<string, INode> = {};
+		for (const pin of Object.values(layer.pins)) {
+			const [_, node] = cache.get(pin.id) || [];
+			if (node) lookup[pin.id] = node;
+		}
+
+		activeLayer.add(layer.id)
+		nodes.push({
+			id: layer.id,
+			type: "layerNode",
+			position: { x: layer.coordinates[0], y: layer.coordinates[1] },
+			data: {
+				label: layer.id,
+				boardId: board.id,
+				appId: appId,
+				hash: hash,
+				layer: layer,
+				pinLookup: lookup,
+			},
+			selected: selected.has(layer.id),
+		});
 	}
 
 	for (const [pin, node] of cache.values()) {
@@ -279,13 +296,15 @@ export function parseBoard(
 				continue;
 			}
 
+			const sourceNode = activeLayer.has(node.layer ?? "") ? node.layer : node.id;
+			const connectedNodeId = activeLayer.has(connectedNode.layer ?? "") ? connectedNode.layer : connectedNode.id;
 			edges.push({
 				id: `${pin.id}-${connectedTo}`,
-				source: node.id,
+				source: sourceNode,
 				sourceHandle: pin.id,
 				animated: pin.data_type !== "Execution",
 				reconnectable: true,
-				target: connectedNode.id,
+				target: connectedNodeId,
 				targetHandle: conntectedPin.id,
 				style: { stroke: typeToColor(pin.data_type) },
 				type: connectionMode ?? "simplebezier",
@@ -323,37 +342,9 @@ export function parseBoard(
 		});
 	}
 
-	for (const layer of Object.values(board.layers)) {
-		const hash = hashNode(layer);
-		const oldNode = oldNodesMap.get(hash);
-		if (oldNode) {
-			nodes.push(oldNode);
-			continue;
-		}
 
-		const lookup: Record<string, INode> = {}
-		for (const pin of Object.values(layer.pins)) {
-			let [_, node] = cache.get(pin.id) || [];
-			if(node) lookup[pin.id] = node;
-		}
 
-		nodes.push({
-			id: layer.id,
-			type: "layerNode",
-			position: { x: layer.coordinates[0], y: layer.coordinates[1] },
-			data: {
-				label: layer.id,
-				boardId: board.id,
-				appId: appId,
-				hash: hash,
-				layer: layer,
-				pinLookup: lookup,
-			},
-			selected: selected.has(layer.id),
-		});
-	}
-
-	return { nodes, edges, cache, traces };
+	return { nodes, edges, cache };
 }
 
 export function handleCopy(nodes: any[], event?: ClipboardEvent) {

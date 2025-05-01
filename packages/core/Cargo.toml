@@ -50,6 +50,7 @@ json5 = "0.4.1"
 schemars.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
+once_cell = "1.21.3"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }

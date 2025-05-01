@@ -26,6 +26,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
 	ArrowBigLeftDashIcon,
+	HistoryIcon,
 	NotebookPenIcon,
 	PlayCircleIcon,
 	Redo2Icon,
@@ -54,9 +55,10 @@ import {
 	ResizablePanel,
 	ResizablePanelGroup,
 } from "../../components/ui/resizable";
-import { useInvoke } from "../../hooks/use-invoke";
+import { useInvalidateInvoke, useInvoke } from "../../hooks/use-invoke";
 import {
 	type IGenericCommand,
+	type ILogMetadata,
 	addNodeCommand,
 	connectPinsCommand,
 	disconnectPinsCommand,
@@ -81,7 +83,6 @@ import {
 } from "../../lib/schema/flow/board";
 import { type INode, IVariableType } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
-import type { IRun, ITrace } from "../../lib/schema/flow/run";
 import { convertJsonToUint8Array } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
 import { useFlowBoardParentState } from "../../state/flow-board-parent-state";
@@ -104,11 +105,14 @@ import {
 	Textarea,
 } from "../ui";
 import { useUndoRedo } from "./flow-history";
+import { FlowRuns } from "./flow-runs";
 import { LayerNode } from "./layer-node";
+import { useLogAggregation } from "../..";
 export function FlowBoard({
 	appId,
 	boardId,
 }: Readonly<{ appId: string; boardId: string }>) {
+	const invalidate = useInvalidateInvoke();
 	const { pushCommand, pushCommands, redo, undo } = useUndoRedo(appId, boardId);
 	const router = useRouter();
 	const backend = useBackend();
@@ -116,12 +120,13 @@ export function FlowBoard({
 	const edgeReconnectSuccessful = useRef(true);
 	const { isOver, setNodeRef, active } = useDroppable({ id: "flow" });
 	const parentRegister = useFlowBoardParentState();
-
+	const { refetchLogs, setCurrentMetadata } = useLogAggregation();
 	const flowRef = useRef<any>(null);
 
 	const flowPanelRef = useRef<ImperativePanelHandle>(null);
 	const logPanelRef = useRef<ImperativePanelHandle>(null);
 	const varPanelRef = useRef<ImperativePanelHandle>(null);
+	const runsPanelRef = useRef<ImperativePanelHandle>(null);
 
 	const { resolvedTheme } = useTheme();
 
@@ -131,12 +136,8 @@ export function FlowBoard({
 	const currentProfile = useInvoke(backend.getSettingsProfile, []);
 	const { addRun, removeRun, pushUpdate } = useRunExecutionStore();
 
-	const [traces, setTraces] = useState<
-		{ node?: INode; traces: ITrace[] } | undefined
-	>(undefined);
 	const [nodes, setNodes] = useNodesState<any>([]);
 	const [edges, setEdges] = useEdgesState<any>([]);
-	const [currentRun, setCurrentRun] = useState<IRun | undefined>(undefined);
 	const [filteredNodes, setFilteredNodes] = useState<INode[]>([]);
 	const [droppedPin, setDroppedPin] = useState<IPin | undefined>(undefined);
 	const [clickPosition, setClickPosition] = useState({ x: 0, y: 0 });
@@ -181,13 +182,11 @@ export function FlowBoard({
 	useEffect(() => {
 		if (!logPanelRef.current) return;
 
-		if (!traces) return logPanelRef.current.collapse();
-
 		logPanelRef.current.expand();
 		const size = logPanelRef.current.getSize();
 
 		if (size < 10) logPanelRef.current.resize(45);
-	}, [traces, logPanelRef.current]);
+	}, [logPanelRef.current]);
 
 	function toggleVars() {
 		if (!varPanelRef.current) return;
@@ -202,19 +201,32 @@ export function FlowBoard({
 		if (size < 10) varPanelRef.current.resize(20);
 	}
 
+	function toggleRunHistory() {
+		if (!runsPanelRef.current) return;
+		const isCollapsed = runsPanelRef.current.isCollapsed();
+		isCollapsed
+			? runsPanelRef.current.expand()
+			: runsPanelRef.current.collapse();
+
+		if (!isCollapsed) {
+			return;
+		}
+
+		const size = runsPanelRef.current.getSize();
+		if (size < 10) runsPanelRef.current.resize(20);
+	}
+
 	const executeBoard = useCallback(
 		async (node: INode, payload?: object) => {
-			setCurrentRun(undefined);
 			let added = false;
-			const runId: string | undefined = await backend.executeBoard(
+			console.log(appId);
+			const runMeta: ILogMetadata | undefined = await backend.executeBoard(
 				appId,
 				boardId,
-				[
-					{
-						id: node.id,
-						payload: payload,
-					},
-				],
+				{
+					id: node.id,
+					payload: payload,
+				},
 				(update) => {
 					const runUpdates = update
 						.filter((item) => item.event_type.startsWith("run:"))
@@ -229,30 +241,20 @@ export function FlowBoard({
 					pushUpdate(firstItem.run_id, runUpdates);
 				},
 			);
-			if (!runId) {
+			if (!runMeta) {
 				toastError(
 					"Failed to execute board",
 					<PlayCircleIcon className="w-4 h-4" />,
 				);
 				return;
 			}
-			removeRun(runId);
-			const result: IRun | undefined = await backend.getRun(appId, runId);
-			setCurrentRun(result);
-			await backend.finalizeRun(appId, runId);
+			removeRun(runMeta.run_id);
+			await backend.finalizeRun(appId, runMeta.run_id);
+			await refetchLogs(backend);
+			setCurrentMetadata(runMeta);
 		},
-		[boardId, backend],
+		[appId, boardId, backend],
 	);
-
-	const openTraces = useCallback(async function openTraces(
-		node: INode,
-		traces: ITrace[],
-	) {
-		setTraces({
-			node: node,
-			traces: traces,
-		});
-	}, []);
 
 	const handlePasteCB = useCallback(
 		async (event: ClipboardEvent) => {
@@ -517,14 +519,12 @@ export function FlowBoard({
 			board.data,
 			appId,
 			executeBoard,
-			openTraces,
 			executeCommand,
 			selected.current,
-			currentRun,
 			currentProfile.data?.flow_settings.connection_mode,
 			nodes,
 			edges,
-			layer
+			layer,
 		);
 
 		setNodes(parsed.nodes);
@@ -536,7 +536,7 @@ export function FlowBoard({
 			stage: board.data.stage,
 			logLevel: board.data.log_level,
 		});
-	}, [board.data, currentRun, layer]);
+	}, [board.data, layer]);
 
 	const miniSearch = useMemo(
 		() =>
@@ -574,7 +574,12 @@ export function FlowBoard({
 	}, [catalog.data]);
 
 	const nodeTypes = useMemo(
-		() => ({ flowNode: FlowNode, commentNode: CommentNode, layerNode: LayerNode, node: FlowNode }),
+		() => ({
+			flowNode: FlowNode,
+			commentNode: CommentNode,
+			layerNode: LayerNode,
+			node: FlowNode,
+		}),
 		[],
 	);
 	const { screenToFlowPosition } = useReactFlow();
@@ -973,21 +978,28 @@ export function FlowBoard({
 								setEditBoard(true);
 							},
 						},
-						...(currentRun
-							? [
-									{
-										icon: <ScrollIcon />,
-										title: "Logs",
-										onClick: async () => {
-											setTraces((old) =>
-												old
-													? undefined
-													: { node: undefined, traces: currentRun.traces },
-											);
-										},
-									},
-								]
-							: ([] as any)),
+						{
+							icon: <HistoryIcon />,
+							title: "Run History",
+							onClick: async () => {
+								toggleRunHistory();
+							},
+						},
+						// ...(currentRun
+						// 	? [
+						// 			{
+						// 				icon: <ScrollIcon />,
+						// 				title: "Logs",
+						// 				onClick: async () => {
+						// 					setTraces((old) =>
+						// 						old
+						// 							? undefined
+						// 							: { node: undefined, traces: currentRun.traces },
+						// 					);
+						// 				},
+						// 			},
+						// 		]
+						// 	: ([] as any)),
 					]}
 				/>
 			</div>
@@ -1072,7 +1084,7 @@ export function FlowBoard({
 									ref={setNodeRef}
 								>
 									<div className="absolute top-0 left-0 right-0 p-1 z-40 flex flex-row items-center gap-1">
-										{openBoards.data?.map(([boardLoadId, boardName]) => (
+										{openBoards.data?.map(([appId, boardLoadId, boardName]) => (
 											<Link
 												key={boardLoadId}
 												className={`flex flex-row items-center gap-2 border p-1 px-2 bg-background rounded-md hover:bg-card ${boardLoadId === boardId ? "bg-card" : ""}`}
@@ -1092,7 +1104,9 @@ export function FlowBoard({
 															);
 															if (nextBoard) {
 																await openBoards.refetch();
-																router.push(`/flow?id=${nextBoard[0]}`);
+																router.push(
+																	`/flow?id=${nextBoard[1]}&app=${nextBoard[0]}`,
+																);
 																return;
 															}
 															router.push("/");
@@ -1156,12 +1170,12 @@ export function FlowBoard({
 						</ResizablePanel>
 						<ResizableHandle withHandle />
 						<ResizablePanel
-							hidden={!traces || !currentRun}
+							hidden={true}
 							ref={logPanelRef}
 							collapsible={true}
 							autoSave="flow-log"
 						>
-							{traces && currentRun && (
+							{/* {traces && currentRun && (
 								<Traces
 									node={traces.node}
 									result={currentRun}
@@ -1170,9 +1184,19 @@ export function FlowBoard({
 										if (!open) setTraces(undefined);
 									}}
 								/>
-							)}
+							)} */}
 						</ResizablePanel>
 					</ResizablePanelGroup>
+				</ResizablePanel>
+				<ResizableHandle withHandle />
+				<ResizablePanel
+					autoSave="flow-log"
+					defaultSize={0}
+					collapsible={true}
+					collapsedSize={0}
+					ref={runsPanelRef}
+				>
+					{board.data && <FlowRuns executeBoard={executeBoard} nodes={board.data.nodes} appId={appId} boardId={boardId} />}
 				</ResizablePanel>
 			</ResizablePanelGroup>
 		</div>

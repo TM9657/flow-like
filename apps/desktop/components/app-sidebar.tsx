@@ -740,7 +740,10 @@ function Flows() {
 								tooltip={"Flows"}
 								onClick={() => {
 									const firstBoard = openBoards.data?.[0];
-									if (firstBoard) router.push(`/flow?id=${firstBoard[0]}`);
+									if (firstBoard)
+										router.push(
+											`/flow?id=${firstBoard[1]}&app=${firstBoard[0]}`,
+										);
 								}}
 							>
 								<WorkflowIcon />
@@ -750,10 +753,10 @@ function Flows() {
 						</CollapsibleTrigger>
 						<CollapsibleContent>
 							<SidebarMenuSub>
-								{openBoards.data?.map(([boardId, boardName]) => (
+								{openBoards.data?.map(([appId, boardId, boardName]) => (
 									<SidebarMenuSubItem key={boardId}>
 										<SidebarMenuSubButton asChild>
-											<Link href={`/flow?id=${boardId}`}>
+											<Link href={`/flow?id=${boardId}&app=${appId}`}>
 												<span
 													className={
 														params.get("id") === boardId

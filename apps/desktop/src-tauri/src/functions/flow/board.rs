@@ -1,14 +1,14 @@
-use crate::{functions::TauriFunctionError, state::TauriFlowLikeState};
+use crate::{functions::TauriFunctionError, state::{TauriFlowLikeState, TauriSettingsState}};
 use flow_like::{
     app::App,
     flow::{
-        board::{Board, ExecutionStage, commands::GenericCommand},
+        board::{self, commands::GenericCommand, Board, ExecutionStage},
         execution::LogLevel,
     },
     flow_like_storage::Path,
 };
 use flow_like_types::sync::Mutex;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
@@ -85,16 +85,31 @@ pub async fn close_board(handler: AppHandle, board_id: String) -> Result<(), Tau
 
 #[tauri::command(async)]
 pub async fn get_open_boards(
-    handler: AppHandle,
-) -> Result<Vec<(String, String)>, TauriFunctionError> {
-    let board_state = TauriFlowLikeState::construct(&handler).await?;
+    app_handle: AppHandle,
+) -> Result<Vec<(String, String, String)>, TauriFunctionError> {
+    let profile = TauriSettingsState::current_profile(&app_handle).await?;
+    let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
 
-    let board_state = board_state.lock().await.board_registry.clone();
+    let mut board_app_lookup = HashMap::new();
+
+    for app in profile.apps.iter() {
+        if let Ok(app) = App::load(app.clone(), flow_like_state.clone()).await {
+            let app = app;
+            for board_id in app.boards.iter() {
+                board_app_lookup.insert(board_id.clone(), app.id.clone());
+            }
+        }
+    }
+
+    let board_state = flow_like_state.lock().await.board_registry.clone();
     let mut boards = Vec::with_capacity(board_state.len());
     for entry in board_state.iter() {
         let value = entry.value();
+        let board_id =  entry.key().clone();
         let board = value.lock().await;
-        boards.push((entry.key().clone(), board.name.clone()));
+        if let Some(app_id) = board_app_lookup.get(&board_id) {
+            boards.push((app_id.clone(), board_id, board.name.clone()));
+        }
     }
 
     Ok(boards)
