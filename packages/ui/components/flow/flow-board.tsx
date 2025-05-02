@@ -65,6 +65,7 @@ import {
 	disconnectPinsCommand,
 	moveNodeCommand,
 	removeCommentCommand,
+	removeLayerCommand,
 	removeNodeCommand,
 	upsertCommentCommand,
 } from "../../lib";
@@ -157,6 +158,11 @@ export function FlowBoard({
 		() => (resolvedTheme === "dark" ? "dark" : "light"),
 		[resolvedTheme],
 	);
+
+	const pinToNode = useCallback((pinId: string) => {
+		const [_, node] = pinCache.get(pinId) || [];
+		return node
+	}, [nodes])
 
 	const executeCommand = useCallback(
 		async (command: IGenericCommand, append = false): Promise<any> => {
@@ -692,6 +698,22 @@ export function FlowBoard({
 									comment: foundComment,
 								});
 							}
+
+							const foundLayer = Object.values(
+								board.data?.layers || {},
+							).find((layer) => layer.id === change.id);
+
+							if (foundLayer) {
+								return removeLayerCommand({
+									child_layers: [],
+									layer: foundLayer,
+									layer_nodes: [],
+									layers: [],
+									nodes: [],
+									preserve_nodes: false
+								});
+							}
+
 							return undefined;
 						})
 						.filter((command) => command !== undefined) as any[],
@@ -765,21 +787,30 @@ export function FlowBoard({
 			const new_id = `${newConnection.sourceHandle}-${newConnection.targetHandle}`;
 			if (oldEdge.id === new_id) return;
 
+			const oldEdgeToNode = pinToNode(oldEdge.targetHandle);
+			const oldEdgeFromNode = pinToNode(oldEdge.sourceHandle);
+
+			if (!oldEdgeToNode || !oldEdgeFromNode) return;
+
 			const disconnectCommand = disconnectPinsCommand({
-				from_node: oldEdge.source,
+				from_node: oldEdgeFromNode.id,
 				from_pin: oldEdge.sourceHandle,
-				to_node: oldEdge.target,
+				to_node: oldEdgeToNode.id,
 				to_pin: oldEdge.targetHandle,
 			});
 
 			await executeCommand(disconnectCommand);
 
 			if (!newConnection.targetHandle || !newConnection.sourceHandle) return;
+			const newConnectionSourceNode = pinToNode(newConnection.sourceHandle);
+			const newConnectionTargetNode = pinToNode(newConnection.targetHandle);
+
+			if (!newConnectionSourceNode || !newConnectionTargetNode) return;
 
 			const connectCommand = connectPinsCommand({
-				from_node: newConnection.source,
+				from_node: newConnectionSourceNode.id,
 				from_pin: newConnection.sourceHandle,
-				to_node: newConnection.target,
+				to_node: newConnectionTargetNode.id,
 				to_pin: newConnection.targetHandle,
 			});
 
@@ -795,10 +826,13 @@ export function FlowBoard({
 		async (event: any, edge: any) => {
 			if (!edgeReconnectSuccessful.current) {
 				const { source, target, sourceHandle, targetHandle } = edge;
+				const from_node = pinToNode(sourceHandle);
+				const to_node = pinToNode(targetHandle);
+				if (!from_node || !to_node) return;
 				const command = disconnectPinsCommand({
-					from_node: source,
+					from_node: from_node?.id,
 					from_pin: sourceHandle,
-					to_node: target,
+					to_node: to_node?.id,
 					to_pin: targetHandle,
 				});
 				await executeCommand(command);

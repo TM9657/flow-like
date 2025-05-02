@@ -92,6 +92,7 @@ impl Command for CopyPasteCommand {
             new_node.icon = blueprint_node.icon.clone();
             new_node.scores = blueprint_node.scores.clone();
             new_node.start = blueprint_node.start;
+            new_node.event_callback = blueprint_node.event_callback.clone();
             new_node.coordinates = Some((
                 new_node.coordinates.unwrap_or((0.0, 0.0, 0.0)).0 + offset.0,
                 new_node.coordinates.unwrap_or((0.0, 0.0, 0.0)).1 + offset.1,
