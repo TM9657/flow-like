@@ -1,13 +1,10 @@
 use flow_like_storage::{
-    arrow_array::RecordBatch,
-    lancedb::arrow::{
-        self, IntoArrow, RecordBatchReader,
-        arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit},
-    },
-    serde_arrow::{
+    arrow_array::RecordBatch, async_duckdb::duckdb::arrow::compute::kernels, lancedb::arrow::{
+        self, arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit}, IntoArrow, RecordBatchReader
+    }, serde_arrow::{
         self,
         schema::{SchemaLike, TracingOptions},
-    },
+    }
 };
 use once_cell::sync::Lazy;
 use schemars::JsonSchema;
@@ -94,12 +91,12 @@ impl From<LogMessage> for StoredLogMessage {
                 .start
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
-                .as_secs(),
+                .as_micros() as u64,
             end: log
                 .end
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
-                .as_secs(),
+                .as_micros() as u64,
         }
     }
 }
@@ -117,8 +114,8 @@ impl From<StoredLogMessage> for LogMessage {
             node_id: log.node_id,
             log_level,
             stats: Some(LogStat::new(token_in, token_out, bit_ids)),
-            start: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(log.start),
-            end: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(log.end),
+            start: SystemTime::UNIX_EPOCH + std::time::Duration::from_micros(log.start),
+            end: SystemTime::UNIX_EPOCH + std::time::Duration::from_micros(log.end),
         }
     }
 }

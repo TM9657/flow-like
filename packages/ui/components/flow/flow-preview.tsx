@@ -56,6 +56,7 @@ export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
 				nanos_since_epoch: 0,
 				secs_since_epoch: 0,
 			},
+			layers: {},
 			version: [0, 0, 0],
 			variables: {},
 			viewport: [0, 0, 0, 0],
@@ -64,7 +65,6 @@ export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
 		const parsedBoard = parseBoard(
 			board,
 			"",
-			async () => {},
 			async () => {},
 			async () => {},
 			new Set(),

@@ -132,6 +132,24 @@ impl LogMeta {
         Ok(batch)
     }
 
+    pub fn into_duckdb_types() -> String {
+        let fields = &*STORED_META_FIELDS;
+        let mut types = vec![];
+
+        for field in fields {
+            let field_type = match field.data_type() {
+                flow_like_storage::arrow_schema::DataType::Utf8 => "TEXT",
+                flow_like_storage::arrow_schema::DataType::UInt64 => "INTEGER",
+                flow_like_storage::arrow_schema::DataType::Int64 => "INTEGER",
+                flow_like_storage::arrow_schema::DataType::Boolean => "BOOLEAN",
+                _ => "TEXT",
+            };
+            types.push(format!("{} {}", field.name(), field_type));
+        }
+
+        types.join(", ")
+    }
+
     pub async fn flush(&self, db: Connection) -> flow_like_types::Result<()> {
         let arrow_batch = self.into_arrow()?;
         let schema = arrow_batch.schema();

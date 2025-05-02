@@ -16,3 +16,20 @@ export function logLevelFromNumber(logLevel: number): ILogLevel {
 			throw new Error(`Invalid log level: ${logLevel}`);
 	}
 }
+
+export function logLevelToNumber(logLevel: ILogLevel): number {
+	switch (logLevel) {
+		case ILogLevel.Debug:
+			return 0;
+		case ILogLevel.Info:
+			return 1;
+		case ILogLevel.Warn:
+			return 2;
+		case ILogLevel.Error:
+			return 3;
+		case ILogLevel.Fatal:
+			return 4;
+		default:
+			throw new Error(`Invalid log level: ${logLevel}`);
+	}
+}

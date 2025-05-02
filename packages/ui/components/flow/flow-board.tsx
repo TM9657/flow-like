@@ -120,7 +120,7 @@ export function FlowBoard({
 	const edgeReconnectSuccessful = useRef(true);
 	const { isOver, setNodeRef, active } = useDroppable({ id: "flow" });
 	const parentRegister = useFlowBoardParentState();
-	const { refetchLogs, setCurrentMetadata } = useLogAggregation();
+	const { refetchLogs, setCurrentMetadata, currentMetadata } = useLogAggregation();
 	const flowRef = useRef<any>(null);
 
 	const flowPanelRef = useRef<ImperativePanelHandle>(null);
@@ -213,7 +213,22 @@ export function FlowBoard({
 		}
 
 		const size = runsPanelRef.current.getSize();
-		if (size < 10) runsPanelRef.current.resize(20);
+		if (size < 10) runsPanelRef.current.resize(30);
+	}
+
+	function toggleLogs() {
+		if (!logPanelRef.current) return;
+		const isCollapsed = logPanelRef.current.isCollapsed();
+		isCollapsed
+			? logPanelRef.current.expand()
+			: logPanelRef.current.collapse();
+
+		if (!isCollapsed) {
+			return;
+		}
+
+		const size = logPanelRef.current.getSize();
+		if (size < 10) logPanelRef.current.resize(20);
 	}
 
 	const executeBoard = useCallback(
@@ -253,7 +268,7 @@ export function FlowBoard({
 			await refetchLogs(backend);
 			setCurrentMetadata(runMeta);
 		},
-		[appId, boardId, backend],
+		[appId, boardId, backend, refetchLogs],
 	);
 
 	const handlePasteCB = useCallback(
@@ -725,16 +740,12 @@ export function FlowBoard({
 							if (!fromPin || !toPin) return undefined;
 							if (!fromNode || !toNode) return undefined;
 
-							return {
-								command: "disconnect_pins",
-								args: {
-									boardId: boardId,
-									fromNode: fromNode.id,
-									fromPin: fromPin.id,
-									toNode: toNode.id,
-									toPin: toPin.id,
-								},
-							};
+							return disconnectPinsCommand({
+								from_node: fromNode.id,
+								from_pin: fromPin.id,
+								to_node: toNode.id,
+								to_pin: toPin.id,
+							})
 						})
 						.filter((command: any) => command !== undefined) as any[],
 				);
@@ -985,21 +996,17 @@ export function FlowBoard({
 								toggleRunHistory();
 							},
 						},
-						// ...(currentRun
-						// 	? [
-						// 			{
-						// 				icon: <ScrollIcon />,
-						// 				title: "Logs",
-						// 				onClick: async () => {
-						// 					setTraces((old) =>
-						// 						old
-						// 							? undefined
-						// 							: { node: undefined, traces: currentRun.traces },
-						// 					);
-						// 				},
-						// 			},
-						// 		]
-						// 	: ([] as any)),
+						...(currentMetadata
+							? [
+									{
+										icon: <ScrollIcon />,
+										title: "Logs",
+										onClick: async () => {
+											toggleLogs()
+										},
+									},
+								]
+							: ([] as any)),
 					]}
 				/>
 			</div>
@@ -1170,28 +1177,21 @@ export function FlowBoard({
 						</ResizablePanel>
 						<ResizableHandle withHandle />
 						<ResizablePanel
-							hidden={true}
+							hidden={!currentMetadata}
 							ref={logPanelRef}
 							collapsible={true}
-							autoSave="flow-log"
+							autoSave="flow-logs"
 						>
-							{/* {traces && currentRun && (
-								<Traces
-									node={traces.node}
-									result={currentRun}
-									traces={traces.traces}
-									onOpenChange={(open) => {
-										if (!open) setTraces(undefined);
-									}}
-								/>
-							)} */}
+							{currentMetadata && (
+								<Traces appId={appId} boardId={boardId}/>
+							)}
 						</ResizablePanel>
 					</ResizablePanelGroup>
 				</ResizablePanel>
 				<ResizableHandle withHandle />
 				<ResizablePanel
-					autoSave="flow-log"
-					defaultSize={0}
+					autoSave="flow-runs"
+					defaultSize={30}
 					collapsible={true}
 					collapsedSize={0}
 					ref={runsPanelRef}

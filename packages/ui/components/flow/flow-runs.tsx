@@ -12,7 +12,7 @@ import {
 	ScrollIcon,
 	TriangleAlertIcon,
 } from "lucide-react";
-import { useCallback, useEffect } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useInvoke } from "../../hooks";
 import {
@@ -26,7 +26,7 @@ import {
 import { logLevelFromNumber } from "../../lib/log-level";
 import { parseUint8ArrayToJson } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
-import { useLogAggregation } from "../../state/log-aggregation-state";
+import { useLogAggregation, type ILogAggregationFilter } from "../../state/log-aggregation-state";
 import {
 	Button,
 	DropdownMenu,
@@ -36,9 +36,14 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 	EmptyState,
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
 } from "../ui";
 
-export const FlowRuns = ({
+const FlowRunsComponent = ({
 	appId,
 	boardId,
 	nodes,
@@ -60,14 +65,57 @@ export const FlowRuns = ({
 		refetchLogs,
 	} = useLogAggregation();
 	const { fitView } = useReactFlow();
+	const [localFilter, setLocalFilter] = useState<ILogAggregationFilter>({
+		appId,
+		boardId,
+		limit: 100,
+		from: (Date.now() - 5 * 60 * 1000) * 1000
+	})
+	const [timeRange, setTimeRange] = useState("last_5_minutes");
 
 	useEffect(() => {
-		setFilter(backend, {
-			appId,
-			boardId,
-			limit: 100,
-		});
-	}, [appId, boardId, backend, setFilter]);
+		setFilter(backend, localFilter);
+	}, [appId, boardId, backend, localFilter, setFilter]);
+
+	useEffect(() => {
+		const now = Date.now();
+		const fiveMinutesAgo = now - 5 * 60 * 1000;
+		const thirtyMinutesAgo = now - 30 * 60 * 1000;
+		const oneHourAgo = now - 60 * 60 * 1000;
+		const fiveHoursAgo = now - 5 * 60 * 60 * 1000;
+		const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+		const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+		let from: number | undefined;
+		switch (timeRange) {
+			case "last_5_minutes":
+				from = fiveMinutesAgo;
+				break;
+			case "last_30_minutes":
+				from = thirtyMinutesAgo;
+				break;
+			case "last_1_hour":
+				from = oneHourAgo;
+				break;
+			case "last_5_hours":
+				from = fiveHoursAgo;
+				break;
+			case "last_24_hours":
+				from = twentyFourHoursAgo;
+				break;
+			case "last_30_days":
+				from = thirtyDaysAgo;
+				break;
+			default:
+				from = undefined;
+		}
+
+		setLocalFilter((prev) => ({
+			...prev,
+			from: from ? from * 1000 : undefined,
+		}));
+
+	}, [timeRange]);
 
 	const zoomNode = useCallback(
 		(nodeId: string) => {
@@ -85,7 +133,7 @@ export const FlowRuns = ({
 	return (
 		<div className="flex flex-col gap-2 p-4 bg-background flex-grow h-full max-h-full overflow-hidden">
 			<div className="flex flex-row items-center justify-between">
-				<h3>Runs</h3>
+					<h3>Runs</h3>
 				<Button
 					variant={"outline"}
 					size={"icon"}
@@ -93,6 +141,67 @@ export const FlowRuns = ({
 				>
 					<RefreshCcwIcon className="w-4 h-4" />
 				</Button>
+			</div>
+			<div className="flex flex-row items-center gap-2">
+			<Select value={timeRange} onValueChange={(value) => {
+							setTimeRange(value);
+						}}>
+						<SelectTrigger className="max-w-[180px]">
+							<SelectValue placeholder="Time Range" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="last_5_minutes">5 Minutes</SelectItem>
+							<SelectItem value="last_30_minutes">30 Minutes</SelectItem>
+							<SelectItem value="last_1_hour">1 Hour</SelectItem>
+							<SelectItem value="last_5_hours">5 Hours</SelectItem>
+							<SelectItem value="last_24_hours">24 Hours</SelectItem>
+							<SelectItem value="last_30_days">30 Days</SelectItem>
+							<SelectItem value="unlimited">All</SelectItem>
+						</SelectContent>
+					</Select>
+					<Select value={localFilter.nodeId ?? "all"} onValueChange={(value) => {
+							setLocalFilter(old => ({...old, nodeId: value === "all" ? undefined : value}));
+						}}>
+						<SelectTrigger className="max-w-[180px]">
+							<SelectValue placeholder="Nodes" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">All</SelectItem>
+							{Object.values(nodes).filter(node => node.start).map(node => <SelectItem key={node.id} value={node.id}>{node.friendly_name}</SelectItem>)}
+						</SelectContent>
+					</Select>
+					<Select value={localFilter.status ?? "all"} onValueChange={(value) => {
+							let status: ILogLevel | undefined;
+							switch (value) {
+								case "Debug":
+									status = ILogLevel.Debug;
+									break;
+								case "Warn":
+									status = ILogLevel.Warn;
+									break;
+								case "Error":
+									status = ILogLevel.Error;
+									break;
+								case "Fatal":
+									status = ILogLevel.Fatal;
+									break;
+								default:
+									status = undefined;
+							}
+
+							setLocalFilter(old => ({...old, status: status}));
+						}}>
+						<SelectTrigger className="max-w-[180px]">
+							<SelectValue placeholder="Status" />
+						</SelectTrigger>
+						<SelectContent>
+						<SelectItem value="all">All</SelectItem>
+						<SelectItem value="Debug">Success</SelectItem>
+						<SelectItem value="Warn">Warning</SelectItem>
+						<SelectItem value="Error">Error</SelectItem>
+						<SelectItem value="Fatal">Fatal</SelectItem>
+						</SelectContent>
+					</Select>
 			</div>
 			{(!currentLogs || currentLogs.length === 0) && (
 				<EmptyState
@@ -114,7 +223,6 @@ export const FlowRuns = ({
 							}
 
 							setCurrentMetadata(run);
-							zoomNode(run.node_id);
 						}}
 					>
 						<div className="flex flex-col gap-2 items-start justify-center">
@@ -200,3 +308,13 @@ export const FlowRuns = ({
 		</div>
 	);
 };
+
+export const FlowRuns = memo(
+	FlowRunsComponent,
+	(prev, next) =>
+	  prev.appId === next.appId &&
+	  prev.boardId === next.boardId &&
+	  prev.executeBoard === next.executeBoard &&
+	  // shallow compare nodes object by reference
+	  prev.nodes === next.nodes
+  );

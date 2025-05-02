@@ -1,11 +1,16 @@
 use flow_like::flow::execution::log::LogMessage;
 use flow_like::flow::execution::{InternalRun, Run, RunStatus, trace::Trace};
 use flow_like::flow::execution::{LogLevel, LogMeta, RunPayload};
+use flow_like::flow_like_storage::async_duckdb::ClientBuilder;
+use flow_like::flow_like_storage::async_duckdb::duckdb::params;
+use flow_like::flow_like_storage::lancedb::arrow::SendableRecordBatchStreamExt;
 use flow_like::flow_like_storage::lancedb::query::{ExecutableQuery, QueryBase};
-use flow_like::flow_like_storage::{Path, serde_arrow};
+use flow_like::flow_like_storage::{Path, arrow_schema, serde_arrow};
 use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
 use flow_like_types::sync::Mutex;
-use futures::TryStreamExt;
+use flow_like_types::tokio;
+use flow_like_types::tokio::task::spawn_blocking;
+use futures::{StreamExt, TryStreamExt};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
@@ -149,12 +154,52 @@ pub async fn list_runs(
         .execute()
         .await
         .map_err(|_| flow_like_types::anyhow!("Failed to open database: {}", base_path))?;
+
     let db = db
         .open_table("runs")
         .execute()
         .await
         .map_err(|_| flow_like_types::anyhow!("Failed to open table: runs"))?;
+
+    let mut query_string = String::from("");
+
+    if let Some(node_id) = node_id {
+        query_string.push_str(&format!("node_id = '{}'", node_id));
+    }
+
+    if let Some(from) = from {
+        if !query_string.is_empty() {
+            query_string.push_str(" AND ");
+        }
+        query_string.push_str(&format!("start >= {}", from));
+    }
+
+    if let Some(to) = to {
+        if !query_string.is_empty() {
+            query_string.push_str(" AND ");
+        }
+        query_string.push_str(&format!("start <= {}", to));
+    }
+
+    if let Some(status) = status {
+        if !query_string.is_empty() {
+            query_string.push_str(" AND ");
+        }
+
+        let status = status.to_u8();
+        if status == 0 {
+            query_string.push_str("log_level <= 1");
+        }else {
+            query_string.push_str(&format!("log_level = {}", status));
+        }
+    }
+
     let mut query = db.query();
+
+    if !query_string.is_empty() {
+        query = query.only_if(&query_string);
+    }
+
     let runs = query
         .limit(limit)
         .offset(offset)
@@ -171,6 +216,49 @@ pub async fn list_runs(
         log_meta.extend(result);
     }
     Ok(log_meta)
+
+    // let mut stream = db
+    //     .query()
+    //     .execute()
+    //     .await
+    //     .map_err(|_| flow_like_types::anyhow!("Failed to execute query on table: runs"))?;
+
+    // let client = ClientBuilder::new().open().await?;
+    // let out = client.conn(move |conn| {
+    //     conn.execute_batch("
+    //         CREATE TABLE runs (
+    //             start     UBIGINT,
+    //             run_id    VARCHAR,
+    //             log_level UTINYINT,
+    //             node_id   VARCHAR
+    //         )
+    //     ")?;
+    //     let mut appender = conn.appender("runs").unwrap();
+    //     let (tx, rx) = std::sync::mpsc::channel();
+    //     tokio::spawn(async move {
+    //         while let Some(item_res) = stream.next().await {
+    //             if let Ok(item) = item_res {
+    //                 let _ = tx.send(item);
+    //             }
+    //         }
+    //     });
+
+    //     for meta in rx {
+    //         appender.append_record_batch(meta)?;
+    //     }
+    //     appender.flush()?;
+    //     let mut stmt = conn.prepare("SELECT start, run_id, log_level, node_id FROM runs ORDER BY start DESC LIMIT ?, ?")?;
+    //     let mut rows = stmt.query(params![offset as i64, limit as i64])?;
+    //     let mut out = Vec::new();
+    //     while let Some(r) = rows.next()? {
+    //         let start: u64 = r.get(0)?;
+    //         println!("Row: {:?}", start);
+    //     }
+    //     Ok(out)
+    // }).await?;
+
+    // return Ok(out);
+
 }
 
 #[tauri::command(async)]

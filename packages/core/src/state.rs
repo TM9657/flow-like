@@ -407,9 +407,13 @@ impl FlowLikeState {
         let db = db_fn(base_path.clone()).execute().await?;
 
         let db = db.open_table(meta.run_id.clone()).execute().await?;
-        let results = db
-            .query()
-            .only_if(query)
+        let mut q = db.query();
+
+        if !query.is_empty() {
+            q = q.only_if(query);
+        }
+
+        let results = q
             .limit(limit)
             .offset(offset)
             .execute()

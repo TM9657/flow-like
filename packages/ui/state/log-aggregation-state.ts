@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { ILogLevel, ILogMetadata } from "../lib";
 import type { IBackendState } from "./backend-state";
 
-interface ILogAggregationFilter {
+export interface ILogAggregationFilter {
 	appId: string;
 	boardId: string;
 	nodeId?: string;
