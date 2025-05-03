@@ -1,5 +1,5 @@
 /// # ONNX Nodes
-/// Loading and Inference of ONNX-based Models
+/// Loading and Inference for ONNX-based Models
 
 use flow_like::flow::{
     execution::context::ExecutionContext, 
@@ -16,13 +16,13 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-// ONNX Image Classification Nodes
+/// ONNX Image Classification Nodes
 pub mod classify;
-// ONNX Image Object Detection Nodes
+/// ONNX Image Object Detection Nodes
 pub mod detect;
-// ONNX Image Feature Extractor Nodes
+/// ONNX Image Feature Extractor Nodes
 pub mod feature;
-// ONNX Model Loader Nodes
+/// ONNX Model Loader Nodes
 pub mod load;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]

@@ -1,6 +1,6 @@
 pub mod generative;
 pub mod processing;
-// Expose Machine Learning Nodes
+/// Machine Learning Nodes
 pub mod ml;
 
 use flow_like::flow::node::NodeLogic;
