@@ -70,26 +70,21 @@ impl ModelLogic for LocalModel {
         let mut output = Response::default();
 
         while let Some(event) = stream.next().await {
-            if let Ok(event) = event {
-                match event {
-                    Event::Message(event) => {
-                        let data = &event.data;
-                        if data == "[DONE]" {
-                            break;
-                        }
-                        let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
-                            Ok(chunk) => chunk,
-                            Err(e) => {
-                                eprintln!("Failed to parse chunk: {}", e);
-                                continue;
-                            }
-                        };
-                        output.push_chunk(chunk.clone());
-                        if let Some(callback) = &callback {
-                            callback(chunk).await?;
-                        }
+            if let Ok(Event::Message(event)) = event {
+                let data = &event.data;
+                if data == "[DONE]" {
+                    break;
+                }
+                let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
+                    Ok(chunk) => chunk,
+                    Err(e) => {
+                        eprintln!("Failed to parse chunk: {}", e);
+                        continue;
                     }
-                    _ => {}
+                };
+                output.push_chunk(chunk.clone());
+                if let Some(callback) = &callback {
+                    callback(chunk).await?;
                 }
             }
         }

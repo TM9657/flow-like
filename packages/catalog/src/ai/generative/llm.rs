@@ -20,6 +20,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(history::from_messages::FromMessagesNode::default()),
         Arc::new(history::message::make::MakeHistoryMessageNode::default()),
         Arc::new(history::message::push_content::PushContentNode::default()),
+        Arc::new(history::message::extract_content::ExtractContentNode::default()),
         Arc::new(history::push_message::PushHistoryMessageNode::default()),
         Arc::new(history::pop_message::PopHistoryMessageNode::default()),
         Arc::new(history::clear::ClearHistoryNode::default()),

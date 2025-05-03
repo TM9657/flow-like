@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     flow::{
-        board::{Board, Comment, commands::Command},
+        board::{Board, Comment, Layer, commands::Command},
         node::Node,
         pin::PinType,
         variable::Variable,
@@ -18,19 +18,32 @@ use serde::{Deserialize, Serialize};
 pub struct CopyPasteCommand {
     pub original_nodes: Vec<Node>,
     pub original_comments: Vec<Comment>,
+    pub original_layers: Vec<Layer>,
     pub new_comments: Vec<Comment>,
     pub new_nodes: Vec<Node>,
+    pub new_layers: Vec<Layer>,
+    pub current_layer: Option<String>,
+    pub old_mouse: Option<(f32, f32, f32)>,
     pub offset: (f32, f32, f32),
 }
 
 impl CopyPasteCommand {
-    pub fn new(original_nodes: Vec<Node>, comments: Vec<Comment>, offset: (f32, f32, f32)) -> Self {
+    pub fn new(
+        original_nodes: Vec<Node>,
+        comments: Vec<Comment>,
+        layers: Vec<Layer>,
+        offset: (f32, f32, f32),
+    ) -> Self {
         CopyPasteCommand {
-            original_nodes: original_nodes.clone(),
-            original_comments: comments.clone(),
+            original_nodes,
+            original_comments: comments,
+            original_layers: layers,
+            old_mouse: None,
+            current_layer: None,
             offset,
             new_nodes: vec![],
             new_comments: vec![],
+            new_layers: vec![],
         }
     }
 }
@@ -50,6 +63,18 @@ impl Command for CopyPasteCommand {
         let mut intermediate_nodes = Vec::with_capacity(self.original_nodes.len());
         let offset = self.offset;
         let offset = self
+            .original_comments
+            .first()
+            .map(|comment| {
+                let old_coors = comment.coordinates;
+                (
+                    offset.0 - old_coors.0,
+                    offset.1 - old_coors.1,
+                    offset.2 - old_coors.2,
+                )
+            })
+            .unwrap_or(offset);
+        let mut offset = self
             .original_nodes
             .first()
             .map(|node| {
@@ -62,18 +87,50 @@ impl Command for CopyPasteCommand {
             })
             .unwrap_or(offset);
 
+        if let Some(old_mouse) = self.old_mouse {
+            offset = (
+                self.offset.0 - old_mouse.0,
+                self.offset.1 - old_mouse.1,
+                self.offset.2 - old_mouse.2,
+            );
+        }
+
         for comment in self.original_comments.iter() {
             let mut new_comment = comment.clone();
             new_comment.id = create_id();
             new_comment.coordinates = (
-                new_comment.coordinates.0 + self.offset.0,
-                new_comment.coordinates.1 + self.offset.1,
-                new_comment.coordinates.2 + self.offset.2,
+                new_comment.coordinates.0 + offset.0,
+                new_comment.coordinates.1 + offset.1,
+                new_comment.coordinates.2 + offset.2,
             );
+
+            if new_comment.layer.is_none() || new_comment.layer == Some("".to_string()) {
+                new_comment.layer = self.current_layer.clone();
+            }
+
             board
                 .comments
                 .insert(new_comment.id.clone(), new_comment.clone());
             self.new_comments.push(new_comment);
+        }
+
+        for layer in self.original_layers.iter() {
+            if board.layers.contains_key(&layer.id) {
+                continue;
+            }
+            let mut new_layer = layer.clone();
+            new_layer.coordinates = (
+                new_layer.coordinates.0 + offset.0,
+                new_layer.coordinates.1 + offset.1,
+                new_layer.coordinates.2 + offset.2,
+            );
+
+            if new_layer.parent_id.is_none() || new_layer.parent_id == Some("".to_string()) {
+                new_layer.parent_id = self.current_layer.clone();
+            }
+
+            board.layers.insert(new_layer.id.clone(), new_layer.clone());
+            self.new_layers.push(new_layer);
         }
 
         for node in self.original_nodes.iter() {
@@ -92,11 +149,16 @@ impl Command for CopyPasteCommand {
             new_node.icon = blueprint_node.icon.clone();
             new_node.scores = blueprint_node.scores.clone();
             new_node.start = blueprint_node.start;
+            new_node.event_callback = blueprint_node.event_callback;
             new_node.coordinates = Some((
                 new_node.coordinates.unwrap_or((0.0, 0.0, 0.0)).0 + offset.0,
                 new_node.coordinates.unwrap_or((0.0, 0.0, 0.0)).1 + offset.1,
                 new_node.coordinates.unwrap_or((0.0, 0.0, 0.0)).2 + offset.2,
             ));
+
+            if new_node.layer.is_none() || new_node.layer == Some("".to_string()) {
+                new_node.layer = self.current_layer.clone();
+            }
 
             new_node.pins = new_node
                 .pins
@@ -178,7 +240,7 @@ impl Command for CopyPasteCommand {
             self.new_nodes.push(new_node);
         }
 
-        board.fix_pins();
+        board.fix_pins_set_layer();
 
         Ok(())
     }
@@ -195,7 +257,12 @@ impl Command for CopyPasteCommand {
         for comment in self.new_comments.iter() {
             board.comments.remove(&comment.id);
         }
-        board.fix_pins();
+
+        for layer in self.new_layers.iter() {
+            board.layers.remove(&layer.id);
+        }
+
+        board.fix_pins_set_layer();
         Ok(())
     }
 }

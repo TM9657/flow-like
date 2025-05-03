@@ -25,7 +25,6 @@ use flow_like_types::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::HashMap,
-    fs::File,
     sync::{Arc, Weak},
 };
 
@@ -78,7 +77,10 @@ impl ExecutionContextCache {
     }
 
     pub fn get_cache(&self, node: bool) -> flow_like_types::Result<Path> {
-        let base = self.board_dir.child("cache");
+        let base = Path::from("temp")
+            .child(self.sub.clone())
+            .child("apps")
+            .child(self.board_id.clone());
 
         if !node {
             return Ok(base);
@@ -100,16 +102,6 @@ impl ExecutionContextCache {
     pub fn get_upload_dir(&self) -> flow_like_types::Result<Path> {
         let base = self.board_dir.child("upload");
         Ok(base)
-    }
-
-    pub fn get_tmp_dir(&self) -> flow_like_types::Result<tempfile::TempDir> {
-        let dir = tempfile::tempdir()?;
-        Ok(dir)
-    }
-
-    pub fn get_tmp_file(&self) -> flow_like_types::Result<File> {
-        let file = tempfile::tempfile()?;
-        Ok(file)
     }
 }
 
@@ -207,7 +199,7 @@ impl ExecutionContext {
             node,
             &self.variables,
             &self.cache,
-            self.log_level.clone(),
+            self.log_level,
             self.stage.clone(),
             self.profile.clone(),
             self.callback.clone(),
@@ -224,7 +216,7 @@ impl ExecutionContext {
         Err(flow_like_types::anyhow!("Variable not found"))
     }
 
-    pub async fn get_payload(&self) -> flow_like_types::Result<RunPayload> {
+    pub async fn get_payload(&self) -> flow_like_types::Result<Arc<RunPayload>> {
         let payload = self
             .run
             .upgrade()
@@ -232,10 +224,9 @@ impl ExecutionContext {
             .lock()
             .await
             .payload
-            .get(&self.id)
-            .cloned();
+            .clone();
 
-        if let Some(payload) = payload {
+        if payload.id == self.id {
             return Ok(payload);
         }
         Err(flow_like_types::anyhow!("Payload not found"))
@@ -288,6 +279,8 @@ impl ExecutionContext {
             return;
         }
 
+        let mut log = log;
+        log.node_id = Some(self.trace.node_id.clone());
         self.trace.logs.push(log);
     }
 
@@ -296,7 +289,8 @@ impl ExecutionContext {
             return;
         }
 
-        let log = LogMessage::new(message, log_level, None);
+        let mut log = LogMessage::new(message, log_level, None);
+        log.node_id = Some(self.trace.node_id.clone());
         self.trace.logs.push(log);
     }
 

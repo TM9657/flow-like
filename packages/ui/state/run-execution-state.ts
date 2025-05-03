@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import type { ITrace } from "../lib";
 
 interface IRunExecutionState {
 	runs: Map<
@@ -22,7 +21,6 @@ export interface IRunUpdateEvent {
 	run_id: string;
 	node_ids: string[];
 	method: "remove" | "add" | "update";
-	logs: ITrace[];
 }
 
 export const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({

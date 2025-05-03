@@ -1,4 +1,3 @@
-use flow_like_types::reqwest_eventsource::retry::RetryPolicy;
 use flow_like_types::reqwest_eventsource::{Event, RequestBuilderExt};
 use futures::StreamExt;
 use openai_api_rs::v1::assistant::{AssistantObject, AssistantRequest, DeletionStatus};
@@ -405,27 +404,24 @@ impl OpenAIClient {
 
         while let Some(event) = stream.next().await {
             if let Ok(event) = event {
-                match event {
-                    Event::Message(event) => {
-                        let data = &event.data;
-                        if data == "[DONE]" {
-                            break;
-                        }
-                        let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
-                            Ok(chunk) => chunk,
-                            Err(e) => {
-                                eprintln!("Failed to parse chunk: {}", e);
-                                continue;
-                            }
-                        };
-                        output.push_chunk(chunk.clone());
-                        if let Some(callback) = &callback {
-                            callback(chunk).await.map_err(|e| APIError::CustomError {
-                                message: format!("Callback error: {}", e),
-                            })?;
-                        }
+                if let Event::Message(event) = event {
+                    let data = &event.data;
+                    if data == "[DONE]" {
+                        break;
                     }
-                    _ => {}
+                    let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
+                        Ok(chunk) => chunk,
+                        Err(e) => {
+                            eprintln!("Failed to parse chunk: {}", e);
+                            continue;
+                        }
+                    };
+                    output.push_chunk(chunk.clone());
+                    if let Some(callback) = &callback {
+                        callback(chunk).await.map_err(|e| APIError::CustomError {
+                            message: format!("Callback error: {}", e),
+                        })?;
+                    }
                 }
             }
         }

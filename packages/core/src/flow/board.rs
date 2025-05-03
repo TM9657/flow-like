@@ -55,6 +55,26 @@ pub struct Layer {
     pub comments: HashMap<String, Comment>,
     pub coordinates: (f32, f32, f32),
     pub pins: HashMap<String, Pin>,
+    pub comment: Option<String>,
+    pub error: Option<String>,
+}
+
+impl Layer {
+    pub fn new(id: String, name: String, r#type: LayerType) -> Self {
+        Layer {
+            id,
+            parent_id: None,
+            name,
+            r#type,
+            nodes: HashMap::new(),
+            variables: HashMap::new(),
+            comments: HashMap::new(),
+            coordinates: (0.0, 0.0, 0.0),
+            pins: HashMap::new(),
+            comment: None,
+            error: None,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -123,7 +143,7 @@ impl Board {
         }
     }
 
-    async fn fixate_node_update(&mut self, state: Arc<Mutex<FlowLikeState>>) {
+    async fn node_updates(&mut self, state: Arc<Mutex<FlowLikeState>>) {
         let reference = Arc::new(self.clone());
         for node in self.nodes.values_mut() {
             let node_logic = match self.logic_nodes.get(&node.name) {
@@ -157,7 +177,7 @@ impl Board {
     ) -> flow_like_types::Result<GenericCommand> {
         let mut command = command;
         command.execute(self, state.clone()).await?;
-        self.fixate_node_update(state).await;
+        self.node_updates(state).await;
         self.updated_at = SystemTime::now();
         Ok(command)
     }
@@ -174,7 +194,7 @@ impl Board {
                 println!("Error executing command: {:?}", e);
             }
         }
-        self.fixate_node_update(state).await;
+        self.node_updates(state).await;
         self.updated_at = SystemTime::now();
         Ok(commands)
     }
@@ -243,11 +263,15 @@ impl Board {
         self.refs = refs;
     }
 
-    pub fn fix_pins(&mut self) {
-        let mut pins = HashMap::with_capacity(self.nodes.len() * 2);
+    pub fn fix_pins_set_layer(&mut self) {
+        let mut pins = HashMap::with_capacity(self.nodes.len() * 3);
+        let mut layer_pins = HashMap::with_capacity(self.nodes.len() * 3);
+        let default_layer = "default".to_string();
         for node in self.nodes.values() {
             for pin in node.pins.values() {
                 pins.insert(pin.id.clone(), pin);
+                let layer = node.layer.as_ref().unwrap_or(&default_layer);
+                layer_pins.insert(&pin.id, layer);
             }
         }
 
@@ -268,6 +292,20 @@ impl Board {
                                 .entry(node.id.clone())
                                 .or_insert_with(HashMap::new)
                                 .insert(pin.id.clone(), connected_to.clone());
+
+                            continue;
+                        }
+
+                        if let Some(layer) = layer_pins.get(connected_to) {
+                            if layer != &node.layer.as_ref().unwrap_or(&default_layer) {
+                                if let Some(layer) = &node.layer {
+                                    if let Some(layer) = self.layers.get_mut(layer) {
+                                        if !layer.pins.contains_key(&pin.id) {
+                                            layer.pins.insert(pin.id.clone(), pin.clone());
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         continue;
@@ -286,6 +324,20 @@ impl Board {
                                 .entry(node.id.clone())
                                 .or_insert_with(HashMap::new)
                                 .insert(pin.id.clone(), depends_on.clone());
+
+                            continue;
+                        }
+
+                        if let Some(layer) = layer_pins.get(depends_on) {
+                            if layer != &node.layer.as_ref().unwrap_or(&default_layer) {
+                                if let Some(layer) = &node.layer {
+                                    if let Some(layer) = self.layers.get_mut(layer) {
+                                        if !layer.pins.contains_key(&pin.id) {
+                                            layer.pins.insert(pin.id.clone(), pin.clone());
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         continue;
@@ -425,7 +477,7 @@ impl Board {
         board.board_dir = path;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
-        board.fix_pins();
+        board.fix_pins_set_layer();
         Ok(board)
     }
 }
@@ -445,6 +497,9 @@ pub struct Comment {
     pub comment_type: CommentType,
     pub timestamp: SystemTime,
     pub coordinates: (f32, f32, f32),
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+    pub layer: Option<String>,
 }
 
 #[cfg(test)]

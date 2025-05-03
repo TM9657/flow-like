@@ -34,6 +34,7 @@ impl Command for UpdateNodeCommand {
         _state: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
         self.old_node = board.nodes.insert(self.node.id.clone(), self.node.clone());
+        board.fix_pins_set_layer();
         Ok(())
     }
 
@@ -47,6 +48,7 @@ impl Command for UpdateNodeCommand {
         } else {
             board.nodes.remove(&self.node.id);
         }
+        board.fix_pins_set_layer();
         Ok(())
     }
 }

@@ -16,3 +16,4 @@ members = [
 futures = "0.3.31"
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 schemars = "0.8.22"
+bytemuck  = "1.23.0"

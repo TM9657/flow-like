@@ -22,8 +22,16 @@ impl TauriFunctionError {
     }
 }
 
-impl From<anyhow::Error> for TauriFunctionError {
-    fn from(error: anyhow::Error) -> Self {
+impl From<flow_like::flow_like_storage::async_duckdb::Error> for TauriFunctionError {
+    fn from(error: flow_like::flow_like_storage::async_duckdb::Error) -> Self {
+        Self {
+            error: error.to_string(),
+        }
+    }
+}
+
+impl From<flow_like_types::Error> for TauriFunctionError {
+    fn from(error: flow_like_types::Error) -> Self {
         Self {
             error: error.to_string(),
         }

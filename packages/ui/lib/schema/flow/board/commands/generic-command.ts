@@ -1,12 +1,16 @@
 export interface IGenericCommand {
 	command_type: ICommandType;
 	comment?: IComment;
+	current_layer?: null | string;
 	old_comment?: null | IComment;
 	node?: INode;
 	new_comments?: IComment[];
+	new_layers?: ILayer[];
 	new_nodes?: INode[];
 	offset?: number[];
+	old_mouse?: number[] | null;
 	original_comments?: IComment[];
+	original_layers?: ILayer[];
 	original_nodes?: INode[];
 	from_coordinates?: number[] | null;
 	node_id?: string;
@@ -21,6 +25,14 @@ export interface IGenericCommand {
 	pin?: IPin;
 	variable?: IVariable;
 	old_variable?: null | IVariable;
+	layer?: ILayer;
+	node_ids?: string[];
+	old_layer?: null | ILayer;
+	child_layers?: string[];
+	layer_nodes?: string[];
+	layers?: ILayer[];
+	nodes?: INode[];
+	preserve_nodes?: boolean;
 	[property: string]: any;
 }
 
@@ -31,10 +43,12 @@ export enum ICommandType {
 	DisconnectPin = "DisconnectPin",
 	MoveNode = "MoveNode",
 	RemoveComment = "RemoveComment",
+	RemoveLayer = "RemoveLayer",
 	RemoveNode = "RemoveNode",
 	RemoveVariable = "RemoveVariable",
 	UpdateNode = "UpdateNode",
 	UpsertComment = "UpsertComment",
+	UpsertLayer = "UpsertLayer",
 	UpsertPin = "UpsertPin",
 	UpsertVariable = "UpsertVariable",
 }
@@ -44,8 +58,11 @@ export interface IComment {
 	comment_type: ICommentType;
 	content: string;
 	coordinates: number[];
+	height?: number | null;
 	id: string;
+	layer?: null | string;
 	timestamp: ISystemTime;
+	width?: number | null;
 	[property: string]: any;
 }
 
@@ -147,6 +164,27 @@ export interface INodeScores {
 	privacy: number;
 	security: number;
 	[property: string]: any;
+}
+
+export interface ILayer {
+	comment?: null | string;
+	comments: { [key: string]: IComment };
+	coordinates: number[];
+	error?: null | string;
+	id: string;
+	name: string;
+	nodes: { [key: string]: INode };
+	parent_id?: null | string;
+	pins: { [key: string]: IPin };
+	type: ILayerType;
+	variables: { [key: string]: IVariable };
+	[property: string]: any;
+}
+
+export enum ILayerType {
+	Collapsed = "Collapsed",
+	Function = "Function",
+	Macro = "Macro",
 }
 
 export interface IVariable {

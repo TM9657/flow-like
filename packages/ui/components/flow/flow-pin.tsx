@@ -1,5 +1,4 @@
 "use client";
-import { useDebounce } from "@uidotdev/usehooks";
 import {
 	Handle,
 	type HandleType,
@@ -31,26 +30,39 @@ function FlowPinInnerComponent({
 	boardId,
 	appId,
 	node,
+	skipOffset,
 }: Readonly<{
 	pin: IPin;
 	index: number;
 	boardId: string;
 	appId: string;
 	node: INode;
+	skipOffset?: boolean;
 }>) {
 	const { pushCommand } = useUndoRedo(appId, boardId);
 	const invalidate = useInvalidateInvoke();
 	const backend = useBackend();
-	const currentNode = useInternalNode(node.id);
+	const currentNode = useInternalNode(node?.id);
 
 	const [defaultValue, setDefaultValue] = useState(pin.default_value);
 
 	const handleStyle = useMemo(() => {
-		if (node.name === "reroute") {
+		if (node?.name === "reroute") {
 			return {
 				// marginTop: "0.5rem",
 				// top: index * 15,
 				background: typeToColor(pin.data_type),
+			};
+		}
+
+		if (skipOffset) {
+			return {
+				marginTop: "1.75rem",
+				top: index * 15,
+				background:
+					pin.data_type === "Execution" || pin.value_type !== IValueType.Normal
+						? "transparent"
+						: typeToColor(pin.data_type),
 			};
 		}
 
@@ -62,7 +74,7 @@ function FlowPinInnerComponent({
 					? "transparent"
 					: typeToColor(pin.data_type),
 		};
-	}, [pin.data_type, pin.value_type, index, node.name]);
+	}, [pin.data_type, pin.value_type, index, node?.name]);
 
 	const iconStyle = useMemo(
 		() => ({
@@ -78,8 +90,8 @@ function FlowPinInnerComponent({
 			pin.name !== "exec_in" &&
 			pin.name !== "exec_out" &&
 			pin.name !== "var_ref" &&
-			node.name !== "reroute",
-		[pin.name, node.name],
+			node?.name !== "reroute",
+		[pin.name, node?.name],
 	);
 
 	const pinEditContainerClassName = useMemo(
@@ -137,7 +149,7 @@ function FlowPinInnerComponent({
 	const pinIcons = useMemo(
 		() => (
 			<>
-				{pin.data_type === "Execution" && node.name !== "reroute" && (
+				{pin.data_type === "Execution" && node?.name !== "reroute" && (
 					<DynamicImage
 						url="/flow/pin.svg"
 						className="w-2 h-2 absolute left-0 -translate-x-[15%] pointer-events-none bg-foreground"
@@ -166,7 +178,7 @@ function FlowPinInnerComponent({
 				)}
 			</>
 		),
-		[pin.data_type, pin.value_type, iconStyle, node.name],
+		[pin.data_type, pin.value_type, iconStyle, node?.name],
 	);
 
 	return (
@@ -195,7 +207,7 @@ function pinPropsAreEqual(prevProps: any, nextProps: any) {
 	return (
 		prevProps.index === nextProps.index &&
 		prevProps.boardId === nextProps.boardId &&
-		prevProps.node.id === nextProps.node.id &&
+		prevProps.node?.id === nextProps.node?.id &&
 		prevProps.pin.id === nextProps.pin.id &&
 		prevProps.pin.default_value === nextProps.pin.default_value &&
 		prevProps.pin.data_type === nextProps.pin.data_type &&
@@ -212,12 +224,14 @@ function FlowPin({
 	appId,
 	node,
 	onPinRemove,
+	skipOffset,
 }: Readonly<{
 	pin: IPin;
 	index: number;
 	boardId: string;
 	appId: string;
 	node: INode;
+	skipOffset?: boolean;
 	onPinRemove: (pin: IPin) => Promise<void>;
 }>) {
 	if (pin.dynamic)
@@ -230,6 +244,7 @@ function FlowPin({
 						index={index}
 						boardId={boardId}
 						node={node}
+						skipOffset={skipOffset}
 					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent>
@@ -252,6 +267,7 @@ function FlowPin({
 			index={index}
 			boardId={boardId}
 			node={node}
+			skipOffset={skipOffset}
 		/>
 	);
 }

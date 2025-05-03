@@ -9,11 +9,15 @@ import {
 } from "./command/generic-command";
 import { toastSuccess } from "./messages";
 import type { IGenericCommand, IValueType } from "./schema";
-import { type IBoard, type IComment, ICommentType } from "./schema/flow/board";
+import {
+	type IBoard,
+	type IComment,
+	ICommentType,
+	type ILayer,
+} from "./schema/flow/board";
 import { IVariableType } from "./schema/flow/node";
 import type { INode } from "./schema/flow/node";
 import type { IPin, IPinType } from "./schema/flow/pin";
-import type { IRun, ITrace } from "./schema/flow/run";
 
 interface ISerializedPin {
 	id: string;
@@ -36,6 +40,7 @@ interface ISerializedNode {
 	pins: {
 		[key: string]: ISerializedPin;
 	};
+	layer?: string;
 }
 
 function serializeNode(node: INode): ISerializedNode {
@@ -65,6 +70,7 @@ function serializeNode(node: INode): ISerializedNode {
 		comment: node.comment ?? undefined,
 		coordinates: node.coordinates ?? undefined,
 		pins: pins,
+		layer: node.layer ?? undefined,
 	};
 }
 
@@ -99,6 +105,7 @@ function deserializeNode(node: ISerializedNode): INode {
 		coordinates: node.coordinates ?? [0, 0, 0],
 		comment: node.comment ?? "",
 		pins: pins,
+		layer: node.layer ?? "",
 	};
 }
 
@@ -181,31 +188,28 @@ export function doPinsMatch(
 	return true;
 }
 
-function hashNode(node: INode | IComment, traces?: ITrace[]) {
+function hashNode(node: INode | IComment | ILayer) {
 	const hash = crypto.createHash("md5");
 	hash.update(JSON.stringify(node));
-	if (traces) {
-		hash.update(JSON.stringify(traces));
-	}
 	return hash.digest("hex");
 }
 
 export function parseBoard(
 	board: IBoard,
 	appId: string,
+	handleCopy: (event?: ClipboardEvent) => void,
+	pushLayer: (layer: ILayer) => void,
 	executeBoard: (node: INode, payload?: object) => Promise<void>,
-	openTraces: (node: INode, traces: ITrace[]) => Promise<void>,
 	executeCommand: (command: IGenericCommand, append: boolean) => Promise<any>,
 	selected: Set<string>,
-	run?: IRun,
 	connectionMode?: string,
 	oldNodes?: any[],
 	oldEdges?: any[],
+	currentLayer?: string,
 ) {
 	const nodes: any[] = [];
 	const edges: any[] = [];
 	const cache = new Map<string, [IPin, INode]>();
-	const traces = new Map<string, ITrace[]>();
 	const oldNodesMap = new Map<string, any>();
 	const oldEdgesMap = new Map<string, any>();
 
@@ -217,17 +221,13 @@ export function parseBoard(
 		oldEdgesMap.set(edge.id, edge);
 	}
 
-	for (const trace of run?.traces ?? []) {
-		if (traces.has(trace.node_id)) {
-			traces.get(trace.node_id)?.push(trace);
-			continue;
-		}
-
-		traces.set(trace.node_id, [trace]);
-	}
-
 	for (const node of Object.values(board.nodes)) {
-		const hash = hashNode(node, traces.get(node.id));
+		for (const pin of Object.values(node.pins)) {
+			cache.set(pin.id, [pin, node]);
+		}
+		const nodeLayer = (node.layer ?? "") === "" ? undefined : node.layer;
+		if (nodeLayer !== currentLayer) continue;
+		const hash = hashNode(node);
 		const oldNode = oldNodesMap.get(hash);
 		if (oldNode) {
 			nodes.push(oldNode);
@@ -235,6 +235,7 @@ export function parseBoard(
 			nodes.push({
 				id: node.id,
 				type: "node",
+				zIndex: 1,
 				position: {
 					x: node.coordinates?.[0] ?? 0,
 					y: node.coordinates?.[1] ?? 0,
@@ -248,18 +249,46 @@ export function parseBoard(
 					onExecute: async (node: INode, payload?: object) => {
 						await executeBoard(node, payload);
 					},
-					openTrace: async (traces: ITrace[]) => {
-						await openTraces(node, traces);
+					onCopy: async () => {
+						handleCopy();
 					},
-					traces: traces.get(node.id) || [],
 				},
 				selected: selected.has(node.id),
 			});
 		}
+	}
 
-		for (const pin of Object.values(node.pins)) {
-			cache.set(pin.id, [pin, node]);
+	const activeLayer = new Set();
+	for (const layer of Object.values(board.layers)) {
+		const parentId = layer.parent_id ?? "";
+		const currentLayerId = currentLayer ?? "";
+
+		if (parentId !== currentLayerId) continue;
+
+		const lookup: Record<string, INode> = {};
+		for (const pin of Object.values(layer.pins)) {
+			const [_, node] = cache.get(pin.id) || [];
+			if (node) lookup[pin.id] = node;
 		}
+
+		activeLayer.add(layer.id);
+		nodes.push({
+			id: layer.id,
+			type: "layerNode",
+			position: { x: layer.coordinates[0], y: layer.coordinates[1] },
+			zIndex: 1,
+			data: {
+				label: layer.id,
+				boardId: board.id,
+				appId: appId,
+				layer: layer,
+				pinLookup: lookup,
+				pushLayer: async (layer: ILayer) => {
+					await pushLayer(layer);
+				},
+			},
+			selected: selected.has(layer.id),
+		});
 	}
 
 	for (const [pin, node] of cache.values()) {
@@ -276,13 +305,20 @@ export function parseBoard(
 				continue;
 			}
 
+			const sourceNode = activeLayer.has(node.layer ?? "")
+				? node.layer
+				: node.id;
+			const connectedNodeId = activeLayer.has(connectedNode.layer ?? "")
+				? connectedNode.layer
+				: connectedNode.id;
 			edges.push({
 				id: `${pin.id}-${connectedTo}`,
-				source: node.id,
+				source: sourceNode,
 				sourceHandle: pin.id,
+				zIndex: 1,
 				animated: pin.data_type !== "Execution",
 				reconnectable: true,
-				target: connectedNode.id,
+				target: connectedNodeId,
 				targetHandle: conntectedPin.id,
 				style: { stroke: typeToColor(pin.data_type) },
 				type: connectionMode ?? "simplebezier",
@@ -304,6 +340,9 @@ export function parseBoard(
 			id: comment.id,
 			type: "commentNode",
 			position: { x: comment.coordinates[0], y: comment.coordinates[1] },
+			width: comment.width ?? 200,
+			height: comment.height ?? 80,
+			zIndex: 0,
 			data: {
 				label: comment.id,
 				boardId: board.id,
@@ -320,10 +359,15 @@ export function parseBoard(
 		});
 	}
 
-	return { nodes, edges, cache, traces };
+	return { nodes, edges, cache };
 }
 
-export function handleCopy(nodes: any[], event?: ClipboardEvent) {
+export function handleCopy(
+	nodes: any[],
+	board: IBoard,
+	cursorPosition?: { x: number; y: number },
+	event?: ClipboardEvent,
+) {
 	const activeElement = document.activeElement;
 	if (
 		activeElement instanceof HTMLInputElement ||
@@ -336,17 +380,77 @@ export function handleCopy(nodes: any[], event?: ClipboardEvent) {
 	event?.preventDefault();
 	event?.stopPropagation();
 
+	const allLayer = Object.values(board.layers);
+
+	const startLayer: ILayer[] = nodes
+		.filter((node) => node.selected && node.type === "layerNode")
+		.map((node) => node.data.layer);
+	const undefinedLayers = new Set(startLayer.map((layer) => layer.id));
+
+	if (startLayer.length !== 0) {
+		const parentLayer = allLayer.find(
+			(layer) => layer.id === startLayer[0].parent_id,
+		);
+		if (parentLayer) {
+			undefinedLayers.add(parentLayer.id);
+		}
+	}
+
+	const foundLayer = new Map<string, ILayer>(
+		startLayer.map((layer) => [layer.id, { ...layer, parent_id: undefined }]),
+	);
+
+	let previousSize = 0;
+
+	while (previousSize < foundLayer.size) {
+		previousSize = foundLayer.size;
+		for (const layer of allLayer) {
+			if (foundLayer.has(layer.id)) continue;
+			if (!layer.parent_id || layer.parent_id === "") continue;
+			if (foundLayer.has(layer.parent_id)) {
+				foundLayer.set(layer.id, layer);
+			}
+		}
+	}
+
 	const selectedNodes = nodes
-		.filter((node: any) => node.selected && node.type === "node")
-		.map((node: any) => serializeNode(node.data.node));
+		.filter(
+			(node: any) =>
+				(node.selected ||
+					foundLayer.has((node.data.node as INode).layer ?? "")) &&
+				node.type === "node",
+		)
+		.map((node: { data: { node: INode } }) =>
+			serializeNode({
+				...node.data.node,
+				layer: undefinedLayers.has(node.data.node.layer ?? "")
+					? undefined
+					: node.data.node.layer,
+			}),
+		);
 
 	const selectedComments: IComment[] = nodes
-		.filter((node: any) => node.selected && node.type === "commentNode")
-		.map((node: any) => node.data.comment);
+		.filter(
+			(node: any) =>
+				(node.selected ||
+					foundLayer.has((node.data.comment as IComment).layer ?? "")) &&
+				node.type === "commentNode",
+		)
+		.map((node: { data: { comment: IComment } }) => ({
+			...node.data.comment,
+			layer: undefinedLayers.has(node.data.comment.layer ?? "")
+				? undefined
+				: node.data.comment.layer,
+		}));
 	try {
 		navigator.clipboard.writeText(
 			JSON.stringify(
-				{ nodes: selectedNodes, comments: selectedComments },
+				{
+					nodes: selectedNodes,
+					comments: selectedComments,
+					cursorPosition,
+					layers: Array.from(foundLayer.values()),
+				},
 				null,
 				2,
 			),
@@ -355,6 +459,7 @@ export function handleCopy(nodes: any[], event?: ClipboardEvent) {
 		return;
 	} catch (error) {
 		toast.error("Failed to copy nodes to clipboard");
+		throw error;
 	}
 }
 
@@ -363,6 +468,7 @@ export async function handlePaste(
 	cursorPosition: { x: number; y: number },
 	boardId: string,
 	executeCommand: (command: IGenericCommand, append?: boolean) => Promise<any>,
+	currentLayer?: string,
 ) {
 	const activeElement = document.activeElement;
 	if (
@@ -380,16 +486,22 @@ export async function handlePaste(
 		const data = JSON.parse(clipboard);
 		if (!data) return;
 		if (!data.nodes && !data.comments) return;
+		const oldPosition = data.cursorPosition;
 		const nodes: any[] = data.nodes.map((node: ISerializedNode) =>
 			deserializeNode(node),
 		);
 		const comments: any[] = data.comments;
+		const layers: ILayer[] = data.layers ?? [];
 
 		const command = copyPasteCommand({
 			original_comments: comments,
 			original_nodes: nodes,
+			original_layers: layers,
 			new_comments: [],
 			new_nodes: [],
+			new_layers: [],
+			current_layer: currentLayer,
+			old_mouse: oldPosition ? [oldPosition.x, oldPosition.y, 0] : undefined,
 			offset: [cursorPosition.x, cursorPosition.y, 0],
 		});
 		await executeCommand(command);
@@ -411,6 +523,7 @@ export async function handlePaste(
 
 		const command = upsertCommentCommand({
 			comment: comment,
+			current_layer: currentLayer,
 		});
 
 		await executeCommand(command);

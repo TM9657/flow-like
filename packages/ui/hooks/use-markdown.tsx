@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import * as jsxRuntime from "react/jsx-runtime";
 import rehypeReact, { type Options as RehypeReactOptions } from "rehype-react";
 import remarkParse, { type Options as RemarkParseOptions } from "remark-parse";
@@ -28,6 +28,7 @@ export default function useMarkdown(
 	}: UseRemarkOptions = {},
 ): [React.ReactElement | null] {
 	const [content, setContent] = useState<React.ReactElement | null>(null);
+	const [isPending, startTransition] = useTransition();
 
 	const setMarkdown = useCallback((source: string) => {
 		unified()
@@ -47,7 +48,9 @@ export default function useMarkdown(
 	}, []);
 
 	useEffect(() => {
-		setMarkdown(markdown);
+		startTransition(() => {
+			setMarkdown(markdown);
+		});
 	}, [markdown]);
 
 	return [content];

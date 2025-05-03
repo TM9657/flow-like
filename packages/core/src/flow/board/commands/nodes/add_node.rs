@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct AddNodeCommand {
     pub node: Node,
+    pub current_layer: Option<String>,
 }
 
 impl AddNodeCommand {
@@ -32,7 +33,10 @@ impl AddNodeCommand {
             }
         }
 
-        AddNodeCommand { node }
+        AddNodeCommand {
+            node,
+            current_layer: None,
+        }
     }
 }
 
@@ -43,6 +47,7 @@ impl Command for AddNodeCommand {
         board: &mut Board,
         _state: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
+        self.node.layer = self.current_layer.clone();
         board.nodes.insert(self.node.id.clone(), self.node.clone());
         Ok(())
     }

@@ -42,7 +42,7 @@ impl Command for UpsertPinCommand {
 
         if node.pins.contains_key(&self.pin.id) {
             self.old_pin = node.pins.insert(self.pin.id.clone(), self.pin.clone());
-            board.fix_pins();
+            board.fix_pins_set_layer();
             return Ok(());
         }
 
@@ -60,7 +60,7 @@ impl Command for UpsertPinCommand {
         node.pins.insert(pin.id.clone(), pin.clone());
         self.pin = pin;
 
-        board.fix_pins();
+        board.fix_pins_set_layer();
 
         Ok(())
     }
@@ -81,7 +81,7 @@ impl Command for UpsertPinCommand {
             node.pins.remove(&self.pin.id);
         }
 
-        board.fix_pins();
+        board.fix_pins_set_layer();
 
         Ok(())
     }

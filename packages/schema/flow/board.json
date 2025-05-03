@@ -450,6 +450,17 @@
 					],
 					"maxItems": 3,
 					"minItems": 3
+				},
+				"width": {
+					"type": ["number", "null"],
+					"format": "float"
+				},
+				"height": {
+					"type": ["number", "null"],
+					"format": "float"
+				},
+				"layer": {
+					"type": ["string", "null"]
 				}
 			}
 		},
@@ -548,6 +559,12 @@
 					"additionalProperties": {
 						"$ref": "#/definitions/Pin"
 					}
+				},
+				"comment": {
+					"type": ["string", "null"]
+				},
+				"error": {
+					"type": ["string", "null"]
 				}
 			}
 		},

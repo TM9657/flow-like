@@ -16,11 +16,13 @@ import {
 	CircleXIcon,
 	ClockIcon,
 	CopyIcon,
+	FoldVerticalIcon,
 	MessageSquareIcon,
 	PlayCircleIcon,
 	ScrollTextIcon,
 	SquareCheckIcon,
 	SquarePenIcon,
+	Trash2Icon,
 	TriangleAlertIcon,
 	WorkflowIcon,
 } from "lucide-react";
@@ -28,6 +30,7 @@ import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 import { toast } from "sonner";
+import { useLogAggregation } from "../..";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -41,15 +44,18 @@ import {
 } from "../../components/ui/context-menu";
 import { useInvalidateInvoke } from "../../hooks";
 import {
+	ILogLevel,
 	IPinType,
 	IValueType,
-	handleCopy,
+	removeNodeCommand,
 	updateNodeCommand,
+	upsertLayerCommand,
 	upsertPinCommand,
 } from "../../lib";
+import { logLevelFromNumber } from "../../lib/log-level";
+import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
 import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IVariableType } from "../../lib/schema/flow/pin";
-import { ILogLevel, type ITrace } from "../../lib/schema/flow/run";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,
@@ -88,9 +94,8 @@ export type FlowNode = Node<
 		node: INode;
 		boardId: string;
 		appId: string;
-		traces: ITrace[];
 		onExecute: (node: INode, payload?: object) => Promise<void>;
-		openTrace: (trace: ITrace[]) => Promise<void>;
+		onCopy: () => Promise<void>;
 	},
 	"node"
 >;
@@ -107,6 +112,8 @@ const FlowNodeInner = memo(
 		const { resolvedTheme } = useTheme();
 		const backend = useBackend();
 		const invalidate = useInvalidateInvoke();
+		const { currentMetadata } = useLogAggregation();
+
 		const [payload, setPayload] = useState({
 			open: false,
 			payload: "",
@@ -124,32 +131,23 @@ const FlowNodeInner = memo(
 		const div = useRef<HTMLDivElement>(null);
 		const reactFlow = useReactFlow();
 		const { getNode } = useReactFlow();
-		const severity = useMemo(() => {
-			let severity = ILogLevel.Debug;
+		const [executed, severity] = useMemo(() => {
+			const severity = ILogLevel.Debug;
 
-			for (const trace of props.data.traces) {
-				for (const log of trace.logs) {
-					if (severity === ILogLevel.Fatal) break;
-
-					if (severity === ILogLevel.Error) {
-						if (log.log_level === ILogLevel.Fatal) severity = ILogLevel.Fatal;
-						continue;
-					}
-
-					if (severity === ILogLevel.Warn) {
-						if (log.log_level === ILogLevel.Fatal) severity = ILogLevel.Fatal;
-						if (log.log_level === ILogLevel.Error) severity = ILogLevel.Error;
-						continue;
-					}
-
-					if (log.log_level === ILogLevel.Fatal) severity = ILogLevel.Fatal;
-					if (log.log_level === ILogLevel.Error) severity = ILogLevel.Error;
-					if (log.log_level === ILogLevel.Warn) severity = ILogLevel.Warn;
+			const nodeId = props.data.node.id;
+			if (!currentMetadata) return [false, severity];
+			const result = currentMetadata.nodes?.find(([localNodeId, severity]) => {
+				if (localNodeId === nodeId) {
+					return true;
 				}
+			}) as [string, number] | undefined;
+
+			if (result) {
+				return [true, logLevelFromNumber(result?.[1] ?? 0)];
 			}
 
-			return severity;
-		}, [props.data.traces]);
+			return [false, severity];
+		}, [props.data.node, currentMetadata]);
 
 		const eventRegistration = useMemo(() => {
 			if (!props.data.node.start) return undefined;
@@ -455,6 +453,77 @@ const FlowNodeInner = memo(
 			return typeof (pin as IPinAction).onAction === "function";
 		}
 
+		const playNode = useMemo(() => {
+			if (!props.data.node.start || executing) return null;
+			if (Object.keys(props.data.node.pins).length <= 1)
+				return (
+					<button
+						className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 bottom-50 top-50 translate-x-[calc(-120%)]"
+						onClick={async (e) => {
+							if (executing) return;
+							setExecuting(true);
+							await props.data.onExecute(props.data.node);
+							setExecuting(false);
+						}}
+					>
+						<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+					</button>
+				);
+
+			return (
+				<Dialog
+					open={payload.open}
+					onOpenChange={(open) => setPayload((old) => ({ ...old, open }))}
+				>
+					<DialogTrigger>
+						<button className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 bottom-50 top-50 translate-y-[150%] translate-x-[calc(-120%)]">
+							<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+						</button>
+					</DialogTrigger>
+					<DialogContent>
+						<DialogHeader>
+							<DialogTitle>Execution Payload</DialogTitle>
+							<DialogDescription>
+								JSON Payload for the Event. Please have a look at the
+								documentation for example Payloads.
+							</DialogDescription>
+						</DialogHeader>
+						<Textarea
+							rows={10}
+							placeholder="JSON payload"
+							value={payload.payload}
+							onChange={(e) =>
+								setPayload((old) => ({
+									...old,
+									payload: e.target.value,
+								}))
+							}
+						/>
+						<Button
+							onClick={async () => {
+								if (executing) return;
+								setExecuting(true);
+								await props.data.onExecute(
+									props.data.node,
+									JSON.parse(payload.payload),
+								);
+								setExecuting(false);
+								setPayload((old) => ({ ...old, open: false }));
+							}}
+						>
+							Send
+						</Button>
+					</DialogContent>
+				</Dialog>
+			);
+		}, [
+			props.data.node.start,
+			payload,
+			executing,
+			props.data.onExecute,
+			props.data.node,
+		]);
+
 		return (
 			<div
 				key={`${props.id}__node`}
@@ -464,6 +533,7 @@ const FlowNodeInner = memo(
 				onMouseEnter={() => onHover(true)}
 				onMouseLeave={() => onHover(false)}
 			>
+				{playNode}
 				{eventRegistration && (
 					<Dialog open={typeof eventRegistration !== "undefined"}>
 						<DialogContent>
@@ -577,84 +647,20 @@ const FlowNodeInner = memo(
 							</small>
 						</div>
 						<div className="flex flex-row items-center gap-1">
-							{useMemo(() => {
+							{executed && (
+								<ScrollTextIcon
+									// onClick={() => props.data.openTrace(props.data.traces)}
+									className="w-2 h-2 cursor-pointer hover:text-primary"
+								/>
+							)}
+							{/* {useMemo(() => {
 								return props.data.traces.length > 0 ? (
 									<ScrollTextIcon
 										onClick={() => props.data.openTrace(props.data.traces)}
 										className="w-2 h-2 cursor-pointer hover:text-primary"
 									/>
 								) : null;
-							}, [props.data.traces.length, props.data.openTrace])}
-
-							{useMemo(() => {
-								if (!props.data.node.start || executing) return null;
-								if (Object.keys(props.data.node.pins).length <= 1)
-									return (
-										<PlayCircleIcon
-											className="w-2 h-2 cursor-pointer hover:text-primary"
-											onClick={async (e) => {
-												if (executing) return;
-												setExecuting(true);
-												await props.data.onExecute(props.data.node);
-												setExecuting(false);
-											}}
-										/>
-									);
-
-								return (
-									<Dialog
-										open={payload.open}
-										onOpenChange={(open) =>
-											setPayload((old) => ({ ...old, open }))
-										}
-									>
-										<DialogTrigger asChild>
-											<PlayCircleIcon className="w-2 h-2 cursor-pointer hover:text-primary" />
-										</DialogTrigger>
-										<DialogContent>
-											<DialogHeader>
-												<DialogTitle>Execution Payload</DialogTitle>
-												<DialogDescription>
-													JSON Payload for the Event. Please have a look at the
-													documentation for example Payloads.
-												</DialogDescription>
-											</DialogHeader>
-											<Textarea
-												rows={10}
-												placeholder="JSON payload"
-												value={payload.payload}
-												onChange={(e) =>
-													setPayload((old) => ({
-														...old,
-														payload: e.target.value,
-													}))
-												}
-											/>
-											<Button
-												onClick={async () => {
-													if (executing) return;
-													setExecuting(true);
-													await props.data.onExecute(
-														props.data.node,
-														JSON.parse(payload.payload),
-													);
-													setExecuting(false);
-													setPayload((old) => ({ ...old, open: false }));
-												}}
-											>
-												Send
-											</Button>
-										</DialogContent>
-									</Dialog>
-								);
-							}, [
-								props.data.node.start,
-								payload,
-								executing,
-								props.data.onExecute,
-								props.data.node,
-							])}
-
+							}, [props.data.traces.length, props.data.openTrace])} */}
 							{useMemo(() => {
 								if (debouncedExecutionState !== "running") return null;
 								return (
@@ -710,7 +716,10 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	const [commentMenu, setCommentMenu] = useState(false);
 	const [renameMenu, setRenameMenu] = useState(false);
 	const flow = useReactFlow();
-	const { pushCommand } = useUndoRedo(props.data.appId, props.data.boardId);
+	const { pushCommand, pushCommands } = useUndoRedo(
+		props.data.appId,
+		props.data.boardId,
+	);
 	const invalidate = useInvalidateInvoke();
 	const errorHandled = useMemo(() => {
 		return Object.values(props.data.node.pins).some(
@@ -726,7 +735,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	}, [props.data.node.pins]);
 
 	const copy = useCallback(async () => {
-		handleCopy(flow.getNodes());
+		props.data.onCopy();
 	}, [flow]);
 
 	const handleError = useCallback(async () => {
@@ -752,13 +761,13 @@ function FlowNode(props: NodeProps<FlowNode>) {
 				.forEach(
 					(pin, index) => (innerNode.pins[pin.id] = { ...pin, index: index }),
 				);
-			const updateNode = updateNodeCommand({
+			let updateNode = updateNodeCommand({
 				node: {
 					...innerNode,
 				},
 			});
 
-			await backend.executeCommand(
+			updateNode = await backend.executeCommand(
 				props.data.appId,
 				props.data.boardId,
 				updateNode,
@@ -806,17 +815,76 @@ function FlowNode(props: NodeProps<FlowNode>) {
 			pin: stringPin,
 		});
 
-		await backend.executeCommand(props.data.appId, props.data.boardId, command);
-		await backend.executeCommand(
+		const commands = await backend.executeCommands(
 			props.data.appId,
 			props.data.boardId,
-			stringCommand,
+			[command, stringCommand],
 		);
-		await pushCommand(command, false);
-		await pushCommand(stringCommand, true);
+
+		await pushCommands(commands);
 
 		invalidate(backend.getBoard, [props.data.appId, props.data.boardId]);
 	}, [backend, props.data.node, props.data.appId, props.data.boardId, flow]);
+
+	const handleCollapse = useCallback(
+		async (x: number, y: number) => {
+			const selectedNodes = flow.getNodes().filter((node) => node.selected);
+			const flowCords = flow.screenToFlowPosition({
+				x: x,
+				y: y,
+			});
+			if (selectedNodes.length <= 1) return;
+
+			const nodeIds = selectedNodes.map((node) => (node.data.node as INode).id);
+			const command = upsertLayerCommand({
+				layer: {
+					id: createId(),
+					comments: {},
+					nodes: {},
+					pins: {},
+					parent_id: props.data.node.layer,
+					coordinates: [flowCords.x, flowCords.y, 0],
+					name: "Collapsed",
+					type: ILayerType.Collapsed,
+					variables: {},
+				},
+				node_ids: nodeIds,
+			});
+
+			const result = await backend.executeCommand(
+				props.data.appId,
+				props.data.boardId,
+				command,
+			);
+			await pushCommand(result, false);
+			await invalidate(backend.getBoard, [
+				props.data.appId,
+				props.data.boardId,
+			]);
+		},
+		[backend, flow],
+	);
+
+	const deleteNodes = useCallback(async () => {
+		const nodes = flow.getNodes().filter((node) => node.selected);
+		if (!nodes || nodes.length === 0) return;
+
+		const commands = nodes.map((node) => {
+			return removeNodeCommand({
+				node: node.data.node as INode,
+				connected_nodes: [],
+			});
+		});
+
+		const result = await backend.executeCommands(
+			props.data.appId,
+			props.data.boardId,
+			commands,
+		);
+		setIsOpen(false);
+		await pushCommands(result);
+		await invalidate(backend.getBoard, [props.data.appId, props.data.boardId]);
+	}, [backend, invalidate, props.data.node]);
 
 	if (isOpen || isHovered) {
 		return (
@@ -848,19 +916,46 @@ function FlowNode(props: NodeProps<FlowNode>) {
 							</div>
 						</ContextMenuItem>
 					)}
-					{isExec &&
-						flow.getNodes().filter((node) => node.selected).length <= 1 && (
-							<ContextMenuItem onClick={() => handleError()}>
-								<div className="flex flex-row items-center gap-2 text-nowrap">
-									<CircleXIcon className="w-4 h-4" />
-									{errorHandled ? "Remove Handling" : "Handle Errors"}
-								</div>
-							</ContextMenuItem>
-						)}
+					{flow.getNodes().filter((node) => node.selected).length > 1 && (
+						<ContextMenuItem
+							onClick={(e) => {
+								e.preventDefault();
+								const screenCoords = e.currentTarget.getBoundingClientRect();
+								const x = screenCoords.x + screenCoords.width / 2;
+								const y = screenCoords.y + screenCoords.height / 2;
+								handleCollapse(x, y);
+							}}
+						>
+							<div className="flex flex-row items-center gap-2 text-nowrap">
+								<FoldVerticalIcon className="w-4 h-4" />
+								Collapse
+							</div>
+						</ContextMenuItem>
+					)}
+
 					<ContextMenuItem onClick={async () => await copy()}>
 						<div className="flex flex-row items-center gap-2 text-nowrap">
 							<CopyIcon className="w-4 h-4" />
 							Copy
+						</div>
+					</ContextMenuItem>
+					{isExec &&
+						flow.getNodes().filter((node) => node.selected).length <= 1 && (
+							<>
+								<ContextMenuSeparator />
+								<ContextMenuItem onClick={() => handleError()}>
+									<div className="flex flex-row items-center gap-2 text-nowrap">
+										<CircleXIcon className="w-4 h-4" />
+										{errorHandled ? "Remove Handling" : "Handle Errors"}
+									</div>
+								</ContextMenuItem>
+							</>
+						)}
+					<ContextMenuSeparator />
+					<ContextMenuItem onClick={async () => await deleteNodes()}>
+						<div className="flex flex-row items-center gap-2 text-nowrap">
+							<Trash2Icon className="w-4 h-4" />
+							Delete
 						</div>
 					</ContextMenuItem>
 					{flow.getNodes().filter((node) => node.selected).length > 1 && (

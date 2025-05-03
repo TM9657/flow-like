@@ -6,6 +6,9 @@
 	"properties": {
 		"node": {
 			"$ref": "#/definitions/Node"
+		},
+		"current_layer": {
+			"type": ["string", "null"]
 		}
 	},
 	"definitions": {
