@@ -189,7 +189,7 @@ pub async fn list_runs(
         let status = status.to_u8();
         if status == 0 {
             query_string.push_str("log_level <= 1");
-        }else {
+        } else {
             query_string.push_str(&format!("log_level = {}", status));
         }
     }
@@ -258,7 +258,6 @@ pub async fn list_runs(
     // }).await?;
 
     // return Ok(out);
-
 }
 
 #[tauri::command(async)]

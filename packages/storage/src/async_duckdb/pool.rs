@@ -1,8 +1,8 @@
 use std::{
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU32, Ordering::Relaxed},
         Arc,
+        atomic::{AtomicU32, Ordering::Relaxed},
     },
     thread::available_parallelism,
 };

@@ -1,5 +1,6 @@
 export interface IUpsertComment {
 	comment: IComment;
+	current_layer?: null | string;
 	old_comment?: null | IComment;
 	[property: string]: any;
 }
@@ -9,8 +10,11 @@ export interface IComment {
 	comment_type: ICommentType;
 	content: string;
 	coordinates: number[];
+	height?: number | null;
 	id: string;
+	layer?: null | string;
 	timestamp: ISystemTime;
+	width?: number | null;
 	[property: string]: any;
 }
 

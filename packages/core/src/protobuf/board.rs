@@ -179,7 +179,7 @@ impl ToProto<flow_like_types::proto::Layer> for Layer {
             coord_x: self.coordinates.0,
             coord_y: self.coordinates.1,
             coord_z: self.coordinates.2,
-            parent_id: self.parent_id.clone().unwrap_or_default(),
+            parent_id: self.parent_id.clone(),
             pins: self
                 .pins
                 .iter()
@@ -196,9 +196,12 @@ impl ToProto<flow_like_types::proto::Layer> for Layer {
                 .iter()
                 .map(|(k, v)| (k.clone(), v.to_proto()))
                 .collect(),
+            comment: self.comment.clone(),
+            error: self.error.clone(),
         }
     }
 }
+
 impl FromProto<flow_like_types::proto::Layer> for Layer {
     fn from_proto(proto: flow_like_types::proto::Layer) -> Self {
         Layer {
@@ -210,7 +213,7 @@ impl FromProto<flow_like_types::proto::Layer> for Layer {
                 .map(|(k, v)| (k, Comment::from_proto(v)))
                 .collect(),
             coordinates: (proto.coord_x, proto.coord_y, proto.coord_z),
-            parent_id: Some(proto.parent_id),
+            parent_id: proto.parent_id,
             pins: proto
                 .pins
                 .into_iter()
@@ -227,6 +230,8 @@ impl FromProto<flow_like_types::proto::Layer> for Layer {
                 .into_iter()
                 .map(|(k, v)| (k, Variable::from_proto(v)))
                 .collect(),
+            comment: proto.comment,
+            error: proto.error,
         }
     }
 }

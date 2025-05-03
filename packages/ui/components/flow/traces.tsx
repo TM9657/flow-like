@@ -14,7 +14,14 @@ import {
 	TriangleAlertIcon,
 } from "lucide-react";
 import MiniSearch from "minisearch";
-import { memo, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+	type RefObject,
+	memo,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { AutoSizer } from "react-virtualized";
 import { parseTimespan } from "../../lib/date";
 import type { INode } from "../../lib/schema/flow/node";
@@ -25,9 +32,13 @@ import {
 	type ITrace,
 } from "../../lib/schema/flow/run";
 import "react-virtualized/styles.css";
+import { useDebounce } from "@uidotdev/usehooks";
 import { useReactFlow } from "@xyflow/react";
 import { VariableSizeList as List, type VariableSizeList } from "react-window";
 import { toast } from "sonner";
+import { type ILog, useBackend, useInvoke } from "../..";
+import { logLevelToNumber } from "../../lib/log-level";
+import { useLogAggregation } from "../../state/log-aggregation-state";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -39,25 +50,23 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
-import { useLogAggregation } from "../../state/log-aggregation-state";
-import { useBackend, useInvoke, type ILog } from "../..";
-import { logLevelToNumber } from "../../lib/log-level";
-import { useDebounce } from "@uidotdev/usehooks";
 
 interface IEnrichedLogMessage extends ILogMessage {
 	node_id: string;
 }
 
-export function Traces({ appId, boardId }: Readonly<{ appId: string; boardId: string}>) {
+export function Traces({
+	appId,
+	boardId,
+}: Readonly<{ appId: string; boardId: string }>) {
 	const { fitView, updateNode, getNodes } = useReactFlow();
 	const backend = useBackend();
 	const { currentMetadata } = useLogAggregation();
 
-
 	const [queryParts, setQueryParts] = useState<string[]>([]);
-	const [query, setQuery] = useState("")
-	const [limit, setLimit] = useState(1000)
-	const [offset, setOffset] = useState(0)
+	const [query, setQuery] = useState("");
+	const [limit, setLimit] = useState(1000);
+	const [offset, setOffset] = useState(0);
 
 	const [logFilter, setLogFilter] = useState<Set<ILogLevel>>(
 		new Set([
@@ -69,7 +78,11 @@ export function Traces({ appId, boardId }: Readonly<{ appId: string; boardId: st
 		]),
 	);
 
-	const messages = useInvoke(backend.queryRun, [currentMetadata!, query, limit, offset], typeof currentMetadata !== "undefined")
+	const messages = useInvoke(
+		backend.queryRun,
+		[currentMetadata!, query, limit, offset],
+		typeof currentMetadata !== "undefined",
+	);
 
 	const [search, setSearch] = useState<string>("");
 	const debouncedSearch = useDebounce(search, 300);
@@ -77,47 +90,51 @@ export function Traces({ appId, boardId }: Readonly<{ appId: string; boardId: st
 	const listRef = useRef<VariableSizeList>(null);
 
 	useEffect(() => {
-		let parts = []
+		const parts = [];
 
 		if (logFilter.size > 0 && logFilter.size < 5) {
-			parts.push(`log_level IN (${Array.from(logFilter).map((level) => logLevelToNumber(level)).join(", ")})`)
+			parts.push(
+				`log_level IN (${Array.from(logFilter)
+					.map((level) => logLevelToNumber(level))
+					.join(", ")})`,
+			);
 		}
 
 		if (debouncedSearch.length > 0) {
-			parts.push(`message LIKE '%${debouncedSearch}%'`)
+			parts.push(`message LIKE '%${debouncedSearch}%'`);
 		}
 
-		setQueryParts(parts)
-	}, [logFilter, debouncedSearch])
+		setQueryParts(parts);
+	}, [logFilter, debouncedSearch]);
 
 	useEffect(() => {
 		if (queryParts.length === 0) {
-			setQuery("")
-			return
+			setQuery("");
+			return;
 		}
 
 		if (queryParts.length === 1) {
-			setQuery(queryParts[0])
-			return
+			setQuery(queryParts[0]);
+			return;
 		}
 
-		let query = ""
+		let query = "";
 		queryParts.forEach((part, index) => {
 			if (index === 0) {
-				query += `(${part})`
+				query += `(${part})`;
 			} else {
-				query += ` AND (${part})`
+				query += ` AND (${part})`;
 			}
-		})
-		setQuery(query)
-	}, [queryParts])
+		});
+		setQuery(query);
+	}, [queryParts]);
 
 	function getRowHeight(index: number) {
 		return (rowHeights.current.get(index) ?? 88) + 6;
 	}
 
 	function render(props: any) {
-		if (!messages.data) return null
+		if (!messages.data) return null;
 		const { index, style } = props;
 		const log = messages.data[index];
 		return (
@@ -245,29 +262,33 @@ export function Traces({ appId, boardId }: Readonly<{ appId: string; boardId: st
 						</div>
 					</div>
 					<div className="flex flex-col w-full gap-1 overflow-x-auto max-h-full flex-grow h-full">
-						{(messages.data?.length ?? 0) === 0 && <EmptyState
-							className="h-full w-full max-w-full"
-							icons={[LogsIcon, ScrollIcon, CheckCircle2Icon]}
-							description="No logs found yet, start an event to see your results here!"
-							title="No Logs"
-						/>}
-						{(messages.data?.length ?? 0) > 0 && <AutoSizer
-							className="h-full flex-grow flex flex-col min-h-full"
-							disableWidth
-						>
-							{({ height, width }) => (
-								<List
-									className="log-container h-full flex-grow flex flex-col"
-									height={height}
-									itemCount={messages.data?.length ?? 0}
-									itemSize={getRowHeight}
-									ref={listRef}
-									width={width}
-								>
-									{render}
-								</List>
-							)}
-						</AutoSizer>}
+						{(messages.data?.length ?? 0) === 0 && (
+							<EmptyState
+								className="h-full w-full max-w-full"
+								icons={[LogsIcon, ScrollIcon, CheckCircle2Icon]}
+								description="No logs found yet, start an event to see your results here!"
+								title="No Logs"
+							/>
+						)}
+						{(messages.data?.length ?? 0) > 0 && (
+							<AutoSizer
+								className="h-full flex-grow flex flex-col min-h-full"
+								disableWidth
+							>
+								{({ height, width }) => (
+									<List
+										className="log-container h-full flex-grow flex flex-col"
+										height={height}
+										itemCount={messages.data?.length ?? 0}
+										itemSize={getRowHeight}
+										ref={listRef}
+										width={width}
+									>
+										{render}
+									</List>
+								)}
+							</AutoSizer>
+						)}
 					</div>
 				</div>
 			</div>
@@ -342,14 +363,16 @@ const LogMessage = memo(function LogMessage({
 						>
 							<CopyIcon className="w-4 h-4" />
 						</Button>
-						{log.node_id && <Button
-							variant={"outline"}
-							size={"icon"}
-							className="!p-1 h-6 w-6"
-							onClick={() => onSelectNode(log.node_id!)}
-						>
-							<CornerRightUpIcon className="w-4 h-4" />
-						</Button>}
+						{log.node_id && (
+							<Button
+								variant={"outline"}
+								size={"icon"}
+								className="!p-1 h-6 w-6"
+								onClick={() => onSelectNode(log.node_id!)}
+							>
+								<CornerRightUpIcon className="w-4 h-4" />
+							</Button>
+						)}
 					</div>
 				</div>
 			</div>

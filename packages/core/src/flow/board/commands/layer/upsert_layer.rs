@@ -16,6 +16,7 @@ pub struct UpsertLayerCommand {
     pub old_layer: Option<Layer>,
     pub layer: Layer,
     pub node_ids: Vec<String>,
+    pub current_layer: Option<String>,
 }
 
 impl UpsertLayerCommand {
@@ -24,6 +25,7 @@ impl UpsertLayerCommand {
             layer,
             old_layer: None,
             node_ids: vec![],
+            current_layer: None,
         }
     }
 }
@@ -36,12 +38,20 @@ impl Command for UpsertLayerCommand {
         _state: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
         let nodes_set: HashSet<String> = HashSet::from_iter(self.node_ids.iter().cloned());
+        self.layer.parent_id = self.current_layer.clone();
         self.old_layer = board
             .layers
             .insert(self.layer.id.clone(), self.layer.clone());
+
         for node in board.nodes.values_mut() {
             if nodes_set.contains(&node.id) {
                 node.layer = Some(self.layer.id.clone());
+            }
+        }
+
+        for comment in board.comments.values_mut() {
+            if nodes_set.contains(&comment.id) {
+                comment.layer = Some(self.layer.id.clone());
             }
         }
 
@@ -72,6 +82,18 @@ impl Command for UpsertLayerCommand {
         for node in board.nodes.values_mut() {
             if node.layer == Some(self.layer.id.clone()) {
                 node.layer = old_layer_id.clone();
+            }
+        }
+
+        for comment in board.comments.values_mut() {
+            if comment.layer == Some(self.layer.id.clone()) {
+                comment.layer = old_layer_id.clone();
+            }
+        }
+
+        for layer in board.layers.values_mut() {
+            if layer.parent_id == Some(self.layer.id.clone()) {
+                layer.parent_id = old_layer_id.clone();
             }
         }
 

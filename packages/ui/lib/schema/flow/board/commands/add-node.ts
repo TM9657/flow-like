@@ -1,4 +1,5 @@
 export interface IAddNode {
+	current_layer?: null | string;
 	node: INode;
 	[property: string]: any;
 }

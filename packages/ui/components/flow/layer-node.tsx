@@ -1,16 +1,25 @@
 "use client";
 
-import type { Node, NodeProps } from "@xyflow/react";
+import {
+	type Node,
+	type NodeProps,
+	NodeResizer,
+	type ResizeDragEvent,
+	type ResizeParams,
+} from "@xyflow/react";
 import {
 	FoldHorizontalIcon,
 	MessageSquareIcon,
 	SquarePenIcon,
+	Trash2Icon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
+	ContextMenuLabel,
+	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
 import type { INode } from "../../lib";
@@ -39,6 +48,7 @@ export type LayerNode = Node<
 		boardId: string;
 		hash: string;
 		appId: string;
+		pushLayer(layer: ILayer): Promise<void>;
 	},
 	"layerNode"
 >;
@@ -109,6 +119,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 				</div>
 			</ContextMenuTrigger>
 			<ContextMenuContent className="max-w-20">
+				<ContextMenuLabel>Layer Actions</ContextMenuLabel>
 				<ContextMenuItem
 					className="flex flex-row items-center gap-2"
 					onClick={() => {
@@ -116,7 +127,36 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 					}}
 				>
 					<SquarePenIcon className="w-4 h-4" />
-					Edit
+					Rename
+				</ContextMenuItem>
+				<ContextMenuItem
+					className="flex flex-row items-center gap-2"
+					onClick={() => {
+						// setEdit((old) => ({ ...old, open: true }));
+					}}
+				>
+					<MessageSquareIcon className="w-4 h-4" />
+					Comment
+				</ContextMenuItem>
+				<ContextMenuSeparator />
+				<ContextMenuItem
+					className="flex flex-row items-center gap-2"
+					onClick={() => {
+						// setEdit((old) => ({ ...old, open: true }));
+					}}
+				>
+					<FoldHorizontalIcon className="w-4 h-4" />
+					Extend
+				</ContextMenuItem>
+				<ContextMenuSeparator />
+				<ContextMenuItem
+					className="flex flex-row items-center gap-2"
+					onClick={() => {
+						// setEdit((old) => ({ ...old, open: true }));
+					}}
+				>
+					<Trash2Icon className="w-4 h-4" />
+					Delete
 				</ContextMenuItem>
 			</ContextMenuContent>
 		</ContextMenu>

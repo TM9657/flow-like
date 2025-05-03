@@ -25,11 +25,11 @@ message Node {
     map<string, Pin> pins = 10;
     bool start = 11;
     string icon = 12;
-    string comment = 13;
+    optional string comment = 13;
     bool long_running = 14;
-    string error = 15;
-    string docs = 16;
-    string layer = 17;
+    optional string error = 15;
+    optional string docs = 16;
+    optional string layer = 17;
     bool event_callback = 18;
 }
 

@@ -47,11 +47,11 @@ impl ToProto<flow_like_types::proto::Node> for Node {
                 .collect(),
             start: self.start.unwrap_or(false),
             icon: self.icon.clone().unwrap_or_default(),
-            comment: self.comment.clone().unwrap_or_default(),
+            comment: self.comment.clone(),
             long_running: self.long_running.unwrap_or(false),
-            error: self.error.clone().unwrap_or_default(),
-            docs: self.docs.clone().unwrap_or_default(),
-            layer: self.layer.clone().unwrap_or_default(),
+            error: self.error.clone(),
+            docs: self.docs.clone(),
+            layer: self.layer.clone(),
             event_callback: self.event_callback.unwrap_or(false),
         }
     }
@@ -78,28 +78,16 @@ impl FromProto<flow_like_types::proto::Node> for Node {
             } else {
                 Some(proto.icon)
             },
-            comment: if proto.comment.is_empty() {
-                None
-            } else {
-                Some(proto.comment)
-            },
+            comment: proto.comment,
             long_running: if proto.long_running { Some(true) } else { None },
-            error: if proto.error.is_empty() {
-                None
-            } else {
-                Some(proto.error)
-            },
-            docs: if proto.docs.is_empty() {
-                None
-            } else {
-                Some(proto.docs)
-            },
+            error: proto.error,
+            docs: proto.docs,
             event_callback: if proto.event_callback {
                 Some(true)
             } else {
                 None
             },
-            layer: Some(proto.layer),
+            layer: proto.layer,
         }
     }
 }

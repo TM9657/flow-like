@@ -1,12 +1,16 @@
 export interface IGenericCommand {
 	command_type: ICommandType;
 	comment?: IComment;
+	current_layer?: null | string;
 	old_comment?: null | IComment;
 	node?: INode;
 	new_comments?: IComment[];
+	new_layers?: ILayer[];
 	new_nodes?: INode[];
 	offset?: number[];
+	old_mouse?: number[] | null;
 	original_comments?: IComment[];
+	original_layers?: ILayer[];
 	original_nodes?: INode[];
 	from_coordinates?: number[] | null;
 	node_id?: string;
@@ -54,8 +58,11 @@ export interface IComment {
 	comment_type: ICommentType;
 	content: string;
 	coordinates: number[];
+	height?: number | null;
 	id: string;
+	layer?: null | string;
 	timestamp: ISystemTime;
+	width?: number | null;
 	[property: string]: any;
 }
 
@@ -160,8 +167,10 @@ export interface INodeScores {
 }
 
 export interface ILayer {
+	comment?: null | string;
 	comments: { [key: string]: IComment };
 	coordinates: number[];
+	error?: null | string;
 	id: string;
 	name: string;
 	nodes: { [key: string]: INode };

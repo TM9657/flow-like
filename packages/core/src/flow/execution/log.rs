@@ -1,10 +1,14 @@
 use flow_like_storage::{
-    arrow_array::RecordBatch, async_duckdb::duckdb::arrow::compute::kernels, lancedb::arrow::{
-        self, arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit}, IntoArrow, RecordBatchReader
-    }, serde_arrow::{
+    arrow_array::RecordBatch,
+    async_duckdb::duckdb::arrow::compute::kernels,
+    lancedb::arrow::{
+        self, IntoArrow, RecordBatchReader,
+        arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit},
+    },
+    serde_arrow::{
         self,
         schema::{SchemaLike, TracingOptions},
-    }
+    },
 };
 use once_cell::sync::Lazy;
 use schemars::JsonSchema;

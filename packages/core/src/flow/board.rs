@@ -55,6 +55,8 @@ pub struct Layer {
     pub comments: HashMap<String, Comment>,
     pub coordinates: (f32, f32, f32),
     pub pins: HashMap<String, Pin>,
+    pub comment: Option<String>,
+    pub error: Option<String>,
 }
 
 impl Layer {
@@ -69,6 +71,8 @@ impl Layer {
             comments: HashMap::new(),
             coordinates: (0.0, 0.0, 0.0),
             pins: HashMap::new(),
+            comment: None,
+            error: None,
         }
     }
 }
@@ -493,6 +497,9 @@ pub struct Comment {
     pub comment_type: CommentType,
     pub timestamp: SystemTime,
     pub coordinates: (f32, f32, f32),
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+    pub layer: Option<String>,
 }
 
 #[cfg(test)]

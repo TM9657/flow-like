@@ -1,4 +1,5 @@
 export interface IUpsertLayer {
+	current_layer?: null | string;
 	layer: ILayer;
 	node_ids: string[];
 	old_layer?: null | ILayer;
@@ -6,8 +7,10 @@ export interface IUpsertLayer {
 }
 
 export interface ILayer {
+	comment?: null | string;
 	comments: { [key: string]: IComment };
 	coordinates: number[];
+	error?: null | string;
 	id: string;
 	name: string;
 	nodes: { [key: string]: INode };
@@ -23,8 +26,11 @@ export interface IComment {
 	comment_type: ICommentType;
 	content: string;
 	coordinates: number[];
+	height?: number | null;
 	id: string;
+	layer?: null | string;
 	timestamp: ISystemTime;
+	width?: number | null;
 	[property: string]: any;
 }
 

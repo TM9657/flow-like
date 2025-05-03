@@ -47,7 +47,6 @@ import {
 	ILogLevel,
 	IPinType,
 	IValueType,
-	handleCopy,
 	removeNodeCommand,
 	updateNodeCommand,
 	upsertLayerCommand,
@@ -96,6 +95,7 @@ export type FlowNode = Node<
 		boardId: string;
 		appId: string;
 		onExecute: (node: INode, payload?: object) => Promise<void>;
+		onCopy: () => Promise<void>;
 	},
 	"node"
 >;
@@ -735,7 +735,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	}, [props.data.node.pins]);
 
 	const copy = useCallback(async () => {
-		handleCopy(flow.getNodes());
+		props.data.onCopy();
 	}, [flow]);
 
 	const handleError = useCallback(async () => {
@@ -842,6 +842,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					comments: {},
 					nodes: {},
 					pins: {},
+					parent_id: props.data.node.layer,
 					coordinates: [flowCords.x, flowCords.y, 0],
 					name: "Collapsed",
 					type: ILayerType.Collapsed,

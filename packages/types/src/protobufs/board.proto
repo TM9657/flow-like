@@ -32,7 +32,7 @@ enum LayerType {
 
 message Layer {
   string id = 1;
-  string parent_id = 2;
+  optional string parent_id = 2;
   string name = 3;
   LayerType type = 4;
   map<string, Node> nodes = 5;
@@ -42,6 +42,8 @@ message Layer {
   float coord_y = 9;
   float coord_z = 10;
   map<string, Pin> pins = 11;
+  optional string comment = 12;
+  optional string error = 13;
 }
 
 message Board {

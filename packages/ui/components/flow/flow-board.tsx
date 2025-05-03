@@ -74,7 +74,7 @@ import {
 	handlePaste,
 	isValidConnection,
 	parseBoard,
-} from "../../lib/flow-board";
+} from "../../lib/flow-board-utils";
 import { toastError, toastSuccess } from "../../lib/messages";
 import {
 	type IComment,
@@ -85,6 +85,7 @@ import {
 } from "../../lib/schema/flow/board";
 import { type INode, IVariableType } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
+import type { ILayer } from "../../lib/schema/flow/run";
 import { convertJsonToUint8Array } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
 import { useFlowBoardParentState } from "../../state/flow-board-parent-state";
@@ -106,6 +107,7 @@ import {
 	Separator,
 	Textarea,
 } from "../ui";
+import { FlowBreadCrumb } from "./flow-breadcrumb";
 import { useUndoRedo } from "./flow-history";
 import { FlowRuns } from "./flow-runs";
 import { LayerNode } from "./layer-node";
@@ -121,7 +123,8 @@ export function FlowBoard({
 	const edgeReconnectSuccessful = useRef(true);
 	const { isOver, setNodeRef, active } = useDroppable({ id: "flow" });
 	const parentRegister = useFlowBoardParentState();
-	const { refetchLogs, setCurrentMetadata, currentMetadata } = useLogAggregation();
+	const { refetchLogs, setCurrentMetadata, currentMetadata } =
+		useLogAggregation();
 	const flowRef = useRef<any>(null);
 
 	const flowPanelRef = useRef<ImperativePanelHandle>(null);
@@ -153,16 +156,20 @@ export function FlowBoard({
 		stage: "Dev",
 		logLevel: "Debug",
 	});
-	const [layer, setLayer] = useState<string | undefined>();
+	const [currentLayer, setCurrentLayer] = useState<string | undefined>();
+	const [layerPath, setLayerPath] = useState<string | undefined>();
 	const colorMode = useMemo(
 		() => (resolvedTheme === "dark" ? "dark" : "light"),
 		[resolvedTheme],
 	);
 
-	const pinToNode = useCallback((pinId: string) => {
-		const [_, node] = pinCache.get(pinId) || [];
-		return node
-	}, [nodes])
+	const pinToNode = useCallback(
+		(pinId: string) => {
+			const [_, node] = pinCache.get(pinId) || [];
+			return node;
+		},
+		[nodes, pinCache],
+	);
 
 	const executeCommand = useCallback(
 		async (command: IGenericCommand, append = false): Promise<any> => {
@@ -225,9 +232,7 @@ export function FlowBoard({
 	function toggleLogs() {
 		if (!logPanelRef.current) return;
 		const isCollapsed = logPanelRef.current.isCollapsed();
-		isCollapsed
-			? logPanelRef.current.expand()
-			: logPanelRef.current.collapse();
+		isCollapsed ? logPanelRef.current.expand() : logPanelRef.current.collapse();
 
 		if (!isCollapsed) {
 			return;
@@ -236,6 +241,17 @@ export function FlowBoard({
 		const size = logPanelRef.current.getSize();
 		if (size < 10) logPanelRef.current.resize(20);
 	}
+
+	const pushLayer = useCallback(
+		(pushedLayer: ILayer) => {
+			setCurrentLayer(pushedLayer.id);
+			setLayerPath((old) => {
+				if (old) return `${old}/${pushedLayer.id}`;
+				return pushedLayer.id;
+			});
+		},
+		[currentLayer, setCurrentLayer, setLayerPath, layerPath],
+	);
 
 	const executeBoard = useCallback(
 		async (node: INode, payload?: object) => {
@@ -283,16 +299,27 @@ export function FlowBoard({
 				x: mousePosition.x,
 				y: mousePosition.y,
 			});
-			await handlePaste(event, currentCursorPosition, boardId, executeCommand);
+			await handlePaste(
+				event,
+				currentCursorPosition,
+				boardId,
+				executeCommand,
+				currentLayer,
+			);
 		},
-		[boardId, mousePosition, executeCommand],
+		[boardId, mousePosition, executeCommand, currentLayer],
 	);
 
 	const handleCopyCB = useCallback(
-		(event: ClipboardEvent) => {
-			handleCopy(nodes, event);
+		(event?: ClipboardEvent) => {
+			if (!board.data) return;
+			const currentCursorPosition = screenToFlowPosition({
+				x: mousePosition.x,
+				y: mousePosition.y,
+			});
+			handleCopy(nodes, board.data, currentCursorPosition, event);
 		},
-		[nodes],
+		[nodes, mousePosition, board.data],
 	);
 
 	const placeNodeShortcut = useCallback(
@@ -406,6 +433,7 @@ export function FlowBoard({
 			});
 			const result = addNodeCommand({
 				node: { ...node, coordinates: [location.x, location.y, 0] },
+				current_layer: currentLayer,
 			});
 
 			await executeCommand(result.command);
@@ -468,7 +496,7 @@ export function FlowBoard({
 				await executeCommand(command);
 			}
 		},
-		[clickPosition, boardId, droppedPin, board.data?.refs],
+		[clickPosition, boardId, droppedPin, board.data?.refs, currentLayer],
 	);
 
 	const handleDrop = useCallback(
@@ -539,13 +567,15 @@ export function FlowBoard({
 		const parsed = parseBoard(
 			board.data,
 			appId,
+			handleCopyCB,
+			pushLayer,
 			executeBoard,
 			executeCommand,
 			selected.current,
 			currentProfile.data?.flow_settings.connection_mode,
 			nodes,
 			edges,
-			layer,
+			currentLayer,
 		);
 
 		setNodes(parsed.nodes);
@@ -557,7 +587,7 @@ export function FlowBoard({
 			stage: board.data.stage,
 			logLevel: board.data.log_level,
 		});
-	}, [board.data, layer]);
+	}, [board.data, currentLayer]);
 
 	const miniSearch = useMemo(
 		() =>
@@ -699,9 +729,9 @@ export function FlowBoard({
 								});
 							}
 
-							const foundLayer = Object.values(
-								board.data?.layers || {},
-							).find((layer) => layer.id === change.id);
+							const foundLayer = Object.values(board.data?.layers || {}).find(
+								(layer) => layer.id === change.id,
+							);
 
 							if (foundLayer) {
 								return removeLayerCommand({
@@ -710,7 +740,7 @@ export function FlowBoard({
 									layer_nodes: [],
 									layers: [],
 									nodes: [],
-									preserve_nodes: false
+									preserve_nodes: false,
 								});
 							}
 
@@ -767,14 +797,14 @@ export function FlowBoard({
 								from_pin: fromPin.id,
 								to_node: toNode.id,
 								to_pin: toPin.id,
-							})
+							});
 						})
 						.filter((command: any) => command !== undefined) as any[],
 				);
 
 				return applyEdgeChanges(changes, eds);
 			}),
-		[setEdges, board.data, boardId],
+		[setEdges, board.data, boardId, pinCache],
 	);
 
 	const onReconnectStart = useCallback(() => {
@@ -792,6 +822,8 @@ export function FlowBoard({
 
 			if (!oldEdgeToNode || !oldEdgeFromNode) return;
 
+			const commands = [];
+
 			const disconnectCommand = disconnectPinsCommand({
 				from_node: oldEdgeFromNode.id,
 				from_pin: oldEdge.sourceHandle,
@@ -799,27 +831,29 @@ export function FlowBoard({
 				to_pin: oldEdge.targetHandle,
 			});
 
-			await executeCommand(disconnectCommand);
+			commands.push(disconnectCommand);
 
-			if (!newConnection.targetHandle || !newConnection.sourceHandle) return;
-			const newConnectionSourceNode = pinToNode(newConnection.sourceHandle);
-			const newConnectionTargetNode = pinToNode(newConnection.targetHandle);
+			if (newConnection.targetHandle && newConnection.sourceHandle) {
+				const newConnectionSourceNode = pinToNode(newConnection.sourceHandle);
+				const newConnectionTargetNode = pinToNode(newConnection.targetHandle);
 
-			if (!newConnectionSourceNode || !newConnectionTargetNode) return;
+				if (newConnectionSourceNode && newConnectionTargetNode)
+					commands.push(
+						connectPinsCommand({
+							from_node: newConnectionSourceNode.id,
+							from_pin: newConnection.sourceHandle,
+							to_node: newConnectionTargetNode.id,
+							to_pin: newConnection.targetHandle,
+						}),
+					);
+			}
 
-			const connectCommand = connectPinsCommand({
-				from_node: newConnectionSourceNode.id,
-				from_pin: newConnection.sourceHandle,
-				to_node: newConnectionTargetNode.id,
-				to_pin: newConnection.targetHandle,
-			});
-
-			await executeCommand(connectCommand, true);
+			await executeCommands(commands);
 
 			edgeReconnectSuccessful.current = true;
 			setEdges((els) => reconnectEdge(oldEdge, newConnection, els));
 		},
-		[boardId, setEdges],
+		[boardId, setEdges, pinToNode, executeCommands],
 	);
 
 	const onReconnectEnd = useCallback(
@@ -841,7 +875,7 @@ export function FlowBoard({
 
 			edgeReconnectSuccessful.current = true;
 		},
-		[boardId, setEdges],
+		[boardId, setEdges, pinToNode],
 	);
 
 	const onContextMenuCB = useCallback((event: any) => {
@@ -852,30 +886,12 @@ export function FlowBoard({
 		async (event: any, node: any, nodes: any) => {
 			const commands: IGenericCommand[] = [];
 			for await (const node of nodes) {
-				console.log(
-					`Moving node ${node.id} to ${node.position.x}, ${node.position.y}`,
-				);
-				const comment = Object.values(board.data?.comments || {}).find(
-					(comment) => comment.id === node.id,
-				);
-				if (comment) {
-					const command = upsertCommentCommand({
-						comment: {
-							...comment,
-							coordinates: [node.position.x, node.position.y, 0],
-						},
-					});
-					commands.push(command);
-				}
+				const command = moveNodeCommand({
+					node_id: node.id,
+					to_coordinates: [node.position.x, node.position.y, 0],
+				});
 
-				if (!comment) {
-					const command = moveNodeCommand({
-						node_id: node.id,
-						to_coordinates: [node.position.x, node.position.y, 0],
-					});
-
-					commands.push(command);
-				}
+				commands.push(command);
 			}
 			await executeCommands(commands);
 		},
@@ -889,8 +905,31 @@ export function FlowBoard({
 		[pinCache, board.data?.refs],
 	) as IsValidConnection<Edge>;
 
+	const onNodeDoubleClick = useCallback(
+		(event: any, node: any) => {
+			const type = node?.type ?? "";
+			if (type === "layerNode") {
+				const layer: ILayer = node.data.layer;
+				pushLayer(layer);
+				return;
+			}
+		},
+		[pushLayer],
+	);
+
 	return (
 		<div className="min-h-dvh h-dvh max-h-dvh w-full flex-1 flex-grow">
+			<div className="absolute top-0 left-0 z-50 mt-2 px-2">
+				<FlowBreadCrumb
+					currentPath={layerPath}
+					layers={board.data?.layers}
+					onAdjustPath={(path) => {
+						setLayerPath(path);
+						const segment = path?.split("/").pop();
+						setCurrentLayer(segment);
+					}}
+				/>
+			</div>
 			<div className="flex items-center justify-center absolute translate-x-[-50%] left-[50dvw] top-5 z-40">
 				<Dialog
 					open={editBoard}
@@ -1036,7 +1075,7 @@ export function FlowBoard({
 										icon: <ScrollIcon />,
 										title: "Logs",
 										onClick: async () => {
-											toggleLogs()
+											toggleLogs();
 										},
 									},
 								]
@@ -1081,6 +1120,7 @@ export function FlowBoard({
 
 									const command = upsertCommentCommand({
 										comment: new_comment,
+										current_layer: currentLayer,
 									});
 
 									await executeCommand(command);
@@ -1124,12 +1164,12 @@ export function FlowBoard({
 									className={`w-full h-full relative ${isOver && "border-green-400 border-2 z-10"}`}
 									ref={setNodeRef}
 								>
-									<div className="absolute top-0 left-0 right-0 p-1 z-40 flex flex-row items-center gap-1">
+									<div className="absolute top-0 left-0 right-0 p-1 z-40 flex flex-row items-center gap-1 mt-10">
 										{openBoards.data?.map(([appId, boardLoadId, boardName]) => (
 											<Link
 												key={boardLoadId}
 												className={`flex flex-row items-center gap-2 border p-1 px-2 bg-background rounded-md hover:bg-card ${boardLoadId === boardId ? "bg-card" : ""}`}
-												href={`/flow?id=${boardLoadId}`}
+												href={`/flow?id=${boardLoadId}&app=${appId}`}
 											>
 												<small>{boardName}</small>
 												<Button
@@ -1168,6 +1208,8 @@ export function FlowBoard({
 										nodes={nodes}
 										nodeTypes={nodeTypes}
 										edges={edges}
+										maxZoom={5}
+										onNodeDoubleClick={onNodeDoubleClick}
 										onNodesChange={onNodesChangeIntercept}
 										onEdgesChange={onEdgesChange}
 										onNodeDragStop={onNodeDragStop}
@@ -1213,19 +1255,19 @@ export function FlowBoard({
 						<ResizablePanel
 							hidden={!currentMetadata}
 							ref={logPanelRef}
+							defaultSize={0}
+							collapsedSize={0}
 							collapsible={true}
 							autoSave="flow-logs"
 						>
-							{currentMetadata && (
-								<Traces appId={appId} boardId={boardId}/>
-							)}
+							{currentMetadata && <Traces appId={appId} boardId={boardId} />}
 						</ResizablePanel>
 					</ResizablePanelGroup>
 				</ResizablePanel>
 				<ResizableHandle withHandle />
 				<ResizablePanel
 					autoSave="flow-runs"
-					defaultSize={30}
+					defaultSize={0}
 					collapsible={true}
 					collapsedSize={0}
 					ref={runsPanelRef}

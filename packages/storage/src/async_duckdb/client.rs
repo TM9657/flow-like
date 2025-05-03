@@ -4,7 +4,7 @@ use std::{
     thread,
 };
 
-use crossbeam_channel::{bounded, unbounded, Sender};
+use crossbeam_channel::{Sender, bounded, unbounded};
 use duckdb::{Config, Connection};
 use futures_channel::oneshot;
 
