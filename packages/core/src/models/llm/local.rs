@@ -163,8 +163,8 @@ impl LocalModel {
             }
 
             let gpu_layer = gpu_layer.to_string();
-            args.push("-ngl");
-            args.push(&gpu_layer);
+            //args.push("-ngl");
+            //args.push(&gpu_layer);
 
             println!("Starting LLM Server with args: {:?}", args);
 
