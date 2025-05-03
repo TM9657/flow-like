@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 pub struct UpsertCommentCommand {
     pub comment: Comment,
     pub old_comment: Option<Comment>,
+    pub current_layer: Option<String>,
 }
 
 impl UpsertCommentCommand {
@@ -19,6 +20,7 @@ impl UpsertCommentCommand {
         UpsertCommentCommand {
             comment,
             old_comment: None,
+            current_layer: None,
         }
     }
 }
@@ -30,6 +32,7 @@ impl Command for UpsertCommentCommand {
         board: &mut Board,
         _: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
+        self.comment.layer = self.current_layer.clone();
         if let Some(old_variable) = board
             .comments
             .insert(self.comment.id.clone(), self.comment.clone())

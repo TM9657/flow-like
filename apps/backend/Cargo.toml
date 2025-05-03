@@ -23,10 +23,11 @@ tracing = "0.1.41"
 sentry-tracing = "0.36.0"
 sentry = "0.36.0"
 sentry-tower = { version = "0.36.0", features = ["axum", "axum-matched-path"] }
+bytemuck  = "1.23.0"
 
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
-panic = "abort" 
+panic = "abort"
 strip = true

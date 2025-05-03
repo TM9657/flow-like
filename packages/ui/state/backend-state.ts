@@ -10,12 +10,13 @@ import type {
 	IFileMetadata,
 	IGenericCommand,
 	IIntercomEvent,
+	ILog,
 	ILogLevel,
+	ILogMetadata,
 	INode,
 	IProfile,
-	IRun,
+	IRunPayload,
 } from "../lib";
-import type { IRunPayload } from "../lib/schema/flow/run";
 import type { ISettingsProfile } from "../types";
 
 export interface IBackendState {
@@ -24,18 +25,35 @@ export interface IBackendState {
 	getBoards(appId: string): Promise<IBoard[]>;
 	getCatalog(): Promise<INode[]>;
 	getBoard(appId: string, boardId: string): Promise<IBoard>;
-	// [BoardId, BoardName]
-	getOpenBoards(): Promise<[string, string][]>;
+	// [AppId, BoardId, BoardName]
+	getOpenBoards(): Promise<[string, string, string][]>;
 	getBoardSettings(): Promise<"straight" | "step" | "simpleBezier">;
 
 	executeBoard(
 		appId: string,
 		boardId: string,
-		payload: IRunPayload[],
+		payload: IRunPayload,
 		cb?: (event: IIntercomEvent[]) => void,
-	): Promise<string>;
+	): Promise<ILogMetadata | undefined>;
 
-	getRun(appId: string, runId: string): Promise<IRun>;
+	listRuns(
+		appId: string,
+		boardId: string,
+		nodeId?: string,
+		from?: number,
+		to?: number,
+		status?: ILogLevel,
+		limit?: number,
+		offset?: number,
+		lastMeta?: ILogMetadata,
+	): Promise<ILogMetadata[]>;
+	queryRun(
+		logMeta: ILogMetadata,
+		query: string,
+		limit?: number,
+		offset?: number,
+	): Promise<ILog[]>;
+
 	finalizeRun(appId: string, runId: string): Promise<void>;
 	undoBoard(
 		appId: string,

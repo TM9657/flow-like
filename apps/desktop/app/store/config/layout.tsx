@@ -63,29 +63,27 @@ export default function Id({
 			boardId: boardId,
 			pushToRegistry: true,
 		});
-		const runId = await backend.executeBoard(
+		const runMeta = await backend.executeBoard(
 			id,
 			boardId,
-			[
-				{
-					id: node.id,
-				},
-			],
+			{
+				id: node.id,
+			},
 			(events) => {},
 		);
 
-		if (!runId) {
+		if (!runMeta) {
 			toastError(
 				"Failed to execute board",
 				<PlayCircleIcon className="w-4 h-4" />,
 			);
 			return;
 		}
-		await addRun(runId, boardId, [node.id]);
-		await invoke("execute_run", { id: runId });
-		removeRun(runId);
-		await invoke("get_run", { id: runId });
-		await invoke("finalize_run", { id: runId });
+		await addRun(runMeta.run_id, boardId, [node.id]);
+		await invoke("execute_run", { id: runMeta });
+		removeRun(runMeta.run_id);
+		await invoke("get_run", { id: runMeta });
+		await invoke("finalize_run", { id: runMeta });
 	}
 
 	return (

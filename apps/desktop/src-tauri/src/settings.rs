@@ -4,6 +4,20 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::SystemTime};
 use tauri::AppHandle;
 
+fn default_logs_dir() -> PathBuf {
+    dirs_next::data_dir()
+        .unwrap_or_default()
+        .join("flow-like")
+        .join("logs")
+}
+
+fn default_temporary_dir() -> PathBuf {
+    dirs_next::data_dir()
+        .unwrap_or_default()
+        .join("flow-like")
+        .join("temporary")
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Settings {
     loaded: bool,
@@ -12,6 +26,10 @@ pub struct Settings {
     pub current_profile: String,
     pub bit_dir: PathBuf,
     pub project_dir: PathBuf,
+    #[serde(default = "default_logs_dir")]
+    pub logs_dir: PathBuf,
+    #[serde(default = "default_temporary_dir")]
+    pub temporary_dir: PathBuf,
     pub user_dir: PathBuf,
     pub profiles: HashMap<String, UserProfile>,
     pub updated: SystemTime,
@@ -55,6 +73,8 @@ impl Settings {
                 .unwrap_or_default()
                 .join("flow-like")
                 .join("projects"),
+            logs_dir: default_logs_dir(),
+            temporary_dir: default_temporary_dir(),
             user_dir: dirs_next::cache_dir().unwrap_or_default().join("flow-like"),
             profiles: HashMap::new(),
             created: SystemTime::now(),

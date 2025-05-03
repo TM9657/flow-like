@@ -33,12 +33,10 @@ export {
 	IPinType,
 } from "./flow/pin";
 export type {
-	IRun,
-	ITrace,
-	ILogMessage,
+	ILog,
 	ILogStat,
-	IRunStatus,
-} from "./flow/run";
+} from "./flow/log";
+export type { ILogMetadata } from "./flow/log-metadata";
 
 export type { IAddNode } from "./flow/board/commands/add-node";
 export type { IConnectPins } from "./flow/board/commands/connect-pins";
@@ -53,6 +51,8 @@ export type { IUpdateNode } from "./flow/board/commands/update-node";
 export type { IUpsertComment } from "./flow/board/commands/upsert-comment";
 export type { IUpsertPin } from "./flow/board/commands/upsert-pin";
 export type { IUpsertVariable } from "./flow/board/commands/upsert-variable";
+export type { IUpsertLayer } from "./flow/board/commands/upsert-layer";
+export type { IRemoveLayer } from "./flow/board/commands/remove-layer";
 export * from "./hub/hub";
 export * from "./llm/history";
 export * from "./llm/response";

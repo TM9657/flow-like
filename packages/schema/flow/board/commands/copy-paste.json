@@ -4,9 +4,11 @@
 	"type": "object",
 	"required": [
 		"new_comments",
+		"new_layers",
 		"new_nodes",
 		"offset",
 		"original_comments",
+		"original_layers",
 		"original_nodes"
 	],
 	"properties": {
@@ -22,6 +24,12 @@
 				"$ref": "#/definitions/Comment"
 			}
 		},
+		"original_layers": {
+			"type": "array",
+			"items": {
+				"$ref": "#/definitions/Layer"
+			}
+		},
 		"new_comments": {
 			"type": "array",
 			"items": {
@@ -33,6 +41,34 @@
 			"items": {
 				"$ref": "#/definitions/Node"
 			}
+		},
+		"new_layers": {
+			"type": "array",
+			"items": {
+				"$ref": "#/definitions/Layer"
+			}
+		},
+		"current_layer": {
+			"type": ["string", "null"]
+		},
+		"old_mouse": {
+			"type": ["array", "null"],
+			"items": [
+				{
+					"type": "number",
+					"format": "float"
+				},
+				{
+					"type": "number",
+					"format": "float"
+				},
+				{
+					"type": "number",
+					"format": "float"
+				}
+			],
+			"maxItems": 3,
+			"minItems": 3
 		},
 		"offset": {
 			"type": "array",
@@ -343,6 +379,17 @@
 					],
 					"maxItems": 3,
 					"minItems": 3
+				},
+				"width": {
+					"type": ["number", "null"],
+					"format": "float"
+				},
+				"height": {
+					"type": ["number", "null"],
+					"format": "float"
+				},
+				"layer": {
+					"type": ["string", "null"]
 				}
 			}
 		},
@@ -363,6 +410,135 @@
 					"type": "integer",
 					"format": "uint32",
 					"minimum": 0.0
+				}
+			}
+		},
+		"Layer": {
+			"type": "object",
+			"required": [
+				"comments",
+				"coordinates",
+				"id",
+				"name",
+				"nodes",
+				"pins",
+				"type",
+				"variables"
+			],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"parent_id": {
+					"type": ["string", "null"]
+				},
+				"name": {
+					"type": "string"
+				},
+				"type": {
+					"$ref": "#/definitions/LayerType"
+				},
+				"nodes": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Node"
+					}
+				},
+				"variables": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Variable"
+					}
+				},
+				"comments": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Comment"
+					}
+				},
+				"coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"pins": {
+					"type": "object",
+					"additionalProperties": {
+						"$ref": "#/definitions/Pin"
+					}
+				},
+				"comment": {
+					"type": ["string", "null"]
+				},
+				"error": {
+					"type": ["string", "null"]
+				}
+			}
+		},
+		"LayerType": {
+			"type": "string",
+			"enum": ["Function", "Macro", "Collapsed"]
+		},
+		"Variable": {
+			"type": "object",
+			"required": [
+				"data_type",
+				"editable",
+				"exposed",
+				"id",
+				"name",
+				"secret",
+				"value_type"
+			],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				},
+				"category": {
+					"type": ["string", "null"]
+				},
+				"description": {
+					"type": ["string", "null"]
+				},
+				"default_value": {
+					"type": ["array", "null"],
+					"items": {
+						"type": "integer",
+						"format": "uint8",
+						"minimum": 0.0
+					}
+				},
+				"data_type": {
+					"$ref": "#/definitions/VariableType"
+				},
+				"value_type": {
+					"$ref": "#/definitions/ValueType"
+				},
+				"exposed": {
+					"type": "boolean"
+				},
+				"secret": {
+					"type": "boolean"
+				},
+				"editable": {
+					"type": "boolean"
 				}
 			}
 		}

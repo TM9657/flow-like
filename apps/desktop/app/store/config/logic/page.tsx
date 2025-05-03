@@ -170,7 +170,7 @@ function Board({
 							boardId: board.id,
 							pushToRegistry: true,
 						});
-						router.push(`/flow?id=${board.id}`);
+						router.push(`/flow?id=${board.id}&app=${app.id}`);
 					}}
 				>
 					<div className="flex flex-row items-center gap-2 w-full justify-between">

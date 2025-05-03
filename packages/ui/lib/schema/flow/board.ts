@@ -21,8 +21,11 @@ export interface IComment {
 	comment_type: ICommentType;
 	content: string;
 	coordinates: number[];
+	height?: number | null;
 	id: string;
+	layer?: null | string;
 	timestamp: ISystemTime;
+	width?: number | null;
 	[property: string]: any;
 }
 
@@ -39,8 +42,10 @@ export interface ISystemTime {
 }
 
 export interface ILayer {
+	comment?: null | string;
 	comments: { [key: string]: IComment };
 	coordinates: number[];
+	error?: null | string;
 	id: string;
 	name: string;
 	nodes: { [key: string]: INode };

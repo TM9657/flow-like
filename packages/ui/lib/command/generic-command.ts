@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import type { INode } from "../schema";
+import type { INode, IRemoveLayer, IUpsertLayer } from "../schema";
 import type { IAddNode } from "../schema/flow/board/commands/add-node";
 import type { IConnectPins } from "../schema/flow/board/commands/connect-pins";
 import type { ICopyPaste } from "../schema/flow/board/commands/copy-paste";
@@ -142,6 +142,24 @@ export function removeVariableCommand(
 	const generic_command = {
 		...command,
 		command_type: ICommandType.RemoveVariable,
+	};
+
+	return generic_command as any;
+}
+
+export function removeLayerCommand(command: IRemoveLayer): IGenericCommand {
+	const generic_command = {
+		...command,
+		command_type: ICommandType.RemoveLayer,
+	};
+
+	return generic_command as any;
+}
+
+export function upsertLayerCommand(command: IUpsertLayer): IGenericCommand {
+	const generic_command = {
+		...command,
+		command_type: ICommandType.UpsertLayer,
 	};
 
 	return generic_command as any;

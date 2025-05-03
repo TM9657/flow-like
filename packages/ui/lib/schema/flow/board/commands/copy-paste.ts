@@ -1,8 +1,12 @@
 export interface ICopyPaste {
+	current_layer?: null | string;
 	new_comments: IComment[];
+	new_layers: ILayer[];
 	new_nodes: INode[];
 	offset: number[];
+	old_mouse?: number[] | null;
 	original_comments: IComment[];
+	original_layers: ILayer[];
 	original_nodes: INode[];
 	[property: string]: any;
 }
@@ -12,8 +16,11 @@ export interface IComment {
 	comment_type: ICommentType;
 	content: string;
 	coordinates: number[];
+	height?: number | null;
 	id: string;
+	layer?: null | string;
 	timestamp: ISystemTime;
+	width?: number | null;
 	[property: string]: any;
 }
 
@@ -26,6 +33,21 @@ export enum ICommentType {
 export interface ISystemTime {
 	nanos_since_epoch: number;
 	secs_since_epoch: number;
+	[property: string]: any;
+}
+
+export interface ILayer {
+	comment?: null | string;
+	comments: { [key: string]: IComment };
+	coordinates: number[];
+	error?: null | string;
+	id: string;
+	name: string;
+	nodes: { [key: string]: INode };
+	parent_id?: null | string;
+	pins: { [key: string]: IPin };
+	type: ILayerType;
+	variables: { [key: string]: IVariable };
 	[property: string]: any;
 }
 
@@ -114,5 +136,25 @@ export interface INodeScores {
 	performance: number;
 	privacy: number;
 	security: number;
+	[property: string]: any;
+}
+
+export enum ILayerType {
+	Collapsed = "Collapsed",
+	Function = "Function",
+	Macro = "Macro",
+}
+
+export interface IVariable {
+	category?: null | string;
+	data_type: IVariableType;
+	default_value?: number[] | null;
+	description?: null | string;
+	editable: boolean;
+	exposed: boolean;
+	id: string;
+	name: string;
+	secret: boolean;
+	value_type: IValueType;
 	[property: string]: any;
 }

@@ -31,20 +31,28 @@ impl Command for MoveNodeCommand {
         board: &mut Board,
         _: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
-        let node = match board.nodes.get_mut(&self.node_id) {
-            Some(node) => node,
-            None => {
-                return Err(flow_like_types::anyhow!(format!(
-                    "Node {} not found",
-                    self.node_id
-                )));
-            }
-        };
+        if let Some(layer) = board.layers.get_mut(&self.node_id) {
+            self.from_coordinates = Some(layer.coordinates);
+            layer.coordinates = self.to_coordinates;
+            return Ok(());
+        }
 
-        self.from_coordinates = node.coordinates;
-        node.coordinates = Some(self.to_coordinates);
+        if let Some(comment) = board.comments.get_mut(&self.node_id) {
+            self.from_coordinates = Some(comment.coordinates);
+            comment.coordinates = self.to_coordinates;
+            return Ok(());
+        }
 
-        Ok(())
+        if let Some(node) = board.nodes.get_mut(&self.node_id) {
+            self.from_coordinates = node.coordinates;
+            node.coordinates = Some(self.to_coordinates);
+            return Ok(());
+        }
+
+        Err(flow_like_types::anyhow!(format!(
+            "Node: {} not found",
+            self.node_id
+        )))
     }
 
     async fn undo(

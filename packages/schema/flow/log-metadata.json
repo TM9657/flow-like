@@ -1,0 +1,79 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "LogMeta",
+	"type": "object",
+	"required": [
+		"app_id",
+		"board_id",
+		"end",
+		"log_level",
+		"node_id",
+		"payload",
+		"run_id",
+		"start",
+		"version"
+	],
+	"properties": {
+		"app_id": {
+			"type": "string"
+		},
+		"run_id": {
+			"type": "string"
+		},
+		"board_id": {
+			"type": "string"
+		},
+		"start": {
+			"type": "integer",
+			"format": "uint64",
+			"minimum": 0.0
+		},
+		"end": {
+			"type": "integer",
+			"format": "uint64",
+			"minimum": 0.0
+		},
+		"log_level": {
+			"type": "integer",
+			"format": "uint8",
+			"minimum": 0.0
+		},
+		"version": {
+			"type": "string"
+		},
+		"nodes": {
+			"type": ["array", "null"],
+			"items": {
+				"type": "array",
+				"items": [
+					{
+						"type": "string"
+					},
+					{
+						"type": "integer",
+						"format": "uint8",
+						"minimum": 0.0
+					}
+				],
+				"maxItems": 2,
+				"minItems": 2
+			}
+		},
+		"logs": {
+			"type": ["integer", "null"],
+			"format": "uint64",
+			"minimum": 0.0
+		},
+		"node_id": {
+			"type": "string"
+		},
+		"payload": {
+			"type": "array",
+			"items": {
+				"type": "integer",
+				"format": "uint8",
+				"minimum": 0.0
+			}
+		}
+	}
+}

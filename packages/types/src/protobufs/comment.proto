@@ -19,4 +19,7 @@ message Comment {
   float coord_x = 6;
   float coord_y = 7;
   float coord_z = 8;
+  optional string layer = 9;
+  optional float width = 10;
+  optional float height = 11;
 }

@@ -8,6 +8,7 @@ import {
 	transformerNotationWordHighlight,
 	transformerRenderWhitespace,
 } from "@shikijs/transformers";
+import { Suspense } from "react";
 import { toast } from "sonner";
 // https://github.com/shikijs/shiki/issues/829
 import useMarkdown from "../../hooks/use-markdown";
@@ -63,5 +64,5 @@ export function MarkdownComponent({ content }: Readonly<{ content: string }>) {
 		],
 	});
 
-	return markdown;
+	return <Suspense>{markdown}</Suspense>;
 }

@@ -4,15 +4,27 @@ use crate::profile::Profile;
 use crate::state::FlowLikeState;
 use ahash::AHasher;
 use context::ExecutionContext;
+use flow_like_storage::arrow_array::{RecordBatch, RecordBatchIterator};
+use flow_like_storage::arrow_schema::FieldRef;
+use flow_like_storage::files::store::FlowLikeStore;
+use flow_like_storage::lancedb::Connection;
+use flow_like_storage::lancedb::arrow::IntoArrowStream;
+use flow_like_storage::lancedb::index::scalar::BitmapIndexBuilder;
+use flow_like_storage::lancedb::query::ExecutableQuery;
+use flow_like_storage::serde_arrow::schema::{SchemaLike, TracingOptions};
+use flow_like_storage::{Path, serde_arrow};
 use flow_like_types::Value;
 use flow_like_types::intercom::InterComCallback;
+use flow_like_types::json::to_vec;
 use flow_like_types::sync::{DashMap, Mutex, RwLock};
 use flow_like_types::{Cacheable, anyhow, create_id};
 use futures::StreamExt;
 use futures::future::BoxFuture;
 use internal_node::InternalNode;
 use internal_pin::InternalPin;
+use log::LogMessage;
 use num_cpus;
+use once_cell::sync::Lazy;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
@@ -31,8 +43,18 @@ pub mod log;
 pub mod trace;
 
 const USE_DEPENDENCY_GRAPH: bool = false;
+static STORED_META_FIELDS: Lazy<Vec<FieldRef>> = Lazy::new(|| {
+    Vec::<FieldRef>::from_type::<LogMeta>(
+        TracingOptions::default()
+            .allow_null_fields(true)
+            .strings_as_large_utf8(false),
+    )
+    .expect("derive FieldRef for StoredLogMessage")
+});
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq, PartialOrd)]
+#[derive(
+    Serialize, Deserialize, JsonSchema, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub enum LogLevel {
     Debug = 0,
     Info = 1,
@@ -41,17 +63,256 @@ pub enum LogLevel {
     Fatal = 4,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone)]
+impl LogLevel {
+    pub fn from_u32(value: u32) -> Self {
+        match value {
+            0 => LogLevel::Debug,
+            1 => LogLevel::Info,
+            2 => LogLevel::Warn,
+            3 => LogLevel::Error,
+            4 => LogLevel::Fatal,
+            _ => LogLevel::Debug,
+        }
+    }
+
+    pub fn from_u8(value: u8) -> Self {
+        match value {
+            0 => LogLevel::Debug,
+            1 => LogLevel::Info,
+            2 => LogLevel::Warn,
+            3 => LogLevel::Error,
+            4 => LogLevel::Fatal,
+            _ => LogLevel::Debug,
+        }
+    }
+
+    pub fn to_u32(self) -> u32 {
+        match self {
+            LogLevel::Debug => 0,
+            LogLevel::Info => 1,
+            LogLevel::Warn => 2,
+            LogLevel::Error => 3,
+            LogLevel::Fatal => 4,
+        }
+    }
+
+    pub fn to_u8(self) -> u8 {
+        match self {
+            LogLevel::Debug => 0,
+            LogLevel::Info => 1,
+            LogLevel::Warn => 2,
+            LogLevel::Error => 3,
+            LogLevel::Fatal => 4,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct LogMeta {
+    pub app_id: String,
+    pub run_id: String,
+    pub board_id: String,
+    pub start: u64,
+    pub end: u64,
+    pub log_level: u8,
+    pub version: String,
+    pub nodes: Option<Vec<(String, u8)>>,
+    pub logs: Option<u64>,
+    pub node_id: String,
+    pub payload: Vec<u8>,
+}
+
+impl LogMeta {
+    fn into_arrow(&self) -> flow_like_types::Result<RecordBatch> {
+        let fields = &*STORED_META_FIELDS;
+        let batch = serde_arrow::to_record_batch(fields, &vec![self])?;
+        Ok(batch)
+    }
+
+    pub fn into_duckdb_types() -> String {
+        let fields = &*STORED_META_FIELDS;
+        let mut types = vec![];
+
+        for field in fields {
+            let field_type = match field.data_type() {
+                flow_like_storage::arrow_schema::DataType::Utf8 => "TEXT",
+                flow_like_storage::arrow_schema::DataType::UInt64 => "INTEGER",
+                flow_like_storage::arrow_schema::DataType::Int64 => "INTEGER",
+                flow_like_storage::arrow_schema::DataType::Boolean => "BOOLEAN",
+                _ => "TEXT",
+            };
+            types.push(format!("{} {}", field.name(), field_type));
+        }
+
+        types.join(", ")
+    }
+
+    pub async fn flush(&self, db: Connection) -> flow_like_types::Result<()> {
+        let arrow_batch = self.into_arrow()?;
+        let schema = arrow_batch.schema();
+
+        let table = db.open_table("runs").execute().await;
+
+        if let Err(err) = table {
+            let table = db
+                .create_empty_table("runs", schema.clone())
+                .execute()
+                .await?;
+            let iter = RecordBatchIterator::new(vec![arrow_batch].into_iter().map(Ok), schema);
+            table.add(iter).execute().await?;
+            table
+                .create_index(
+                    &["node_id"],
+                    flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
+                )
+                .execute()
+                .await?;
+            table
+                .create_index(
+                    &["log_level"],
+                    flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
+                )
+                .execute()
+                .await?;
+            table
+                .create_index(
+                    &["start"],
+                    flow_like_storage::lancedb::index::Index::BTree(
+                        flow_like_storage::lancedb::index::scalar::BTreeIndexBuilder {},
+                    ),
+                )
+                .execute()
+                .await?;
+            return Ok(());
+        }
+        let table = table?;
+        let iter = RecordBatchIterator::new(vec![arrow_batch].into_iter().map(Ok), schema);
+        table.add(iter).execute().await?;
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
 pub struct Run {
     pub id: String,
+    pub app_id: String,
     pub traces: Vec<Trace>,
     pub status: RunStatus,
     pub start: SystemTime,
     pub end: SystemTime,
     pub board: Arc<Board>,
     pub log_level: LogLevel,
-    pub payload: Arc<HashMap<String, RunPayload>>,
+    pub payload: Arc<RunPayload>,
     pub sub: String,
+    pub highest_log_level: LogLevel,
+    pub log_initialized: bool,
+    pub logs: u64,
+
+    pub visited_nodes: HashMap<String, LogLevel>,
+    pub log_store: Option<FlowLikeStore>,
+    pub log_db: Option<
+        Arc<dyn Fn(Path) -> flow_like_storage::lancedb::connection::ConnectBuilder + Send + Sync>,
+    >,
+}
+
+impl Run {
+    pub async fn flush_logs(&mut self, finalize: bool) -> flow_like_types::Result<Option<LogMeta>> {
+        let db_fn = self
+            .log_db
+            .as_ref()
+            .ok_or_else(|| anyhow!("No log database configured"))?;
+        let base_path = Path::from("runs")
+            .child(self.app_id.clone())
+            .child(self.board.id.clone());
+        println!("Flushing logs to {}", base_path);
+        let db = db_fn(base_path.clone()).execute().await?;
+
+        // 1) pre‑count total logs, reserve once, and find highest level in one pass
+        let total = self.traces.iter().map(|t| t.logs.len()).sum();
+        let mut logs = Vec::with_capacity(total);
+        let mut highest = self.highest_log_level;
+        for trace in self.traces.drain(..) {
+            let node_level = self
+                .visited_nodes
+                .entry(trace.node_id.clone())
+                .or_insert(LogLevel::Debug);
+
+            for log in trace.logs {
+                let lvl = log.log_level;
+
+                if lvl > highest {
+                    highest = lvl;
+                }
+
+                if lvl > *node_level {
+                    *node_level = lvl;
+                }
+
+                logs.push(log);
+            }
+        }
+        self.logs = self.logs.saturating_add(logs.len() as u64);
+        self.highest_log_level = highest;
+
+        // 2) write arrow batches
+        let arrow_batch = LogMessage::into_arrow(logs)?;
+        let schema = arrow_batch.schema();
+        let table = if self.log_initialized {
+            db.open_table(&self.id).execute().await?
+        } else {
+            let t = db
+                .create_empty_table(&self.id, schema.clone())
+                .execute()
+                .await?;
+            self.log_initialized = true;
+            t
+        };
+        let iter = RecordBatchIterator::new(vec![arrow_batch].into_iter().map(Ok), schema);
+        table.add(iter).execute().await?;
+
+        if !finalize {
+            return Ok(None);
+        }
+
+        // 3) write meta file
+        let vs = &self.board.version;
+        let version_string = format!("v{}-{}-{}", vs.0, vs.1, vs.2);
+        let start_micros = self
+            .start
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_micros()
+            .try_into()
+            .map_err(|_| anyhow!("start timestamp overflowed u64"))?;
+        let end_micros = self
+            .end
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_micros()
+            .try_into()
+            .map_err(|_| anyhow!("end timestamp overflowed u64"))?;
+        let payload =
+            to_vec(&self.payload.payload.clone().unwrap_or(Value::Null)).unwrap_or_default();
+        let visited_nodes = self
+            .visited_nodes
+            .drain()
+            .map(|(k, v)| (k, v.to_u8()))
+            .collect::<Vec<(String, u8)>>();
+
+        let content = LogMeta {
+            app_id: self.app_id.clone(),
+            run_id: self.id.clone(),
+            board_id: self.board.id.clone(),
+            start: start_micros,
+            end: end_micros,
+            log_level: self.highest_log_level.to_u8(),
+            version: version_string,
+            nodes: Some(visited_nodes),
+            logs: Some(self.logs),
+            node_id: self.payload.id.clone(),
+            payload,
+        };
+
+        Ok(Some(content))
+    }
 }
 
 #[derive(Clone)]
@@ -125,32 +386,43 @@ pub struct RunPayload {
 
 impl InternalRun {
     pub async fn new(
+        app_id: &str,
         board: Arc<Board>,
         handler: &Arc<Mutex<FlowLikeState>>,
         profile: &Profile,
-        payload: Vec<RunPayload>,
+        payload: RunPayload,
         sub: Option<String>,
         callback: InterComCallback,
     ) -> flow_like_types::Result<Self> {
         let before = Instant::now();
-        let mut payloads = HashMap::with_capacity(payload.len());
-        for payload in payload {
-            payloads.insert(payload.id.clone(), payload);
-        }
-        let payload = Arc::new(payloads);
-
         let run_id = create_id();
+
+        let (log_store, db) = {
+            let state = handler.lock().await;
+            let guard = state.config.read().await;
+            let log_store = guard.stores.log_store.clone();
+            let db = guard.callbacks.build_logs_database.clone();
+            (log_store, db)
+        };
 
         let run = Run {
             id: run_id.clone(),
+            app_id: app_id.to_string(),
             traces: vec![],
             status: RunStatus::Running,
             start: SystemTime::now(),
             end: SystemTime::now(),
-            log_level: board.log_level.clone(),
+            log_level: board.log_level,
             board: board.clone(),
-            payload: payload.clone(),
+            payload: Arc::new(payload.clone()),
             sub: sub.unwrap_or_else(|| "local".to_string()),
+            highest_log_level: LogLevel::Debug,
+            log_initialized: false,
+            logs: 0,
+
+            visited_nodes: HashMap::with_capacity(board.nodes.len()),
+            log_store,
+            log_db: db,
         };
 
         let run = Arc::new(Mutex::new(run));
@@ -213,7 +485,7 @@ impl InternalRun {
 
         let mut dependency_map = HashMap::with_capacity(board.nodes.len());
         let mut nodes = HashMap::with_capacity(board.nodes.len());
-        let mut stack = RunStack::with_capacity(payload.len());
+        let mut stack = RunStack::with_capacity(1);
 
         let registry = handler
             .lock()
@@ -261,7 +533,7 @@ impl InternalRun {
                 pin_guard.node = Arc::downgrade(&internal_node);
             }
 
-            if payload.contains_key(&node.id) {
+            if payload.id == node.id {
                 stack.push(&node.id, internal_node.clone());
             }
 
@@ -301,7 +573,7 @@ impl InternalRun {
             cpus: num_cpus::get(),
             callback,
             dependencies,
-            log_level: board.log_level.clone(),
+            log_level: board.log_level,
             profile: Arc::new(profile.clone()),
             completion_callbacks: Arc::new(RwLock::new(vec![])),
         })
@@ -362,7 +634,7 @@ impl InternalRun {
                 let profile = profile.clone();
                 let callback = callback.clone();
                 let stage = stage.clone();
-                let log_level = log_level.clone();
+                let log_level = log_level;
                 let concurrency_map = self.concurrency_map.clone();
                 let completion_callbacks = self.completion_callbacks.clone();
 
@@ -421,7 +693,7 @@ impl InternalRun {
             &self.run,
             variables,
             cache,
-            log_level.clone(),
+            log_level,
             stage.clone(),
             &self.dependencies,
             &self.profile,
@@ -446,11 +718,7 @@ impl InternalRun {
 
         let (stage, log_level, stack) = {
             let run = self.run.lock().await;
-            (
-                run.board.stage.clone(),
-                run.log_level.clone(),
-                self.stack.clone(),
-            )
+            (run.board.stage.clone(), run.log_level, self.stack.clone())
         };
 
         match stack.len() {
@@ -463,15 +731,30 @@ impl InternalRun {
         }
     }
 
-    pub async fn execute(&mut self, handler: Arc<Mutex<FlowLikeState>>) {
+    pub async fn execute(&mut self, handler: Arc<Mutex<FlowLikeState>>) -> Option<LogMeta> {
         let start = Instant::now();
-        self.run.lock().await.start = SystemTime::now();
+
+        {
+            let mut run = self.run.lock().await;
+            run.start = SystemTime::now();
+        }
+
         let mut stack_hash = self.stack.hash();
         let mut current_stack_len = self.stack.len();
-
         let mut errored = false;
+        let mut iter = 0;
+
         while current_stack_len > 0 {
             self.step(handler.clone()).await;
+            iter += 1;
+
+            if iter % 20 == 0 {
+                let mut run = self.run.lock().await;
+                if let Err(err) = run.flush_logs(false).await {
+                    eprintln!("[Error] flushing logs: {:?}", err);
+                }
+            }
+
             current_stack_len = self.stack.len();
             let new_stack_hash = self.stack.hash();
             if new_stack_hash == stack_hash {
@@ -483,16 +766,30 @@ impl InternalRun {
         }
 
         self.trigger_completion_callbacks().await;
-        self.run.lock().await.end = SystemTime::now();
-        self.run.lock().await.status = if errored {
-            RunStatus::Failed
-        } else {
-            RunStatus::Success
+
+        let meta = {
+            let mut run = self.run.lock().await;
+            run.end = SystemTime::now();
+            run.status = if errored {
+                RunStatus::Failed
+            } else {
+                RunStatus::Success
+            };
+            match run.flush_logs(true).await {
+                Ok(Some(meta)) => Some(meta),
+                Ok(None) => None,
+                Err(err) => {
+                    eprintln!("[Error] flushing logs (final): {:?}", err);
+                    None
+                }
+            }
         };
 
         if self.log_level == LogLevel::Info {
             println!("InternalRun::execute took {:?}", start.elapsed());
         }
+
+        meta
     }
 
     pub async fn debug_step(&mut self, handler: Arc<Mutex<FlowLikeState>>) -> bool {
@@ -627,7 +924,7 @@ async fn step_core(
         node,
         variables,
         cache,
-        log_level.clone(),
+        log_level,
         stage.clone(),
         profile.clone(),
         callback.clone(),

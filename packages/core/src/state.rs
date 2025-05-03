@@ -9,6 +9,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 #[cfg(feature = "flow-runtime")]
+use crate::flow::execution::{LogMeta, log::LogMessage};
+
+#[cfg(feature = "flow-runtime")]
 use crate::flow::board::Board;
 #[cfg(feature = "flow-runtime")]
 use crate::flow::execution::InternalRun;
@@ -30,11 +33,14 @@ pub struct FlowLikeStores {
     pub bits_store: Option<FlowLikeStore>,
     pub user_store: Option<FlowLikeStore>,
     pub project_store: Option<FlowLikeStore>,
+    pub temporary_store: Option<FlowLikeStore>,
+    pub log_store: Option<FlowLikeStore>,
 }
 
 #[derive(Clone, Default)]
 pub struct FlowLikeCallbacks {
     pub build_project_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
+    pub build_logs_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
 }
 
 #[derive(Clone, Default)]
@@ -63,11 +69,26 @@ impl FlowLikeConfig {
         self.stores.bits_store = Some(store);
     }
 
+    pub fn register_temporary_store(&mut self, store: FlowLikeStore) {
+        self.stores.temporary_store = Some(store);
+    }
+
+    pub fn register_log_store(&mut self, store: FlowLikeStore) {
+        self.stores.log_store = Some(store);
+    }
+
     pub fn register_build_project_database(
         &mut self,
         callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
     ) {
         self.callbacks.build_project_database = Some(callback);
+    }
+
+    pub fn register_build_logs_database(
+        &mut self,
+        callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
+    ) {
+        self.callbacks.build_logs_database = Some(callback);
     }
 }
 
@@ -349,6 +370,67 @@ impl FlowLikeState {
                 "Run not found or could not be locked"
             )),
         }
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub async fn query_run(
+        &self,
+        meta: &LogMeta,
+        query: &str,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> flow_like_types::Result<Vec<LogMessage>> {
+        use flow_like_storage::{
+            lancedb::query::{ExecutableQuery, QueryBase},
+            serde_arrow,
+        };
+        use flow_like_types::anyhow;
+        use futures::TryStreamExt;
+
+        use crate::flow::execution::log::StoredLogMessage;
+
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+
+        let db = {
+            let guard = self.config.read().await;
+
+            guard.callbacks.build_logs_database.clone()
+        };
+
+        let db_fn = db
+            .as_ref()
+            .ok_or_else(|| anyhow!("No log database configured"))?;
+        let base_path = Path::from("runs")
+            .child(meta.app_id.clone())
+            .child(meta.board_id.clone());
+        let db = db_fn(base_path.clone()).execute().await?;
+
+        let db = db.open_table(meta.run_id.clone()).execute().await?;
+        let mut q = db.query();
+
+        if !query.is_empty() {
+            q = q.only_if(query);
+        }
+
+        let results = q.limit(limit).offset(offset).execute().await?;
+        let results = results.try_collect::<Vec<_>>().await?;
+
+        let mut log_messages = Vec::with_capacity(results.len() * 10);
+        for result in results {
+            let result = serde_arrow::from_record_batch::<Vec<StoredLogMessage>>(&result)
+                .unwrap_or_default();
+            let result = result
+                .into_iter()
+                .map(|log| {
+                    let log: LogMessage = log.into();
+                    log
+                })
+                .collect::<Vec<_>>();
+            log_messages.extend(result);
+        }
+
+        Ok(log_messages)
     }
 
     #[inline]

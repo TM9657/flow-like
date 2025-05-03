@@ -47,18 +47,25 @@ async fn run_board(id: &str, start_ids: Vec<String>) {
     let state = default_state().await;
     let board = Arc::new(open_board(id, state.clone()).await);
     let profile = construct_profile();
-    let payload: Vec<RunPayload> = start_ids
-        .iter()
-        .map(|start_id| RunPayload {
+
+    for start_id in &start_ids {
+        let payload = RunPayload {
             id: start_id.clone(),
             payload: None,
-        })
-        .collect();
-
-    let mut run = InternalRun::new(board, &state, &profile, payload, None, None)
+        };
+        let mut run = InternalRun::new(
+            "bench",
+            board.clone(),
+            &state,
+            &profile,
+            payload,
+            None,
+            None,
+        )
         .await
         .unwrap();
-    run.execute(state.clone()).await;
+        run.execute(state.clone()).await;
+    }
 }
 
 async fn run_shared_board(
@@ -67,17 +74,24 @@ async fn run_shared_board(
     profile: Profile,
     start_ids: Vec<String>,
 ) {
-    let payload: Vec<RunPayload> = start_ids
-        .iter()
-        .map(|start_id| RunPayload {
+    for start_id in &start_ids {
+        let payload = RunPayload {
             id: start_id.clone(),
             payload: None,
-        })
-        .collect();
-    let mut run = InternalRun::new(board, &state, &profile, payload, None, None)
+        };
+        let mut run = InternalRun::new(
+            "bench",
+            board.clone(),
+            &state,
+            &profile,
+            payload,
+            None,
+            None,
+        )
         .await
         .unwrap();
-    run.execute(state.clone()).await;
+        run.execute(state.clone()).await;
+    }
 }
 
 fn get_memory_usage() -> f64 {

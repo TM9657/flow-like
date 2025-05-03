@@ -28,7 +28,10 @@ pub mod attachment_to_url;
 pub mod push_attachment;
 pub mod push_attachments;
 pub mod push_chunk;
+pub mod push_global_session;
+pub mod push_local_session;
 pub mod push_response;
+
 #[derive(Default)]
 pub struct ChatEventNode {}
 
@@ -95,7 +98,10 @@ impl NodeLogic for ChatEventNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let exec_out_pin = context.get_pin_by_name("exec_out").await?;
         let payload = context.get_payload().await?;
-        let chat = payload.payload.ok_or(anyhow!("Failed to get payload"))?;
+        let chat = payload
+            .payload
+            .clone()
+            .ok_or(anyhow!("Failed to get payload"))?;
         let chat: Chat = flow_like_types::json::from_value(chat)
             .map_err(|e| anyhow!("Failed to deserialize payload: {}", e))?;
 
@@ -275,5 +281,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(push_attachments::PushAttachmentsNode::default()) as Arc<dyn NodeLogic>,
         Arc::new(attachment_to_url::AttachmentToUrlNode::default()) as Arc<dyn NodeLogic>,
         Arc::new(attachment_from_url::AttachmentFromUrlNode::default()) as Arc<dyn NodeLogic>,
+        Arc::new(push_local_session::PushLocalSessionNode::default()) as Arc<dyn NodeLogic>,
+        Arc::new(push_global_session::PushGlobalSessionNode::default()) as Arc<dyn NodeLogic>,
     ]
 }

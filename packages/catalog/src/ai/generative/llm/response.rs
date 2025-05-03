@@ -4,6 +4,7 @@ pub mod last_message;
 pub mod make;
 pub mod message;
 pub mod push_chunk;
+pub mod response_from_string;
 pub mod usage;
 
 use flow_like::flow::node::NodeLogic;
@@ -18,5 +19,6 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(message::get_content::GetContentNode::default()),
         Arc::new(message::get_role::GetRoleNode::default()),
         Arc::new(chunk::get_token::GetTokenNode::default()),
+        Arc::new(response_from_string::ResponseFromStringNode::default()),
     ]
 }

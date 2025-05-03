@@ -55,7 +55,7 @@ schemaFiles.forEach((schemaFile) => {
 	mkdirSync(parse(outputFilePath).dir, { recursive: true });
 
 	// Command to generate TypeScript file using quicktype
-	const quicktypeCommand = `bunx quicktype --just-types -o ${outputFilePath} -s schema ${schemaFile}`;
+	const quicktypeCommand = `bunx quicktype@23.0.0 --just-types -o ${outputFilePath} -s schema ${schemaFile}`;
 
 	console.log(`Processing: ${schemaFile} -> ${outputFilePath}`);
 	execSync(quicktypeCommand);
