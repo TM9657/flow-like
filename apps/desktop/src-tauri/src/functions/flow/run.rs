@@ -1,16 +1,11 @@
 use flow_like::flow::execution::log::LogMessage;
-use flow_like::flow::execution::{InternalRun, Run, RunStatus, trace::Trace};
+use flow_like::flow::execution::{InternalRun, RunStatus};
 use flow_like::flow::execution::{LogLevel, LogMeta, RunPayload};
-use flow_like::flow_like_storage::async_duckdb::ClientBuilder;
-use flow_like::flow_like_storage::async_duckdb::duckdb::params;
-use flow_like::flow_like_storage::lancedb::arrow::SendableRecordBatchStreamExt;
 use flow_like::flow_like_storage::lancedb::query::{ExecutableQuery, QueryBase};
-use flow_like::flow_like_storage::{Path, arrow_schema, serde_arrow};
+use flow_like::flow_like_storage::{Path, serde_arrow};
 use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
 use flow_like_types::sync::Mutex;
-use flow_like_types::tokio;
-use flow_like_types::tokio::task::spawn_blocking;
-use futures::{StreamExt, TryStreamExt};
+use futures::TryStreamExt;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
@@ -80,8 +75,8 @@ pub async fn execute_board(
         let db = {
             let guard = flow_like_state.lock().await;
             let guard = guard.config.read().await;
-            let db = guard.callbacks.build_logs_database.clone();
-            db
+
+            guard.callbacks.build_logs_database.clone()
         };
         let db_fn = db
             .as_ref()
@@ -143,8 +138,8 @@ pub async fn list_runs(
     let db = {
         let guard = state.lock().await;
         let guard = guard.config.read().await;
-        let db = guard.callbacks.build_logs_database.clone();
-        db
+
+        guard.callbacks.build_logs_database.clone()
     };
     let db_fn = db
         .as_ref()
@@ -212,7 +207,7 @@ pub async fn list_runs(
         .map_err(|_| flow_like_types::anyhow!("Failed to collect results"))?;
     let mut log_meta = Vec::with_capacity(results.len() * 10);
     for result in results {
-        let result = serde_arrow::from_record_batch::<Vec<LogMeta>>(&result).unwrap_or(vec![]);
+        let result = serde_arrow::from_record_batch::<Vec<LogMeta>>(&result).unwrap_or_default();
         log_meta.extend(result);
     }
     Ok(log_meta)

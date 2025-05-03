@@ -4,22 +4,19 @@ use crate::profile::Profile;
 use crate::state::FlowLikeState;
 use ahash::AHasher;
 use context::ExecutionContext;
-use flow_like_model_provider::tokenizers::decoders::metaspace::Metaspace;
 use flow_like_storage::arrow_array::{RecordBatch, RecordBatchIterator};
 use flow_like_storage::arrow_schema::FieldRef;
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::lancedb::Connection;
 use flow_like_storage::lancedb::arrow::IntoArrowStream;
 use flow_like_storage::lancedb::index::scalar::BitmapIndexBuilder;
-use flow_like_storage::lancedb::query::{ExecutableQuery, QueryBase};
-use flow_like_storage::lancedb::table::Duration;
-use flow_like_storage::object_store::PutPayload;
+use flow_like_storage::lancedb::query::ExecutableQuery;
 use flow_like_storage::serde_arrow::schema::{SchemaLike, TracingOptions};
 use flow_like_storage::{Path, serde_arrow};
+use flow_like_types::Value;
 use flow_like_types::intercom::InterComCallback;
-use flow_like_types::json::{self, to_vec};
+use flow_like_types::json::to_vec;
 use flow_like_types::sync::{DashMap, Mutex, RwLock};
-use flow_like_types::{Bytes, Value};
 use flow_like_types::{Cacheable, anyhow, create_id};
 use futures::StreamExt;
 use futures::future::BoxFuture;
@@ -233,7 +230,7 @@ impl Run {
         // 1) pre‑count total logs, reserve once, and find highest level in one pass
         let total = self.traces.iter().map(|t| t.logs.len()).sum();
         let mut logs = Vec::with_capacity(total);
-        let mut highest = self.highest_log_level.clone();
+        let mut highest = self.highest_log_level;
         for trace in self.traces.drain(..) {
             let node_level = self
                 .visited_nodes
@@ -415,7 +412,7 @@ impl InternalRun {
             status: RunStatus::Running,
             start: SystemTime::now(),
             end: SystemTime::now(),
-            log_level: board.log_level.clone(),
+            log_level: board.log_level,
             board: board.clone(),
             payload: Arc::new(payload.clone()),
             sub: sub.unwrap_or_else(|| "local".to_string()),
@@ -576,7 +573,7 @@ impl InternalRun {
             cpus: num_cpus::get(),
             callback,
             dependencies,
-            log_level: board.log_level.clone(),
+            log_level: board.log_level,
             profile: Arc::new(profile.clone()),
             completion_callbacks: Arc::new(RwLock::new(vec![])),
         })
@@ -637,7 +634,7 @@ impl InternalRun {
                 let profile = profile.clone();
                 let callback = callback.clone();
                 let stage = stage.clone();
-                let log_level = log_level.clone();
+                let log_level = log_level;
                 let concurrency_map = self.concurrency_map.clone();
                 let completion_callbacks = self.completion_callbacks.clone();
 
@@ -696,7 +693,7 @@ impl InternalRun {
             &self.run,
             variables,
             cache,
-            log_level.clone(),
+            log_level,
             stage.clone(),
             &self.dependencies,
             &self.profile,
@@ -721,11 +718,7 @@ impl InternalRun {
 
         let (stage, log_level, stack) = {
             let run = self.run.lock().await;
-            (
-                run.board.stage.clone(),
-                run.log_level.clone(),
-                self.stack.clone(),
-            )
+            (run.board.stage.clone(), run.log_level, self.stack.clone())
         };
 
         match stack.len() {
@@ -931,7 +924,7 @@ async fn step_core(
         node,
         variables,
         cache,
-        log_level.clone(),
+        log_level,
         stage.clone(),
         profile.clone(),
         callback.clone(),

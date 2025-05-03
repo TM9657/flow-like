@@ -1,10 +1,6 @@
 use flow_like_storage::{
     arrow_array::RecordBatch,
-    async_duckdb::duckdb::arrow::compute::kernels,
-    lancedb::arrow::{
-        self, IntoArrow, RecordBatchReader,
-        arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit},
-    },
+    lancedb::arrow::{IntoArrow, arrow_schema::FieldRef},
     serde_arrow::{
         self,
         schema::{SchemaLike, TracingOptions},

@@ -25,7 +25,6 @@ use flow_like_types::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::HashMap,
-    fs::File,
     sync::{Arc, Weak},
 };
 
@@ -200,7 +199,7 @@ impl ExecutionContext {
             node,
             &self.variables,
             &self.cache,
-            self.log_level.clone(),
+            self.log_level,
             self.stage.clone(),
             self.profile.clone(),
             self.callback.clone(),

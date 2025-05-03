@@ -5,7 +5,7 @@ use crate::{
 use flow_like::{
     app::App,
     flow::{
-        board::{self, Board, ExecutionStage, commands::GenericCommand},
+        board::{Board, ExecutionStage, commands::GenericCommand},
         execution::LogLevel,
     },
     flow_like_storage::Path,

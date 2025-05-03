@@ -1,16 +1,13 @@
 use flow_like::{
     flow::{
-        board::Board,
         execution::context::ExecutionContext,
         node::{Node, NodeLogic},
-        pin::PinOptions,
         variable::VariableType,
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::history::{Content, ContentType, HistoryMessage, MessageContent};
-use flow_like_types::{Value, async_trait, json::json};
-use std::sync::Arc;
+use flow_like_model_provider::history::{Content, HistoryMessage, MessageContent};
+use flow_like_types::{async_trait, json::json};
 
 #[derive(Default)]
 pub struct ExtractContentNode {}

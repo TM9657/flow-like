@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 #[cfg(feature = "flow-runtime")]
-use crate::flow::execution::{LogLevel, LogMeta, log::LogMessage};
+use crate::flow::execution::{LogMeta, log::LogMessage};
 
 #[cfg(feature = "flow-runtime")]
 use crate::flow::board::Board;
@@ -394,8 +394,8 @@ impl FlowLikeState {
 
         let db = {
             let guard = self.config.read().await;
-            let db = guard.callbacks.build_logs_database.clone();
-            db
+
+            guard.callbacks.build_logs_database.clone()
         };
 
         let db_fn = db
@@ -418,8 +418,8 @@ impl FlowLikeState {
 
         let mut log_messages = Vec::with_capacity(results.len() * 10);
         for result in results {
-            let result =
-                serde_arrow::from_record_batch::<Vec<StoredLogMessage>>(&result).unwrap_or(vec![]);
+            let result = serde_arrow::from_record_batch::<Vec<StoredLogMessage>>(&result)
+                .unwrap_or_default();
             let result = result
                 .into_iter()
                 .map(|log| {
