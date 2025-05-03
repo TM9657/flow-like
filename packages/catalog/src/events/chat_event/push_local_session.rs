@@ -23,7 +23,7 @@ impl NodeLogic for PushLocalSessionNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
             "events_chat_push_local_session",
-            "Push Global Session",
+            "Push Local Session",
             "Pushes a new local session to the chat. The session persists for one chat session.",
             "Events/Chat",
         );
