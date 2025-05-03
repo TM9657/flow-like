@@ -1,3 +1,5 @@
+/// # ONNX Nodes
+/// Loading and Inference of ONNX-based Models
 
 use flow_like::flow::{
     execution::context::ExecutionContext, 
@@ -20,10 +22,12 @@ pub mod feature;
 pub mod load;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+/// ONNX Runtime Session Reference
 pub struct NodeOnnxSession {
     pub session_ref: String,
 }
 
+/// ONNX Runtime Session Wrapper
 pub struct NodeOnnxSessionWrapper {
     pub session: Arc<Mutex<Session>>,
 }
@@ -38,6 +42,7 @@ impl Cacheable for NodeOnnxSessionWrapper {
 }
 
 impl NodeOnnxSession {
+    /// Push new ONNX Runtime Session to Execution Context
     pub async fn new(ctx: &mut ExecutionContext, session: Session) -> Self {
         let id = create_id();
         let session_ref = Arc::new(Mutex::new(session));
@@ -87,6 +92,7 @@ impl NodeOnnxSession {
     //     Ok(new_session)
     // }
 
+    /// Fetch ONNX Runtime Session from Cached Runtime Context
     pub async fn get_session(&self, ctx: &mut ExecutionContext) -> Result<Arc<Mutex<Session>>> {
         let session = ctx
             .cache
@@ -104,7 +110,11 @@ impl NodeOnnxSession {
     }
 }
 
+
+/// Add ONNX-related Nodes to Catalog Lib
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let nodes: Vec<Arc<dyn NodeLogic>> = vec![];
+    let nodes: Vec<Arc<dyn NodeLogic>> = vec![
+        Arc::new(load::LoadOnnxNode::default()),
+    ];
     nodes
 }
