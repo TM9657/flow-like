@@ -26,6 +26,7 @@ use flow_like_types::{
 pub struct LoadOnnxNode {}
 
 impl LoadOnnxNode {
+    /// Create new LoadOnnxNode Instance
     pub fn new() -> Self {
         LoadOnnxNode {  }
     }

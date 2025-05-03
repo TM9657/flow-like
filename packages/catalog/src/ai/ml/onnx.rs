@@ -24,11 +24,14 @@ pub mod load;
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 /// ONNX Runtime Session Reference
 pub struct NodeOnnxSession {
+    /// Cache ID for Session
     pub session_ref: String,
 }
 
 /// ONNX Runtime Session Wrapper
 pub struct NodeOnnxSessionWrapper {
+    /// Shared Mutable ONNX Runtime Session
+    /// Todo: we might not need a Mutex?
     pub session: Arc<Mutex<Session>>,
 }
 
@@ -58,7 +61,7 @@ impl NodeOnnxSession {
 
     /// ONNX Sessions don't implement copy trait
     /// We just need an immut reference to session for execution
-    /// So get_session should be fine here
+    /// So get_session should be sufficient
     // pub async fn copy_session(&self, ctx: &mut ExecutionContext) -> Result<Self> {
     //     let session = ctx
     //         .cache
