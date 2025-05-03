@@ -60,3 +60,4 @@ pub mod intercom;
 pub mod utils;
 pub use image;
 pub use minijinja;
+pub use ort;
