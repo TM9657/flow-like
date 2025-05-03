@@ -16,9 +16,13 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+// ONNX Image Classification Nodes
 pub mod classify;
+// ONNX Image Object Detection Nodes
 pub mod detect;
+// ONNX Image Feature Extractor Nodes
 pub mod feature;
+// ONNX Model Loader Nodes
 pub mod load;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
