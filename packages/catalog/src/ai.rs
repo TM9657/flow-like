@@ -1,5 +1,7 @@
 pub mod generative;
 pub mod processing;
+/// Machine Learning Nodes
+pub mod ml;
 
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;
@@ -9,6 +11,6 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
 
     registry.extend(generative::register_functions().await);
     registry.extend(processing::register_functions().await);
-
+    registry.extend(ml::register_functions().await);
     registry
 }
