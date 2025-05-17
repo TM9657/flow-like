@@ -103,6 +103,7 @@ impl NodeLogic for MakeBoxNode {
                     y2,
                     score,
                     class_idx,
+                    class_name: None,
                 }
             }
             "x1y1wh" => {
@@ -119,6 +120,7 @@ impl NodeLogic for MakeBoxNode {
                     y2,
                     score,
                     class_idx,
+                    class_name: None,
                 }
             }
             _ => return Err(anyhow!("Invalid Bounding Box Definition")),
