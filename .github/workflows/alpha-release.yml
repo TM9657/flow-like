@@ -92,6 +92,25 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: tauri-apps/tauri-action@v0
+        if: matrix.platform == 'ubuntu-latest' || matrix.platform == 'ubuntu-24.04-arm'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          PUBLIC_SENTRY_ENDPOINT: ${{ secrets.PUBLIC_SENTRY_ENDPOINT }}
+          LD_LIBRARY_PATH: "${{ github.workspace }}/apps/desktop/src-tauri/binaries/linux/x64"
+        with:
+          tagName: alpha-v__VERSION__
+          releaseName: "Flow Like - Alpha v__VERSION__"
+          releaseBody: "Alpha release for testing purposes. Please do not distribute."
+          releaseDraft: true
+          prerelease: true
+          projectPath: "./apps/desktop"
+          tauriScript: "bun tauri"
+          args: ${{ matrix.args }}
+
+      - uses: tauri-apps/tauri-action@v0
+        if: matrix.platform != 'ubuntu-latest' && matrix.platform != 'ubuntu-24.04-arm'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}

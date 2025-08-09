@@ -342,6 +342,10 @@ export function FlowContextMenu({
 					<Separator className="my-1" />
 					<Input
 						ref={inputRef}
+						autoComplete="off"
+						spellCheck="false"
+						autoCorrect="off"
+						autoCapitalize="off"
 						className="mb-1"
 						autoFocus
 						type="search"

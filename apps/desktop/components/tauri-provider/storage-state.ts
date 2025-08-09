@@ -1,14 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
+import { dirname, join, resolve } from "@tauri-apps/api/path";
 import { save } from "@tauri-apps/plugin-dialog";
-import { mkdir, open, create } from "@tauri-apps/plugin-fs";
+import { mkdir, open } from "@tauri-apps/plugin-fs";
 import type { IStorageItem, IStorageState } from "@tm9657/flow-like-ui";
 import type { IStorageItemActionResult } from "@tm9657/flow-like-ui/state/backend-state/types";
 import { fetcher, put } from "../../lib/api";
 import type { TauriBackend } from "../tauri-provider";
-import { join, delimiter, resolve, dirname } from "@tauri-apps/api/path";
 
 export class StorageState implements IStorageState {
-	constructor(private readonly backend: TauriBackend) { }
+	constructor(private readonly backend: TauriBackend) {}
 	async listStorageItems(
 		appId: string,
 		prefix: string,
@@ -246,7 +246,7 @@ export class StorageState implements IStorageState {
 
 						const parentDir = await dirname(rawPath);
 						await mkdir(parentDir, { recursive: true });
-						let fileHandle
+						let fileHandle;
 
 						fileHandle = await open(await resolve(rawPath), {
 							append: false,
@@ -254,7 +254,6 @@ export class StorageState implements IStorageState {
 							write: true,
 							truncate: true,
 						});
-
 
 						if (!fileHandle) {
 							completedFiles++;

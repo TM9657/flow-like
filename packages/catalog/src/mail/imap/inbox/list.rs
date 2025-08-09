@@ -104,43 +104,35 @@ impl EmailRef {
             from: Some(
                 mail.from()
                     .iter()
-                    .map(|addr| parse_mail_addresses(addr))
-                    .flatten()
+                    .flat_map(|addr| parse_mail_addresses(addr))
                     .collect(),
             ),
             sender: Some(
                 mail.sender()
                     .iter()
-                    .map(|addr| parse_mail_addresses(addr))
-                    .flatten()
+                    .flat_map(|addr| parse_mail_addresses(addr))
                     .collect(),
             ),
             to: Some(
                 mail.to()
                     .iter()
-                    .map(|addr| parse_mail_addresses(addr))
-                    .flatten()
+                    .flat_map(|addr| parse_mail_addresses(addr))
                     .collect(),
             ),
             cc: Some(
                 mail.cc()
                     .iter()
-                    .map(|addr| parse_mail_addresses(addr))
-                    .flatten()
+                    .flat_map(|addr| parse_mail_addresses(addr))
                     .collect(),
             ),
             bcc: Some(
                 mail.bcc()
                     .iter()
-                    .map(|addr| parse_mail_addresses(addr))
-                    .flatten()
+                    .flat_map(|addr| parse_mail_addresses(addr))
                     .collect(),
             ),
             subject: mail.subject().map(|s| s.to_string()),
-            date: mail
-                .date()
-                .and_then(|d| Some(d.to_rfc3339()))
-                .map(|s| s.to_string()),
+            date: mail.date().map(|d| d.to_rfc3339()).map(|s| s.to_string()),
             plain: mail.body_text(0).map(|s| s.to_string()),
             html: mail.body_html(0).map(|s| s.to_string()),
             attachments: Some(
@@ -159,9 +151,9 @@ impl EmailRef {
                         let data = part.contents().to_vec();
 
                         Attachment {
-                            filename: filename,
-                            content_type: content_type,
-                            data: data,
+                            filename,
+                            content_type,
+                            data,
                         }
                     })
                     .collect::<Vec<_>>(),

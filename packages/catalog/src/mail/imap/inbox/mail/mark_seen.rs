@@ -74,7 +74,7 @@ impl NodeLogic for ImapMarkSeenNode {
         let email: EmailRef = context.evaluate_pin("email").await?;
         let mark_as_seen: bool = context.evaluate_pin("mark_as_seen").await?;
 
-        let mut cached_session = email.connection.to_session_cache(context).await?;
+        let cached_session = email.connection.to_session_cache(context).await?;
 
         cached_session
             .session

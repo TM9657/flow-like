@@ -38,7 +38,7 @@ import {
 	SquareMousePointerIcon,
 	Trash2,
 	VariableIcon,
-	WorkflowIcon
+	WorkflowIcon,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";

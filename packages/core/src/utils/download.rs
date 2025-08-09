@@ -193,7 +193,7 @@ pub async fn download_bit(
         async_fs::create_dir_all(parent).await?;
     }
 
-    let mut file = match OpenOptions::new()
+    let file = match OpenOptions::new()
         .write(true)
         .append(resume)
         .truncate(!resume)
@@ -245,10 +245,8 @@ pub async fn download_bit(
         downloaded = new;
 
         // if buffer is bigger than 20 mb flush
-        if in_buffer > 20_000_000 {
-            if file.flush().await.is_ok() {
-                in_buffer = 0;
-            }
+        if in_buffer > 20_000_000 && file.flush().await.is_ok() {
+            in_buffer = 0;
         }
 
         if last_emit.elapsed() >= Duration::from_millis(150) {

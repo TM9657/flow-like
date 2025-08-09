@@ -140,7 +140,7 @@ impl NodeLogic for ImapCreateDraftNode {
             let filename = flow_path
                 .path
                 .split('/')
-                .last()
+                .next_back()
                 .unwrap_or("attachment")
                 .to_string();
             attachments.push((filename, content));
@@ -148,16 +148,14 @@ impl NodeLogic for ImapCreateDraftNode {
 
         let mut cached_session = connection.to_session_cache(context).await?;
 
-        if create_if_missing {
-            if !cached_session.mailbox_exists(&mailbox).await? {
-                context.log_message(
-                    &format!("Drafts mailbox '{}' missing → creating", mailbox),
-                    LogLevel::Debug,
-                );
-                cached_session.create_mailbox(&mailbox).await.map_err(|e| {
-                    flow_like_types::anyhow!("Failed to create mailbox '{}': {}", mailbox, e)
-                })?;
-            }
+        if create_if_missing && !cached_session.mailbox_exists(&mailbox).await? {
+            context.log_message(
+                &format!("Drafts mailbox '{}' missing → creating", mailbox),
+                LogLevel::Debug,
+            );
+            cached_session.create_mailbox(&mailbox).await.map_err(|e| {
+                flow_like_types::anyhow!("Failed to create mailbox '{}': {}", mailbox, e)
+            })?;
         }
 
         let message_id = generate_message_id(&from);
