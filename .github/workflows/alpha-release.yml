@@ -28,10 +28,11 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
-      # - uses: ./.github/actions/setup-environment
-      #   with:
-      #     repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-latest' || matrix.platform == 'ubuntu-24.04-arm'

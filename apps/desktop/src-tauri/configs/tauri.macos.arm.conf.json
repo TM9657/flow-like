@@ -1,10 +1,7 @@
 {
-	"identifier": "com.flow-like.app",
-	"bundle": {
-		"externalBin": [
-            "binaries/mac/arm/ggml-common.h",
-            "binaries/mac/arm/ggml-metal-impl.h",
-            "binaries/mac/arm/ggml-metal.metal",
+    "identifier": "com.flow-like.app",
+    "bundle": {
+        "externalBin": [
             "binaries/mac/arm/libggml-base.dylib",
             "binaries/mac/arm/libggml-blas.dylib",
             "binaries/mac/arm/libggml-cpu.dylib",
@@ -12,13 +9,14 @@
             "binaries/mac/arm/libggml-rpc.dylib",
             "binaries/mac/arm/libggml.dylib",
             "binaries/mac/arm/libllama.dylib",
-            "binaries/mac/arm/libmtmd_helper_shared.dylib",
-            "binaries/mac/arm/libmtmd_shared.dylib",
             "binaries/mac/arm/llama-server",
             "bin/flow-docling"
         ],
         "resources": {
-            "icons/Assets.car": "Assets.car"
+            "icons/Assets.car": "Assets.car",
+            "binaries/mac/arm/ggml-common.h": "ggml-common.h",
+            "binaries/mac/arm/ggml-metal-impl.h": "ggml-metal-impl.h",
+            "binaries/mac/arm/ggml-metal.metal": "ggml-metal.metal"
         }
-	}
+    }
 }
