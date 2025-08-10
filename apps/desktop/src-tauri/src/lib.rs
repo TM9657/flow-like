@@ -12,16 +12,19 @@ use flow_like::{
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
-use flow_like_types::{sync::Mutex, tokio::{self, time::interval}};
+use flow_like_types::{
+    sync::Mutex,
+    tokio::{self, time::interval},
+};
 use serde_json::json;
 use settings::Settings;
 use state::TauriFlowLikeState;
-use tauri_plugin_dialog::DialogExt;
 use std::{sync::Arc, time::Duration};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
-use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_dialog::MessageDialogButtons;
+use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(not(debug_assertions))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -374,9 +377,8 @@ fn handle_deep_link(app: &AppHandle, event: OpenUrlEvent) {
     println!("deep link URLs: {:?}", event.urls());
 }
 
-
 #[tauri::command(async)]
-async fn update(app_handle: AppHandle,) -> tauri_plugin_updater::Result<()> {
+async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
     if let Some(update) = app_handle.updater()?.check().await? {
         let mut downloaded = 0;
 

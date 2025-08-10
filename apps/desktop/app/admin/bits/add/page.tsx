@@ -9,6 +9,7 @@ import {
 	type ILlmParameters,
 	IPooling,
 	Input,
+	Progress,
 	Separator,
 	nowSystemTime,
 	useBackend,
@@ -18,7 +19,7 @@ import { Loader2Icon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
-import { put } from "../../../../lib/api";
+import { put, streamFetcher } from "../../../../lib/api";
 import {
 	getContextLength,
 	getModelLicense,
@@ -141,6 +142,7 @@ export default function Page() {
 		IBit | undefined
 	>(undefined);
 	const auth = useAuth();
+	const [progress, setProgress] = useState<number>(0);
 
 	function getDefaultBit(type: IBitTypes): IBit {
 		return {
@@ -150,6 +152,38 @@ export default function Page() {
 			type: type,
 		};
 	}
+
+	const uploadBit = useCallback(async (bit: IBit): Promise<IBit> => {
+		if (!profile.data) {
+			throw new Error("User profile is not available");
+		}
+
+		let finalBit = { ...bit };
+
+		await streamFetcher(
+			profile.data,
+			`admin/bit/${bit.id}`,
+			{
+				method: "PUT",
+				body: JSON.stringify(bit),
+			},
+			auth,
+			(data: any) => {
+				console.log("Received data:", data);
+
+				if(data.percent) {
+					setProgress(data.percent);
+				}
+
+				if (data.id) {
+					setProgress(0)
+					finalBit = data as IBit;
+					console.log("Final Bit:", finalBit);
+				}
+			}
+		);
+		return finalBit;
+	}, [auth, profile.data]);
 
 	function setDefaultDependencies(type: IBitTypes) {
 		if (type === IBitTypes.Vlm) {
@@ -481,7 +515,7 @@ export default function Page() {
 				</>
 			) : null}
 			{bit.type === IBitTypes.Embedding ||
-			bit.type === IBitTypes.ImageEmbedding ? (
+				bit.type === IBitTypes.ImageEmbedding ? (
 				<>
 					<div className="flex flex-col items-start gap-6 w-full max-w-screen-lg">
 						<EmbeddingConfiguration bit={bit} setBit={setBit} />
@@ -546,6 +580,7 @@ export default function Page() {
 				</>
 			) : null}
 			<MetaConfiguration bit={bit} setBit={setBit} />
+			{progress > 0 && <Progress className="mt-4" value={progress} />}
 			<Button
 				className="mt-4 w-full max-w-screen-lg"
 				onClick={async () => {
@@ -568,46 +603,32 @@ export default function Page() {
 								);
 							}
 
-							const tokenizerRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${tokenizer.id}`,
-								mergeBitParameters(tokenizer, bit),
-								auth,
+							const tokenizerRegistration: IBit = await uploadBit(
+							mergeBitParameters(tokenizer, bit)
 							);
 							dependencies.push(tokenizerRegistration);
-							const tokenizerConfigRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${tokenizerConfig.id}`,
-								mergeBitParameters(tokenizerConfig, bit),
-								auth,
+							const tokenizerConfigRegistration: IBit = await uploadBit(
+								mergeBitParameters(tokenizerConfig, bit)
 							);
+
 							dependencies.push(tokenizerConfigRegistration);
-							const specialTokensMapRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${specialTokensMap.id}`,
-								mergeBitParameters(specialTokensMap, bit),
-								auth,
+							const specialTokensMapRegistration: IBit = await uploadBit(
+								mergeBitParameters(specialTokensMap, bit)
 							);
+
 							dependencies.push(specialTokensMapRegistration);
-							const configRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${config.id}`,
-								mergeBitParameters(config, bit),
-								auth,
+							const configRegistration: IBit = await uploadBit(
+								mergeBitParameters(config, bit)
 							);
+
 							dependencies.push(configRegistration);
 
-							const response: IBit = await put(
-								profile.data,
-								`admin/bit/${bit.id}`,
-								{
+							const response: IBit = await uploadBit({
 									...bit,
 									dependencies: dependencies.map(
 										(dep) => `${dep.hub}:${dep.id}`,
 									),
-								},
-								auth,
-							);
+								});
 
 							const metaUpload = await put(
 								profile.data,
@@ -635,39 +656,29 @@ export default function Page() {
 							textEmbeddingModel.license = bit.license;
 							textEmbeddingModel.authors = bit.authors;
 
-							const tokenizerRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${tokenizer.id}`,
+							const tokenizerRegistration: IBit = await uploadBit(
 								mergeBitParameters(tokenizer, textEmbeddingModel),
-								auth,
 							);
 							dependencies.push(tokenizerRegistration);
-							const tokenizerConfigRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${tokenizerConfig.id}`,
+							const tokenizerConfigRegistration: IBit = await uploadBit(
+
 								mergeBitParameters(tokenizerConfig, textEmbeddingModel),
-								auth,
 							);
 							dependencies.push(tokenizerConfigRegistration);
-							const specialTokensMapRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${specialTokensMap.id}`,
+							const specialTokensMapRegistration: IBit = await uploadBit(
+
 								mergeBitParameters(specialTokensMap, textEmbeddingModel),
-								auth,
 							);
 							dependencies.push(specialTokensMapRegistration);
 
-							const configRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${config.id}`,
+							const configRegistration: IBit = await uploadBit(
+
 								mergeBitParameters(config, textEmbeddingModel),
-								auth,
 							);
 							dependencies.push(configRegistration);
 
-							const textEmbeddingModelRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${textEmbeddingModel.id}`,
+							const textEmbeddingModelRegistration: IBit = await uploadBit(
+
 								{
 									...textEmbeddingModel,
 									license: bit.license,
@@ -676,36 +687,29 @@ export default function Page() {
 										(dep) => `${dep.hub}:${dep.id}`,
 									),
 								},
-								auth,
 							);
 
 							dependencies = [textEmbeddingModelRegistration];
 
-							const imageEmbeddingPreprocessorRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${imageEmbeddingPreprocessor.id}`,
+							const imageEmbeddingPreprocessorRegistration: IBit = await uploadBit(
+
 								mergeBitParameters(imageEmbeddingPreprocessor, bit),
-								auth,
 							);
 							dependencies.push(imageEmbeddingPreprocessorRegistration);
-							const imageEmbeddingConfigRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${imageEmbeddingConfig.id}`,
+							const imageEmbeddingConfigRegistration: IBit = await uploadBit(
+
 								mergeBitParameters(imageEmbeddingConfig, bit),
-								auth,
 							);
 							dependencies.push(imageEmbeddingConfigRegistration);
 
-							const response: IBit = await put(
-								profile.data,
-								`admin/bit/${bit.id}`,
+							const response: IBit = await uploadBit(
+
 								{
 									...bit,
 									dependencies: dependencies.map(
 										(dep) => `${dep.hub}:${dep.id}`,
 									),
 								},
-								auth,
 							);
 
 							const metaUpload = await put(
@@ -721,31 +725,25 @@ export default function Page() {
 								throw new Error("Projection is required for VLM");
 							}
 
-							const projectionRegistration: IBit = await put(
-								profile.data,
-								`admin/bit/${projection.id}`,
+							const projectionRegistration: IBit = await uploadBit(
 								{
 									...projection,
 									license: bit.license,
 									authors: bit.authors,
 									repository: bit.repository,
 								},
-								auth,
 							);
 							dependencies.push(projectionRegistration);
 						}
 
 						if (bit.type === IBitTypes.Vlm || bit.type === IBitTypes.Llm) {
-							const response: IBit = await put(
-								profile.data,
-								`admin/bit/${bit.id}`,
+							const response: IBit = await uploadBit(
 								{
 									...bit,
 									dependencies: dependencies.map(
 										(dep) => `${dep.hub}:${dep.id}`,
 									),
 								},
-								auth,
 							);
 							const metaUpload = await put(
 								profile.data,

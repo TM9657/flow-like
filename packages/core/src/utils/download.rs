@@ -140,7 +140,12 @@ pub async fn download_bit(
     if remote_size.is_err() {
         if async_fs::try_exists(&path_name).await.unwrap_or(false) {
             let _rem = remove_download(bit, &app_state).await;
-            let _ = publish_progress(bit, callback, path_name.metadata()?.len(), &store_path).await;
+            let local_len = async_fs::metadata(&path_name)
+                .await
+                .ok()
+                .map(|m| m.len())
+                .unwrap_or(0);
+            let _ = publish_progress(bit, callback, local_len, &store_path).await;
             return Ok(store_path);
         }
 
@@ -151,7 +156,11 @@ pub async fn download_bit(
 
     let mut local_size = 0;
     if async_fs::try_exists(&path_name).await.unwrap_or(false) {
-        local_size = path_name.metadata()?.len();
+        local_size = async_fs::metadata(&path_name)
+            .await
+            .ok()
+            .map(|m| m.len())
+            .unwrap_or(0);
         if local_size == remote_size {
             let _rem = remove_download(bit, &app_state).await;
             let _ = publish_progress(bit, callback, remote_size, &store_path).await;

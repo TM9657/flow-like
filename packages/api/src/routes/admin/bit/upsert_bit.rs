@@ -7,13 +7,36 @@ use crate::{
 use axum::{
     Extension, Json,
     extract::{Path, State},
+    response::sse::{Event, KeepAlive, Sse},
 };
 use flow_like::{bit::Bit, utils::http::HTTPClient};
 use flow_like_storage::object_store::PutPayload;
-use flow_like_types::{anyhow, create_id, reqwest};
+use flow_like_types::tokio::{self, sync::mpsc};
+use flow_like_types::{create_id, reqwest};
 use futures_util::StreamExt;
+use futures_util::stream::{self, Stream};
 use hyper::header::{ACCEPT_RANGES, CONTENT_LENGTH, ETAG};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
+use serde::Serialize;
+use serde_json::json;
+use std::convert::Infallible;
+use std::time::Duration;
+
+#[derive(Serialize, Clone)]
+struct Progress {
+    stage: &'static str,
+    message: Option<String>,
+    downloaded: Option<u64>,
+    total: Option<u64>,
+    percent: Option<f32>,
+    hash: Option<String>,
+}
+
+enum StreamMsg {
+    Progress(Progress),
+    Done(Bit),
+    Error(String),
+}
 
 #[tracing::instrument(name = "PUT /admin/bit/{bit_id}", skip(state, user, bit))]
 pub async fn upsert_bit(
@@ -21,64 +44,161 @@ pub async fn upsert_bit(
     Extension(user): Extension<AppUser>,
     Path(bit_id): Path<String>,
     Json(bit): Json<Bit>,
-) -> Result<Json<Bit>, ApiError> {
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     user.check_global_permission(&state, GlobalPermission::WriteBits)
         .await?;
 
-    let mut bit: bit::Model = bit.into();
-    let existing_bit = bit::Entity::find_by_id(&bit_id).one(&state.db).await?;
+    let (tx, rx) = mpsc::channel::<StreamMsg>(64);
+    let state_cloned = state.clone();
+    let bit_id_cloned = bit_id.clone();
 
-    if let Some(existing_bit) = existing_bit {
-        let mut updated_bit: bit::ActiveModel = existing_bit.into();
-        if updated_bit.download_link != Set(bit.download_link.clone()) {
-            download_and_hash(&mut bit, state.clone()).await?;
-            build_dependency_hash(&mut bit, state.clone()).await?;
-            updated_bit.download_link = Set(bit.download_link.clone());
-            updated_bit.hash = Set(bit.hash.clone());
-            updated_bit.dependency_tree_hash = Set(bit.dependency_tree_hash.clone());
+    tokio::spawn(async move {
+        let mut model: bit::Model = bit.into();
+        match bit::Entity::find_by_id(&bit_id_cloned)
+            .one(&state_cloned.db)
+            .await
+        {
+            Ok(Some(existing_bit)) => {
+                let mut updated_bit: bit::ActiveModel = existing_bit.into();
+                if updated_bit.download_link != Set(model.download_link.clone()) {
+                    let _ = tx
+                        .send(StreamMsg::Progress(Progress {
+                            stage: "start",
+                            message: Some("downloading".into()),
+                            downloaded: None,
+                            total: None,
+                            percent: None,
+                            hash: None,
+                        }))
+                        .await;
+                    if let Err(e) =
+                        download_and_hash(&mut model, state_cloned.clone(), Some(tx.clone())).await
+                    {
+                        let _ = tx.send(StreamMsg::Error(e.to_string())).await;
+                        return;
+                    }
+                    if let Err(e) =
+                        build_dependency_hash(&mut model, state_cloned.clone(), Some(tx.clone()))
+                            .await
+                    {
+                        let _ = tx.send(StreamMsg::Error(e.to_string())).await;
+                        return;
+                    }
+                    updated_bit.download_link = Set(model.download_link.clone());
+                    updated_bit.hash = Set(model.hash.clone());
+                    updated_bit.dependency_tree_hash = Set(model.dependency_tree_hash.clone());
+                }
+                updated_bit.hub = Set(state_cloned.platform_config.domain.clone());
+                updated_bit.authors = Set(model.authors);
+                updated_bit.updated_at = Set(chrono::Utc::now().naive_utc());
+                updated_bit.dependencies = Set(model.dependencies);
+                updated_bit.file_name = Set(model.file_name);
+                updated_bit.hub = Set(model.hub);
+                updated_bit.license = Set(model.license);
+                updated_bit.parameters = Set(model.parameters);
+                updated_bit.repository = Set(model.repository);
+                updated_bit.size = Set(model.size);
+                updated_bit.r#type = Set(model.r#type);
+                updated_bit.version = Set(model.version);
+                match updated_bit.update(&state_cloned.db).await {
+                    Ok(updated) => {
+                        let _ = tx.send(StreamMsg::Done(Bit::from(updated))).await;
+                    }
+                    Err(e) => {
+                        let _ = tx.send(StreamMsg::Error(e.to_string())).await;
+                    }
+                }
+            }
+            Ok(None) => {
+                let _ = tx
+                    .send(StreamMsg::Progress(Progress {
+                        stage: "start",
+                        message: Some("downloading".into()),
+                        downloaded: None,
+                        total: None,
+                        percent: None,
+                        hash: None,
+                    }))
+                    .await;
+                if let Err(e) =
+                    download_and_hash(&mut model, state_cloned.clone(), Some(tx.clone())).await
+                {
+                    let _ = tx.send(StreamMsg::Error(e.to_string())).await;
+                    return;
+                }
+                if let Err(e) =
+                    build_dependency_hash(&mut model, state_cloned.clone(), Some(tx.clone())).await
+                {
+                    let _ = tx.send(StreamMsg::Error(e.to_string())).await;
+                    return;
+                }
+                let dependency_tree_hash = model.dependency_tree_hash.clone();
+                let mut new_bit: bit::ActiveModel = model.into();
+                new_bit.id = Set(create_id());
+                new_bit.hub = Set(state_cloned.platform_config.domain.clone());
+                new_bit.created_at = Set(chrono::Utc::now().naive_utc());
+                new_bit.updated_at = Set(chrono::Utc::now().naive_utc());
+                match new_bit.insert(&state_cloned.db).await {
+                    Ok(inserted) => {
+                        let _ = tx.send(StreamMsg::Done(Bit::from(inserted))).await;
+                    }
+                    Err(_e) => {
+                        match bit::Entity::find()
+                            .filter(bit::Column::DependencyTreeHash.eq(dependency_tree_hash))
+                            .one(&state_cloned.db)
+                            .await
+                        {
+                            Ok(Some(existing_bit)) => {
+                                let _ = tx.send(StreamMsg::Done(Bit::from(existing_bit))).await;
+                            }
+                            Ok(None) => {
+                                let _ = tx.send(StreamMsg::Error("Bit with the same dependency tree hash not found after insert error".into())).await;
+                            }
+                            Err(e) => {
+                                let _ = tx.send(StreamMsg::Error(e.to_string())).await;
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                let _ = tx.send(StreamMsg::Error(e.to_string())).await;
+            }
         }
-        updated_bit.hub = Set(state.platform_config.domain.clone());
-        updated_bit.authors = Set(bit.authors);
-        updated_bit.updated_at = Set(chrono::Utc::now().naive_utc());
-        updated_bit.dependencies = Set(bit.dependencies);
-        updated_bit.file_name = Set(bit.file_name);
-        updated_bit.hub = Set(bit.hub);
-        updated_bit.license = Set(bit.license);
-        updated_bit.parameters = Set(bit.parameters);
-        updated_bit.repository = Set(bit.repository);
-        updated_bit.size = Set(bit.size);
-        updated_bit.r#type = Set(bit.r#type);
-        updated_bit.version = Set(bit.version);
-        let updated = updated_bit.update(&state.db).await?;
+    });
 
-        return Ok(Json(Bit::from(updated)));
-    }
-
-    download_and_hash(&mut bit, state.clone()).await?;
-    build_dependency_hash(&mut bit, state.clone()).await?;
-    let dependency_tree_hash = bit.dependency_tree_hash.clone();
-    let mut new_bit: bit::ActiveModel = bit.into();
-    new_bit.id = Set(create_id());
-    new_bit.hub = Set(state.platform_config.domain.clone());
-    new_bit.created_at = Set(chrono::Utc::now().naive_utc());
-    new_bit.updated_at = Set(chrono::Utc::now().naive_utc());
-    match new_bit.insert(&state.db).await {
-        Ok(bit) => Ok(Json(Bit::from(bit))),
-        Err(_e) => {
-            let existing_bit = bit::Entity::find()
-                .filter(bit::Column::DependencyTreeHash.eq(dependency_tree_hash))
-                .one(&state.db)
-                .await?
-                .ok_or(anyhow!(
-                    "Bit with the same dependency tree hash already exists"
-                ))?;
-            Ok(Json(Bit::from(existing_bit)))
+    let stream = stream::unfold(rx, |mut rx| async move {
+        match rx.recv().await {
+            Some(StreamMsg::Progress(p)) => {
+                let data = serde_json::to_string(&p).unwrap_or_else(|_| "{}".into());
+                Some((Ok(Event::default().event("progress").data(data)), rx))
+            }
+            Some(StreamMsg::Done(bit)) => {
+                let data = json!(bit).to_string();
+                Some((Ok(Event::default().event("done").data(data)), rx))
+            }
+            Some(StreamMsg::Error(msg)) => {
+                let data = json!({"message": msg}).to_string();
+                Some((Ok(Event::default().event("error").data(data)), rx))
+            }
+            None => None,
         }
-    }
+    });
+
+    let sse = Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .text("keep-alive")
+            .interval(Duration::from_secs(15)),
+    );
+    Ok(sse)
 }
 
 #[tracing::instrument(name = "download_and_hash_bit", skip(bit, state))]
-async fn download_and_hash(bit: &mut bit::Model, state: AppState) -> flow_like_types::Result<()> {
+async fn download_and_hash(
+    bit: &mut bit::Model,
+    state: AppState,
+    tx: Option<mpsc::Sender<StreamMsg>>,
+) -> flow_like_types::Result<()> {
     // Get the E-Tag from the download link if available
     if bit.download_link.is_none() {
         tracing::warn!("No download link provided for bit {}", bit.id);
@@ -125,6 +245,19 @@ async fn download_and_hash(bit: &mut bit::Model, state: AppState) -> flow_like_t
         .map(|s| s.trim().trim_matches('"').to_string())
         .unwrap_or_else(create_id);
 
+    if let Some(tx) = &tx {
+        let _ = tx
+            .send(StreamMsg::Progress(Progress {
+                stage: "head",
+                message: None,
+                downloaded: Some(0),
+                total: content_length,
+                percent: Some(0.0),
+                hash: None,
+            }))
+            .await;
+    }
+
     let path = flow_like_storage::object_store::path::Path::from("bits").child(e_tag.clone());
 
     const CHUNK_SIZE: usize = 50 * 1024 * 1024; // 20MB chunks
@@ -166,6 +299,20 @@ async fn download_and_hash(bit: &mut bit::Model, state: AppState) -> flow_like_t
                             file_size,
                             (total_downloaded as f64 / file_size as f64) * 100.0
                         );
+
+                        if let Some(tx) = &tx {
+                            let percent = (total_downloaded as f32 / file_size as f32) * 100.0;
+                            let _ = tx
+                                .send(StreamMsg::Progress(Progress {
+                                    stage: "downloading",
+                                    message: None,
+                                    downloaded: Some(total_downloaded),
+                                    total: Some(file_size),
+                                    percent: Some(percent),
+                                    hash: None,
+                                }))
+                                .await;
+                        }
                         break;
                     }
                     Err(e) if retry_count < MAX_RETRIES => {
@@ -208,6 +355,21 @@ async fn download_and_hash(bit: &mut bit::Model, state: AppState) -> flow_like_t
                     if total_downloaded % (100 * 1024 * 1024) == 0 {
                         // Log every 100MB
                         tracing::info!("Downloaded {} bytes", total_downloaded);
+                        if let Some(tx) = &tx {
+                            let percent = content_length
+                                .map(|total| (total_downloaded as f32 / total as f32) * 100.0)
+                                .unwrap_or(0.0);
+                            let _ = tx
+                                .send(StreamMsg::Progress(Progress {
+                                    stage: "downloading",
+                                    message: None,
+                                    downloaded: Some(total_downloaded),
+                                    total: content_length,
+                                    percent: Some(percent),
+                                    hash: None,
+                                }))
+                                .await;
+                        }
                     }
                 }
                 Err(e) => {
@@ -231,6 +393,19 @@ async fn download_and_hash(bit: &mut bit::Model, state: AppState) -> flow_like_t
     let url = format!("{}/bits/{}", url, e_tag);
     bit.download_link = Some(url.to_string());
 
+    if let Some(tx) = &tx {
+        let _ = tx
+            .send(StreamMsg::Progress(Progress {
+                stage: "hashed",
+                message: None,
+                downloaded: Some(total_downloaded),
+                total: content_length,
+                percent: Some(100.0),
+                hash: Some(file_hash.clone()),
+            }))
+            .await;
+    }
+
     tracing::info!(
         "Successfully processed {} bytes with hash {}",
         total_downloaded,
@@ -243,6 +418,7 @@ async fn download_and_hash(bit: &mut bit::Model, state: AppState) -> flow_like_t
 async fn build_dependency_hash(
     bit: &mut bit::Model,
     state: AppState,
+    tx: Option<mpsc::Sender<StreamMsg>>,
 ) -> flow_like_types::Result<()> {
     let mut dependencies = match &bit.dependencies {
         Some(deps) => deps.clone(),
@@ -263,6 +439,21 @@ async fn build_dependency_hash(
     let (http_client, _rcv) = HTTPClient::new();
     let http_client = Arc::new(http_client);
 
+    if let Some(tx) = &tx {
+        let _ = tx
+            .send(StreamMsg::Progress(Progress {
+                stage: "dep-hash",
+                message: Some("start".into()),
+                downloaded: None,
+                total: Some(dependencies.len() as u64),
+                percent: Some(0.0),
+                hash: None,
+            }))
+            .await;
+    }
+
+    let total = dependencies.len() as f32;
+    let mut idx = 0f32;
     for dependency in dependencies {
         let (hub, id) = dependency.split_once(':').ok_or_else(|| {
             flow_like_types::Error::msg(format!("Invalid dependency format: {}", dependency))
@@ -283,6 +474,20 @@ async fn build_dependency_hash(
             })?;
             hasher.update(remote_bit.dependency_tree_hash.as_bytes());
         }
+
+        idx += 1.0;
+        if let Some(tx) = &tx {
+            let _ = tx
+                .send(StreamMsg::Progress(Progress {
+                    stage: "dep-hash",
+                    message: None,
+                    downloaded: Some(idx as u64),
+                    total: Some(total as u64),
+                    percent: Some((idx / total) * 100.0),
+                    hash: None,
+                }))
+                .await;
+        }
     }
 
     let dependency_hash = hasher.finalize().to_hex().to_string().to_lowercase();
@@ -292,6 +497,19 @@ async fn build_dependency_hash(
         bit.id,
         bit.dependency_tree_hash
     );
+
+    if let Some(tx) = &tx {
+        let _ = tx
+            .send(StreamMsg::Progress(Progress {
+                stage: "dep-hash",
+                message: Some("done".into()),
+                downloaded: None,
+                total: None,
+                percent: Some(100.0),
+                hash: None,
+            }))
+            .await;
+    }
 
     Ok(())
 }

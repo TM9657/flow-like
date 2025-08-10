@@ -7,6 +7,8 @@ use crate::bit::Bit;
 
 use super::cache::get_cache_dir;
 
+const DOWNLOAD_MANAGER_FILE: &str = "download-manager.json";
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Download {
     pub url: String,
@@ -38,7 +40,7 @@ impl DownloadManager {
 
     pub fn load(&mut self) -> HashMap<String, Bit> {
         let dir = get_cache_dir();
-        let dir = dir.join("download-manager.json");
+        let dir = dir.join(DOWNLOAD_MANAGER_FILE);
         if !dir.exists() {
             return HashMap::new();
         }
@@ -87,11 +89,22 @@ impl DownloadManager {
     }
 
     pub fn save(&self) {
-        let dir = get_cache_dir();
-        let dir = dir.join("download-manager.bin");
-        let data = flow_like_types::json::to_string(self).unwrap();
-        if let Err(e) = std::fs::write(dir, data) {
-            println!("Error saving download manager: {:?}", e);
-        }
+        let dir = get_cache_dir().join(DOWNLOAD_MANAGER_FILE);
+        let data = match flow_like_types::json::to_string(self) {
+            Ok(v) => v,
+            Err(e) => {
+                println!("Error serializing download manager: {:?}", e);
+                return;
+            }
+        };
+        // Offload blocking filesystem write to a dedicated thread to avoid stalling the async runtime.
+        let _ = flow_like_types::tokio::task::spawn_blocking(move || {
+            if let Some(parent) = dir.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Err(e) = std::fs::write(&dir, data) {
+                println!("Error saving download manager: {:?}", e);
+            }
+        });
     }
 }
