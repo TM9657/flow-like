@@ -16,7 +16,15 @@
     <true/>
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+    <key>com.apple.security.files.bookmarks.document-scope</key>
+    <true/>
     <key>com.apple.security.files.home.read-write</key>
+    <true/>
+    <key>com.apple.security.files.cache.read-write</key>
     <true/>
     <key>com.apple.security.application-groups</key>
     <array/>

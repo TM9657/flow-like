@@ -219,7 +219,6 @@ impl Hub {
         let hub_info_url = url.join("api/v1")?;
         let request = http_client.client().get(hub_info_url.clone()).build()?;
         let mut info: Hub = http_client.hashed_request(request).await?;
-        println!("Hub info: {:?}", info);
         info.recursion_guard = Some(RecursionGuard::new(vec![url.as_ref()]));
         info.http_client = Some(http_client);
         Ok(info)

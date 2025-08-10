@@ -44,6 +44,7 @@ import { ThemeLoader } from "../components/theme-loader";
 import ToastProvider from "../components/toast-provider";
 import PostHogPageView from "./PostHogPageView";
 import { PHProvider } from "./provider";
+import { UpdateProvider } from "../components/update-provider";
 
 const persister = createIDBPersister();
 const queryClient = new QueryClient({
@@ -128,6 +129,7 @@ export default function RootLayout({
 						}}
 					>
 						<body className={inter.className}>
+							<UpdateProvider/>
 							<GlobalAnchorHandler />
 							<ThemeProvider
 								attribute="class"

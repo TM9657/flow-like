@@ -31,6 +31,7 @@ window-vibrancy = "0.6.0"
 anyhow = "1.0.95"
 sentry = { version = "0.42.0", features = ["anyhow"] }
 tauri-plugin-dialog = "2.3.2"
+tauri-plugin-updater = "2.9.0"
 tauri-plugin-deep-link = "2.4.1"
 sentry-tracing = "0.42.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
