@@ -43,6 +43,7 @@ export async function streamFetcher<T>(
 ): Promise<void> {
 	const authHeader = auth?.user?.id_token ? { Authorization: `Bearer ${auth.user.id_token}` } : {};
 	const url = constructUrl(profile, path);
+	let finished = false;
 
 	await new Promise<void>((resolve, reject) => {
 		const es = createEventSource({
@@ -60,18 +61,36 @@ export async function streamFetcher<T>(
 			body: options?.body ? options.body : undefined,
 			signal: options?.signal,
 			onMessage: (message: EventSourceMessage) => {
+				const evt = message?.event ?? "message";
 				const parsedData = tryParseJSON<T>(message.data);
 				if (parsedData && onMessage) {
 					onMessage(parsedData);
 				} else {
 					console.warn("Received non-JSON data:", message.data);
 				}
+
+				if (evt === "done") {
+                    if (!finished) {
+                        finished = true;
+                        try { es.close(); } catch {}
+                        resolve();
+                    }
+                }
+
+                if (evt === "error") {
+                    if (!finished) {
+                        finished = true;
+                        try { es.close(); } catch {}
+                        reject(new Error("SSE stream error"));
+                    }
+                }
 			},
 			onConnect: () => {
 				console.log("Connected to SSE stream:", url);
 			},
 			onDisconnect: () => {
 				console.log("Disconnected from SSE stream:", url);
+				es.close();
 				resolve();
 			},
 		})
@@ -205,3 +224,4 @@ export async function patch<T>(
 		auth,
 	);
 }
+

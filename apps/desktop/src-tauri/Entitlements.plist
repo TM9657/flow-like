@@ -2,44 +2,42 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-<key>com.apple.security.automation.apple-events</key>
-    <true/>
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
-    <key>com.apple.security.network.client</key>
-    <true/>
-    <key>com.apple.security.network.server</key>
-    <true/>
-    <key>com.apple.security.system-group-privilege</key>
-    <true/>
-    <key>com.apple.security.files.user-selected.read-write</key>
-    <true/>
-    <key>com.apple.security.files.downloads.read-write</key>
-    <true/>
-    <key>com.apple.security.files.bookmarks.app-scope</key>
-    <true/>
-    <key>com.apple.security.files.bookmarks.document-scope</key>
-    <true/>
-    <key>com.apple.security.files.home.read-write</key>
-    <true/>
-    <key>com.apple.security.files.cache.read-write</key>
-    <true/>
-    <key>com.apple.security.application-groups</key>
-    <array/>
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-    <true/>
-    <key>com.apple.security.inherit</key>
-    <true/>
-    <key>com.apple.security.device.usb</key>
-    <true/>
-    <key>com.apple.security.process-info-privileged-operations</key>
-    <true/>
-    <!-- Hardware Access -->
-    <key>com.apple.security.device.camera</key>
-    <true/>
-    <key>com.apple.security.device.microphone</key>
-    <true/>
-    <key>com.apple.security.device.audio-input</key>
-    <true/>
+  <!-- App Sandbox -->
+  <key>com.apple.security.app-sandbox</key><true/>
+
+
+
+  <!-- Network: client + server (open/listen on ports) -->
+  <key>com.apple.security.network.client</key><true/>
+  <key>com.apple.security.network.server</key><true/>
+
+  <!-- Files: user-selected read/write + Downloads folder -->
+  <key>com.apple.security.files.user-selected.read-write</key><true/>
+  <key>com.apple.security.files.downloads.read-write</key><true/>
+
+  <!-- Persist access to user-picked folders/files via bookmarks -->
+  <key>com.apple.security.files.bookmarks.app-scope</key><true/>
+  <key>com.apple.security.files.bookmarks.document-scope</key><true/>
+
+  <!-- Camera & Microphone (for conferencing) -->
+  <key>com.apple.security.device.camera</key><true/>
+  <key>com.apple.security.device.audio-input</key><true/>
+  <key>com.apple.security.device.microphone</key><true/>
+
+  <!-- Apple Events (control other apps) -->
+  <key>com.apple.security.automation.apple-events</key><true/>
+
+  <!-- Hardened Runtime options -->
+  <!-- Load third-party sidecars/plugins (not signed by your Team ID) -->
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
+  <!-- Safer alternative to unsigned executable memory (for JIT-capable runtimes) -->
+  <key>com.apple.security.cs.allow-jit</key><true/>
+
+  <!-- Optional: make spawned helper tools inherit your sandbox (use only if needed) -->
+  <key>com.apple.security.inherit</key><true/>
+
+  <!-- Hardened Runtime: allow loading external/sidecar code you ship -->
+  <!-- Remove if all plugins are signed by your team and embedded -->
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
 </dict>
 </plist>
