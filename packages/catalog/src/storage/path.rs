@@ -44,11 +44,8 @@ impl FlowPath {
         mut bypass_cache: bool,
     ) -> flow_like_types::Result<Vec<u8>> {
         let store: FlowLikeStore = self.to_store(context).await?;
-        match store {
-            FlowLikeStore::Memory(_) => {
-                bypass_cache = true;
-            }
-            _ => {}
+        if let FlowLikeStore::Memory(_) = store {
+            bypass_cache = true;
         }
 
         if bypass_cache {
@@ -96,11 +93,8 @@ impl FlowPath {
         let payload = PutPayload::from_bytes(bytes);
         let store = self.to_store(context).await?;
 
-        match store {
-            FlowLikeStore::Memory(_) => {
-                bypass_cache = true;
-            }
-            _ => {}
+        if let FlowLikeStore::Memory(_) = store {
+            bypass_cache = true;
         }
 
         let result = store

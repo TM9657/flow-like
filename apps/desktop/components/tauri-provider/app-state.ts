@@ -1,5 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { invoke } from "@tauri-apps/api/core";
+import { dirname, resolve } from "@tauri-apps/api/path";
 import { mkdir, open as openFile } from "@tauri-apps/plugin-fs";
 import {
 	type IApp,
@@ -17,7 +18,6 @@ import type { IMediaItem } from "@tm9657/flow-like-ui/state/backend-state/app-st
 import { fetcher, put } from "../../lib/api";
 import { appsDB } from "../../lib/apps-db";
 import type { TauriBackend } from "../tauri-provider";
-import { dirname, resolve } from "@tauri-apps/api/path";
 
 export class AppState implements IAppState {
 	constructor(private readonly backend: TauriBackend) {}

@@ -63,7 +63,7 @@ Here is the tool schema, you **must** use to make your response:
 # Required Response Format
 <tooluse>
     {
-        "name": "name", 
+        "name": "name",
         "args": {
             "reason": ...,
             "decision": ...
@@ -177,7 +177,7 @@ impl NodeLogic for LLMBranchNode {
         context.log_message(&response_string, LogLevel::Debug);
 
         let mut tool_calls_str = extract_tagged(&response_string, "tooluse")?;
-        let tool_call: BranchToolCall = if tool_calls_str.len() >= 1 {
+        let tool_call: BranchToolCall = if !tool_calls_str.is_empty() {
             // account for reasoning models which might produce tooluse tags multiple times
             // we are assuming that the last occurance of tooluse is the actual one
             let tool_call_str = tool_calls_str.pop().unwrap();

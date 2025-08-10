@@ -12,13 +12,20 @@ use flow_like::{
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
-use flow_like_types::{sync::Mutex, tokio::time::interval};
+use flow_like_types::{
+    sync::Mutex,
+    tokio::{self, time::interval},
+};
 use serde_json::json;
 use settings::Settings;
 use state::TauriFlowLikeState;
 use std::{sync::Arc, time::Duration};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::MessageDialogButtons;
+use tauri_plugin_updater::UpdaterExt;
+
 #[cfg(not(debug_assertions))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -122,11 +129,13 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let relay_handle = app.app_handle().clone();
             let gc_handle = relay_handle.clone();
             let refetch_handle = relay_handle.clone();
             let deep_link_handle = relay_handle.clone();
+            let update_handle = relay_handle.clone();
 
             #[cfg(desktop)]
             {
@@ -226,7 +235,6 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_dialog::init())
         .manage(state::TauriSettingsState(settings_state))
         .manage(state::TauriFlowLikeState(state_ref))
         .on_page_load(|view, payload| {
@@ -252,6 +260,7 @@ pub fn run() {
             println!("{} loaded: {}", label, payload.url());
         })
         .invoke_handler(tauri::generate_handler![
+            update,
             functions::file::get_path_meta,
             functions::ai::invoke::stream_chat_completion,
             functions::ai::invoke::chat_completion,
@@ -366,4 +375,29 @@ fn handle_deep_link(app: &AppHandle, event: OpenUrlEvent) {
         .set_focus();
 
     println!("deep link URLs: {:?}", event.urls());
+}
+
+#[tauri::command(async)]
+async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
+    if let Some(update) = app_handle.updater()?.check().await? {
+        let mut downloaded = 0;
+
+        // alternatively we could also call update.download() and update.install() separately
+        update
+            .download_and_install(
+                |chunk_length, content_length| {
+                    downloaded += chunk_length;
+                    println!("downloaded {downloaded} from {content_length:?}");
+                },
+                || {
+                    println!("download finished");
+                },
+            )
+            .await?;
+
+        println!("update installed");
+        app_handle.restart();
+    }
+
+    Ok(())
 }

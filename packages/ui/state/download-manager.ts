@@ -1,6 +1,19 @@
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { Bit, type Download, type IBit } from "../lib";
 import type { IBackendState } from "./backend-state";
+
+// Ensure a single DownloadManager instance across navigations/HMR
+declare global {
+	// eslint-disable-next-line no-var
+	var __FL_DL_MANAGER__: DownloadManager | undefined;
+	// eslint-disable-next-line no-var
+	var __FL_DL_STORE__: UseBoundStore<StoreApi<IDownloadManager>> | undefined;
+}
+
+function getManagerSingleton(): DownloadManager {
+	globalThis.__FL_DL_MANAGER__ ??= new DownloadManager();
+	return globalThis.__FL_DL_MANAGER__;
+}
 
 export class DownloadManager {
 	private readonly downloads = new Map<string, Download>();
@@ -96,18 +109,21 @@ interface IDownloadManager {
 	download: (bit: IBit, cb?: (dl: Download) => void) => Promise<IBit[]>;
 }
 
-export const useDownloadManager = create<IDownloadManager>((set, get) => ({
-	manager: new DownloadManager(),
-	backend: {} as IBackendState,
-	setDownloadBackend: (backend: IBackendState) => set({ backend }),
-	download: async (bit: IBit, cb?: (dl: Download) => void) => {
-		const { manager, backend } = get();
+const createStore = () =>
+	create<IDownloadManager>((set, get) => ({
+		manager: getManagerSingleton(),
+		backend: {} as IBackendState,
+		setDownloadBackend: (backend: IBackendState) => set({ backend }),
+		download: async (bit: IBit, cb?: (dl: Download) => void) => {
+			const { manager, backend } = get();
 
-		// Check if the backend actually has functions to download bits
-		if (!backend.bitState.downloadBit) {
-			throw new Error("Backend does not support downloading bits.");
-		}
+			// Check if the backend actually has functions to download bits
+			if (!backend.bitState.downloadBit) {
+				throw new Error("Backend does not support downloading bits.");
+			}
 
-		return await manager.download(backend, bit, cb);
-	},
-}));
+			return await manager.download(backend, bit, cb);
+		},
+	}));
+
+export const useDownloadManager = (globalThis.__FL_DL_STORE__ ??= createStore());

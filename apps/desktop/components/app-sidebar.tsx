@@ -56,10 +56,8 @@ import {
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import {
 	BadgeCheck,
-	Bell,
 	BellIcon,
 	BookOpenIcon,
-	BotMessageSquareIcon,
 	BugIcon,
 	ChevronRight,
 	ChevronsUpDown,
@@ -76,7 +74,6 @@ import {
 	Moon,
 	Package2Icon,
 	Plus,
-	Settings2Icon,
 	SidebarCloseIcon,
 	SidebarOpenIcon,
 	Sparkles,
@@ -393,7 +390,11 @@ function InnerSidebar() {
 						</DropdownMenuContent>
 					</DropdownMenu>
 
-					<a href="https://docs.flow-like.com" target="_blank" rel="noopener noreferrer">
+					<a
+						href="https://docs.flow-like.com"
+						target="_blank"
+						rel="noopener noreferrer"
+					>
 						<SidebarMenuButton>
 							<BookOpenIcon className="size-4" />
 							<span className="w-full flex flex-row items-center justify-between">
@@ -428,8 +429,6 @@ function Profiles() {
 		backend.userState,
 		[],
 	);
-
-
 
 	return (
 		<SidebarMenu>
@@ -608,9 +607,9 @@ function NavMain({
 											<SidebarMenuButton
 												variant={
 													pathname === item.url ||
-														typeof item.items?.find(
-															(item) => item.url === pathname,
-														) !== "undefined"
+													typeof item.items?.find(
+														(item) => item.url === pathname,
+													) !== "undefined"
 														? "outline"
 														: "default"
 												}
@@ -727,9 +726,9 @@ function NavMain({
 												<SidebarMenuButton
 													variant={
 														pathname === item.url ||
-															typeof item.items?.find(
-																(item) => item.url === pathname,
-															) !== "undefined"
+														typeof item.items?.find(
+															(item) => item.url === pathname,
+														) !== "undefined"
 															? "outline"
 															: "default"
 													}

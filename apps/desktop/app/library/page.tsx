@@ -194,7 +194,7 @@ export default function YoursPage() {
 							variant="outline"
 							className="shadow-lg hover:shadow-xl transition-all duration-200"
 							onClick={async () => {
-								await invoke("import_app")
+								await invoke("import_app");
 								await apps.refetch();
 							}}
 						>

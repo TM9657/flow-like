@@ -1,4 +1,4 @@
-use async_smtp::{Envelope, Message, SendableEmail};
+use async_smtp::{Envelope, SendableEmail};
 use chrono::Offset;
 use flow_like::{
     flow::{
@@ -10,8 +10,6 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::{anyhow, async_trait, json::json};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 
 use crate::mail::smtp::SmtpConnection;
 use crate::{
@@ -136,7 +134,7 @@ impl NodeLogic for SmtpSendMailNode {
             let filename = flow_path
                 .path
                 .split('/')
-                .last()
+                .next_back()
                 .unwrap_or("attachment")
                 .to_string();
             attachments.push((filename, content));
@@ -372,7 +370,7 @@ pub fn build_rfc5322_message_send(
 }
 
 fn detect_mime_type(filename: &str, _content: &[u8]) -> String {
-    let extension = filename.split('.').last().unwrap_or("").to_lowercase();
+    let extension = filename.split('.').next_back().unwrap_or("").to_lowercase();
     match extension.as_str() {
         "pdf" => "application/pdf",
         "doc" => "application/msword",
@@ -449,7 +447,7 @@ pub fn generate_message_id(from: &str) -> String {
 }
 
 fn rfc2822_now() -> String {
-    use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
+    use chrono::{DateTime, FixedOffset, Local};
     // Format like: Tue, 01 Jul 2003 10:52:37 +0200
     let now_local: DateTime<Local> = Local::now();
     let offset: FixedOffset = now_local.offset().fix();

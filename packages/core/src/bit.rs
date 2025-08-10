@@ -446,7 +446,12 @@ impl BitPack {
 
     pub fn size(&self) -> u64 {
         let mut size = 0;
+        let mut bits_considered = HashSet::new();
         for bit in self.bits.iter() {
+            if bits_considered.contains(&bit.hash) {
+                continue;
+            }
+            bits_considered.insert(bit.hash.clone());
             if bit.size.is_some() {
                 size += bit.size.unwrap();
             }

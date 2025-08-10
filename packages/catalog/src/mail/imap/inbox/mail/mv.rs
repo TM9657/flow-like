@@ -120,23 +120,17 @@ impl NodeLogic for ImapMoveMailNode {
                 )
             })?;
 
-        if create_if_missing {
-            if !cached_session.mailbox_exists(&destination).await? {
-                context.log_message(
-                    &format!("Destination '{}' missing → creating", destination),
-                    LogLevel::Debug,
-                );
-                cached_session
-                    .create_mailbox(&destination)
-                    .await
-                    .map_err(|e| {
-                        flow_like_types::anyhow!(
-                            "Failed to create mailbox '{}': {}",
-                            destination,
-                            e
-                        )
-                    })?;
-            }
+        if create_if_missing && !cached_session.mailbox_exists(&destination).await? {
+            context.log_message(
+                &format!("Destination '{}' missing → creating", destination),
+                LogLevel::Debug,
+            );
+            cached_session
+                .create_mailbox(&destination)
+                .await
+                .map_err(|e| {
+                    flow_like_types::anyhow!("Failed to create mailbox '{}': {}", destination, e)
+                })?;
         }
 
         let uid = email.uid.clone().to_string();

@@ -39,15 +39,15 @@ pub fn generate_mail_footer_plain() -> String {
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let mut output = vec![
-        Arc::new(imap::ImapConnectNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(imap::inbox::list::ListMailsNode::default()) as Arc<dyn NodeLogic>,
+        Arc::new(imap::ImapConnectNode) as Arc<dyn NodeLogic>,
+        Arc::new(imap::inbox::list::ListMailsNode) as Arc<dyn NodeLogic>,
     ];
 
     output.extend(imap::inbox::mail::register_functions().await);
     output.extend(imap::inbox::register_functions().await);
 
-    output.push(Arc::new(smtp::SmtpConnectNode::default()));
-    output.push(Arc::new(smtp::send_mail::SmtpSendMailNode::default()));
+    output.push(Arc::new(smtp::SmtpConnectNode));
+    output.push(Arc::new(smtp::send_mail::SmtpSendMailNode));
 
     output
 }

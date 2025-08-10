@@ -140,7 +140,12 @@ pub async fn download_bit(
     if remote_size.is_err() {
         if async_fs::try_exists(&path_name).await.unwrap_or(false) {
             let _rem = remove_download(bit, &app_state).await;
-            let _ = publish_progress(bit, callback, path_name.metadata()?.len(), &store_path).await;
+            let local_len = async_fs::metadata(&path_name)
+                .await
+                .ok()
+                .map(|m| m.len())
+                .unwrap_or(0);
+            let _ = publish_progress(bit, callback, local_len, &store_path).await;
             return Ok(store_path);
         }
 
@@ -151,7 +156,11 @@ pub async fn download_bit(
 
     let mut local_size = 0;
     if async_fs::try_exists(&path_name).await.unwrap_or(false) {
-        local_size = path_name.metadata()?.len();
+        local_size = async_fs::metadata(&path_name)
+            .await
+            .ok()
+            .map(|m| m.len())
+            .unwrap_or(0);
         if local_size == remote_size {
             let _rem = remove_download(bit, &app_state).await;
             let _ = publish_progress(bit, callback, remote_size, &store_path).await;
@@ -193,7 +202,7 @@ pub async fn download_bit(
         async_fs::create_dir_all(parent).await?;
     }
 
-    let mut file = match OpenOptions::new()
+    let file = match OpenOptions::new()
         .write(true)
         .append(resume)
         .truncate(!resume)
@@ -245,10 +254,8 @@ pub async fn download_bit(
         downloaded = new;
 
         // if buffer is bigger than 20 mb flush
-        if in_buffer > 20_000_000 {
-            if file.flush().await.is_ok() {
-                in_buffer = 0;
-            }
+        if in_buffer > 20_000_000 && file.flush().await.is_ok() {
+            in_buffer = 0;
         }
 
         if last_emit.elapsed() >= Duration::from_millis(150) {

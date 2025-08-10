@@ -19,6 +19,10 @@ export function StringVariable({
 		<div className="grid w-full items-center gap-1.5">
 			{variable.secret ? (
 				<Input
+					autoComplete="off"
+					spellCheck="false"
+					autoCorrect="off"
+					autoCapitalize="off"
 					disabled={disabled}
 					value={parseUint8ArrayToJson(variable.default_value)}
 					onChange={(e) => {

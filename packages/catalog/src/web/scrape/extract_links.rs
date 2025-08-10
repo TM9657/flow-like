@@ -144,7 +144,7 @@ async fn crawl_links(
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
             .and_then(|v| v.to_str().ok())
-            .map_or(false, |ct| ct.starts_with("text/html"))
+            .is_some_and(|ct| ct.starts_with("text/html"))
         {
             continue;
         }
@@ -166,11 +166,11 @@ async fn crawl_links(
                 if let Ok(link) = url.join(href) {
                     let link_str = link.to_string();
 
-                    if visited.insert(link_str.clone()) {
-                        if !same_domain || link.domain() == url.domain() {
-                            links.insert(link_str.clone());
-                            queue.push_back((link, depth - 1));
-                        }
+                    if visited.insert(link_str.clone())
+                        && (!same_domain || link.domain() == url.domain())
+                    {
+                        links.insert(link_str.clone());
+                        queue.push_back((link, depth - 1));
                     }
                 }
             }

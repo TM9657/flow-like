@@ -54,7 +54,7 @@ export function BitHover({
 					</Avatar>
 					<div>
 						<div className="flex flex-row items-center gap-1">
-							<h4 className="text-sm text-start">{bitData.meta.en.name}</h4>
+							<h4 className="text-sm text-start">{bitData.meta?.en?.name}</h4>
 							<BitTypeIcon type={bitData.type} className="w-3 h-3" />
 						</div>
 						<p className="text-xs text-muted-foreground text-start">
@@ -64,7 +64,7 @@ export function BitHover({
 				</div>
 				<br />
 				<p className="text-xs text-start line-clamp-3">
-					{bitData.meta.en.description}
+					{bitData.meta?.en?.description}
 				</p>
 				<br />
 				{"languages" in bitData.parameters && (

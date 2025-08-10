@@ -12,7 +12,7 @@ export default function DonePage() {
 		<main>
 			<Crossfire autorun={{ speed: 1 }} />
 			<Card>
-				<CardContent>
+				<CardContent className="w-full max-w-screen-md min-w-fit">
 					<CardHeader>
 						<h1>🎉 Congratulations!</h1>
 						<p>You have successfully completed the onboarding process.</p>

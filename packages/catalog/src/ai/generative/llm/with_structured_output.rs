@@ -40,7 +40,7 @@ TOOL_STR
 # Required Response Format
 <tooluse>
     {
-        "name": "<name of the tool>", 
+        "name": "<name of the tool>",
         "args": "<key: value dict for args as defined by schema>"
     }
 </tooluse>
@@ -116,6 +116,7 @@ impl NodeLogic for LLMWithStructuredOutput {
         let model = context.evaluate_pin::<Bit>("model").await?;
         let definition_str: String = context.evaluate_pin("schema").await?; // todo: at some point this will be a struct
         let prompt = context.evaluate_pin::<String>("prompt").await?;
+        let functions = vec![validate_openai_function_str(&definition_str)?];
 
         // load model
         let mut model_name = model.id.clone();
@@ -156,7 +157,6 @@ impl NodeLogic for LLMWithStructuredOutput {
                 tool_calls_str.len()
             )));
         };
-        let functions = vec![validate_openai_function_str(&definition_str)?];
         let tool_call = validate_openai_tool_call_str(&functions, &tool_call_str)?;
 
         // set outputs

@@ -181,19 +181,29 @@ impl BufferedInterComHandler {
 
         let callback = self.callback.clone();
 
-        for mut entry in self.buffer.iter_mut() {
-            let events_to_process = std::mem::take(entry.value_mut());
-
-            if !events_to_process.is_empty() {
-                if let Err(err) = callback(events_to_process).await {
-                    println!("Error publishing events: {}", err);
+        // Move events out first to avoid holding DashMap guards across await
+        let mut batches: Vec<(String, Vec<InterComEvent>)> = Vec::new();
+        {
+            for mut entry in self.buffer.iter_mut() {
+                let key = entry.key().clone();
+                let events_to_process = std::mem::take(entry.value_mut());
+                if !events_to_process.is_empty() {
+                    batches.push((key, events_to_process));
                 }
             }
         }
 
+        // Now process without any locks held
+        for (_key, events_to_process) in batches {
+            if let Err(err) = callback(events_to_process).await {
+                println!("Error publishing events: {}", err);
+            }
+        }
+
+        // Cleanup and update last tick
         self.buffer.retain(|_, events| !events.is_empty());
         self.last_tick_ms
-            .store(Self::now_as_millis(), Ordering::Relaxed);
+            .store(Self::now_as_millis(), std::sync::atomic::Ordering::Relaxed);
         Ok(())
     }
 }

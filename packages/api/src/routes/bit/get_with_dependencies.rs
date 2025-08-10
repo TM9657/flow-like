@@ -111,6 +111,8 @@ async fn fetch_dependencies(bit: &Bit, state: &AppState) -> flow_like_types::Res
     let http_client = Arc::new(http_client);
     let mut hubs: HashMap<String, flow_like::hub::Hub> = HashMap::new();
 
+    let mut seen_hashes = HashSet::from([bit.hash.clone()]);
+
     let mut recursion_guard = HashSet::from([bit.id.clone()]);
     let mut new_dependencies = bit.dependencies.clone();
 
@@ -132,7 +134,9 @@ async fn fetch_dependencies(bit: &Bit, state: &AppState) -> flow_like_types::Res
                 if own_bit.dependency_tree_hash != own_bit.hash {
                     next_dependencies.extend(own_bit.dependencies.clone());
                 }
-                bits.push(own_bit);
+                if seen_hashes.insert(own_bit.hash.clone()) {
+                    bits.push(own_bit);
+                }
                 continue;
             }
 
@@ -163,7 +167,9 @@ async fn fetch_dependencies(bit: &Bit, state: &AppState) -> flow_like_types::Res
                 next_dependencies.extend(bit.dependencies.clone());
             }
 
-            bits.push(bit)
+            if seen_hashes.insert(bit.hash.clone()) {
+                bits.push(bit)
+            }
         }
         new_dependencies = next_dependencies;
     }

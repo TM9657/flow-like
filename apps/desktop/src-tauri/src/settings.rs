@@ -44,12 +44,12 @@ impl Settings {
         let dir = get_cache_dir();
         let dir = dir.join("global-settings.json");
         if dir.exists() {
-            let settings = std::fs::read(dir);
+            let settings = std::fs::read(&dir);
             if let Ok(settings) = settings {
                 let settings = serde_json::from_slice::<Settings>(&settings);
                 if let Ok(mut settings) = settings {
                     settings.loaded = false;
-                    println!("Loaded settings from cache");
+                    println!("Loaded settings from cache: {:?}", dir);
                     return settings;
                 }
 
