@@ -485,11 +485,12 @@ export function parseBoard(
 			width: comment.width ?? 200,
 			height: comment.height ?? 80,
 			zIndex: comment.z_index ?? 1,
+			draggable: !(comment.is_locked ?? false),
 			data: {
 				label: comment.id,
 				boardId: board.id,
 				hash: hash,
-				comment: comment,
+				comment: {...comment, is_locked: comment.is_locked ?? false},
 				onUpsert: (comment: IComment) => {
 					const command = upsertCommentCommand({
 						comment: comment,

@@ -1,7 +1,7 @@
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import type { IProfile } from "@tm9657/flow-like-ui";
+import { type EventSourceMessage, createEventSource } from "eventsource-client";
 import type { AuthContextProps } from "react-oidc-context";
-import { createEventSource, EventSourceMessage } from 'eventsource-client'
 
 function constructUrl(profile: IProfile, path: string): string {
 	let baseUrl = profile.hub ?? "api.flow-like.com";
@@ -41,7 +41,9 @@ export async function streamFetcher<T>(
 	auth?: AuthContextProps,
 	onMessage?: (data: T) => void,
 ): Promise<void> {
-	const authHeader = auth?.user?.id_token ? { Authorization: `Bearer ${auth.user.id_token}` } : {};
+	const authHeader = auth?.user?.id_token
+		? { Authorization: `Bearer ${auth.user.id_token}` }
+		: {};
 	const url = constructUrl(profile, path);
 	let finished = false;
 
@@ -55,7 +57,9 @@ export async function streamFetcher<T>(
 				// Only set Content-Type if we actually send a body
 				...(options?.body ? { "Content-Type": "application/json" } : {}),
 				...(options?.headers ?? {}),
-				...(authHeader.Authorization ? { Authorization: authHeader.Authorization } : {}),
+				...(authHeader.Authorization
+					? { Authorization: authHeader.Authorization }
+					: {}),
 			},
 			method: options?.method ?? "GET",
 			body: options?.body ? options.body : undefined,
@@ -70,20 +74,24 @@ export async function streamFetcher<T>(
 				}
 
 				if (evt === "done") {
-                    if (!finished) {
-                        finished = true;
-                        try { es.close(); } catch {}
-                        resolve();
-                    }
-                }
+					if (!finished) {
+						finished = true;
+						try {
+							es.close();
+						} catch {}
+						resolve();
+					}
+				}
 
-                if (evt === "error") {
-                    if (!finished) {
-                        finished = true;
-                        try { es.close(); } catch {}
-                        reject(new Error("SSE stream error"));
-                    }
-                }
+				if (evt === "error") {
+					if (!finished) {
+						finished = true;
+						try {
+							es.close();
+						} catch {}
+						reject(new Error("SSE stream error"));
+					}
+				}
 			},
 			onConnect: () => {
 				console.log("Connected to SSE stream:", url);
@@ -93,8 +101,8 @@ export async function streamFetcher<T>(
 				es.close();
 				resolve();
 			},
-		})
-	})
+		});
+	});
 }
 
 export async function fetcher<T>(
@@ -224,4 +232,3 @@ export async function patch<T>(
 		auth,
 	);
 }
-

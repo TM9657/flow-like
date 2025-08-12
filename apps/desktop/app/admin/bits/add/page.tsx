@@ -18,7 +18,15 @@ import {
 	useBackend,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
-import { FileTextIcon, GaugeIcon, HashIcon, Loader2Icon, PackageIcon, TimerIcon, UploadCloudIcon } from "lucide-react";
+import {
+	FileTextIcon,
+	GaugeIcon,
+	HashIcon,
+	Loader2Icon,
+	PackageIcon,
+	TimerIcon,
+	UploadCloudIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
@@ -147,13 +155,15 @@ export default function Page() {
 	const auth = useAuth();
 	const [progress, setProgress] = useState<number>(0);
 
-	const [progressDownloaded, setProgressDownloaded] = useState<number | null>(null);
-    const [progressTotal, setProgressTotal] = useState<number | null>(null);
-    const [progressLabel, setProgressLabel] = useState<string | null>(null);
-    const [progressBit, setProgressBit] = useState<IBit | undefined>(undefined);
-    const lastSampleRef = useRef<{ t: number; downloaded: number } | null>(null);
-    const [speedBps, setSpeedBps] = useState<number>(0);
-    const [etaSec, setEtaSec] = useState<number | null>(null);
+	const [progressDownloaded, setProgressDownloaded] = useState<number | null>(
+		null,
+	);
+	const [progressTotal, setProgressTotal] = useState<number | null>(null);
+	const [progressLabel, setProgressLabel] = useState<string | null>(null);
+	const [progressBit, setProgressBit] = useState<IBit | undefined>(undefined);
+	const lastSampleRef = useRef<{ t: number; downloaded: number } | null>(null);
+	const [speedBps, setSpeedBps] = useState<number>(0);
+	const [etaSec, setEtaSec] = useState<number | null>(null);
 
 	function getDefaultBit(type: IBitTypes): IBit {
 		return {
@@ -164,80 +174,93 @@ export default function Page() {
 		};
 	}
 
-	const uploadBit = useCallback(async (bit: IBit): Promise<IBit> => {
-		if (!profile.data) {
-			throw new Error("User profile is not available");
-		}
-
-		let finalBit = { ...bit };
-
-		await streamFetcher(
-			profile.data,
-			`admin/bit/${bit.id}`,
-			{
-				method: "PUT",
-				body: JSON.stringify(bit),
-			},
-			auth,
-			(data: any) => {
-				console.log("Received data:", data);
-
-				const pRaw = data?.percent;
-                const dlRaw = data?.downloaded;
-                const totRaw = data?.total;
-
-                const downloaded =
-                    typeof dlRaw === "string" ? Number(dlRaw) : (dlRaw as number | undefined);
-                const total =
-                    typeof totRaw === "string" ? Number(totRaw) : (totRaw as number | undefined);
-                let percent =
-                    typeof pRaw === "string" ? Number(pRaw) : (pRaw as number | undefined);
-
-                if (
-                    (percent == null || !Number.isFinite(percent)) &&
-                    typeof downloaded === "number" &&
-                    typeof total === "number" &&
-                    total > 0
-                ) {
-                    percent = (downloaded / total) * 100;
-                }
-
-                if (typeof percent === "number" && Number.isFinite(percent)) {
-                    const clamped = Math.max(0, Math.min(100, percent));
-                    setProgress(clamped);
-                }
-
-                if (typeof downloaded === "number") setProgressDownloaded(downloaded);
-                if (typeof total === "number") setProgressTotal(total);
-
-                if (typeof downloaded === "number") {
-                    const now = Date.now();
-                    const last = lastSampleRef.current;
-                    if (last) {
-                        const dt = (now - last.t) / 1000;
-                        if (dt >= 0.25 && downloaded >= last.downloaded) {
-                            const bps = (downloaded - last.downloaded) / dt;
-                            if (Number.isFinite(bps)) {
-                                setSpeedBps(bps);
-                                if (typeof total === "number" && total > downloaded && bps > 0) {
-                                    setEtaSec((total - downloaded) / bps);
-                                }
-                            }
-                            lastSampleRef.current = { t: now, downloaded };
-                        }
-                    } else {
-                        lastSampleRef.current = { t: now, downloaded };
-                    }
-                }
-
-                // Completed single upload
-                if (data?.id) {
-                    finalBit = data as IBit;
-                }
+	const uploadBit = useCallback(
+		async (bit: IBit): Promise<IBit> => {
+			if (!profile.data) {
+				throw new Error("User profile is not available");
 			}
-		);
-		return finalBit;
-	}, [auth, profile.data]);
+
+			let finalBit = { ...bit };
+
+			await streamFetcher(
+				profile.data,
+				`admin/bit/${bit.id}`,
+				{
+					method: "PUT",
+					body: JSON.stringify(bit),
+				},
+				auth,
+				(data: any) => {
+					console.log("Received data:", data);
+
+					const pRaw = data?.percent;
+					const dlRaw = data?.downloaded;
+					const totRaw = data?.total;
+
+					const downloaded =
+						typeof dlRaw === "string"
+							? Number(dlRaw)
+							: (dlRaw as number | undefined);
+					const total =
+						typeof totRaw === "string"
+							? Number(totRaw)
+							: (totRaw as number | undefined);
+					let percent =
+						typeof pRaw === "string"
+							? Number(pRaw)
+							: (pRaw as number | undefined);
+
+					if (
+						(percent == null || !Number.isFinite(percent)) &&
+						typeof downloaded === "number" &&
+						typeof total === "number" &&
+						total > 0
+					) {
+						percent = (downloaded / total) * 100;
+					}
+
+					if (typeof percent === "number" && Number.isFinite(percent)) {
+						const clamped = Math.max(0, Math.min(100, percent));
+						setProgress(clamped);
+					}
+
+					if (typeof downloaded === "number") setProgressDownloaded(downloaded);
+					if (typeof total === "number") setProgressTotal(total);
+
+					if (typeof downloaded === "number") {
+						const now = Date.now();
+						const last = lastSampleRef.current;
+						if (last) {
+							const dt = (now - last.t) / 1000;
+							if (dt >= 0.25 && downloaded >= last.downloaded) {
+								const bps = (downloaded - last.downloaded) / dt;
+								if (Number.isFinite(bps)) {
+									setSpeedBps(bps);
+									if (
+										typeof total === "number" &&
+										total > downloaded &&
+										bps > 0
+									) {
+										setEtaSec((total - downloaded) / bps);
+									}
+								}
+								lastSampleRef.current = { t: now, downloaded };
+							}
+						} else {
+							lastSampleRef.current = { t: now, downloaded };
+						}
+					}
+
+					// Completed single upload
+					if (data?.id) {
+						finalBit = data as IBit;
+					}
+				},
+			);
+			return finalBit;
+		},
+		[auth, profile.data],
+	);
 
 	function setDefaultDependencies(type: IBitTypes) {
 		if (type === IBitTypes.Vlm) {
@@ -569,7 +592,7 @@ export default function Page() {
 				</>
 			) : null}
 			{bit.type === IBitTypes.Embedding ||
-				bit.type === IBitTypes.ImageEmbedding ? (
+			bit.type === IBitTypes.ImageEmbedding ? (
 				<>
 					<div className="flex flex-col items-start gap-6 w-full max-w-screen-lg">
 						<EmbeddingConfiguration bit={bit} setBit={setBit} />
@@ -635,16 +658,16 @@ export default function Page() {
 			) : null}
 			<MetaConfiguration bit={bit} setBit={setBit} />
 			{(progress > 0 || loading) && (
-                <UploadProgressCard
-                    percent={progress}
-                    downloaded={progressDownloaded ?? undefined}
-                    total={progressTotal ?? undefined}
-                    label={progressLabel ?? undefined}
-                    bit={progressBit}
-                    speedBps={speedBps}
-                    etaSec={etaSec ?? null}
-                />
-            )}
+				<UploadProgressCard
+					percent={progress}
+					downloaded={progressDownloaded ?? undefined}
+					total={progressTotal ?? undefined}
+					label={progressLabel ?? undefined}
+					bit={progressBit}
+					speedBps={speedBps}
+					etaSec={etaSec ?? null}
+				/>
+			)}
 			<Button
 				className="mt-4 w-full max-w-screen-lg"
 				onClick={async () => {
@@ -668,31 +691,29 @@ export default function Page() {
 							}
 
 							const tokenizerRegistration: IBit = await uploadBit(
-							mergeBitParameters(tokenizer, bit)
+								mergeBitParameters(tokenizer, bit),
 							);
 							dependencies.push(tokenizerRegistration);
 							const tokenizerConfigRegistration: IBit = await uploadBit(
-								mergeBitParameters(tokenizerConfig, bit)
+								mergeBitParameters(tokenizerConfig, bit),
 							);
 
 							dependencies.push(tokenizerConfigRegistration);
 							const specialTokensMapRegistration: IBit = await uploadBit(
-								mergeBitParameters(specialTokensMap, bit)
+								mergeBitParameters(specialTokensMap, bit),
 							);
 
 							dependencies.push(specialTokensMapRegistration);
 							const configRegistration: IBit = await uploadBit(
-								mergeBitParameters(config, bit)
+								mergeBitParameters(config, bit),
 							);
 
 							dependencies.push(configRegistration);
 
 							const response: IBit = await uploadBit({
-									...bit,
-									dependencies: dependencies.map(
-										(dep) => `${dep.hub}:${dep.id}`,
-									),
-								});
+								...bit,
+								dependencies: dependencies.map((dep) => `${dep.hub}:${dep.id}`),
+							});
 
 							const metaUpload = await put(
 								profile.data,
@@ -725,56 +746,42 @@ export default function Page() {
 							);
 							dependencies.push(tokenizerRegistration);
 							const tokenizerConfigRegistration: IBit = await uploadBit(
-
 								mergeBitParameters(tokenizerConfig, textEmbeddingModel),
 							);
 							dependencies.push(tokenizerConfigRegistration);
 							const specialTokensMapRegistration: IBit = await uploadBit(
-
 								mergeBitParameters(specialTokensMap, textEmbeddingModel),
 							);
 							dependencies.push(specialTokensMapRegistration);
 
 							const configRegistration: IBit = await uploadBit(
-
 								mergeBitParameters(config, textEmbeddingModel),
 							);
 							dependencies.push(configRegistration);
 
-							const textEmbeddingModelRegistration: IBit = await uploadBit(
-
-								{
-									...textEmbeddingModel,
-									license: bit.license,
-									authors: bit.authors,
-									dependencies: dependencies.map(
-										(dep) => `${dep.hub}:${dep.id}`,
-									),
-								},
-							);
+							const textEmbeddingModelRegistration: IBit = await uploadBit({
+								...textEmbeddingModel,
+								license: bit.license,
+								authors: bit.authors,
+								dependencies: dependencies.map((dep) => `${dep.hub}:${dep.id}`),
+							});
 
 							dependencies = [textEmbeddingModelRegistration];
 
-							const imageEmbeddingPreprocessorRegistration: IBit = await uploadBit(
-
-								mergeBitParameters(imageEmbeddingPreprocessor, bit),
-							);
+							const imageEmbeddingPreprocessorRegistration: IBit =
+								await uploadBit(
+									mergeBitParameters(imageEmbeddingPreprocessor, bit),
+								);
 							dependencies.push(imageEmbeddingPreprocessorRegistration);
 							const imageEmbeddingConfigRegistration: IBit = await uploadBit(
-
 								mergeBitParameters(imageEmbeddingConfig, bit),
 							);
 							dependencies.push(imageEmbeddingConfigRegistration);
 
-							const response: IBit = await uploadBit(
-
-								{
-									...bit,
-									dependencies: dependencies.map(
-										(dep) => `${dep.hub}:${dep.id}`,
-									),
-								},
-							);
+							const response: IBit = await uploadBit({
+								...bit,
+								dependencies: dependencies.map((dep) => `${dep.hub}:${dep.id}`),
+							});
 
 							const metaUpload = await put(
 								profile.data,
@@ -789,26 +796,20 @@ export default function Page() {
 								throw new Error("Projection is required for VLM");
 							}
 
-							const projectionRegistration: IBit = await uploadBit(
-								{
-									...projection,
-									license: bit.license,
-									authors: bit.authors,
-									repository: bit.repository,
-								},
-							);
+							const projectionRegistration: IBit = await uploadBit({
+								...projection,
+								license: bit.license,
+								authors: bit.authors,
+								repository: bit.repository,
+							});
 							dependencies.push(projectionRegistration);
 						}
 
 						if (bit.type === IBitTypes.Vlm || bit.type === IBitTypes.Llm) {
-							const response: IBit = await uploadBit(
-								{
-									...bit,
-									dependencies: dependencies.map(
-										(dep) => `${dep.hub}:${dep.id}`,
-									),
-								},
-							);
+							const response: IBit = await uploadBit({
+								...bit,
+								dependencies: dependencies.map((dep) => `${dep.hub}:${dep.id}`),
+							});
 							const metaUpload = await put(
 								profile.data,
 								`admin/bit/${response.id}/en`,
@@ -853,88 +854,93 @@ function mergeBitParameters(bit: IBit, parent: IBit): IBit {
 }
 
 function UploadProgressCard(props: {
-    percent: number;
-    downloaded?: number;
-    total?: number;
-    label?: string;
-    bit?: IBit;
-    speedBps?: number;
-    etaSec?: number | null;
+	percent: number;
+	downloaded?: number;
+	total?: number;
+	label?: string;
+	bit?: IBit;
+	speedBps?: number;
+	etaSec?: number | null;
 }) {
-    const { percent, downloaded, total, label, bit, speedBps, etaSec } = props;
+	const { percent, downloaded, total, label, bit, speedBps, etaSec } = props;
 
-    return (
-        <Card className="mt-4 w-full max-w-screen-lg">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <UploadCloudIcon className="h-4 w-4" />
-                    <span>{label ?? "Uploading…"}</span>
-                </div>
-                {bit ? (
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="inline-flex items-center gap-1">
-                            <PackageIcon className="h-3 w-3" />
-                            {bit.type}
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                            <FileTextIcon className="h-3 w-3" />
-                            {bit.file_name || bit.name || bit.id}
-                        </span>
-                        {bit.version ? (
-                            <span className="inline-flex items-center gap-1">
-                                <HashIcon className="h-3 w-3" />
-                                {bit.version}
-                            </span>
-                        ) : null}
-                    </div>
-                ) : null}
-            </CardHeader>
-            <CardContent className="space-y-2">
-                <div className="flex items-center gap-3">
-                    <Progress className="flex-1" value={Number.isFinite(percent) ? percent : 0} />
-                    <span className="w-12 text-right text-sm tabular-nums">
-                        {Math.round(Number.isFinite(percent) ? percent : 0)}%
-                    </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                        <GaugeIcon className="h-3 w-3" />
-                        {formatBytes(downloaded ?? 0)}
-                        {typeof total === "number" ? ` / ${formatBytes(total)}` : ""}
-                    </span>
-                    {speedBps && speedBps > 0 ? (
-                        <span className="inline-flex items-center gap-1">
-                            <UploadCloudIcon className="h-3 w-3" />
-                            {formatBytes(speedBps)}/s
-                        </span>
-                    ) : null}
-                    {etaSec != null && Number.isFinite(etaSec) ? (
-                        <span className="inline-flex items-center gap-1">
-                            <TimerIcon className="h-3 w-3" />
-                            ~{formatTime(etaSec)}
-                        </span>
-                    ) : null}
-                </div>
-            </CardContent>
-        </Card>
-    );
+	return (
+		<Card className="mt-4 w-full max-w-screen-lg">
+			<CardHeader className="flex flex-row items-center justify-between space-y-0">
+				<div className="flex items-center gap-2 text-sm text-muted-foreground">
+					<UploadCloudIcon className="h-4 w-4" />
+					<span>{label ?? "Uploading…"}</span>
+				</div>
+				{bit ? (
+					<div className="flex items-center gap-3 text-xs text-muted-foreground">
+						<span className="inline-flex items-center gap-1">
+							<PackageIcon className="h-3 w-3" />
+							{bit.type}
+						</span>
+						<span className="inline-flex items-center gap-1">
+							<FileTextIcon className="h-3 w-3" />
+							{bit.file_name || bit.name || bit.id}
+						</span>
+						{bit.version ? (
+							<span className="inline-flex items-center gap-1">
+								<HashIcon className="h-3 w-3" />
+								{bit.version}
+							</span>
+						) : null}
+					</div>
+				) : null}
+			</CardHeader>
+			<CardContent className="space-y-2">
+				<div className="flex items-center gap-3">
+					<Progress
+						className="flex-1"
+						value={Number.isFinite(percent) ? percent : 0}
+					/>
+					<span className="w-12 text-right text-sm tabular-nums">
+						{Math.round(Number.isFinite(percent) ? percent : 0)}%
+					</span>
+				</div>
+				<div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
+					<span className="inline-flex items-center gap-1">
+						<GaugeIcon className="h-3 w-3" />
+						{formatBytes(downloaded ?? 0)}
+						{typeof total === "number" ? ` / ${formatBytes(total)}` : ""}
+					</span>
+					{speedBps && speedBps > 0 ? (
+						<span className="inline-flex items-center gap-1">
+							<UploadCloudIcon className="h-3 w-3" />
+							{formatBytes(speedBps)}/s
+						</span>
+					) : null}
+					{etaSec != null && Number.isFinite(etaSec) ? (
+						<span className="inline-flex items-center gap-1">
+							<TimerIcon className="h-3 w-3" />~{formatTime(etaSec)}
+						</span>
+					) : null}
+				</div>
+			</CardContent>
+		</Card>
+	);
 }
 
 function formatBytes(bytes: number): string {
-    if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    const i = Math.min(Math.floor(Math.log(bytes || 1) / Math.log(1024)), units.length - 1);
-    const value = bytes / Math.pow(1024, i);
-    return `${value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[i]}`;
+	if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+	const units = ["B", "KB", "MB", "GB", "TB"];
+	const i = Math.min(
+		Math.floor(Math.log(bytes || 1) / Math.log(1024)),
+		units.length - 1,
+	);
+	const value = bytes / Math.pow(1024, i);
+	return `${value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[i]}`;
 }
 
 function formatTime(sec: number): string {
-    if (!Number.isFinite(sec) || sec < 0) return "—";
-    const s = Math.round(sec);
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const r = s % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m ${r}s`;
-    return `${r}s`;
+	if (!Number.isFinite(sec) || sec < 0) return "—";
+	const s = Math.round(sec);
+	const h = Math.floor(s / 3600);
+	const m = Math.floor((s % 3600) / 60);
+	const r = s % 60;
+	if (h > 0) return `${h}h ${m}m`;
+	if (m > 0) return `${m}m ${r}s`;
+	return `${r}s`;
 }

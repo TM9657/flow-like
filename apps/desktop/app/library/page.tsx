@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
 	AppCard,
 	Button,
@@ -27,6 +28,8 @@ import {
 } from "@tm9657/flow-like-ui";
 import {
 	ArrowUpDown,
+	EyeIcon,
+	EyeOffIcon,
 	FilesIcon,
 	Grid3X3,
 	ImportIcon,
@@ -34,6 +37,7 @@ import {
 	LibraryIcon,
 	Link2,
 	List,
+	LockIcon,
 	Search,
 	SearchIcon,
 	Sparkles,
@@ -50,6 +54,10 @@ export default function YoursPage() {
 	const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+	const [importDialogOpen, setImportDialogOpen] = useState(false);
+	const [encryptedImportPath, setEncryptedImportPath] = useState<string | null>(
+		null,
+	);
 	const [inviteLink, setInviteLink] = useState("");
 	const [sortBy, setSortBy] = useState<
 		"created" | "updated" | "visibility" | "name"
@@ -188,18 +196,44 @@ export default function YoursPage() {
 							</p>
 						</div>
 					</div>
-					<div className="flex items-center space-x-2">
+					<div className="flex items-center gap-2">
 						<Button
 							size="lg"
 							variant="outline"
 							className="shadow-lg hover:shadow-xl transition-all duration-200"
 							onClick={async () => {
-								await invoke("import_app");
-								await apps.refetch();
+								const file = await open({
+									multiple: false,
+									directory: false,
+									filters: [
+										{
+											name: "Flow App",
+											extensions: ["flow-app", "enc.flow-app"],
+										},
+									],
+								});
+								if (!file) return;
+								const path = String(file);
+								if (path.toLowerCase().endsWith(".enc.flow-app")) {
+									setEncryptedImportPath(path);
+									setImportDialogOpen(true);
+									return;
+								}
+								const toastId = toast.loading("Importing app...", {
+									description: "Please wait.",
+								});
+								try {
+									await invoke("import_app_from_file", { path });
+									toast.success("App imported successfully!", { id: toastId });
+									await apps.refetch();
+								} catch (err) {
+									console.error(err);
+									toast.error("Failed to import app", { id: toastId });
+								}
 							}}
 						>
 							<ImportIcon className="mr-2 h-4 w-4" />
-							Import Project
+							Import App
 						</Button>
 						<Button
 							size="lg"
@@ -210,15 +244,17 @@ export default function YoursPage() {
 							<Link2 className="mr-2 h-4 w-4" />
 							Join Project
 						</Button>
-						<Link href={"/library/new"}>
-							<Button
-								size="lg"
-								className="shadow-lg hover:shadow-xl transition-all duration-200"
-							>
+						<Button
+							size="lg"
+							variant="outline"
+							className="shadow-lg hover:shadow-xl transition-all duration-200"
+							asChild
+						>
+							<Link href="/library/new">
 								<Sparkles className="mr-2 h-4 w-4" />
 								Create App
-							</Button>
-						</Link>
+							</Link>
+						</Button>
 					</div>
 				</div>
 
@@ -261,6 +297,19 @@ export default function YoursPage() {
 						</DialogFooter>
 					</DialogContent>
 				</Dialog>
+
+				{/* Encrypted Import Dialog */}
+				<ImportEncryptedDialog
+					open={importDialogOpen}
+					onOpenChange={(o) => {
+						setImportDialogOpen(o);
+						if (!o) setEncryptedImportPath(null);
+					}}
+					path={encryptedImportPath}
+					onImported={async () => {
+						await apps.refetch();
+					}}
+				/>
 
 				{/* Search and Filter Bar */}
 				<div className="flex items-center justify-between space-x-4">
@@ -349,3 +398,120 @@ export default function YoursPage() {
 		</main>
 	);
 }
+
+interface ImportEncryptedDialogProps {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	path: string | null;
+	onImported: () => Promise<void> | void;
+}
+
+const ImportEncryptedDialog: React.FC<ImportEncryptedDialogProps> = ({
+	open,
+	onOpenChange,
+	path,
+	onImported,
+}) => {
+	const [password, setPassword] = useState("");
+	const [show, setShow] = useState(false);
+	const [loading, setLoading] = useState(false);
+
+	useEffect(() => {
+		if (!open) {
+			setPassword("");
+			setShow(false);
+			setLoading(false);
+		}
+	}, [open]);
+
+	const handleImport = useCallback(async () => {
+		if (!path) return;
+		setLoading(true);
+		const toastId = toast.loading("Importing encrypted app...", {
+			description: "Decrypting and importing. Please wait.",
+		});
+		try {
+			await invoke("import_app_from_file", { path, password });
+			toast.success("App imported successfully!", { id: toastId });
+			onOpenChange(false);
+			await onImported();
+		} catch (err) {
+			console.error(err);
+			toast.error("Failed to import app", { id: toastId });
+		} finally {
+			setLoading(false);
+		}
+	}, [path, password, onImported, onOpenChange]);
+
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent className="sm:max-w-md animate-in fade-in-0 slide-in-from-top-8 rounded-2xl shadow-2xl border-none bg-background/95 backdrop-blur-lg">
+				<DialogHeader className="space-y-3">
+					<div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+						<LockIcon className="h-6 w-6 text-primary" />
+					</div>
+					<DialogTitle className="text-center text-2xl font-bold">
+						Import Encrypted App
+					</DialogTitle>
+					<DialogDescription className="text-center text-muted-foreground">
+						This file is encrypted. Enter the password to decrypt and import it.
+					</DialogDescription>
+				</DialogHeader>
+
+				<div className="flex flex-col gap-3 py-2">
+					<div className="grid gap-2">
+						<label
+							htmlFor="import-password"
+							className="text-xs text-muted-foreground"
+						>
+							Password
+						</label>
+						<div className="relative">
+							<Input
+								id="import-password"
+								type={show ? "text" : "password"}
+								value={password}
+								onChange={(e) => setPassword(e.target.value)}
+								placeholder="Enter password"
+								autoFocus
+							/>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="absolute right-1 top-1 h-7 w-7"
+								onClick={() => setShow((s) => !s)}
+								aria-label={show ? "Hide password" : "Show password"}
+							>
+								{show ? (
+									<EyeOffIcon className="w-4 h-4" />
+								) : (
+									<EyeIcon className="w-4 h-4" />
+								)}
+							</Button>
+						</div>
+					</div>
+					{path && (
+						<p className="text-[11px] text-muted-foreground truncate">
+							File: {path}
+						</p>
+					)}
+				</div>
+
+				<DialogFooter className="flex flex-row gap-1 justify-center pt-2">
+					<DialogClose asChild>
+						<Button variant="outline" disabled={loading}>
+							Cancel
+						</Button>
+					</DialogClose>
+					<Button
+						onClick={handleImport}
+						disabled={loading || password.trim() === ""}
+					>
+						{loading ? "Importing..." : "Import"}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+};

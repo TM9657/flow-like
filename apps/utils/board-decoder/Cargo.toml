@@ -1,0 +1,10 @@
+[package]
+name = "board-decoder"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = {version="4.5.44", features = ["derive"]}
+flow-like.workspace = true
+flow-like-types.workspace = true
+flow-like-storage.workspace = true

@@ -33,11 +33,12 @@ impl Command for UpsertCommentCommand {
         _: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
         self.comment.layer = self.current_layer.clone();
-        if let Some(old_variable) = board
+        self.comment.hash();
+        if let Some(old_comment) = board
             .comments
             .insert(self.comment.id.clone(), self.comment.clone())
         {
-            self.old_comment = Some(old_variable);
+            self.old_comment = Some(old_comment);
         }
 
         Ok(())

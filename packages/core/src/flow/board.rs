@@ -985,6 +985,7 @@ pub struct Comment {
     pub color: Option<String>,
     pub z_index: Option<i32>,
     pub hash: Option<u64>,
+    pub is_locked: Option<bool>,
 }
 
 impl Comment {
@@ -1026,6 +1027,10 @@ impl Comment {
 
         if let Some(z_index) = self.z_index {
             hasher.append(&z_index.to_le_bytes());
+        }
+
+        if let Some(is_locked) = self.is_locked {
+            hasher.append(&[is_locked as u8]);
         }
 
         self.hash = Some(hasher.finalize64());

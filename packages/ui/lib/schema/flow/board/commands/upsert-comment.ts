@@ -14,6 +14,7 @@ export interface IComment {
 	hash?: number | null;
 	height?: number | null;
 	id: string;
+	is_locked?: boolean | null;
 	layer?: null | string;
 	timestamp: ISystemTime;
 	width?: number | null;

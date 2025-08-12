@@ -1,6 +1,6 @@
 {
 	"productName": "Flow Like",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"identifier": "com.flow-like.app",
 	"build": {
 		"beforeDevCommand": "bun run dev",
@@ -40,7 +40,7 @@
 		"fileAssociations": [
 			{
 				"ext": [
-					"fl-app"
+					"flow-app"
 				],
 				"description": "Flow-Like App",
 				"mimeType": "application/vnd.flow-like.app",
@@ -49,7 +49,7 @@
 			},
 			{
 				"ext": [
-					"fl-flow"
+					"flow"
 				],
 				"description": "Flow-Like Flow",
 				"mimeType": "application/vnd.flow-like.flow",

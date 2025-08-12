@@ -339,6 +339,9 @@
 		"PinOptions": {
 			"type": "object",
 			"properties": {
+				"sensitive": {
+					"type": ["boolean", "null"]
+				},
 				"valid_values": {
 					"type": ["array", "null"],
 					"items": {
@@ -486,6 +489,9 @@
 					"type": ["integer", "null"],
 					"format": "uint64",
 					"minimum": 0.0
+				},
+				"is_locked": {
+					"type": ["boolean", "null"]
 				}
 			}
 		},

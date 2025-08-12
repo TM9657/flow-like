@@ -9,11 +9,13 @@ import {
 	useReactFlow,
 } from "@xyflow/react";
 import {
+	LockIcon,
 	SquareChevronDownIcon,
 	SquareChevronUpIcon,
 	SquarePenIcon,
+	UnlockIcon,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
 	ContextMenu,
@@ -23,7 +25,7 @@ import {
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
 import type { IComment } from "../../lib/schema/flow/board";
-import { TextEditor } from "../ui";
+import { Button, TextEditor } from "../ui";
 import { ColorPicker } from "../ui/color-picker";
 import {
 	Dialog,
@@ -45,7 +47,7 @@ export type CommentNode = Node<
 >;
 
 export function CommentNode(props: NodeProps<CommentNode>) {
-	const { getNodes } = useReactFlow();
+	const { getNodes, setNodes } = useReactFlow();
 	const [edit, setEdit] = useState({
 		open: false,
 		content: props.data.comment.content,
@@ -54,6 +56,29 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 	const [currentColor, setCurrentColor] = useState<string | undefined>(
 		props.data.comment.color ?? undefined,
 	);
+
+	const isLocked = props.data.comment.is_locked ?? false;
+
+	const toggleLock = useCallback(async () => {
+		const next = !isLocked;
+		// Try to persist on the comment if supported
+		const node = getNodes().find((n) => n.id === props.id);
+		if (node) {
+			const comment = node.data.comment as IComment;
+			try {
+				console.dir({
+					...comment,
+					is_locked: next,
+				});
+				await props.data.onUpsert({
+					...comment,
+					is_locked: next,
+				});
+			} catch {
+				// noop
+			}
+		}
+	}, [getNodes, isLocked, props.data.onUpsert, props.id, setNodes]);
 
 	const onResizeEnd = useCallback(
 		async (event: ResizeDragEvent, params: ResizeParams) => {
@@ -114,7 +139,7 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 					height: 10,
 					zIndex: (props.data.comment.z_index ?? 1) + 1,
 				}}
-				isVisible={props.selected}
+				isVisible={!isLocked && props.selected}
 				onResizeEnd={onResizeEnd}
 				minWidth={30}
 				minHeight={30}
@@ -123,11 +148,30 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 				<ContextMenuTrigger>
 					<div
 						key={`${props.id}__node`}
-						className={`bg-card p-1 md-wrapper react-flow__node-default selectable w-full! h-full! focus:ring-2 relative rounded-md! border-0! group opacity-80 ${props.selected && ""}`}
+						className={`bg-card p-1 md-wrapper react-flow__node-default w-full! h-full! focus:ring-2 relative rounded-md! border-0! group opacity-80 ${props.selected && ""} ${isLocked ? "cursor-not-allowed" : ""}`}
 						style={{
 							backgroundColor: currentColor,
 						}}
 					>
+						<div className="absolute top-1 right-1 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+							<Button
+								variant="secondary"
+								size="icon"
+								title={isLocked ? "Unlock comment" : "Lock comment"}
+								onClick={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									toggleLock();
+								}}
+								className="h-6 w-6"
+							>
+								{isLocked ? (
+									<LockIcon className="w-3.5 h-3.5" />
+								) : (
+									<UnlockIcon className="w-3.5 h-3.5" />
+								)}
+							</Button>
+						</div>
 						{props.selected && (
 							<ColorPicker
 								className="z-50 absolute top-0 left-0 border translate-x-[-120%] "
@@ -219,6 +263,19 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 					>
 						<SquareChevronDownIcon className="w-4 h-4" />
 						Move Down
+					</ContextMenuItem>
+					<ContextMenuItem
+						className="flex flex-row items-center gap-2"
+						onClick={() => {
+							toggleLock();
+						}}
+					>
+						{isLocked ? (
+									<UnlockIcon className="size-4" />
+								) : (
+									<LockIcon className="size-4" />
+								)}
+						{isLocked ? "Unlock comment" : "Lock comment"}
 					</ContextMenuItem>
 				</ContextMenuContent>
 			</ContextMenu>
