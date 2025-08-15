@@ -1,3 +1,4 @@
+
 use crate::utils::json::parse_with_schema::{
     OpenAIFunction, OpenAIToolCall, validate_openai_functions_str, validate_openai_tool_call_str,
 };
@@ -5,35 +6,20 @@ use flow_like::{
     bit::Bit,
     flow::{
         board::Board,
-        execution::{LogLevel, context::ExecutionContext},
+        execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
         node::{Node, NodeLogic},
         pin::{PinOptions, PinType},
         variable::VariableType,
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::{history::History, response::Response};
+use flow_like_model_provider::{history::{Content, ContentType, History, HistoryMessage, MessageContent, Role}, response::Response};
 
-use flow_like_types::{Error, Value, anyhow, async_trait, json, regex::Regex};
+use flow_like_types::{anyhow, async_trait, json, regex::Regex, Error, Value};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-
-const SYSTEM_PROMPT_TEMPLATE: &str = r#"
-# Instruction
-You are a helpful assistant with access to the tools below.
-
-# Tools
-Here are the tools you *can* use:
-
-TOOLS_STR
-
-# Output Format
-You have *two* options to answer:
-- Use a tool wrapping it in <tooluse></tooluse> tags like this: <tooluse>{"name": "name of the tool", "args": ...}</tooluse>
-- Reply back to user wrapping it in <replytouser></replytouser> tags like this: <replytouser>...</replytouser>
-"#;
 
 /// Extract tagged substrings, e.g. Hello, <tool>extract this</tool> and <tool>this</tool>, good bye.
 pub fn extract_tagged_simple(text: &str, tag: &str) -> Result<Vec<String>, Error> {
@@ -96,26 +82,25 @@ pub fn extract_tagged(text: &str, tag: &str) -> Result<Vec<String>, Error> {
             used_ends[ei] = true;
         }
     }
-
     Ok(out)
 }
 
 #[derive(Default)]
-pub struct LLMWithTools {}
+pub struct InvokeLLMWithToolsNode {}
 
-impl LLMWithTools {
+impl InvokeLLMWithToolsNode {
     pub fn new() -> Self {
-        LLMWithTools {}
+        InvokeLLMWithToolsNode {}
     }
 }
 
 #[async_trait]
-impl NodeLogic for LLMWithTools {
+impl NodeLogic for InvokeLLMWithToolsNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "with_tools",
-            "With Tool Calls",
-            "LLM with Tool Calls",
+            "invoke_llm_with_tools",
+            "Invoke with Tools",
+            "Invoke LLM with Tool Cals",
             "AI/Generative",
         );
         node.add_icon("/flow/icons/bot-invoke.svg");
@@ -137,6 +122,24 @@ impl NodeLogic for LLMWithTools {
             VariableType::String,
         )
         .set_default_value(Some(json::json!("[]")));
+
+        // future: at some point we could allow for parallel tool execution
+        // for now, we only implement sequential processing in a loop to avoid writing to global variables at the same time
+        node.add_input_pin("thread_model", "Threads", "Threads", VariableType::String)
+            .set_default_value(Some(json::json!("tasks")))
+            .set_options(
+                PinOptions::new()
+                    .set_valid_values(vec!["sequential".to_string()])
+                    .build(),
+            );
+
+        node.add_input_pin(
+            "max_iter",
+            "Maxium Iterations",
+            "Maximum Number of Iterations (Recursion Limit)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json::json!(15)));
 
         node.add_output_pin("exec_done", "Done", "Done Pin", VariableType::Execution);
 
@@ -162,14 +165,15 @@ impl NodeLogic for LLMWithTools {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+
         context.deactivate_exec_pin("exec_done").await?;
 
         // fetch inputs
+        let recursion_limit: u64 = context.evaluate_pin("max_iter").await?;
         let model_bit = context.evaluate_pin::<Bit>("model").await?;
-        let mut history = context.evaluate_pin::<History>("history").await?;
         let tools_str: String = context.evaluate_pin("tools").await?;
 
-        // deactivate all function exec output pins
+        // validate tools + deactivate all function exec output pins
         let functions = validate_openai_functions_str(&tools_str)?;
         for function in &functions {
             context.deactivate_exec_pin(&function.name).await?
@@ -178,67 +182,6 @@ impl NodeLogic for LLMWithTools {
         // log model name
         if let Some(meta) = model_bit.meta.get("en") {
             context.log_message(&format!("Loading model {:?}", meta.name), LogLevel::Debug);
-        }
-
-        // ingest system prompt with tool definitions
-        let system_prompt = SYSTEM_PROMPT_TEMPLATE.replace("TOOLS_STR", &tools_str); // todo: serlialize tools instead?
-        context.log_message(&system_prompt, LogLevel::Debug);
-        history.set_system_prompt(system_prompt.to_string()); // todo: handle previously set system prompts
-
-        // generate response, todo: wrap this
-        let response = {
-            // load model
-            let model_factory = context.app_state.lock().await.model_factory.clone();
-            let model = model_factory
-                .lock()
-                .await
-                .build(&model_bit, context.app_state.clone())
-                .await?;
-            model.invoke(&history, None).await?
-        }; // drop model
-
-        // parse response
-        let mut response_string = "".to_string();
-        if let Some(response) = response.last_message() {
-            response_string = response.content.clone().unwrap_or("".to_string());
-        }
-        context.log_message(&response_string, LogLevel::Debug);
-        if response_string.contains("<tooluse>") {
-            let tool_calls_str = extract_tagged(&response_string, "tooluse")?;
-            let tool_calls: Result<Vec<OpenAIToolCall>, Error> = tool_calls_str
-                .iter()
-                .map(|tool_call_str| validate_openai_tool_call_str(&functions, tool_call_str))
-                .collect();
-            let mut tool_calls = tool_calls?;
-            let tool_call = if tool_calls.len() == 1 {
-                // todo: remove to support parallel tool calls
-                tool_calls.pop().unwrap()
-            } else {
-                return Err(anyhow!(format!(
-                    "Invalid number of tool calls: Expected 1, got {}.",
-                    tool_calls.len()
-                )));
-            };
-            context
-                .set_pin_value("tool_args", json::json!(tool_call.args))
-                .await?;
-            context.activate_exec_pin(&tool_call.name).await?; // activate this tool call exec pin
-        } else if response_string.contains("<replytouser>") {
-            let mut response_tagged = extract_tagged(&response_string, "replytouser")?;
-            let response_tagged = if response_tagged.len() == 1 {
-                response_tagged.pop().unwrap()
-            } else {
-                return Err(anyhow!(format!(
-                    "Invalid number of responses: Expected 1, got {}.",
-                    response_tagged.len()
-                )));
-            };
-            context
-                .set_pin_value("response", json::json!(response))
-                .await?; // todo: remove prefix from response struct
-            context.activate_exec_pin("exec_done").await?;
-        } else {
-            return Err(anyhow!("Invalid response."));
         }
 
         Ok(())

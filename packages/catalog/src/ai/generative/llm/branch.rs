@@ -2,7 +2,7 @@
 /// Like the Control > Branch Node but with integrated decision making about the input being either True or False
 /// Useful to route a execution flow between two possible downstream branches.
 /// Node execution might fail if the LLM-output cannot be parsed according to the decision data schema.
-use crate::ai::generative::llm::with_tools::extract_tagged;
+use crate::ai::generative::llm::invoke_with_tools::extract_tagged;
 use flow_like::{
     bit::Bit,
     flow::{

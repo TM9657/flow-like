@@ -2,7 +2,7 @@
 // https://modelcontextprotocol.io/docs/concepts/sampling/
 
 use std::collections::HashMap;
-
+use std::fmt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -84,6 +84,27 @@ impl HistoryMessage {
             name: None,
             tool_call_id: None,
             tool_calls: None,
+        }
+    }
+}
+
+impl fmt::Display for History {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.messages.len() > 0 {
+            let mut history_str = String::from("| ");
+            for message in self.messages.iter() {
+                let m = match message.role {
+                    Role::Assistant => " A |",
+                    Role::System => " S |",
+                    Role::Tool => " T |",
+                    Role::User => " H |",
+                    Role::Function => " F |"
+                };
+                history_str.push_str(m);
+            }
+            return write!(f, "{}", history_str)
+        } else {
+            return write!(f, "[]")
         }
     }
 }
@@ -215,13 +236,37 @@ impl History {
         self.messages.push(message);
     }
 
-    pub fn set_system_prompt(&mut self, prompt: String) {
-        let system_prompt_index = self
-            .messages
+    pub fn get_system_prompt_index(&self) -> Option<usize> {
+        self.messages
             .iter()
-            .position(|message| message.role == Role::System);
+            .position(|message| message.role == Role::System)
+    }
 
-        if let Some(index) = system_prompt_index {
+    pub fn get_system_prompt(&self) -> Option<String> {
+        if let Some(index) = self.get_system_prompt_index() {
+            match &self.messages[index].content {
+                MessageContent::Contents(contents) => {
+                    let mut prompt = String::new();
+                    for content in contents {
+                        match content {
+                            Content::Text { content_type: _, text } => {
+                                prompt.push_str(&text);
+                            },
+                            _ => {}
+                        }
+                    }
+                    return Some(prompt)
+                },
+                MessageContent::String(content) => {
+                    return Some(content.to_string())
+                }
+            }
+        }
+        None
+    }
+
+    pub fn set_system_prompt(&mut self, prompt: String) {
+        if let Some(index) = self.get_system_prompt_index() {
             self.messages[index].content = MessageContent::Contents(vec![Content::Text {
                 content_type: ContentType::Text,
                 text: prompt,

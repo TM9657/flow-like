@@ -1,9 +1,9 @@
-use crate::ai::generative::llm::with_tools::extract_tagged;
 /// # Make OpenAI Function Node
 /// Function call definitions or JSON Schemas are tedious to write by hand so this is an utility node to help you out.
 /// Node execution can fail if the LLM produces an output that cannot be parsed as JSON schema.
 /// If node execution succeeds, however, the output is *guaranteed* to be a valid OpenAI-like Function Call Definition with valid JSON schema in the "parameters" section.
 use crate::utils::json::parse_with_schema::validate_openai_function_str;
+use crate::ai::generative::llm::invoke_with_tools::extract_tagged;
 use flow_like::{
     bit::Bit,
     flow::{

@@ -45,6 +45,7 @@ impl NodeLogic for MakeHistoryMessageNode {
                     "Assistant".to_string(),
                     "System".to_string(),
                     "User".to_string(),
+                    "Tool".to_string(),
                 ])
                 .build(),
         )
@@ -77,18 +78,19 @@ impl NodeLogic for MakeHistoryMessageNode {
             "Assistant" => Role::Assistant,
             "System" => Role::System,
             "User" => Role::User,
+            "Tool" => Role::Tool,
             _ => Role::User,
         };
 
         let mut message: HistoryMessage = HistoryMessage {
             content: MessageContent::Contents(vec![]),
-            role: Role::User,
+            role: role,
             name: None,
             tool_call_id: None,
             tool_calls: None,
         };
 
-        message.role = role;
+        //message.role = role;
 
         match message_type.as_str() {
             "Text" => {

@@ -3,7 +3,7 @@
 /// Effectively, this is a forced single-tool call configuration.
 /// Node execution can fail if the LLM produces an output that cannot be parsed as JSON or if the JSON produced violates the specified schema.
 /// If node execution succeeds, however, the output is *guaranteed* to be valid JSON data that aligns with the specified schema.
-use crate::ai::generative::llm::with_tools::extract_tagged;
+use crate::ai::generative::llm::invoke_with_tools::extract_tagged;
 use crate::utils::json::parse_with_schema::{
     validate_openai_function_str, validate_openai_tool_call_str,
 };
