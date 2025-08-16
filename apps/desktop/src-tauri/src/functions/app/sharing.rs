@@ -62,15 +62,15 @@ pub async fn import_app_from_file(
         profile.hub_profile.apps = Some(vec![]);
     }
 
-    if let Some(apps) = &mut profile.hub_profile.apps {
-        if !apps.iter().any(|a| a.app_id == app.id) {
-            apps.push(ProfileApp::new(app.id.clone()));
-            let mut settings = settings.lock().await;
-            settings
-                .profiles
-                .insert(profile.hub_profile.id.clone(), profile.clone());
-            settings.serialize();
-        }
+    if let Some(apps) = &mut profile.hub_profile.apps
+        && !apps.iter().any(|a| a.app_id == app.id)
+    {
+        apps.push(ProfileApp::new(app.id.clone()));
+        let mut settings = settings.lock().await;
+        settings
+            .profiles
+            .insert(profile.hub_profile.id.clone(), profile.clone());
+        settings.serialize();
     }
 
     Ok(app)

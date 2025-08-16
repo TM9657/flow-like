@@ -4,7 +4,10 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use crate::{
     flow::{
-        board::{commands::Command, Board, Layer}, node::Node, pin::PinType, variable::VariableType
+        board::{Board, Layer, commands::Command},
+        node::Node,
+        pin::PinType,
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
@@ -206,8 +209,6 @@ pub fn connect_pins(
     upsert_node_or_layer(board, from_entity);
     upsert_node_or_layer(board, to_entity);
 
-    board.fix_pins_set_layer();
-
     Ok(())
 }
 
@@ -238,8 +239,6 @@ pub fn disconnect_pins(
 
     upsert_node_or_layer(board, from_entity);
     upsert_node_or_layer(board, to_entity);
-
-    board.fix_pins_set_layer();
 
     Ok(())
 }

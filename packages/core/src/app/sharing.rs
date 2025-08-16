@@ -236,7 +236,7 @@ fn encrypt_bytes(password: &str, plain: &[u8]) -> flow_like_types::Result<Vec<u8
 
     let mut salt = [0u8; SALT_LEN];
     let mut nonce = [0u8; XNONCE_LEN];
-    let mut rng = OsRng::default();
+    let mut rng = OsRng;
     rng.try_fill_bytes(&mut salt)?;
     rng.try_fill_bytes(&mut nonce)?;
 

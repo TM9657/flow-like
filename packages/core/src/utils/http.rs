@@ -49,10 +49,10 @@ impl HTTPClient {
     async fn refetch(&self, request: &Request) {
         if let Some(sender) = &self.sender {
             let request = request.try_clone();
-            if let Some(request) = request {
-                if let Err(e) = sender.send_timeout(request, Duration::from_secs(1)).await {
-                    eprintln!("Failed to send request: {}", e);
-                }
+            if let Some(request) = request
+                && let Err(e) = sender.send_timeout(request, Duration::from_secs(1)).await
+            {
+                eprintln!("Failed to send request: {}", e);
             }
         }
     }
@@ -120,10 +120,10 @@ impl HTTPClient {
             hasher.update(value.as_bytes());
         }
 
-        if let Some(body) = request.body() {
-            if let Some(body) = body.as_bytes() {
-                hasher.update(body);
-            }
+        if let Some(body) = request.body()
+            && let Some(body) = body.as_bytes()
+        {
+            hasher.update(body);
         }
 
         let request_hash = hasher.finalize();

@@ -190,12 +190,11 @@ impl Event {
             if let Some(version_str) = location.filename() {
                 let version = version_str.split('.').collect::<Vec<&str>>();
                 let version = version.as_slice();
-                if version.len() == 3 {
-                    if let (Ok(major), Ok(minor), Ok(patch)) =
+                if version.len() == 3
+                    && let (Ok(major), Ok(minor), Ok(patch)) =
                         (version[0].parse(), version[1].parse(), version[2].parse())
-                    {
-                        versions.push((major, minor, patch));
-                    }
+                {
+                    versions.push((major, minor, patch));
                 }
             }
         }

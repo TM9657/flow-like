@@ -69,11 +69,12 @@ impl NodeLogic for GetArrayElementNode {
         {
             let array_in = array_in.as_ref().lock().await;
 
-            if let Some(array) = array_in.as_array() {
-                if index >= 0 && index < array.len() as i64 {
-                    element = array[index as usize].clone();
-                    success = true;
-                }
+            if let Some(array) = array_in.as_array()
+                && index >= 0
+                && index < array.len() as i64
+            {
+                element = array[index as usize].clone();
+                success = true;
             }
         }
 

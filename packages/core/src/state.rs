@@ -462,10 +462,10 @@ impl FlowLikeState {
     #[cfg(feature = "flow-runtime")]
     pub fn remove_and_cancel_run(&self, run_id: &str) -> flow_like_types::Result<()> {
         let removed = self.board_run_registry.remove(run_id);
-        if let Some((_id, run)) = removed {
-            if !run.is_cancelled() {
-                run.cancel();
-            }
+        if let Some((_id, run)) = removed
+            && !run.is_cancelled()
+        {
+            run.cancel();
         }
 
         Ok(())

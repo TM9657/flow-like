@@ -44,7 +44,7 @@ pub async fn get_templates(
     for (template_model, meta_models) in templates_with_meta {
         if let Some(meta) = meta_models
             .iter()
-            .find(|meta| &meta.lang == language)
+            .find(|meta| meta.lang == language)
             .or_else(|| meta_models.iter().find(|meta| &meta.lang == "en"))
         {
             let mut metadata = Metadata::from(meta.clone());

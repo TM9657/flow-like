@@ -7,10 +7,7 @@ use super::{
 use crate::{
     app::App,
     state::FlowLikeState,
-    utils::{
-        compression::{compress_to_file, from_compressed},
-        hash::hash_string_non_cryptographic,
-    },
+    utils::compression::{compress_to_file, from_compressed},
 };
 use commands::GenericCommand;
 use flow_like_storage::object_store::{ObjectStore, path::Path};
@@ -20,12 +17,13 @@ use highway::{HighwayHash, HighwayHasher};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{Arc, Weak},
     time::SystemTime,
 };
 use tracing::instrument;
 
+pub mod cleanup;
 pub mod commands;
 
 #[derive(Debug, Clone)]
@@ -263,6 +261,7 @@ impl Board {
         command.execute(self, state.clone()).await?;
         self.node_updates(state).await;
         self.updated_at = SystemTime::now();
+        self.cleanup();
         Ok(command)
     }
 
@@ -280,6 +279,7 @@ impl Board {
         }
         self.node_updates(state).await;
         self.updated_at = SystemTime::now();
+        self.cleanup();
         Ok(commands)
     }
 
@@ -292,6 +292,7 @@ impl Board {
         for command in commands.iter_mut().rev() {
             command.undo(self, state.clone()).await?;
         }
+        self.cleanup();
         Ok(())
     }
 
@@ -304,347 +305,8 @@ impl Board {
         for command in commands.iter_mut().rev() {
             command.execute(self, state.clone()).await?;
         }
-        Ok(())
-    }
-
-    pub fn cleanup(&mut self) {
-        let mut refs = self.refs.clone();
-        let mut abandoned_hashes = refs.keys().cloned().collect::<HashSet<String>>();
-        for node in self.nodes.values_mut() {
-            if !refs.contains_key(&node.description) {
-                let description_hash = hash_string_non_cryptographic(&node.description).to_string();
-                refs.insert(description_hash.clone(), node.description.clone());
-                abandoned_hashes.remove(&description_hash);
-                node.description = description_hash;
-            } else {
-                abandoned_hashes.remove(&node.description);
-            }
-
-            for pin in node.pins.values_mut() {
-                if !refs.contains_key(&pin.description) {
-                    let description_hash =
-                        hash_string_non_cryptographic(&pin.description).to_string();
-                    refs.insert(description_hash.clone(), pin.description.clone());
-                    abandoned_hashes.remove(&description_hash);
-                    pin.description = description_hash;
-                } else {
-                    abandoned_hashes.remove(&pin.description);
-                }
-
-                if let Some(schema) = pin.schema.clone() {
-                    if !refs.contains_key(&schema) {
-                        let schema_hash = hash_string_non_cryptographic(&schema).to_string();
-                        refs.insert(schema_hash.clone(), schema.clone());
-                        abandoned_hashes.remove(&schema_hash);
-                        pin.schema = Some(schema_hash);
-                    } else {
-                        abandoned_hashes.remove(&schema);
-                    }
-                }
-            }
-        }
-
-        self.refs = refs;
-    }
-
-    pub fn fix_pins_set_layer(&mut self) {
-        // Index all pins (node pins + layer pins) and where they live
-        #[derive(Clone)]
-        enum Owner {
-            Node(String),
-            Layer(String),
-        }
-
-        let default_layer = None::<String>; // None = not in any layer
-        let mut pins: HashMap<String, &Pin> = HashMap::with_capacity(self.nodes.len() * 5);
-        let mut pin_owner: HashMap<String, Owner> = HashMap::with_capacity(self.nodes.len() * 5);
-        let mut pin_layer: HashMap<String, Option<String>> =
-            HashMap::with_capacity(self.nodes.len() * 5);
-
-        // Node pins
-        for (node_id, node) in self.nodes.iter() {
-            let node_layer = node.layer.clone();
-            for pin in node.pins.values() {
-                pins.insert(pin.id.clone(), pin);
-                pin_owner.insert(pin.id.clone(), Owner::Node(node_id.clone()));
-                pin_layer.insert(pin.id.clone(), node_layer.clone());
-            }
-        }
-
-        // Layer pins
-        for (layer_id, layer) in self.layers.iter() {
-            for pin in layer.pins.values() {
-                pins.insert(pin.id.clone(), pin);
-                pin_owner.insert(pin.id.clone(), Owner::Layer(layer_id.clone()));
-                pin_layer.insert(pin.id.clone(), Some(layer_id.clone()));
-            }
-        }
-
-        // Newly created (empty) layers we should seed with bridge pins
-        let mut empty_layers = HashSet::with_capacity(self.layers.len());
-        for (layer_id, layer) in self.layers.iter() {
-            if layer.pins.is_empty() {
-                empty_layers.insert(layer_id.clone());
-            }
-        }
-
-        // Collect removals for invalid/missing reciprocal links (node pins only)
-        let mut node_pins_connected_to_remove: HashMap<String, HashMap<String, HashSet<String>>> =
-            HashMap::new();
-        let mut node_pins_depends_on_remove: HashMap<String, HashMap<String, HashSet<String>>> =
-            HashMap::new();
-
-        // Plan new layer bridge pins for empty layers:
-        // (layer_id, base_pin_id) -> { outside_connected_to, outside_depends_on }
-        #[derive(Default)]
-        struct BridgePlan {
-            outside_connected_to: HashSet<String>,
-            outside_depends_on: HashSet<String>,
-        }
-        let mut bridge_plans: HashMap<(String, String), BridgePlan> = HashMap::new();
-
-        // Scan node pins to validate links and to prepare bridge pins for empty layers
-        for (node_id, node) in self.nodes.iter() {
-            let node_layer = node.layer.clone();
-            for pin in node.pins.values() {
-                // Validate connected_to -> requires target.depends_on contains this pin
-                for connected_to in &pin.connected_to {
-                    if let Some(target_pin) = pins.get(connected_to) {
-                        if !target_pin.depends_on.contains(&pin.id) {
-                            node_pins_connected_to_remove
-                                .entry(node_id.clone())
-                                .or_default()
-                                .entry(pin.id.clone())
-                                .or_default()
-                                .insert(connected_to.clone());
-                        }
-
-                        // If this node is inside an empty layer and targets a pin outside, plan a bridge
-                        if let Some(layer_id) = node_layer.clone() {
-                            if empty_layers.contains(&layer_id) {
-                                let other_layer = pin_layer.get(connected_to).cloned().unwrap_or(default_layer.clone());
-                                if other_layer != Some(layer_id.clone()) {
-                                    let key = (layer_id.clone(), pin.id.clone());
-                                    bridge_plans
-                                        .entry(key)
-                                        .or_default()
-                                        .outside_connected_to
-                                        .insert(connected_to.clone());
-                                }
-                            }
-                        }
-                    } else {
-                        // Target pin does not exist -> remove
-                        node_pins_connected_to_remove
-                            .entry(node_id.clone())
-                            .or_default()
-                            .entry(pin.id.clone())
-                            .or_default()
-                            .insert(connected_to.clone());
-                    }
-                }
-
-                // Validate depends_on -> requires target.connected_to contains this pin
-                for depends_on in &pin.depends_on {
-                    if let Some(target_pin) = pins.get(depends_on) {
-                        if !target_pin.connected_to.contains(&pin.id) {
-                            node_pins_depends_on_remove
-                                .entry(node_id.clone())
-                                .or_default()
-                                .entry(pin.id.clone())
-                                .or_default()
-                                .insert(depends_on.clone());
-                        }
-
-                        // If this node is inside an empty layer and depends on a pin outside, plan a bridge
-                        if let Some(layer_id) = node_layer.clone() {
-                            if empty_layers.contains(&layer_id) {
-                                let other_layer = pin_layer.get(depends_on).cloned().unwrap_or(default_layer.clone());
-                                if other_layer != Some(layer_id.clone()) {
-                                    let key = (layer_id.clone(), pin.id.clone());
-                                    bridge_plans
-                                        .entry(key)
-                                        .or_default()
-                                        .outside_depends_on
-                                        .insert(depends_on.clone());
-                                }
-                            }
-                        }
-                    } else {
-                        // Target pin does not exist -> remove
-                        node_pins_depends_on_remove
-                            .entry(node_id.clone())
-                            .or_default()
-                            .entry(pin.id.clone())
-                            .or_default()
-                            .insert(depends_on.clone());
-                    }
-                }
-            }
-        }
-
-        // Prepare additions to ensure reciprocal links and bridge wiring
-        let mut add_connected_to: HashMap<String, HashSet<String>> = HashMap::new();
-        let mut add_depends_on: HashMap<String, HashSet<String>> = HashMap::new();
-
-        // For each planned bridge, create a new layer pin (with new ID) and wire it
-        // - Bridge pin depends_on the inside pin; inside pin connected_to the bridge
-        // - Bridge pin mirrors outside references:
-        //      * connected_to outside pins; outside pins depends_on bridge
-        //      * depends_on outside pins; outside pins connected_to bridge
-        // We only create for empty layers (as collected above).
-        let mut new_layer_pins: HashMap<String, Vec<Pin>> = HashMap::new();
-        for ((layer_id, base_pin_id), plan) in bridge_plans {
-            // Ensure base pin still exists
-            let Some(base_pin) = pins.get(&base_pin_id) else { continue };
-
-            // Skip if layer is no longer empty (race within the same pass)
-            if !empty_layers.contains(&layer_id) {
-                continue;
-            }
-
-            let mut bridge_pin = (*base_pin).clone();
-            bridge_pin.id = create_id();
-            bridge_pin.connected_to.clear();
-            bridge_pin.depends_on.clear();
-
-            // Set index later upon insertion (after we can count by type)
-
-            // Wire inside <-> bridge
-            add_connected_to
-                .entry(base_pin_id.clone())
-                .or_default()
-                .insert(bridge_pin.id.clone());
-            add_depends_on
-                .entry(bridge_pin.id.clone())
-                .or_default()
-                .insert(base_pin_id.clone());
-
-            // Wire bridge -> outside (connected_to) and reciprocal
-            for outside in plan.outside_connected_to {
-                add_connected_to
-                    .entry(bridge_pin.id.clone())
-                    .or_default()
-                    .insert(outside.clone());
-                add_depends_on
-                    .entry(outside.clone())
-                    .or_default()
-                    .insert(bridge_pin.id.clone());
-            }
-
-            // Wire bridge depends_on outside and reciprocal
-            for outside in plan.outside_depends_on {
-                add_depends_on
-                    .entry(bridge_pin.id.clone())
-                    .or_default()
-                    .insert(outside.clone());
-                add_connected_to
-                    .entry(outside.clone())
-                    .or_default()
-                    .insert(bridge_pin.id.clone());
-            }
-
-            new_layer_pins.entry(layer_id.clone()).or_default().push(bridge_pin.clone());
-        }
-
-        // Insert newly created layer pins with proper indices
-        for (layer_id, mut pins_to_add) in new_layer_pins {
-            if let Some(layer) = self.layers.get_mut(&layer_id) {
-                for mut p in pins_to_add.drain(..) {
-                    let next_index = layer
-                        .pins
-                        .iter()
-                        .filter(|(_, lp)| lp.pin_type == p.pin_type)
-                        .count() as u16
-                        + 1;
-                    p.index = next_index;
-                    // Record ownership for later additions
-                    pin_owner.insert(p.id.clone(), Owner::Layer(layer_id.clone()));
-                    pin_layer.insert(p.id.clone(), Some(layer_id.clone()));
-                    layer.pins.insert(p.id.clone(), p);
-                }
-            }
-        }
-
-        // Apply additions to connected_to and depends_on (nodes and layers)
-        let mut apply_additions = |map: HashMap<String, HashSet<String>>, is_connected_to: bool| {
-            for (pin_id, targets) in map {
-                let owner = match pin_owner.get(&pin_id) {
-                    Some(o) => o.clone(),
-                    None => continue,
-                };
-                match owner {
-                    Owner::Node(node_id) => {
-                        if let Some(node) = self.nodes.get_mut(&node_id) {
-                            if let Some(pin) = node.pins.get_mut(&pin_id) {
-                                if is_connected_to {
-                                    for t in targets {
-                                        pin.connected_to.insert(t);
-                                    }
-                                } else {
-                                    for t in targets {
-                                        pin.depends_on.insert(t);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Owner::Layer(layer_id) => {
-                        if let Some(layer) = self.layers.get_mut(&layer_id) {
-                            if let Some(pin) = layer.pins.get_mut(&pin_id) {
-                                if is_connected_to {
-                                    for t in targets {
-                                        pin.connected_to.insert(t);
-                                    }
-                                } else {
-                                    for t in targets {
-                                        pin.depends_on.insert(t);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        };
-
-        apply_additions(add_connected_to, true);
-        apply_additions(add_depends_on, false);
-
-        // Removals for invalid node pin links (layer pins are left untouched here)
-        for (node_id, pins) in node_pins_connected_to_remove {
-            if let Some(node) = self.nodes.get_mut(&node_id) {
-                for (pin_id, to_remove) in pins {
-                    if let Some(pin) = node.pins.get_mut(&pin_id) {
-                        for connected_to in to_remove {
-                            println!(
-                                "Node Pins connected to remove: {} {} {}",
-                                node_id, pin_id, connected_to
-                            );
-                            pin.connected_to.remove(&connected_to);
-                        }
-                    }
-                }
-            }
-        }
-
-        for (node_id, pins) in node_pins_depends_on_remove {
-            if let Some(node) = self.nodes.get_mut(&node_id) {
-                for (pin_id, to_remove) in pins {
-                    if let Some(pin) = node.pins.get_mut(&pin_id) {
-                        for depends_on in to_remove {
-                            println!(
-                                "Node Pins depends on remove: {} {} {}",
-                                node_id, pin_id, depends_on
-                            );
-                            pin.depends_on.remove(&depends_on);
-                        }
-                    }
-                }
-            }
-        }
-
         self.cleanup();
+        Ok(())
     }
 
     pub fn get_pin_by_id(&self, pin_id: &str) -> Option<&Pin> {
@@ -833,7 +495,6 @@ impl Board {
         board.board_dir = board_dir;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
-        board.fix_pins_set_layer();
         Ok(board)
     }
 
@@ -1038,7 +699,6 @@ impl Board {
         board.board_dir = board_dir;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
-        board.fix_pins_set_layer();
         Ok(board)
     }
 
