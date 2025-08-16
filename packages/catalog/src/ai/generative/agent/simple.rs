@@ -1,7 +1,6 @@
 /// # Simple Agent Node
 /// Recursive LLM-invokes until no more tool calls are made or recursion limit hit.
 /// Effectively, this is an LLM-controlled while loop over an arbitrary number of flow-leafes with back-propagation of leaf outputs into the agent.
-
 use crate::ai::generative::llm::invoke_with_tools::extract_tagged;
 use crate::utils::json::parse_with_schema::{
     OpenAIFunction, OpenAIToolCall, validate_openai_functions_str, validate_openai_tool_call_str,
@@ -17,9 +16,13 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::{history::{Content, ContentType, History, HistoryMessage, MessageContent, Role}, response::Response};
+use flow_like_model_provider::history::ToolCall;
+use flow_like_model_provider::{
+    history::{Content, ContentType, History, HistoryMessage, MessageContent, Role},
+    response::Response,
+};
 
-use flow_like_types::{anyhow, async_trait, json, Error, Value};
+use flow_like_types::{Error, Value, anyhow, async_trait, json};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -125,19 +128,25 @@ impl NodeLogic for SimpleAgentNode {
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
-            "tool_args",
-            "Tool Args",
+            "tool_call_id",
+            "Tool Call Id",
+            "Tool Call Identifier",
+            VariableType::String,
+        );
+
+        node.add_output_pin(
+            "tool_call_args",
+            "Tool Call Args",
             "Tool Call Arguments",
             VariableType::Struct,
         );
 
         node.set_long_running(true);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-
         context.deactivate_exec_pin("exec_done").await?;
 
         // fetch inputs
@@ -166,16 +175,22 @@ impl NodeLogic for SimpleAgentNode {
         let system_prompt = match history.get_system_prompt() {
             Some(system_prompt) => {
                 format!("{}\n\n{}", system_prompt, system_prompt_tools) // handle previously set system prompts
-            },
-            None => system_prompt_tools
+            }
+            None => system_prompt_tools,
         };
-        context.log_message(&format!("system prompt: {}", system_prompt), LogLevel::Debug);
+        context.log_message(
+            &format!("system prompt: {}", system_prompt),
+            LogLevel::Debug,
+        );
 
         // Loop until no more tool cals or max recursion limit hit
         let mut previous_external_history = History::new(history.model.clone(), vec![]);
         let mut internal_history = History::new(history.model.clone(), vec![]);
         for agent_iteration in 0..recursion_limit {
-            context.log_message(&format!("[agent iter {}] agent iteration", agent_iteration), LogLevel::Debug);
+            context.log_message(
+                &format!("[agent iter {}] agent iteration", agent_iteration),
+                LogLevel::Debug,
+            );
 
             // re-evaluate history + set system prompt
             let mut external_history = context.evaluate_pin::<History>("history").await?;
@@ -183,16 +198,40 @@ impl NodeLogic for SimpleAgentNode {
 
             // append new messages to internal history
             // todo: validate tool call followed by tool output
-            context.log_message(&format!("[agent iter {}] previous external history: {}", agent_iteration, &previous_external_history), LogLevel::Debug);
-            context.log_message(&format!("[agent iter {}] previous internal history: {}", agent_iteration, &internal_history), LogLevel::Debug);
+            context.log_message(
+                &format!(
+                    "[agent iter {}] previous external history: {}",
+                    agent_iteration, &previous_external_history
+                ),
+                LogLevel::Debug,
+            );
+            context.log_message(
+                &format!(
+                    "[agent iter {}] previous internal history: {}",
+                    agent_iteration, &internal_history
+                ),
+                LogLevel::Debug,
+            );
             let n1 = previous_external_history.messages.len();
             let n2 = external_history.messages.len();
             for i in n1..n2 {
                 let new_message = external_history.messages[i].clone();
                 internal_history.messages.push(new_message);
             }
-            context.log_message(&format!("[agent iter {}] updated  external history: {}", agent_iteration, &external_history), LogLevel::Debug);
-            context.log_message(&format!("[agent iter {}] updated  internal history: {}", agent_iteration, &internal_history), LogLevel::Debug);
+            context.log_message(
+                &format!(
+                    "[agent iter {}] updated  external history: {}",
+                    agent_iteration, &external_history
+                ),
+                LogLevel::Debug,
+            );
+            context.log_message(
+                &format!(
+                    "[agent iter {}] updated  internal history: {}",
+                    agent_iteration, &internal_history
+                ),
+                LogLevel::Debug,
+            );
             previous_external_history = external_history;
 
             // generate response
@@ -212,7 +251,13 @@ impl NodeLogic for SimpleAgentNode {
             if let Some(response) = response.last_message() {
                 response_string = response.content.clone().unwrap_or("".to_string());
             }
-            context.log_message(&format!("[agent iter {}] llm response: '{}'", agent_iteration, &response_string), LogLevel::Debug);
+            context.log_message(
+                &format!(
+                    "[agent iter {}] llm response: '{}'",
+                    agent_iteration, &response_string
+                ),
+                LogLevel::Debug,
+            );
 
             // parse tool cals (if any)
             let tool_calls = if response_string.contains("<tooluse>") {
@@ -228,10 +273,14 @@ impl NodeLogic for SimpleAgentNode {
 
             // LLM wants to make tool calls -> execute subcontexts
             if tool_calls.len() > 0 {
-                let tool_args_pin = context.get_pin_by_name("tool_args").await?;
+                let tool_call_id_pin = context.get_pin_by_name("tool_call_id").await?;
+                let tool_call_args_pin = context.get_pin_by_name("tool_call_args").await?;
                 for tool_call in tool_calls.iter() {
                     context.log_message(
-                        &format!("[agent iter {}] exec tool {}", agent_iteration, &tool_call.name),
+                        &format!(
+                            "[agent iter {}] exec tool {}",
+                            agent_iteration, &tool_call.name
+                        ),
                         LogLevel::Debug,
                     );
 
@@ -241,7 +290,12 @@ impl NodeLogic for SimpleAgentNode {
                     }
 
                     // set tool args + activate tool exec pin
-                    tool_args_pin
+                    tool_call_id_pin
+                        .lock()
+                        .await
+                        .set_value(json::json!("abc"))
+                        .await;
+                    tool_call_args_pin
                         .lock()
                         .await
                         .set_value(json::json!(tool_call.args))
@@ -277,7 +331,7 @@ impl NodeLogic for SimpleAgentNode {
                     .set_pin_value("response", json::json!(response))
                     .await?; // todo: remove prefix from response struct
                 context.activate_exec_pin("exec_done").await?;
-                return Ok(())
+                return Ok(());
             }
 
             // append response as assistant message to internal history
@@ -289,12 +343,11 @@ impl NodeLogic for SimpleAgentNode {
                 }]),
                 name: None,
                 tool_call_id: None,
-                tool_calls: None,  // todo: use tool calls + tool messages
+                tool_calls: None, // todo: use tool calls + tool messages
             };
             internal_history.messages.push(ai_message);
-            
         }
-        return Err(anyhow!("Max recursion limit hit"))
+        return Err(anyhow!("Max recursion limit hit"));
     }
 
     async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
@@ -303,7 +356,7 @@ impl NodeLogic for SimpleAgentNode {
             .values()
             .filter(|p| {
                 p.pin_type == PinType::Output
-                    && (p.name != "exec_done" && p.name != "response" && p.name != "tool_args") // p.description == "Tool Exec" doesn't seem to work as filter cond
+                    && (p.name != "exec_done" && p.name != "response" && p.name != "tool_call_id" && p.name != "tool_call_args") // p.description == "Tool Exec" doesn't seem to work as filter cond
             })
             .collect();
 
