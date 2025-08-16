@@ -110,7 +110,6 @@ impl Command for RemoveLayerCommand {
             board.layers.remove(&self.layer.id);
         }
 
-        board.fix_pins_set_layer();
         Ok(())
     }
 
@@ -144,7 +143,6 @@ impl Command for RemoveLayerCommand {
             }
         }
 
-        board.fix_pins_set_layer();
         Ok(())
     }
 }

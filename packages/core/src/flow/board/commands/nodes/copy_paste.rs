@@ -296,8 +296,6 @@ impl Command for CopyPasteCommand {
             self.new_layers.push(new_layer);
         }
 
-        board.fix_pins_set_layer();
-
         Ok(())
     }
 
@@ -318,7 +316,6 @@ impl Command for CopyPasteCommand {
             board.layers.remove(&layer.id);
         }
 
-        board.fix_pins_set_layer();
         Ok(())
     }
 }

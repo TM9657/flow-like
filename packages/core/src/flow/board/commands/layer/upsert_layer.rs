@@ -94,8 +94,6 @@ impl Command for UpsertLayerCommand {
             self.layer.coordinates = center_position;
         }
 
-        board.fix_pins_set_layer();
-
         Ok(())
     }
 
@@ -105,7 +103,7 @@ impl Command for UpsertLayerCommand {
         _: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
         let mut old_layer_id = None;
-        if let Some(old_layer) = self.old_layer.take() {
+        if let Some(mut old_layer) = self.old_layer.take() {
             old_layer_id = Some(old_layer.id.clone());
             board.layers.insert(old_layer.id.clone(), old_layer.clone());
         } else {
@@ -129,8 +127,6 @@ impl Command for UpsertLayerCommand {
                 layer.parent_id = old_layer_id.clone();
             }
         }
-
-        board.fix_pins_set_layer();
 
         Ok(())
     }
