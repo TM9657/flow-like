@@ -62,6 +62,8 @@ import { useInvoke } from "../../hooks/use-invoke";
 import {
 	type IGenericCommand,
 	type ILogMetadata,
+	IPinType,
+	IValueType,
 	addNodeCommand,
 	connectPinsCommand,
 	disconnectPinsCommand,
@@ -70,6 +72,7 @@ import {
 	removeLayerCommand,
 	removeNodeCommand,
 	upsertCommentCommand,
+	upsertLayerCommand,
 } from "../../lib";
 import {
 	handleCopy,
@@ -96,6 +99,7 @@ import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowRuns } from "./flow-runs";
 import { LayerNode } from "./layer-node";
 import { LayerInnerNode } from "./layer-inner-node";
+import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
 
 function hexToRgba(hex: string, alpha = 0.3): string {
 	let c = hex.replace("#", "");
@@ -369,8 +373,8 @@ export function FlowBoard({
 	}, [layerPath, saveViewport]);
 
 	const onMoveEnd = useCallback(() => {
-    void saveViewport();
-  }, [saveViewport]);
+		void saveViewport();
+	}, [saveViewport]);
 
 	const executeBoard = useCallback(
 		async (node: INode, payload?: object) => {
@@ -680,6 +684,166 @@ export function FlowBoard({
 			boardId,
 			droppedPin,
 			board.data?.refs,
+			currentLayer,
+			screenToFlowPosition,
+		],
+	);
+
+	const placePlaceholder = useCallback(
+		async (name: string, position?: { x: number; y: number }) => {
+			const refs = board.data?.refs ?? {};
+			const location = screenToFlowPosition({
+				x: position?.x ?? clickPosition.x,
+				y: position?.y ?? clickPosition.y,
+			});
+
+			const layerId = createId();
+
+			const execInPin: IPin = {
+				id: createId(),
+				name: "exec_in",
+				friendly_name: "Exec In",
+				connected_to: [],
+				depends_on: [],
+				description: "",
+				index: 0,
+				pin_type: IPinType.Input,
+				value_type: IValueType.Normal,
+				data_type: IVariableType.Execution,
+				default_value: null,
+			};
+
+			const execOutPin: IPin = {
+				...execInPin,
+				id: createId(),
+				pin_type: IPinType.Output,
+				name: "exec_out",
+				friendly_name: "Exec Out",
+				index: 1,
+			};
+
+			let dataPin: IPin | undefined;
+			let connectToPinId: string | undefined;
+
+			if (droppedPin) {
+				const oppositeType =
+					droppedPin.pin_type === "Input" ? IPinType.Output : IPinType.Input;
+
+				if (droppedPin.data_type === IVariableType.Execution) {
+					connectToPinId =
+						oppositeType === IPinType.Input ? execInPin.id : execOutPin.id;
+				} else {
+					const resolvedSchema =
+						typeof droppedPin.schema === "string"
+							? refs?.[droppedPin.schema] ?? droppedPin.schema
+							: droppedPin.schema;
+
+					dataPin = {
+						id: createId(),
+						name: oppositeType === IPinType.Input ? "in" : "out",
+						friendly_name:
+							oppositeType === IPinType.Input ? "In" : "Out",
+						connected_to: [],
+						depends_on: [],
+						description: "",
+						index: 2,
+						pin_type: oppositeType,
+						value_type: droppedPin.value_type,
+						data_type: droppedPin.data_type,
+						default_value: null,
+						...(resolvedSchema ? { schema: resolvedSchema } : {}),
+						...(droppedPin.options ? { options: droppedPin.options } : {}),
+					};
+
+					connectToPinId = dataPin.id;
+				}
+			}
+
+			const pins: Record<string, IPin> = {
+				[execInPin.id]: execInPin,
+				[execOutPin.id]: execOutPin,
+				...(dataPin ? { [dataPin.id]: dataPin } : {}),
+			};
+
+			const newLayerCommand = upsertLayerCommand({
+				current_layer: currentLayer,
+				layer: {
+					comments: {},
+					coordinates: [location.x, location.y, 0],
+					id: layerId,
+					name,
+					nodes: {},
+					pins,
+					type: ILayerType.Collapsed,
+					variables: {},
+					parent_id: currentLayer,
+				},
+				node_ids: [],
+			});
+
+			const newLayerResult = await executeCommand(newLayerCommand, false);
+			const newLayer: ILayer = newLayerResult.layer;
+
+			if(!droppedPin) {
+				return;
+			}
+				const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
+				const pinValueType = droppedPin.value_type;
+				const pinDataType = droppedPin.data_type;
+				const options = droppedPin.options;
+
+				const pin = Object.values(newLayer.pins).find((pin) => {
+					if (pin.pin_type !== pinType) false;
+					if (pin.value_type !== pinValueType) {
+						if (
+							pinDataType !== IVariableType.Generic &&
+							pin.data_type !== IVariableType.Generic
+						)
+							return false;
+						if (
+							(options?.enforce_generic_value_type ?? false) ||
+							(pin.options?.enforce_generic_value_type ?? false)
+						)
+							return false;
+					}
+					if (
+						pin.data_type === IVariableType.Generic &&
+						pinDataType !== IVariableType.Execution
+					)
+						return true;
+					if (
+						pinDataType === IVariableType.Generic &&
+						pin.data_type !== IVariableType.Execution
+					)
+						return true;
+					return pin.data_type === pinDataType;
+				});
+				const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
+				if (!sourcePin || !sourceNode) {
+					return;
+				}
+				if (!pin) {
+					return;
+				}
+
+				const command = connectPinsCommand({
+					from_node:
+						droppedPin.pin_type === "Output" ? sourceNode.id : newLayer.id,
+					from_pin: droppedPin.pin_type === "Output" ? sourcePin.id : pin?.id,
+					to_node:
+						droppedPin.pin_type === "Input" ? sourceNode.id : newLayer.id,
+					to_pin: droppedPin.pin_type === "Input" ? sourcePin.id : pin?.id,
+				});
+
+				await executeCommand(command);
+		},
+		[
+			clickPosition,
+			boardId,
+			droppedPin,
+			board.data?.refs,
+			executeCommand,
+			pinCache,
 			currentLayer,
 			screenToFlowPosition,
 		],
@@ -1248,6 +1412,9 @@ export function FlowBoard({
 								refs={board.data?.refs || {}}
 								onClose={() => setDroppedPin(undefined)}
 								nodes={catalog.data ?? []}
+								onPlaceholder={async (name) => {
+									await placePlaceholder(name);
+								}}
 								onNodePlace={async (node) => {
 									await placeNode(node);
 								}}
