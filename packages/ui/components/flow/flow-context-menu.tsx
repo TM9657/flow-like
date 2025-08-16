@@ -331,7 +331,7 @@ export function FlowContextMenu({
 				}}
 			>
 				<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-				<ContextMenuContent className="w-80 max-h-[30rem] h-[30rem] overflow-y-hidden overflow-x-hidden">
+				<ContextMenuContent className="w-80 max-h-[30rem] h-[30rem] overflow-y-hidden overflow-x-hidden flex flex-col">
 					<div className="sticky">
 						<div className="flex flex-row w-full items-center justify-between bg-accent text-accent-foreground p-1 mb-1">
 							<small className="font-bold">Actions</small>
@@ -394,9 +394,9 @@ export function FlowContextMenu({
 							}}
 						/>
 					</div>
-					<div className="pr-1">
+					<div className="pr-1 flex flex-grow flex-col overflow-hidden">
 						<ScrollArea
-							className="h-52 w-[calc(20rem-0.5rem)] border rounded-md"
+							className="h-full w-[calc(20rem-0.5rem)] max-h-full overflow-auto border rounded-md"
 							onFocusCapture={() => {
 								if (inputRef.current && filter !== "") {
 									inputRef.current.focus();
