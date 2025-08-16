@@ -90,7 +90,6 @@ export type FlowNode = Node<
 		boardId: string;
 		appId: string;
 		transparent?: boolean;
-		ghost?: boolean;
 		onExecute: (node: INode, payload?: object) => Promise<void>;
 		onCopy: () => Promise<void>;
 	},
@@ -841,6 +840,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					pins: {},
 					parent_id: (selectedNodes[0].data.node as INode).layer,
 					coordinates: [flowCords.x, flowCords.y, 0],
+					in_coordinates: undefined,
 					name: "Collapsed",
 					type: ILayerType.Collapsed,
 					variables: {},
@@ -901,10 +901,9 @@ function FlowNode(props: NodeProps<FlowNode>) {
 			let end = Number.NEGATIVE_INFINITY;
 
 			selectedNodes.forEach((node) => {
-				if (!node.data.ghost) {
-					const nodeData = node.data.node as INode;
-					if (nodeData?.layer) currentLayer = nodeData.layer;
-				}
+				const nodeData = node.data.node as INode;
+				if (nodeData?.layer) currentLayer = nodeData.layer;
+
 				start = Math.min(
 					start,
 					type === "align" ? node.position.x : node.position.y,

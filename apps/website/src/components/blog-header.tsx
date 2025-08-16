@@ -1,5 +1,5 @@
 import { Button } from "@tm9657/flow-like-ui";
-import { BsBookHalf, BsBookmarkDashFill, BsDiscord, BsGithub, BsJournalBookmark, BsTwitterX } from "react-icons/bs";
+import { BsDiscord, BsGithub, BsTwitterX } from "react-icons/bs";
 import { LuBookHeart, LuBookMarked } from "react-icons/lu";
 
 export function BlogHeader() {
@@ -10,9 +10,7 @@ export function BlogHeader() {
 				<h3 className="hidden sm:block">Flow Like</h3>
 			</a>
 			<div className="flex flex-row items-center px-2 gap-2">
-				<a
-					href="/blog/"
-				>
+				<a href="/blog/">
 					<Button variant={"outline"}>
 						<LuBookHeart width={5} height={5} className="w-5 h-5" />
 						Blog

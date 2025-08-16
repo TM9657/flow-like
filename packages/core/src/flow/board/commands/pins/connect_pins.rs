@@ -4,13 +4,33 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use crate::{
     flow::{
-        board::{Board, commands::Command},
-        pin::PinType,
-        variable::VariableType,
+        board::{commands::Command, Board, Layer}, node::Node, pin::PinType, variable::VariableType
     },
     state::FlowLikeState,
 };
 use serde::{Deserialize, Serialize};
+
+#[derive(Clone)]
+enum NodeOrLayer {
+    Node(Node),
+    Layer(Layer),
+}
+
+impl NodeOrLayer {
+    fn is_node(&self) -> bool {
+        match self {
+            NodeOrLayer::Node(_) => true,
+            NodeOrLayer::Layer(_) => false,
+        }
+    }
+
+    fn is_layer(&self) -> bool {
+        match self {
+            NodeOrLayer::Node(_) => false,
+            NodeOrLayer::Layer(_) => true,
+        }
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ConnectPinsCommand {
@@ -31,6 +51,27 @@ impl ConnectPinsCommand {
     }
 }
 
+fn find_node_or_layer(board: &Board, id: &str) -> flow_like_types::Result<NodeOrLayer> {
+    if let Some(node) = board.nodes.get(id) {
+        return Ok(NodeOrLayer::Node(node.clone()));
+    }
+    if let Some(layer) = board.layers.get(id) {
+        return Ok(NodeOrLayer::Layer(layer.clone()));
+    }
+    Err(flow_like_types::anyhow!("Entity ({}) not found", id))
+}
+
+fn upsert_node_or_layer(board: &mut Board, entity: NodeOrLayer) {
+    match entity {
+        NodeOrLayer::Node(node) => {
+            board.nodes.insert(node.id.clone(), node);
+        }
+        NodeOrLayer::Layer(layer) => {
+            board.layers.insert(layer.id.clone(), layer);
+        }
+    }
+}
+
 #[async_trait]
 impl Command for ConnectPinsCommand {
     async fn execute(
@@ -46,20 +87,10 @@ impl Command for ConnectPinsCommand {
             &self.to_pin,
         )?;
 
-        let from_node = board
-            .nodes
-            .get(&self.from_node)
-            .ok_or(flow_like_types::anyhow!("Node not found"))?
-            .clone();
-
-        let to_node = board
-            .nodes
-            .get(&self.to_node)
-            .ok_or(flow_like_types::anyhow!("Node not found"))?
-            .clone();
-
-        board.nodes.insert(from_node.id.clone(), from_node);
-        board.nodes.insert(to_node.id.clone(), to_node);
+        let from_entity = find_node_or_layer(board, &self.from_node)?;
+        let to_entity = find_node_or_layer(board, &self.to_node)?;
+        upsert_node_or_layer(board, from_entity);
+        upsert_node_or_layer(board, to_entity);
 
         Ok(())
     }
@@ -77,20 +108,10 @@ impl Command for ConnectPinsCommand {
             &self.to_pin,
         )?;
 
-        let from_node = board
-            .nodes
-            .get(&self.from_node)
-            .ok_or(flow_like_types::anyhow!("Node not found"))?
-            .clone();
-
-        let to_node = board
-            .nodes
-            .get(&self.to_node)
-            .ok_or(flow_like_types::anyhow!("Node not found"))?
-            .clone();
-
-        board.nodes.insert(from_node.id.clone(), from_node);
-        board.nodes.insert(to_node.id.clone(), to_node);
+        let from_entity = find_node_or_layer(board, &self.from_node)?;
+        let to_entity = find_node_or_layer(board, &self.to_node)?;
+        upsert_node_or_layer(board, from_entity);
+        upsert_node_or_layer(board, to_entity);
 
         Ok(())
     }
@@ -115,82 +136,76 @@ pub fn connect_pins(
         ));
     }
 
-    let from_node = match board.nodes.get(from_node) {
-        Some(node) => node,
-        None => return Err(flow_like_types::anyhow!("Node not found".to_string())),
-    };
-    let mut from_node = from_node.clone();
+    let mut from_entity = find_node_or_layer(board, from_node)?;
+    let from_is_layer = from_entity.is_layer();
+    let mut to_entity = find_node_or_layer(board, to_node)?;
+    let to_is_layer = to_entity.is_layer();
 
-    let to_node = match board.nodes.get(to_node) {
-        Some(node) => node,
-        None => return Err(flow_like_types::anyhow!("Node not found".to_string())),
-    };
-    let mut to_node = to_node.clone();
+    let from_pin_ref = match &mut from_entity {
+        NodeOrLayer::Node(node) => node.pins.get_mut(from_pin),
+        NodeOrLayer::Layer(layer) => layer.pins.get_mut(from_pin),
+    }
+    .ok_or_else(|| flow_like_types::anyhow!("From Pin ({}) not found in container", from_pin))?;
 
-    let from_pin = match from_node.pins.get_mut(from_pin) {
-        Some(pin) => pin,
-        None => {
-            println!("Node: {:?}, Pin ID: {}", from_node, from_pin);
-            return Err(flow_like_types::anyhow!(
-                "Pin not found in node".to_string()
-            ));
-        }
-    };
+    let to_pin_ref = match &mut to_entity {
+        NodeOrLayer::Node(node) => node.pins.get_mut(to_pin),
+        NodeOrLayer::Layer(layer) => layer.pins.get_mut(to_pin),
+    }
+    .ok_or_else(|| flow_like_types::anyhow!("To Pin ({}) not found in container", to_pin))?;
 
-    let to_pin = match to_node.pins.get_mut(to_pin) {
-        Some(pin) => pin,
-        None => {
-            println!("Node: {:?}, Pin ID: {}", to_node, to_pin);
-            return Err(flow_like_types::anyhow!(
-                "Pin not found in node".to_string()
-            ));
-        }
-    };
-
-    if from_pin.pin_type == PinType::Input {
+    if from_pin_ref.pin_type == PinType::Input && !from_is_layer {
         return Err(flow_like_types::anyhow!(
             "Cannot connect an input pin".to_string()
         ));
     }
 
-    if to_pin.pin_type == PinType::Output {
+    if to_pin_ref.pin_type == PinType::Output && !to_is_layer {
         return Err(flow_like_types::anyhow!(
             "Cannot connect an output pin".to_string()
         ));
     }
 
-    // If we would allow this, it could introduce race conditions for variable access.
-    // We will allow it BUT ONLY via explicit parallel sequence node.
-    if from_pin.data_type == VariableType::Execution {
-        let mut old_connect_to = from_pin.connected_to.clone();
-        from_pin.connected_to = BTreeSet::from([to_pin.id.clone()]);
-        old_connect_to.remove(&to_pin.id);
+    if from_pin_ref.data_type == VariableType::Execution {
+        let mut old_connect_to = from_pin_ref.connected_to.clone();
+        from_pin_ref.connected_to = BTreeSet::from([to_pin_ref.id.clone()]);
+        old_connect_to.remove(&to_pin_ref.id);
 
         board.nodes.iter_mut().for_each(|(_, node)| {
             node.pins.iter_mut().for_each(|(_, pin)| {
-                pin.depends_on.remove(&from_pin.id);
+                pin.depends_on.remove(&from_pin_ref.id);
+            });
+        });
+        board.layers.iter_mut().for_each(|(_, layer)| {
+            layer.pins.iter_mut().for_each(|(_, pin)| {
+                pin.depends_on.remove(&from_pin_ref.id);
             });
         });
 
-        to_pin.depends_on.insert(from_pin.id.clone());
+        to_pin_ref.depends_on.insert(from_pin_ref.id.clone());
     }
 
-    if from_pin.data_type != VariableType::Execution {
-        let mut old_depends_on = to_pin.depends_on.clone();
-        to_pin.depends_on = BTreeSet::from([from_pin.id.clone()]);
-        old_depends_on.remove(&from_pin.id);
+    if from_pin_ref.data_type != VariableType::Execution {
+        let mut old_depends_on = to_pin_ref.depends_on.clone();
+        to_pin_ref.depends_on = BTreeSet::from([from_pin_ref.id.clone()]);
+        old_depends_on.remove(&from_pin_ref.id);
 
         board.nodes.iter_mut().for_each(|(_, node)| {
             node.pins.iter_mut().for_each(|(_, pin)| {
-                pin.connected_to.remove(&to_pin.id);
+                pin.connected_to.remove(&to_pin_ref.id);
+            });
+        });
+        board.layers.iter_mut().for_each(|(_, layer)| {
+            layer.pins.iter_mut().for_each(|(_, pin)| {
+                pin.connected_to.remove(&to_pin_ref.id);
             });
         });
     }
 
-    from_pin.connected_to.insert(to_pin.id.clone());
+    from_pin_ref.connected_to.insert(to_pin_ref.id.clone());
 
-    board.nodes.insert(from_node.id.clone(), from_node);
-    board.nodes.insert(to_node.id.clone(), to_node);
+    upsert_node_or_layer(board, from_entity);
+    upsert_node_or_layer(board, to_entity);
+
     board.fix_pins_set_layer();
 
     Ok(())
@@ -203,46 +218,27 @@ pub fn disconnect_pins(
     to_node: &str,
     to_pin: &str,
 ) -> flow_like_types::Result<()> {
-    let mut from_node = match board.nodes.get(from_node) {
-        Some(node) => node.clone(),
-        None => {
-            return Err(flow_like_types::anyhow!(
-                "From Node ({}) not found",
-                from_node
-            ));
-        }
-    };
+    let mut from_entity = find_node_or_layer(board, from_node)?;
+    let mut to_entity = find_node_or_layer(board, to_node)?;
 
-    let mut to_node = match board.nodes.get(to_node) {
-        Some(node) => node.clone(),
-        None => return Err(flow_like_types::anyhow!("To Node ({}) not found", to_node)),
-    };
+    let from_pin_ref = match &mut from_entity {
+        NodeOrLayer::Node(node) => node.pins.get_mut(from_pin),
+        NodeOrLayer::Layer(layer) => layer.pins.get_mut(from_pin),
+    }
+    .ok_or_else(|| flow_like_types::anyhow!("From Pin ({}) not found in container", from_pin))?;
 
-    let from_pin = match from_node.pins.get_mut(from_pin) {
-        Some(pin) => pin,
-        None => {
-            return Err(flow_like_types::anyhow!(
-                "From Pin ({}) not found in node",
-                from_pin
-            ));
-        }
-    };
+    let to_pin_ref = match &mut to_entity {
+        NodeOrLayer::Node(node) => node.pins.get_mut(to_pin),
+        NodeOrLayer::Layer(layer) => layer.pins.get_mut(to_pin),
+    }
+    .ok_or_else(|| flow_like_types::anyhow!("To Pin ({}) not found in container", to_pin))?;
 
-    let to_pin = match to_node.pins.get_mut(to_pin) {
-        Some(pin) => pin,
-        None => {
-            return Err(flow_like_types::anyhow!(
-                "To Pin ({}) not found in node",
-                to_pin
-            ));
-        }
-    };
+    to_pin_ref.depends_on.remove(&from_pin_ref.id);
+    from_pin_ref.connected_to.remove(&to_pin_ref.id);
 
-    to_pin.depends_on.remove(&from_pin.id);
-    from_pin.connected_to.remove(&to_pin.id);
+    upsert_node_or_layer(board, from_entity);
+    upsert_node_or_layer(board, to_entity);
 
-    board.nodes.insert(from_node.id.clone(), from_node);
-    board.nodes.insert(to_node.id.clone(), to_node);
     board.fix_pins_set_layer();
 
     Ok(())

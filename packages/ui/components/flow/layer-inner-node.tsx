@@ -59,10 +59,15 @@ import { CommentDialog } from "./comment-dialog";
 import { FlowPin } from "./flow-pin";
 import { NameDialog } from "./name-dialog";
 
-export type LayerNode = Node<
+export enum InnerLayerNodeType {
+	INPUT,
+	RETURN
+}
+
+export type ILayerInnerNode = Node<
 	{
 		layer: ILayer;
-		pinLookup: Record<string, INode>;
+		type: InnerLayerNodeType;
 		boardId: string;
 		hash: string;
 		appId: string;
@@ -70,10 +75,10 @@ export type LayerNode = Node<
 		onLayerUpdate(layer: ILayer): Promise<void>;
 		onLayerRemove(layer: ILayer, preserve_nodes: boolean): Promise<void>;
 	},
-	"layerNode"
+	"layerInnerNode"
 >;
 
-export function LayerNode(props: NodeProps<LayerNode>) {
+export function LayerInnerNode(props: NodeProps<ILayerInnerNode>) {
 	const divRef = useRef<HTMLDivElement>(null);
 	const { getNodes } = useReactFlow();
 	const [comment, setComment] = useState<string | undefined>();
@@ -164,19 +169,19 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 								/>
 							</div>
 						)}
-						<div className="header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b bg-muted p-1 justify-start rounded-t-md">
+						<div className="header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b p-1 justify-start rounded-t-md bg-accent! text-accent-foreground!">
 							<ZapIcon className="w-2 h-2" />
 							<small className="font-medium leading-none">
-								{props.data.layer.name}
+								"{props.data.layer.name}" {props.data.type === InnerLayerNodeType.INPUT ? "Start" : "Return"}
 							</small>
 						</div>
 						{Object.values(props.data.layer.pins)
-							.filter((pin) => pin.pin_type === IPinType.Input)
+							.filter((pin) => pin.pin_type === IPinType.Output && props.data.type === InnerLayerNodeType.INPUT)
 							.toSorted((a, b) => a.index - b.index)
 							.map((pin) => (
 								<FlowPin
 									appId={props.data.appId}
-									node={props.data.pinLookup[pin.id] ?? props.data.layer}
+									node={props.data.layer}
 									boardId={props.data.boardId}
 									pin={pin}
 									key={pin.id}
@@ -185,12 +190,12 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 								/>
 							))}
 						{Object.values(props.data.layer.pins)
-							.filter((pin) => pin.pin_type === IPinType.Output)
+							.filter((pin) => pin.pin_type === IPinType.Input && props.data.type === InnerLayerNodeType.RETURN)
 							.toSorted((a, b) => a.index - b.index)
 							.map((pin) => (
 								<FlowPin
 									appId={props.data.appId}
-									node={props.data.pinLookup[pin.id] ?? props.data.layer}
+									node={props.data.layer}
 									boardId={props.data.boardId}
 									pin={pin}
 									key={pin.id}
