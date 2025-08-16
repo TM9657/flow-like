@@ -53,8 +53,10 @@ export interface ILayer {
 	error?: null | string;
 	hash?: number | null;
 	id: string;
+	in_coordinates?: number[] | null;
 	name: string;
 	nodes: { [key: string]: INode };
+	out_coordinates?: number[] | null;
 	parent_id?: null | string;
 	pins: { [key: string]: IPin };
 	type: ILayerType;

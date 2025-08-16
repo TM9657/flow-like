@@ -7,20 +7,23 @@ import mdx from "@astrojs/mdx";
 // https://astro.build/config
 export default defineConfig({
 	site: "https://flow-like.com",
-	integrations: [// markdoc(),
+	integrations: [
+		// markdoc(),
 		// robotsTxt(),
 		// sitemap(),
 		// playformCompress(),
-		react(), mdx({
-			syntaxHighlight: 'shiki',
-			shikiConfig: { theme: 'dracula' },
-			remarkRehype: { footnoteLabel: 'Footnotes' },
+		react(),
+		mdx({
+			syntaxHighlight: "shiki",
+			shikiConfig: { theme: "dracula" },
+			remarkRehype: { footnoteLabel: "Footnotes" },
 			gfm: false,
-		}),],
+		}),
+	],
 	vite: {
 		define: {
-      "process.env": {},
-    },
+			"process.env": {},
+		},
 		ssr: {
 			noExternal: [
 				"katex",

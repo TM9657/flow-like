@@ -10,9 +10,7 @@ export function Header() {
 				<h3 className="hidden sm:block">Flow Like</h3>
 			</a>
 			<div className="flex flex-row items-center px-2 gap-2">
-				<a
-					href="/blog/"
-				>
+				<a href="/blog/">
 					<Button variant={"outline"}>
 						<LuBookHeart width={5} height={5} className="w-5 h-5" />
 						Blog

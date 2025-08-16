@@ -43,7 +43,7 @@ import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { useLogAggregation } from "../..";
+import { useLogAggregation, viewportDb, viewportKey } from "../..";
 import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
@@ -95,6 +95,7 @@ import { useUndoRedo } from "./flow-history";
 import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowRuns } from "./flow-runs";
 import { LayerNode } from "./layer-node";
+import { LayerInnerNode } from "./layer-inner-node";
 
 function hexToRgba(hex: string, alpha = 0.3): string {
 	let c = hex.replace("#", "");
@@ -157,16 +158,16 @@ export function FlowBoard({
 		[],
 	);
 	const { addRun, removeRun, pushUpdate } = useRunExecutionStore();
-	const { screenToFlowPosition } = useReactFlow();
+	const { screenToFlowPosition, getViewport, setViewport, fitView } = useReactFlow();
 
 	const [nodes, setNodes] = useNodesState<any>([]);
 	const [edges, setEdges] = useEdgesState<any>([]);
 	const [droppedPin, setDroppedPin] = useState<IPin | undefined>(undefined);
 	const [clickPosition, setClickPosition] = useState({ x: 0, y: 0 });
 	const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-	const [pinCache, setPinCache] = useState<Map<string, [IPin, INode, boolean]>>(
-		new Map(),
-	);
+	const [pinCache, setPinCache] = useState<
+		Map<string, [IPin, INode | ILayer, boolean]>
+	>(new Map());
 	const [editBoard, setEditBoard] = useState(false);
 	const [currentLayer, setCurrentLayer] = useState<string | undefined>();
 	const [layerPath, setLayerPath] = useState<string | undefined>();
@@ -182,6 +183,50 @@ export function FlowBoard({
 		},
 		[nodes, pinCache],
 	);
+
+	const saveViewport = useCallback(async () => {
+		try {
+			const vp = getViewport();
+			await viewportDb.viewports.put({
+				id: viewportKey(appId, boardId, layerPath),
+				appId,
+				boardId,
+				layerPath: layerPath ?? "root",
+				x: vp.x,
+				y: vp.y,
+				zoom: vp.zoom,
+				updatedAt: Date.now(),
+			});
+		} catch {
+			// no-op
+		}
+	}, [appId, boardId, layerPath, getViewport]);
+
+	useEffect(() => {
+		let active = true;
+
+		const restore = async () => {
+			const rec = await viewportDb.viewports.get(
+				viewportKey(appId, boardId, layerPath),
+			);
+			if (!active) return;
+
+			if (rec) {
+				setViewport({ x: rec.x, y: rec.y, zoom: rec.zoom });
+			} else {
+				// Fit screen when no stored viewport is found
+				fitView({ duration: 300 });
+			}
+		};
+
+		// Wait until nodes are there so fitting has effect
+		// Using nodes.length is enough to re-run after initial load
+		restore();
+
+		return () => {
+			active = false;
+		};
+	}, [appId, boardId, layerPath, setViewport, fitView, nodes.length]);
 
 	const executeCommand = useCallback(
 		async (command: IGenericCommand, append = false): Promise<any> => {
@@ -294,17 +339,23 @@ export function FlowBoard({
 
 	const pushLayer = useCallback(
 		(pushedLayer: ILayer) => {
+			void saveViewport();
+
 			setCurrentLayer(pushedLayer.id);
 			setLayerPath((old) => {
 				if (old) return `${old}/${pushedLayer.id}`;
 				return pushedLayer.id;
 			});
 		},
-		[currentLayer, setCurrentLayer, setLayerPath, layerPath],
+		[saveViewport],
 	);
 
 	const popLayer = useCallback(() => {
 		if (!layerPath) return;
+
+		// Save current layer viewport before switching
+		void saveViewport();
+
 		const segments = layerPath.split("/");
 		if (segments.length === 1) {
 			setLayerPath(undefined);
@@ -315,7 +366,11 @@ export function FlowBoard({
 		setLayerPath(newPath);
 		const segment = newPath.split("/").pop();
 		setCurrentLayer(segment);
-	}, [currentLayer, setCurrentLayer, setLayerPath]);
+	}, [layerPath, saveViewport]);
+
+	const onMoveEnd = useCallback(() => {
+    void saveViewport();
+  }, [saveViewport]);
 
 	const executeBoard = useCallback(
 		async (node: INode, payload?: object) => {
@@ -719,6 +774,7 @@ export function FlowBoard({
 			flowNode: FlowNode,
 			commentNode: CommentNode,
 			layerNode: LayerNode,
+			layerInnerNode: LayerInnerNode,
 			node: FlowNode,
 		}),
 		[],
@@ -1101,17 +1157,17 @@ export function FlowBoard({
 				<FlowDock
 					items={[
 						...(typeof parentRegister.boardParents[boardId] === "string" &&
-						!currentLayer
+							!currentLayer
 							? [
-									{
-										icon: <ArrowBigLeftDashIcon />,
-										title: "Back",
-										onClick: async () => {
-											const urlWithQuery = parentRegister.boardParents[boardId];
-											router.push(urlWithQuery);
-										},
+								{
+									icon: <ArrowBigLeftDashIcon />,
+									title: "Back",
+									onClick: async () => {
+										const urlWithQuery = parentRegister.boardParents[boardId];
+										router.push(urlWithQuery);
 									},
-								]
+								},
+							]
 							: []),
 						{
 							icon: <VariableIcon />,
@@ -1137,27 +1193,27 @@ export function FlowBoard({
 						},
 						...(currentMetadata
 							? [
-									{
-										icon: <ScrollIcon />,
-										title: "Logs",
-										onClick: async () => {
-											toggleLogs();
-										},
+								{
+									icon: <ScrollIcon />,
+									title: "Logs",
+									onClick: async () => {
+										toggleLogs();
 									},
-								]
+								},
+							]
 							: ([] as any)),
 						...(currentLayer
 							? [
-									{
-										icon: <SquareChevronUpIcon />,
-										title: "Layer Up",
-										separator: "left",
-										highlight: true,
-										onClick: async () => {
-											popLayer();
-										},
+								{
+									icon: <SquareChevronUpIcon />,
+									title: "Layer Up",
+									separator: "left",
+									highlight: true,
+									onClick: async () => {
+										popLayer();
 									},
-								]
+								},
+							]
 							: []),
 					]}
 				/>
@@ -1232,6 +1288,7 @@ export function FlowBoard({
 										onConnect={onConnect}
 										onReconnect={onReconnect}
 										onReconnectStart={onReconnectStart}
+										onMoveEnd={onMoveEnd}
 										// onEdgeDoubleClick={(e, edge) => {
 										// 	console.dir({e, edge})
 										// }}
@@ -1307,8 +1364,8 @@ export function FlowBoard({
 											<Variable
 												variable={active?.data?.current as IVariable}
 												preview
-												onVariableChange={() => {}}
-												onVariableDeleted={() => {}}
+												onVariableChange={() => { }}
+												onVariableDeleted={() => { }}
 											/>
 										)}
 									</DragOverlay>

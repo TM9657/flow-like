@@ -379,7 +379,7 @@ export function FlowContextMenu({
 													return pins.some((pin) => {
 														if (pin.pin_type === droppedPin.pin_type)
 															return false;
-														return doPinsMatch(pin, droppedPin, refs);
+														return doPinsMatch(pin, droppedPin, refs, node);
 													});
 												}),
 											]

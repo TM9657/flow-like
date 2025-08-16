@@ -61,6 +61,7 @@ impl Command for CopyPasteCommand {
         };
         let mut translated_connection = HashMap::with_capacity(self.original_nodes.len());
         let mut intermediate_nodes = Vec::with_capacity(self.original_nodes.len());
+        let mut intermediate_layers = Vec::with_capacity(self.original_layers.len());
         let offset = self.offset;
         let offset = self
             .original_comments
@@ -112,8 +113,21 @@ impl Command for CopyPasteCommand {
                 new_layer.parent_id = self.current_layer.clone();
             }
 
+            new_layer.pins = layer
+                .pins
+                .values()
+                .map(|pin| {
+                    let mut pin = pin.clone();
+                    let old_pin_id = pin.id.clone();
+                    let new_pin_id = create_id();
+                    translated_connection.insert(old_pin_id, new_pin_id.clone());
+                    pin.id = new_pin_id.clone();
+                    (new_pin_id, pin)
+                })
+                .collect();
+
             board.layers.insert(new_layer.id.clone(), new_layer.clone());
-            self.new_layers.push(new_layer);
+            intermediate_layers.push(new_layer.clone());
         }
 
         for comment in self.original_comments.iter() {
@@ -259,6 +273,27 @@ impl Command for CopyPasteCommand {
 
             board.nodes.insert(new_node.id.clone(), new_node.clone());
             self.new_nodes.push(new_node);
+        }
+
+        for layer in intermediate_layers.iter() {
+            let mut new_layer = layer.clone();
+            for pin in new_layer.pins.values_mut() {
+                pin.depends_on = pin
+                    .depends_on
+                    .iter()
+                    .filter(|dep_id| translated_connection.contains_key(*dep_id))
+                    .map(|dep_id| translated_connection.get(dep_id).unwrap_or(dep_id).clone())
+                    .collect();
+
+                pin.connected_to = pin
+                    .connected_to
+                    .iter()
+                    .filter(|dep_id| translated_connection.contains_key(*dep_id))
+                    .map(|dep_id| translated_connection.get(dep_id).unwrap_or(dep_id).clone())
+                    .collect();
+            }
+            board.layers.insert(new_layer.id.clone(), new_layer.clone());
+            self.new_layers.push(new_layer);
         }
 
         board.fix_pins_set_layer();

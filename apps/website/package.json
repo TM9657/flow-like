@@ -15,6 +15,7 @@
 		"@astrojs/markdoc": "0.15.1",
 		"@astrojs/mdx": "^4.3.3",
 		"@astrojs/react": "^4.2.0",
+		"@astrojs/rss": "^4.0.12",
 		"@astrojs/sitemap": "^3.2.1",
 		"@astrolib/seo": "^1.0.0-beta.8",
 		"@playform/compress": "^0.2.0",
