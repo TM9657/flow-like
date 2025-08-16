@@ -233,6 +233,49 @@ export function FlowBoard({
 		};
 	}, [appId, boardId, layerPath, setViewport, fitView, nodes.length]);
 
+	const focusNode = useCallback(
+		(nodeId: string) => {
+			const node = board.data?.nodes[nodeId];
+			if (!node) {
+				console.error("Node not found:", nodeId);
+				return;
+			}
+
+			const layers = board.data?.layers ?? {};
+			const layerTree: string[] = [];
+			let parentLayer = node.layer;
+			let iteration = 0;
+
+			while (parentLayer && iteration < 40) {
+				iteration++;
+				const layer = layers[parentLayer];
+				if (!layer) break;
+				layerTree.push(layer.id);
+				parentLayer = layer.parent_id;
+			}
+
+			if (layerTree.length > 0) {
+				setCurrentLayer(layerTree[layerTree.length - 1]);
+				setLayerPath(layerTree.slice().reverse().join("/"));
+			} else {
+				setCurrentLayer(undefined);
+				setLayerPath(undefined);
+			}
+
+			// Defer until layer switch renders nodes
+			requestAnimationFrame(() => {
+				requestAnimationFrame(() => {
+					fitView({
+						nodes: [{ id: node.id }],
+						padding: 3,
+						duration: 500,
+					});
+				});
+			});
+		},
+		[board.data?.nodes, board.data?.layers, fitView],
+	);
+
 	const executeCommand = useCallback(
 		async (command: IGenericCommand, append = false): Promise<any> => {
 			const backend = useBackendStore.getState().backend;
@@ -1548,7 +1591,16 @@ export function FlowBoard({
 							collapsible={true}
 							autoSave="flow-logs"
 						>
-							{currentMetadata && <Traces appId={appId} boardId={boardId} />}
+							{board.data && currentMetadata && (
+								<Traces
+									appId={appId}
+									boardId={boardId}
+									board={board.data}
+									onFocusNode={(nodeId: string) => {
+										focusNode(nodeId);
+									}}
+								/>
+							)}
 						</ResizablePanel>
 					</ResizablePanelGroup>
 				</ResizablePanel>
