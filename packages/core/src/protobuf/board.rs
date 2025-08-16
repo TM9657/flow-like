@@ -214,7 +214,10 @@ impl FromProto<flow_like_types::proto::Layer> for Layer {
     fn from_proto(proto: flow_like_types::proto::Layer) -> Self {
         let (in_default, out_default) = if proto.nodes.is_empty() {
             let base = (proto.coord_x, proto.coord_y, proto.coord_z);
-            ((base.0 - 50.0, base.1, base.2), (base.0 + 50.0, base.1, base.2))
+            (
+                (base.0 - 50.0, base.1, base.2),
+                (base.0 + 50.0, base.1, base.2),
+            )
         } else {
             let mut min_x = f32::INFINITY;
             let mut min_y = 0.0;
@@ -223,7 +226,7 @@ impl FromProto<flow_like_types::proto::Layer> for Layer {
             let mut max_y = 0.0;
             let mut max_z = 0.0;
 
-          for n in proto.nodes.values() {
+            for n in proto.nodes.values() {
                 let x = n.coord_x;
                 if x < min_x {
                     min_x = x;
@@ -270,7 +273,7 @@ impl FromProto<flow_like_types::proto::Layer> for Layer {
                 .into_iter()
                 .map(|(k, v)| (k, Variable::from_proto(v)))
                 .collect(),
-           in_coordinates: Some((
+            in_coordinates: Some((
                 proto.coord_x_in.unwrap_or(in_default.0),
                 proto.coord_y_in.unwrap_or(in_default.1),
                 proto.coord_z_in.unwrap_or(in_default.2),

@@ -86,6 +86,7 @@ import {
 	ICommentType,
 	type IVariable,
 } from "../../lib/schema/flow/board";
+import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
 import { type INode, IVariableType } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
 import type { ILayer } from "../../lib/schema/flow/run";
@@ -97,9 +98,8 @@ import { BoardMeta } from "./board-meta";
 import { useUndoRedo } from "./flow-history";
 import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowRuns } from "./flow-runs";
-import { LayerNode } from "./layer-node";
 import { LayerInnerNode } from "./layer-inner-node";
-import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
+import { LayerNode } from "./layer-node";
 
 function hexToRgba(hex: string, alpha = 0.3): string {
 	let c = hex.replace("#", "");
@@ -162,7 +162,8 @@ export function FlowBoard({
 		[],
 	);
 	const { addRun, removeRun, pushUpdate } = useRunExecutionStore();
-	const { screenToFlowPosition, getViewport, setViewport, fitView } = useReactFlow();
+	const { screenToFlowPosition, getViewport, setViewport, fitView } =
+		useReactFlow();
 
 	const [nodes, setNodes] = useNodesState<any>([]);
 	const [edges, setEdges] = useEdgesState<any>([]);
@@ -735,14 +736,13 @@ export function FlowBoard({
 				} else {
 					const resolvedSchema =
 						typeof droppedPin.schema === "string"
-							? refs?.[droppedPin.schema] ?? droppedPin.schema
+							? (refs?.[droppedPin.schema] ?? droppedPin.schema)
 							: droppedPin.schema;
 
 					dataPin = {
 						id: createId(),
 						name: oppositeType === IPinType.Input ? "in" : "out",
-						friendly_name:
-							oppositeType === IPinType.Input ? "In" : "Out",
+						friendly_name: oppositeType === IPinType.Input ? "In" : "Out",
 						connected_to: [],
 						depends_on: [],
 						description: "",
@@ -784,58 +784,57 @@ export function FlowBoard({
 			const newLayerResult = await executeCommand(newLayerCommand, false);
 			const newLayer: ILayer = newLayerResult.layer;
 
-			if(!droppedPin) {
+			if (!droppedPin) {
 				return;
 			}
-				const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
-				const pinValueType = droppedPin.value_type;
-				const pinDataType = droppedPin.data_type;
-				const options = droppedPin.options;
+			const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
+			const pinValueType = droppedPin.value_type;
+			const pinDataType = droppedPin.data_type;
+			const options = droppedPin.options;
 
-				const pin = Object.values(newLayer.pins).find((pin) => {
-					if (pin.pin_type !== pinType) false;
-					if (pin.value_type !== pinValueType) {
-						if (
-							pinDataType !== IVariableType.Generic &&
-							pin.data_type !== IVariableType.Generic
-						)
-							return false;
-						if (
-							(options?.enforce_generic_value_type ?? false) ||
-							(pin.options?.enforce_generic_value_type ?? false)
-						)
-							return false;
-					}
+			const pin = Object.values(newLayer.pins).find((pin) => {
+				if (pin.pin_type !== pinType) false;
+				if (pin.value_type !== pinValueType) {
 					if (
-						pin.data_type === IVariableType.Generic &&
-						pinDataType !== IVariableType.Execution
+						pinDataType !== IVariableType.Generic &&
+						pin.data_type !== IVariableType.Generic
 					)
-						return true;
+						return false;
 					if (
-						pinDataType === IVariableType.Generic &&
-						pin.data_type !== IVariableType.Execution
+						(options?.enforce_generic_value_type ?? false) ||
+						(pin.options?.enforce_generic_value_type ?? false)
 					)
-						return true;
-					return pin.data_type === pinDataType;
-				});
-				const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
-				if (!sourcePin || !sourceNode) {
-					return;
+						return false;
 				}
-				if (!pin) {
-					return;
-				}
+				if (
+					pin.data_type === IVariableType.Generic &&
+					pinDataType !== IVariableType.Execution
+				)
+					return true;
+				if (
+					pinDataType === IVariableType.Generic &&
+					pin.data_type !== IVariableType.Execution
+				)
+					return true;
+				return pin.data_type === pinDataType;
+			});
+			const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
+			if (!sourcePin || !sourceNode) {
+				return;
+			}
+			if (!pin) {
+				return;
+			}
 
-				const command = connectPinsCommand({
-					from_node:
-						droppedPin.pin_type === "Output" ? sourceNode.id : newLayer.id,
-					from_pin: droppedPin.pin_type === "Output" ? sourcePin.id : pin?.id,
-					to_node:
-						droppedPin.pin_type === "Input" ? sourceNode.id : newLayer.id,
-					to_pin: droppedPin.pin_type === "Input" ? sourcePin.id : pin?.id,
-				});
+			const command = connectPinsCommand({
+				from_node:
+					droppedPin.pin_type === "Output" ? sourceNode.id : newLayer.id,
+				from_pin: droppedPin.pin_type === "Output" ? sourcePin.id : pin?.id,
+				to_node: droppedPin.pin_type === "Input" ? sourceNode.id : newLayer.id,
+				to_pin: droppedPin.pin_type === "Input" ? sourcePin.id : pin?.id,
+			});
 
-				await executeCommand(command);
+			await executeCommand(command);
 		},
 		[
 			clickPosition,
@@ -1321,17 +1320,17 @@ export function FlowBoard({
 				<FlowDock
 					items={[
 						...(typeof parentRegister.boardParents[boardId] === "string" &&
-							!currentLayer
+						!currentLayer
 							? [
-								{
-									icon: <ArrowBigLeftDashIcon />,
-									title: "Back",
-									onClick: async () => {
-										const urlWithQuery = parentRegister.boardParents[boardId];
-										router.push(urlWithQuery);
+									{
+										icon: <ArrowBigLeftDashIcon />,
+										title: "Back",
+										onClick: async () => {
+											const urlWithQuery = parentRegister.boardParents[boardId];
+											router.push(urlWithQuery);
+										},
 									},
-								},
-							]
+								]
 							: []),
 						{
 							icon: <VariableIcon />,
@@ -1357,27 +1356,27 @@ export function FlowBoard({
 						},
 						...(currentMetadata
 							? [
-								{
-									icon: <ScrollIcon />,
-									title: "Logs",
-									onClick: async () => {
-										toggleLogs();
+									{
+										icon: <ScrollIcon />,
+										title: "Logs",
+										onClick: async () => {
+											toggleLogs();
+										},
 									},
-								},
-							]
+								]
 							: ([] as any)),
 						...(currentLayer
 							? [
-								{
-									icon: <SquareChevronUpIcon />,
-									title: "Layer Up",
-									separator: "left",
-									highlight: true,
-									onClick: async () => {
-										popLayer();
+									{
+										icon: <SquareChevronUpIcon />,
+										title: "Layer Up",
+										separator: "left",
+										highlight: true,
+										onClick: async () => {
+											popLayer();
+										},
 									},
-								},
-							]
+								]
 							: []),
 					]}
 				/>
@@ -1531,8 +1530,8 @@ export function FlowBoard({
 											<Variable
 												variable={active?.data?.current as IVariable}
 												preview
-												onVariableChange={() => { }}
-												onVariableDeleted={() => { }}
+												onVariableChange={() => {}}
+												onVariableDeleted={() => {}}
 											/>
 										)}
 									</DragOverlay>

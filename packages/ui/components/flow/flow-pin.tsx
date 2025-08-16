@@ -16,6 +16,7 @@ import {
 } from "../../components/ui/context-menu";
 import { useInvalidateInvoke } from "../../hooks";
 import { updateNodeCommand } from "../../lib";
+import type { ILayer } from "../../lib/schema/flow/board";
 import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IValueType } from "../../lib/schema/flow/pin";
 import { useBackendStore } from "../../state/backend-state";
@@ -23,7 +24,6 @@ import { DynamicImage } from "../ui/dynamic-image";
 import { useUndoRedo } from "./flow-history";
 import { PinEdit } from "./flow-pin/pin-edit";
 import { typeToColor } from "./utils";
-import type { ILayer } from "../../lib/schema/flow/board";
 
 function FlowPinInnerComponent({
 	pin,

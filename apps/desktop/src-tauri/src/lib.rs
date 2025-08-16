@@ -237,18 +237,18 @@ pub fn run() {
             let app_handle = view.app_handle();
             let main_window = app_handle.get_webview_window("main");
 
-            if let Some(main_window) = main_window {
-                if label == "oidcFlow" {
-                    let res = main_window.emit(
-                        "oidc/url",
-                        json!({
-                            "url": payload.url(),
-                        }),
-                    );
+            if let Some(main_window) = main_window
+                && label == "oidcFlow"
+            {
+                let res = main_window.emit(
+                    "oidc/url",
+                    json!({
+                        "url": payload.url(),
+                    }),
+                );
 
-                    if let Err(e) = res {
-                        eprintln!("Error emitting oidcUrlChange: {}", e);
-                    }
+                if let Err(e) = res {
+                    eprintln!("Error emitting oidcUrlChange: {}", e);
                 }
             }
 

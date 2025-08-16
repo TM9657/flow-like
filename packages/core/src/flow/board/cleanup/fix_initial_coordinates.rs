@@ -1,11 +1,17 @@
-use std::{collections::{HashMap, HashSet}};
+use std::collections::{HashMap, HashSet};
 
-use crate::{flow::{board::{cleanup::{BoardCleanupLogic, PinLookup}, Board}, node::Node}};
+use crate::flow::{
+    board::{
+        Board,
+        cleanup::{BoardCleanupLogic, PinLookup},
+    },
+    node::Node,
+};
 
 #[derive(Default)]
 pub struct FixInitialCoordinates {
     pub layer_coordinates: HashMap<String, Vec<(f32, f32, f32)>>,
-    pub dirty_layer: HashSet<String>
+    pub dirty_layer: HashSet<String>,
 }
 
 impl FixInitialCoordinates {
@@ -18,10 +24,18 @@ impl FixInitialCoordinates {
         let mut count = 0.0f32;
 
         for &(x, y, z) in coordinates {
-            if x < min_x { min_x = x; }
-            if x > max_x { max_x = x; }
-            if y < min_y { min_y = y; }
-            if y > max_y { max_y = y; }
+            if x < min_x {
+                min_x = x;
+            }
+            if x > max_x {
+                max_x = x;
+            }
+            if y < min_y {
+                min_y = y;
+            }
+            if y > max_y {
+                max_y = y;
+            }
             sum_z += z;
             count += 1.0;
         }
@@ -37,20 +51,27 @@ impl FixInitialCoordinates {
         let margin = (axis * 0.25).max(60.0).min(240.0);
 
         if horizontal {
-            ((min_x - margin, center_y, avg_z), (max_x + margin, center_y, avg_z))
+            (
+                (min_x - margin, center_y, avg_z),
+                (max_x + margin, center_y, avg_z),
+            )
         } else {
-            ((center_x, min_y - margin, avg_z), (center_x, max_y + margin, avg_z))
+            (
+                (center_x, min_y - margin, avg_z),
+                (center_x, max_y + margin, avg_z),
+            )
         }
     }
 }
 
 impl BoardCleanupLogic for FixInitialCoordinates {
     fn init(_board: &mut Board) -> Self
-        where
-            Self: Sized {
+    where
+        Self: Sized,
+    {
         Self {
             layer_coordinates: HashMap::new(),
-            dirty_layer: HashSet::new()
+            dirty_layer: HashSet::new(),
         }
     }
 
@@ -60,7 +81,7 @@ impl BoardCleanupLogic for FixInitialCoordinates {
             self.layer_coordinates
                 .entry(parent_layer_id.clone())
                 .or_default()
-                .push(layer.coordinates.clone());
+                .push(layer.coordinates);
         }
 
         if layer.in_coordinates.is_some() && layer.out_coordinates.is_some() {
@@ -72,17 +93,21 @@ impl BoardCleanupLogic for FixInitialCoordinates {
     }
 
     fn initial_node_iteration(&mut self, node: &Node) {
-        if let Some(layer_id) = &node.layer {
-            if let Some(coordinates) = &node.coordinates {
-                self.layer_coordinates
-                    .entry(layer_id.clone())
-                    .or_default()
-                    .push(coordinates.clone());
-            }
+        if let Some(layer_id) = &node.layer
+            && let Some(coordinates) = &node.coordinates
+        {
+            self.layer_coordinates
+                .entry(layer_id.clone())
+                .or_default()
+                .push(*coordinates);
         }
     }
 
-    fn main_layer_iteration(&mut self, layer: &mut crate::flow::board::Layer, _pin_lookup: &PinLookup) {
+    fn main_layer_iteration(
+        &mut self,
+        layer: &mut crate::flow::board::Layer,
+        _pin_lookup: &PinLookup,
+    ) {
         let is_dirty = self.dirty_layer.contains(&layer.id);
         if !is_dirty {
             return;

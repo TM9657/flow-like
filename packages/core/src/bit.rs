@@ -181,10 +181,10 @@ impl BitModelPreference {
         Self::normalize_weight(&mut self.multilinguality_weight);
         Self::normalize_weight(&mut self.coding_weight);
 
-        if let Some(model_hint) = &self.model_hint {
-            if model_hint.is_empty() {
-                self.model_hint = None;
-            }
+        if let Some(model_hint) = &self.model_hint
+            && model_hint.is_empty()
+        {
+            self.model_hint = None;
         }
     }
 }
@@ -243,10 +243,11 @@ impl BitModelClassification {
     /// Calculates the score of the model in a range from 0 to 1 based on the provided preference
     pub fn score(&self, preference: &BitModelPreference, bit: &Bit) -> f32 {
         // If preference is multimodal but model doesn't support it return a score of 0
-        if let Some(multimodal) = preference.multimodal {
-            if multimodal && !bit.is_multimodal() {
-                return 0.0;
-            }
+        if let Some(multimodal) = preference.multimodal
+            && multimodal
+            && !bit.is_multimodal()
+        {
+            return 0.0;
         }
 
         // Map weights to model fields dynamically

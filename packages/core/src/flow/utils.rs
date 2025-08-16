@@ -41,11 +41,11 @@ pub async fn evaluate_pin_value_reference(
         }
 
         // Case 2: Pin depends on another pin
-        if let Some(dependency) = first_dependency {
-            if let Some(dependency) = dependency.upgrade() {
-                current_pin = dependency;
-                continue;
-            }
+        if let Some(dependency) = first_dependency
+            && let Some(dependency) = dependency.upgrade()
+        {
+            current_pin = dependency;
+            continue;
         }
 
         // Case 3: Use default value if available
@@ -112,11 +112,11 @@ pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> flow_like_types
         }
 
         // Case 2: Pin depends on another pin
-        if let Some(dependency) = first_dependency {
-            if let Some(dependency) = dependency.upgrade() {
-                current_pin = dependency;
-                continue;
-            }
+        if let Some(dependency) = first_dependency
+            && let Some(dependency) = dependency.upgrade()
+        {
+            current_pin = dependency;
+            continue;
         }
 
         // Case 3: Use default value if available

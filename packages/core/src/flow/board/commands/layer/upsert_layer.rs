@@ -103,7 +103,7 @@ impl Command for UpsertLayerCommand {
         _: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
         let mut old_layer_id = None;
-        if let Some(mut old_layer) = self.old_layer.take() {
+        if let Some(old_layer) = self.old_layer.take() {
             old_layer_id = Some(old_layer.id.clone());
             board.layers.insert(old_layer.id.clone(), old_layer.clone());
         } else {

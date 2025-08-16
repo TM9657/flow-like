@@ -141,10 +141,10 @@ impl Command for CopyPasteCommand {
 
             if new_comment.layer.is_none() || new_comment.layer == Some("".to_string()) {
                 new_comment.layer = self.current_layer.clone();
-            } else if let Some(layer_id) = new_comment.layer.clone() {
-                if let Some(new_layer_id) = layer_translation.get(&layer_id) {
-                    new_comment.layer = Some(new_layer_id.clone());
-                }
+            } else if let Some(layer_id) = new_comment.layer.clone()
+                && let Some(new_layer_id) = layer_translation.get(&layer_id)
+            {
+                new_comment.layer = Some(new_layer_id.clone());
             }
 
             board
@@ -178,10 +178,10 @@ impl Command for CopyPasteCommand {
 
             if new_node.layer.is_none() || new_node.layer == Some("".to_string()) {
                 new_node.layer = self.current_layer.clone();
-            } else if let Some(layer_id) = new_node.layer.clone() {
-                if let Some(new_layer_id) = layer_translation.get(&layer_id) {
-                    new_node.layer = Some(new_layer_id.clone());
-                }
+            } else if let Some(layer_id) = new_node.layer.clone()
+                && let Some(new_layer_id) = layer_translation.get(&layer_id)
+            {
+                new_node.layer = Some(new_layer_id.clone());
             }
 
             new_node.pins = new_node
@@ -201,36 +201,36 @@ impl Command for CopyPasteCommand {
                     pin.id = new_pin_id.clone();
                     pin.description = blueprint_pin.description.clone();
 
-                    if pin.name == "var_ref" {
-                        if let Some(var_ref) = pin.default_value.as_ref() {
-                            let var_ref = from_slice::<String>(var_ref);
-                            if let Ok(var_ref) = var_ref {
-                                let variable_ref = board.variables.get(&var_ref);
-                                if variable_ref.is_none() {
-                                    let var_name = if new_node.friendly_name.starts_with("Get ") {
-                                        new_node.friendly_name.replace("Get ", "")
-                                    } else if new_node.friendly_name.starts_with("Set ") {
-                                        new_node.friendly_name.replace("Set ", "")
-                                    } else {
-                                        new_node.friendly_name.clone()
-                                    };
-                                    println!(
-                                        "Creating new variable: {}, friendly name: {}",
-                                        var_name, new_node.friendly_name
-                                    );
-                                    let (_id, value_ref_pin) = new_node
-                                        .pins
-                                        .iter()
-                                        .find(|(_, p)| p.name == "value_ref")
-                                        .unwrap_or((&String::new(), &pin));
-                                    let mut new_var = Variable::new(
-                                        &var_name,
-                                        value_ref_pin.data_type.clone(),
-                                        value_ref_pin.value_type.clone(),
-                                    );
-                                    new_var.id = var_ref.clone();
-                                    board.variables.insert(var_ref.clone(), new_var);
-                                }
+                    if pin.name == "var_ref"
+                        && let Some(var_ref) = pin.default_value.as_ref()
+                    {
+                        let var_ref = from_slice::<String>(var_ref);
+                        if let Ok(var_ref) = var_ref {
+                            let variable_ref = board.variables.get(&var_ref);
+                            if variable_ref.is_none() {
+                                let var_name = if new_node.friendly_name.starts_with("Get ") {
+                                    new_node.friendly_name.replace("Get ", "")
+                                } else if new_node.friendly_name.starts_with("Set ") {
+                                    new_node.friendly_name.replace("Set ", "")
+                                } else {
+                                    new_node.friendly_name.clone()
+                                };
+                                println!(
+                                    "Creating new variable: {}, friendly name: {}",
+                                    var_name, new_node.friendly_name
+                                );
+                                let (_id, value_ref_pin) = new_node
+                                    .pins
+                                    .iter()
+                                    .find(|(_, p)| p.name == "value_ref")
+                                    .unwrap_or((&String::new(), &pin));
+                                let mut new_var = Variable::new(
+                                    &var_name,
+                                    value_ref_pin.data_type.clone(),
+                                    value_ref_pin.value_type.clone(),
+                                );
+                                new_var.id = var_ref.clone();
+                                board.variables.insert(var_ref.clone(), new_var);
                             }
                         }
                     }

@@ -4,7 +4,10 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use crate::{
     flow::{
-        board::{commands::Command, Board, Layer}, node::Node, pin::PinType, variable::VariableType
+        board::{Board, Layer, commands::Command},
+        node::Node,
+        pin::PinType,
+        variable::VariableType,
     },
     state::FlowLikeState,
 };

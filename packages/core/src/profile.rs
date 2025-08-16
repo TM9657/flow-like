@@ -131,10 +131,10 @@ impl Profile {
                 if multimodal && !bit.is_multimodal() {
                     continue;
                 }
-                if let Ok(score) = bit.score(preference) {
-                    if best_bit.1.is_none() || (score > best_bit.0) {
-                        best_bit = (score, Some(bit.clone()));
-                    }
+                if let Ok(score) = bit.score(preference)
+                    && (best_bit.1.is_none() || (score > best_bit.0))
+                {
+                    best_bit = (score, Some(bit.clone()));
                 }
             }
 
@@ -165,10 +165,10 @@ impl Profile {
                 continue;
             }
 
-            if let Ok(score) = bit.score(&preference) {
-                if best_bit.1.is_none() || score > best_bit.0 {
-                    best_bit = (score, Some(bit.clone()));
-                }
+            if let Ok(score) = bit.score(&preference)
+                && (best_bit.1.is_none() || score > best_bit.0)
+            {
+                best_bit = (score, Some(bit.clone()));
             }
         }
 

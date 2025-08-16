@@ -1,21 +1,14 @@
 "use client";
-
-import { createId } from "@paralleldrive/cuid2";
 import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import {
-	ArrowDownIcon,
-	ArrowUpIcon,
 	FoldHorizontalIcon,
-	GripVerticalIcon,
 	MessageSquareIcon,
-	PlusIcon,
-	SaveIcon,
 	SlidersHorizontalIcon,
 	SquarePenIcon,
 	Trash2Icon,
 	ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
 	ContextMenu,
@@ -25,40 +18,12 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
-import {
-	type INode,
-	type IPin,
-	type IPinOptions,
-	IValueType,
-	IVariableType,
-} from "../../lib";
+import type { INode } from "../../lib";
 import { type ILayer, IPinType } from "../../lib/schema/flow/board";
-import {
-	Button,
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-	Input,
-	Label,
-	ScrollArea,
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-	Separator,
-	Tabs,
-	TabsContent,
-	TabsList,
-	TabsTrigger,
-} from "../ui";
 import { CommentDialog } from "./comment-dialog";
 import { FlowPin } from "./flow-pin";
-import { NameDialog } from "./name-dialog";
 import { LayerEditMenu } from "./layer-editing-menu";
+import { NameDialog } from "./name-dialog";
 
 export type LayerNode = Node<
 	{

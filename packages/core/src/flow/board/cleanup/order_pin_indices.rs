@@ -70,5 +70,4 @@ impl BoardCleanupLogic for PinIndicesCleanup {
             pin.index = index as u16 + 1;
         }
     }
-
 }

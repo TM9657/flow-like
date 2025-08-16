@@ -69,11 +69,11 @@ impl Command for RemoveLayerCommand {
 
             // 2) Drop any nodes belonging to those removed layers
             board.nodes.retain(|_, node| {
-                if let Some(layer_id) = &node.layer {
-                    if removed_layers.contains(layer_id) {
-                        self.nodes.push(node.clone());
-                        return false;
-                    }
+                if let Some(layer_id) = &node.layer
+                    && removed_layers.contains(layer_id)
+                {
+                    self.nodes.push(node.clone());
+                    return false;
                 }
                 true
             });

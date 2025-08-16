@@ -1,4 +1,4 @@
-import { MessageCircleDashedIcon, PlayCircleIcon, SpeechIcon, SquarePlusIcon, ZapIcon } from "lucide-react";
+import { MessageCircleDashedIcon, PlayCircleIcon, ZapIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMiniSearch } from "react-minisearch";
 import {
@@ -11,12 +11,20 @@ import { type IBoard, doPinsMatch } from "../../lib";
 import type { INode } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
 import { convertJsonToUint8Array } from "../../lib/uint8";
+import {
+	Button,
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	Label,
+} from "../ui";
 import { Checkbox } from "../ui/checkbox";
 import { Input } from "../ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import { Separator } from "../ui/separator";
 import { FlowContextMenuNodes } from "./flow-context-menu-nodes";
-import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, Label } from "../ui";
 
 export function FlowContextMenu({
 	nodes,
@@ -259,18 +267,18 @@ export function FlowContextMenu({
 						(pin) =>
 							pin.name === "var_ref"
 								? {
-									...pin,
-									default_value: convertJsonToUint8Array(variable.id),
-								}
+										...pin,
+										default_value: convertJsonToUint8Array(variable.id),
+									}
 								: pin,
 					);
 					const setPins = Object.values(variableSetNode?.pins ?? {}).map(
 						(pin) =>
 							pin.name === "var_ref"
 								? {
-									...pin,
-									default_value: convertJsonToUint8Array(variable.id),
-								}
+										...pin,
+										default_value: convertJsonToUint8Array(variable.id),
+									}
 								: pin,
 					);
 					const newGetPins = Object.fromEntries(
@@ -400,19 +408,23 @@ export function FlowContextMenu({
 									items={
 										droppedPin && contextSensitive
 											? [
-												...(filter === ""
-													? sortedNodes
-													: (searchResults ?? [])
-												).filter((node) => {
-													const pins = Object.values(node.pins);
-													return pins.some((pin) => {
-														if (pin.pin_type === droppedPin.pin_type)
-															return false;
-														return doPinsMatch(pin, droppedPin, refs, node);
-													});
-												}),
-											]
-											: [...(filter === "" ? sortedNodes : (searchResults ?? []))]
+													...(filter === ""
+														? sortedNodes
+														: (searchResults ?? [])
+													).filter((node) => {
+														const pins = Object.values(node.pins);
+														return pins.some((pin) => {
+															if (pin.pin_type === droppedPin.pin_type)
+																return false;
+															return doPinsMatch(pin, droppedPin, refs, node);
+														});
+													}),
+												]
+											: [
+													...(filter === ""
+														? sortedNodes
+														: (searchResults ?? [])),
+												]
 									}
 									filter={filter}
 									onNodePlace={async (node) => onNodePlace(node)}
@@ -422,12 +434,15 @@ export function FlowContextMenu({
 					</div>
 				</ContextMenuContent>
 			</ContextMenu>
-			<Dialog open={isPlaceholderOpen} onOpenChange={(open) => {
-				setIsPlaceholderOpen(open);
-				if (!open) {
-					onClose();
-				}
-			}}>
+			<Dialog
+				open={isPlaceholderOpen}
+				onOpenChange={(open) => {
+					setIsPlaceholderOpen(open);
+					if (!open) {
+						onClose();
+					}
+				}}
+			>
 				<DialogContent
 					className="sm:max-w-md"
 					onOpenAutoFocus={(e) => e.preventDefault()} // we'll focus manually
@@ -456,10 +471,16 @@ export function FlowContextMenu({
 						/>
 					</div>
 					<DialogFooter className="mt-4">
-						<Button variant="outline" onClick={() => setIsPlaceholderOpen(false)}>
+						<Button
+							variant="outline"
+							onClick={() => setIsPlaceholderOpen(false)}
+						>
 							Cancel
 						</Button>
-						<Button onClick={confirmPlaceholder} disabled={!placeholderName.trim()}>
+						<Button
+							onClick={confirmPlaceholder}
+							disabled={!placeholderName.trim()}
+						>
 							Create
 						</Button>
 					</DialogFooter>

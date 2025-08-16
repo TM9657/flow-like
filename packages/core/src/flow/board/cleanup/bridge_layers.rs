@@ -110,13 +110,13 @@ impl BoardCleanupLogic for BridgeLayersCleanup {
 
             let original_pin_id = original_pin.id.clone();
 
-            original_pin.connected_to.retain(|connected_to| {
-                !plan.outside_connected_to.contains(connected_to)
-            });
+            original_pin
+                .connected_to
+                .retain(|connected_to| !plan.outside_connected_to.contains(connected_to));
 
-            original_pin.depends_on.retain(|depends_on| {
-                !plan.outside_depends_on.contains(depends_on)
-            });
+            original_pin
+                .depends_on
+                .retain(|depends_on| !plan.outside_depends_on.contains(depends_on));
 
             let bridge_pin_id = create_id();
             let mut bridge_pin = original_pin.clone();

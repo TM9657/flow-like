@@ -591,10 +591,10 @@ pub async fn get_app_size(
     let mut size = 0;
 
     while let Some(location) = locations.next().await {
-        if let Ok(location) = location {
-            if let Ok(meta) = content_store.head(&location).await {
-                size += meta.size;
-            }
+        if let Ok(location) = location
+            && let Ok(meta) = content_store.head(&location).await
+        {
+            size += meta.size;
         }
     }
 

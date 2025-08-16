@@ -46,16 +46,16 @@ pub async fn upsert_info(
 
     let mut updated_user: user::ActiveModel = current_user.clone().into();
 
-    if let Some(email) = email {
-        if current_user.email != Some(email.clone()) {
-            updated_user.email = Set(Some(email));
-        }
+    if let Some(email) = email
+        && current_user.email != Some(email.clone())
+    {
+        updated_user.email = Set(Some(email));
     }
 
-    if let Some(preferred_username) = preferred_username {
-        if current_user.preferred_username != Some(preferred_username.clone()) {
-            updated_user.preferred_username = Set(Some(preferred_username));
-        }
+    if let Some(preferred_username) = preferred_username
+        && current_user.preferred_username != Some(preferred_username.clone())
+    {
+        updated_user.preferred_username = Set(Some(preferred_username));
     }
 
     if let Some(name) = payload.name {

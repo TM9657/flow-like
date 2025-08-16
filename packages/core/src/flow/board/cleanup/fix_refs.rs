@@ -1,11 +1,21 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{flow::{board::{cleanup::{BoardCleanupLogic, PinLookup}, Board}, node::Node, pin::Pin}, utils::hash::hash_string_non_cryptographic};
+use crate::{
+    flow::{
+        board::{
+            Board,
+            cleanup::{BoardCleanupLogic, PinLookup},
+        },
+        node::Node,
+        pin::Pin,
+    },
+    utils::hash::hash_string_non_cryptographic,
+};
 
 #[derive(Default)]
 pub struct FixRefsCleanup {
     pub refs: HashMap<String, String>,
-    pub abandoned: HashSet<String>
+    pub abandoned: HashSet<String>,
 }
 
 impl FixRefsCleanup {
@@ -29,8 +39,9 @@ impl FixRefsCleanup {
 
 impl BoardCleanupLogic for FixRefsCleanup {
     fn init(board: &mut Board) -> Self
-        where
-            Self: Sized {
+    where
+        Self: Sized,
+    {
         Self {
             refs: board.refs.clone(),
             abandoned: board.refs.keys().cloned().collect(),
@@ -38,7 +49,7 @@ impl BoardCleanupLogic for FixRefsCleanup {
     }
 
     fn main_node_iteration(&mut self, node: &mut Node, _pin_lookup: &PinLookup) {
-         self.ensure_ref(&mut node.description);
+        self.ensure_ref(&mut node.description);
     }
 
     fn main_pin_iteration(&mut self, pin: &mut Pin, _pin_lookup: &PinLookup) {

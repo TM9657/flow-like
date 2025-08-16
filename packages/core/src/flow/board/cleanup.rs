@@ -1,11 +1,21 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::flow::{board::{cleanup::{bridge_layers::BridgeLayersCleanup, fix_pin_connections::FixPinsCleanup, fix_refs::FixRefsCleanup, order_pin_indices::PinIndicesCleanup}, Board, Layer}, node::Node, pin::Pin};
+use crate::flow::{
+    board::{
+        Board, Layer,
+        cleanup::{
+            bridge_layers::BridgeLayersCleanup, fix_pin_connections::FixPinsCleanup,
+            fix_refs::FixRefsCleanup, order_pin_indices::PinIndicesCleanup,
+        },
+    },
+    node::Node,
+    pin::Pin,
+};
 
 pub mod bridge_layers;
+pub mod fix_initial_coordinates;
 pub mod fix_pin_connections;
 pub mod fix_refs;
-pub mod fix_initial_coordinates;
 pub mod order_pin_indices;
 
 pub type PinLookup = HashMap<String, (Arc<Pin>, NodeOrLayer)>;
@@ -69,9 +79,11 @@ impl Board {
         let mut fix_pin_connections = FixPinsCleanup::init(self);
         let mut fix_refs = FixRefsCleanup::init(self);
         let mut order_pin_indices = PinIndicesCleanup::init(self);
-        let mut fix_initial_coordinates = fix_initial_coordinates::FixInitialCoordinates::init(self);
+        let mut fix_initial_coordinates =
+            fix_initial_coordinates::FixInitialCoordinates::init(self);
 
-        let mut pins: PinLookup = HashMap::with_capacity((self.nodes.len() + self.layers.len()) * 4);
+        let mut pins: PinLookup =
+            HashMap::with_capacity((self.nodes.len() + self.layers.len()) * 4);
 
         let mut steps: Vec<&mut dyn BoardCleanupLogic> = vec![
             &mut fix_initial_coordinates,
@@ -88,7 +100,10 @@ impl Board {
             }
 
             for pin in node.pins.values() {
-                pins.insert(pin.id.clone(), (Arc::new(pin.clone()), NodeOrLayer::Node(node.id.clone())));
+                pins.insert(
+                    pin.id.clone(),
+                    (Arc::new(pin.clone()), NodeOrLayer::Node(node.id.clone())),
+                );
                 for step in steps.iter_mut() {
                     (*step).initial_pin_iteration(pin, NodeOrLayerRef::Node(node));
                 }
@@ -101,7 +116,10 @@ impl Board {
             }
 
             for pin in layer.pins.values() {
-                pins.insert(pin.id.clone(), (Arc::new(pin.clone()), NodeOrLayer::Layer(layer.id.clone())));
+                pins.insert(
+                    pin.id.clone(),
+                    (Arc::new(pin.clone()), NodeOrLayer::Layer(layer.id.clone())),
+                );
                 for step in steps.iter_mut() {
                     (*step).initial_pin_iteration(pin, NodeOrLayerRef::Layer(layer));
                 }
