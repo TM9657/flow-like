@@ -2,7 +2,7 @@
 import { getCollection } from "astro:content";
 import "@tm9657/flow-like-ui/global.css";
 import "../../styles/Blog.css";
-import BlogLayout from "../../layouts/BlogLayout.astro";
+import BlogLayout from "../../layouts/Blog-Layout.astro";
 import { LuCopy, LuShare } from "react-icons/lu";
 
 export async function getStaticPaths() {
@@ -25,16 +25,55 @@ const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
 
 <BlogLayout data={entry.data} content={Content}>
   <a
-  href="/blog/"
-  class="inline-flex items-center rounded-md px-2 py-1 text-sm hover:text-primary transition mb-2"
->
-  ← Back to blog
-</a>
+    href="/blog/"
+    class="inline-flex items-center rounded-md px-2 py-1 text-sm hover:text-primary transition mb-2"
+  >
+    ← Back to blog
+  </a>
 
   <div class="relative">
     {
       cover && (
-        <header class="relative mb-8 md:mb-10">
+        <header id="cover-header" class="relative mb-8 md:mb-10">
+          <div
+            id="right-pin"
+            class="size-4 bg-primary absolute top-30 -right-1.5 z-10 rounded-full"
+          />
+          <div
+            id="left-pin"
+            class="size-4 bg-pink-400 absolute top-50 -left-1.5 z-10 rounded-full"
+          />
+          <div
+            id="right-pin-top"
+            class="size-4 bg-foreground absolute top-10 -right-1.5 z-10 rounded-full"
+          />
+          <div
+            id="left-pin-top"
+            class="size-4 bg-foreground absolute top-20 -left-1.5 z-10 rounded-full"
+          />
+
+          <svg
+            id="pin-connections"
+            class="pointer-events-none absolute inset-0"
+            style="overflow: visible;"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path id="right-conn" class="pin-conn text-primary" fill="none" />
+            <path id="left-conn" class="pin-conn text-pink-400" fill="none" />
+            <path
+              id="right-conn-top"
+              class="pin-conn-solid text-foreground"
+              fill="none"
+            />
+            <path
+              id="left-conn-top"
+              class="pin-conn-solid text-foreground"
+              fill="none"
+            />
+          </svg>
+
           <div class="relative h-[36vh] min-h-[240px] max-h-[420px] overflow-hidden rounded-xl border">
             <img
               src={cover}
@@ -45,7 +84,7 @@ const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
             <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
             <div class="absolute z-10 flex h-full items-end">
               <div class="w-full p-5 sm:p-7 md:p-8">
-                <h1 class="text-white drop-shadow-md text-2xl sm:text-3xl md:text-4xl font-bold leading-tight pt-0!">
+                <h1 class="text-white drop-shadow-md text-xl sm:text-3xl md:text-4xl font-bold leading-tight pt-0! line-clamp-2 sm:line-clamp-2 md:line-clamp-4">
                   {title}
                 </h1>
                 <p class="mt-2 text-white/90 max-w-3xl drop-shadow">
@@ -106,12 +145,12 @@ const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
       )
     }
 
-    <div class="mx-auto max-w-7xl px-4 sm:px-6">
+    <div class="mx-auto border rounded-xl max-w-7xl p-2 md:p-4 sm:p-6 bg-background">
       <div class="grid gap-8 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside class="hidden lg:block">
           {
             headings?.length > 0 && (
-              <nav class="sticky top-24 h-max rounded-lg border bg-card/60 backdrop-blur p-4 text-sm">
+              <nav class="sticky top-24 h-max rounded-lg border bg-card/60 backdrop-blur p-2 md:p-4 text-sm">
                 <p class="mb-2 font-medium text-muted-foreground">
                   On this page
                 </p>
@@ -137,7 +176,7 @@ const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
 
         <article
           id="post-content"
-          class="prose prose-zinc dark:prose-invert max-w-none"
+          class="prose prose-zinc dark:prose-invert max-w-none px-2! md:px-4"
         >
           <Content />
           <hr class="my-10" />
@@ -158,19 +197,17 @@ const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
               <button
                 data-copy-link
                 class="rounded-md border px-2.5 py-1.5 text-xs hover:bg-accent transition. flex flex-row items-center gap-2"
-                >
-                <LuCopy/>
-                Copy link
-                </button
               >
+                <LuCopy />
+                Copy link
+              </button>
               <button
                 data-web-share
                 class="rounded-md border px-2.5 py-1.5 text-xs hover:bg-accent transition. flex flex-row items-center gap-2"
-                >
-                <LuShare/>
-                Share
-                </button
               >
+                <LuShare />
+                Share
+              </button>
             </div>
           </div>
         </article>
@@ -190,6 +227,7 @@ const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
     const $ = (s, r = document) => r.querySelector(s);
     const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
     const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
+    const raf = (fn) => requestAnimationFrame(fn);
 
     const article = $("#post-content");
     const bar = $("#progress");
@@ -260,6 +298,7 @@ const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
 
     setReadingTime();
     setProgress();
+
     const links = $$(".toc-link");
     if (links.length) {
       const bySlug = Object.fromEntries(links.map((l) => [l.dataset.slug, l]));
@@ -278,19 +317,151 @@ const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
         obs.observe(h),
       );
     }
+
     addEventListener("scroll", () => requestAnimationFrame(setProgress), {
       passive: true,
     });
-    addEventListener("resize", () => requestAnimationFrame(setProgress));
+    addEventListener("resize", () => {
+      raf(setProgress);
+      if (window.updatePinConnections) raf(window.updatePinConnections);
+    });
+
+    const initPinConnections = () => {
+      const headerEl = $("#cover-header");
+      const svg = $("#pin-connections");
+      const leftPin = $("#left-pin");
+      const rightPin = $("#right-pin");
+      const leftPinTop = $("#left-pin-top");
+      const rightPinTop = $("#right-pin-top");
+
+      if (!headerEl || !svg) return;
+
+      const setViewBox = () => {
+        const r = headerEl.getBoundingClientRect();
+        svg.setAttribute("viewBox", `0 0 ${r.width} ${r.height}`);
+        svg.setAttribute("width", String(r.width));
+        svg.setAttribute("height", String(r.height));
+      };
+
+      const cubicPath = (pin, isRight) => {
+        const hr = headerEl.getBoundingClientRect();
+        const pr = pin.getBoundingClientRect();
+        const sx = pr.left - hr.left + pr.width / 2;
+        const sy = pr.top - hr.top + pr.height / 2;
+        const ex = isRight ? hr.width + 200 : -200;
+        const ey = sy + (isRight ? 40 : 80);
+        const dx = ex - sx;
+        const cp1x = sx + dx * 0.4;
+        const cp2x = sx + dx * 0.8;
+        return `M${sx},${sy} C${cp1x},${sy} ${cp2x},${ey} ${ex},${ey}`;
+      };
+
+      const straightPath = (pin, isRight) => {
+        const hr = headerEl.getBoundingClientRect();
+        const pr = pin.getBoundingClientRect();
+        const sx = pr.left - hr.left + pr.width / 2;
+        const sy = pr.top - hr.top + pr.height / 2;
+        const ex = isRight ? hr.width + 300 : -300;
+        const ey = sy + (isRight ? -20 : 20);
+        const cp1x = sx + (ex - sx) * 0.6;
+        return `M${sx},${sy} Q${cp1x},${sy} ${ex},${ey}`;
+      };
+
+      const animateStroke = (path) => {
+        const len = path.getTotalLength();
+        path.style.setProperty("--len", String(len));
+        path.style.animation = "none";
+        path.offsetWidth;
+        path.style.animation = "";
+      };
+
+      const updatePaths = () => {
+        setViewBox();
+
+        if (rightPin) {
+          const rightConn = $("#right-conn");
+          if (rightConn) {
+            rightConn.setAttribute("d", cubicPath(rightPin, true));
+            animateStroke(rightConn);
+          }
+        }
+
+        if (leftPin) {
+          const leftConn = $("#left-conn");
+          if (leftConn) {
+            leftConn.setAttribute("d", cubicPath(leftPin, false));
+            animateStroke(leftConn);
+          }
+        }
+
+        if (rightPinTop) {
+          const rightConnTop = $("#right-conn-top");
+          if (rightConnTop) {
+            rightConnTop.setAttribute("d", straightPath(rightPinTop, true));
+          }
+        }
+
+        if (leftPinTop) {
+          const leftConnTop = $("#left-conn-top");
+          if (leftConnTop) {
+            leftConnTop.setAttribute("d", straightPath(leftPinTop, false));
+          }
+        }
+      };
+
+      updatePaths();
+      window.updatePinConnections = updatePaths;
+    };
+
+    if ($("#cover-header")) {
+      initPinConnections();
+    }
   </script>
 
   <style>
     .toc-link.font-medium {
       color: var(--foreground);
     }
+
+    .pin-conn-solid {
+      stroke: currentColor;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .pin-conn {
+      stroke: currentColor;
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+      stroke-dasharray: 10 10;
+      animation: flow-dots 0.4s linear infinite;
+    }
+
+    @keyframes draw-conn {
+      from {
+        stroke-dashoffset: var(--len, 100);
+      }
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+
+    @keyframes flow-dots {
+      to {
+        stroke-dashoffset: -20px;
+      }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       #progress {
         transition: none;
+      }
+      .pin-conn {
+        animation: draw-conn 900ms ease-out forwards;
       }
     }
   </style>

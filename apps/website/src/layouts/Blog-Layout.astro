@@ -40,7 +40,8 @@ const upd = data.updated ?? data.date;
 		/>
 		<meta name="twitter:image" content={data.cover ?? "/og.webp"} />
 	</head>
-	<body class="flex flex-col min-h-screen bg-background text-foreground">
+	<body class="flex flex-col min-h-screen bg-background text-foreground bg-dot">
+		<div class="pointer-events-none fixed inset-0 h-full w-full bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] -z-[100]"/>
 		<BlogHeader/>
 		<main class="flex flex-col flex-grow py-2 md:py-2 lg:py-6 xl:py-8 2xl:py-16 article prose">
 			<slot />
