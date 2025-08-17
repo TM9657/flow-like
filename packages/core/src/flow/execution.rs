@@ -501,7 +501,7 @@ impl InternalRun {
             }
         }
 
-        for (_layer_id, layer) in &board.layers {
+        for layer in board.layers.values() {
             for (pin_id, pin) in &layer.pins {
                 if pins.contains_key(pin_id) {
                     // this is the old layer format, where we just relayed the connected pin to the layers pin.

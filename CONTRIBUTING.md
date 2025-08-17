@@ -93,7 +93,7 @@ Found a bug or need help? Open an issue with:
 
 ## 🔐 Security Issues
 
-For sensitive security bugs, please **do not open a public issue**. Instead, report privately to \[[security@good-co.de](mailto:security@good-co.de)].
+For sensitive security bugs, please **do not open a public issue**. Instead, report privately to \[[security@great-co.de](mailto:security@great-co.de)].
 
 ## 🙌 Thank You
 

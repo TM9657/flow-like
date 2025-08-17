@@ -858,6 +858,44 @@
 					"maxItems": 3,
 					"minItems": 3
 				},
+				"in_coordinates": {
+					"type": ["array", "null"],
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"out_coordinates": {
+					"type": ["array", "null"],
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
 				"pins": {
 					"type": "object",
 					"additionalProperties": {

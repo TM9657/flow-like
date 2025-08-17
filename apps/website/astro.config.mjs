@@ -4,23 +4,29 @@ import { defineConfig } from "astro/config";
 
 import mdx from "@astrojs/mdx";
 
+import sitemap from "@astrojs/sitemap";
+
 // https://astro.build/config
 export default defineConfig({
 	site: "https://flow-like.com",
-	integrations: [// markdoc(),
+	integrations: [
+		// markdoc(),
 		// robotsTxt(),
-		// sitemap(),
+		sitemap(),
 		// playformCompress(),
-		react(), mdx({
-			syntaxHighlight: 'shiki',
-			shikiConfig: { theme: 'dracula' },
-			remarkRehype: { footnoteLabel: 'Footnotes' },
+		react(),
+		mdx({
+			syntaxHighlight: "shiki",
+			shikiConfig: { theme: "dracula" },
+			remarkRehype: { footnoteLabel: "Footnotes" },
 			gfm: false,
-		}),],
+		}),
+		sitemap(),
+	],
 	vite: {
 		define: {
-      "process.env": {},
-    },
+			"process.env": {},
+		},
 		ssr: {
 			noExternal: [
 				"katex",

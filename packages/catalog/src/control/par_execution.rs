@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use flow_like::{
     flow::{
         execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
@@ -9,7 +7,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{anyhow, async_trait, json::json, sync::Mutex, tokio};
+use flow_like_types::{async_trait, json::json, tokio};
 use futures::future::join_all;
 
 #[derive(Default)]
@@ -41,8 +39,18 @@ impl NodeLogic for ParallelExecutionNode {
                     .build(),
             );
 
-        node.add_output_pin("exec_out", "Parallel Task", "Parallel Task Pin", VariableType::Execution);
-        node.add_output_pin("exec_out", "Parallel Task", "Parallel Task Pin", VariableType::Execution);
+        node.add_output_pin(
+            "exec_out",
+            "Parallel Task",
+            "Parallel Task Pin",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "exec_out",
+            "Parallel Task",
+            "Parallel Task Pin",
+            VariableType::Execution,
+        );
 
         node.add_output_pin("exec_done", "Done", "Done Pin", VariableType::Execution);
 
@@ -119,10 +127,8 @@ impl NodeLogic for ParallelExecutionNode {
             for res in results {
                 match res {
                     Ok(completed_context) => context.push_sub_context(completed_context),
-                    Err(err) => context.log_message(
-                        &format!("Thread join error: {:?}", err),
-                        LogLevel::Error,
-                    ),
+                    Err(err) => context
+                        .log_message(&format!("Thread join error: {:?}", err), LogLevel::Error),
                 }
             }
         }

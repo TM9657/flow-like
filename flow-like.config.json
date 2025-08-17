@@ -39,13 +39,13 @@
 	"app": "app.flow-like.com",
 	"provider": "aws",
 	"region": "eu-west-1",
-	"terms_of_service": "https://good-co.de/eula/",
-	"legal_notice": "https://good-co.de/legal-notice/",
-	"privacy_policy": "https://good-co.de/privacy-policy/",
+	"terms_of_service": "https://great-co.de/eula/",
+	"legal_notice": "https://great-co.de/legal-notice/",
+	"privacy_policy": "https://great-co.de/privacy-policy/",
 	"contact": {
 		"name": "Support Team",
-		"email": "help@good-co.de",
-		"url": "https://good-co.de"
+		"email": "help@great-co.de",
+		"url": "https://great-co.de"
 	},
 	"max_users_prototype": -1,
 	"default_user_plan": "FREE",

@@ -34,17 +34,18 @@ async fn main() -> Result<(), Error> {
     let cdn_bucket_secret_key = std::env::var("CDN_BUCKET_SECRET_ACCESS_KEY").ok();
 
     let mut cdn_bucket = AmazonS3Builder::new().with_bucket_name(cdn_bucket);
-    if let Some(endpoint) = cdn_bucket_endpoint {
-        if !endpoint.is_empty() {
-            cdn_bucket = cdn_bucket.with_endpoint(endpoint);
-        }
+    if let Some(endpoint) = cdn_bucket_endpoint
+        && !endpoint.is_empty()
+    {
+        cdn_bucket = cdn_bucket.with_endpoint(endpoint);
     }
 
-    if let (Some(access_key), Some(secret_key)) = (cdn_bucket_access_key, cdn_bucket_secret_key) {
-        if !access_key.is_empty() && !secret_key.is_empty() {
-            cdn_bucket = cdn_bucket.with_access_key_id(access_key);
-            cdn_bucket = cdn_bucket.with_secret_access_key(secret_key);
-        }
+    if let (Some(access_key), Some(secret_key)) = (cdn_bucket_access_key, cdn_bucket_secret_key)
+        && !access_key.is_empty()
+        && !secret_key.is_empty()
+    {
+        cdn_bucket = cdn_bucket.with_access_key_id(access_key);
+        cdn_bucket = cdn_bucket.with_secret_access_key(secret_key);
     }
 
     let cdn_bucket =

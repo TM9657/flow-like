@@ -1,9 +1,9 @@
 ---
 import { getCollection } from 'astro:content';
-import PostCard from '../../components/PostCard.astro';
+import PostCard from '../../components/post-card.astro';
 import "@tm9657/flow-like-ui/global.css";
 import "../../styles/Blog.css";
-import BlogLayout from '../../layouts/BlogLayout.astro';
+import BlogLayout from '../../layouts/Blog-Layout.astro';
 export async function getStaticPaths() {
   const posts = await getCollection('blog', ({ data }) => import.meta.env.PROD ? !data.draft : true);
   const tags = new Set(posts.flatMap(p => p.data.tags));

@@ -90,7 +90,6 @@ export type FlowNode = Node<
 		boardId: string;
 		appId: string;
 		transparent?: boolean;
-		ghost?: boolean;
 		onExecute: (node: INode, payload?: object) => Promise<void>;
 		onCopy: () => Promise<void>;
 	},
@@ -655,14 +654,6 @@ const FlowNodeInner = memo(
 									className="w-2 h-2 cursor-pointer hover:text-primary"
 								/>
 							)}
-							{/* {useMemo(() => {
-								return props.data.traces.length > 0 ? (
-									<ScrollTextIcon
-										onClick={() => props.data.openTrace(props.data.traces)}
-										className="w-2 h-2 cursor-pointer hover:text-primary"
-									/>
-								) : null;
-							}, [props.data.traces.length, props.data.openTrace])} */}
 							{useMemo(() => {
 								if (debouncedExecutionState !== "running") return null;
 								return (
@@ -841,6 +832,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					pins: {},
 					parent_id: (selectedNodes[0].data.node as INode).layer,
 					coordinates: [flowCords.x, flowCords.y, 0],
+					in_coordinates: undefined,
 					name: "Collapsed",
 					type: ILayerType.Collapsed,
 					variables: {},
@@ -901,10 +893,9 @@ function FlowNode(props: NodeProps<FlowNode>) {
 			let end = Number.NEGATIVE_INFINITY;
 
 			selectedNodes.forEach((node) => {
-				if (!node.data.ghost) {
-					const nodeData = node.data.node as INode;
-					if (nodeData?.layer) currentLayer = nodeData.layer;
-				}
+				const nodeData = node.data.node as INode;
+				if (nodeData?.layer) currentLayer = nodeData.layer;
+
 				start = Math.min(
 					start,
 					type === "align" ? node.position.x : node.position.y,

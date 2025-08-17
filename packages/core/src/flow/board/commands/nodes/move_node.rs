@@ -82,6 +82,26 @@ impl Command for MoveNodeCommand {
         board: &mut Board,
         _: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
+        if self.node_id.ends_with("-input") {
+            let id = self.node_id.trim_end_matches("-input").to_string();
+            let layer = board.layers.get_mut(&id).ok_or_else(|| {
+                flow_like_types::anyhow!(format!("Layer with id {} not found", id))
+            })?;
+
+            layer.in_coordinates = Some(self.to_coordinates);
+            return Ok(());
+        }
+
+        if self.node_id.ends_with("-return") {
+            let id = self.node_id.trim_end_matches("-return").to_string();
+            let layer = board.layers.get_mut(&id).ok_or_else(|| {
+                flow_like_types::anyhow!(format!("Layer with id {} not found", id))
+            })?;
+
+            layer.out_coordinates = Some(self.to_coordinates);
+            return Ok(());
+        }
+
         if let Some(layer) = board.layers.get_mut(&self.node_id) {
             let offset = layer.coordinates;
 

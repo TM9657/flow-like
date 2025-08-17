@@ -1,9 +1,9 @@
 ---
 import { getCollection } from 'astro:content';
-import PostCard from '../../components/PostCard.astro';
+import PostCard from '../../components/post-card.astro';
 import "@tm9657/flow-like-ui/global.css";
 import "../../styles/Blog.css";
-import BlogLayout from '../../layouts/BlogLayout.astro';
+import BlogLayout from '../../layouts/Blog-Layout.astro';
 
 const PAGE_SIZE = 10;
 const page = Number(Astro.url.searchParams.get('page') ?? 1);
@@ -18,7 +18,7 @@ const first = slice[0];
 const rest = slice.slice(1);
 ---
 <BlogLayout data={{ title: "Blog", description: "Latest blog posts", slug: "blog" }}>
-  <main class="mx-auto max-w-3xl p-2 flex flex-grow flex-col items-start justify-start gap-8">
+  <main class="mx-auto max-w-4xl p-2 flex flex-grow flex-col items-start justify-start gap-8">
     <h1 class="sr-only">Blog</h1>
 
     {first && <PostCard entry={first} variant="lead" />}

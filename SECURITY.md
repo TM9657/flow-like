@@ -13,4 +13,4 @@ Coming soon...
 
 ## Reporting a Vulnerability
 
-Please report vulnerabilities to [security@good-co.de](mailto:security@good-co.de). We will get back to you!
+Please report vulnerabilities to [security@great-co.de](mailto:security@great-co.de). We will get back to you!

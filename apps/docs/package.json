@@ -18,7 +18,7 @@
 		"@tailwindcss/vite": "^4.1.11",
 		"@tm9657/flow-like-ui": "workspace:*",
 		"@types/lodash-es": "^4.17.12",
-		"astro": "5.12.3",
+		"astro": "5.13.2",
 		"lodash-es": "^4.17.21",
 		"sharp": "^0.34.3",
 		"tailwind-merge": "^3.3.1",

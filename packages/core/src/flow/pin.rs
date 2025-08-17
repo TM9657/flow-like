@@ -1,6 +1,7 @@
 use super::variable::VariableType;
 use canonical_json::ser::to_string;
 use flow_like_types::{Value, json::to_value, sync::Mutex};
+use highway::{HighwayHash, HighwayHasher};
 use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, sync::Arc};
@@ -75,6 +76,30 @@ impl PinOptions {
     pub fn build(&self) -> Self {
         self.clone()
     }
+
+    pub fn hash(&self, hasher: &mut HighwayHasher) {
+        if let Some(sensitive) = &self.sensitive {
+            hasher.append(sensitive.to_string().as_bytes());
+        }
+        if let Some(valid_values) = &self.valid_values {
+            for value in valid_values {
+                hasher.append(value.as_bytes());
+            }
+        }
+        if let Some((min, max)) = &self.range {
+            hasher.append(&min.to_le_bytes());
+            hasher.append(&max.to_le_bytes());
+        }
+        if let Some(step) = &self.step {
+            hasher.append(&step.to_le_bytes());
+        }
+        if let Some(enforce_schema) = &self.enforce_schema {
+            hasher.append(enforce_schema.to_string().as_bytes());
+        }
+        if let Some(enforce_generic_value_type) = &self.enforce_generic_value_type {
+            hasher.append(enforce_generic_value_type.to_string().as_bytes());
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -129,6 +154,24 @@ impl Pin {
     pub fn set_options(&mut self, options: PinOptions) -> &mut Self {
         self.options = Some(options);
         self
+    }
+
+    pub fn hash(&self, hasher: &mut HighwayHasher) {
+        hasher.append(self.id.as_bytes());
+        hasher.append(self.name.as_bytes());
+        hasher.append(self.friendly_name.as_bytes());
+        hasher.append(self.description.as_bytes());
+        hasher.append(&[self.value_type.clone() as u8]);
+        hasher.append(&self.index.to_le_bytes());
+        hasher.append(&[self.pin_type.clone() as u8]);
+        hasher.append(&[self.data_type.clone() as u8]);
+        if let Some(schema) = &self.schema {
+            hasher.append(schema.as_bytes());
+        }
+
+        if let Some(options) = &self.options {
+            options.hash(hasher);
+        }
     }
 }
 

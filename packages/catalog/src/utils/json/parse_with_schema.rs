@@ -56,18 +56,17 @@ pub fn is_openai(data: &Value) -> bool {
 /// Returns data as-is if not OpenAI
 pub fn into_json_schema(data: Value) -> Result<Value, Error> {
     if is_openai(&data) {
-        if let Some(obj) = data.as_object() {
-            if let Some(parameters) = obj.get("parameters") {
-                if let Some(mut parameters_obj) = parameters.as_object().cloned() {
-                    parameters_obj.remove("additionalProperties");
-                    let name = match obj.get("name").cloned() {
-                        Some(name) => name,
-                        None => Value::Null,
-                    };
-                    parameters_obj.insert("title".to_string(), name);
-                    return Ok(Value::Object(parameters_obj));
-                }
-            }
+        if let Some(obj) = data.as_object()
+            && let Some(parameters) = obj.get("parameters")
+            && let Some(mut parameters_obj) = parameters.as_object().cloned()
+        {
+            parameters_obj.remove("additionalProperties");
+            let name = match obj.get("name").cloned() {
+                Some(name) => name,
+                None => Value::Null,
+            };
+            parameters_obj.insert("title".to_string(), name);
+            return Ok(Value::Object(parameters_obj));
         }
         Err(anyhow!("Failed to convert OpenAI function to JSON Schema"))
     } else {

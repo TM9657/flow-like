@@ -4,7 +4,7 @@ const { title, description, date, tags, cover } = entry.data;
 const href = '/blog/' + entry.slug.split('-').slice(3).join('-') + '/';
 ---
 {variant === 'compact' ? (
-  <article class="group grid grid-cols-[120px_1fr] sm:grid-cols-[160px_1fr] gap-4 items-start">
+  <article class="group grid grid-cols-[120px_1fr] sm:grid-cols-[160px_1fr] gap-4 items-start bg-background p-2">
     <a href={href} class="block overflow-hidden rounded-md bg-white dark:bg-zinc-900">
       {cover && (
         <img
@@ -27,7 +27,7 @@ const href = '/blog/' + entry.slug.split('-').slice(3).join('-') + '/';
     </div>
   </article>
 ) : (
-  <article class="group relative flex flex-col">
+  <article class="group relative flex flex-col p-2 bg-background/50">
     <a href={href} class="block overflow-hidden rounded-md sm:rounded-lg bg-white dark:bg-zinc-900">
       {cover && (
         <img

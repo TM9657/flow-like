@@ -43,9 +43,7 @@ export class EmptyBackend implements IBackendState {
 	userState: IUserState = new EmptyUserState();
 }
 
-export function EmptyBackendProvider({
-	data
-}: Readonly<{ data: string }>) {
+export function EmptyBackendProvider({ data }: Readonly<{ data: string }>) {
 	const [nodes, setNodes] = useState<any[]>([]);
 	const [edges, setEdges] = useState<any[]>([]);
 	const [loaded, setLoaded] = useState(false);
@@ -65,14 +63,16 @@ export function EmptyBackendProvider({
 	}, []);
 
 	if (!loaded) {
-		return <ThemeProvider
-			attribute="class"
-			defaultTheme="dark"
-			enableSystem
-			disableTransitionOnChange
-		>
-			<LoadingScreen />;
-		</ThemeProvider>
+		return (
+			<ThemeProvider
+				attribute="class"
+				defaultTheme="dark"
+				enableSystem
+				disableTransitionOnChange
+			>
+				<LoadingScreen />;
+			</ThemeProvider>
+		);
 	}
 
 	return (

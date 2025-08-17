@@ -79,7 +79,9 @@ impl NodeLogic for SequenceNode {
 
         for node in execution_order {
             let mut sub_context = context.create_sub_context(&node).await;
-            let _ = InternalNode::trigger(&mut sub_context, &mut Some(recursion_guard.clone()), true).await;
+            let _ =
+                InternalNode::trigger(&mut sub_context, &mut Some(recursion_guard.clone()), true)
+                    .await;
             sub_context.end_trace();
             context.push_sub_context(sub_context);
         }

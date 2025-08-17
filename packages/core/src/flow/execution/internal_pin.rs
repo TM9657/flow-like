@@ -13,7 +13,7 @@ pub struct InternalPin {
     pub node: Option<Weak<InternalNode>>,
     pub connected_to: Vec<Weak<Mutex<InternalPin>>>,
     pub depends_on: Vec<Weak<Mutex<InternalPin>>>,
-    pub layer_pin: bool
+    pub layer_pin: bool,
 }
 
 impl InternalPin {

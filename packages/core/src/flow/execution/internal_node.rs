@@ -170,7 +170,7 @@ impl InternalNode {
         Ok(true)
     }
 
-     pub async fn get_connected(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
+    pub async fn get_connected(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let mut connected = Vec::with_capacity(self.pins.len());
         let mut seen_nodes: HashSet<usize> = HashSet::new();
         let mut visited_pins: HashSet<usize> = HashSet::new();
@@ -302,7 +302,10 @@ impl InternalNode {
     pub async fn get_error_handled_nodes(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let pin = self.get_pin_by_name("auto_handle_error").await?;
         let active = evaluate_pin_value(pin.clone()).await?;
-        let active = match active { Value::Bool(b) => b, _ => false };
+        let active = match active {
+            Value::Bool(b) => b,
+            _ => false,
+        };
         if !active {
             return Err(flow_like_types::anyhow!("Error Pin not active"));
         }
@@ -496,14 +499,14 @@ impl InternalNode {
                     (parent_node.id.clone(), parent_node.friendly_name.clone())
                 };
 
-                if let Some(guard) = recursion_guard {
-                    if guard.contains(&node_id) {
-                        context.log_message(
-                            &format!("Recursion detected for: {}, skipping execution", &node_id),
-                            LogLevel::Debug,
-                        );
-                        continue;
-                    }
+                if let Some(guard) = recursion_guard
+                    && guard.contains(&node_id)
+                {
+                    context.log_message(
+                        &format!("Recursion detected for: {}, skipping execution", &node_id),
+                        LogLevel::Debug,
+                    );
+                    continue;
                 }
 
                 let mut sub_context = context.create_sub_context(&parent).await;
