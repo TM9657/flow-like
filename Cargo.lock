@@ -14879,6 +14879,7 @@ dependencies = [
 [[package]]
 name = "tract-core"
 version = "0.21.14-pre"
+source = "git+https://github.com/TM9657/tract?rev=ed3b020#ed3b0200e22bdd4553819db49e8aea94e33cae48"
 dependencies = [
  "anyhow",
  "anymap3",
@@ -14903,6 +14904,7 @@ dependencies = [
 [[package]]
 name = "tract-data"
 version = "0.21.14-pre"
+source = "git+https://github.com/TM9657/tract?rev=ed3b020#ed3b0200e22bdd4553819db49e8aea94e33cae48"
 dependencies = [
  "anyhow",
  "downcast-rs 1.2.1",
@@ -14927,6 +14929,7 @@ dependencies = [
 [[package]]
 name = "tract-linalg"
 version = "0.21.14-pre"
+source = "git+https://github.com/TM9657/tract?rev=ed3b020#ed3b0200e22bdd4553819db49e8aea94e33cae48"
 dependencies = [
  "byteorder",
  "cc",
@@ -14953,6 +14956,7 @@ dependencies = [
 [[package]]
 name = "tract-tflite"
 version = "0.21.14-pre"
+source = "git+https://github.com/TM9657/tract?rev=ed3b020#ed3b0200e22bdd4553819db49e8aea94e33cae48"
 dependencies = [
  "derive-new",
  "flatbuffers 23.5.26",

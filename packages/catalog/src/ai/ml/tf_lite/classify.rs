@@ -10,7 +10,7 @@ use flow_like::{
 };
 use flow_like_types::{
     JsonSchema, Result, async_trait,
-    image::imageops::FilterType,
+    image::{imageops::FilterType, RgbImage, imageops},
     json::{Deserialize, Serialize, json},
     tokio,
 };
@@ -112,9 +112,9 @@ impl NodeLogic for TfliteImageClassificationNode {
         let model_path: FlowPath = context.evaluate_pin("model").await?;
         let node_img: NodeImage = context.evaluate_pin("image_in").await?;
         let labels_path_opt: Option<FlowPath> = context.evaluate_pin("labels").await.ok();
-        let iw: i64 = context.evaluate_pin("input_width").await.unwrap_or(224);
-        let ih: i64 = context.evaluate_pin("input_height").await.unwrap_or(224);
-        let (iw, ih) = (iw.max(1) as u32, ih.max(1) as u32);
+        let iw_pin: i64 = context.evaluate_pin("input_width").await.unwrap_or(224);
+        let ih_pin: i64 = context.evaluate_pin("input_height").await.unwrap_or(224);
+        let (iw, ih) = (iw_pin.max(1) as u32, ih_pin.max(1) as u32);
 
         let labels_vec: Vec<String> = if let Some(labels_path) = labels_path_opt {
             let lbs = labels_path.get(context, false).await?;
@@ -144,61 +144,65 @@ impl NodeLogic for TfliteImageClassificationNode {
 
         let img = node_img.get_image(context).await?;
         let img_guard = img.lock().await;
-        let resized = img_guard
-            .resize_exact(iw, ih, FilterType::CatmullRom)
-            .to_rgb8();
+        let rgb = img_guard.to_rgb8();
+        let (src_w, src_h) = rgb.dimensions();
+        let rgb_bytes = rgb.into_raw();
         drop(img_guard);
-
-        let mut input_f32 = Vec::with_capacity((ih * iw * 3) as usize);
-        for y in 0..ih {
-            for x in 0..iw {
-                let p = resized.get_pixel(x, y);
-                input_f32.push(p[0] as f32 / 255.0);
-                input_f32.push(p[1] as f32 / 255.0);
-                input_f32.push(p[2] as f32 / 255.0);
-            }
-        }
 
         let (top_idx, top_score) =
             tokio::task::spawn_blocking(move || -> flow_like_types::Result<(usize, f32)> {
-                let tfl = tract_tflite::tflite();
+                use tract_data::prelude::DatumType;
+
+                // Load model
                 let mut cursor = Cursor::new(model_bytes);
                 let mut model = tract_tflite::tflite()
                     .model_for_read(&mut cursor)
                     .map_err(|e| flow_like_types::anyhow!("TFLite parse error: {e}"))?;
 
-                // Peek original input fact
+                // Prepare image (resize exactly with bicubic, like OpenCV INTER_CUBIC)
+                let src = RgbImage::from_raw(src_w, src_h, rgb_bytes)
+                    .ok_or_else(|| flow_like_types::anyhow!("Invalid source image buffer"))?;
+                let resized = imageops::resize(&src, iw, ih, FilterType::CatmullRom);
+
+                // Inspect input dtype and set input fact/shape
                 let inlet = model.input_outlets()?[0];
                 let orig = model.outlet_fact(inlet)?;
-                use tract_data::prelude::DatumType;
-
-                let fact = match orig.datum_type {
-                    DatumType::F32 => TypedFact::dt_shape(
-                        f32::datum_type(),
-                        tvec!(1, ih as usize, iw as usize, 3),
-                    ),
+                let input_shape = tvec!(1, ih as usize, iw as usize, 3);
+                let (fact, tensor): (TypedFact, Tensor) = match orig.datum_type {
+                    DatumType::F32 => {
+                        let arr = tract_ndarray::Array4::<f32>::from_shape_fn(
+                            (1, ih as usize, iw as usize, 3),
+                            |(_, y, x, c)| {
+                                let p = resized.get_pixel(x as u32, y as u32);
+                                p[c] as f32 / 255.0
+                            },
+                        );
+                        (TypedFact::dt_shape(f32::datum_type(), input_shape), arr.into())
+                    }
                     DatumType::U8 => {
-                        TypedFact::dt_shape(u8::datum_type(), tvec!(1, ih as usize, iw as usize, 3))
+                        let arr = tract_ndarray::Array4::<u8>::from_shape_fn(
+                            (1, ih as usize, iw as usize, 3),
+                            |(_, y, x, c)| {
+                                let p = resized.get_pixel(x as u32, y as u32);
+                                p[c]
+                            },
+                        );
+                        (TypedFact::dt_shape(u8::datum_type(), input_shape), arr.into())
                     }
-                    DatumType::I8 => {
-                        TypedFact::dt_shape(i8::datum_type(), tvec!(1, ih as usize, iw as usize, 3))
+                    dt => {
+                        return Err(flow_like_types::anyhow!(
+                            "Unsupported input dtype: {dt:?} (only F32 and U8 are supported)"
+                        ))
                     }
-                    dt => return Err(flow_like_types::anyhow!("Unsupported input dtype: {dt:?}")),
                 };
+
                 let mut runnable = model
                     .with_input_fact(0, fact)?
                     .into_optimized()?
                     .into_runnable()?;
 
-                let input: Tensor = tract_ndarray::Array4::from_shape_vec(
-                    (1, ih as usize, iw as usize, 3),
-                    input_f32,
-                )
-                .map_err(|e| flow_like_types::anyhow!("Failed to shape input tensor: {e}"))?
-                .into();
-
                 let outputs = runnable
-                    .run(tvec!(input.into()))
+                    .run(tvec!(tensor.into()))
                     .map_err(|e| flow_like_types::anyhow!("Failed to run TFLite model: {e}"))?;
 
                 if outputs.is_empty() {

@@ -149,7 +149,7 @@ pub async fn download_bit(
             return Ok(store_path);
         }
 
-        bail!("Error getting remote size");
+        bail!("Error getting remote size for {}: {}", &url, remote_size.unwrap_err());
     }
 
     let remote_size = remote_size?;
