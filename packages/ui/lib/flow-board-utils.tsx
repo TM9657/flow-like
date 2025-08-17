@@ -440,6 +440,7 @@ export function parseBoard(
 					layer: layer,
 					hash: layer.hash ?? -1,
 					pinLookup: lookup,
+					refs: board.refs,
 					pushLayer: async (layer: ILayer) => {
 						pushLayer(layer);
 					},

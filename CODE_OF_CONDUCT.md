@@ -26,7 +26,7 @@ This Code of Conduct applies to all project-related spaces, including:
 - Report any issues that conflict with our mission or standards.
 
 ## Reporting Violations
-If you encounter behavior that goes against this Code of Conduct, please contact the maintainers at [contributions@good-co.de] or via Discord. Include:
+If you encounter behavior that goes against this Code of Conduct, please contact the maintainers at [contributions@great-co.de] or via Discord. Include:
 - A description of the incident and where it occurred.
 - Supporting details (e.g., screenshots or links), if available.
 
@@ -44,7 +44,7 @@ Maintainers will review incidents and apply measures fairly to protect the commu
 We’re here to democratize programming and AI by building tools that work for everyone willing to engage. Adhering to these guidelines helps us maintain a professional and productive space for all contributors, including enterprise users.
 
 ## Questions?
-If you need clarification, reach out to us at [contributions@good-co.de] or through Discord.
+If you need clarification, reach out to us at [contributions@great-co.de] or through Discord.
 
 ---
 
