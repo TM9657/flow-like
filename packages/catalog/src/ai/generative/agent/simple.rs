@@ -2,9 +2,7 @@
 /// Recursive LLM-invokes until no more tool calls are made or recursion limit hit.
 /// Effectively, this is an LLM-controlled while loop over an arbitrary number of flow-leafes with back-propagation of leaf outputs into the agent.
 use crate::ai::generative::llm::invoke_with_tools::extract_tagged;
-use crate::utils::json::parse_with_schema::{
-    OpenAIFunction, OpenAIToolCall, validate_openai_functions_str, validate_openai_tool_call_str,
-};
+use crate::utils::json::parse_with_schema::tool_call_from_str;
 use flow_like::{
     bit::Bit,
     flow::{
@@ -18,7 +16,7 @@ use flow_like::{
 };
 use flow_like_model_provider::history::ToolCall;
 use flow_like_model_provider::{
-    history::{Content, ContentType, History, HistoryMessage, MessageContent, Role},
+    history::{Content, ContentType, History, HistoryMessage, MessageContent, Role, Tool},
     response::Response,
 };
 
@@ -42,7 +40,7 @@ TOOLS_STR
 <tooluse>
     {
         "name": "<name of the tool you want to use>", 
-        "args": "<key: value dict for args as defined by schema of the tool you want to use>"
+        "arguments": "<key: value dict for args as defined by schema of the tool you want to use>"
     }
 </tooluse>
 
@@ -78,7 +76,7 @@ impl NodeLogic for SimpleAgentNode {
             "Simple Agent Node with Tool Calls",
             "AI/Agents",
         );
-        node.add_icon("/flow/icons/bot-invoke.svg");
+        node.add_icon("/flow/icons/for-each.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
 
@@ -155,9 +153,12 @@ impl NodeLogic for SimpleAgentNode {
         let tools_str: String = context.evaluate_pin("tools").await?;
 
         // validate tools + deactivate all function exec output pins
-        let functions = validate_openai_functions_str(&tools_str)?;
-        for function in &functions {
-            context.deactivate_exec_pin(&function.name).await?
+        let tools: Vec<Tool> = match json::from_str(&tools_str) {
+            Ok(tools) => tools,
+            Err(err) => return Err(anyhow!("Failed to parse tools: {err:?}")),
+        };
+        for tool in &tools {
+            context.deactivate_exec_pin(&tool.function.name).await?
         }
 
         // log model name
@@ -166,7 +167,7 @@ impl NodeLogic for SimpleAgentNode {
         }
 
         // render system prompt with add-on for tool definitions
-        let system_prompt_tools = if functions.len() > 0 {
+        let system_prompt_tools = if tools.len() > 0 {
             SYSTEM_PROMPT_TEMPLATE.replace("TOOLS_STR", &tools_str) // todo: serlialize tools instead?
         } else {
             String::from("")
@@ -186,6 +187,7 @@ impl NodeLogic for SimpleAgentNode {
         // Loop until no more tool cals or max recursion limit hit
         let mut previous_external_history = History::new(history.model.clone(), vec![]);
         let mut internal_history = History::new(history.model.clone(), vec![]);
+        let mut unanswered_tool_calls: HashMap<String, String> = HashMap::new();
         for agent_iteration in 0..recursion_limit {
             context.log_message(
                 &format!("[agent iter {}] agent iteration", agent_iteration),
@@ -194,10 +196,7 @@ impl NodeLogic for SimpleAgentNode {
 
             // re-evaluate history + set system prompt
             let mut external_history = context.evaluate_pin::<History>("history").await?;
-            external_history.set_system_prompt(system_prompt.to_string());
-
-            // append new messages to internal history
-            // todo: validate tool call followed by tool output
+            external_history.set_system_prompt(system_prompt.to_string());            
             context.log_message(
                 &format!(
                     "[agent iter {}] previous external history: {}",
@@ -212,11 +211,46 @@ impl NodeLogic for SimpleAgentNode {
                 ),
                 LogLevel::Debug,
             );
-            let n1 = previous_external_history.messages.len();
-            let n2 = external_history.messages.len();
-            for i in n1..n2 {
-                let new_message = external_history.messages[i].clone();
-                internal_history.messages.push(new_message);
+
+            // append new messages to internal history
+            // validate whether an incoming tool output message can be associated to a tool call of a previous assistant message
+            // failing to do so can lead to LLMs not seeing results or even bad requests for cloud-model provider
+            let offset = previous_external_history.messages.len();
+            for new_message in external_history.messages.iter().skip(offset) {
+                match new_message.role {
+                    Role::Tool => {
+                        let content_str = if let Some(tool_call_id) = &new_message.tool_call_id {
+                            if let Some(tool_name) = unanswered_tool_calls.remove(tool_call_id) {
+                                format!("[tooloutput] [{}]: {}", tool_name, new_message.as_str())
+                            } else {
+                                context.log_message(&format!("Couldn't link new tool message with id {} to any previous tool call", tool_call_id), LogLevel::Warn);
+                                format!("[tooloutput]: {}", new_message.as_str())
+                            }
+                        } else {
+                            context.log_message("New tool message is missing a tool call id", LogLevel::Warn);
+                            format!("[tooloutput]: {}", new_message.as_str())
+                        };                        
+                        let message = HistoryMessage {
+                            role: Role::User,
+                            content: MessageContent::Contents(vec![Content::Text {
+                                content_type: ContentType::Text,
+                                text: content_str,
+                            }]),
+                            tool_call_id: None,
+                            tool_calls: None,
+                            name: None
+                        };
+                        internal_history.messages.push(message);
+                    },
+                    _ => {
+                        // if there are tool calls from a previous iteration not answered by tool outputs we warn the user
+                        if unanswered_tool_calls.len() > 0 {
+                            context.log_message(&format!("There are open tool calls but incoming message hasn't role 'tool' but {:?} - this can lead to non-optimal performance.", new_message.role), LogLevel::Warn);
+                        }
+                        // if there aren't any tool calls (yet) to answer it's fine
+                        internal_history.messages.push(new_message.clone());
+                    }
+                }
             }
             context.log_message(
                 &format!(
@@ -259,12 +293,12 @@ impl NodeLogic for SimpleAgentNode {
                 LogLevel::Debug,
             );
 
-            // parse tool cals (if any)
+            // parse tool calls (if any)
             let tool_calls = if response_string.contains("<tooluse>") {
                 let tool_calls_str = extract_tagged(&response_string, "tooluse")?;
-                let tool_calls: Result<Vec<OpenAIToolCall>, Error> = tool_calls_str
+                let tool_calls: Result<Vec<ToolCall>, Error> = tool_calls_str
                     .iter()
-                    .map(|tool_call_str| validate_openai_tool_call_str(&functions, tool_call_str))
+                    .map(|tool_call_str| tool_call_from_str(&tools, tool_call_str))
                     .collect();
                 tool_calls?
             } else {
@@ -276,34 +310,35 @@ impl NodeLogic for SimpleAgentNode {
                 let tool_call_id_pin = context.get_pin_by_name("tool_call_id").await?;
                 let tool_call_args_pin = context.get_pin_by_name("tool_call_args").await?;
                 for tool_call in tool_calls.iter() {
+                    let tool_call_args: Value = json::from_str(&tool_call.function.arguments)?;
                     context.log_message(
                         &format!(
                             "[agent iter {}] exec tool {}",
-                            agent_iteration, &tool_call.name
+                            agent_iteration, &tool_call.function.name
                         ),
                         LogLevel::Debug,
                     );
 
                     // deactivate all tool exec pins
-                    for function in &functions {
-                        context.deactivate_exec_pin(&function.name).await?
+                    for tool in &tools {
+                        context.deactivate_exec_pin(&tool.function.name).await?
                     }
 
                     // set tool args + activate tool exec pin
                     tool_call_id_pin
                         .lock()
                         .await
-                        .set_value(json::json!("abc"))
+                        .set_value(json::json!(&tool_call.id))
                         .await;
                     tool_call_args_pin
                         .lock()
                         .await
-                        .set_value(json::json!(tool_call.args))
+                        .set_value(tool_call_args)
                         .await;
-                    context.activate_exec_pin(&tool_call.name).await?;
+                    context.activate_exec_pin(&tool_call.function.name).await?;
 
                     // execute tool subcontext
-                    let tool_exec_pin = context.get_pin_by_name(&tool_call.name).await?;
+                    let tool_exec_pin = context.get_pin_by_name(&tool_call.function.name).await?;
                     let tool_flow = tool_exec_pin.lock().await.get_connected_nodes().await;
                     for node in &tool_flow {
                         let mut sub_context = context.create_sub_context(node).await;
@@ -314,15 +349,18 @@ impl NodeLogic for SimpleAgentNode {
                         if run.is_err() {
                             let error = run.err().unwrap();
                             context.log_message(
-                                &format!("Error executing tool {}: {:?}", &tool_call.name, error),
+                                &format!(
+                                    "Error executing tool {}: {:?}",
+                                    &tool_call.function.name, error
+                                ),
                                 LogLevel::Error,
                             );
                         }
                     }
                 }
                 // deactivate all tool exec pins
-                for function in &functions {
-                    context.deactivate_exec_pin(&function.name).await?
+                for tool in &tools {
+                    context.deactivate_exec_pin(&tool.function.name).await?
                 }
 
             // LLM doesn't want to make any tool calls -> return final response
@@ -334,7 +372,13 @@ impl NodeLogic for SimpleAgentNode {
                 return Ok(());
             }
 
-            // append response as assistant message to internal history
+            // prep for next iteration
+            // -> track open tool calls
+            for tool_call in tool_calls.iter() {
+                unanswered_tool_calls.insert(tool_call.id.clone(), tool_call.function.name.clone());
+            }
+
+            // -> append own response as assistant message to internal history
             let ai_message = HistoryMessage {
                 role: Role::Assistant,
                 content: MessageContent::Contents(vec![Content::Text {
@@ -343,7 +387,7 @@ impl NodeLogic for SimpleAgentNode {
                 }]),
                 name: None,
                 tool_call_id: None,
-                tool_calls: None, // todo: use tool calls + tool messages
+                tool_calls: Some(tool_calls),
             };
             internal_history.messages.push(ai_message);
         }
@@ -356,11 +400,14 @@ impl NodeLogic for SimpleAgentNode {
             .values()
             .filter(|p| {
                 p.pin_type == PinType::Output
-                    && (p.name != "exec_done" && p.name != "response" && p.name != "tool_call_id" && p.name != "tool_call_args") // p.description == "Tool Exec" doesn't seem to work as filter cond
+                    && (p.name != "exec_done"
+                        && p.name != "response"
+                        && p.name != "tool_call_id"
+                        && p.name != "tool_call_args") // p.description == "Tool Exec" doesn't seem to work as filter cond
             })
             .collect();
 
-        let schema_str: String = node
+        let tools_str: String = node
             .get_pin_by_name("tools")
             .and_then(|pin| pin.default_value.clone())
             .and_then(|bytes| flow_like_types::json::from_slice::<Value>(&bytes).ok())
@@ -372,7 +419,7 @@ impl NodeLogic for SimpleAgentNode {
             .map(|p| (p.name.clone(), *p))
             .collect::<HashMap<_, _>>();
 
-        let update_tools: Vec<OpenAIFunction> = match validate_openai_functions_str(&schema_str) {
+        let update_tools: Vec<Tool> = match json::from_str(&tools_str) {
             Ok(tools) => tools,
             Err(err) => {
                 node.error = Some(format!("Failed to parse tools: {err:?}").to_string());
@@ -384,9 +431,12 @@ impl NodeLogic for SimpleAgentNode {
         let mut missing_tool_exec_refs = HashSet::new();
 
         for update_tool in update_tools {
-            all_tool_exec_refs.insert(update_tool.name.clone());
-            if current_tool_exec_refs.remove(&update_tool.name).is_none() {
-                missing_tool_exec_refs.insert(update_tool.name.clone());
+            all_tool_exec_refs.insert(update_tool.function.name.clone());
+            if current_tool_exec_refs
+                .remove(&update_tool.function.name)
+                .is_none()
+            {
+                missing_tool_exec_refs.insert(update_tool.function.name.clone());
             }
         }
 
