@@ -52,12 +52,11 @@ export function Traces({
 }: Readonly<{
 	appId: string;
 	boardId: string;
-	board: IBoard;
+	board: RefObject<IBoard | undefined>;
 	onFocusNode: (nodeId: string) => void;
 }>) {
 	const backend = useBackend();
 	const { currentMetadata } = useLogAggregation();
-	const boardRef = useRef<IBoard>(board);
 
 	const [queryParts, setQueryParts] = useState<string[]>([]);
 	const [query, setQuery] = useState("");
@@ -183,7 +182,7 @@ export function Traces({
 					log={log}
 					index={index}
 					style={style}
-					board={boardRef}
+					board={board}
 					onSetHeight={setRowHeight}
 					onSelectNode={onFocusNode}
 				/>
@@ -297,7 +296,7 @@ const LogMessage = memo(function LogMessage({
 	log: ILog;
 	style: any;
 	index: number;
-	board: RefObject<IBoard>;
+	board: RefObject<IBoard | undefined>;
 	onSetHeight: (index: number, height: number) => void;
 	onSelectNode: (nodeId: string) => void;
 }>) {
@@ -306,7 +305,7 @@ const LogMessage = memo(function LogMessage({
 
 	useEffect(() => {
 		if (log.node_id) {
-			const node = board.current.nodes[log.node_id];
+			const node = board.current?.nodes[log.node_id];
 			setNode(node);
 		}
 	}, [log.node_id, board]);

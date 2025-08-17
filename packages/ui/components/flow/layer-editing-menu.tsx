@@ -13,14 +13,14 @@ import {
 	SlidersHorizontalIcon,
 	Trash2Icon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type RefObject } from "react";
 import {
 	type IPin,
 	type IPinOptions,
 	IValueType,
 	IVariableType,
 } from "../../lib";
-import { type ILayer, IPinType } from "../../lib/schema/flow/board";
+import { type IBoard, type ILayer, IPinType } from "../../lib/schema/flow/board";
 import {
 	Button,
 	Dialog,
@@ -93,16 +93,29 @@ const useGroupedPins = (edits: Record<string, PinEdit>) => {
 	}, [edits]);
 };
 
-const buildInitialEdits = (layer: ILayer): Record<string, PinEdit> => {
+const buildInitialEdits = (layer: ILayer, boardRef?: RefObject<IBoard | undefined>): Record<string, PinEdit> => {
 	const out: Record<string, PinEdit> = {};
 	for (const pin of Object.values(layer.pins)) {
 		const p: any = pin;
 		const friendly = p?.friendly_name ?? p?.name ?? pin.id;
+		let description = p?.description ?? "";
+
+
+		const ref = boardRef?.current?.refs?.[description];
+		if(ref) {
+			description = ref;
+		}
+
+		// Hash for empty string, empty string will not be taken into the refs.
+		if (description === "16248035215404677707") {
+			description = ""
+		}
+
 		out[pin.id] = {
 			id: pin.id,
 			name: toMachineName(friendly),
 			friendly_name: friendly,
-			description: p?.description ?? "",
+			description: description,
 			data_type: p?.data_type ?? IVariableType.Generic,
 			options: p?.options ?? null,
 			schema: p?.schema ?? null,
@@ -119,6 +132,7 @@ interface LayerEditMenuProps {
 	onOpenChange: (open: boolean) => void;
 	layer: ILayer;
 	onApply: (updated: ILayer) => Promise<void>;
+	boardRef?: RefObject<IBoard | undefined>
 }
 
 export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
@@ -126,16 +140,17 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 	onOpenChange,
 	layer,
 	onApply,
+	boardRef,
 }) => {
 	const [edits, setEdits] = useState<Record<string, PinEdit>>(() =>
-		buildInitialEdits(layer),
+		buildInitialEdits(layer, boardRef),
 	);
 	const { inputs, outputs } = useGroupedPins(edits);
 	const [tab, setTab] = useState<"inputs" | "outputs">("inputs");
 
 	useEffect(() => {
 		if (open) {
-			setEdits(buildInitialEdits(layer));
+			setEdits(buildInitialEdits(layer, boardRef));
 			setTab("inputs");
 		}
 	}, [open, layer]);

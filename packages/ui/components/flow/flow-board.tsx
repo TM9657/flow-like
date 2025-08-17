@@ -82,6 +82,7 @@ import {
 } from "../../lib/flow-board-utils";
 import { toastError, toastSuccess } from "../../lib/messages";
 import {
+	type IBoard,
 	type IComment,
 	ICommentType,
 	type IVariable,
@@ -156,6 +157,7 @@ export function FlowBoard({
 		[appId, boardId, version],
 		boardId !== "",
 	);
+	const boardRef = useRef<IBoard | undefined>(undefined);
 	const currentProfile = useInvoke(
 		backend.userState.getProfile,
 		backend.userState,
@@ -955,7 +957,7 @@ export function FlowBoard({
 
 	useEffect(() => {
 		if (!board.data) return;
-
+		boardRef.current = board.data;
 		const parsed = parseBoard(
 			board.data,
 			appId,
@@ -968,6 +970,7 @@ export function FlowBoard({
 			nodes,
 			edges,
 			currentLayer,
+			boardRef
 		);
 
 		setNodes(parsed.nodes);
@@ -1595,7 +1598,7 @@ export function FlowBoard({
 								<Traces
 									appId={appId}
 									boardId={boardId}
-									board={board.data}
+									board={boardRef}
 									onFocusNode={(nodeId: string) => {
 										focusNode(nodeId);
 									}}
