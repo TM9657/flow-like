@@ -64,7 +64,7 @@ Here is the tool schema, you **must** use to make your response:
 <tooluse>
     {
         "name": "name",
-        "args": {
+        "arguments": {
             "reason": ...,
             "decision": ...
         }
@@ -86,7 +86,7 @@ struct BranchToolCallArgs {
 #[derive(Debug, Deserialize)]
 struct BranchToolCall {
     name: String,
-    args: BranchToolCallArgs,
+    arguments: BranchToolCallArgs,
 }
 
 #[derive(Default)]
@@ -115,7 +115,6 @@ impl NodeLogic for LLMBranchNode {
             .set_schema::<Bit>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        // todo: name this 'Condition' to align with Branch node?
         node.add_input_pin(
             "prompt",
             "Prompt",
@@ -188,10 +187,10 @@ impl NodeLogic for LLMBranchNode {
                 tool_calls_str.len()
             )));
         };
-        context.log_message(&tool_call.args.reason, LogLevel::Debug);
+        context.log_message(&tool_call.arguments.reason, LogLevel::Debug);
 
         // set outputs
-        if tool_call.args.decision {
+        if tool_call.arguments.decision {
             context.activate_exec_pin("true").await?;
             context.deactivate_exec_pin("false").await?;
         } else {

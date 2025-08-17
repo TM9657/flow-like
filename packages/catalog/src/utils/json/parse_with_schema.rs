@@ -12,23 +12,23 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_model_provider::history::{Tool, ToolCall, ToolCallFunction};
 use flow_like_types::{Error, Value, anyhow, async_trait, json, jsonschema};
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct OpenAIFunction {
-    pub r#type: String,
-    pub name: String,
-    pub description: String,
-    pub parameters: Value,
-    pub strict: bool,
-}
+//#[derive(Debug, Deserialize, Serialize)]
+//pub struct OpenAIFunction {
+//    pub r#type: String,
+//    pub name: String,
+//    pub description: Option<String>,
+//    pub parameters: Option<Value>,
+//    pub strict: bool,
+//}
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct OpenAIToolCall {
-    pub name: String,
-    pub args: Value,
-}
+//#[derive(Debug, Deserialize, Serialize)]
+//pub struct OpenAIToolCall {
+//    pub name: String,
+//    pub args: Value,
+//}
 
 /// Is this JSON Value an OpenAI Function Definition?
 /// https://platform.openai.com/docs/guides/function-calling?api-mode=responses#defining-functions
@@ -50,69 +50,6 @@ pub fn is_openai(data: &Value) -> bool {
         }
     }
     true
-}
-
-/// Validates JSON against OpenAI Function Definition Schema
-/// https://platform.openai.com/docs/guides/function-calling?api-mode=responses#defining-functions
-/// Returns parsed JSON Value if valid
-pub fn validate_openai_function(function: &OpenAIFunction) -> Result<&OpenAIFunction, Error> {
-    // "type" should always be function
-    if function.r#type != "function" {
-        return Err(anyhow!("As of now, 'type' should always be 'function'"));
-    }
-
-    // check whether 'parameters' is valid JSON schema
-    let parameters = &function.parameters;
-    if !jsonschema::meta::is_valid(parameters) {
-        return Err(anyhow!(
-            "'parameters' value is not a valid JSON schema definition"
-        ));
-    }
-
-    // todo: add strict option to ensure all properties in parameters have descriptions
-    Ok(function)
-}
-
-pub fn validate_openai_functions(
-    functions: &Vec<OpenAIFunction>,
-) -> Result<&Vec<OpenAIFunction>, Error> {
-    for function in functions {
-        validate_openai_function(function)?;
-    }
-    Ok(functions)
-}
-
-pub fn validate_openai_functions_str(functions: &str) -> Result<Vec<OpenAIFunction>, Error> {
-    let functions: Vec<OpenAIFunction> = match json::from_str(functions) {
-        Ok(functions) => functions,
-        Err(e) => {
-            return Err(anyhow!(format!(
-                "Failed to load list of functions from input string: {}",
-                e
-            )));
-        }
-    };
-    match validate_openai_functions(&functions) {
-        Ok(_) => Ok(functions),
-        Err(e) => Err(e),
-    }
-}
-
-pub fn validate_openai_function_str(function: &str) -> Result<OpenAIFunction, Error> {
-    // Is definition input pin value valid JSON?
-    let function: OpenAIFunction = match json::from_str(function) {
-        Ok(function) => function,
-        Err(e) => {
-            return Err(anyhow!(format!(
-                "Failed to load definition/schema from input string: {}",
-                e
-            )));
-        }
-    };
-    match validate_openai_function(&function) {
-        Ok(_) => Ok(function),
-        Err(e) => Err(e),
-    }
 }
 
 /// Converts OpenAI Function Defintion to JSON Schema
@@ -188,26 +125,34 @@ pub fn validate_json_data(schema: &str, data: &str) -> Result<Value, Error> {
     }
 }
 
-/// Validates a Tool Call string against a list of OpenAi-Functions
-pub fn validate_openai_tool_call_str(
-    functions: &Vec<OpenAIFunction>,
-    tool_call: &str,
-) -> Result<OpenAIToolCall, Error> {
+/// Validates a Tool Call Function str against a list of Tools and returns the Tool Call Object
+pub fn tool_call_from_str(tools: &Vec<Tool>, tool_call_function: &str) -> Result<ToolCall, Error> {
     // Deserialize tool call
-    let tool_call: OpenAIToolCall = match json::from_str(tool_call) {
-        Ok(tool_call) => tool_call,
+    let tool_call_function: ToolCallFunction = match json::from_str(tool_call_function) {
+        Ok(tool_call_function) => tool_call_function,
         Err(e) => return Err(anyhow!(format!("Failed to parse tool call: {}", e))),
     };
+    let cuid = flow_like_types::create_id();
+    let tool_call = ToolCall {
+        id: cuid,
+        r#type: "function".to_string(),
+        function: tool_call_function,
+    };
 
-    for function in functions {
-        if tool_call.name == function.name {
-            let validator = match jsonschema::validator_for(&function.parameters) {
+    for tool in tools.iter() {
+        if tool_call.function.name == tool.function.name {
+            let schema = json::to_value(&tool.function.parameters)?;
+            let validator = match jsonschema::validator_for(&schema) {
                 Ok(validator) => validator,
                 Err(e) => return Err(anyhow!(format!("Failed to load schema validator: {}", e))),
             };
 
             // Validate tool call agains function schema
-            let errors = validator.iter_errors(&tool_call.args);
+            let tool_call_args: Value = match json::from_str(&tool_call.function.arguments) {
+                Ok(tool_call_args) => tool_call_args,
+                Err(e) => return Err(anyhow!(format!("Failed to parse tool call args: {}", e))),
+            };
+            let errors = validator.iter_errors(&tool_call_args);
             let error_msg = errors
                 .map(|e| format!("Error: {}, Location: {}", e, e.instance_path))
                 .collect::<Vec<_>>()
@@ -222,7 +167,7 @@ pub fn validate_openai_tool_call_str(
     }
     Err(anyhow!(format!(
         "No matching function found for tool call: {}",
-        tool_call.name
+        tool_call.function.name
     )))
 }
 
@@ -287,10 +232,10 @@ impl NodeLogic for ParseWithSchema {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
-        let definition_str: String = context.evaluate_pin("schema").await?;
+        let schema_str: String = context.evaluate_pin("schema").await?;
         let data_str: String = context.evaluate_pin("data").await?;
 
-        let validated = validate_json_data(&definition_str, &data_str)?;
+        let validated = validate_json_data(&schema_str, &data_str)?;
 
         context.set_pin_value("parsed", validated).await?;
         context.activate_exec_pin("exec_out").await?;
