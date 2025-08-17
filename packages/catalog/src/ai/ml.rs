@@ -3,7 +3,7 @@
 
 /// ONNX Nodes
 pub mod onnx;
-pub mod tf_lite;
+pub mod teachable_machine;
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;
 
@@ -11,6 +11,6 @@ use std::sync::Arc;
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let mut registry: Vec<Arc<dyn NodeLogic>> = Vec::new();
     registry.extend(onnx::register_functions().await);
-    registry.extend(tf_lite::register_functions().await);
+    registry.extend(teachable_machine::register_functions().await);
     registry
 }

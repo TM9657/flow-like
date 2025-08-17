@@ -25,22 +25,22 @@ pub struct ClassPrediction {
 }
 
 #[derive(Default)]
-pub struct TfliteImageClassificationNode {}
+pub struct TeachableMachineNode {}
 
-impl TfliteImageClassificationNode {
+impl TeachableMachineNode {
     pub fn new() -> Self {
         Self {}
     }
 }
 
 #[async_trait]
-impl NodeLogic for TfliteImageClassificationNode {
+impl NodeLogic for TeachableMachineNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "tf_savedmodel_image_classification",
-            "TensorFlow Lite Image Classification",
-            "Image classification using TensorFlow Lite models (*.tflite).",
-            "AI/ML/TensorFlow",
+            "ai_ml_teachable_machine",
+            "Teachable Machine",
+            "Image classification using Teachable Machine models.",
+            "AI/ML",
         );
 
         node.add_icon("/flow/icons/find_model.svg");
@@ -174,7 +174,7 @@ impl NodeLogic for TfliteImageClassificationNode {
                             (1, ih as usize, iw as usize, 3),
                             |(_, y, x, c)| {
                                 let p = resized.get_pixel(x as u32, y as u32);
-                                (p[c] as f32 / 127.5 - 1.0) // as f32 / 255.0
+                                p[c] as f32 / 127.5 - 1.0
                             },
                         );
                         (TypedFact::dt_shape(f32::datum_type(), input_shape), arr.into())
@@ -252,4 +252,115 @@ fn find_tflite_slice(buf: &[u8]) -> Option<&[u8]> {
         }
     }
     None
+}
+
+#[derive(Default)]
+pub struct PredictionClassOrLabelNode {}
+
+impl PredictionClassOrLabelNode {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for PredictionClassOrLabelNode {
+    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+        let mut node = Node::new(
+            "ai_ml_pred_class_or_label",
+            "Prediction Class/Label",
+            "Extract class_idx and label from predictions.",
+            "AI/ML",
+        );
+        node.add_icon("/flow/icons/find_model.svg");
+
+        node.add_input_pin(
+            "prediction",
+            "Prediction",
+            "Single ClassPrediction",
+            VariableType::Struct,
+        )
+        .set_schema::<ClassPrediction>();
+
+        node.add_output_pin(
+            "class_idx",
+            "Class Index",
+            "Selected prediction class index",
+            VariableType::Integer,
+        );
+
+        node.add_output_pin(
+            "label",
+            "Label",
+            "Selected prediction label (empty if not provided)",
+            VariableType::String,
+        );
+
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
+        let prediction: ClassPrediction = context.evaluate_pin("prediction").await?;
+
+        context.set_pin_value("class_idx", json!(prediction.class_idx)).await?;
+        context
+            .set_pin_value("label", json!(prediction.label.clone().unwrap_or_default()))
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct PredictionScoreNode {}
+
+impl PredictionScoreNode {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for PredictionScoreNode {
+    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+        let mut node = Node::new(
+            "ai_ml_pred_score",
+            "Prediction Score",
+            "Extract score from predictions.",
+            "AI/ML/Teachable Machine",
+        );
+        node.add_icon("/flow/icons/find_model.svg");
+
+        node.add_input_pin(
+            "prediction",
+            "Prediction",
+            "Single ClassPrediction",
+            VariableType::Struct,
+        )
+        .set_schema::<ClassPrediction>();
+
+        node.add_output_pin(
+            "score",
+            "Score",
+            "Selected prediction score",
+            VariableType::Integer,
+        );
+
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
+        let prediction: ClassPrediction = context.evaluate_pin("prediction").await?;
+
+        context.set_pin_value("score", json!(prediction.score)).await?;
+        Ok(())
+    }
+}
+
+/// Register TFLite-related nodes
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
+    vec![
+        Arc::new(TeachableMachineNode::default()) as Arc<dyn NodeLogic>,
+        Arc::new(PredictionClassOrLabelNode::default()) as Arc<dyn NodeLogic>,
+        Arc::new(PredictionScoreNode::default()) as Arc<dyn NodeLogic>,
+    ]
 }
