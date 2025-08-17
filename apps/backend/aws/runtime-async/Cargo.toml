@@ -8,6 +8,7 @@ aws_lambda_events = { version = "0.16.0", default-features = false, features = [
 flow-like.workspace = true
 flow-like-types.workspace = true
 lambda_runtime = {version="0.14.1", features = ["anyhow"]}
+tracing.workspace = true
 
 [profile.release]
 opt-level = "z"

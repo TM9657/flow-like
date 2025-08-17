@@ -120,6 +120,7 @@ impl From<History> for ChatCompletionRequest {
         ChatCompletionRequest {
             model: history.model,
             messages,
+            reasoning: None,
             temperature: history.temperature.map(|t| t as f64),
             top_p: history.top_p.map(|t| t as f64),
             n: history.n.map(|n| n as i64),
