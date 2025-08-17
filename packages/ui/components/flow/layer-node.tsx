@@ -1,4 +1,5 @@
 "use client";
+import { useDebounce } from "@uidotdev/usehooks";
 import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import {
 	BanIcon,
@@ -13,7 +14,16 @@ import {
 	TriangleAlertIcon,
 	ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useTheme } from "next-themes";
+import {
+	type RefObject,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import PuffLoader from "react-spinners/PuffLoader";
 import { toast } from "sonner";
 import {
 	ContextMenu,
@@ -24,17 +34,14 @@ import {
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
 import type { IBoard, INode } from "../../lib";
+import { logLevelFromNumber } from "../../lib/log-level";
 import { type ILayer, ILogLevel, IPinType } from "../../lib/schema/flow/board";
+import { useLogAggregation } from "../../state/log-aggregation-state";
+import { useRunExecutionStore } from "../../state/run-execution-state";
 import { CommentDialog } from "./comment-dialog";
 import { FlowPin } from "./flow-pin";
 import { LayerEditMenu } from "./layer-editing-menu";
 import { NameDialog } from "./name-dialog";
-import { useDebounce } from "@uidotdev/usehooks";
-import { useRunExecutionStore } from "../../state/run-execution-state";
-import { useLogAggregation } from "../../state/log-aggregation-state";
-import { logLevelFromNumber } from "../../lib/log-level";
-import PuffLoader from "react-spinners/PuffLoader";
-import { useTheme } from "next-themes";
 
 export type LayerNode = Node<
 	{
@@ -43,7 +50,7 @@ export type LayerNode = Node<
 		boardId: string;
 		hash: string;
 		appId: string;
-		boardRef?: RefObject<IBoard | undefined>
+		boardRef?: RefObject<IBoard | undefined>;
 		pushLayer(layer: ILayer): Promise<void>;
 		onLayerUpdate(layer: ILayer): Promise<void>;
 		onLayerRemove(layer: ILayer, preserve_nodes: boolean): Promise<void>;
@@ -302,7 +309,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 									pin={pin}
 									key={pin.id}
 									skipOffset={true}
-									onPinRemove={async () => { }}
+									onPinRemove={async () => {}}
 								/>
 							))}
 						{Object.values(props.data.layer.pins)
@@ -316,7 +323,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 									pin={pin}
 									key={pin.id}
 									skipOffset={true}
-									onPinRemove={async () => { }}
+									onPinRemove={async () => {}}
 								/>
 							))}
 					</div>

@@ -1,5 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { CopyIcon } from "lucide-react";
+import type { RefObject } from "react";
 import { toast } from "sonner";
 import { InnerLayerNodeType } from "../components/flow/layer-inner-node";
 import { typeToColor } from "../components/flow/utils";
@@ -20,7 +21,6 @@ import {
 import { IVariableType } from "./schema/flow/node";
 import type { INode } from "./schema/flow/node";
 import { type IPin, IPinType } from "./schema/flow/pin";
-import type { RefObject } from "react";
 
 interface ISerializedPin {
 	id: string;
@@ -251,7 +251,7 @@ export function parseBoard(
 	oldNodes?: any[],
 	oldEdges?: any[],
 	currentLayer?: string,
-	boardRef?: RefObject<IBoard | undefined>
+	boardRef?: RefObject<IBoard | undefined>,
 ) {
 	const nodes: any[] = [];
 	const edges: any[] = [];
