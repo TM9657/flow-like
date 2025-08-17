@@ -20,6 +20,7 @@ import {
 import { IVariableType } from "./schema/flow/node";
 import type { INode } from "./schema/flow/node";
 import { type IPin, IPinType } from "./schema/flow/pin";
+import type { RefObject } from "react";
 
 interface ISerializedPin {
 	id: string;
@@ -250,6 +251,7 @@ export function parseBoard(
 	oldNodes?: any[],
 	oldEdges?: any[],
 	currentLayer?: string,
+	boardRef?: RefObject<IBoard | undefined>
 ) {
 	const nodes: any[] = [];
 	const edges: any[] = [];
@@ -258,6 +260,7 @@ export function parseBoard(
 	const oldEdgesMap = new Map<string, any>();
 
 	for (const oldNode of oldNodes ?? []) {
+		oldNode.data.boardRef = boardRef;
 		if (oldNode.data?.hash) oldNodesMap.set(oldNode.data?.hash, oldNode);
 	}
 
@@ -286,6 +289,7 @@ export function parseBoard(
 				},
 				data: {
 					label: node.name,
+					boardRef: boardRef,
 					node: node,
 					hash: hash,
 					boardId: board.id,
@@ -340,6 +344,7 @@ export function parseBoard(
 							label: layer.id,
 							boardId: board.id,
 							appId: appId,
+							boardRef: boardRef,
 							type: InnerLayerNodeType.INPUT,
 							layer: {
 								...layer,
@@ -383,6 +388,7 @@ export function parseBoard(
 							label: layer.id,
 							boardId: board.id,
 							appId: appId,
+							boardRef: boardRef,
 							type: InnerLayerNodeType.RETURN,
 							layer: {
 								...layer,
@@ -438,6 +444,7 @@ export function parseBoard(
 					boardId: board.id,
 					appId: appId,
 					layer: layer,
+					boardRef: boardRef,
 					hash: layer.hash ?? -1,
 					pinLookup: lookup,
 					pushLayer: async (layer: ILayer) => {
@@ -590,6 +597,7 @@ export function parseBoard(
 				label: comment.id,
 				boardId: board.id,
 				hash: hash,
+				boardRef: boardRef,
 				comment: { ...comment, is_locked: comment.is_locked ?? false },
 				onUpsert: (comment: IComment) => {
 					const command = upsertCommentCommand({

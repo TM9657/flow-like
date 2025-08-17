@@ -6,6 +6,28 @@ import type { CollectionEntry } from 'astro:content';
 const { content, data } = Astro.props as { content: any, data: CollectionEntry<'blog'>['data'] };
 const pub = data.date;
 const upd = data.updated ?? data.date;
+
+const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
+const canonical = new URL(Astro.url.pathname, site).toString();
+
+const title = data.title ?? "Flow-Like Blog";
+const desc = data.description ?? "Enterprise-grade workflow automation built for scale.";
+const cover = data.cover ?? "/og.webp";
+
+function toIsoDate(d: string | Date | undefined): string | undefined {
+  if (!d) return undefined;
+  if (d instanceof Date) return d.toISOString();
+  if (typeof d === "string") {
+    // If it’s exactly YYYY-MM-DD, pin to UTC midnight to avoid TZ shifts
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return `${d}T00:00:00.000Z`;
+    const parsed = new Date(d);
+    return isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+  }
+  return undefined;
+}
+
+const pubISO = toIsoDate(data.date);
+const updISO = toIsoDate(data.updated ?? data.date);
 ---
 
 <!doctype html>
@@ -15,30 +37,35 @@ const upd = data.updated ?? data.date;
 		<meta name="viewport" content="width=device-width" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<meta name="generator" content={Astro.generator} />
-		<title>{data.title}</title>
-    	<meta name="description" content={data.description ?? ''} />
-		<meta name="robots" content="index, follow" />
 
-		<meta property="og:title" content={data.title} />
-		<meta
-			property="og:description"
-			content={data.description ?? ''}
-		/>
-		<meta property="og:image" content={data.cover ?? "/og.webp"} />
+		<title>{title}</title>
+		<meta name="description" content={desc} />
+		<meta name="robots" content="index, follow" />
+		<link rel="canonical" href={canonical} />
+		<link rel="sitemap" href="/sitemap-index.xml" />
+
+		<!-- Open Graph -->
+		<meta property="og:type" content="article" />
+		<meta property="og:site_name" content="Flow-Like" />
+		<meta property="og:url" content={canonical} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={desc} />
+		<meta property="og:image" content={cover} />
 		<meta property="og:image:type" content="image/webp" />
 		<meta property="og:image:width" content="1280" />
 		<meta property="og:image:height" content="898" />
+		<meta property="article:published_time" content={pubISO} />
+		<meta property="article:modified_time" content={updISO} />
 
+		<!-- Twitter -->
 		<meta name="twitter:card" content="summary_large_image" />
-		<meta
-			name="twitter:title"
-			content="Flow-Like | Enterprise Automation"
-		/>
-		<meta
-			name="twitter:description"
-			content="Enterprise-grade workflow automation built for scale."
-		/>
-		<meta name="twitter:image" content={data.cover ?? "/og.webp"} />
+		<meta name="twitter:site" content="@greatco_de" />
+		<meta name="twitter:creator" content="@greatco_de" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={desc} />
+		<meta name="twitter:image" content={cover} />
+
+		{data.tags && <meta name="keywords" content={data.tags.join(", ")} />}
 	</head>
 	<body class="flex flex-col min-h-screen bg-background text-foreground bg-dot">
 		<div class="pointer-events-none fixed inset-0 h-full w-full bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] -z-[100]"/>

@@ -25,7 +25,7 @@ export function BlogHeader() {
 						<BsGithub width={5} height={5} className="w-5 h-5" />
 					</Button>
 				</a>
-				<a href="https://x.com/tm9657" target="_blank" rel="noreferrer">
+				<a href="https://x.com/greatco_de" target="_blank" rel="noreferrer">
 					<Button variant={"outline"} size={"icon"}>
 						<BsTwitterX width={5} height={5} className="w-5 h-5" />
 					</Button>

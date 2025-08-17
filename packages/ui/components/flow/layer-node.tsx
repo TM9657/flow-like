@@ -8,7 +8,7 @@ import {
 	Trash2Icon,
 	ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { toast } from "sonner";
 import {
 	ContextMenu,
@@ -18,7 +18,7 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
-import type { INode } from "../../lib";
+import type { IBoard, INode } from "../../lib";
 import { type ILayer, IPinType } from "../../lib/schema/flow/board";
 import { CommentDialog } from "./comment-dialog";
 import { FlowPin } from "./flow-pin";
@@ -32,6 +32,7 @@ export type LayerNode = Node<
 		boardId: string;
 		hash: string;
 		appId: string;
+		boardRef?: RefObject<IBoard | undefined>
 		pushLayer(layer: ILayer): Promise<void>;
 		onLayerUpdate(layer: ILayer): Promise<void>;
 		onLayerRemove(layer: ILayer, preserve_nodes: boolean): Promise<void>;
@@ -220,6 +221,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 				open={editing}
 				layer={props.data.layer}
 				onOpenChange={setEditing}
+				boardRef={props.data.boardRef}
 				onApply={async (updated) => {
 					const newLayer = {
 						...props.data.layer,
