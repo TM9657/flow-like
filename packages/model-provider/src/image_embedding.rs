@@ -1,3 +1,4 @@
+use flow_like_types::image::DynamicImage;
 use flow_like_types::Cacheable;
 use flow_like_types::Result;
 use flow_like_types::async_trait;
@@ -14,6 +15,6 @@ pub trait ImageEmbeddingModelLogic: Send + Sync + Cacheable + 'static {
     ) -> flow_like_types::Result<(GeneralTextSplitter, GeneralTextSplitter)>;
     async fn text_embed_query(&self, texts: &Vec<String>) -> Result<Vec<Vec<f32>>>;
     async fn text_embed_document(&self, texts: &Vec<String>) -> Result<Vec<Vec<f32>>>;
-    async fn image_embed(&self, image_paths: Vec<String>) -> Result<Vec<Vec<f32>>>;
+    async fn image_embed(&self, images: Vec<DynamicImage>) -> Result<Vec<Vec<f32>>>;
     fn as_cacheable(&self) -> Arc<dyn Cacheable>;
 }

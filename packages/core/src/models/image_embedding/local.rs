@@ -12,6 +12,7 @@ use flow_like_model_provider::{
 };
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_types::{Cacheable, Result, async_trait, sync::Mutex};
+use image::DynamicImage;
 use std::{any::Any, sync::Arc};
 
 #[derive(Clone)]
@@ -108,8 +109,8 @@ impl ImageEmbeddingModelLogic for LocalImageEmbeddingModel {
         return self.text_model.text_embed_document(texts).await;
     }
 
-    async fn image_embed(&self, image_paths: Vec<String>) -> Result<Vec<Vec<f32>>> {
-        let embeddings = match self.image_embedding_model.embed(image_paths, None) {
+    async fn image_embed(&self, images: Vec<DynamicImage>) -> Result<Vec<Vec<f32>>> {
+        let embeddings = match self.image_embedding_model.embed_images(images) {
             Ok(embeddings) => embeddings,
             Err(e) => {
                 println!("Error embedding image: {}", e);
