@@ -1,7 +1,3 @@
-
-use crate::utils::json::parse_with_schema::{
-    OpenAIFunction, OpenAIToolCall, validate_openai_functions_str, validate_openai_tool_call_str,
-};
 use flow_like::{
     bit::Bit,
     flow::{
@@ -13,13 +9,110 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::{history::{Content, ContentType, History, HistoryMessage, MessageContent, Role}, response::Response};
-
-use flow_like_types::{anyhow, async_trait, json, regex::Regex, Error, Value};
+use flow_like_model_provider::{
+    history::{History, Tool, ToolChoice, ToolCall},
+    response::Response,
+};
+use flow_like_types::{Error, Value, anyhow, async_trait, json, regex::Regex};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
+use crate::utils::json::parse_with_schema::tool_call_from_str;
+
+const SP_TEMPLATE_AUTO: &str = r#"
+# Instruction
+You are a helpful assistant with access to the tools below.
+
+# Tools
+Here are the schemas for the tools you *can* use:
+
+## Schemas
+TOOLS_STR
+
+## Tool Use Format
+<tooluse>
+    {
+        "name": "<name of the tool you want to use>", 
+        "arguments": "<key: value dict for args as defined by schema of the tool you want to use>"
+    }
+</tooluse>
+
+# Response Format
+Your tool use json data within the <tooluse></tooluse> will be validated by the tool json schemas above.
+
+The tool use data string inside the <tooluse></tooluse> tags *MUST* be compliant with the tool json schemas above.
+
+If you want to use a tool you *MUST* wrap your tool use json data in these xml tags: <tooluse></tooluse>.
+
+Do *NOT* use code blocks.
+
+Wrap every tool use in a pair of xml tags <tooluse></tooluse>.
+"#;
+
+const SP_TEMPLATE_REQUIRED: &str = r#"
+# Instruction
+You are a helpful assistant with access to the tools below.
+
+# Tools
+You *MUST* use one of the tools below to make your response.
+
+## Schemas
+TOOLS_STR
+
+## Tool Use Format
+<tooluse>
+    {
+        "name": "<name of the tool you want to use>", 
+        "arguments": "<key: value dict for args as defined by schema of the tool you want to use>"
+    }
+</tooluse>
+
+# Response Format
+Your tool use json data within the <tooluse></tooluse> will be validated by the tool json schemas above.
+
+The tool use data string inside the <tooluse></tooluse> tags *MUST* be compliant with the tool json schemas above.
+
+You *MUST* wrap your tool use json data in these xml tags: <tooluse></tooluse>.
+
+Do *NOT* use code blocks.
+
+Wrap every tool use in a pair of xml tags <tooluse></tooluse>.
+
+You *MUST* use at least one tool.
+"#;
+
+const SP_TEMPLATE_SPECIFIC: &str = r#"
+# Instruction
+You are a helpful assistant with access to the tool below.
+
+# Tool
+You *MUST* use the tools below to make your response.
+
+## Schema
+TOOL_STR
+
+## Tool Use Format
+<tooluse>
+    {
+        "name": "<name of the tool>", 
+        "arguments": "<key: value dict for args as defined by schema of the tool>"
+    }
+</tooluse>
+
+# Response Format
+Your tool use json data within the <tooluse></tooluse> will be validated by the tool json schemas above.
+
+The tool use data string inside the <tooluse></tooluse> tags *MUST* be compliant with the tool json schemas above.
+
+You *MUST* wrap your tool use json data in these xml tags: <tooluse></tooluse>.
+
+Do *NOT* use code blocks.
+
+Wrap your tool use in a pair of xml tags <tooluse></tooluse>.
+
+You *MUST* use the tool specified above to make your response.
+"#;
 
 /// Extract tagged substrings, e.g. Hello, <tool>extract this</tool> and <tool>this</tool>, good bye.
 pub fn extract_tagged_simple(text: &str, tag: &str) -> Result<Vec<String>, Error> {
@@ -123,23 +216,22 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         )
         .set_default_value(Some(json::json!("[]")));
 
-        // future: at some point we could allow for parallel tool execution
-        // for now, we only implement sequential processing in a loop to avoid writing to global variables at the same time
-        node.add_input_pin("thread_model", "Threads", "Threads", VariableType::String)
-            .set_default_value(Some(json::json!("tasks")))
-            .set_options(
-                PinOptions::new()
-                    .set_valid_values(vec!["sequential".to_string()])
-                    .build(),
-            );
-
         node.add_input_pin(
-            "max_iter",
-            "Maxium Iterations",
-            "Maximum Number of Iterations (Recursion Limit)",
-            VariableType::Integer,
+            "tool_choice",
+            "Tool Choice",
+            "Tool Choice Mode",
+            VariableType::String,
         )
-        .set_default_value(Some(json::json!(15)));
+        .set_options(
+            PinOptions::new()
+                .set_valid_values(vec![
+                    "Auto".to_string(),
+                    "Required".to_string(),
+                    "None".to_string(),
+                ])
+                .build(),
+        )
+        .set_default_value(Some(json::json!("Auto")));
 
         node.add_output_pin("exec_done", "Done", "Done Pin", VariableType::Execution);
 
@@ -153,8 +245,8 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
-            "tool_args",
-            "Tool Args",
+            "tool_call_args",
+            "Tool Call Args",
             "Tool Call Arguments",
             VariableType::Struct,
         );
@@ -165,18 +257,25 @@ impl NodeLogic for InvokeLLMWithToolsNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-
         context.deactivate_exec_pin("exec_done").await?;
 
         // fetch inputs
-        let recursion_limit: u64 = context.evaluate_pin("max_iter").await?;
         let model_bit = context.evaluate_pin::<Bit>("model").await?;
         let tools_str: String = context.evaluate_pin("tools").await?;
+        let tool_choice: String = context.evaluate_pin("tool_choice").await?;
+        let tool_choice = match tool_choice.as_str() {
+            "Required" => ToolChoice::Required,
+            "None" => ToolChoice::None,
+            _ => ToolChoice::Auto,
+        };
 
         // validate tools + deactivate all function exec output pins
-        let functions = validate_openai_functions_str(&tools_str)?;
-        for function in &functions {
-            context.deactivate_exec_pin(&function.name).await?
+        let tools: Vec<Tool> = match json::from_str(&tools_str) {
+            Ok(value) => value,
+            Err(e) => return Err(anyhow!("Failed to parse tools: {e:?}")),
+        };
+        for tool in &tools {
+            context.deactivate_exec_pin(&tool.function.name).await?
         }
 
         // log model name
@@ -184,6 +283,133 @@ impl NodeLogic for InvokeLLMWithToolsNode {
             context.log_message(&format!("Loading model {:?}", meta.name), LogLevel::Debug);
         }
 
+        // render system prompt with add-on for tool definitions
+        let system_prompt_tools = if tools.len() > 0 {
+            match tool_choice {
+                ToolChoice::Auto => SP_TEMPLATE_AUTO.replace("TOOLS_STR", &tools_str),
+                ToolChoice::Required => SP_TEMPLATE_REQUIRED.replace("TOOLS_STR", &tools_str),
+                _ => String::from(""),
+            }
+        } else {
+            String::from("")
+        };
+        let mut history = context.evaluate_pin::<History>("history").await?;
+        let system_prompt = match history.get_system_prompt() {
+            Some(system_prompt) => {
+                format!("{}\n\n{}", system_prompt, system_prompt_tools) // handle previously set system prompts
+            }
+            None => system_prompt_tools,
+        };
+        history.set_system_prompt(system_prompt.to_string());
+        context.log_message(
+            &format!("system prompt: {}", system_prompt),
+            LogLevel::Debug,
+        );
+
+        // generate response
+        let response = {
+            // load model
+            let model_factory = context.app_state.lock().await.model_factory.clone();
+            let model = model_factory
+                .lock()
+                .await
+                .build(&model_bit, context.app_state.clone())
+                .await?;
+            model.invoke(&history, None).await?
+        }; // drop model
+
+        // parse response
+        let mut response_string = "".to_string();
+        if let Some(response) = response.last_message() {
+            response_string = response.content.clone().unwrap_or("".to_string());
+        }
+        context.log_message(
+            &format!("llm response: '{}'", &response_string),
+            LogLevel::Debug,
+        );
+
+        // parse tool calls (if any)
+        let tool_calls = if response_string.contains("<tooluse>") {
+            let tool_calls_str = extract_tagged(&response_string, "tooluse")?;
+            let tool_calls: Result<Vec<ToolCall>, Error> = tool_calls_str
+                .iter()
+                .map(|tool_call_str| tool_call_from_str(&tools, tool_call_str))
+                .collect();
+            tool_calls?
+        } else {
+            vec![]
+        };
+
+        // LLM wants to make tool calls -> execute subcontexts
+        if tool_calls.len() > 0 {
+            if let ToolChoice::None = tool_choice {
+                return Err(anyhow!("LLM made tool calls but tool choice is None!"))
+            };
+
+            //let tool_call_id_pin = context.get_pin_by_name("tool_call_id").await?;
+            let tool_call_args_pin = context.get_pin_by_name("tool_call_args").await?;
+            for tool_call in tool_calls.iter() {
+                let tool_call_args: Value = json::from_str(&tool_call.function.arguments)?;
+                context.log_message(
+                    &format!("exec tool {}", &tool_call.function.name),
+                    LogLevel::Debug,
+                );
+
+                // deactivate all tool exec pins
+                for tool in &tools {
+                    context.deactivate_exec_pin(&tool.function.name).await?
+                }
+
+                // set tool args + activate tool exec pin
+                tool_call_args_pin
+                    .lock()
+                    .await
+                    .set_value(tool_call_args)
+                    .await;
+                context.activate_exec_pin(&tool_call.function.name).await?;
+
+                // execute tool subcontext
+                let tool_exec_pin = context.get_pin_by_name(&tool_call.function.name).await?;
+                let tool_flow = tool_exec_pin.lock().await.get_connected_nodes().await;
+                for node in &tool_flow {
+                    let mut sub_context = context.create_sub_context(node).await;
+                    let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
+
+                    sub_context.end_trace();
+                    context.push_sub_context(sub_context);
+                    if run.is_err() {
+                        let error = run.err().unwrap();
+                        context.log_message(
+                            &format!(
+                                "Error executing tool {}: {:?}",
+                                &tool_call.function.name, error
+                            ),
+                            LogLevel::Error,
+                        );
+                    }
+                }
+            }
+            // deactivate all tool exec pins
+            for tool in &tools {
+                context.deactivate_exec_pin(&tool.function.name).await?
+            }
+
+        // LLM doesn't want to make any tool calls -> return response as-is
+        } else {
+            match tool_choice {
+                ToolChoice::Required => {
+                    return Err(anyhow!("LLM made no tool calls but at least one is required!"))
+                },
+                _ => {
+                    context
+                        .set_pin_value("response", json::json!(response))
+                        .await?;
+                }
+            }
+        }
+
+        // all done
+        context.activate_exec_pin("exec_done").await?;
         Ok(())
     }
 
@@ -193,11 +419,11 @@ impl NodeLogic for InvokeLLMWithToolsNode {
             .values()
             .filter(|p| {
                 p.pin_type == PinType::Output
-                    && (p.name != "exec_done" && p.name != "response" && p.name != "tool_args") // p.description == "Tool Exec" doesn't seem to work as filter cond
+                    && (p.name != "exec_done" && p.name != "response" && p.name != "tool_call_args") // p.description == "Tool Exec" doesn't seem to work as filter cond
             })
             .collect();
 
-        let schema_str: String = node
+        let tools_str: String = node
             .get_pin_by_name("tools")
             .and_then(|pin| pin.default_value.clone())
             .and_then(|bytes| flow_like_types::json::from_slice::<Value>(&bytes).ok())
@@ -209,7 +435,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
             .map(|p| (p.name.clone(), *p))
             .collect::<HashMap<_, _>>();
 
-        let update_tools: Vec<OpenAIFunction> = match validate_openai_functions_str(&schema_str) {
+        let update_tools: Vec<Tool> = match json::from_str(&tools_str) {
             Ok(tools) => tools,
             Err(err) => {
                 node.error = Some(format!("Failed to parse tools: {err:?}").to_string());
@@ -221,9 +447,12 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         let mut missing_tool_exec_refs = HashSet::new();
 
         for update_tool in update_tools {
-            all_tool_exec_refs.insert(update_tool.name.clone());
-            if current_tool_exec_refs.remove(&update_tool.name).is_none() {
-                missing_tool_exec_refs.insert(update_tool.name.clone());
+            all_tool_exec_refs.insert(update_tool.function.name.clone());
+            if current_tool_exec_refs
+                .remove(&update_tool.function.name)
+                .is_none()
+            {
+                missing_tool_exec_refs.insert(update_tool.function.name.clone());
             }
         }
 
