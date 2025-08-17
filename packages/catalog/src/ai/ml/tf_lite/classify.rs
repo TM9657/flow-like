@@ -174,7 +174,7 @@ impl NodeLogic for TfliteImageClassificationNode {
                             (1, ih as usize, iw as usize, 3),
                             |(_, y, x, c)| {
                                 let p = resized.get_pixel(x as u32, y as u32);
-                                p[c] as f32 / 255.0
+                                (p[c] as f32 / 127.5 - 1.0) // as f32 / 255.0
                             },
                         );
                         (TypedFact::dt_shape(f32::datum_type(), input_shape), arr.into())
