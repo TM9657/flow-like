@@ -490,12 +490,32 @@ impl InternalRun {
             for (pin_id, pin) in &node.pins {
                 let internal_pin = InternalPin {
                     pin: Arc::new(Mutex::new(pin.clone())),
-                    node: Weak::new(),
+                    node: Some(Weak::new()),
                     connected_to: vec![],
                     depends_on: vec![],
+                    layer_pin: false,
                 };
 
                 pin_to_node.insert(pin_id, (node_id, node.is_pure()));
+                pins.insert(pin.id.clone(), Arc::new(Mutex::new(internal_pin)));
+            }
+        }
+
+        for layer in board.layers.values() {
+            for (pin_id, pin) in &layer.pins {
+                if pins.contains_key(pin_id) {
+                    // this is the old layer format, where we just relayed the connected pin to the layers pin.
+                    continue;
+                }
+
+                let internal_pin = InternalPin {
+                    pin: Arc::new(Mutex::new(pin.clone())),
+                    node: None,
+                    connected_to: vec![],
+                    depends_on: vec![],
+                    layer_pin: true,
+                };
+
                 pins.insert(pin.id.clone(), Arc::new(Mutex::new(internal_pin)));
             }
         }
@@ -571,7 +591,7 @@ impl InternalRun {
 
             for internal_pin in node_pins.values() {
                 let mut pin_guard = internal_pin.lock().await;
-                pin_guard.node = Arc::downgrade(&internal_node);
+                pin_guard.node = Some(Arc::downgrade(&internal_node));
             }
 
             if payload.id == node.id {

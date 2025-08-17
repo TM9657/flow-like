@@ -7,10 +7,7 @@ use super::{
 use crate::{
     app::App,
     state::FlowLikeState,
-    utils::{
-        compression::{compress_to_file, from_compressed},
-        hash::hash_string_non_cryptographic,
-    },
+    utils::compression::{compress_to_file, from_compressed},
 };
 use commands::GenericCommand;
 use flow_like_storage::object_store::{ObjectStore, path::Path};
@@ -20,12 +17,13 @@ use highway::{HighwayHash, HighwayHasher};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{Arc, Weak},
     time::SystemTime,
 };
 use tracing::instrument;
 
+pub mod cleanup;
 pub mod commands;
 
 #[derive(Debug, Clone)]
@@ -65,6 +63,8 @@ pub struct Layer {
     pub variables: HashMap<String, Variable>,
     pub comments: HashMap<String, Comment>,
     pub coordinates: (f32, f32, f32),
+    pub in_coordinates: Option<(f32, f32, f32)>,
+    pub out_coordinates: Option<(f32, f32, f32)>,
     pub pins: HashMap<String, Pin>,
     pub comment: Option<String>,
     pub error: Option<String>,
@@ -83,6 +83,8 @@ impl Layer {
             variables: HashMap::new(),
             comments: HashMap::new(),
             coordinates: (0.0, 0.0, 0.0),
+            in_coordinates: None,
+            out_coordinates: None,
             pins: HashMap::new(),
             comment: None,
             error: None,
@@ -130,9 +132,8 @@ impl Layer {
 
         let mut sorted_pins: Vec<_> = self.pins.iter().collect();
         sorted_pins.sort_by_key(|(id, _)| *id);
-        for (id, pin) in sorted_pins {
-            hasher.append(id.as_bytes());
-            hasher.append(pin.id.as_bytes());
+        for (_id, pin) in sorted_pins {
+            pin.hash(&mut hasher);
         }
 
         hasher.append(&self.coordinates.0.to_le_bytes());
@@ -260,6 +261,7 @@ impl Board {
         command.execute(self, state.clone()).await?;
         self.node_updates(state).await;
         self.updated_at = SystemTime::now();
+        self.cleanup();
         Ok(command)
     }
 
@@ -277,6 +279,7 @@ impl Board {
         }
         self.node_updates(state).await;
         self.updated_at = SystemTime::now();
+        self.cleanup();
         Ok(commands)
     }
 
@@ -289,6 +292,7 @@ impl Board {
         for command in commands.iter_mut().rev() {
             command.undo(self, state.clone()).await?;
         }
+        self.cleanup();
         Ok(())
     }
 
@@ -301,209 +305,8 @@ impl Board {
         for command in commands.iter_mut().rev() {
             command.execute(self, state.clone()).await?;
         }
-        Ok(())
-    }
-
-    pub fn cleanup(&mut self) {
-        let mut refs = self.refs.clone();
-        let mut abandoned_hashes = refs.keys().cloned().collect::<HashSet<String>>();
-        for node in self.nodes.values_mut() {
-            if !refs.contains_key(&node.description) {
-                let description_hash = hash_string_non_cryptographic(&node.description).to_string();
-                refs.insert(description_hash.clone(), node.description.clone());
-                abandoned_hashes.remove(&description_hash);
-                node.description = description_hash;
-            } else {
-                abandoned_hashes.remove(&node.description);
-            }
-
-            for pin in node.pins.values_mut() {
-                if !refs.contains_key(&pin.description) {
-                    let description_hash =
-                        hash_string_non_cryptographic(&pin.description).to_string();
-                    refs.insert(description_hash.clone(), pin.description.clone());
-                    abandoned_hashes.remove(&description_hash);
-                    pin.description = description_hash;
-                } else {
-                    abandoned_hashes.remove(&pin.description);
-                }
-
-                if let Some(schema) = pin.schema.clone() {
-                    if !refs.contains_key(&schema) {
-                        let schema_hash = hash_string_non_cryptographic(&schema).to_string();
-                        refs.insert(schema_hash.clone(), schema.clone());
-                        abandoned_hashes.remove(&schema_hash);
-                        pin.schema = Some(schema_hash);
-                    } else {
-                        abandoned_hashes.remove(&schema);
-                    }
-                }
-            }
-        }
-
-        self.refs = refs;
-    }
-
-    pub fn fix_pins_set_layer(&mut self) {
-        let mut pins = HashMap::with_capacity(self.nodes.len() * 3);
-        let mut layer_pins = HashMap::with_capacity(self.nodes.len() * 3);
-        let default_layer = "default".to_string();
-        for node in self.nodes.values() {
-            for pin in node.pins.values() {
-                pins.insert(pin.id.clone(), pin);
-                let layer = node.layer.as_ref().unwrap_or(&default_layer);
-                layer_pins.insert(&pin.id, layer);
-            }
-        }
-
-        let mut old_pins = HashMap::with_capacity(pins.len());
-
-        for (layer_id, layer) in self.layers.iter_mut() {
-            for (pin_id, pin) in layer.pins.drain() {
-                old_pins.insert(format!("{}-{}", layer_id, pin_id), pin);
-            }
-        }
-
-        let mut node_pins_to_remove = HashMap::new();
-        let mut node_pins_connected_to_remove = HashMap::new();
-        let mut node_pins_depends_on_remove = HashMap::new();
-        for node in self.nodes.values() {
-            for pin in node.pins.values() {
-                if !pins.contains_key(&pin.id) {
-                    node_pins_to_remove.insert(node.id.clone(), pin.id.clone());
-                    continue;
-                }
-
-                for connected_to in &pin.connected_to {
-                    if let Some(connected_pin) = pins.get(connected_to) {
-                        if !connected_pin.depends_on.contains(&pin.id) {
-                            node_pins_connected_to_remove
-                                .entry(node.id.clone())
-                                .or_insert_with(HashMap::new)
-                                .insert(pin.id.clone(), connected_to.clone());
-
-                            continue;
-                        }
-
-                        if let Some(layer) = layer_pins.get(connected_to) {
-                            if layer != &node.layer.as_ref().unwrap_or(&default_layer) {
-                                if let Some(layer) = &node.layer {
-                                    if let Some(layer) = self.layers.get_mut(layer) {
-                                        if !layer.pins.contains_key(&pin.id) {
-                                            if let Some(old_pin) =
-                                                old_pins.remove(&format!("{}-{}", layer.id, pin.id))
-                                            {
-                                                layer.pins.insert(pin.id.clone(), old_pin);
-                                            } else {
-                                                let mut new_pin = pin.clone();
-                                                new_pin.index = layer
-                                                    .pins
-                                                    .iter()
-                                                    .filter(|(_, p)| p.pin_type == new_pin.pin_type)
-                                                    .count()
-                                                    as u16
-                                                    + 1;
-                                                layer.pins.insert(pin.id.clone(), new_pin);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        continue;
-                    }
-
-                    node_pins_connected_to_remove
-                        .entry(node.id.clone())
-                        .or_insert_with(HashMap::new)
-                        .insert(pin.id.clone(), connected_to.clone());
-                }
-
-                for depends_on in &pin.depends_on {
-                    if let Some(depends_on_pin) = pins.get(depends_on) {
-                        if !depends_on_pin.connected_to.contains(&pin.id) {
-                            node_pins_depends_on_remove
-                                .entry(node.id.clone())
-                                .or_insert_with(HashMap::new)
-                                .insert(pin.id.clone(), depends_on.clone());
-
-                            continue;
-                        }
-
-                        if let Some(layer) = layer_pins.get(depends_on) {
-                            if layer != &node.layer.as_ref().unwrap_or(&default_layer) {
-                                if let Some(layer) = &node.layer {
-                                    if let Some(layer) = self.layers.get_mut(layer) {
-                                        if !layer.pins.contains_key(&pin.id) {
-                                            if let Some(old_pin) =
-                                                old_pins.remove(&format!("{}-{}", layer.id, pin.id))
-                                            {
-                                                layer.pins.insert(pin.id.clone(), old_pin);
-                                            } else {
-                                                let mut new_pin = pin.clone();
-                                                new_pin.index = layer
-                                                    .pins
-                                                    .iter()
-                                                    .filter(|(_, p)| p.pin_type == new_pin.pin_type)
-                                                    .count()
-                                                    as u16
-                                                    + 1;
-                                                layer.pins.insert(pin.id.clone(), new_pin);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        continue;
-                    }
-
-                    node_pins_depends_on_remove
-                        .entry(node.id.clone())
-                        .or_insert_with(HashMap::new)
-                        .insert(pin.id.clone(), depends_on.clone());
-                }
-            }
-        }
-
-        for (node_id, pin_id) in node_pins_to_remove {
-            if let Some(node) = self.nodes.get_mut(&node_id) {
-                println!("Node Pins to remove: {} {}", node_id, pin_id);
-                node.pins.remove(&pin_id);
-            }
-        }
-
-        for (node_id, pins) in node_pins_connected_to_remove {
-            if let Some(node) = self.nodes.get_mut(&node_id) {
-                for (pin_id, connected_to) in pins {
-                    if let Some(pin) = node.pins.get_mut(&pin_id) {
-                        println!(
-                            "Node Pins connected to remove: {} {} {}",
-                            node_id, pin_id, connected_to
-                        );
-                        pin.connected_to.remove(&connected_to);
-                    }
-                }
-            }
-        }
-
-        for (node_id, pins) in node_pins_depends_on_remove {
-            if let Some(node) = self.nodes.get_mut(&node_id) {
-                for (pin_id, depends_on) in pins {
-                    if let Some(pin) = node.pins.get_mut(&pin_id) {
-                        println!(
-                            "Node Pins depends on remove: {} {} {}",
-                            node_id, pin_id, depends_on
-                        );
-                        pin.depends_on.remove(&depends_on);
-                    }
-                }
-            }
-        }
-
         self.cleanup();
+        Ok(())
     }
 
     pub fn get_pin_by_id(&self, pin_id: &str) -> Option<&Pin> {
@@ -692,7 +495,6 @@ impl Board {
         board.board_dir = board_dir;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
-        board.fix_pins_set_layer();
         Ok(board)
     }
 
@@ -897,7 +699,6 @@ impl Board {
         board.board_dir = board_dir;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
-        board.fix_pins_set_layer();
         Ok(board)
     }
 
@@ -985,6 +786,7 @@ pub struct Comment {
     pub color: Option<String>,
     pub z_index: Option<i32>,
     pub hash: Option<u64>,
+    pub is_locked: Option<bool>,
 }
 
 impl Comment {
@@ -1026,6 +828,10 @@ impl Comment {
 
         if let Some(z_index) = self.z_index {
             hasher.append(&z_index.to_le_bytes());
+        }
+
+        if let Some(is_locked) = self.is_locked {
+            hasher.append(&[is_locked as u8]);
         }
 
         self.hash = Some(hasher.finalize64());

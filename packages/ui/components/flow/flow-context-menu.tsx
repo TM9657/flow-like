@@ -1,4 +1,4 @@
-import { SquarePlusIcon } from "lucide-react";
+import { MessageCircleDashedIcon, PlayCircleIcon, ZapIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMiniSearch } from "react-minisearch";
 import {
@@ -11,6 +11,15 @@ import { type IBoard, doPinsMatch } from "../../lib";
 import type { INode } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
 import { convertJsonToUint8Array } from "../../lib/uint8";
+import {
+	Button,
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	Label,
+} from "../ui";
 import { Checkbox } from "../ui/checkbox";
 import { Input } from "../ui/input";
 import { ScrollArea } from "../ui/scroll-area";
@@ -23,6 +32,7 @@ export function FlowContextMenu({
 	refs,
 	children,
 	droppedPin,
+	onPlaceholder,
 	onNodePlace,
 	onCommentPlace,
 	onClose,
@@ -32,13 +42,32 @@ export function FlowContextMenu({
 	refs: { [key: string]: string };
 	children: React.ReactNode;
 	droppedPin?: IPin;
+	onPlaceholder: (name: string) => void;
 	onNodePlace: (node: INode) => void;
 	onCommentPlace: () => void;
 	onClose: () => void;
 }>) {
 	const inputRef = useRef<HTMLInputElement>(null);
+	const placeholderInputRef = useRef<HTMLInputElement>(null);
 	const [filter, setFilter] = useState("");
 	const [contextSensitive, setContextSensitive] = useState(true);
+	const [isPlaceholderOpen, setIsPlaceholderOpen] = useState(false);
+	const [placeholderName, setPlaceholderName] = useState("Placeholder");
+
+	useEffect(() => {
+		if (isPlaceholderOpen) {
+			requestAnimationFrame(() => placeholderInputRef.current?.focus());
+		}
+	}, [isPlaceholderOpen]);
+
+	const confirmPlaceholder = () => {
+		const name = placeholderName.trim();
+		if (!name) return;
+		onPlaceholder(name);
+		setIsPlaceholderOpen(false);
+		setPlaceholderName("Placeholder");
+	};
+
 	const sortedNodes = useMemo(() => {
 		if (!nodes) return [];
 
@@ -292,106 +321,171 @@ export function FlowContextMenu({
 	}, [sortedNodes, board]);
 
 	return (
-		<ContextMenu
-			onOpenChange={(open) => {
-				if (!open) {
-					onClose();
-					setFilter("");
-				}
-			}}
-		>
-			<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-			<ContextMenuContent className="w-80 max-h-96 overflow-y-hidden overflow-x-hidden">
-				<div className="sticky">
-					<div className="flex flex-row w-full items-center justify-between bg-accent text-accent-foreground p-1 mb-1">
-						<small className="font-bold">Actions</small>
-						{droppedPin && (
-							<div className="flex flex-row items-center gap-2">
-								<div className="grid gap-1.5 leading-none">
-									<small>Context Sensitive</small>
+		<>
+			<ContextMenu
+				onOpenChange={(open) => {
+					if (!open && !isPlaceholderOpen) {
+						onClose();
+						setFilter("");
+					}
+				}}
+			>
+				<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+				<ContextMenuContent className="w-80 max-h-[30rem] h-[30rem] overflow-y-hidden overflow-x-hidden flex flex-col">
+					<div className="sticky">
+						<div className="flex flex-row w-full items-center justify-between bg-accent text-accent-foreground p-1 mb-1">
+							<small className="font-bold">Actions</small>
+							{droppedPin && (
+								<div className="flex flex-row items-center gap-2">
+									<div className="grid gap-1.5 leading-none">
+										<small>Context Sensitive</small>
+									</div>
+									<Checkbox
+										id="context-sensitive"
+										checked={contextSensitive}
+										onCheckedChange={(checked) =>
+											setContextSensitive(checked.valueOf() as boolean)
+										}
+									/>
 								</div>
-								<Checkbox
-									id="context-sensitive"
-									checked={contextSensitive}
-									onCheckedChange={(checked) =>
-										setContextSensitive(checked.valueOf() as boolean)
-									}
-								/>
-							</div>
-						)}
+							)}
+						</div>
+						<ContextMenuItem
+							className="flex flex-row gap-1 items-center"
+							onClick={() => onCommentPlace()}
+						>
+							<MessageCircleDashedIcon className="w-4 h-4" />
+							Comment
+						</ContextMenuItem>
+						<ContextMenuItem
+							className="flex flex-row gap-1 items-center"
+							onClick={() => {
+								const node_ref = sortedNodes.find(
+									(node) => node.name === "events_simple",
+								);
+								if (node_ref) onNodePlace(node_ref);
+							}}
+						>
+							<PlayCircleIcon className="w-4 h-4" />
+							Event
+						</ContextMenuItem>
+						<ContextMenuItem
+							className="flex flex-row gap-1 items-center"
+							onClick={() => setIsPlaceholderOpen(true)}
+						>
+							<ZapIcon className="w-4 h-4" />
+							Placeholder
+						</ContextMenuItem>
+						<Separator className="my-1" />
+						<Input
+							ref={inputRef}
+							autoComplete="off"
+							spellCheck="false"
+							autoCorrect="off"
+							autoCapitalize="off"
+							className="mb-1"
+							autoFocus
+							type="search"
+							placeholder="Search..."
+							value={filter}
+							onChange={(e) => {
+								setFilter(e.target.value);
+								search(e.target.value);
+							}}
+						/>
 					</div>
-					<ContextMenuItem
-						className="flex flex-row gap-1 items-center"
-						onClick={() => onCommentPlace()}
-					>
-						<SquarePlusIcon className="w-4 h-4" />
-						Comment
-					</ContextMenuItem>
-					<ContextMenuItem
-						className="flex flex-row gap-1 items-center"
-						onClick={() => {
-							const node_ref = sortedNodes.find(
-								(node) => node.name === "events_simple",
-							);
-							if (node_ref) onNodePlace(node_ref);
-						}}
-					>
-						<SquarePlusIcon className="w-4 h-4" />
-						Event
-					</ContextMenuItem>
-					<Separator className="my-1" />
-					<Input
-						ref={inputRef}
-						autoComplete="off"
-						spellCheck="false"
-						autoCorrect="off"
-						autoCapitalize="off"
-						className="mb-1"
-						autoFocus
-						type="search"
-						placeholder="Search..."
-						value={filter}
-						onChange={(e) => {
-							setFilter(e.target.value);
-							search(e.target.value);
-						}}
-					/>
-				</div>
-				<div className="pr-1">
-					<ScrollArea
-						className="h-52 w-[calc(20rem-0.5rem)] border rounded-md"
-						onFocusCapture={() => {
-							if (inputRef.current && filter !== "") {
-								inputRef.current.focus();
-							}
-						}}
-					>
-						{nodes && (
-							<FlowContextMenuNodes
-								items={
-									droppedPin && contextSensitive
-										? [
-												...(filter === ""
-													? sortedNodes
-													: (searchResults ?? [])
-												).filter((node) => {
-													const pins = Object.values(node.pins);
-													return pins.some((pin) => {
-														if (pin.pin_type === droppedPin.pin_type)
-															return false;
-														return doPinsMatch(pin, droppedPin, refs);
-													});
-												}),
-											]
-										: [...(filter === "" ? sortedNodes : (searchResults ?? []))]
+					<div className="pr-1 flex flex-grow flex-col overflow-hidden">
+						<ScrollArea
+							className="h-full w-[calc(20rem-0.5rem)] max-h-full overflow-auto border rounded-md"
+							onFocusCapture={() => {
+								if (inputRef.current && filter !== "") {
+									inputRef.current.focus();
 								}
-								filter={filter}
-								onNodePlace={async (node) => onNodePlace(node)}
-							/>
-						)}
-					</ScrollArea>
-				</div>
-			</ContextMenuContent>
-		</ContextMenu>
+							}}
+						>
+							{nodes && (
+								<FlowContextMenuNodes
+									items={
+										droppedPin && contextSensitive
+											? [
+													...(filter === ""
+														? sortedNodes
+														: (searchResults ?? [])
+													).filter((node) => {
+														const pins = Object.values(node.pins);
+														return pins.some((pin) => {
+															if (pin.pin_type === droppedPin.pin_type)
+																return false;
+															return doPinsMatch(pin, droppedPin, refs, node);
+														});
+													}),
+												]
+											: [
+													...(filter === ""
+														? sortedNodes
+														: (searchResults ?? [])),
+												]
+									}
+									filter={filter}
+									onNodePlace={async (node) => onNodePlace(node)}
+								/>
+							)}
+						</ScrollArea>
+					</div>
+				</ContextMenuContent>
+			</ContextMenu>
+			<Dialog
+				open={isPlaceholderOpen}
+				onOpenChange={(open) => {
+					setIsPlaceholderOpen(open);
+					if (!open) {
+						onClose();
+					}
+				}}
+			>
+				<DialogContent
+					className="sm:max-w-md"
+					onOpenAutoFocus={(e) => e.preventDefault()} // we'll focus manually
+				>
+					<DialogHeader>
+						<DialogTitle>Name Your Placeholder</DialogTitle>
+					</DialogHeader>
+					<div className="grid gap-2">
+						<Label htmlFor="placeholder-name">Name</Label>
+						<Input
+							id="placeholder-name"
+							ref={placeholderInputRef}
+							placeholder="e.g. Temporary Result"
+							value={placeholderName}
+							onChange={(e) => setPlaceholderName(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									e.preventDefault();
+									confirmPlaceholder();
+								}
+								if (e.key === "Escape") {
+									e.preventDefault();
+									setIsPlaceholderOpen(false);
+								}
+							}}
+						/>
+					</div>
+					<DialogFooter className="mt-4">
+						<Button
+							variant="outline"
+							onClick={() => setIsPlaceholderOpen(false)}
+						>
+							Cancel
+						</Button>
+						<Button
+							onClick={confirmPlaceholder}
+							disabled={!placeholderName.trim()}
+						>
+							Create
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+		</>
 	);
 }

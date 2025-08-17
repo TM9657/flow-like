@@ -18,13 +18,13 @@ nalgebra = "0.34.0"
 schemars.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
-rayon = "1.10.0"
-csv = "1.3.1"
 csv-async = {version="1.3.0", features = ["tokio"]}
-htmd = "0.2.2"
+htmd = "0.3.0"
 scraper = "0.23.1"
 async-imap = {version = "0.11.1", default-features = false, features = ["runtime-tokio", "tokio"]}
 async-native-tls = { version = "0.5", default-features = false, features = ["runtime-tokio"] }
 async-smtp = { version = "0.10.2", default-features = false, features = ["runtime-tokio", "tokio"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 mail-parser = "0.11.0"
+# tract-tflite = { path = "../../../tract/tflite" }
+tract-tflite = { git = "https://github.com/TM9657/tract", rev = "ed3b020" }

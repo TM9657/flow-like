@@ -1,7 +1,7 @@
 use flow_like_types::{Value, json::json, sync::Mutex};
 use std::{
     collections::{HashMap, HashSet},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 use crate::flow::{
@@ -172,6 +172,9 @@ impl InternalNode {
 
     pub async fn get_connected(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let mut connected = Vec::with_capacity(self.pins.len());
+        let mut seen_nodes: HashSet<usize> = HashSet::new();
+        let mut visited_pins: HashSet<usize> = HashSet::new();
+        let mut stack: Vec<Weak<Mutex<InternalPin>>> = Vec::new();
 
         for pin in self.pins.values() {
             let pin_guard = pin.lock().await;
@@ -180,20 +183,44 @@ impl InternalNode {
             if pin.pin_type != PinType::Output {
                 continue;
             }
-
             drop(pin);
 
-            let connected_pins = pin_guard.connected_to.clone();
+            let seeds = pin_guard.connected_to.clone();
+            drop(pin_guard);
 
-            for connected_pin in &connected_pins {
-                let connected_pin_guard = connected_pin
+            let cap = seeds.len();
+            visited_pins.clear();
+            stack.clear();
+            if stack.capacity() < cap {
+                stack.reserve(cap - stack.capacity());
+            }
+            stack.extend(seeds);
+
+            while let Some(next_weak) = stack.pop() {
+                let pin_arc = next_weak
                     .upgrade()
                     .ok_or(flow_like_types::anyhow!("Failed to lock Pin"))?;
-                let connected_pin_guard = connected_pin_guard.lock().await;
-                let connected_node = connected_pin_guard.node.upgrade();
 
-                if let Some(connected_node) = connected_node {
-                    connected.push(connected_node);
+                let pin_key = Arc::as_ptr(&pin_arc) as usize;
+                if !visited_pins.insert(pin_key) {
+                    continue;
+                }
+
+                let parent_opt = {
+                    let guard = pin_arc.lock().await;
+                    if let Some(node_weak) = &guard.node {
+                        node_weak.upgrade()
+                    } else {
+                        stack.extend(guard.connected_to.iter().cloned());
+                        None
+                    }
+                };
+
+                if let Some(parent) = parent_opt {
+                    let node_key = Arc::as_ptr(&parent) as usize;
+                    if seen_nodes.insert(node_key) {
+                        connected.push(parent);
+                    }
                 }
             }
         }
@@ -205,48 +232,66 @@ impl InternalNode {
         &self,
         filter_valid: bool,
     ) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
-        let mut connected = vec![];
+        let mut connected = Vec::with_capacity(self.pins.len());
+        let mut seen_nodes: HashSet<usize> = HashSet::new();
+        let mut visited_pins: HashSet<usize> = HashSet::new();
+        let mut stack: Vec<Weak<Mutex<InternalPin>>> = Vec::new();
 
         for pin in self.pins.values() {
-            let value = evaluate_pin_value(pin.clone()).await;
-
-            if filter_valid && value.is_err() {
-                continue;
-            }
-
-            let bool_val = match value.unwrap() {
-                Value::Bool(b) => b,
-                _ => false,
-            };
-
-            if filter_valid && !bool_val {
-                continue;
+            if filter_valid {
+                match evaluate_pin_value(pin.clone()).await {
+                    Ok(Value::Bool(true)) => {}
+                    _ => continue,
+                }
             }
 
             let pin_guard = pin.lock().await;
-            let pin = pin_guard.pin.lock().await;
+            let pin_meta = pin_guard.pin.lock().await;
 
-            if pin.pin_type != PinType::Output {
+            if pin_meta.pin_type != PinType::Output {
                 continue;
             }
-
-            if pin.data_type != VariableType::Execution {
+            if pin_meta.data_type != VariableType::Execution {
                 continue;
             }
+            drop(pin_meta);
 
-            drop(pin);
+            let seeds = pin_guard.connected_to.clone();
+            drop(pin_guard);
 
-            let connected_pins = pin_guard.connected_to.clone();
+            let cap = seeds.len();
+            visited_pins.clear();
+            stack.clear();
+            if stack.capacity() < cap {
+                stack.reserve(cap - stack.capacity());
+            }
+            stack.extend(seeds);
 
-            for connected_pin in &connected_pins {
-                let connected_pin_guard = connected_pin
+            while let Some(next_weak) = stack.pop() {
+                let pin_arc = next_weak
                     .upgrade()
                     .ok_or(flow_like_types::anyhow!("Failed to lock Pin"))?;
-                let connected_pin_guard = connected_pin_guard.lock().await;
-                let connected_node = connected_pin_guard.node.upgrade();
 
-                if let Some(connected_node) = connected_node {
-                    connected.push(connected_node);
+                let pin_key = Arc::as_ptr(&pin_arc) as usize;
+                if !visited_pins.insert(pin_key) {
+                    continue;
+                }
+
+                let parent_opt = {
+                    let guard = pin_arc.lock().await;
+                    if let Some(node_weak) = &guard.node {
+                        node_weak.upgrade()
+                    } else {
+                        stack.extend(guard.connected_to.iter().cloned());
+                        None
+                    }
+                };
+
+                if let Some(parent) = parent_opt {
+                    let node_key = Arc::as_ptr(&parent) as usize;
+                    if seen_nodes.insert(node_key) {
+                        connected.push(parent);
+                    }
                 }
             }
         }
@@ -255,43 +300,61 @@ impl InternalNode {
     }
 
     pub async fn get_error_handled_nodes(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
-        let mut connected = vec![];
-
         let pin = self.get_pin_by_name("auto_handle_error").await?;
         let active = evaluate_pin_value(pin.clone()).await?;
-
         let active = match active {
             Value::Bool(b) => b,
             _ => false,
         };
-
         if !active {
             return Err(flow_like_types::anyhow!("Error Pin not active"));
         }
 
         let pin_guard = pin.lock().await;
-        let pin = pin_guard.pin.lock().await;
-
-        if pin.pin_type != PinType::Output {
+        let pin_meta = pin_guard.pin.lock().await;
+        if pin_meta.pin_type != PinType::Output {
             return Err(flow_like_types::anyhow!("Pin is not an output pin"));
         }
-
-        if pin.data_type != VariableType::Execution {
+        if pin_meta.data_type != VariableType::Execution {
             return Err(flow_like_types::anyhow!("Pin is not an execution pin"));
         }
+        drop(pin_meta);
 
-        drop(pin);
-        let connected_pins = pin_guard.connected_to.clone();
+        let seeds = pin_guard.connected_to.clone();
+        drop(pin_guard);
 
-        for connected_pin in &connected_pins {
-            let connected_pin_guard = connected_pin
+        let cap = seeds.len();
+        let mut connected = Vec::with_capacity(cap);
+        let mut seen_nodes: HashSet<usize> = HashSet::with_capacity(cap.saturating_mul(2));
+        let mut visited_pins: HashSet<usize> = HashSet::with_capacity(cap.saturating_mul(4));
+        let mut stack: Vec<Weak<Mutex<InternalPin>>> = seeds;
+
+        while let Some(next_weak) = stack.pop() {
+            let pin_arc = next_weak
                 .upgrade()
                 .ok_or(flow_like_types::anyhow!("Failed to lock Pin"))?;
-            let connected_pin_guard = connected_pin_guard.lock().await;
-            let connected_node = connected_pin_guard.node.upgrade();
 
-            if let Some(connected_node) = connected_node {
-                connected.push(connected_node);
+            let pin_key = Arc::as_ptr(&pin_arc) as usize;
+            if !visited_pins.insert(pin_key) {
+                continue;
+            }
+
+            let parent_opt = {
+                let guard = pin_arc.lock().await;
+                if let Some(node_weak) = &guard.node {
+                    node_weak.upgrade()
+                } else {
+                    // relay through standalone pins
+                    stack.extend(guard.connected_to.iter().cloned());
+                    None
+                }
+            };
+
+            if let Some(parent) = parent_opt {
+                let node_key = Arc::as_ptr(&parent) as usize;
+                if seen_nodes.insert(node_key) {
+                    connected.push(parent);
+                }
             }
         }
 
@@ -300,28 +363,55 @@ impl InternalNode {
 
     pub async fn get_dependencies(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let mut dependencies = Vec::with_capacity(self.pins.len());
+        let mut seen_nodes: HashSet<usize> = HashSet::new();
+        let mut visited_pins: HashSet<usize> = HashSet::new();
+        let mut stack: Vec<Weak<Mutex<InternalPin>>> = Vec::new();
 
         for pin in self.pins.values() {
             let pin_guard = pin.lock().await;
-            let pin = pin_guard.pin.lock().await;
+            let pin_meta = pin_guard.pin.lock().await;
 
-            if pin.pin_type != PinType::Input {
+            if pin_meta.pin_type != PinType::Input {
                 continue;
             }
+            drop(pin_meta);
 
-            drop(pin);
+            let seeds = pin_guard.depends_on.clone();
+            drop(pin_guard);
 
-            let dependency_pins = pin_guard.depends_on.clone();
+            let cap = seeds.len();
+            visited_pins.clear();
+            stack.clear();
+            if stack.capacity() < cap {
+                stack.reserve(cap - stack.capacity());
+            }
+            stack.extend(seeds);
 
-            for connected_pin in &dependency_pins {
-                let dependency_pin_guard = connected_pin
+            while let Some(dep_weak) = stack.pop() {
+                let dep_arc = dep_weak
                     .upgrade()
                     .ok_or(flow_like_types::anyhow!("Failed to lock Pin"))?;
-                let dependency_pin_guard = dependency_pin_guard.lock().await;
-                let dependency_pin = dependency_pin_guard.node.upgrade();
 
-                if let Some(dependency) = dependency_pin {
-                    dependencies.push(dependency);
+                let pin_key = Arc::as_ptr(&dep_arc) as usize;
+                if !visited_pins.insert(pin_key) {
+                    continue;
+                }
+
+                let parent_opt = {
+                    let dep_guard = dep_arc.lock().await;
+                    if let Some(node_weak) = &dep_guard.node {
+                        node_weak.upgrade()
+                    } else {
+                        stack.extend(dep_guard.depends_on.iter().cloned());
+                        None
+                    }
+                };
+
+                if let Some(parent) = parent_opt {
+                    let node_key = Arc::as_ptr(&parent) as usize;
+                    if seen_nodes.insert(node_key) {
+                        dependencies.push(parent);
+                    }
                 }
             }
         }
@@ -363,48 +453,63 @@ impl InternalNode {
                 pin_guard.depends_on.clone()
             };
 
-            // TODO: optimize this for parallel execution
-            for dependency in &dependencies {
-                let parent = {
-                    let dependency = match dependency.upgrade() {
-                        Some(dep) => dep,
-                        None => {
-                            context.log_message("Failed to lock dependency", LogLevel::Error);
-                            return false;
-                        }
-                    };
-                    let dependency_guard = dependency.lock().await;
+            let cap = dependencies.len();
+            let mut visited_pins: HashSet<usize> = HashSet::with_capacity(cap.saturating_mul(4));
+            let mut seen_nodes: HashSet<usize> = HashSet::with_capacity(cap.saturating_mul(2));
+            let mut stack: Vec<Weak<Mutex<InternalPin>>> = dependencies;
 
-                    let parent = dependency_guard.node.upgrade();
-
-                    if parent.is_none() {
-                        continue;
+            while let Some(dep_weak) = stack.pop() {
+                let dep_arc = match dep_weak.upgrade() {
+                    Some(dep) => dep,
+                    None => {
+                        context.log_message("Failed to lock dependency", LogLevel::Error);
+                        return false;
                     }
-
-                    parent.unwrap().clone()
                 };
 
-                let (node_id, node_name) = {
-                    // We only run pure nodes
-                    if !parent.is_pure().await {
-                        continue;
+                let pin_key = Arc::as_ptr(&dep_arc) as usize;
+                if !visited_pins.insert(pin_key) {
+                    continue;
+                }
+
+                let parent_opt = {
+                    let dep_guard = dep_arc.lock().await;
+                    if let Some(node_weak) = &dep_guard.node {
+                        node_weak.upgrade()
+                    } else {
+                        // relay through standalone pins
+                        stack.extend(dep_guard.depends_on.iter().cloned());
+                        None
                     }
+                };
+
+                let Some(parent) = parent_opt else { continue };
+
+                let node_key = Arc::as_ptr(&parent) as usize;
+                if !seen_nodes.insert(node_key) {
+                    continue;
+                }
+
+                if !parent.is_pure().await {
+                    continue;
+                }
+
+                let (node_id, node_name) = {
                     let parent_node = parent.node.lock().await;
                     (parent_node.id.clone(), parent_node.friendly_name.clone())
                 };
 
-                if let Some(recursion_guard) = recursion_guard {
-                    if recursion_guard.contains(&node_id) {
-                        context.log_message(
-                            &format!("Recursion detected for: {}, skipping execution", &node_id),
-                            LogLevel::Debug,
-                        );
-                        continue;
-                    }
+                if let Some(guard) = recursion_guard
+                    && guard.contains(&node_id)
+                {
+                    context.log_message(
+                        &format!("Recursion detected for: {}, skipping execution", &node_id),
+                        LogLevel::Debug,
+                    );
+                    continue;
                 }
 
                 let mut sub_context = context.create_sub_context(&parent).await;
-
                 let mut log_message = LogMessage::new(
                     &format!("Triggering missing dependency: {}", &node_name),
                     LogLevel::Debug,

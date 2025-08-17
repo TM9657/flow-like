@@ -13,6 +13,7 @@ use futures::{StreamExt, TryStreamExt};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::SystemTime, vec};
+pub mod sharing;
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub enum StandardInterfaces {
@@ -387,13 +388,11 @@ impl App {
         let board = Board::load(storage_root, &board_id, state, version).await?;
         let board_ref = Arc::new(Mutex::new(board));
         let register = register.unwrap_or(false);
-        if register {
-            if let Some(app_state) = &self.app_state {
-                app_state
-                    .lock()
-                    .await
-                    .register_board(&board_id, board_ref.clone(), version)?;
-            }
+        if register && let Some(app_state) = &self.app_state {
+            app_state
+                .lock()
+                .await
+                .register_board(&board_id, board_ref.clone(), version)?;
         }
 
         Ok(board_ref)

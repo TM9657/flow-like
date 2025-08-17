@@ -1,5 +1,6 @@
 "use client";
 
+import { invoke } from "@tauri-apps/api/core";
 import {
 	Avatar,
 	AvatarFallback,
@@ -16,14 +17,24 @@ import {
 	CardContent,
 	CardHeader,
 	CardTitle,
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
 	HoverCard,
 	HoverCardContent,
 	HoverCardTrigger,
 	IAppVisibility,
 	type IEvent,
+	Input,
+	Label,
 	ScrollArea,
 	Separator,
 	Skeleton,
+	Switch,
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
@@ -41,21 +52,27 @@ import {
 	CopyIcon,
 	CrownIcon,
 	DatabaseIcon,
+	DownloadIcon,
+	EyeIcon,
+	EyeOffIcon,
 	FolderClosedIcon,
 	GlobeIcon,
 	LayoutGridIcon,
+	LockIcon,
 	Maximize2Icon,
 	Minimize2Icon,
 	PlayCircleIcon,
 	SparklesIcon,
 	SquarePenIcon,
+	UnlockIcon,
 	UsersRoundIcon,
 	WorkflowIcon,
 	ZapIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { appsDB } from "../../../lib/apps-db";
 import { EVENT_CONFIG } from "../../../lib/event-config";
 
@@ -171,6 +188,62 @@ export default function Id({
 		typeof id === "string",
 	);
 	const [isMaximized, setIsMaximized] = useState(false);
+	const [exportOpen, setExportOpen] = useState(false);
+	const [encrypt, setEncrypt] = useState(false);
+	const [password, setPassword] = useState("");
+	const [confirmPassword, setConfirmPassword] = useState("");
+	const [showPassword, setShowPassword] = useState(false);
+	const [exporting, setExporting] = useState(false);
+
+	useEffect(() => {
+		const saved = localStorage.getItem("exportEncrypted");
+		if (saved != null) setEncrypt(saved === "true");
+	}, []);
+
+	useEffect(() => {
+		localStorage.setItem("exportEncrypted", String(encrypt));
+		if (!encrypt) {
+			setPassword("");
+			setConfirmPassword("");
+		}
+	}, [encrypt]);
+
+	const strength = useMemo(() => {
+		if (!encrypt) return 0;
+		let s = 0;
+		if (password.length >= 8) s++;
+		if (/[A-Z]/.test(password) && /[a-z]/.test(password)) s++;
+		if (/\d/.test(password)) s++;
+		if (/[^A-Za-z0-9]/.test(password)) s++;
+		return s; // 0..4
+	}, [password, encrypt]);
+
+	const passValid =
+		!encrypt || (password.length >= 8 && password === confirmPassword);
+
+	const handleExport = useCallback(async () => {
+		const loader = toast.loading("Exporting app...", {
+			description: "This may take a moment, please wait.",
+		});
+		setExporting(true);
+		try {
+			await invoke("export_app_to_file", {
+				appId: id,
+				...(encrypt && password ? { password } : {}),
+			});
+			toast.success("App exported successfully!", { id: loader });
+			setExportOpen(false);
+			setPassword("");
+			setConfirmPassword("");
+		} catch (error) {
+			console.error("Export error:", error);
+			toast.error("Failed to export app");
+		} finally {
+			setExporting(false);
+			toast.dismiss(loader);
+		}
+	}, [id, encrypt, password]);
+
 	const events = useInvoke(
 		backend.eventState.getEvents,
 		backend.eventState,
@@ -425,11 +498,7 @@ export default function Id({
 																href={`${item.href}?id=${id}`}
 																className={`
                             flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all
-                            ${
-															isActive
-																? "bg-primary text-primary-foreground shadow-sm font-medium"
-																: "hover:bg-muted text-muted-foreground hover:text-foreground"
-														}
+                            ${"hover:bg-muted text-muted-foreground hover:text-foreground"}
                         `}
 															>
 																<Icon className="w-4 h-4 flex-shrink-0" />
@@ -443,6 +512,185 @@ export default function Id({
 													</Tooltip>
 												);
 											})}
+										{(online?.visibility ?? IAppVisibility.Private) ===
+											IAppVisibility.Offline && (
+											<Tooltip key={"export"} delayDuration={300}>
+												<Dialog open={exportOpen} onOpenChange={setExportOpen}>
+													<TooltipTrigger asChild>
+														<DialogTrigger asChild>
+															<Button
+																variant={"link"}
+																className={`
+                            flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all justify-start
+                            ${"hover:bg-muted text-muted-foreground hover:text-foreground"}
+                          `}
+															>
+																<DownloadIcon className="w-4 h-4 flex-shrink-0" />
+																<span className="truncate">Export App</span>
+															</Button>
+														</DialogTrigger>
+													</TooltipTrigger>
+
+													<TooltipContent side="right" className="max-w-xs">
+														<p className="font-bold">Export Application</p>
+														<p className="text-xs mt-1">
+															Export the application to a file for backup or
+															sharing.
+														</p>
+													</TooltipContent>
+
+													<DialogContent className="sm:max-w-[520px]">
+														<DialogHeader>
+															<DialogTitle>Export Application</DialogTitle>
+															<DialogDescription>
+																Choose how you want to export your app.
+															</DialogDescription>
+														</DialogHeader>
+
+														<div className="space-y-4">
+															<div className="flex items-center justify-between rounded-lg border p-3">
+																<div className="flex items-center gap-3">
+																	{encrypt ? (
+																		<LockIcon className="w-4 h-4 text-primary" />
+																	) : (
+																		<UnlockIcon className="w-4 h-4 text-muted-foreground" />
+																	)}
+																	<div className="min-w-0">
+																		<p className="text-sm font-medium">
+																			{encrypt
+																				? "Encrypted export"
+																				: "Unencrypted export"}
+																		</p>
+																		<p className="text-xs text-muted-foreground">
+																			{encrypt
+																				? "Protect your export with a password."
+																				: "Quick export without encryption."}
+																		</p>
+																	</div>
+																</div>
+																<div className="flex items-center gap-2">
+																	<span className="text-xs text-muted-foreground">
+																		Encrypt
+																	</span>
+																	<Switch
+																		checked={encrypt}
+																		onCheckedChange={setEncrypt}
+																	/>
+																</div>
+															</div>
+
+															{encrypt && (
+																<div className="space-y-3">
+																	<div className="grid gap-2">
+																		<Label
+																			htmlFor="export-password"
+																			className="text-xs"
+																		>
+																			Password
+																		</Label>
+																		<div className="relative">
+																			<Input
+																				id="export-password"
+																				type={
+																					showPassword ? "text" : "password"
+																				}
+																				value={password}
+																				onChange={(e) =>
+																					setPassword(e.target.value)
+																				}
+																				placeholder="Enter a strong password"
+																				autoFocus
+																			/>
+																			<Button
+																				type="button"
+																				variant="ghost"
+																				size="icon"
+																				className="absolute right-1 top-1 h-7 w-7"
+																				onClick={() =>
+																					setShowPassword((s) => !s)
+																				}
+																				aria-label={
+																					showPassword
+																						? "Hide password"
+																						: "Show password"
+																				}
+																			>
+																				{showPassword ? (
+																					<EyeOffIcon className="w-4 h-4" />
+																				) : (
+																					<EyeIcon className="w-4 h-4" />
+																				)}
+																			</Button>
+																		</div>
+																	</div>
+
+																	<div className="grid gap-2">
+																		<Label
+																			htmlFor="export-password-confirm"
+																			className="text-xs"
+																		>
+																			Confirm password
+																		</Label>
+																		<Input
+																			id="export-password-confirm"
+																			type={showPassword ? "text" : "password"}
+																			value={confirmPassword}
+																			onChange={(e) =>
+																				setConfirmPassword(e.target.value)
+																			}
+																			placeholder="Re-enter password"
+																		/>
+																	</div>
+
+																	<div className="flex items-center gap-2">
+																		<div className="flex gap-1" aria-hidden>
+																			{[0, 1, 2, 3].map((i) => (
+																				<span
+																					key={i}
+																					className={`h-1.5 w-10 rounded ${strength > i ? "bg-green-500" : "bg-muted"}`}
+																				/>
+																			))}
+																		</div>
+																		<span className="text-xs text-muted-foreground">
+																			{strength <= 1
+																				? "Weak"
+																				: strength === 2
+																					? "Fair"
+																					: strength === 3
+																						? "Good"
+																						: "Strong"}
+																		</span>
+																	</div>
+
+																	{!passValid && (
+																		<p className="text-xs text-destructive">
+																			Passwords must match and be at least 8
+																			characters.
+																		</p>
+																	)}
+																</div>
+															)}
+														</div>
+
+														<DialogFooter className="gap-2">
+															<Button
+																variant="outline"
+																onClick={() => setExportOpen(false)}
+																disabled={exporting}
+															>
+																Cancel
+															</Button>
+															<Button
+																onClick={handleExport}
+																disabled={exporting || (encrypt && !passValid)}
+															>
+																{exporting ? "Exporting..." : "Export"}
+															</Button>
+														</DialogFooter>
+													</DialogContent>
+												</Dialog>
+											</Tooltip>
+										)}
 									</nav>
 
 									<Separator className="my-4 mx-3" />

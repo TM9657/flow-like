@@ -1,0 +1,468 @@
+---
+import { getCollection } from "astro:content";
+import "@tm9657/flow-like-ui/global.css";
+import "../../styles/Blog.css";
+import BlogLayout from "../../layouts/Blog-Layout.astro";
+import { LuCopy, LuShare } from "react-icons/lu";
+
+export async function getStaticPaths() {
+  const all = await getCollection("blog", ({ data }) =>
+    import.meta.env.PROD ? !data.draft : true,
+  );
+  return all.map((entry) => ({
+    params: { slug: entry.slug.split("-").slice(3).join("-") },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content, headings } = await entry.render();
+const { title, description, date, tags = [], cover } = entry.data;
+
+const site = Astro.site ?? import.meta.env.SITE;
+const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
+---
+
+<BlogLayout data={entry.data} content={Content}>
+  <a
+    href="/blog/"
+    class="inline-flex items-center rounded-md px-2 py-1 text-sm hover:text-primary transition mb-2"
+  >
+    ← Back to blog
+  </a>
+
+  <div class="relative">
+    {
+      cover && (
+        <header id="cover-header" class="relative mb-8 md:mb-10">
+          <div
+            id="right-pin"
+            class="size-4 bg-primary absolute top-30 -right-1.5 z-10 rounded-full"
+          />
+          <div
+            id="left-pin"
+            class="size-4 bg-pink-400 absolute top-50 -left-1.5 z-10 rounded-full"
+          />
+          <div
+            id="right-pin-top"
+            class="size-4 bg-foreground absolute top-10 -right-1.5 z-10 rounded-full"
+          />
+          <div
+            id="left-pin-top"
+            class="size-4 bg-foreground absolute top-20 -left-1.5 z-10 rounded-full"
+          />
+
+          <svg
+            id="pin-connections"
+            class="pointer-events-none absolute inset-0"
+            style="overflow: visible;"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path id="right-conn" class="pin-conn text-primary" fill="none" />
+            <path id="left-conn" class="pin-conn text-pink-400" fill="none" />
+            <path
+              id="right-conn-top"
+              class="pin-conn-solid text-foreground"
+              fill="none"
+            />
+            <path
+              id="left-conn-top"
+              class="pin-conn-solid text-foreground"
+              fill="none"
+            />
+          </svg>
+
+          <div class="relative h-[36vh] min-h-[240px] max-h-[420px] overflow-hidden rounded-xl border">
+            <img
+              src={cover}
+              alt=""
+              class="absolute inset-0 h-full w-full object-cover"
+              loading="eager"
+            />
+            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
+            <div class="absolute z-10 flex h-full items-end">
+              <div class="w-full p-5 sm:p-7 md:p-8">
+                <h1 class="text-white drop-shadow-md text-xl sm:text-3xl md:text-4xl font-bold leading-tight pt-0! line-clamp-2 sm:line-clamp-2 md:line-clamp-4">
+                  {title}
+                </h1>
+                <p class="mt-2 text-white/90 max-w-3xl drop-shadow">
+                  {description}
+                </p>
+                <div class="mt-3 flex flex-wrap items-center gap-3 text-white/80 text-sm">
+                  <time datetime={new Date(date).toISOString()}>
+                    {new Date(date).toDateString()}
+                  </time>
+                  <span aria-hidden="true">•</span>
+                  <span id="reading-time">— min read</span>
+                </div>
+                <div class="flex flex-wrap gap-2 mt-3 h-0 md:h-fit opacity-0 md:opacity-100">
+                  {tags.map((t: string) => (
+                    <a
+                      href={`/tags/${encodeURIComponent(t)}/`}
+                      class="rounded-full border border-white/30 bg-black/30 px-2 py-0.5 text-xs text-white/90 backdrop-blur-[2px] hover:border-white/50 hover:bg-black/40 transition"
+                    >
+                      #{t}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+      )
+    }
+
+    {
+      !cover && (
+        <header class="mb-8 md:mb-10">
+          <h1 class="text-3xl md:text-4xl font-bold">{title}</h1>
+          <p class="mt-2 text-muted-foreground">{description}</p>
+          <div class="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <time datetime={new Date(date).toISOString()}>
+              {new Date(date).toDateString()}
+            </time>
+            <span aria-hidden="true">•</span>
+            <span id="reading-time">— min read</span>
+            {tags.length > 0 && (
+              <>
+                <span aria-hidden="true">•</span>
+                <div class="flex flex-wrap gap-2">
+                  {tags.map((t: string) => (
+                    <a
+                      href={`/tags/${encodeURIComponent(t)}/`}
+                      class="rounded-full border px-2 py-0.5 text-xs hover:-translate-y-0.5 transition"
+                    >
+                      #{t}
+                    </a>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </header>
+      )
+    }
+
+    <div class="mx-auto border rounded-xl max-w-7xl p-2 md:p-4 sm:p-6 bg-background">
+      <div class="grid gap-8 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <aside class="hidden lg:block">
+          {
+            headings?.length > 0 && (
+              <nav class="sticky top-24 h-max rounded-lg border bg-card/60 backdrop-blur p-2 md:p-4 text-sm">
+                <p class="mb-2 font-medium text-muted-foreground">
+                  On this page
+                </p>
+                <ul class="space-y-1">
+                  {headings
+                    .filter((h) => h.depth <= 3 && h.slug)
+                    .map((h) => (
+                      <li class={`pl-${(h.depth - 2) * 3} toc-item`}>
+                        <a
+                          href={`#${h.slug}`}
+                          data-slug={h.slug}
+                          class="toc-link block rounded px-2 py-1 text-muted-foreground hover:text-foreground"
+                        >
+                          {h.text}
+                        </a>
+                      </li>
+                    ))}
+                </ul>
+              </nav>
+            )
+          }
+        </aside>
+
+        <article
+          id="post-content"
+          class="prose prose-zinc dark:prose-invert max-w-none px-2! md:px-4"
+        >
+          <Content />
+          <hr class="my-10" />
+          <div class="flex flex-wrap gap-2 justify-between items-center">
+            <div class="flex flex-wrap gap-2">
+              {
+                tags.map((t: string) => (
+                  <a
+                    href={`/tags/${encodeURIComponent(t)}/`}
+                    class="rounded-full border px-2 py-0.5 text-xs hover:-translate-y-0.5 transition"
+                  >
+                    #{t}
+                  </a>
+                ))
+              }
+            </div>
+            <div class="flex items-center gap-2">
+              <button
+                data-copy-link
+                class="rounded-md border px-2.5 py-1.5 text-xs hover:bg-accent transition. flex flex-row items-center gap-2"
+              >
+                <LuCopy />
+                Copy link
+              </button>
+              <button
+                data-web-share
+                class="rounded-md border px-2.5 py-1.5 text-xs hover:bg-accent transition. flex flex-row items-center gap-2"
+              >
+                <LuShare />
+                Share
+              </button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <div class="fixed inset-x-0 top-0 z-40 h-1">
+    <div
+      id="progress"
+      class="h-full origin-left scale-x-0 bg-primary transition-[transform] duration-100"
+    >
+    </div>
+  </div>
+
+  <script type="module" define:vars={{ title, description, canonical }}>
+    const $ = (s, r = document) => r.querySelector(s);
+    const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+    const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
+    const raf = (fn) => requestAnimationFrame(fn);
+
+    const article = $("#post-content");
+    const bar = $("#progress");
+    const timeEl = $("#reading-time");
+    const copyBtn = $("[data-copy-link]");
+    const shareBtn = $("[data-web-share]");
+
+    const setProgress = () => {
+      if (!article || !bar) return;
+      const start = article.offsetTop;
+      const end = start + article.offsetHeight - innerHeight;
+      const p = clamp((scrollY - start) / (end - start), 0, 1);
+      bar.style.transform = `scaleX(${p || 0})`;
+    };
+
+    const setReadingTime = () => {
+      if (!article || !timeEl) return;
+      const text = article.textContent || "";
+      const words = (text.match(/\S+/g) || []).length;
+      const mins = Math.max(1, Math.round(words / 200));
+      timeEl.textContent = `${mins} min read`;
+    };
+
+    const getUrl = () => canonical || location.href;
+
+    const copyLink = async () => {
+      const url = getUrl();
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(url);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = url;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          ta.remove();
+        }
+        if (copyBtn) {
+          const old = copyBtn.textContent;
+          copyBtn.textContent = "Copied";
+          setTimeout(() => (copyBtn.textContent = old || "Copy link"), 1200);
+        }
+      } catch {}
+    };
+
+    const webShare = async () => {
+      const data = { title, text: description || "", url: getUrl() };
+      if (navigator.share) {
+        try {
+          await navigator.share(data);
+          return;
+        } catch {}
+      }
+      copyLink();
+    };
+
+    copyBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      copyLink();
+    });
+    shareBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      webShare();
+    });
+
+    setReadingTime();
+    setProgress();
+
+    const links = $$(".toc-link");
+    if (links.length) {
+      const bySlug = Object.fromEntries(links.map((l) => [l.dataset.slug, l]));
+      const obs = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            const link = bySlug[e.target.id];
+            if (!link) continue;
+            link.classList.toggle("text-foreground", e.isIntersecting);
+            link.classList.toggle("font-medium", e.isIntersecting);
+          }
+        },
+        { rootMargin: "0px 0px -70% 0px", threshold: 0 },
+      );
+      $$("#post-content h2[id], #post-content h3[id]").forEach((h) =>
+        obs.observe(h),
+      );
+    }
+
+    addEventListener("scroll", () => requestAnimationFrame(setProgress), {
+      passive: true,
+    });
+    addEventListener("resize", () => {
+      raf(setProgress);
+      if (window.updatePinConnections) raf(window.updatePinConnections);
+    });
+
+    const initPinConnections = () => {
+      const headerEl = $("#cover-header");
+      const svg = $("#pin-connections");
+      const leftPin = $("#left-pin");
+      const rightPin = $("#right-pin");
+      const leftPinTop = $("#left-pin-top");
+      const rightPinTop = $("#right-pin-top");
+
+      if (!headerEl || !svg) return;
+
+      const setViewBox = () => {
+        const r = headerEl.getBoundingClientRect();
+        svg.setAttribute("viewBox", `0 0 ${r.width} ${r.height}`);
+        svg.setAttribute("width", String(r.width));
+        svg.setAttribute("height", String(r.height));
+      };
+
+      const cubicPath = (pin, isRight) => {
+        const hr = headerEl.getBoundingClientRect();
+        const pr = pin.getBoundingClientRect();
+        const sx = pr.left - hr.left + pr.width / 2;
+        const sy = pr.top - hr.top + pr.height / 2;
+        const ex = isRight ? hr.width + 200 : -200;
+        const ey = sy + (isRight ? 40 : 80);
+        const dx = ex - sx;
+        const cp1x = sx + dx * 0.4;
+        const cp2x = sx + dx * 0.8;
+        return `M${sx},${sy} C${cp1x},${sy} ${cp2x},${ey} ${ex},${ey}`;
+      };
+
+      const straightPath = (pin, isRight) => {
+        const hr = headerEl.getBoundingClientRect();
+        const pr = pin.getBoundingClientRect();
+        const sx = pr.left - hr.left + pr.width / 2;
+        const sy = pr.top - hr.top + pr.height / 2;
+        const ex = isRight ? hr.width + 300 : -300;
+        const ey = sy + (isRight ? -20 : 20);
+        const cp1x = sx + (ex - sx) * 0.6;
+        return `M${sx},${sy} Q${cp1x},${sy} ${ex},${ey}`;
+      };
+
+      const animateStroke = (path) => {
+        const len = path.getTotalLength();
+        path.style.setProperty("--len", String(len));
+        path.style.animation = "none";
+        path.offsetWidth;
+        path.style.animation = "";
+      };
+
+      const updatePaths = () => {
+        setViewBox();
+
+        if (rightPin) {
+          const rightConn = $("#right-conn");
+          if (rightConn) {
+            rightConn.setAttribute("d", cubicPath(rightPin, true));
+            animateStroke(rightConn);
+          }
+        }
+
+        if (leftPin) {
+          const leftConn = $("#left-conn");
+          if (leftConn) {
+            leftConn.setAttribute("d", cubicPath(leftPin, false));
+            animateStroke(leftConn);
+          }
+        }
+
+        if (rightPinTop) {
+          const rightConnTop = $("#right-conn-top");
+          if (rightConnTop) {
+            rightConnTop.setAttribute("d", straightPath(rightPinTop, true));
+          }
+        }
+
+        if (leftPinTop) {
+          const leftConnTop = $("#left-conn-top");
+          if (leftConnTop) {
+            leftConnTop.setAttribute("d", straightPath(leftPinTop, false));
+          }
+        }
+      };
+
+      updatePaths();
+      window.updatePinConnections = updatePaths;
+    };
+
+    if ($("#cover-header")) {
+      initPinConnections();
+    }
+  </script>
+
+  <style>
+    .toc-link.font-medium {
+      color: var(--foreground);
+    }
+
+    .pin-conn-solid {
+      stroke: currentColor;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .pin-conn {
+      stroke: currentColor;
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+      stroke-dasharray: 10 10;
+      animation: flow-dots 0.4s linear infinite;
+    }
+
+    @keyframes draw-conn {
+      from {
+        stroke-dashoffset: var(--len, 100);
+      }
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+
+    @keyframes flow-dots {
+      to {
+        stroke-dashoffset: -20px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #progress {
+        transition: none;
+      }
+      .pin-conn {
+        animation: draw-conn 900ms ease-out forwards;
+      }
+    }
+  </style>
+</BlogLayout>

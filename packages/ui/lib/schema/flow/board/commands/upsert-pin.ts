@@ -39,6 +39,7 @@ export interface IPinOptions {
 	enforce_generic_value_type?: boolean | null;
 	enforce_schema?: boolean | null;
 	range?: number[] | null;
+	sensitive?: boolean | null;
 	step?: number | null;
 	valid_values?: string[] | null;
 	[property: string]: any;

@@ -199,7 +199,7 @@ export function Variable({
 	const isArrayDropdown = (
 		<DropdownMenu>
 			<DropdownMenuTrigger>
-				<VariableIcon
+				<ValueTypeIcon
 					value_type={localVariable.value_type}
 					data_type={localVariable.data_type}
 				/>
@@ -454,7 +454,7 @@ export function Variable({
 	);
 }
 
-function VariableIcon({
+export function ValueTypeIcon({
 	value_type,
 	data_type,
 	className,

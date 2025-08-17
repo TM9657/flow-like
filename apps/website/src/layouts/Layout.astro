@@ -2,6 +2,13 @@
 import "@tm9657/flow-like-ui/global.css";
 import { Header } from "../components/header";
 import { Footer } from "../components/footer";
+
+const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
+const canonical = new URL(Astro.url.pathname, site).toString();
+
+const title = "Flow-Like | Enterprise Automation";
+const desc = "Enterprise-grade workflow automation built for scale.";
+const cover = "/og.webp";
 ---
 
 <!doctype html>
@@ -11,30 +18,35 @@ import { Footer } from "../components/footer";
 		<meta name="viewport" content="width=device-width" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Flow-Like | Enterprise Automation</title>
-		<meta name="description" content="Enterprise-grade workflow automation built for scale." />
-		<meta name="robots" content="index, follow" />
 
-		<meta property="og:title" content="Flow-Like | Enterprise Automation" />
-		<meta
-			property="og:description"
-			content="Enterprise-grade workflow automation built for scale."
-		/>
-		<meta property="og:image" content="/og.webp" />
+		<title>{title}</title>
+		<meta name="description" content={desc} />
+		<meta name="robots" content="index, follow" />
+		<link rel="canonical" href={canonical} />
+		<meta name="theme-color" content="#ffffff" />
+		<link rel="sitemap" href="/sitemap-index.xml" />
+
+		<!-- Open Graph -->
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="Flow-Like" />
+		<meta property="og:url" content={canonical} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={desc} />
+		<meta property="og:image" content={cover} />
 		<meta property="og:image:type" content="image/webp" />
 		<meta property="og:image:width" content="1600" />
 		<meta property="og:image:height" content="900" />
 
+		<!-- Twitter -->
 		<meta name="twitter:card" content="summary_large_image" />
-		<meta
-			name="twitter:title"
-			content="Flow-Like | Enterprise Automation"
-		/>
-		<meta
-			name="twitter:description"
-			content="Enterprise-grade workflow automation built for scale."
-		/>
-		<meta name="twitter:image" content="/og.webp" />
+		<meta name="twitter:site" content="@greatco_de" />
+		<meta name="twitter:creator" content="@greatco_de" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={desc} />
+		<meta name="twitter:image" content={cover} />
+
+		<!-- Extra -->
+		<meta name="keywords" content="workflow automation, enterprise automation, orchestration, flow-like, AI automation" />
 	</head>
 	<body>
 		<Header/>

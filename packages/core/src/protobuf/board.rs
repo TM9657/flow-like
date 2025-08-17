@@ -179,6 +179,12 @@ impl ToProto<flow_like_types::proto::Layer> for Layer {
             coord_x: self.coordinates.0,
             coord_y: self.coordinates.1,
             coord_z: self.coordinates.2,
+            coord_x_in: self.in_coordinates.map(|c| c.0),
+            coord_y_in: self.in_coordinates.map(|c| c.1),
+            coord_z_in: self.in_coordinates.map(|c| c.2),
+            coord_x_out: self.out_coordinates.map(|c| c.0),
+            coord_y_out: self.out_coordinates.map(|c| c.1),
+            coord_z_out: self.out_coordinates.map(|c| c.2),
             parent_id: self.parent_id.clone(),
             pins: self
                 .pins
@@ -206,6 +212,41 @@ impl ToProto<flow_like_types::proto::Layer> for Layer {
 
 impl FromProto<flow_like_types::proto::Layer> for Layer {
     fn from_proto(proto: flow_like_types::proto::Layer) -> Self {
+        let (in_default, out_default) = if proto.nodes.is_empty() {
+            let base = (proto.coord_x, proto.coord_y, proto.coord_z);
+            (
+                (base.0 - 50.0, base.1, base.2),
+                (base.0 + 50.0, base.1, base.2),
+            )
+        } else {
+            let mut min_x = f32::INFINITY;
+            let mut min_y = 0.0;
+            let mut min_z = 0.0;
+            let mut max_x = f32::NEG_INFINITY;
+            let mut max_y = 0.0;
+            let mut max_z = 0.0;
+
+            for n in proto.nodes.values() {
+                let x = n.coord_x;
+                if x < min_x {
+                    min_x = x;
+                    min_y = n.coord_y;
+                    min_z = n.coord_z;
+                }
+                if x > max_x {
+                    max_x = x;
+                    max_y = n.coord_y;
+                    max_z = n.coord_z;
+                }
+            }
+
+            if proto.nodes.is_empty() {
+                ((-50.0, min_y, min_z), (50.0, max_y, max_z))
+            } else {
+                ((min_x - 50.0, min_y, min_z), (max_x + 50.0, max_y, max_z))
+            }
+        };
+
         Layer {
             id: proto.id,
             name: proto.name,
@@ -232,6 +273,16 @@ impl FromProto<flow_like_types::proto::Layer> for Layer {
                 .into_iter()
                 .map(|(k, v)| (k, Variable::from_proto(v)))
                 .collect(),
+            in_coordinates: Some((
+                proto.coord_x_in.unwrap_or(in_default.0),
+                proto.coord_y_in.unwrap_or(in_default.1),
+                proto.coord_z_in.unwrap_or(in_default.2),
+            )),
+            out_coordinates: Some((
+                proto.coord_x_out.unwrap_or(out_default.0),
+                proto.coord_y_out.unwrap_or(out_default.1),
+                proto.coord_z_out.unwrap_or(out_default.2),
+            )),
             comment: proto.comment,
             error: proto.error,
             color: proto.color,

@@ -11,6 +11,9 @@
             "binaries/win/arm/llama.dll",
             "binaries/win/arm/mtmd.dll",
             "binaries/win/arm/llama-server.exe"
-        ]
+        ],
+        "resources": {
+            "assets/THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt"
+        }
 	}
 }

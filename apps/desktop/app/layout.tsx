@@ -42,9 +42,9 @@ import GlobalAnchorHandler from "../components/global-anchor-component";
 import { TauriProvider } from "../components/tauri-provider";
 import { ThemeLoader } from "../components/theme-loader";
 import ToastProvider from "../components/toast-provider";
+import { UpdateProvider } from "../components/update-provider";
 import PostHogPageView from "./PostHogPageView";
 import { PHProvider } from "./provider";
-import { UpdateProvider } from "../components/update-provider";
 
 const persister = createIDBPersister();
 const queryClient = new QueryClient({
@@ -129,7 +129,7 @@ export default function RootLayout({
 						}}
 					>
 						<body className={inter.className}>
-							<UpdateProvider/>
+							<UpdateProvider />
 							<GlobalAnchorHandler />
 							<ThemeProvider
 								attribute="class"

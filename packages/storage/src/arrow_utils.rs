@@ -46,13 +46,12 @@ where
     let serialized = to_value(first_record)?;
 
     // Check if the "vector" field exists and is a Vec<f32>
-    if let Some(map) = serialized.as_object() {
-        if let Some(Value::Array(vec)) = map.get("vector") {
-            if !vec.is_empty() {
-                // Determine the length of the vector
-                return Ok(vec.len() as i32);
-            }
-        }
+    if let Some(map) = serialized.as_object()
+        && let Some(Value::Array(vec)) = map.get("vector")
+        && !vec.is_empty()
+    {
+        // Determine the length of the vector
+        return Ok(vec.len() as i32);
     }
 
     Err(anyhow!("Unable to determine vector dimension from records"))

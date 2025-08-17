@@ -10,7 +10,7 @@ pub async fn make_data_url(url: &str) -> anyhow::Result<String> {
         return Ok(url.to_string());
     }
 
-    let user_agent = "flow-like/0.1 (info@good-co.de)";
+    let user_agent = "flow-like/0.1 (info@great-co.de)";
     let response = reqwest::Client::new()
         .get(url)
         .header(reqwest::header::USER_AGENT, user_agent)

@@ -25,4 +25,5 @@ message Comment {
   optional string color = 12;
   optional int32 z_index = 13;
   optional uint64 hash = 14;
+  optional bool is_locked = 15;
 }

@@ -43,12 +43,12 @@ impl LocalObjectStore {
 impl ObjectStore for LocalObjectStore {
     async fn put(&self, location: &Path, payload: PutPayload) -> Result<PutResult> {
         let path = self.store.path_to_filesystem(location)?;
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)
-                    .map(|_| ())
-                    .map_err(|_| object_store::Error::NotImplemented)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)
+                .map(|_| ())
+                .map_err(|_| object_store::Error::NotImplemented)?;
         }
         self.store.put(location, payload).await
     }
@@ -60,24 +60,24 @@ impl ObjectStore for LocalObjectStore {
         opts: PutOptions,
     ) -> Result<PutResult> {
         let path = self.store.path_to_filesystem(location)?;
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)
-                    .map(|_| ())
-                    .map_err(|_| object_store::Error::NotImplemented)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)
+                .map(|_| ())
+                .map_err(|_| object_store::Error::NotImplemented)?;
         }
         self.store.put_opts(location, payload, opts).await
     }
 
     async fn put_multipart(&self, location: &Path) -> Result<Box<dyn MultipartUpload>> {
         let path = self.store.path_to_filesystem(location)?;
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)
-                    .map(|_| ())
-                    .map_err(|_| object_store::Error::NotImplemented)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)
+                .map(|_| ())
+                .map_err(|_| object_store::Error::NotImplemented)?;
         }
         self.store.put_multipart(location).await
     }
@@ -88,12 +88,12 @@ impl ObjectStore for LocalObjectStore {
         opts: PutMultipartOpts,
     ) -> Result<Box<dyn MultipartUpload>> {
         let path = self.store.path_to_filesystem(location)?;
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)
-                    .map(|_| ())
-                    .map_err(|_| object_store::Error::NotImplemented)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)
+                .map(|_| ())
+                .map_err(|_| object_store::Error::NotImplemented)?;
         }
         self.store.put_multipart_opts(location, opts).await
     }
@@ -120,12 +120,12 @@ impl ObjectStore for LocalObjectStore {
 
     async fn head(&self, location: &Path) -> Result<ObjectMeta> {
         let path = self.store.path_to_filesystem(location)?;
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)
-                    .map(|_| ())
-                    .map_err(|_| object_store::Error::NotImplemented)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)
+                .map(|_| ())
+                .map_err(|_| object_store::Error::NotImplemented)?;
         }
         self.store.head(location).await
     }

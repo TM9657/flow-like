@@ -1,5 +1,4 @@
 import { useDebounce } from "@uidotdev/usehooks";
-import { useReactFlow } from "@xyflow/react";
 import {
 	BombIcon,
 	CheckCircle2Icon,
@@ -11,17 +10,32 @@ import {
 	ScrollIcon,
 	TriangleAlertIcon,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type RefObject,
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { AutoSizer } from "react-virtualized";
 import "react-virtualized/styles.css";
+import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
 import { VariableSizeList as List, type VariableSizeList } from "react-window";
 import { toast } from "sonner";
-import { type ILog, useBackend, useInfiniteInvoke } from "../..";
+import {
+	type IBoard,
+	type ILog,
+	type INode,
+	useBackend,
+	useInfiniteInvoke,
+} from "../..";
 import { parseTimespan } from "../../lib/date";
 import { logLevelToNumber } from "../../lib/log-level";
 import { ILogLevel, type ILogMessage } from "../../lib/schema/flow/run";
 import { useLogAggregation } from "../../state/log-aggregation-state";
-import { EmptyState } from "../ui";
+import { DynamicImage, EmptyState } from "../ui";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -33,8 +47,14 @@ interface IEnrichedLogMessage extends ILogMessage {
 export function Traces({
 	appId,
 	boardId,
-}: Readonly<{ appId: string; boardId: string }>) {
-	const { fitView, updateNode, getNodes } = useReactFlow();
+	board,
+	onFocusNode,
+}: Readonly<{
+	appId: string;
+	boardId: string;
+	board: RefObject<IBoard | undefined>;
+	onFocusNode: (nodeId: string) => void;
+}>) {
 	const backend = useBackend();
 	const { currentMetadata } = useLogAggregation();
 
@@ -85,27 +105,6 @@ export function Traces({
 		if (parts.length === 1) return parts[0];
 		return parts.map((part) => `(${part})`).join(" AND ");
 	}, []);
-
-	const handleNodeSelect = useCallback(
-		(nodeId: string) => {
-			console.log("select node", nodeId);
-			const nodes = getNodes();
-
-			nodes
-				.filter((node) => node.selected && node.id !== nodeId)
-				.forEach((node) => {
-					updateNode(node.id, { selected: false });
-				});
-
-			updateNode(nodeId, { selected: true });
-
-			fitView({
-				nodes: [{ id: nodeId }],
-				duration: 500,
-			});
-		},
-		[getNodes, updateNode, fitView],
-	);
 
 	useEffect(() => {
 		const parts = [];
@@ -183,18 +182,13 @@ export function Traces({
 					log={log}
 					index={index}
 					style={style}
+					board={board}
 					onSetHeight={setRowHeight}
-					onSelectNode={handleNodeSelect}
+					onSelectNode={onFocusNode}
 				/>
 			);
 		},
-		[
-			messages,
-			hasNextPage,
-			isFetchingNextPage,
-			fetchNextPage,
-			handleNodeSelect,
-		],
+		[messages, hasNextPage, isFetchingNextPage, fetchNextPage],
 	);
 
 	useEffect(() => {
@@ -295,16 +289,26 @@ const LogMessage = memo(function LogMessage({
 	log,
 	style,
 	index,
+	board,
 	onSetHeight,
 	onSelectNode,
 }: Readonly<{
 	log: ILog;
 	style: any;
 	index: number;
+	board: RefObject<IBoard | undefined>;
 	onSetHeight: (index: number, height: number) => void;
 	onSelectNode: (nodeId: string) => void;
 }>) {
+	const [node, setNode] = useState<INode | undefined>();
 	const rowRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (log.node_id) {
+			const node = board.current?.nodes[log.node_id];
+			setNode(node);
+		}
+	}, [log.node_id, board]);
 
 	useEffect(() => {
 		if (rowRef.current) {
@@ -347,6 +351,22 @@ const LogMessage = memo(function LogMessage({
 						<div />
 					)}
 					<div className="flex flex-row items-center gap-1">
+						<div className="m-0! mr-2 p-0!">
+							{!!node ? (
+								<span className={`flex flex-row items-center gap-2`}>
+									<DynamicImage
+										url={node.icon ?? ""}
+										className={`w-4 h-4 size-4 ${logLevelToColor(log.log_level, true)}`}
+									/>
+									{node.friendly_name || node.name}
+								</span>
+							) : (
+								<span className="flex flex-row items-center gap-2">
+									<QuestionMarkCircledIcon className="w-4 h-4 size-4" />
+									Unknown Node
+								</span>
+							)}
+						</div>
 						<Button
 							variant={"outline"}
 							size={"icon"}
@@ -375,19 +395,23 @@ const LogMessage = memo(function LogMessage({
 	);
 });
 
-function logLevelToColor(logLevel: ILogLevel) {
+function logLevelToColor(logLevel: ILogLevel, icon = false) {
 	switch (logLevel) {
 		case ILogLevel.Debug:
-			return "bg-muted/20 text-muted-foreground";
+			return !icon
+				? "bg-muted/20 text-muted-foreground"
+				: "bg-muted-foreground";
 		case ILogLevel.Info:
-			return "bg-background/20";
+			return !icon ? "bg-background/20" : "bg-foreground";
 		case ILogLevel.Warn:
-			return "bg-yellow-400/20";
+			return !icon ? "bg-yellow-400/20" : "bg-yellow-400";
 		case ILogLevel.Error:
-			return "bg-rose-400/20";
+			return icon ? "bg-rose-400/20" : "bg-rose-400";
 		case ILogLevel.Fatal:
-			return "bg-pink-400/30";
+			return !icon ? "bg-pink-400/30" : "bg-pink-400";
 	}
+
+	return icon ? "bg-foreground" : "bg-background";
 }
 
 function LogIndicator({ logLevel }: Readonly<{ logLevel: ILogLevel }>) {

@@ -14,7 +14,8 @@
             "bin/flow-docling"
         ],
         "resources": {
-            "icons/Assets.car": "Assets.car"
+            "icons/Assets.car": "Assets.car",
+            "assets/THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt"
         }
 	}
 }

@@ -1,185 +1,25 @@
 {
 	"$schema": "http://json-schema.org/draft-07/schema#",
-	"title": "FileMetadata",
+	"title": "StorageItem",
 	"type": "object",
-	"required": [
-		"file_extension",
-		"file_name",
-		"file_path",
-		"file_size",
-		"mime_type"
-	],
+	"required": ["last_modified", "location", "size"],
 	"properties": {
-		"file_name": {
-			"type": "string"
-		},
-		"file_path": {
-			"type": "string"
-		},
-		"file_extension": {
-			"type": "string"
-		},
-		"file_size": {
-			"type": "integer",
-			"format": "uint64",
-			"minimum": 0.0
-		},
-		"mime_type": {
-			"type": "string"
-		},
-		"creation_time": {
-			"anyOf": [
-				{
-					"$ref": "#/definitions/SystemTime"
-				},
-				{
-					"type": "null"
-				}
-			]
-		},
-		"modification_time": {
-			"anyOf": [
-				{
-					"$ref": "#/definitions/SystemTime"
-				},
-				{
-					"type": "null"
-				}
-			]
-		},
-		"access_time": {
-			"anyOf": [
-				{
-					"$ref": "#/definitions/SystemTime"
-				},
-				{
-					"type": "null"
-				}
-			]
-		},
-		"creator": {
-			"type": ["string", "null"]
-		},
-		"producer": {
-			"type": ["string", "null"]
-		},
-		"author": {
-			"type": ["string", "null"]
-		},
-		"title": {
-			"type": ["string", "null"]
-		},
-		"subject": {
-			"type": ["string", "null"]
-		},
-		"keywords": {
-			"type": ["string", "null"]
-		},
-		"pages": {
-			"type": ["integer", "null"],
-			"format": "uint32",
-			"minimum": 0.0
-		},
 		"location": {
-			"type": ["array", "null"],
-			"items": [
-				{
-					"type": "number",
-					"format": "double"
-				},
-				{
-					"type": "number",
-					"format": "double"
-				}
-			],
-			"maxItems": 2,
-			"minItems": 2
+			"type": "string"
 		},
-		"camera_make": {
-			"type": ["string", "null"]
+		"last_modified": {
+			"type": "string"
 		},
-		"camera_model": {
-			"type": ["string", "null"]
-		},
-		"resolution": {
-			"type": ["array", "null"],
-			"items": [
-				{
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0.0
-				},
-				{
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0.0
-				}
-			],
-			"maxItems": 2,
-			"minItems": 2
-		},
-		"orientation": {
-			"type": ["integer", "null"],
-			"format": "uint16",
+		"size": {
+			"type": "integer",
+			"format": "uint",
 			"minimum": 0.0
 		},
-		"artist": {
+		"e_tag": {
 			"type": ["string", "null"]
 		},
-		"album": {
+		"version": {
 			"type": ["string", "null"]
-		},
-		"track_title": {
-			"type": ["string", "null"]
-		},
-		"genre": {
-			"type": ["string", "null"]
-		},
-		"year": {
-			"type": ["integer", "null"],
-			"format": "int32"
-		},
-		"track_number": {
-			"type": ["integer", "null"],
-			"format": "uint32",
-			"minimum": 0.0
-		},
-		"duration": {
-			"type": ["integer", "null"],
-			"format": "uint32",
-			"minimum": 0.0
-		},
-		"bitrate": {
-			"type": ["integer", "null"],
-			"format": "uint32",
-			"minimum": 0.0
-		},
-		"sample_rate": {
-			"type": ["integer", "null"],
-			"format": "uint32",
-			"minimum": 0.0
-		},
-		"frame_rate": {
-			"type": ["number", "null"],
-			"format": "float"
-		}
-	},
-	"definitions": {
-		"SystemTime": {
-			"type": "object",
-			"required": ["nanos_since_epoch", "secs_since_epoch"],
-			"properties": {
-				"secs_since_epoch": {
-					"type": "integer",
-					"format": "uint64",
-					"minimum": 0.0
-				},
-				"nanos_since_epoch": {
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0.0
-				}
-			}
 		}
 	}
 }

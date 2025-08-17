@@ -16,8 +16,10 @@ export interface ILayer {
 	error?: null | string;
 	hash?: number | null;
 	id: string;
+	in_coordinates?: number[] | null;
 	name: string;
 	nodes: { [key: string]: INode };
+	out_coordinates?: number[] | null;
 	parent_id?: null | string;
 	pins: { [key: string]: IPin };
 	type: ILayerType;
@@ -34,6 +36,7 @@ export interface IComment {
 	hash?: number | null;
 	height?: number | null;
 	id: string;
+	is_locked?: boolean | null;
 	layer?: null | string;
 	timestamp: ISystemTime;
 	width?: number | null;
@@ -108,6 +111,7 @@ export interface IPinOptions {
 	enforce_generic_value_type?: boolean | null;
 	enforce_schema?: boolean | null;
 	range?: number[] | null;
+	sensitive?: boolean | null;
 	step?: number | null;
 	valid_values?: string[] | null;
 	[property: string]: any;

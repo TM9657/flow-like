@@ -242,6 +242,9 @@
 		"PinOptions": {
 			"type": "object",
 			"properties": {
+				"sensitive": {
+					"type": ["boolean", "null"]
+				},
 				"valid_values": {
 					"type": ["array", "null"],
 					"items": {

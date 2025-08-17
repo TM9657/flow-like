@@ -1,0 +1,21 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import "../../styles/Blog.css";
+import BlogLayout from '../../layouts/Blog-Layout.astro';
+import { getCollection } from 'astro:content';
+const posts = await getCollection('blog', ({ data }) => import.meta.env.PROD ? !data.draft : true);
+const tagCounts = new Map<string, number>();
+for (const p of posts) for (const t of p.data.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+const tags = [...tagCounts.entries()].sort(([a],[b]) => a.localeCompare(b));
+---
+
+<BlogLayout data={{ title: "Tags", description: "Explore blog posts by tags", slug: "tags" }}>
+  <main class="mx-auto max-w-3xl p-6">
+    <h1>Tags</h1>
+    <ul>
+      {tags.map(([t,count]) =>
+      <li><a href={`/tags/${encodeURIComponent(t)}/`}>#{t}</a> ({count})</li>
+    )}
+  </ul>
+</main>
+</BlogLayout>

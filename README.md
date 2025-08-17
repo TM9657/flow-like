@@ -18,9 +18,11 @@
 
 <a name="Headline"></a>
 
-# Flow-Like: Your Next Generation Workflow OS.
+# Flow-Like: Your Next Generation Typed Workflow OS.
 
 > *Any flow you like.*
+
+🚀 Flow Like offers **Typed** Workflows. Compared to tools like n8n, these can actually scale.
 
 🔀 Flow-Like is an enterprise-grade **workflow operating system**.
 
@@ -32,10 +34,21 @@
 
 🤝 It is **Open Source**.
 
+## Typed Workflows 📑
+
+In Flow-Like, workflows are **fully typed** — they don’t just describe *what happens*, but also *what data flows where*.
+Compared to tools like *n8n*, Flow-Like explicitly shows:
+
+* **Data origins** – e.g., where the email being sent is coming from.
+* **Transformations** – every step where data is validated, enriched, or reformatted.
+* **Contracts** – clear input/output definitions for each node, preventing runtime surprises.
+
+This typing system is essential for **complex, large-scale workflows** where correctness, maintainability, and scalability matter. You can quickly inspect a flow and understand *both* the logic path *and* the underlying data movement.
+
 ## Quick Start 🚀
 Try and use Flow-Like:
 - [Download ⬇️](https://github.com/TM9657/flow-like/releases) and run the latest stable build of our standalone desktop app, *or*
-- Skip the the setup and [try our hosted version in the cloud ☁️](https://flow-like.com/) (to be available soon), *or*
+- Skip the setup and [try our hosted version in the cloud ☁️](https://flow-like.com/) (to be available soon), *or*
 - [Build the desktop app from source ⚙️](#build-from-source) (see instructions below).
 
 ## Flow-Like’s Ecosystem 🌐
@@ -48,9 +61,9 @@ Our innovative, no-code workflow builder IDE. Connect, collapse, and annotate. G
 <p align="center"><img width="800" src="./assets/recording.gif" alt="Recording"></p>
 
 ### Node Catalog
-- Build your workflows from a rich set of execution nodes - from branching, databases to object detection and higher-order agent nodes. 
+- Build your workflows from a rich set of execution nodes - from branching, databases to object detection and higher-order agent nodes.
 - Link your application to frontends, backends, and third party apps, for example to chat interfaces or incoming mails.
-- Checkout the full catalog in our [docs 📄](https://docs.flow-like.com/).
+- Check out the full catalog in our [docs 📄](https://docs.flow-like.com/).
 
 ### Templates
 Reuse and share your workflows as templates:
@@ -65,7 +78,7 @@ Flow-Like helps *developers and individuals* to efficiently craft highly individ
 - Choose from a wide node and event catalog for different computational tasks and triggers
 - Efficiently synthesize automations via standardized interfaces, data objects using a powerful builder interface
 - Share and copy workflows as templates and projects to streamline collaboration.
-- Contribute project or enterprise specific nodes and events to the core catalog 
+- Contribute project or enterprise specific nodes and events to the core catalog
 
 Flow-Like helps *business responsibles* to express application logic in a natural way:
 - Build workflows without coding. Flows act both as documentation and execution.
@@ -78,6 +91,17 @@ Flow-Like helps *IT* to manage and operate application stacks:
 - Run your applications efficiently thanks to Rust’s performance guarantees
 - Built-in version control
 
+## Process Orchestration 🎛️
+
+Flow-Like goes beyond simple task automation — it’s built for **end-to-end process orchestration**.
+With our **Layer Drill Down** capability, you can:
+
+* Show high-level business processes for stakeholders.
+* Seamlessly reveal the detailed **technical implementation** just one layer below.
+* Manage **cross-team** and **cross-system** workflows without losing visibility or control.
+
+This makes Flow-Like ideal for organizations that need to keep **business logic** and **technical execution** aligned, from strategy to deployment.
+
 ## Build From Source ⚙️
 For the latest features, you can build the standalone desktop app yourself:
 1. Install Rust: https://www.rust-lang.org/tools/install
@@ -87,7 +111,7 @@ For the latest features, you can build the standalone desktop app yourself:
 5. Clone this repository
 6. Run `bun install && bun run build:desktop`
 
-Checkout our docs for specific hints for MacOS, Windows and Linux.
+Check out our docs for specific hints for MacOS, Windows and Linux.
 
 ## Gallery 📸
 <p align="center"><img width="800" src="https://cdn.flow-like.com/website/RightsAndRoles.webp" alt="Set Rights and Roles for Your Apps"></p>

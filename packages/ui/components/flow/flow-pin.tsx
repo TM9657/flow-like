@@ -16,6 +16,7 @@ import {
 } from "../../components/ui/context-menu";
 import { useInvalidateInvoke } from "../../hooks";
 import { updateNodeCommand } from "../../lib";
+import type { ILayer } from "../../lib/schema/flow/board";
 import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IValueType } from "../../lib/schema/flow/pin";
 import { useBackendStore } from "../../state/backend-state";
@@ -34,7 +35,7 @@ function FlowPinInnerComponent({
 	pin: IPin;
 	boardId: string;
 	appId: string;
-	node: INode;
+	node: INode | ILayer;
 	skipOffset?: boolean;
 }>) {
 	const { pushCommand } = useUndoRedo(appId, boardId);
@@ -103,6 +104,8 @@ function FlowPinInnerComponent({
 	}, [appId, boardId, invalidate]);
 
 	const updateNode = useCallback(async () => {
+		if (node.nodes) return;
+		const translatedNode = node as INode;
 		if (defaultValue === undefined) return;
 		if (defaultValue === null) return;
 		if (defaultValue === pin.default_value) return;
@@ -111,7 +114,7 @@ function FlowPinInnerComponent({
 		if (!backend) return;
 		const command = updateNodeCommand({
 			node: {
-				...node,
+				...translatedNode,
 				hash: undefined,
 				coordinates: [currentNode.position.x, currentNode.position.y, 0],
 				pins: {
@@ -242,7 +245,7 @@ function FlowPin({
 	pin: IPin;
 	boardId: string;
 	appId: string;
-	node: INode;
+	node: INode | ILayer;
 	skipOffset?: boolean;
 	onPinRemove: (pin: IPin) => Promise<void>;
 }>) {

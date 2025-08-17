@@ -98,10 +98,11 @@ impl NodeLogic for SetHistoryResponseFormatNode {
         let match_type = node
             .match_type("response_format", board.clone(), None, None)
             .unwrap_or(VariableType::Generic);
-        if match_type != VariableType::String && match_type != VariableType::Struct {
-            if let Some(pin) = node.get_pin_mut_by_name("response_format") {
-                pin.depends_on.clear();
-            }
+        if match_type != VariableType::String
+            && match_type != VariableType::Struct
+            && let Some(pin) = node.get_pin_mut_by_name("response_format")
+        {
+            pin.depends_on.clear();
         }
     }
 }

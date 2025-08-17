@@ -61,10 +61,10 @@ export function PathbufVariable({
 						console.dir(pathBuf);
 						const fileMetadata = await backend.helperState.getPathMeta(pathBuf);
 						if (!fileMetadata || fileMetadata.length === 0) return;
-						setFileOrFolder(fileMetadata[0].file_path);
+						setFileOrFolder(fileMetadata[0].location);
 						onChange({
 							...variable,
-							default_value: convertJsonToUint8Array(fileMetadata[0].file_path),
+							default_value: convertJsonToUint8Array(fileMetadata[0].location),
 						});
 						return;
 					}

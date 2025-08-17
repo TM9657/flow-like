@@ -17,6 +17,7 @@ members = [
     "packages/catalog",
     "packages/storage",
     "packages/api",
+    "apps/utils/board-decoder",
 ]
 
 [workspace.dependencies]

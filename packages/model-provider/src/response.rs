@@ -117,10 +117,10 @@ impl ResponseMessage {
             self.refusal = Some(self.refusal.as_deref().unwrap_or("").to_string() + &refusal);
         }
 
-        if let Some(role) = delta.role {
-            if role != self.role {
-                self.role = self.role.to_string() + &role;
-            }
+        if let Some(role) = delta.role
+            && role != self.role
+        {
+            self.role = self.role.to_string() + &role;
         }
 
         if delta.tool_calls.is_none() {

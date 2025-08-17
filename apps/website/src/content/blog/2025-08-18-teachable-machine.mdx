@@ -1,0 +1,122 @@
+---
+title: "From Teachable Machine to Workflow Automation"
+description: "Learn how to integrate Google’s Teachable Machine with Flow-Like for seamless AI-powered workflows."
+date: 2025-08-18
+tags: ["google", "teachable machine", "tutorial"]
+cover: "/images/teachable-machine.jpg"
+draft: false
+---
+
+
+Machine learning often feels like a black box — something only experts with GPUs and massive datasets can use. But that’s changing. Google’s **Teachable Machine** turned training custom models into a drag-and-drop experience. And now, with Flow-Like’s **Teachable Machine node**, those same models can run inside fully automated workflows.
+
+That means you can move from an idea, to a trained AI model, to a running workflow in minutes — all without writing a single line of code.
+
+In this guide, we’ll cover:
+
+* What Teachable Machine is and why it matters
+* How to train and export a TensorFlow Lite model
+* How to connect and run your model in Flow-Like
+
+---
+
+## What is Teachable Machine?
+
+Teachable Machine is a web-based tool from Google that makes machine learning approachable. Instead of writing TensorFlow or PyTorch code, you use a simple interface:
+
+1. Define classes (the categories you want to recognize).
+2. Upload or record sample data (images, audio, or poses).
+3. Click **Train Model**.
+4. Export the trained model for use anywhere.
+
+It’s designed for speed and accessibility — ideal for rapid prototyping, education, or testing AI-driven ideas. What once took weeks of setup can now be done in minutes.
+
+But training a model is only half the story. The real question is: **how do you use it?** That’s where Flow-Like comes in.
+
+---
+
+## Step 1: Define Your Use Case
+
+In Teachable Machine, start by creating the classes you want your model to recognize. For this example, we defined two categories: **Thumbnails** and **Workflows**.
+
+Each class needs a set of images. You can upload files or record directly from your webcam. Even with just a handful of examples, Teachable Machine can train a working model.
+
+![Create use case](/posts/teachable-machine/1-create-use-case.png)
+
+---
+
+## Step 2: Train and Export the Model
+
+Once your dataset is ready, train the model with a single click. Teachable Machine automatically handles preprocessing, architecture, and optimization.
+
+Next, export your trained model:
+
+* Select **TensorFlow Lite** as the format.
+* Choose **Floating Point** for maximum compatibility.
+
+This generates two files:
+
+* A `.tflite` file containing the trained model.
+* A `labels.txt` file listing your class names.
+
+Both files are required for running the model in Flow-Like.
+
+![Export floating point model](/posts/teachable-machine/2-export-floating-point-tflite.png)
+
+---
+
+## Step 3: Connect the Model in Flow-Like
+
+Flow-Like provides a dedicated **Teachable Machine node** that integrates seamlessly with your exported model. Setup is straightforward:
+
+1. Load the `.tflite` model file.
+2. Load the `labels.txt` file.
+3. Provide an input image.
+4. Connect the prediction output to any node — logging, visualization, or further automation.
+
+Example workflow:
+
+![Workflow example](/posts/teachable-machine/3-workflow.png)
+
+In this setup:
+
+* A **Load Image** node feeds an image into the model.
+* The **Teachable Machine node** runs inference.
+* **Get Element** and **Class/Label** nodes interpret the result.
+* The prediction is displayed using **Print Info**.
+
+This allows Flow-Like to instantly recognize whether an image belongs to the Thumbnail or Workflow class — no custom inference code required.
+
+---
+
+## Why This Matters
+
+Teachable Machine made it easy for anyone to train a model. Flow-Like makes it just as easy to **use** that model in production workflows.
+
+* **Speed**: Train and deploy in minutes.
+* **Accessibility**: No machine learning expertise required.
+* **Integration**: Models can connect with any Flow-Like node.
+* **Scalability**: Move from prototypes to enterprise workflows seamlessly.
+
+AI becomes just another **building block** in your workflow — like timers, events, or data transformations.
+
+---
+
+## Get Started in 4 Steps
+
+1. Visit [Teachable Machine](https://teachablemachine.withgoogle.com/).
+2. Train a simple classifier with a few examples.
+3. Export as **TensorFlow Lite (Floating Point)**.
+4. Open Flow-Like and connect the **Teachable Machine node** with your model and labels.
+
+In less than 10 minutes, you’ll have an AI-powered workflow running locally — without touching TensorFlow code.
+
+---
+
+## Conclusion
+
+With Teachable Machine and Flow-Like, the journey from idea to automation has never been shorter. What used to be a technical barrier — training and deploying models — is now reduced to drag, drop, and connect.
+
+AI is no longer just an experiment. It’s a practical, flexible, and accessible tool for anyone building workflows.
+
+The next step is yours: train a model, drop it into Flow-Like, and watch your workflows get smarter.

@@ -1,0 +1,87 @@
+---
+title: "Typed Workflows: Why “It Works” Isn’t Good Enough in Enterprise IT"
+description: "Enterprise-grade workflow automation built for scale. How Flow-Like's typed workflows solve the problems of traditional workflow engines."
+date: 2025-08-13
+tags: ["workflows", "typing", "enterprise", "automation"]
+cover: "/images/typed-workflows.jpg"
+draft: false
+---
+
+In most companies, workflows start small.
+A quick automation here, a data sync there — maybe a script to send an email when a lead comes in. It’s simple, it works, and nobody touches it because *“don’t fix what isn’t broken.”*
+
+Fast forward six months and that neat little automation has turned into a web of triggers, connectors, and conditional logic that only one person understands. That person is now on vacation. And something just broke.
+
+---
+
+## The JavaScript Problem
+
+A lot of popular workflow tools are basically JavaScript without the guardrails: easy to start with, somewhat flexible, and… totally blind when it comes to the *data* it’s moving.
+
+You see a node that says “Send Email” — great. But where did that email come from? Was it pulled from a CRM? Entered manually? Did it pass through a validation step? No clue.
+
+At small scale, you can live with that uncertainty. At enterprise scale, it’s a disaster waiting to happen. It’s the difference between:
+
+```javascript
+sendEmail(to);
+```
+
+…and:
+
+```typescript
+sendEmail(customer.email: EmailAddressType);
+```
+
+One is “hope it works.” The other is “I know exactly what’s being sent, from where, and why.”
+
+---
+
+## The TypeScript Upgrade for Workflows
+
+Typed workflows add a real data layer. Not just the actions (“send email”, “update record”), but the context: where the data came from, how it’s transformed, and how it flows through the system.
+
+That means:
+
+* You can debug without guessing.
+* You can spot issues before they cause outages.
+* You can prove to security and compliance exactly what’s happening.
+
+If you’ve ever been in a 3-hour incident call trying to answer “where did this data come from?” you already understand why this matters.
+
+---
+
+## Security and Governance: The Other Half of the Equation
+
+Type safety is great, but enterprise systems also need governance. This isn’t just about ticking compliance boxes — it’s about not waking up to an email titled *“Urgent: Data Breach Response Plan”*.
+
+Serious workflow platforms have:
+
+* **Authentication & Authorization** — proper identity management, role-based access.
+* **Audit Logs** — who ran what, when, and with which data.
+* **Versioning** — because “oops, I deployed the wrong workflow” shouldn’t be a career-ending mistake.
+* **Isolation** — so one failed workflow doesn’t take the whole system down.
+
+If your automation tool can’t do those things, it’s not an enterprise tool. It’s a side project.
+
+---
+
+## Flow-Like: Built for the Grown-Up Problems
+
+This is exactly why we built [**Flow-Like**](https://github.com/TM9657/flow-like).
+
+Flow-Like treats workflows like codebases:
+
+* Typed data layer you can see and trace.
+* Built-in enterprise security and governance.
+* Scales with complexity instead of collapsing under it.
+
+Think of it like this:
+
+* Typical Workflow = JavaScript. Fast to start, risky at scale.
+* Flow-Like = TypeScript. Structured, explicit, safe — and made for when your workflows handle things that actually matter - and also fast to start.
+
+When your automations are moving sensitive customer data, running financial processes, or touching anything that could make auditors nervous, “it works” is not enough. You need to know exactly *how* it works, and you need to be able to prove it.
+
+---
+
+**Bottom line:** Typed workflows aren’t a nice-to-have. They’re the difference between smooth scaling and late-night war rooms.

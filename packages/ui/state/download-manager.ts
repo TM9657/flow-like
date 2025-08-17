@@ -1,4 +1,4 @@
-import { create, type StoreApi, type UseBoundStore } from "zustand";
+import { type StoreApi, type UseBoundStore, create } from "zustand";
 import { Bit, type Download, type IBit } from "../lib";
 import type { IBackendState } from "./backend-state";
 
@@ -126,4 +126,5 @@ const createStore = () =>
 		},
 	}));
 
-export const useDownloadManager = (globalThis.__FL_DL_STORE__ ??= createStore());
+export const useDownloadManager = (globalThis.__FL_DL_STORE__ ??=
+	createStore());

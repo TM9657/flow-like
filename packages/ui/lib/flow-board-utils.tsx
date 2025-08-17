@@ -1,6 +1,8 @@
 import { createId } from "@paralleldrive/cuid2";
 import { CopyIcon } from "lucide-react";
+import type { RefObject } from "react";
 import { toast } from "sonner";
+import { InnerLayerNodeType } from "../components/flow/layer-inner-node";
 import { typeToColor } from "../components/flow/utils";
 import {
 	copyPasteCommand,
@@ -18,7 +20,7 @@ import {
 } from "./schema/flow/board";
 import { IVariableType } from "./schema/flow/node";
 import type { INode } from "./schema/flow/node";
-import type { IPin, IPinType } from "./schema/flow/pin";
+import { type IPin, IPinType } from "./schema/flow/pin";
 
 interface ISerializedPin {
 	id: string;
@@ -112,7 +114,7 @@ function deserializeNode(node: ISerializedNode): INode {
 
 export function isValidConnection(
 	connection: any,
-	cache: Map<string, [IPin, INode, boolean]>,
+	cache: Map<string, [IPin, INode | ILayer, boolean]>,
 	refs: { [key: string]: string },
 ) {
 	const [sourcePin, sourceNode] = cache.get(connection.sourceHandle) || [];
@@ -138,14 +140,36 @@ export function isValidConnection(
 		return false;
 	}
 
-	return doPinsMatch(sourcePin, targetPin, refs);
+	return doPinsMatch(sourcePin, targetPin, refs, sourceNode, targetNode);
+}
+
+function invertPinType(type: IPinType): IPinType {
+	return type === IPinType.Input ? IPinType.Output : IPinType.Input;
 }
 
 export function doPinsMatch(
 	sourcePin: IPin,
 	targetPin: IPin,
 	refs: { [key: string]: string },
+	sourceNode?: INode | ILayer,
+	targetNode?: INode | ILayer,
 ) {
+	if (sourceNode?.id.endsWith("-return")) {
+		sourcePin.pin_type = invertPinType(sourcePin.pin_type);
+	}
+
+	if (sourceNode?.id.endsWith("-input")) {
+		sourcePin.pin_type = invertPinType(sourcePin.pin_type);
+	}
+
+	if (targetNode?.id.endsWith("-return")) {
+		targetPin.pin_type = invertPinType(targetPin.pin_type);
+	}
+
+	if (targetNode?.id.endsWith("-input")) {
+		targetPin.pin_type = invertPinType(targetPin.pin_type);
+	}
+
 	if (
 		(sourcePin.name === "route_in" &&
 			sourcePin.data_type === IVariableType.Generic) ||
@@ -161,7 +185,12 @@ export function doPinsMatch(
 	)
 		return true;
 
-	if (sourcePin.pin_type === targetPin.pin_type) return false;
+	if (sourcePin.pin_type === targetPin.pin_type) {
+		console.warn(
+			`Invalid connection: source and target pins have the same type (${sourcePin.pin_type})`,
+		);
+		return false;
+	}
 
 	let schemaSource = sourcePin.schema;
 	if (schemaSource) {
@@ -222,14 +251,16 @@ export function parseBoard(
 	oldNodes?: any[],
 	oldEdges?: any[],
 	currentLayer?: string,
+	boardRef?: RefObject<IBoard | undefined>,
 ) {
 	const nodes: any[] = [];
 	const edges: any[] = [];
-	const cache = new Map<string, [IPin, INode, boolean]>();
+	const cache = new Map<string, [IPin, INode | ILayer, boolean]>();
 	const oldNodesMap = new Map<number, any>();
 	const oldEdgesMap = new Map<string, any>();
 
 	for (const oldNode of oldNodes ?? []) {
+		oldNode.data.boardRef = boardRef;
 		if (oldNode.data?.hash) oldNodesMap.set(oldNode.data?.hash, oldNode);
 	}
 
@@ -245,7 +276,7 @@ export function parseBoard(
 		if (nodeLayer !== currentLayer) continue;
 		const hash = node.hash ?? -1;
 		const oldNode = hash === -1 ? undefined : oldNodesMap.get(hash);
-		if (oldNode && !oldNode?.data?.ghost) {
+		if (oldNode) {
 			nodes.push(oldNode);
 		} else {
 			nodes.push({
@@ -258,9 +289,9 @@ export function parseBoard(
 				},
 				data: {
 					label: node.name,
+					boardRef: boardRef,
 					node: node,
 					hash: hash,
-					ghost: false,
 					boardId: board.id,
 					appId: appId,
 					onExecute: async (node: INode, payload?: object) => {
@@ -280,13 +311,126 @@ export function parseBoard(
 		for (const layer of Object.values(board.layers)) {
 			const parentLayer =
 				(layer.parent_id ?? "") === "" ? undefined : layer.parent_id;
-			if (parentLayer !== currentLayer) continue;
+			if (parentLayer !== currentLayer) {
+				if (layer.id === currentLayer) {
+					// Build immutable inverted pins for the current layer view and split into input/return inner nodes
+					const inputNodePins: { [key: string]: IPin } = {};
+					const returnNodePins: { [key: string]: IPin } = {};
 
-			const lookup: Record<string, INode> = {};
+					for (const pin of Object.values(layer.pins)) {
+						const inverted: IPin = {
+							...pin,
+							pin_type: invertPinType(pin.pin_type),
+						};
+						// cache the inverted pin with the layer as owner; visibility = true (we are inside this layer)
+						cache.set(inverted.id, [inverted, layer, true]);
+						// Pins that become Output feed the -input node; those that become Input feed the -return node
+						if (inverted.pin_type === IPinType.Output) {
+							inputNodePins[inverted.id] = inverted;
+						} else {
+							returnNodePins[inverted.id] = inverted;
+						}
+					}
+
+					nodes.push({
+						id: layer.id + "-input",
+						type: "layerInnerNode",
+						position: {
+							x: layer.in_coordinates?.[0],
+							y: layer.in_coordinates?.[1],
+						},
+						zIndex: 19,
+						data: {
+							label: layer.id,
+							boardId: board.id,
+							appId: appId,
+							boardRef: boardRef,
+							type: InnerLayerNodeType.INPUT,
+							layer: {
+								...layer,
+								pins: inputNodePins,
+							},
+							hash: layer.hash ?? -1,
+							pushLayer: async (layer: ILayer) => {
+								pushLayer(layer);
+							},
+							onLayerUpdate: async (layer: ILayer) => {
+								const command = upsertLayerCommand({
+									current_layer: currentLayer,
+									layer: layer,
+									node_ids: [],
+								});
+								await executeCommand(command, false);
+							},
+							onLayerRemove: async (layer: ILayer, preserve_nodes: boolean) => {
+								const command = removeLayerCommand({
+									layer,
+									child_layers: [],
+									layer_nodes: [],
+									layers: [],
+									nodes: [],
+									preserve_nodes,
+								});
+								await executeCommand(command, false);
+							},
+						},
+						selected: selected.has(layer.id + "-input"),
+					});
+					nodes.push({
+						id: layer.id + "-return",
+						type: "layerInnerNode",
+						position: {
+							x: layer.out_coordinates?.[0],
+							y: layer.out_coordinates?.[1],
+						},
+						zIndex: 19,
+						data: {
+							label: layer.id,
+							boardId: board.id,
+							appId: appId,
+							boardRef: boardRef,
+							type: InnerLayerNodeType.RETURN,
+							layer: {
+								...layer,
+								pins: returnNodePins,
+							},
+							hash: layer.hash ?? -1,
+							pushLayer: async (layer: ILayer) => {
+								pushLayer(layer);
+							},
+							onLayerUpdate: async (layer: ILayer) => {
+								const command = upsertLayerCommand({
+									current_layer: currentLayer,
+									layer: layer,
+									node_ids: [],
+								});
+								await executeCommand(command, false);
+							},
+							onLayerRemove: async (layer: ILayer, preserve_nodes: boolean) => {
+								const command = removeLayerCommand({
+									layer,
+									child_layers: [],
+									layer_nodes: [],
+									layers: [],
+									nodes: [],
+									preserve_nodes,
+								});
+								await executeCommand(command, false);
+							},
+						},
+						selected: selected.has(layer.id + "-return"),
+					});
+				}
+
+				continue;
+			}
+
+			const lookup: Record<string, INode | ILayer> = {};
 			if (layer.pins)
 				for (const pin of Object.values(layer.pins)) {
-					const [_, node] = cache.get(pin.id) || [];
+					const [_, node] = cache.get(pin.id) ?? [pin.id, layer];
 					if (node) lookup[pin.id] = node;
+					cache.set(pin.id, [pin, node, true]);
 				}
 
 			activeLayer.add(layer.id);
@@ -300,6 +444,8 @@ export function parseBoard(
 					boardId: board.id,
 					appId: appId,
 					layer: layer,
+					boardRef: boardRef,
+					hash: layer.hash ?? -1,
 					pinLookup: lookup,
 					pushLayer: async (layer: ILayer) => {
 						pushLayer(layer);
@@ -328,12 +474,18 @@ export function parseBoard(
 			});
 		}
 
+	// Helper to resolve inner node id for current layer boundary pins
+	const resolveInnerNodeId = (layerId: string, pin: IPin) =>
+		// Pins were inverted when entering the current layer view:
+		// - boundary Input -> inverted Output -> belongs to `${layerId}-input`
+		// - boundary Output -> inverted Input -> belongs to `${layerId}-return`
+		pin.pin_type === IPinType.Output ? `${layerId}-input` : `${layerId}-return`;
+
 	const currentLayerRef: ILayer | undefined = board.layers[currentLayer ?? ""];
 	for (const [pin, node, visible] of cache.values()) {
 		if (pin.connected_to.length === 0) continue;
 
 		for (const connectedTo of pin.connected_to) {
-			const shadowNodes = new Map();
 			const [conntectedPin, connectedNode, connectedVisible] =
 				cache.get(connectedTo) || [];
 			const connectedLayer = board.layers[connectedNode?.layer ?? ""];
@@ -344,7 +496,7 @@ export function parseBoard(
 				visible !== connectedVisible &&
 				(connectedLayer?.parent_id ?? "") !== (currentLayer ?? "")
 			) {
-				if (!visible && node.layer === currentLayerRef.parent_id) {
+				if (!visible && node.layer === currentLayerRef?.parent_id) {
 					let coordinates = node.coordinates ?? [0, 0, 0];
 
 					if (currentLayerRef?.nodes[node.id]) {
@@ -352,37 +504,9 @@ export function parseBoard(
 							0, 0, 0,
 						];
 					}
-
-					nodes.push({
-						id: node.id,
-						type: "node",
-						deletable: false,
-						style: { opacity: 0.5 },
-						zIndex: 20,
-						position: {
-							x: coordinates?.[0] ?? 0,
-							y: coordinates?.[1] ?? 0,
-						},
-						data: {
-							label: node.name,
-							node: node,
-							hash: node.hash ?? -1,
-							boardId: board.id,
-							appId: appId,
-							ghost: true,
-							onExecute: async (node: INode, payload?: object) => {
-								await executeBoard(node, payload);
-							},
-							onCopy: async () => {
-								handleCopy();
-							},
-						},
-						selected: selected.has(node.id),
-					});
-					shadowNodes.set(node.id, node);
 				} else if (
 					!connectedVisible &&
-					connectedNode.layer === currentLayerRef.parent_id
+					connectedNode.layer === currentLayerRef?.parent_id
 				) {
 					let coordinates = connectedNode.coordinates ?? [0, 0, 0];
 
@@ -390,34 +514,6 @@ export function parseBoard(
 						coordinates = currentLayerRef.nodes[connectedNode.id]
 							?.coordinates ?? [0, 0, 0];
 					}
-
-					nodes.push({
-						id: connectedNode.id,
-						type: "node",
-						zIndex: 20,
-						deletable: false,
-						style: { opacity: 0.5 },
-						position: {
-							x: coordinates?.[0] ?? 0,
-							y: coordinates?.[1] ?? 0,
-						},
-						data: {
-							label: connectedNode.name,
-							node: connectedNode,
-							boardId: board.id,
-							appId: appId,
-							hash: connectedNode.hash ?? -1,
-							ghost: true,
-							onExecute: async (node: INode, payload?: object) => {
-								await executeBoard(node, payload);
-							},
-							onCopy: async () => {
-								handleCopy();
-							},
-						},
-						selected: selected.has(connectedNode.id),
-					});
-					shadowNodes.set(connectedNode.id, connectedNode);
 				}
 			}
 
@@ -426,44 +522,55 @@ export function parseBoard(
 			if (
 				edge &&
 				visible === connectedVisible &&
-				edge.data.fromLayer === node.layer &&
-				edge.data.toLayer === connectedNode.layer
+				edge.data.fromLayer === (node as any).layer &&
+				edge.data.toLayer === (connectedNode as any).layer &&
+				currentLayer !== (connectedNode as any).layer &&
+				currentLayer !== (node as any).layer
 			) {
 				edges.push(edge);
 				continue;
 			}
 
-			const sourceNode = shadowNodes.has(node.id)
-				? node.id
-				: activeLayer.has(node.layer ?? "")
-					? node.layer
-					: node.id;
+			// Map endpoints:
+			// - If the owner is the current layer, route to the inner nodes (-input / -return)
+			// - Else, if the owner lives in an active child layer, route to that layer node
+			// - Else, route to the node itself
+			const sourceNodeId =
+				((node as any)?.id ?? "") === (currentLayer ?? "")
+					? resolveInnerNodeId(currentLayer!, pin)
+					: activeLayer.has((node as any)?.layer ?? "")
+						? (node as any).layer
+						: (node as any)?.id;
 
-			const connectedNodeId = shadowNodes.has(connectedNode.id)
-				? connectedNode.id
-				: activeLayer.has(connectedNode.layer ?? "")
-					? connectedNode.layer
-					: connectedNode.id;
+			const targetNodeId =
+				((connectedNode as any)?.id ?? "") === (currentLayer ?? "")
+					? resolveInnerNodeId(currentLayer!, conntectedPin)
+					: activeLayer.has((connectedNode as any)?.layer ?? "")
+						? (connectedNode as any).layer
+						: (connectedNode as any)?.id;
 
 			if (pin.id && conntectedPin.id)
 				edges.push({
 					id: `${pin.id}-${conntectedPin.id}`,
-					source: sourceNode,
+					source: sourceNodeId,
 					sourceHandle: pin.id,
 					zIndex: 18,
 					data: {
-						fromLayer: node.layer,
-						toLayer: connectedNode.layer,
+						fromLayer: (node as any).layer,
+						toLayer: (connectedNode as any).layer,
 					},
 					animated: pin.data_type !== "Execution",
 					reconnectable: true,
-					target: connectedNodeId,
+					target: targetNodeId,
 					targetHandle: conntectedPin.id,
 					style: { stroke: typeToColor(pin.data_type) },
 					type: connectionMode ?? "default",
 					data_type: pin.data_type,
 					selected: selected.has(`${pin.id}-${connectedTo}`),
 				});
+			else {
+				console.log(`${pin.id}-${connectedTo} edge not created`);
+			}
 		}
 	}
 
@@ -485,11 +592,13 @@ export function parseBoard(
 			width: comment.width ?? 200,
 			height: comment.height ?? 80,
 			zIndex: comment.z_index ?? 1,
+			draggable: !(comment.is_locked ?? false),
 			data: {
 				label: comment.id,
 				boardId: board.id,
 				hash: hash,
-				comment: comment,
+				boardRef: boardRef,
+				comment: { ...comment, is_locked: comment.is_locked ?? false },
 				onUpsert: (comment: IComment) => {
 					const command = upsertCommentCommand({
 						comment: comment,

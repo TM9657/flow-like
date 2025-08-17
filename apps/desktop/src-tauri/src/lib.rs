@@ -12,18 +12,13 @@ use flow_like::{
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
-use flow_like_types::{
-    sync::Mutex,
-    tokio::{self, time::interval},
-};
+use flow_like_types::{sync::Mutex, tokio::time::interval};
 use serde_json::json;
 use settings::Settings;
 use state::TauriFlowLikeState;
 use std::{sync::Arc, time::Duration};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
-use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_dialog::MessageDialogButtons;
 use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(not(debug_assertions))]
@@ -242,18 +237,18 @@ pub fn run() {
             let app_handle = view.app_handle();
             let main_window = app_handle.get_webview_window("main");
 
-            if let Some(main_window) = main_window {
-                if label == "oidcFlow" {
-                    let res = main_window.emit(
-                        "oidc/url",
-                        json!({
-                            "url": payload.url(),
-                        }),
-                    );
+            if let Some(main_window) = main_window
+                && label == "oidcFlow"
+            {
+                let res = main_window.emit(
+                    "oidc/url",
+                    json!({
+                        "url": payload.url(),
+                    }),
+                );
 
-                    if let Err(e) = res {
-                        eprintln!("Error emitting oidcUrlChange: {}", e);
-                    }
+                if let Err(e) = res {
+                    eprintln!("Error emitting oidcUrlChange: {}", e);
                 }
             }
 
@@ -296,6 +291,8 @@ pub fn run() {
             functions::app::import_app,
             functions::app::update_app,
             functions::app::delete_app,
+            functions::app::sharing::export_app_to_file,
+            functions::app::sharing::import_app_from_file,
             functions::bit::get_bit,
             functions::bit::is_bit_installed,
             functions::bit::get_bit_size,

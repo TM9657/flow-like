@@ -5,16 +5,16 @@ edition = "2024"
 
 [dependencies]
 flow-like-types.workspace = true
-text-splitter = {version = "0.25.1", features = ["markdown", "tokenizers", "tiktoken-rs"]}
-tokenizers = {version="0.21.1", default-features = false, features = ["onig"]}
+text-splitter = {version = "0.27.0", features = ["markdown", "tokenizers", "tiktoken-rs"]}
+tokenizers = {version="0.21.4", default-features = false, features = ["onig"]}
 schemars.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
-fastembed = {version="4.8.0", default-features = false, features = ["ort-download-binaries"] }
+fastembed = {version="4.9.1", default-features = false, features = ["ort-download-binaries"] }
 openai-api-rs = "6.0.3"
-tiktoken-rs = "0.6.0"
-aws-config = { version = "1.6.1", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = "1.81.0"
+tiktoken-rs = "0.7.0"
+aws-config = { workspace = true, features = ["behavior-version-latest"] }
+aws-sdk-bedrockruntime = "1.101.0"
 ort = {version="=2.0.0-rc.9", features = ["download-binaries"]}
 ndarray = "0.16.1"
 

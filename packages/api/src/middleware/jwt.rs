@@ -263,89 +263,89 @@ pub async fn jwt_middleware(
     next: Next,
 ) -> Result<Response<Body>, AuthorizationError> {
     let mut request = request;
-    if let Some(auth_header) = request.headers().get(AUTHORIZATION) {
-        if let Ok(token) = auth_header.to_str() {
-            let token = if token.starts_with("Bearer ") {
-                &token[7..]
-            } else {
-                token
-            };
+    if let Some(auth_header) = request.headers().get(AUTHORIZATION)
+        && let Ok(token) = auth_header.to_str()
+    {
+        let token = if token.starts_with("Bearer ") {
+            &token[7..]
+        } else {
+            token
+        };
 
-            let token = token.trim();
-            let claims = state.validate_token(token)?;
-            let sub = claims.get("sub").ok_or(anyhow!("sub not found"))?;
-            let sub = sub.as_str().ok_or(anyhow!("sub not a string"))?;
-            let email = claims
-                .get("email")
-                .and_then(|v| v.as_str())
-                .map(String::from);
-            let username = claims
-                .get("username")
-                .and_then(|v| v.as_str())
-                .map(String::from)
-                .or_else(|| {
-                    claims
-                        .get("cognito:username")
-                        .and_then(|v| v.as_str())
-                        .map(String::from)
-                })
-                .unwrap_or_else(|| sub.to_string());
-            let preferred_username = claims
-                .get("preferred_username")
-                .and_then(|v| v.as_str())
-                .map(String::from)
-                .unwrap_or_else(|| username.clone());
-            let user = AppUser::OpenID(OpenIDUser {
-                sub: sub.to_string(),
-                username,
-                email,
-                preferred_username,
+        let token = token.trim();
+        let claims = state.validate_token(token)?;
+        let sub = claims.get("sub").ok_or(anyhow!("sub not found"))?;
+        let sub = sub.as_str().ok_or(anyhow!("sub not a string"))?;
+        let email = claims
+            .get("email")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let username = claims
+            .get("username")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .or_else(|| {
+                claims
+                    .get("cognito:username")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+            })
+            .unwrap_or_else(|| sub.to_string());
+        let preferred_username = claims
+            .get("preferred_username")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| username.clone());
+        let user = AppUser::OpenID(OpenIDUser {
+            sub: sub.to_string(),
+            username,
+            email,
+            preferred_username,
+        });
+        request.extensions_mut().insert::<AppUser>(user);
+        return Ok(next.run(request).await);
+    }
+
+    if let Some(pat_header) = request.headers().get("x-pat")
+        && let Ok(pat_str) = pat_header.to_str()
+    {
+        let db_pat = Pat::find()
+            .filter(pat::Column::Key.eq(pat_str))
+            .one(&state.db)
+            .await?;
+        if let Some(pat) = db_pat {
+            let pat_user = AppUser::PAT(PATUser {
+                pat: pat_str.to_string(),
+                sub: pat.user_id.clone(),
             });
-            request.extensions_mut().insert::<AppUser>(user);
+            request.extensions_mut().insert::<AppUser>(pat_user);
             return Ok(next.run(request).await);
         }
     }
 
-    if let Some(pat_header) = request.headers().get("x-pat") {
-        if let Ok(pat_str) = pat_header.to_str() {
-            let db_pat = Pat::find()
-                .filter(pat::Column::Key.eq(pat_str))
-                .one(&state.db)
-                .await?;
-            if let Some(pat) = db_pat {
-                let pat_user = AppUser::PAT(PATUser {
-                    pat: pat_str.to_string(),
-                    sub: pat.user_id.clone(),
-                });
-                request.extensions_mut().insert::<AppUser>(pat_user);
-                return Ok(next.run(request).await);
-            }
-        }
-    }
+    if let Some(api_key_header) = request.headers().get("x-api-key")
+        && let Ok(api_key_str) = api_key_header.to_str()
+    {
+        let db_app = TechnicalUser::find()
+            .filter(technical_user::Column::Key.eq(api_key_str))
+            .one(&state.db)
+            .await?;
 
-    if let Some(api_key_header) = request.headers().get("x-api-key") {
-        if let Ok(api_key_str) = api_key_header.to_str() {
-            let db_app = TechnicalUser::find()
-                .filter(technical_user::Column::Key.eq(api_key_str))
-                .one(&state.db)
-                .await?;
-
-            if let Some(app) = db_app {
-                if let Some(valid_until) = app.valid_until {
-                    let now = chrono::Utc::now().naive_utc();
-                    if valid_until < now {
-                        return Err(AuthorizationError::from(anyhow!("API Key is expired")));
-                    }
+        if let Some(app) = db_app {
+            if let Some(valid_until) = app.valid_until {
+                let now = chrono::Utc::now().naive_utc();
+                if valid_until < now {
+                    return Err(AuthorizationError::from(anyhow!("API Key is expired")));
                 }
-
-                let app_user = AppUser::APIKey(ApiKey {
-                    key_id: app.id.clone(),
-                    api_key: api_key_str.to_string(),
-                    app_id: app.app_id.clone(),
-                });
-                request.extensions_mut().insert::<AppUser>(app_user);
-                return Ok(next.run(request).await);
             }
+
+            let app_user = AppUser::APIKey(ApiKey {
+                key_id: app.id.clone(),
+                api_key: api_key_str.to_string(),
+                app_id: app.app_id.clone(),
+            });
+            request.extensions_mut().insert::<AppUser>(app_user);
+            return Ok(next.run(request).await);
         }
     }
 

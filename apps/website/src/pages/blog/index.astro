@@ -1,0 +1,44 @@
+---
+import { getCollection } from 'astro:content';
+import PostCard from '../../components/post-card.astro';
+import "@tm9657/flow-like-ui/global.css";
+import "../../styles/Blog.css";
+import BlogLayout from '../../layouts/Blog-Layout.astro';
+
+const PAGE_SIZE = 10;
+const page = Number(Astro.url.searchParams.get('page') ?? 1);
+
+const all = (await getCollection('blog', ({ data }) => import.meta.env.PROD ? !data.draft : true))
+  .sort((a,b) => b.data.date.getTime() - a.data.date.getTime());
+
+const start = (page-1)*PAGE_SIZE;
+const slice = all.slice(start, start+PAGE_SIZE);
+const pageCount = Math.ceil(all.length / PAGE_SIZE);
+const first = slice[0];
+const rest = slice.slice(1);
+---
+<BlogLayout data={{ title: "Blog", description: "Latest blog posts", slug: "blog" }}>
+  <main class="mx-auto max-w-4xl p-2 flex flex-grow flex-col items-start justify-start gap-8">
+    <h1 class="sr-only">Blog</h1>
+
+    {first && <PostCard entry={first} variant="lead" />}
+
+    <section class="mt-6 flex flex-col gap-8">
+      {rest.map(p => <PostCard entry={p} variant="compact" />)}
+    </section>
+
+    {pageCount > 1 && (
+      <nav class="mt-10 flex gap-2">
+        {Array.from({length: pageCount}, (_, i) => i + 1).map(i => (
+          <a
+            href={`?page=${i}`}
+            aria-current={i === page ? 'page' : undefined}
+            class={`px-3 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 ${i===page ? 'bg-zinc-200 dark:bg-zinc-700 font-medium' : ''}`}
+          >
+            {i}
+          </a>
+        ))}
+      </nav>
+    )}
+  </main>
+</BlogLayout>
