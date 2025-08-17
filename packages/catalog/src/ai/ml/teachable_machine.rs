@@ -155,7 +155,7 @@ impl NodeLogic for TeachableMachineNode {
 
                 // Load model
                 let mut cursor = Cursor::new(model_bytes);
-                let mut model = tract_tflite::tflite()
+                let model = tract_tflite::tflite()
                     .model_for_read(&mut cursor)
                     .map_err(|e| flow_like_types::anyhow!("TFLite parse error: {e}"))?;
 
@@ -196,7 +196,7 @@ impl NodeLogic for TeachableMachineNode {
                     }
                 };
 
-                let mut runnable = model
+                let runnable = model
                     .with_input_fact(0, fact)?
                     .into_optimized()?
                     .into_runnable()?;
