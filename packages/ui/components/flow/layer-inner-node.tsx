@@ -2,9 +2,19 @@
 
 import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import { ZapIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import {
+	type RefObject,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { toast } from "sonner";
-import { type IBoard, type ILayer, IPinType } from "../../lib/schema/flow/board";
+import {
+	type IBoard,
+	type ILayer,
+	IPinType,
+} from "../../lib/schema/flow/board";
 import { CommentDialog } from "./comment-dialog";
 import { FlowPin } from "./flow-pin";
 import { LayerEditMenu } from "./layer-editing-menu";
@@ -22,7 +32,7 @@ export type ILayerInnerNode = Node<
 		boardId: string;
 		hash: string;
 		appId: string;
-		boardRef?: RefObject<IBoard | undefined>
+		boardRef?: RefObject<IBoard | undefined>;
 		pushLayer(layer: ILayer): Promise<void>;
 		onLayerUpdate(layer: ILayer): Promise<void>;
 		onLayerRemove(layer: ILayer, preserve_nodes: boolean): Promise<void>;

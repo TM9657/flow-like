@@ -970,7 +970,7 @@ export function FlowBoard({
 			nodes,
 			edges,
 			currentLayer,
-			boardRef
+			boardRef,
 		);
 
 		setNodes(parsed.nodes);

@@ -654,14 +654,6 @@ const FlowNodeInner = memo(
 									className="w-2 h-2 cursor-pointer hover:text-primary"
 								/>
 							)}
-							{/* {useMemo(() => {
-								return props.data.traces.length > 0 ? (
-									<ScrollTextIcon
-										onClick={() => props.data.openTrace(props.data.traces)}
-										className="w-2 h-2 cursor-pointer hover:text-primary"
-									/>
-								) : null;
-							}, [props.data.traces.length, props.data.openTrace])} */}
 							{useMemo(() => {
 								if (debouncedExecutionState !== "running") return null;
 								return (

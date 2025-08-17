@@ -1,14 +1,29 @@
 "use client";
+import { useDebounce } from "@uidotdev/usehooks";
 import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import {
+	BanIcon,
+	CircleXIcon,
 	FoldHorizontalIcon,
 	MessageSquareIcon,
+	ScrollTextIcon,
 	SlidersHorizontalIcon,
+	SquareCheckIcon,
 	SquarePenIcon,
 	Trash2Icon,
+	TriangleAlertIcon,
 	ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useTheme } from "next-themes";
+import {
+	type RefObject,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import PuffLoader from "react-spinners/PuffLoader";
 import { toast } from "sonner";
 import {
 	ContextMenu,
@@ -19,7 +34,10 @@ import {
 	ContextMenuTrigger,
 } from "../../components/ui/context-menu";
 import type { IBoard, INode } from "../../lib";
-import { type ILayer, IPinType } from "../../lib/schema/flow/board";
+import { logLevelFromNumber } from "../../lib/log-level";
+import { type ILayer, ILogLevel, IPinType } from "../../lib/schema/flow/board";
+import { useLogAggregation } from "../../state/log-aggregation-state";
+import { useRunExecutionStore } from "../../state/run-execution-state";
 import { CommentDialog } from "./comment-dialog";
 import { FlowPin } from "./flow-pin";
 import { LayerEditMenu } from "./layer-editing-menu";
@@ -32,7 +50,7 @@ export type LayerNode = Node<
 		boardId: string;
 		hash: string;
 		appId: string;
-		boardRef?: RefObject<IBoard | undefined>
+		boardRef?: RefObject<IBoard | undefined>;
 		pushLayer(layer: ILayer): Promise<void>;
 		onLayerUpdate(layer: ILayer): Promise<void>;
 		onLayerRemove(layer: ILayer, preserve_nodes: boolean): Promise<void>;
@@ -46,6 +64,110 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 	const [comment, setComment] = useState<string | undefined>();
 	const [name, setName] = useState<string | undefined>();
 	const [editing, setEditing] = useState(false);
+	const { resolvedTheme } = useTheme();
+
+	const { currentMetadata } = useLogAggregation();
+	const { runs } = useRunExecutionStore();
+	const [executionState, setExecutionState] = useState<
+		"done" | "running" | "none"
+	>("none");
+	const debouncedExecutionState = useDebounce(executionState, 100);
+	const [runId, setRunId] = useState<string | undefined>(undefined);
+
+	const fetchChildNodeIDs = useCallback(() => {
+		const layers = props.data.boardRef?.current?.layers ?? {};
+		const nodes = props.data.boardRef?.current?.nodes ?? {};
+		const startId = props.data.layer.id;
+
+		// Collect the start layer and all descendant layers (recursive).
+		const collected = new Set<string>();
+		const queue: string[] = [startId];
+
+		while (queue.length) {
+			const current = queue.shift()!;
+			if (collected.has(current)) continue;
+			collected.add(current);
+
+			for (const l of Object.values(layers)) {
+				// robustly detect layer id and common parent-field names
+				const lid = (l as any).id ?? (l as any).layer ?? undefined;
+				if (!lid) continue;
+
+				const parentId =
+					(l as any).parent ??
+					(l as any).parent_id ??
+					(l as any).parentLayer ??
+					(l as any).parent?.id ??
+					(l as any).layer_parent ??
+					undefined;
+
+				if (parentId === current && !collected.has(lid)) {
+					queue.push(lid);
+				}
+			}
+		}
+
+		return Object.values(nodes)
+			.filter((n) => n.layer && collected.has(n.layer))
+			.map((n) => n.id);
+	}, [props.data.layer.id, props.data.boardRef]);
+
+	const [executed, severity] = useMemo(() => {
+		const severity = ILogLevel.Debug;
+		let childNodeExecuted = false;
+		let worstSeverity = 0;
+
+		const nodeIds = fetchChildNodeIDs();
+		if (!currentMetadata) return [false, severity];
+		currentMetadata.nodes?.forEach(([localNodeId, severity]) => {
+			if (nodeIds.includes(localNodeId.toString())) {
+				childNodeExecuted = true;
+				worstSeverity = Math.max(worstSeverity, severity as number);
+			}
+		});
+
+		if (childNodeExecuted) {
+			return [true, logLevelFromNumber(worstSeverity)];
+		}
+
+		return [false, severity];
+	}, [props.data.layer.id, currentMetadata]);
+
+	useEffect(() => {
+		const nodeIds = fetchChildNodeIDs();
+		let isRunning = false;
+		let already_executed = false;
+		let foundRunId: string | undefined;
+
+		for (const [rId, run] of runs) {
+			if (nodeIds.some((nid) => run.nodes.has(nid))) {
+				isRunning = true;
+				foundRunId = rId;
+				break;
+			}
+
+			if (nodeIds.some((nid) => run.already_executed.has(nid))) {
+				already_executed = true;
+				foundRunId = foundRunId ?? rId;
+			}
+		}
+
+		if (foundRunId !== undefined) {
+			setRunId(foundRunId);
+		}
+
+		if (isRunning) {
+			setExecutionState("running");
+			return;
+		}
+
+		if (already_executed) {
+			setExecutionState("done");
+			return;
+		}
+
+		setExecutionState("none");
+	}, [runs, props.id, props.data.layer.nodes]);
 
 	useEffect(() => {
 		const height = Math.max(
@@ -110,7 +232,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 					<div
 						ref={divRef}
 						key={`${props.data.hash}__node`}
-						className={`p-1 flex flex-col justify-center items-center react-flow__node-default selectable focus:ring-2 relative bg-card! border-border! rounded-md! group ${props.selected && "border-primary! border-2"}`}
+						className={`p-1 flex flex-col justify-center items-center react-flow__node-default selectable focus:ring-2 relative bg-card! border-border! rounded-md! group ${executionState === "done" ? "opacity-60" : "opacity-100"} ${props.selected && "border-primary! border-2"}`}
 					>
 						{props.data.layer.comment && props.data.layer.comment !== "" && (
 							<div className="absolute top-0 translate-y-[calc(-100%-0.5rem)] left-3 right-3 mb-2 text-center bg-foreground/70 text-background p-1 rounded-md">
@@ -131,11 +253,50 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 								/>
 							</div>
 						)}
-						<div className="header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b bg-muted p-1 justify-start rounded-t-md">
-							<ZapIcon className="w-2 h-2" />
-							<small className="font-medium leading-none">
-								{props.data.layer.name}
-							</small>
+						{severity !== ILogLevel.Debug && (
+							<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(50%)] right-0 text-center bg-background rounded-full">
+								{severity === ILogLevel.Fatal && (
+									<BanIcon className="w-3 h-3 text-red-800" />
+								)}
+								{severity === ILogLevel.Error && (
+									<CircleXIcon className="w-3 h-3 text-red-500" />
+								)}
+								{severity === ILogLevel.Warn && (
+									<TriangleAlertIcon className="w-3 h-3 text-yellow-500" />
+								)}
+							</div>
+						)}
+						<div className="header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b bg-muted p-1 justify-between rounded-t-md">
+							<div className="flex flex-row items-center gap-1">
+								<ZapIcon className="w-2 h-2" />
+								<small className="font-medium leading-none">
+									{props.data.layer.name}
+								</small>
+							</div>
+							<div className="flex flex-row items-center gap-1">
+								{executed && (
+									<ScrollTextIcon
+										// onClick={() => props.data.openTrace(props.data.traces)}
+										className="w-2 h-2 cursor-pointer hover:text-primary"
+									/>
+								)}
+								{useMemo(() => {
+									if (debouncedExecutionState !== "running") return null;
+									return (
+										<PuffLoader
+											color={resolvedTheme === "dark" ? "white" : "black"}
+											size={10}
+											speedMultiplier={1}
+										/>
+									);
+								}, [debouncedExecutionState, resolvedTheme])}
+
+								{useMemo(() => {
+									return debouncedExecutionState === "done" ? (
+										<SquareCheckIcon className="w-2 h-2 text-primary" />
+									) : null;
+								}, [debouncedExecutionState])}
+							</div>
 						</div>
 						{Object.values(props.data.layer.pins)
 							.filter((pin) => pin.pin_type === IPinType.Input)
