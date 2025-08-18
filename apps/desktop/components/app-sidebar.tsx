@@ -226,9 +226,7 @@ export function AppSidebar({
 }
 
 function InnerSidebar() {
-	const intervalRef = useRef<any>(null);
 	const router = useRouter();
-	const { manager } = useDownloadManager();
 	const [user] = useState<IUser | undefined>();
 	const { open, toggleSidebar } = useSidebar();
 	const { setTheme } = useTheme();
@@ -237,23 +235,7 @@ function InnerSidebar() {
 		email: "",
 		message: "",
 	});
-	const [stats, setStats] = useState({
-		bytesPerSecond: 0,
-		total: 0,
-		progress: 0,
-		max: 0,
-	});
 
-	useEffect(() => {
-		intervalRef.current = setInterval(async () => {
-			const stats = await manager.getSpeed();
-			setStats(stats);
-		}, 1000);
-
-		return () => {
-			clearInterval(intervalRef.current);
-		};
-	}, []);
 
 	return (
 		<Sidebar collapsible="icon" side="left">
@@ -266,21 +248,6 @@ function InnerSidebar() {
 			</SidebarContent>
 			<SidebarFooter>
 				<div className="flex flex-col gap-1">
-					{stats.max > 0 && (
-						<div>
-							<SidebarMenuButton
-								onClick={() => {
-									router.push("/download");
-								}}
-							>
-								<DownloadIcon />
-								<span>
-									Download:{" "}
-									<b className="highlight">{stats.progress.toFixed(2)} %</b>
-								</span>
-							</SidebarMenuButton>
-						</div>
-					)}
 					<Dialog>
 						<DialogTrigger asChild>
 							<SidebarMenuButton>

@@ -3,9 +3,11 @@ use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::{Path, blake3};
 use flow_like_types::intercom::{InterComCallback, InterComEvent};
 use flow_like_types::reqwest::Client;
-use flow_like_types::sync::Mutex;
+use flow_like_types::sync::{mpsc, Mutex};
 use flow_like_types::tokio::fs::{self as async_fs, OpenOptions};
 use flow_like_types::tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
+use flow_like_types::tokio::spawn;
+use flow_like_types::tokio::sync::{oneshot, Semaphore};
 use flow_like_types::tokio::task::yield_now;
 use flow_like_types::tokio::time::Instant;
 use flow_like_types::{anyhow, bail, reqwest};
@@ -14,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::sync::Arc;
 use std::time::Duration;
+use std::sync::OnceLock;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BitDownloadEvent {
@@ -21,6 +24,62 @@ pub struct BitDownloadEvent {
     pub downloaded: u64,
     pub path: String,
     pub hash: String,
+}
+
+// Global concurrency limit for active downloads.
+fn global_download_semaphore() -> &'static Semaphore {
+    static SEM: OnceLock<Semaphore> = OnceLock::new();
+    SEM.get_or_init(|| {
+        let max = std::env::var("FLOW_LIKE_MAX_CONCURRENT_DOWNLOADS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or(4);
+        Semaphore::new(max)
+    })
+}
+
+// Download job queue and dispatcher.
+struct DownloadJob {
+    bit: crate::bit::Bit,
+    app_state: Arc<Mutex<FlowLikeState>>,
+    retries: usize,
+    callback: InterComCallback,
+    respond_to: oneshot::Sender<flow_like_types::Result<Path>>,
+}
+
+fn global_download_queue() -> &'static mpsc::Sender<DownloadJob> {
+    static TX: OnceLock<mpsc::Sender<DownloadJob>> = OnceLock::new();
+    TX.get_or_init(|| {
+        let (tx, mut rx) = mpsc::channel::<DownloadJob>(1024);
+
+        // Dispatcher: spawns a task per job; semaphore enforces active concurrency.
+        spawn(async move {
+            while let Some(job) = rx.recv().await {
+                spawn(async move {
+                    let _permit = match global_download_semaphore().acquire().await {
+                        Ok(p) => p,
+                        Err(_) => {
+                            let _ = job.respond_to.send(Err(anyhow!("Download queue closed")));
+                            return;
+                        }
+                    };
+
+                    let res = process_download_bit(
+                        &job.bit,
+                        job.app_state.clone(),
+                        job.retries,
+                        &job.callback,
+                    )
+                    .await;
+
+                    let _ = job.respond_to.send(res);
+                });
+            }
+        });
+
+        tx
+    })
 }
 
 async fn get_remote_size(client: &Client, url: &str) -> flow_like_types::Result<u64> {
@@ -96,6 +155,30 @@ pub async fn download_bit(
     retries: usize,
     callback: &InterComCallback,
 ) -> flow_like_types::Result<Path> {
+    let (tx, rx) = oneshot::channel();
+    let job = DownloadJob {
+        bit: bit.clone(),
+        app_state,
+        retries,
+        callback: callback.clone(),
+        respond_to: tx,
+    };
+
+    global_download_queue()
+        .send(job)
+        .await
+        .map_err(|_| anyhow!("Failed to enqueue download"))?;
+
+    rx.await.map_err(|_| anyhow!("Download worker dropped"))?
+}
+
+async fn process_download_bit(
+    bit: &crate::bit::Bit,
+    app_state: Arc<Mutex<FlowLikeState>>,
+    retries: usize,
+    callback: &InterComCallback,
+) -> flow_like_types::Result<Path> {
+    println!("Processing download for: {}", bit.hash);
     let file_store = FlowLikeState::bit_store(&app_state).await?;
 
     let file_store = match file_store {
@@ -149,7 +232,11 @@ pub async fn download_bit(
             return Ok(store_path);
         }
 
-        bail!("Error getting remote size for {}: {}", &url, remote_size.unwrap_err());
+        bail!(
+            "Error getting remote size for {}: {}",
+            &url,
+            remote_size.unwrap_err()
+        );
     }
 
     let remote_size = remote_size?;
@@ -284,7 +371,7 @@ pub async fn download_bit(
         let _ = async_fs::remove_file(&path_name).await;
         if retries > 0 {
             println!("Retrying download: {}", bit.hash);
-            let result = Box::pin(download_bit(bit, app_state, retries - 1, callback));
+            let result = Box::pin(process_download_bit(bit, app_state, retries - 1, callback));
             return result.await;
         }
         bail!("Error downloading file, hash does not match");
@@ -292,3 +379,4 @@ pub async fn download_bit(
 
     Ok(store_path)
 }
+

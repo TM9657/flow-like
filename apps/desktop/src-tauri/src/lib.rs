@@ -2,7 +2,7 @@ mod functions;
 mod profile;
 mod settings;
 mod state;
-mod utils;
+pub mod utils;
 use flow_like::{
     flow_like_storage::{
         Path,
@@ -130,7 +130,6 @@ pub fn run() {
             let gc_handle = relay_handle.clone();
             let refetch_handle = relay_handle.clone();
             let deep_link_handle = relay_handle.clone();
-            let update_handle = relay_handle.clone();
 
             #[cfg(desktop)]
             {
@@ -233,23 +232,17 @@ pub fn run() {
         .manage(state::TauriSettingsState(settings_state))
         .manage(state::TauriFlowLikeState(state_ref))
         .on_page_load(|view, payload| {
-            let label = view.label();
-            let app_handle = view.app_handle();
-            let main_window = app_handle.get_webview_window("main");
+            let label = view.label().to_string();
+            let app_handle = view.app_handle().clone();
 
-            if let Some(main_window) = main_window
-                && label == "oidcFlow"
-            {
-                let res = main_window.emit(
+            if label == "oidcFlow" {
+                crate::utils::emit_throttled(
+                    &app_handle,
+                    crate::utils::UiEmitTarget::All,
                     "oidc/url",
-                    json!({
-                        "url": payload.url(),
-                    }),
+                    json!({ "url": payload.url() }),
+                    std::time::Duration::from_millis(200),
                 );
-
-                if let Err(e) = res {
-                    eprintln!("Error emitting oidcUrlChange: {}", e);
-                }
             }
 
             println!("{} loaded: {}", label, payload.url());
