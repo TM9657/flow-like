@@ -1490,6 +1490,7 @@ export function FlowBoard({
 								nodes={catalog.data ?? []}
 								onPlaceholder={async (name) => {
 									await placePlaceholder(name);
+									setDroppedPin(undefined)
 								}}
 								onNodePlace={async (node) => {
 									await placeNode(node);
