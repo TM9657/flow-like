@@ -127,7 +127,7 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           PUBLIC_SENTRY_ENDPOINT: ${{ secrets.PUBLIC_SENTRY_ENDPOINT }}
           APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
-          RUSTFLAGS: ${{ matrix.platform == 'windows-latest' && '-C link-args=/STACK:8388608 -C link-args=-Wl,--stack,8388608' || '' }}
+          RUSTFLAGS: ${{ matrix.platform == 'windows-latest' && '-C link-arg=/STACK:8388608' || '' }}
         with:
           tagName: alpha-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
           releaseName: "Flow Like - Alpha v__VERSION__"
