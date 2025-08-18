@@ -369,25 +369,26 @@ fn handle_deep_link(app: &AppHandle, event: OpenUrlEvent) {
 
 #[tauri::command(async)]
 async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
-    if let Some(update) = app_handle.updater()?.check().await? {
-        let mut downloaded = 0;
+    // LEADS TO CRASHES (MAIN OVERFLOW) ON WINDOWS
+    // if let Some(update) = app_handle.updater()?.check().await? {
+    //     let mut downloaded = 0;
 
-        // alternatively we could also call update.download() and update.install() separately
-        update
-            .download_and_install(
-                |chunk_length, content_length| {
-                    downloaded += chunk_length;
-                    println!("downloaded {downloaded} from {content_length:?}");
-                },
-                || {
-                    println!("download finished");
-                },
-            )
-            .await?;
+    //     // alternatively we could also call update.download() and update.install() separately
+    //     update
+    //         .download_and_install(
+    //             |chunk_length, content_length| {
+    //                 downloaded += chunk_length;
+    //                 println!("downloaded {downloaded} from {content_length:?}");
+    //             },
+    //             || {
+    //                 println!("download finished");
+    //             },
+    //         )
+    //         .await?;
 
-        println!("update installed");
-        app_handle.restart();
-    }
+    //     println!("update installed");
+    //     app_handle.restart();
+    // }
 
     Ok(())
 }
