@@ -219,7 +219,8 @@ impl NodeLogic for EmailAttachmentsNode {
             "Array of attachments",
             VariableType::Struct,
         )
-        .set_schema::<Option<Vec<Attachment>>>();
+        .set_value_type(ValueType::Array)
+        .set_schema::<Attachment>();
 
         node
     }
@@ -227,7 +228,7 @@ impl NodeLogic for EmailAttachmentsNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let email: Email = context.evaluate_pin("email").await?;
         context
-            .set_pin_value("attachments", json!(email.attachments))
+            .set_pin_value("attachments", json!(email.attachments.unwrap_or_default()))
             .await?;
         Ok(())
     }
