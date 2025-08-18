@@ -266,7 +266,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 								)}
 							</div>
 						)}
-						<div className="header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b bg-muted p-1 justify-between rounded-t-md">
+						<div className="header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b bg-accent text-accent-foreground p-1 justify-between rounded-t-md">
 							<div className="flex flex-row items-center gap-1">
 								<ZapIcon className="w-2 h-2" />
 								<small className="font-medium leading-none">
