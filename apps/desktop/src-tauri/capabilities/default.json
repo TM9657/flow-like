@@ -73,7 +73,6 @@
     "clipboard-manager:allow-write-text",
     "window-state:default",
     "http:default",
-    "log:default",
     "fs:allow-create",
     "fs:allow-exists",
     "fs:allow-fstat",

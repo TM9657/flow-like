@@ -9,12 +9,10 @@ flow-like-types.workspace = true
 flow-like-storage.workspace = true
 flow-like-catalog.workspace = true
 socket2 = "0.5.9"
-tracing.workspace = true
 tracing-subscriber.workspace = true
 dotenv.workspace = true
 sentry-tracing.workspace = true
 sentry.workspace = true
-oasgen = {version="0.25.0", features = ["axum"]}
 
 [profile.release]
 opt-level = "z"

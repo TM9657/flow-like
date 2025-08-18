@@ -25,9 +25,6 @@ flow-like-catalog.workspace = true
 flow-like-types.workspace = true
 tauri = { version = "2.7.0", features = [ "protocol-asset", "macos-private-api", "devtools"] }
 tauri-plugin-shell = "2.3.0"
-tauri-plugin-log = "2.6.0"
-tauri-plugin-notification = "2.3.0"
-window-vibrancy = "0.6.0"
 anyhow = "1.0.95"
 sentry = { version = "0.42.0", features = ["anyhow"] }
 tauri-plugin-dialog = "2.3.2"
@@ -41,8 +38,6 @@ futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json.workspace = true
 image.workspace = true
-imageproc.workspace = true
-webp.workspace = true
 tauri-plugin = "2.3.1"
 tauri-plugin-clipboard-manager = "2.2.2"
 tauri-plugin-http = "2.5.1"

@@ -9,12 +9,8 @@ flow-like-types.workspace = true
 flow-like-storage.workspace = true
 flow-like-catalog.workspace = true
 lambda_http.workspace = true
-axum.workspace = true
-serde = { workspace = true, features = ["derive", "rc"] }
-serde_json.workspace = true
 sentry-tracing.workspace = true
 sentry.workspace = true
-sentry-tower.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 

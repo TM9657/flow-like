@@ -2469,12 +2469,6 @@
           "markdownDescription": "Denies the save command without any pre-configured scope."
         },
         {
-          "description": "Allows the log command\n#### This default permission set includes:\n\n- `allow-log`",
-          "type": "string",
-          "const": "log:default",
-          "markdownDescription": "Allows the log command\n#### This default permission set includes:\n\n- `allow-log`"
-        },
-        {
           "description": "Enables the log command without any pre-configured scope.",
           "type": "string",
           "const": "log:allow-log",

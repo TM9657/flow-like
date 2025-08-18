@@ -10,8 +10,4 @@ license-file = "LICENSE"
 readme = "README.md"
 
 [dependencies]
-anyhow = "1.0.95"
-schemars.workspace = true
-serde.workspace = true
-serde_json.workspace = true
 flow-like.workspace = true

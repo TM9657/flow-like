@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 aws_lambda_events = { version = "0.16.0", default-features = false, features = ["sqs"] }
-flow-like.workspace = true
 flow-like-types.workspace = true
 lambda_runtime = {version="0.14.1", features = ["anyhow"]}
 tracing.workspace = true

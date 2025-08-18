@@ -24,7 +24,6 @@ hyper-util.workspace = true
 tracing.workspace = true
 tower-http.workspace = true
 chrono.workspace = true
-oasgen = {version="0.25.0", features = ["axum"]}
 async-stripe.workspace = true
 bitflags.workspace = true
 futures-util.workspace = true

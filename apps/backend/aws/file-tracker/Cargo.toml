@@ -10,11 +10,8 @@ aws_lambda_events = { version = "0.16.1", default-features = false, features = [
 aws-config.workspace = true
 aws-sdk-dynamodb.workspace = true
 aws-sdk-s3.workspace = true
-
-serde = { workspace = true, features = ["derive", "rc"] }
 serde_json.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 
 lambda_runtime.workspace = true
 tokio = { workspace = true, features = ["macros"] }

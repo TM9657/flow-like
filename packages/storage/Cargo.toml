@@ -7,20 +7,18 @@ edition = "2024"
 flow-like-types.workspace = true
 object_store = {version="0.11.1", features = ["gcp", "aws", "azure", "serde", "serde_json", "cloud"] }
 lancedb = {version="0.21.3", features = ["polars"]}
-polars = "0.39.2"
-polars-arrow = "0.39.2"
 arrow-array = "55.1"
 arrow-schema = {version="55.1", features = ["serde"] }
 arrow = "55.1"
 serde_arrow = { version = "0.13.4", features = ["arrow-55"] }
 blake3 = {version = "1.8.1", features = ["rayon"]}
+schemars.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
 futures-channel = "0.3.31"
 crossbeam-channel = "0.5.15"
 futures-util = "0.3.31"
 urlencoding.workspace = true
-schemars.workspace = true
 base64.workspace = true
 datafusion = { version = "48.0", default-features = false, features = ["recursive_protection", "regex_expressions", "string_expressions", "unicode_expressions", "array_expressions", "nested_expressions", "math_expressions", "datetime_expressions"]}
 # duckdb = { version="1.2.2", features = ["bundled", "extensions-full", "modern-full", "vtab-full"]}
