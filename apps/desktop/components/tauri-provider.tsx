@@ -197,7 +197,7 @@ export function TauriProvider({
 			return;
 		}
 
-		await new Promise((resolve) => setTimeout(resolve, 1000));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 		console.time("Resuming Downloads");
 		const downloads = await invoke<{ [key: string]: IBit }>("init_downloads");
 		console.timeEnd("Resuming Downloads");
@@ -223,7 +223,7 @@ export function TauriProvider({
 			startTransition(() => {
 				resumeDownloads();
 			});
-		}, 10000);
+		}, 100);
 	}, [backend, resumeDownloads]);
 
 	useEffect(() => {
