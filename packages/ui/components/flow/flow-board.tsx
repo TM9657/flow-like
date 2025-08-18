@@ -737,7 +737,6 @@ export function FlowBoard({
 
 	const placePlaceholder = useCallback(
 		async (name: string, position?: { x: number; y: number }) => {
-
 			const delayNode = catalog.data?.find((node) => node.name === "delay");
 
 			const refs = board.data?.refs ?? {};
@@ -832,7 +831,7 @@ export function FlowBoard({
 			const newLayerResult = await executeCommand(newLayerCommand, false);
 			const newLayer: ILayer = newLayerResult.layer;
 
-			if(delayNode) {
+			if (delayNode) {
 				const placeDelayCommand = addNodeCommand({
 					node: delayNode,
 					current_layer: newLayer.id,
@@ -840,8 +839,16 @@ export function FlowBoard({
 
 				const placedNode = await executeCommand(placeDelayCommand.command);
 				const newNode: INode = placedNode.node;
-				const newNodeInPin = Object.values(newNode.pins).find((pin) => pin.pin_type === IPinType.Input && pin.data_type === IVariableType.Execution);
-				const newNodeOutPin = Object.values(newNode.pins).find((pin) => pin.pin_type === IPinType.Output && pin.data_type === IVariableType.Execution);
+				const newNodeInPin = Object.values(newNode.pins).find(
+					(pin) =>
+						pin.pin_type === IPinType.Input &&
+						pin.data_type === IVariableType.Execution,
+				);
+				const newNodeOutPin = Object.values(newNode.pins).find(
+					(pin) =>
+						pin.pin_type === IPinType.Output &&
+						pin.data_type === IVariableType.Execution,
+				);
 
 				const connectOutput = connectPinsCommand({
 					from_node: newNode.id,
@@ -1490,7 +1497,7 @@ export function FlowBoard({
 								nodes={catalog.data ?? []}
 								onPlaceholder={async (name) => {
 									await placePlaceholder(name);
-									setDroppedPin(undefined)
+									setDroppedPin(undefined);
 								}}
 								onNodePlace={async (node) => {
 									await placeNode(node);

@@ -48,7 +48,6 @@ import {
 	SidebarRail,
 	Textarea,
 	useBackend,
-	useDownloadManager,
 	useInvalidateInvoke,
 	useInvoke,
 	useSidebar,
@@ -62,7 +61,6 @@ import {
 	ChevronRight,
 	ChevronsUpDown,
 	CreditCard,
-	DownloadIcon,
 	Edit3Icon,
 	ExternalLinkIcon,
 	HeartIcon,
@@ -84,7 +82,7 @@ import {
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 import { fetcher } from "../lib/api";
@@ -235,7 +233,6 @@ function InnerSidebar() {
 		email: "",
 		message: "",
 	});
-
 
 	return (
 		<Sidebar collapsible="icon" side="left">
