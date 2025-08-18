@@ -38,10 +38,8 @@ import {
 	Search,
 	Sparkles,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTauriInvoke } from "../../../components/useInvoke";
-
-let counter = 0;
 
 function bitTypeToFilter(bitType: IBitTypes) {
 	switch (bitType) {
@@ -77,10 +75,26 @@ function getFilterIcon(filter: string) {
 	}
 }
 
+// Layout helper: fill rows with capacity=3 (md). Prefer pattern [2,1,1] but
+// never place a wide card when only 1 slot remains in the current row.
+function computeWideFlags(count: number): boolean[] {
+	const flags: boolean[] = [];
+	let rem = 3;
+	for (let i = 0; i < count; i += 1) {
+		const preferWide = i % 3 === 0; // base pattern
+		const wide = preferWide && rem >= 2;
+		flags.push(wide);
+		rem -= wide ? 2 : 1;
+		if (rem === 0) rem = 3;
+	}
+	return flags;
+}
+
 export default function SettingsPage() {
 	const backend = useBackend();
 	const [searchTerm, setSearchTerm] = useState("");
 	const [blacklist, setBlacklist] = useState(new Set<string>());
+	const [compactHeader, setCompactHeader] = useState(false);
 
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -116,15 +130,16 @@ export default function SettingsPage() {
 					Bit.fromObject(bit).setBackend(backend).fetchDependencies(),
 				),
 		);
-		const blacklist = new Set<string>(
+
+		const bl = new Set<string>(
 			dependencies.flatMap((dep) =>
 				dep.bits
-					.filter((bit) => bit.type !== "ImageEmbedding")
+					.filter((bit) => bit.type !== IBitTypes.ImageEmbedding)
 					.map((bit) => bit.id),
 			),
 		);
-		setBlacklist(blacklist);
-	}, [blacklist, foundBits.data]);
+		setBlacklist(bl);
+	}, [backend, foundBits.data]);
 
 	const [bits, setBits] = useState<IBit[]>([]);
 	const [installedBits, setInstalledBits] = useState<Set<string>>(new Set());
@@ -171,28 +186,34 @@ export default function SettingsPage() {
 	);
 
 	useEffect(() => {
+		const el = scrollContainerRef.current;
+		if (!el) return;
+		const onScroll = () => setCompactHeader(el.scrollTop > 16);
+		onScroll();
+		el.addEventListener("scroll", onScroll);
+		return () => el.removeEventListener("scroll", onScroll);
+	}, []);
+
+	useEffect(() => {
 		if (!foundBits.data) return;
 		imageBlacklist();
-	}, [foundBits.data]);
+	}, [foundBits.data, imageBlacklist]);
 
 	useEffect(() => {
 		if (!foundBits.data || !profile.data) return;
 
-		// Check which bits are installed
 		const checkInstalled = async () => {
 			const installedSet = new Set<string>();
 			for (const bit of foundBits.data) {
 				const isInstalled = await backend.bitState.isBitInstalled(bit);
-				if (isInstalled) {
-					installedSet.add(bit.id);
-				}
+				if (isInstalled) installedSet.add(bit.id);
 			}
 			setInstalledBits(installedSet);
 		};
 
 		checkInstalled();
 		imageBlacklist();
-	}, [foundBits.data, profile.data]);
+	}, [backend.bitState, foundBits.data, profile.data, imageBlacklist]);
 
 	useEffect(() => {
 		if (!foundBits.data || !profile.data) return;
@@ -205,58 +226,36 @@ export default function SettingsPage() {
 			?.filter((bit) => {
 				if (blacklist.has(bit.id)) return false;
 
-				// Check which filters are applied
 				const hasProfileFilter =
 					searchFilter.appliedFilter.includes("In Profile");
 				const hasDownloadedFilter =
 					searchFilter.appliedFilter.includes("Downloaded");
 				const hasAllFilter = searchFilter.appliedFilter.includes("All");
 
-				// Get type filters (excluding "All", "In Profile", "Downloaded")
 				const typeFilters = searchFilter.appliedFilter.filter(
 					(filter) => !["All", "In Profile", "Downloaded"].includes(filter),
 				);
 
-				// Determine type match
 				const typeMatch =
 					hasAllFilter ||
-					typeFilters.length === 0 || // No specific types selected - show all types
+					typeFilters.length === 0 ||
 					typeFilters.includes(bitTypeToFilter(bit.type));
 
-				// If no profile/download filters are applied, just return type match
-				if (!hasProfileFilter && !hasDownloadedFilter) {
-					return typeMatch;
-				}
+				if (!hasProfileFilter && !hasDownloadedFilter) return typeMatch;
 
-				// Check profile/download conditions
 				const inProfile = profileBitIds.has(bit.id);
 				const isDownloaded = installedBits.has(bit.id);
 
-				// If only one filter is applied, check that specific condition
-				if (hasProfileFilter && !hasDownloadedFilter) {
+				if (hasProfileFilter && !hasDownloadedFilter)
 					return typeMatch && inProfile;
-				}
-
-				if (hasDownloadedFilter && !hasProfileFilter) {
+				if (hasDownloadedFilter && !hasProfileFilter)
 					return typeMatch && isDownloaded;
-				}
-
-				// If both filters are applied, show bits that match either condition (OR logic)
-				if (hasProfileFilter && hasDownloadedFilter) {
+				if (hasProfileFilter && hasDownloadedFilter)
 					return typeMatch && (inProfile || isDownloaded);
-				}
 
 				return typeMatch;
 			})
 			.sort((a, b) => Date.parse(b.updated) - Date.parse(a.updated));
-
-		console.groupCollapsed("Bit Filter Check");
-		console.dir({
-			allBits,
-			profileBitIds,
-			installedBits,
-		});
-		console.groupEnd();
 
 		removeAll();
 		setBits(allBits);
@@ -268,40 +267,67 @@ export default function SettingsPage() {
 				description: item.meta?.en?.description,
 			})),
 		);
-	}, [foundBits.data, blacklist, searchFilter, profile.data, installedBits]);
+	}, [
+		foundBits.data,
+		blacklist,
+		searchFilter,
+		profile.data,
+		installedBits,
+		addAllAsync,
+		removeAll,
+	]);
 
 	const activeFilterCount = searchFilter.appliedFilter.filter(
 		(f) => f !== "All",
 	).length;
+
+	const visibleBits: IBit[] = useMemo(
+		() => (searchTerm === "" ? bits : ((searchResults ?? []) as IBit[])),
+		[bits, searchResults, searchTerm],
+	);
+	const wideFlags = useMemo(
+		() => computeWideFlags(visibleBits.length),
+		[visibleBits.length],
+	);
+	const skeletonWideFlags = useMemo(() => computeWideFlags(6), []);
 
 	return (
 		<main className="flex flex-grow h-full max-h-full overflow-hidden flex-col w-full">
 			{/* Header Section */}
 			<div
 				className={`
-                border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60
-                transition-transform duration-300 ease-in-out
-            `}
+                    sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60
+                    transition-all duration-200 ease-in-out
+                    ${compactHeader ? "shadow-sm" : ""}
+                `}
 			>
 				<div
-					className={`max-w-screen-xl mx-auto p-6 flex flex-col duration-200 transition-all ease-in-out space-y-4`}
+					className={`max-w-screen-xl mx-auto ${compactHeader ? "px-4 py-2 sm:py-3" : "px-6 py-4 sm:py-6"} flex flex-col gap-3`}
 				>
 					{/* Title and Description */}
-					<div className="flex flex-col space-y-2">
+					<div className="flex flex-col gap-1.5">
 						<div className="flex items-center space-x-2">
-							<Sparkles className="h-8 w-8 text-primary" />
-							<h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+							<Sparkles className="h-7 w-7 text-primary" />
+							<h1
+								className={`scroll-m-20 font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent
+                                    ${compactHeader ? "text-2xl lg:text-3xl" : "text-4xl lg:text-5xl"}
+                                `}
+							>
 								Model Catalog
 							</h1>
 						</div>
-						<p className="text-lg text-muted-foreground max-w-2xl">
+						<p
+							className={`text-muted-foreground max-w-2xl
+                                ${compactHeader ? "hidden h-0 opacity-0" : "text-lg"}
+                            `}
+						>
 							Discover and configure AI models for your workflow. Browse through
 							our collection of language models, vision models, and embeddings.
 						</p>
 					</div>
 
 					{/* Search and Filter Controls */}
-					<div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+					<div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
 						<div className="flex flex-1 max-w-md">
 							<div className="relative flex flex-row items-center w-full">
 								<Search className="absolute left-3 top-1/2 h-4 w-4 text-muted-foreground -translate-y-1/2" />
@@ -319,7 +345,6 @@ export default function SettingsPage() {
 						</div>
 
 						<div className="flex items-center space-x-2">
-							{/* Active Filters Display */}
 							{activeFilterCount > 0 && (
 								<div className="flex items-center space-x-1">
 									{searchFilter.appliedFilter
@@ -337,7 +362,6 @@ export default function SettingsPage() {
 								</div>
 							)}
 
-							{/* Filter Dropdown */}
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
 									<Button
@@ -420,14 +444,13 @@ export default function SettingsPage() {
 						</div>
 					</div>
 
-					{/* Results Summary */}
 					{!foundBits.isLoading && (
 						<div className="flex items-center justify-between text-sm text-muted-foreground">
 							<div className="flex items-center space-x-2">
 								<span>
 									{searchTerm === ""
-										? `${bits.length} models available`
-										: `${searchResults?.length ?? 0} results for "${searchTerm}"`}
+										? `${visibleBits.length} models available`
+										: `${visibleBits.length} results for "${searchTerm}"`}
 								</span>
 								{searchFilter.appliedFilter.length > 0 &&
 									!searchFilter.appliedFilter.includes("All") && (
@@ -462,51 +485,45 @@ export default function SettingsPage() {
 									</CardContent>
 								</Card>
 							</div>
-							<BentoGrid className="mx-auto cursor-pointer w-full">
-								{[...Array(6)].map((item, i) => {
-									if (i === 0) counter = 0;
-									const wide = counter === 3 || counter === 6;
-									if (counter === 6) counter = 0;
-									else counter += 1;
-									return (
-										<BentoGridItem
-											className={`h-full w-full border-2 ${wide ? "md:col-span-2" : ""}`}
-											key={`${i}__skeleton`}
-											title={
-												<div className="flex flex-row items-center space-x-2">
-													<Skeleton className="h-4 w-[150px]" />
-													<Skeleton className="h-4 w-[80px]" />
+							<BentoGrid className="mx-auto w-full grid-flow-row-dense">
+								{skeletonWideFlags.map((wide, i) => (
+									<BentoGridItem
+										className={`h-full w-full border-2 ${wide ? "md:col-span-2" : ""}`}
+										key={`${i}__skeleton`}
+										title={
+											<div className="flex flex-row items-center space-x-2">
+												<Skeleton className="h-4 w-[150px]" />
+												<Skeleton className="h-4 w-[80px]" />
+											</div>
+										}
+										description={
+											<div className="space-y-2">
+												<Skeleton className="h-20 w-full rounded-lg" />
+												<div className="flex space-x-2">
+													<Skeleton className="h-6 w-16 rounded-full" />
+													<Skeleton className="h-6 w-20 rounded-full" />
 												</div>
-											}
-											description={
-												<div className="space-y-2">
-													<Skeleton className="h-20 w-full rounded-lg" />
-													<div className="flex space-x-2">
-														<Skeleton className="h-6 w-16 rounded-full" />
-														<Skeleton className="h-6 w-20 rounded-full" />
+											</div>
+										}
+										header={
+											<div className="space-y-3">
+												<div className="flex flex-row items-center space-x-3">
+													<Skeleton className="h-12 w-12 rounded-full" />
+													<div className="space-y-1">
+														<Skeleton className="h-4 w-[100px]" />
+														<Skeleton className="h-3 w-[60px]" />
 													</div>
 												</div>
-											}
-											header={
-												<div className="space-y-3">
-													<div className="flex flex-row items-center space-x-3">
-														<Skeleton className="h-12 w-12 rounded-full" />
-														<div className="space-y-1">
-															<Skeleton className="h-4 w-[100px]" />
-															<Skeleton className="h-3 w-[60px]" />
-														</div>
-													</div>
-												</div>
-											}
-											icon={<Skeleton className="h-4 w-[120px]" />}
-										/>
-									);
-								})}
+											</div>
+										}
+										icon={<Skeleton className="h-4 w-[120px]" />}
+									/>
+								))}
 							</BentoGrid>
 						</div>
 					)}
 					{!foundBits.isLoading &&
-						((searchTerm === "" ? bits : (searchResults ?? [])).length === 0 ? (
+						(visibleBits.length === 0 ? (
 							<Card className="p-8 text-center max-w-md mx-auto mt-12">
 								<CardContent className="space-y-4 p-0">
 									<div className="w-16 h-16 mx-auto bg-muted rounded-full flex items-center justify-center">
@@ -539,16 +556,11 @@ export default function SettingsPage() {
 								</CardContent>
 							</Card>
 						) : (
-							<BentoGrid className="mx-auto cursor-pointer w-full pb-20">
-								{(searchTerm === "" ? bits : (searchResults ?? [])).map(
-									(bit, i) => {
-										if (i === 0) counter = 0;
-										const wide = counter === 3 || counter === 6;
-										if (counter === 6) counter = 0;
-										else counter += 1;
-										return <BitCard key={bit.id} bit={bit} wide={wide} />;
-									},
-								)}
+							<BentoGrid className="mx-auto w-full pb-20 grid-flow-row-dense">
+								{visibleBits.map((bit: IBit, i: number) => {
+									const wide = wideFlags[i];
+									return <BitCard key={bit.id} bit={bit} wide={wide} />;
+								})}
 							</BentoGrid>
 						))}
 				</div>

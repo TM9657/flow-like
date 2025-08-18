@@ -29,7 +29,7 @@ import {
 } from "@tm9657/flow-like-ui";
 import type { ICommandSync } from "@tm9657/flow-like-ui/lib";
 import type { IAIState } from "@tm9657/flow-like-ui/state/backend-state/ai-state";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useTransition } from "react";
 import type { AuthContextProps } from "react-oidc-context";
 import { appsDB } from "../lib/apps-db";
 import { AiState } from "./tauri-provider/ai-state";
@@ -43,6 +43,14 @@ import { StorageState } from "./tauri-provider/storage-state";
 import { TeamState } from "./tauri-provider/team-state";
 import { TemplateState } from "./tauri-provider/template-state";
 import { UserState } from "./tauri-provider/user-state";
+
+// One-time resume guards for the whole app session
+declare global {
+	// eslint-disable-next-line no-var
+	var __FL_DL_RESUME_PROMISE__: Promise<void> | undefined;
+	// eslint-disable-next-line no-var
+	var __FL_DL_RESUMED__: boolean | undefined;
+}
 
 export class TauriBackend implements IBackendState {
 	appState: IAppState;
@@ -189,43 +197,72 @@ export function TauriProvider({
 	const { setDownloadBackend, download } = useDownloadManager();
 	const [isPending, startTransition] = useTransition();
 
-	const [resumedDownloads, setResumedDownloads] = useState(false);
+	// Safety to avoid state updates after unmount during resume
+	const mountedRef = useRef(true);
+	useEffect(() => {
+		mountedRef.current = true;
+		return () => {
+			mountedRef.current = false;
+		};
+	}, []);
 
+	// Resume downloads exactly once per app lifecycle
 	const resumeDownloads = useCallback(async () => {
-		if (resumedDownloads) {
-			console.log("Downloads already resumed, skipping...");
+		if (globalThis.__FL_DL_RESUME_PROMISE__) {
+			await globalThis.__FL_DL_RESUME_PROMISE__;
 			return;
 		}
 
-		await new Promise((resolve) => setTimeout(resolve, 1000));
-		console.time("Resuming Downloads");
-		const downloads = await invoke<{ [key: string]: IBit }>("init_downloads");
-		console.timeEnd("Resuming Downloads");
-		const items = Object.keys(downloads).map((bitId) => {
-			const bit: IBit = downloads[bitId];
-			return bit;
-		});
+		globalThis.__FL_DL_RESUME_PROMISE__ = (async () => {
+			try {
+				// Small defer to let backend wire up
+				await new Promise((r) => setTimeout(r, 100));
 
-		console.time("Resuming download requests");
-		const download_requests = items.map((item) => {
-			console.log("Resuming download for item:", item);
-			return download(item);
-		});
+				// First-time resume: ask backend for items to resume
+				if (!globalThis.__FL_DL_RESUMED__) {
+					console.time("Resuming Downloads (init_downloads)");
+					const downloads = await invoke<{ [key: string]: IBit }>(
+						"init_downloads",
+					);
+					console.timeEnd("Resuming Downloads (init_downloads)");
+					const items = Object.keys(downloads).map((bitId) => downloads[bitId]);
 
-		await Promise.allSettled([...download_requests]);
-		console.timeEnd("Resuming download requests");
-		setResumedDownloads(true);
-	}, [download, setResumedDownloads, resumedDownloads]);
+					if (items.length) {
+						console.time("Resuming download requests");
+						await Promise.allSettled(items.map((item) => download(item)));
+						console.timeEnd("Resuming download requests");
+					}
+					globalThis.__FL_DL_RESUMED__ = true;
+					return;
+				}
 
+				// Subsequent mounts: only hydrate UI state, do not re-trigger init
+				console.time("Hydrating Downloads (get_downloads)");
+				const snapshot = await invoke<{ [key: string]: IBit }>("get_downloads");
+				console.timeEnd("Hydrating Downloads (get_downloads)");
+				const items = Object.keys(snapshot).map((bitId) => snapshot[bitId]);
+
+				// Calling download(item) is safe because the manager de-duplicates in-flight calls.
+				if (items.length) {
+					await Promise.allSettled(items.map((item) => download(item)));
+				}
+			} catch (e) {
+				console.error("resumeDownloads failed:", e);
+			}
+		})();
+
+		await globalThis.__FL_DL_RESUME_PROMISE__;
+	}, [download]);
+
+	// Kick off resume when a backend is set
 	useEffect(() => {
 		if (!backend) return;
-		setTimeout(() => {
-			startTransition(() => {
-				resumeDownloads();
-			});
-		}, 10000);
+		startTransition(() => {
+			void resumeDownloads();
+		});
 	}, [backend, resumeDownloads]);
 
+	// Keep backend references in sync
 	useEffect(() => {
 		if (backend && backend instanceof TauriBackend && queryClient) {
 			backend.pushQueryClient(queryClient);
@@ -237,23 +274,22 @@ export function TauriProvider({
 		const backend = new TauriBackend((promise) => {
 			promise
 				.then((result) => {
-					// Handle successful completion
 					console.log("Background task completed:", result);
-					// Maybe update some global state, cache, or UI
 				})
 				.catch((error) => {
-					// Handle errors
 					console.error("Background task failed:", error);
-					// Maybe show a notification or log the error
 				});
 		}, queryClient);
 		console.timeEnd("TauriProvider Initialization");
+
 		console.time("Setting Backend");
 		setBackend(backend);
 		console.timeEnd("Setting Backend");
+
 		console.time("Setting Download Backend");
 		setDownloadBackend(backend);
 		console.timeEnd("Setting Download Backend");
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	if (!backend) {
