@@ -1,3 +1,7 @@
+/// # Make Message Node
+/// Create a new Message object with either image or image Message Content
+/// Set the message type via Role input.
+/// In case of a Tool Message, the associated Tool Call Id has to be provided as well
 use flow_like::{
     flow::{
         board::Board,

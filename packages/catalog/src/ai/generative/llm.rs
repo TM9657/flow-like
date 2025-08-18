@@ -41,6 +41,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(history::set_stop::SetHistoryStopWordsNode::default()),
         Arc::new(history::set_response_format::SetHistoryResponseFormatNode::default()),
         Arc::new(history::set_n::SetHistoryNNode::default()),
+        Arc::new(history::from_string::HistoryFromStringNode::default()),
         Arc::new(branch::LLMBranchNode::default()),
         Arc::new(with_structured_output::LLMWithStructuredOutput::default()),
         Arc::new(invoke_with_tools::InvokeLLMWithToolsNode::default()),
