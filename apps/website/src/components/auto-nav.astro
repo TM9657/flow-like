@@ -1,0 +1,18 @@
+---
+import { getCollection } from 'astro:content';
+const posts = (await getCollection('blog', ({ data }) => import.meta.env.PROD ? !data.draft : true))
+  .sort((a,b) => b.data.date.getTime() - a.data.date.getTime())
+  .slice(0,5);
+---
+<nav class="auto-nav">
+  <a href="/">Home</a>
+  <a href="/tags/">Tags</a>
+  <details>
+    <summary>Latest</summary>
+    <ul>
+      {posts.map(p =>
+        <li><a href={`/${p.slug.split('-').slice(3).join('-')}/`}>{p.data.title}</a></li>
+      )}
+    </ul>
+  </details>
+</nav>

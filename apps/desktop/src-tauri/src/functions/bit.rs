@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::TauriFunctionError;
-use crate::state::{TauriFlowLikeState, TauriSettingsState};
+use crate::{state::{TauriFlowLikeState, TauriSettingsState}, utils::UiEmitTarget};
 use flow_like::{
     bit::{Bit, BitPack},
     hub::BitSearchQuery,
@@ -67,23 +67,33 @@ pub async fn download_bit(app_handle: AppHandle, bit: Bit) -> Result<Vec<Bit>, T
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
     let pack = bit.pack(flow_like_state.clone()).await?;
     let buffered_sender = Arc::new(BufferedInterComHandler::new(
-        Arc::new(move |event| {
+        Arc::new(move |events| {
             let app_handle = app_handle.clone();
-            Box::pin({
-                async move {
-                    let first_event = event.first();
-                    if let Some(first_event) = first_event {
-                        if let Err(err) = app_handle.emit(&first_event.event_type, event.clone()) {
-                            println!("Error emitting event: {}", err);
-                        }
-                    }
-                    Ok(())
+            Box::pin(async move {
+                if events.is_empty() {
+                    return Ok(());
                 }
+                let first = events.first().cloned().unwrap();
+                let last = events.last().cloned().unwrap();
+
+                // Keep payload shape as Vec for compatibility but only send latest item
+                let payload = vec![last.clone()];
+                let event_type = first.event_type.clone();
+
+                // 300–400 ms is enough to keep UI smooth and avoid lock contention
+                crate::utils::emit_throttled(
+                    &app_handle,
+                    UiEmitTarget::All,
+                    &event_type,
+                    payload,
+                    std::time::Duration::from_millis(350),
+                );
+                Ok(())
             })
         }),
-        Some(20),
-        Some(100),
-        Some(true),
+        Some(250), // interval ms
+        Some(500), // capacity
+        Some(true), // background check
     ));
     let result = pack
         .download(flow_like_state, buffered_sender.into_callback())

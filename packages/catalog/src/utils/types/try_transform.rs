@@ -112,15 +112,13 @@ fn value_to_float(input: &Value, target: &mut Value) -> bool {
         }
     }
 
-    if input.is_string() {
-        if let Some(s) = input.as_str() {
-            if let Ok(val) = s.parse::<f64>() {
-                if let Some(num) = flow_like_types::json::Number::from_f64(val) {
-                    *target = Value::Number(num);
-                    return true;
-                }
-            }
-        }
+    if input.is_string()
+        && let Some(s) = input.as_str()
+        && let Ok(val) = s.parse::<f64>()
+        && let Some(num) = flow_like_types::json::Number::from_f64(val)
+    {
+        *target = Value::Number(num);
+        return true;
     }
 
     if input.is_boolean() {
@@ -148,19 +146,19 @@ fn value_to_int(input: &Value, target: &mut Value) -> bool {
         }
     }
 
-    if input.is_string() {
-        if let Some(s) = input.as_str() {
-            // Try parsing as i64 first
-            if let Ok(val) = s.parse::<i64>() {
-                *target = Value::Number(val.into());
-                return true;
-            }
+    if input.is_string()
+        && let Some(s) = input.as_str()
+    {
+        // Try parsing as i64 first
+        if let Ok(val) = s.parse::<i64>() {
+            *target = Value::Number(val.into());
+            return true;
+        }
 
-            // Try parsing as f64 and then converting to i64
-            if let Ok(val) = s.parse::<f64>() {
-                *target = Value::Number((val as i64).into());
-                return true;
-            }
+        // Try parsing as f64 and then converting to i64
+        if let Ok(val) = s.parse::<f64>() {
+            *target = Value::Number((val as i64).into());
+            return true;
         }
     }
 
@@ -192,23 +190,23 @@ fn value_to_boolean(input: &Value, target: &mut Value) -> bool {
         }
     }
 
-    if input.is_string() {
-        if let Some(s) = input.as_str() {
-            let lower = s.to_lowercase();
-            if ["true", "yes", "y", "1", "on"].contains(&lower.as_str()) {
-                *target = Value::Bool(true);
-                return true;
-            }
+    if input.is_string()
+        && let Some(s) = input.as_str()
+    {
+        let lower = s.to_lowercase();
+        if ["true", "yes", "y", "1", "on"].contains(&lower.as_str()) {
+            *target = Value::Bool(true);
+            return true;
+        }
 
-            if ["false", "no", "n", "0", "off"].contains(&lower.as_str()) {
-                *target = Value::Bool(false);
-                return true;
-            }
+        if ["false", "no", "n", "0", "off"].contains(&lower.as_str()) {
+            *target = Value::Bool(false);
+            return true;
+        }
 
-            if let Ok(val) = s.parse::<f64>() {
-                *target = Value::Bool(val != 0.0);
-                return true;
-            }
+        if let Ok(val) = s.parse::<f64>() {
+            *target = Value::Bool(val != 0.0);
+            return true;
         }
     }
 
@@ -236,15 +234,15 @@ fn value_to_struct(input: &Value, target: &mut Value) -> bool {
         return true;
     }
 
-    if input.is_string() {
-        if let Some(s) = input.as_str() {
-            // Parse string as JSON
-            if let Ok(parsed) = flow_like_types::json::from_str::<Value>(s) {
-                if parsed.is_object() {
-                    *target = parsed;
-                    return true;
-                }
-            }
+    if input.is_string()
+        && let Some(s) = input.as_str()
+    {
+        // Parse string as JSON
+        if let Ok(parsed) = flow_like_types::json::from_str::<Value>(s)
+            && parsed.is_object()
+        {
+            *target = parsed;
+            return true;
         }
     }
 
@@ -272,11 +270,11 @@ fn value_to_struct(input: &Value, target: &mut Value) -> bool {
 
 fn value_to_byte(input: &Value, target: &mut Value) -> bool {
     if input.is_number() {
-        if let Some(val) = input.as_i64() {
-            if (0..=255).contains(&val) {
-                *target = Value::Number((val as u8).into());
-                return true;
-            }
+        if let Some(val) = input.as_i64()
+            && (0..=255).contains(&val)
+        {
+            *target = Value::Number((val as u8).into());
+            return true;
         }
 
         if let Some(val) = input.as_f64() {
@@ -288,27 +286,27 @@ fn value_to_byte(input: &Value, target: &mut Value) -> bool {
         }
     }
 
-    if input.is_string() {
-        if let Some(s) = input.as_str() {
-            if let Ok(val) = s.parse::<u8>() {
-                *target = Value::Number(val.into());
+    if input.is_string()
+        && let Some(s) = input.as_str()
+    {
+        if let Ok(val) = s.parse::<u8>() {
+            *target = Value::Number(val.into());
+            return true;
+        }
+
+        if let Ok(val) = s.parse::<f64>() {
+            let byte_val = val.round() as i64;
+            if (0..=255).contains(&byte_val) {
+                *target = Value::Number((byte_val as u8).into());
                 return true;
             }
+        }
 
-            if let Ok(val) = s.parse::<f64>() {
-                let byte_val = val.round() as i64;
-                if (0..=255).contains(&byte_val) {
-                    *target = Value::Number((byte_val as u8).into());
-                    return true;
-                }
-            }
-
-            if s.chars().count() == 1 {
-                let byte_val = s.chars().next().unwrap() as u32;
-                if byte_val <= 255 {
-                    *target = Value::Number((byte_val as u8).into());
-                    return true;
-                }
+        if s.chars().count() == 1 {
+            let byte_val = s.chars().next().unwrap() as u32;
+            if byte_val <= 255 {
+                *target = Value::Number((byte_val as u8).into());
+                return true;
             }
         }
     }
@@ -323,44 +321,44 @@ fn value_to_byte(input: &Value, target: &mut Value) -> bool {
 }
 
 fn value_to_date(input: &Value, target: &mut Value) -> bool {
-    if input.is_string() {
-        if let Some(s) = input.as_str() {
-            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
-                let timestamp_millis = dt.timestamp_millis();
-                let secs = timestamp_millis / 1000;
+    if input.is_string()
+        && let Some(s) = input.as_str()
+    {
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+            let timestamp_millis = dt.timestamp_millis();
+            let secs = timestamp_millis / 1000;
+
+            let date_obj = json!({
+                "secs_since_epoch": secs,
+                "nanos_since_epoch": timestamp_millis * 1_000_000
+            });
+
+            *target = date_obj;
+            return true;
+        }
+
+        for format in &["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d %H:%M:%S"] {
+            if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, format) {
+                let timestamp_millis = dt.and_utc().timestamp_millis();
 
                 let date_obj = json!({
-                    "secs_since_epoch": secs,
+                    "secs_since_epoch": timestamp_millis / 1000,
                     "nanos_since_epoch": timestamp_millis * 1_000_000
                 });
 
                 *target = date_obj;
                 return true;
-            }
+            } else if let Ok(d) = chrono::NaiveDate::parse_from_str(s, format) {
+                let dt = d.and_time(chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+                let timestamp_millis = dt.and_utc().timestamp_millis();
 
-            for format in &["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d %H:%M:%S"] {
-                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, format) {
-                    let timestamp_millis = dt.and_utc().timestamp_millis();
+                let date_obj = json!({
+                    "secs_since_epoch": timestamp_millis / 1000,
+                    "nanos_since_epoch": timestamp_millis * 1_000_000
+                });
 
-                    let date_obj = json!({
-                        "secs_since_epoch": timestamp_millis / 1000,
-                        "nanos_since_epoch": timestamp_millis * 1_000_000
-                    });
-
-                    *target = date_obj;
-                    return true;
-                } else if let Ok(d) = chrono::NaiveDate::parse_from_str(s, format) {
-                    let dt = d.and_time(chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap());
-                    let timestamp_millis = dt.and_utc().timestamp_millis();
-
-                    let date_obj = json!({
-                        "secs_since_epoch": timestamp_millis / 1000,
-                        "nanos_since_epoch": timestamp_millis * 1_000_000
-                    });
-
-                    *target = date_obj;
-                    return true;
-                }
+                *target = date_obj;
+                return true;
             }
         }
     }
@@ -408,22 +406,22 @@ fn value_to_pathbuf(input: &Value, target: &mut Value) -> bool {
         return true;
     }
 
-    if input.is_object() {
-        if let Some(obj) = input.as_object() {
-            if let Some(path) = obj.get("path") {
-                if path.is_string() {
-                    *target = path.clone();
-                    return true;
-                }
-            }
+    if input.is_object()
+        && let Some(obj) = input.as_object()
+    {
+        if let Some(path) = obj.get("path")
+            && path.is_string()
+        {
+            *target = path.clone();
+            return true;
+        }
 
-            if let (Some(dir), Some(file)) = (obj.get("directory"), obj.get("filename")) {
-                if let (Some(dir_str), Some(file_str)) = (dir.as_str(), file.as_str()) {
-                    let path = format!("{}{}{}", dir_str, std::path::MAIN_SEPARATOR, file_str);
-                    *target = Value::String(path);
-                    return true;
-                }
-            }
+        if let (Some(dir), Some(file)) = (obj.get("directory"), obj.get("filename"))
+            && let (Some(dir_str), Some(file_str)) = (dir.as_str(), file.as_str())
+        {
+            let path = format!("{}{}{}", dir_str, std::path::MAIN_SEPARATOR, file_str);
+            *target = Value::String(path);
+            return true;
         }
     }
 

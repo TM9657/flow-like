@@ -1,0 +1,60 @@
+---
+const { entry, variant = 'lede' } = Astro.props;
+const { title, description, date, tags, cover } = entry.data;
+const href = '/blog/' + entry.slug.split('-').slice(3).join('-') + '/';
+---
+{variant === 'compact' ? (
+  <article class="group grid grid-cols-[120px_1fr] sm:grid-cols-[160px_1fr] gap-4 items-start bg-background p-2">
+    <a href={href} class="block overflow-hidden rounded-md bg-white dark:bg-zinc-900">
+      {cover && (
+        <img
+          width={320}
+          height={200}
+          src={cover}
+          alt={title}
+          loading="lazy"
+          class="aspect-[4/3] h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+        />
+      )}
+    </a>
+    <div class="flex flex-col">
+      <h2 class="text-xl sm:text-2xl font-serif font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 mt-0!">
+        <a href={href} class="hover:underline decoration-2 underline-offset-4">{title}</a>
+      </h2>
+      <div class="mt-3 text-xs sm:text-sm uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+        <time datetime={date.toISOString()}>{date.toDateString()}</time>
+      </div>
+    </div>
+  </article>
+) : (
+  <article class="group relative flex flex-col p-2 bg-background/50">
+    <a href={href} class="block overflow-hidden rounded-md sm:rounded-lg bg-white dark:bg-zinc-900">
+      {cover && (
+        <img
+          width={1280}
+          height={896}
+          src={cover}
+          alt={title}
+          loading="lazy"
+          class="aspect-[4/3] w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+        />
+      )}
+    </a>
+
+    <div class="mt-5 sm:mt-6">
+      <h2 class="text-3xl sm:text-4xl font-serif font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 mt-0!">
+        <a href={href} class="hover:underline decoration-2 underline-offset-4">{title}</a>
+      </h2>
+
+      {description && (
+        <p class="mt-3 sm:mt-4 text-lg sm:text-xl leading-relaxed text-zinc-700 dark:text-zinc-300">
+          {description}
+        </p>
+      )}
+
+      <div class="mt-5 text-xs sm:text-sm uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+        <time datetime={date.toISOString()}>{date.toDateString()}</time>
+      </div>
+    </div>
+  </article>
+)}

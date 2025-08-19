@@ -46,7 +46,7 @@ export function PathbufSetVariable({
 		if (!isFolder) {
 			const meta = await backend.helperState.getPathMeta(pathBuf);
 			if (!meta || meta.length === 0) return;
-			finalPath = meta[0].file_path;
+			finalPath = meta[0].location;
 		}
 
 		const updated = [...items, finalPath];

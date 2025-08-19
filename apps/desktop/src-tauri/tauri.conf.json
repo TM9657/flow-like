@@ -90,7 +90,7 @@
 			"icons/icon.ico"
 		],
 		"resources": [
-			"assets/licenses.md"
+			"assets/THIRD-PARTY-NOTICES.txt"
 		]
 	},
 	"plugins": {

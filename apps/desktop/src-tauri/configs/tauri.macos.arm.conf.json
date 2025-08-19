@@ -16,7 +16,8 @@
             "icons/Assets.car": "Assets.car",
             "binaries/mac/arm/ggml-common.h": "ggml-common.h",
             "binaries/mac/arm/ggml-metal-impl.h": "ggml-metal-impl.h",
-            "binaries/mac/arm/ggml-metal.metal": "ggml-metal.metal"
+            "binaries/mac/arm/ggml-metal.metal": "ggml-metal.metal",
+            "assets/THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt"
         }
     }
 }

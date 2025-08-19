@@ -20,10 +20,8 @@ export * from "./storage/storage-item";
 export * from "./files/file-metadata";
 export * from "./flow/node";
 export { IValueType } from "./flow/variable";
-export type {
-	IVariable,
-	IVariableType,
-} from "./flow/variable";
+export { IVariableType } from "./flow/variable";
+export type { IVariable } from "./flow/variable";
 export {
 	type IBoard,
 	type IComment,

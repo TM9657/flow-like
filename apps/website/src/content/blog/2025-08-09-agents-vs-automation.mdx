@@ -1,0 +1,133 @@
+---
+title: "Everyone’s Talking About “Agents.” What They Actually Want Is Automation."
+description: "In the world of enterprise IT, the focus is shifting from autonomous agents to reliable automation. This article explores the nuances of this transition."
+date: 2025-08-09
+tags: ["agents", "enterprise", "automation"]
+cover: "/images/agents-vs-automation.jpg"
+draft: false
+---
+
+There’s a lot of noise about autonomous agents right now. Demos look magical: give the agent a goal, watch it plan, browse, decide, and execute. But when you peel back the hype, most teams don’t want a fully autonomous intern with a browser. They want **reliable automation**—with a few **GenAI-powered decisions** sprinkled in where it helps.
+
+Think: deterministic workflow for 90% of the path, and selective AI for “turn left or right?” moments.
+
+---
+
+## The math no one puts on the slide
+
+Suppose you had a near-perfect agent that makes the right move **95%** of the time. Sounds great—until you chain decisions:
+
+* A 20-step process succeeds with probability 0.95<sup>20</sup> ≈ <strong>35.8%</strong>.
+* Even at **99%** per step, 0.99<sup>20</sup> ≈ <strong>82%</strong>.
+
+That’s not a system; that’s roulette.
+(Yes, independence assumptions, correlations, etc.—but the headline holds: **errors compound**.)
+
+---
+
+## Deterministic scaffolding, probabilistic leaves
+
+Most steps in enterprise processes **are (and should be) deterministic**:
+
+* Fetch this record.
+* Validate schema and constraints.
+* Transform and enrich.
+* Write to system X; confirm idempotently.
+* Emit an audit event.
+
+Where GenAI shines is **bounded choice**: classification, ranking, extraction, “is this likely A or B?”, drafting human-facing text. Treat those as **leaf decisions**—not the trunk of your system.
+
+**Pattern:**
+
+1. Model the end-to-end flow deterministically.
+2. Insert AI gates where ambiguity actually exists.
+3. Wrap each AI gate with **guards** (confidence thresholds, fallbacks, human approval).
+4. Log inputs/outputs and decisions for traceability.
+
+---
+
+## Why workflows beat “agent loops”
+
+Agent loops try → fail → retry with fuzzy state. Workflows **encode state** and **control flow** explicitly:
+
+* **Types & schemas** prevent garbage from flowing downstream.
+* **Idempotency keys** keep retries safe.
+* **Dead-letter queues & compensations** keep failures contained.
+* **Versioning** lets you ship safely and roll back cleanly.
+* **Observability** (structured logs, metrics, traces) makes incidents boring.
+
+In short: workflows are what you reach for when “it worked in the demo” stops working in production.
+
+---
+
+## Interoperability: call other agents and MCP servers—safely
+
+You don’t have to choose between “no agents” and “agents run the show.” Use them **as tools** inside a controlled workflow:
+
+* **Capability-scoped access:** grant the agent/MCP tool only the methods it needs (read-only vs write, which systems, which fields).
+* **Typed contracts:** validate inputs/outputs at the boundary (`Invoice{…} → Summary{total, currency}`), reject on schema drift.
+* **Budgets & timeboxes:** per-step token/time limits, circuit breakers, and max-retry policies to avoid runaway loops.
+* **Confidence & fallbacks:** require a minimum confidence; otherwise branch to deterministic logic or human review.
+* **Sandboxing & audit:** isolate credentials, record every tool call (prompt, parameters, outputs), and retain an immutable run log.
+* **Policy checks:** pre- and post-conditions (PII rules, data residency, approval gates) that must pass before committing side effects.
+
+This way you can still **invoke agents, MCP servers, or tool-calling models**—just with guardrails that keep risk proportional and traceable.
+
+---
+
+## Where GenAI fits (and where it doesn’t)
+
+**Great fits**
+
+* Routing: “Which queue should this ticket go to?”
+* Extraction: “Pull entities X, Y, Z from this document.”
+* Summarization: “Draft the customer-visible note from structured data.”
+* Policy hints: “This looks like it violates rule R—confirm?”
+
+**Bad fits**
+
+* Core control flow (“decide the whole plan every time”)
+* Unbounded tool access without guardrails
+* Anything that must be **provably** correct (payments, KYC checks, compliance gates)
+
+---
+
+## A minimal, sane architecture
+
+**Deterministic backbone**
+
+* Strongly typed payloads (contracts at every hop)
+* Explicit outcomes: `Success | Retry | Compensate | Escalate`
+* Observability & audit trails baked in
+
+**AI at the edges**
+
+* Step-local prompts with versioning
+* Confidence thresholds & fallback branches
+* Human-in-the-loop on low-confidence or high-impact decisions
+
+**Governance**
+
+* RBAC/ABAC on workflow edits and runs
+* Signed workflow versions; immutable run history
+* Data residency and PII boundaries enforced per step
+
+---
+
+## How Flow-Like helps
+
+[Flow-Like](https://github.com/TM9657/flow-like) is built for this “automation-first, AI-assisted” reality:
+
+* **Typed workflows**: define, validate, and trace your data end-to-end.
+* **Deterministic control flow** with first-class retries, timeouts, and compensations.
+* **Governance for enterprises**: roles, audit logs, versioning, isolation.
+* **Agent/MCP integration done right**: capability-scoped calls, budgets, confidence gates, fallbacks, and human approvals are easy to model.
+
+You get the speed of GenAI where it matters—without handing the keys of your production system to a probabilistic loop.
+
+---
+
+## Bottom line
+
+Autonomous agents make great demos. **Automation makes great systems.**
+Design your processes to be deterministic by default, call agents/MCP servers when useful—but do it **in a controlled, risk-aware way**. Your success rate (and sleep) will thank you.

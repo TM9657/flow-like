@@ -69,11 +69,11 @@ impl Command for RemoveLayerCommand {
 
             // 2) Drop any nodes belonging to those removed layers
             board.nodes.retain(|_, node| {
-                if let Some(layer_id) = &node.layer {
-                    if removed_layers.contains(layer_id) {
-                        self.nodes.push(node.clone());
-                        return false;
-                    }
+                if let Some(layer_id) = &node.layer
+                    && removed_layers.contains(layer_id)
+                {
+                    self.nodes.push(node.clone());
+                    return false;
                 }
                 true
             });
@@ -110,7 +110,6 @@ impl Command for RemoveLayerCommand {
             board.layers.remove(&self.layer.id);
         }
 
-        board.fix_pins_set_layer();
         Ok(())
     }
 
@@ -144,7 +143,6 @@ impl Command for RemoveLayerCommand {
             }
         }
 
-        board.fix_pins_set_layer();
         Ok(())
     }
 }

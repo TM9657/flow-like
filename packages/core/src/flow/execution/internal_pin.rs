@@ -10,9 +10,10 @@ use super::internal_node::InternalNode;
 
 pub struct InternalPin {
     pub pin: Arc<Mutex<Pin>>,
-    pub node: Weak<InternalNode>,
+    pub node: Option<Weak<InternalNode>>,
     pub connected_to: Vec<Weak<Mutex<InternalPin>>>,
     pub depends_on: Vec<Weak<Mutex<InternalPin>>>,
+    pub layer_pin: bool,
 }
 
 impl InternalPin {
@@ -30,45 +31,91 @@ impl InternalPin {
     }
 
     pub async fn get_connected_nodes(&self) -> Vec<Arc<InternalNode>> {
-        let mut connected_nodes = vec![];
-        let mut ids = HashSet::new();
-        for connected_pin in &self.connected_to {
-            let Some(connected_pin) = connected_pin.upgrade() else {
-                continue;
-            };
-            let connected_pin_guard = connected_pin.lock().await;
-            let connected_node = connected_pin_guard.node.upgrade();
+        let mut result = Vec::new();
+        let mut node_ids = HashSet::new();
+        let mut visited_pins: HashSet<usize> = HashSet::new();
+        let mut stack: Vec<Arc<Mutex<InternalPin>>> = Vec::new();
 
-            if let Some(connected_node) = connected_node {
-                let connected_id = connected_node.node.lock().await.id.clone();
-                if ids.contains(&connected_id) {
-                    continue;
-                }
-
-                ids.insert(connected_id);
-                connected_nodes.push(connected_node);
+        for weak in &self.connected_to {
+            if let Some(p) = weak.upgrade() {
+                stack.push(p);
             }
         }
 
-        connected_nodes
+        while let Some(pin_arc) = stack.pop() {
+            let pin_key = Arc::as_ptr(&pin_arc) as usize;
+            if !visited_pins.insert(pin_key) {
+                continue;
+            }
+
+            let node_opt = {
+                let guard = pin_arc.lock().await;
+                if let Some(node_weak) = &guard.node {
+                    node_weak.upgrade()
+                } else {
+                    for next in &guard.connected_to {
+                        if let Some(next_arc) = next.upgrade() {
+                            stack.push(next_arc);
+                        }
+                    }
+                    None
+                }
+            };
+
+            if let Some(node_arc) = node_opt {
+                let id = node_arc.node.lock().await.id.clone();
+                if node_ids.insert(id) {
+                    result.push(node_arc);
+                }
+            }
+        }
+
+        result
     }
 
     pub async fn get_dependent_nodes(&self) -> Vec<Arc<InternalNode>> {
-        let mut connected_nodes = vec![];
+        let seed = self.depends_on.len();
 
-        for depends_on_pin in &self.depends_on {
-            let Some(depends_on_pin) = depends_on_pin.upgrade() else {
-                continue;
-            };
-            let depends_on_pin_guard = depends_on_pin.lock().await;
-            let depends_on_node = depends_on_pin_guard.node.upgrade();
+        let mut result = Vec::with_capacity(seed);
+        let mut node_ids = HashSet::with_capacity(seed.saturating_mul(2));
+        let mut visited_pins: HashSet<usize> = HashSet::with_capacity(seed.saturating_mul(4));
+        let mut stack: Vec<Arc<Mutex<InternalPin>>> = Vec::with_capacity(seed);
 
-            if let Some(depends_on_node) = depends_on_node {
-                connected_nodes.push(depends_on_node);
+        for weak in &self.depends_on {
+            if let Some(p) = weak.upgrade() {
+                stack.push(p);
             }
         }
 
-        connected_nodes
+        while let Some(pin_arc) = stack.pop() {
+            let pin_key = Arc::as_ptr(&pin_arc) as usize;
+            if !visited_pins.insert(pin_key) {
+                continue;
+            }
+
+            let node_opt = {
+                let guard = pin_arc.lock().await;
+                if let Some(node_weak) = &guard.node {
+                    node_weak.upgrade()
+                } else {
+                    for next in &guard.depends_on {
+                        if let Some(next_arc) = next.upgrade() {
+                            stack.push(next_arc);
+                        }
+                    }
+                    None
+                }
+            };
+
+            if let Some(node_arc) = node_opt {
+                let id = node_arc.node.lock().await.id.clone();
+                if node_ids.insert(id) {
+                    result.push(node_arc);
+                }
+            }
+        }
+
+        result
     }
 
     pub async fn set_value(&self, value: Value) {
@@ -81,10 +128,15 @@ impl InternalPin {
         pin.value = Some(value.clone());
     }
 
+    // Pins without a parent report as pure!
     pub async fn is_pure(&self) -> bool {
-        if let Some(internal_node) = self.node.upgrade() {
-            return internal_node.is_pure().await;
+        if let Some(node) = &self.node {
+            if let Some(internal_node) = node.upgrade() {
+                return internal_node.is_pure().await;
+            } else {
+                return false;
+            }
         }
-        false
+        true
     }
 }

@@ -61,9 +61,17 @@ impl NodeLogic for CallReferenceNode {
         let input_pins = context.node.pins.clone();
 
         for (_id, pin) in input_pins {
-            let value = context.evaluate_pin_ref::<Value>(pin.clone()).await?;
+            let value = context.evaluate_pin_ref::<Value>(pin.clone()).await;
             let name = pin.lock().await.pin.lock().await.name.clone();
-            content_pins.insert(name, value);
+            if let Ok(value) = value {
+                content_pins.insert(name, value);
+                continue;
+            }
+
+            context.log_message(
+                &format!("Failed to evaluate pin {}: {:?}", name, value),
+                LogLevel::Warn,
+            );
         }
 
         let reference_function = context

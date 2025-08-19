@@ -14,6 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
+use crate::utils::UiEmitTarget;
 use crate::{
     functions::TauriFunctionError,
     state::{TauriFlowLikeState, TauriSettingsState},
@@ -63,18 +64,23 @@ async fn execute_internal(
                     }
 
                     let first_event = event.first();
+
                     if let Some(first_event) = first_event {
-                        if let Err(err) = app_handle.emit(&first_event.event_type, event.clone()) {
-                            println!("Error emitting event: {}", err);
-                        }
+                        crate::utils::emit_throttled(
+                            &app_handle,
+                            UiEmitTarget::All,
+                            &first_event.event_type,
+                            event.clone(),
+                            std::time::Duration::from_millis(150),
+                        );
                     }
 
                     Ok(())
                 }
             })
         }),
-        Some(1),
         Some(100),
+        Some(400),
         Some(true),
     ));
 

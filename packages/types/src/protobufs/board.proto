@@ -25,8 +25,8 @@ enum LogLevel {
 }
 
 enum LayerType {
-  FUNCTION = 0;
-  MACRO = 1;
+  FUNCTION = 0 [deprecated = true];
+  MACRO = 1 [deprecated = true];
   COLLAPSED = 2;
 }
 
@@ -46,6 +46,12 @@ message Layer {
   optional string error = 13;
   optional string color = 14;
   optional uint64 hash = 15;
+  optional float coord_x_in = 16;
+  optional float coord_y_in = 17;
+  optional float coord_z_in = 18;
+  optional float coord_x_out = 19;
+  optional float coord_y_out = 20;
+  optional float coord_z_out = 21;
 }
 
 

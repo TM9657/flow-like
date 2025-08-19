@@ -26,10 +26,10 @@ async fn should_update(
 
     let mut should_update = true;
 
-    if let Ok(Some(actual_value)) = actual_value {
-        if Some(actual_value) == *value {
-            should_update = false;
-        }
+    if let Ok(Some(actual_value)) = actual_value
+        && Some(actual_value) == *value
+    {
+        should_update = false;
     }
     should_update
 }
@@ -46,42 +46,40 @@ pub async fn user_info(
     let user_info = user::Entity::find_by_id(&sub).one(&state.db).await?;
     if let Some(mut user_info) = user_info {
         let mut updated_user: Option<user::ActiveModel> = None;
-        if let Some(email) = &email {
-            if user_info.email != Some(email.clone())
-                && should_update(&state, &sub, &username, "email", &user_info.email).await
-            {
-                let mut tmp_updated_user: user::ActiveModel = user_info.clone().into();
-                tmp_updated_user.email = sea_orm::ActiveValue::Set(Some(email.clone()));
-                updated_user = Some(tmp_updated_user);
-            }
+        if let Some(email) = &email
+            && user_info.email != Some(email.clone())
+            && should_update(&state, &sub, &username, "email", &user_info.email).await
+        {
+            let mut tmp_updated_user: user::ActiveModel = user_info.clone().into();
+            tmp_updated_user.email = sea_orm::ActiveValue::Set(Some(email.clone()));
+            updated_user = Some(tmp_updated_user);
         }
 
-        if let Some(username) = &username {
-            if user_info.username != Some(username.clone()) {
-                let mut tmp_updated_user: user::ActiveModel =
-                    updated_user.unwrap_or(user_info.clone().into());
-                tmp_updated_user.username = sea_orm::ActiveValue::Set(Some(username.clone()));
-                updated_user = Some(tmp_updated_user);
-            }
+        if let Some(username) = &username
+            && user_info.username != Some(username.clone())
+        {
+            let mut tmp_updated_user: user::ActiveModel =
+                updated_user.unwrap_or(user_info.clone().into());
+            tmp_updated_user.username = sea_orm::ActiveValue::Set(Some(username.clone()));
+            updated_user = Some(tmp_updated_user);
         }
 
-        if let Some(preferred_username) = &preferred_username {
-            if user_info.preferred_username != Some(preferred_username.clone())
-                && should_update(
-                    &state,
-                    &sub,
-                    &username,
-                    "preferred_username",
-                    &user_info.preferred_username,
-                )
-                .await
-            {
-                let mut tmp_updated_user: user::ActiveModel =
-                    updated_user.unwrap_or(user_info.clone().into());
-                tmp_updated_user.preferred_username =
-                    sea_orm::ActiveValue::Set(Some(preferred_username.clone()));
-                updated_user = Some(tmp_updated_user);
-            }
+        if let Some(preferred_username) = &preferred_username
+            && user_info.preferred_username != Some(preferred_username.clone())
+            && should_update(
+                &state,
+                &sub,
+                &username,
+                "preferred_username",
+                &user_info.preferred_username,
+            )
+            .await
+        {
+            let mut tmp_updated_user: user::ActiveModel =
+                updated_user.unwrap_or(user_info.clone().into());
+            tmp_updated_user.preferred_username =
+                sea_orm::ActiveValue::Set(Some(preferred_username.clone()));
+            updated_user = Some(tmp_updated_user);
         }
 
         if user_info.stripe_id.is_none() && state.platform_config.features.premium {

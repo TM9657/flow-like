@@ -105,16 +105,10 @@ impl NodeLogic for InvokeLLM {
         context.activate_exec_pin_ref(&on_stream).await?;
 
         let connected_nodes = Arc::new(DashMap::new());
-        let connected = on_stream.lock().await.connected_to.clone();
-        for pin in connected {
-            let node = pin
-                .upgrade()
-                .ok_or(flow_like_types::anyhow!("Pin is not set"))?;
-            let node = node.lock().await.node.clone();
-            if let Some(node) = node.upgrade() {
-                let context = Arc::new(Mutex::new(context.create_sub_context(&node).await));
-                connected_nodes.insert(node.node.lock().await.id.clone(), context);
-            }
+        let connected = on_stream.lock().await.get_connected_nodes().await;
+        for node in connected {
+            let context = Arc::new(Mutex::new(context.create_sub_context(&node).await));
+            connected_nodes.insert(node.node.lock().await.id.clone(), context);
         }
 
         let parent_node_id = context.node.node.lock().await.id.clone();

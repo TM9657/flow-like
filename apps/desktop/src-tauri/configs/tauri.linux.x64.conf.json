@@ -19,7 +19,8 @@
             "binaries/linux/x64/libggml-rpc.so": "libggml-rpc.so",
             "binaries/linux/x64/libggml-vulkan.so": "libggml-vulkan.so",
             "binaries/linux/x64/libggml.so": "libggml.so",
-            "binaries/linux/x64/libllama.so": "libllama.so"
+            "binaries/linux/x64/libllama.so": "libllama.so",
+            "assets/THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt"
         }
 	}
 }

@@ -2,6 +2,7 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import {
 	CameraIcon,
+	ClockIcon,
 	DownloadCloudIcon,
 	ExternalLinkIcon,
 	FileIcon,
@@ -19,7 +20,14 @@ import {
 	UniversityIcon,
 	WorkflowIcon,
 } from "lucide-react";
-import { type JSX, useCallback, useState } from "react";
+import {
+	type JSX,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { Progress } from "../../components/ui/progress";
 import { useInvoke } from "../../hooks/use-invoke";
 import { type IBit, IBitTypes } from "../../lib/schema/bit/bit";
@@ -44,9 +52,55 @@ export function BitCard({
 	wide = false,
 }: Readonly<{ bit: IBit; wide: boolean }>) {
 	const backend = useBackend();
-	const { download } = useDownloadManager();
+	const download = useDownloadManager((s) => s.download);
+	const onProgress = useDownloadManager((s) => s.onProgress);
+	const isQueued = useDownloadManager((s) => s.isQueued);
+	const getLatestPct = useDownloadManager((s) => s.getLatestPct);
 
 	const [progress, setProgress] = useState<number | undefined>();
+	const isQueuedState = useMemo(() => progress === 0, [progress]);
+
+	const mountedRef = useRef(true);
+	const lastPctRef = useRef(0);
+	const lastUpdateRef = useRef(0);
+	const unsubscribeRef = useRef<(() => void) | null>(null);
+
+	useEffect(() => {
+		mountedRef.current = true;
+
+		const initial = getLatestPct(bit.hash);
+		if (typeof initial === "number") {
+			setProgress(initial);
+			lastPctRef.current = initial;
+		} else if (isQueued(bit.hash)) {
+			setProgress(0);
+			lastPctRef.current = 0;
+		}
+
+		unsubscribeRef.current = onProgress(bit.hash, (dl) => {
+			const pct = Math.round(dl.progress() * 100);
+			const now = Date.now();
+			const changed = Math.abs(pct - lastPctRef.current) >= 1;
+			const due = now - lastUpdateRef.current >= 250;
+			if ((changed || due) && mountedRef.current) {
+				setProgress(pct);
+				lastPctRef.current = pct;
+				lastUpdateRef.current = now;
+			}
+		});
+
+		return () => {
+			mountedRef.current = false;
+			if (unsubscribeRef.current) {
+				unsubscribeRef.current();
+				unsubscribeRef.current = null;
+			}
+			lastPctRef.current = 0;
+			lastUpdateRef.current = 0;
+			setProgress(undefined);
+		};
+	}, [bit.hash, getLatestPct, isQueued, onProgress]);
+
 	const isInstalled: UseQueryResult<boolean> = useInvoke(
 		backend.bitState.isBitInstalled,
 		backend.bitState,
@@ -64,12 +118,14 @@ export function BitCard({
 	);
 
 	const downloadBit = useCallback(
-		async (bit: IBit) => {
-			await download(bit, (dl) => {
-				setProgress(dl.progress() * 100);
-			});
-			await isInstalled.refetch();
-			setProgress(undefined);
+		async (b: IBit) => {
+			setProgress(0);
+			try {
+				await download(b); // de-duplicated in manager
+				await isInstalled.refetch();
+			} finally {
+				// keep subscription; overlay hides when done/unmounted
+			}
 		},
 		[download, isInstalled],
 	);
@@ -127,29 +183,40 @@ export function BitCard({
 		>
 			<Card
 				className={`
-                relative h-full w-full cursor-pointer transition-all duration-300 ease-out
-                hover:shadow-2xl hover:shadow-primary/10 hover:-translate-y-2
-                ${isInstalled.data ? "ring-1 ring-emerald-500/20 shadow-emerald-500/10" : ""}
-                ${isInProfile ? "bg-linear-to-br from-primary/5 to-emerald-500/5" : ""}
-                overflow-hidden border hover:border-primary/30
-                backdrop-blur-xs bg-card/80
-            `}
+        relative h-full w-full cursor-pointer transition-all duration-300 ease-out
+        hover:shadow-2xl hover:shadow-primary/10 hover:-translate-y-2
+        ${isInstalled.data ? "ring-1 ring-emerald-500/20 shadow-emerald-500/10" : ""}
+        ${isInProfile ? "bg-linear-to-br from-primary/5 to-emerald-500/5" : ""}
+        overflow-hidden border hover:border-primary/30
+        backdrop-blur-xs bg-card/80
+      `}
 			>
 				{progress !== undefined && (
 					<div className="absolute inset-0 bg-background/80 backdrop-blur-xs z-30 flex items-center justify-center">
-						<div className="text-center space-y-4">
-							<Progress value={progress} className="w-48" />
-							<div className="flex items-center gap-2">
-								<DownloadCloudIcon className="h-6 w-6 text-primary animate-pulse" />
-								<p className="text-sm text-muted-foreground">
-									{Math.round(progress)}% Downloaded
+						{isQueuedState ? (
+							<div className="text-center space-y-2">
+								<div className="flex items-center gap-2 justify-center">
+									<ClockIcon className="h-5 w-5 text-primary animate-pulse" />
+									<p className="text-sm text-muted-foreground">Queued…</p>
+								</div>
+								<p className="text-xs text-muted-foreground">
+									Waiting for available download slot
 								</p>
 							</div>
-						</div>
+						) : (
+							<div className="text-center space-y-4">
+								<Progress value={progress} className="w-48" />
+								<div className="flex items-center gap-2">
+									<DownloadCloudIcon className="h-6 w-6 text-primary animate-pulse" />
+									<p className="text-sm text-muted-foreground">
+										{Math.round(progress)}% Downloaded
+									</p>
+								</div>
+							</div>
+						)}
 					</div>
 				)}
 
-				{/* Dropdown Menu - Top Right */}
 				<div className="absolute top-3 right-3 z-20">
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
@@ -226,8 +293,6 @@ export function BitCard({
 
 				<CardHeader className="pb-3">
 					<div className="flex items-center space-x-4 mb-4 pr-10">
-						{" "}
-						{/* Added right padding for dropdown */}
 						<div className="relative">
 							<Avatar className="h-14 w-14 border-2 border-background shadow-lg ring-2 ring-primary/10 transition-all duration-300 group-hover/card:ring-primary/30">
 								<AvatarImage
@@ -250,6 +315,12 @@ export function BitCard({
 								</h3>
 								{isInProfile && (
 									<SparklesIcon className="h-4 w-4 text-primary animate-pulse" />
+								)}
+								{isQueued(bit.hash) && (
+									<Badge variant="outline" className="text-xs">
+										<ClockIcon className="h-3 w-3 mr-1" />
+										Queued
+									</Badge>
 								)}
 								{bit.repository?.startsWith("https://huggingface.co/") && (
 									<img
@@ -351,7 +422,6 @@ export function BitTypeIcon({
 		case IBitTypes.Course:
 			return <UniversityIcon className={combinedClass} />;
 	}
-
 	return <Package2Icon className={combinedClass} />;
 }
 

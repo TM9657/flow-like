@@ -47,11 +47,11 @@ export default defineConfig({
 					label: "GitHub",
 					href: "https://github.com/TM9657/flow-like",
 				},
-				{ icon: "x.com", label: "X.com", href: "https://x.com/tm9657" },
+				{ icon: "x.com", label: "X.com", href: "https://x.com/greatco_de" },
 				{
 					icon: "linkedin",
 					label: "LinkedIn",
-					href: "https://linkedin.com/company/tm9657",
+					href: "https://linkedin.com/company/greatco-de",
 				},
 			],
 			lastUpdated: true,

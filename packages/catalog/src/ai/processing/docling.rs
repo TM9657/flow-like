@@ -168,10 +168,10 @@ impl NodeLogic for DoclingNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let mut port = 0;
-        if let Some(cache) = context.cache.read().await.get(DOCLING_KEY) {
-            if let Some(docling) = cache.as_any().downcast_ref::<DoclingCacheObject>() {
-                port = docling.port;
-            }
+        if let Some(cache) = context.cache.read().await.get(DOCLING_KEY)
+            && let Some(docling) = cache.as_any().downcast_ref::<DoclingCacheObject>()
+        {
+            port = docling.port;
         };
 
         if port == 0 {

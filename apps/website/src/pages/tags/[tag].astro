@@ -1,0 +1,23 @@
+---
+import { getCollection } from 'astro:content';
+import PostCard from '../../components/post-card.astro';
+import "@tm9657/flow-like-ui/global.css";
+import "../../styles/Blog.css";
+import BlogLayout from '../../layouts/Blog-Layout.astro';
+export async function getStaticPaths() {
+  const posts = await getCollection('blog', ({ data }) => import.meta.env.PROD ? !data.draft : true);
+  const tags = new Set(posts.flatMap(p => p.data.tags));
+  return [...tags].map(tag => ({ params: { tag } }));
+}
+
+const { tag } = Astro.params;
+const posts = (await getCollection('blog', ({ data }) => import.meta.env.PROD ? !data.draft : true))
+  .filter(p => p.data.tags.includes(tag))
+  .sort((a,b) => b.data.date.getTime() - a.data.date.getTime());
+---
+<BlogLayout data={{ title: "Blog", description: "Latest blog posts", slug: "blog" }}>
+    <main class="mx-auto max-w-3xl p-2 flex flex-grow flex-col items-start justify-start gap-4">
+        <h1 class="mt-4!">#{tag}</h1>
+        {posts.map(p => <PostCard entry={p} />)}
+</main>
+</BlogLayout>

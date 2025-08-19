@@ -1,13 +1,13 @@
 use flow_like_types::reqwest_eventsource::{Event, RequestBuilderExt};
 use futures::StreamExt;
-use openai_api_rs::v1::assistant::{AssistantObject, AssistantRequest, DeletionStatus};
+use openai_api_rs::v1::assistant::{AssistantObject, AssistantRequest};
 use openai_api_rs::v1::audio::{
     AudioSpeechRequest, AudioSpeechResponse, AudioTranscriptionRequest, AudioTranscriptionResponse,
     AudioTranslationRequest, AudioTranslationResponse,
 };
 use openai_api_rs::v1::batch::{BatchResponse, ListBatchResponse};
 use openai_api_rs::v1::chat_completion::{ChatCompletionRequest, ChatCompletionResponse};
-use openai_api_rs::v1::common;
+use openai_api_rs::v1::common::{self, DeletionStatus};
 use openai_api_rs::v1::completion::{CompletionRequest, CompletionResponse};
 use openai_api_rs::v1::edit::{EditRequest, EditResponse};
 use openai_api_rs::v1::embedding::{EmbeddingRequest, EmbeddingResponse};
@@ -403,25 +403,25 @@ impl OpenAIClient {
         let mut output = crate::response::Response::default();
 
         while let Some(event) = stream.next().await {
-            if let Ok(event) = event {
-                if let Event::Message(event) = event {
-                    let data = &event.data;
-                    if data == "[DONE]" {
-                        break;
+            if let Ok(event) = event
+                && let Event::Message(event) = event
+            {
+                let data = &event.data;
+                if data == "[DONE]" {
+                    break;
+                }
+                let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
+                    Ok(chunk) => chunk,
+                    Err(e) => {
+                        eprintln!("Failed to parse chunk: {}", e);
+                        continue;
                     }
-                    let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
-                        Ok(chunk) => chunk,
-                        Err(e) => {
-                            eprintln!("Failed to parse chunk: {}", e);
-                            continue;
-                        }
-                    };
-                    output.push_chunk(chunk.clone());
-                    if let Some(callback) = &callback {
-                        callback(chunk).await.map_err(|e| APIError::CustomError {
-                            message: format!("Callback error: {}", e),
-                        })?;
-                    }
+                };
+                output.push_chunk(chunk.clone());
+                if let Some(callback) = &callback {
+                    callback(chunk).await.map_err(|e| APIError::CustomError {
+                        message: format!("Callback error: {}", e),
+                    })?;
                 }
             }
         }
@@ -436,12 +436,13 @@ impl OpenAIClient {
         req: AudioTranscriptionRequest,
     ) -> Result<AudioTranscriptionResponse, APIError> {
         // https://platform.openai.com/docs/api-reference/audio/createTranscription#audio-createtranscription-response_format
-        if let Some(response_format) = &req.response_format {
-            if response_format != "json" && response_format != "verbose_json" {
-                return Err(APIError::CustomError {
+        if let Some(response_format) = &req.response_format
+            && response_format != "json"
+            && response_format != "verbose_json"
+        {
+            return Err(APIError::CustomError {
                     message: "response_format must be either 'json' or 'verbose_json' please use audio_transcription_raw".to_string(),
                 });
-            }
         }
         let form: Form;
         if req.clone().file.is_some() {
@@ -461,12 +462,14 @@ impl OpenAIClient {
         req: AudioTranscriptionRequest,
     ) -> Result<Bytes, APIError> {
         // https://platform.openai.com/docs/api-reference/audio/createTranscription#audio-createtranscription-response_format
-        if let Some(response_format) = &req.response_format {
-            if response_format != "text" && response_format != "srt" && response_format != "vtt" {
-                return Err(APIError::CustomError {
+        if let Some(response_format) = &req.response_format
+            && response_format != "text"
+            && response_format != "srt"
+            && response_format != "vtt"
+        {
+            return Err(APIError::CustomError {
                     message: "response_format must be either 'text', 'srt' or 'vtt', please use audio_transcription".to_string(),
                 });
-            }
         }
         let form: Form;
         if req.clone().file.is_some() {

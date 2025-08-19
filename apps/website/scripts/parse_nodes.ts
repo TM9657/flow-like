@@ -87,7 +87,7 @@ for (const comment of comments) {
 }
 
 fs.writeFileSync(
-	"./src/assets/board.json",
+	"./public/board.json",
 	JSON.stringify({
 		nodes: parsedNodes,
 		edges: parsedEdges,

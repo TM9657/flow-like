@@ -82,12 +82,14 @@ export function FlowContextMenuNodes({
 							{category}
 						</ContextMenuSubTrigger>
 						<ContextMenuSubContent className="w-48" key={category}>
-							<FlowContextMenuNodes
-								items={node}
-								filter={filter}
-								pin={pin}
-								onNodePlace={onNodePlace}
-							/>
+							<div className="max-h-96 overflow-y-auto">
+								<FlowContextMenuNodes
+									items={node}
+									filter={filter}
+									pin={pin}
+									onNodePlace={onNodePlace}
+								/>
+							</div>
 						</ContextMenuSubContent>
 					</ContextMenuSub>
 				))}

@@ -21,7 +21,8 @@
             "binaries/win/x64/libcurl-x64.dll": "libcurl-x64.dll",
             "binaries/win/x64/libomp140.x86_64.dll": "libomp140.x86_64.dll",
             "binaries/win/x64/llama.dll": "llama.dll",
-            "binaries/win/x64/mtmd.dll": "mtmd.dll"
+            "binaries/win/x64/mtmd.dll": "mtmd.dll",
+            "assets/THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt"
         }
 	}
 }

@@ -75,10 +75,10 @@ pub async fn predict(
             Box::pin({
                 async move {
                     let first_event = event.first();
-                    if let Some(first_event) = first_event {
-                        if let Err(err) = app_handle.emit(&first_event.event_type, event.clone()) {
-                            println!("Error emitting event: {}", err);
-                        }
+                    if let Some(first_event) = first_event
+                        && let Err(err) = app_handle.emit(&first_event.event_type, event.clone())
+                    {
+                        println!("Error emitting event: {}", err);
                     }
                     Ok(())
                 }

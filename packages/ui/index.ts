@@ -9,6 +9,7 @@ export * from "./state/run-execution-state";
 export * from "./state/log-aggregation-state";
 export type { IRunUpdateEvent } from "./state/run-execution-state";
 export * from "./types";
+export * from "./db/index";
 
 // Dependency exports
 export {

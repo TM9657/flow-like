@@ -17,31 +17,31 @@ pub async fn convert_bedrock_response(
 
     let mut content = String::new();
 
-    if let Some(output) = converse_output.output {
-        if let Ok(message) = output.as_message() {
-            let mut response_message = ResponseMessage::default();
-            response_message.role = message.role.as_str().to_string();
-            // let mut tool_calls = vec![];
+    if let Some(output) = converse_output.output
+        && let Ok(message) = output.as_message()
+    {
+        let mut response_message = ResponseMessage::default();
+        response_message.role = message.role.as_str().to_string();
+        // let mut tool_calls = vec![];
 
-            for chunk in message.content.iter() {
-                if let Ok(text) = chunk.as_text() {
-                    content.push_str(text);
-                }
-
-                if let Ok(tool_call) = chunk.as_tool_result() {
-                    // TODO
-                }
+        for chunk in message.content.iter() {
+            if let Ok(text) = chunk.as_text() {
+                content.push_str(text);
             }
 
-            response.choices.push(Choice {
-                index: 0,
-                finish_reason: converse_output.stop_reason.as_str().to_string(),
-                logprobs: None,
-                message: response_message,
-            });
-
-            return Ok(response);
+            if let Ok(tool_call) = chunk.as_tool_result() {
+                // TODO
+            }
         }
+
+        response.choices.push(Choice {
+            index: 0,
+            finish_reason: converse_output.stop_reason.as_str().to_string(),
+            logprobs: None,
+            message: response_message,
+        });
+
+        return Ok(response);
     }
 
     response.choices.push(Choice {
@@ -103,28 +103,28 @@ pub fn convert_bedrock_stream_output(
         }
         ConverseStreamOutputType::ContentBlockStart(start) => {
             response_chunk.id = "0".to_string();
-            if let Some(start) = start.start {
-                if let Ok(tool) = start.as_tool_use() {
-                    response_chunk.choices.push(ResponseChunkChoice {
-                        logprobs: None,
-                        index: 0,
-                        finish_reason: None,
-                        delta: Some(Delta {
-                            content: None,
-                            role: None,
-                            refusal: None,
-                            tool_calls: Some(vec![FunctionCall {
-                                id: tool.tool_use_id.clone(),
-                                index: None,
-                                function: ResponseFunction {
-                                    name: Some(tool.name.clone()),
-                                    arguments: None,
-                                },
-                                tool_type: None,
-                            }]),
-                        }),
-                    })
-                }
+            if let Some(start) = start.start
+                && let Ok(tool) = start.as_tool_use()
+            {
+                response_chunk.choices.push(ResponseChunkChoice {
+                    logprobs: None,
+                    index: 0,
+                    finish_reason: None,
+                    delta: Some(Delta {
+                        content: None,
+                        role: None,
+                        refusal: None,
+                        tool_calls: Some(vec![FunctionCall {
+                            id: tool.tool_use_id.clone(),
+                            index: None,
+                            function: ResponseFunction {
+                                name: Some(tool.name.clone()),
+                                arguments: None,
+                            },
+                            tool_type: None,
+                        }]),
+                    }),
+                })
             }
         }
         ConverseStreamOutputType::ContentBlockStop(stop) => {

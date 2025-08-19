@@ -13,7 +13,8 @@
 			"**/node_modules/**",
 			"target/**",
 			"**/out/**",
-			"**/dist/**"
+			"**/dist/**",
+			"**/*.astro"
 		]
 	},
 	"formatter": {
@@ -36,13 +37,5 @@
 		"formatter": {
 			"quoteStyle": "double"
 		}
-	},
-	"overrides": [
-		{
-			"include": ["**/*.astro"],
-			"organizeImports": {
-				"enabled": false
-			}
-		}
-	]
+	}
 }

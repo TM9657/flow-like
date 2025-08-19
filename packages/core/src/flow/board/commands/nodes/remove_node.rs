@@ -95,8 +95,6 @@ impl Command for RemoveNodeCommand {
             board.nodes.insert(node.id.clone(), node.clone());
         }
 
-        board.fix_pins_set_layer();
-
         Ok(())
     }
 
@@ -110,8 +108,6 @@ impl Command for RemoveNodeCommand {
         for node in &self.connected_nodes {
             board.nodes.insert(node.id.clone(), node.clone());
         }
-
-        board.fix_pins_set_layer();
 
         Ok(())
     }

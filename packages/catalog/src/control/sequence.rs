@@ -39,11 +39,11 @@ impl NodeLogic for SequenceNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        let mut already_executed = HashSet::new();
+        let mut already_executed: std::collections::HashSet<usize> = HashSet::new();
 
         let mut pin_indices = {
             let exec_out_pins = context.get_pins_by_name("exec_out").await?;
-            let mut pin_indices = Vec::new();
+            let mut pin_indices = Vec::with_capacity(exec_out_pins.len());
             for pin in exec_out_pins {
                 let index = pin.lock().await.pin.lock().await.index;
                 pin_indices.push((pin.clone(), index));
@@ -54,37 +54,30 @@ impl NodeLogic for SequenceNode {
         pin_indices.sort_by_key(|(_, index)| *index);
 
         let execution_order = {
-            let mut execution_order = Vec::with_capacity(pin_indices.len());
+            let mut order = Vec::with_capacity(pin_indices.len());
 
             for (pin, _) in pin_indices {
-                let activate_pin = context.activate_exec_pin_ref(&pin).await;
-                if let Err(err) = activate_pin {
-                    eprintln!("Error activating pin: {:?}", err);
-                }
-                let pin = pin.lock().await;
-                let connected_to = pin.connected_to.clone();
-                for connection in connected_to {
-                    let connection = connection
-                        .upgrade()
-                        .ok_or(flow_like_types::anyhow!("Connection not Valid"))?;
-                    let connection = connection.lock().await;
-                    let node = connection.node.upgrade();
-                    if let Some(node) = node {
-                        let node_id = node.node.lock().await.id.clone();
-                        if !already_executed.contains(&node_id) {
-                            execution_order.push((node.clone(), node_id.clone()));
-                            already_executed.insert(node_id);
-                        }
+                let _ = context.activate_exec_pin_ref(&pin).await;
+
+                let connected_nodes = {
+                    let guard = pin.lock().await;
+                    guard.get_connected_nodes().await
+                };
+
+                for node in connected_nodes {
+                    let key = std::sync::Arc::as_ptr(&node) as usize;
+                    if already_executed.insert(key) {
+                        order.push(node);
                     }
                 }
             }
-            execution_order
+            order
         };
 
         let mut recursion_guard = HashSet::new();
         recursion_guard.insert(context.node.node.lock().await.id.clone());
 
-        for (node, _node_id) in execution_order {
+        for node in execution_order {
             let mut sub_context = context.create_sub_context(&node).await;
             let _ =
                 InternalNode::trigger(&mut sub_context, &mut Some(recursion_guard.clone()), true)
@@ -95,12 +88,9 @@ impl NodeLogic for SequenceNode {
 
         let exec_out_pins = context.get_pins_by_name("exec_out").await?;
         for pin in exec_out_pins {
-            let deactivate_pin = context.deactivate_exec_pin_ref(&pin).await;
-            if let Err(err) = deactivate_pin {
-                eprintln!("Error deactivating pin: {:?}", err);
-            }
+            let _ = context.deactivate_exec_pin_ref(&pin).await;
         }
 
-        return Ok(());
+        Ok(())
     }
 }

@@ -131,10 +131,10 @@ impl Variable {
         }
 
         // We don´t leak secret values in the hash
-        if !self.secret {
-            if let Some(default_value) = &self.default_value {
-                hasher.append(default_value);
-            }
+        if !self.secret
+            && let Some(default_value) = &self.default_value
+        {
+            hasher.append(default_value);
         }
 
         hasher.append(format!("{:?}", self.data_type).as_bytes());

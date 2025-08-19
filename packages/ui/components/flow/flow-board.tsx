@@ -43,7 +43,7 @@ import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { useLogAggregation } from "../..";
+import { useLogAggregation, viewportDb, viewportKey } from "../..";
 import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
@@ -62,6 +62,8 @@ import { useInvoke } from "../../hooks/use-invoke";
 import {
 	type IGenericCommand,
 	type ILogMetadata,
+	IPinType,
+	IValueType,
 	addNodeCommand,
 	connectPinsCommand,
 	disconnectPinsCommand,
@@ -70,6 +72,7 @@ import {
 	removeLayerCommand,
 	removeNodeCommand,
 	upsertCommentCommand,
+	upsertLayerCommand,
 } from "../../lib";
 import {
 	handleCopy,
@@ -79,10 +82,12 @@ import {
 } from "../../lib/flow-board-utils";
 import { toastError, toastSuccess } from "../../lib/messages";
 import {
+	type IBoard,
 	type IComment,
 	ICommentType,
 	type IVariable,
 } from "../../lib/schema/flow/board";
+import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
 import { type INode, IVariableType } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
 import type { ILayer } from "../../lib/schema/flow/run";
@@ -94,6 +99,7 @@ import { BoardMeta } from "./board-meta";
 import { useUndoRedo } from "./flow-history";
 import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowRuns } from "./flow-runs";
+import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
 
 function hexToRgba(hex: string, alpha = 0.3): string {
@@ -151,22 +157,24 @@ export function FlowBoard({
 		[appId, boardId, version],
 		boardId !== "",
 	);
+	const boardRef = useRef<IBoard | undefined>(undefined);
 	const currentProfile = useInvoke(
 		backend.userState.getProfile,
 		backend.userState,
 		[],
 	);
 	const { addRun, removeRun, pushUpdate } = useRunExecutionStore();
-	const { screenToFlowPosition } = useReactFlow();
+	const { screenToFlowPosition, getViewport, setViewport, fitView } =
+		useReactFlow();
 
 	const [nodes, setNodes] = useNodesState<any>([]);
 	const [edges, setEdges] = useEdgesState<any>([]);
 	const [droppedPin, setDroppedPin] = useState<IPin | undefined>(undefined);
 	const [clickPosition, setClickPosition] = useState({ x: 0, y: 0 });
 	const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-	const [pinCache, setPinCache] = useState<Map<string, [IPin, INode, boolean]>>(
-		new Map(),
-	);
+	const [pinCache, setPinCache] = useState<
+		Map<string, [IPin, INode | ILayer, boolean]>
+	>(new Map());
 	const [editBoard, setEditBoard] = useState(false);
 	const [currentLayer, setCurrentLayer] = useState<string | undefined>();
 	const [layerPath, setLayerPath] = useState<string | undefined>();
@@ -181,6 +189,93 @@ export function FlowBoard({
 			return node;
 		},
 		[nodes, pinCache],
+	);
+
+	const saveViewport = useCallback(async () => {
+		try {
+			const vp = getViewport();
+			await viewportDb.viewports.put({
+				id: viewportKey(appId, boardId, layerPath),
+				appId,
+				boardId,
+				layerPath: layerPath ?? "root",
+				x: vp.x,
+				y: vp.y,
+				zoom: vp.zoom,
+				updatedAt: Date.now(),
+			});
+		} catch {
+			// no-op
+		}
+	}, [appId, boardId, layerPath, getViewport]);
+
+	useEffect(() => {
+		let active = true;
+
+		const restore = async () => {
+			const rec = await viewportDb.viewports.get(
+				viewportKey(appId, boardId, layerPath),
+			);
+			if (!active) return;
+
+			if (rec) {
+				setViewport({ x: rec.x, y: rec.y, zoom: rec.zoom });
+			} else {
+				// Fit screen when no stored viewport is found
+				fitView({ duration: 300 });
+			}
+		};
+
+		// Wait until nodes are there so fitting has effect
+		// Using nodes.length is enough to re-run after initial load
+		restore();
+
+		return () => {
+			active = false;
+		};
+	}, [appId, boardId, layerPath, setViewport, fitView, nodes.length]);
+
+	const focusNode = useCallback(
+		(nodeId: string) => {
+			const node = board.data?.nodes[nodeId];
+			if (!node) {
+				console.error("Node not found:", nodeId);
+				return;
+			}
+
+			const layers = board.data?.layers ?? {};
+			const layerTree: string[] = [];
+			let parentLayer = node.layer;
+			let iteration = 0;
+
+			while (parentLayer && iteration < 40) {
+				iteration++;
+				const layer = layers[parentLayer];
+				if (!layer) break;
+				layerTree.push(layer.id);
+				parentLayer = layer.parent_id;
+			}
+
+			if (layerTree.length > 0) {
+				setCurrentLayer(layerTree[layerTree.length - 1]);
+				setLayerPath(layerTree.slice().reverse().join("/"));
+			} else {
+				setCurrentLayer(undefined);
+				setLayerPath(undefined);
+			}
+
+			// Defer until layer switch renders nodes
+			requestAnimationFrame(() => {
+				requestAnimationFrame(() => {
+					fitView({
+						nodes: [{ id: node.id }],
+						padding: 3,
+						duration: 500,
+					});
+				});
+			});
+		},
+		[board.data?.nodes, board.data?.layers, fitView],
 	);
 
 	const executeCommand = useCallback(
@@ -294,17 +389,23 @@ export function FlowBoard({
 
 	const pushLayer = useCallback(
 		(pushedLayer: ILayer) => {
+			void saveViewport();
+
 			setCurrentLayer(pushedLayer.id);
 			setLayerPath((old) => {
 				if (old) return `${old}/${pushedLayer.id}`;
 				return pushedLayer.id;
 			});
 		},
-		[currentLayer, setCurrentLayer, setLayerPath, layerPath],
+		[saveViewport],
 	);
 
 	const popLayer = useCallback(() => {
 		if (!layerPath) return;
+
+		// Save current layer viewport before switching
+		void saveViewport();
+
 		const segments = layerPath.split("/");
 		if (segments.length === 1) {
 			setLayerPath(undefined);
@@ -315,7 +416,11 @@ export function FlowBoard({
 		setLayerPath(newPath);
 		const segment = newPath.split("/").pop();
 		setCurrentLayer(segment);
-	}, [currentLayer, setCurrentLayer, setLayerPath]);
+	}, [layerPath, saveViewport]);
+
+	const onMoveEnd = useCallback(() => {
+		void saveViewport();
+	}, [saveViewport]);
 
 	const executeBoard = useCallback(
 		async (node: INode, payload?: object) => {
@@ -630,6 +735,202 @@ export function FlowBoard({
 		],
 	);
 
+	const placePlaceholder = useCallback(
+		async (name: string, position?: { x: number; y: number }) => {
+			const delayNode = catalog.data?.find((node) => node.name === "delay");
+
+			const refs = board.data?.refs ?? {};
+			const location = screenToFlowPosition({
+				x: position?.x ?? clickPosition.x,
+				y: position?.y ?? clickPosition.y,
+			});
+
+			const layerId = createId();
+
+			const execInPin: IPin = {
+				id: createId(),
+				name: "exec_in",
+				friendly_name: "Exec In",
+				connected_to: [],
+				depends_on: [],
+				description: "",
+				index: 1,
+				pin_type: IPinType.Input,
+				value_type: IValueType.Normal,
+				data_type: IVariableType.Execution,
+				default_value: null,
+			};
+
+			const execOutPin: IPin = {
+				...execInPin,
+				id: createId(),
+				pin_type: IPinType.Output,
+				name: "exec_out",
+				friendly_name: "Exec Out",
+				index: 1,
+			};
+
+			let dataPin: IPin | undefined;
+			let connectToPinId: string | undefined;
+
+			if (droppedPin) {
+				const oppositeType =
+					droppedPin.pin_type === "Input" ? IPinType.Output : IPinType.Input;
+
+				if (droppedPin.data_type === IVariableType.Execution) {
+					connectToPinId =
+						oppositeType === IPinType.Input ? execInPin.id : execOutPin.id;
+				} else {
+					const resolvedSchema =
+						typeof droppedPin.schema === "string"
+							? (refs?.[droppedPin.schema] ?? droppedPin.schema)
+							: droppedPin.schema;
+
+					dataPin = {
+						id: createId(),
+						name: oppositeType === IPinType.Input ? "in" : "out",
+						friendly_name: oppositeType === IPinType.Input ? "In" : "Out",
+						connected_to: [],
+						depends_on: [],
+						description: "",
+						index: 2,
+						pin_type: oppositeType,
+						value_type: droppedPin.value_type,
+						data_type: droppedPin.data_type,
+						default_value: null,
+						...(resolvedSchema ? { schema: resolvedSchema } : {}),
+						...(droppedPin.options ? { options: droppedPin.options } : {}),
+					};
+
+					connectToPinId = dataPin.id;
+				}
+			}
+
+			const pins: Record<string, IPin> = {
+				[execInPin.id]: execInPin,
+				[execOutPin.id]: execOutPin,
+				...(dataPin ? { [dataPin.id]: dataPin } : {}),
+			};
+
+			const newLayerCommand = upsertLayerCommand({
+				current_layer: currentLayer,
+				layer: {
+					comments: {},
+					coordinates: [location.x, location.y, 0],
+					id: layerId,
+					name,
+					nodes: {},
+					pins,
+					type: ILayerType.Collapsed,
+					variables: {},
+					parent_id: currentLayer,
+				},
+				node_ids: [],
+			});
+
+			const newLayerResult = await executeCommand(newLayerCommand, false);
+			const newLayer: ILayer = newLayerResult.layer;
+
+			if (delayNode) {
+				const placeDelayCommand = addNodeCommand({
+					node: delayNode,
+					current_layer: newLayer.id,
+				});
+
+				const placedNode = await executeCommand(placeDelayCommand.command);
+				const newNode: INode = placedNode.node;
+				const newNodeInPin = Object.values(newNode.pins).find(
+					(pin) =>
+						pin.pin_type === IPinType.Input &&
+						pin.data_type === IVariableType.Execution,
+				);
+				const newNodeOutPin = Object.values(newNode.pins).find(
+					(pin) =>
+						pin.pin_type === IPinType.Output &&
+						pin.data_type === IVariableType.Execution,
+				);
+
+				const connectOutput = connectPinsCommand({
+					from_node: newNode.id,
+					from_pin: newNodeOutPin!.id,
+					to_node: newLayer.id,
+					to_pin: execOutPin.id,
+				});
+
+				const connectInput = connectPinsCommand({
+					to_node: newNode.id,
+					to_pin: newNodeInPin!.id,
+					from_node: newLayer.id,
+					from_pin: execInPin.id,
+				});
+
+				await executeCommands([connectOutput, connectInput]);
+			}
+
+			if (!droppedPin) {
+				return;
+			}
+			const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
+			const pinValueType = droppedPin.value_type;
+			const pinDataType = droppedPin.data_type;
+			const options = droppedPin.options;
+
+			const pin = Object.values(newLayer.pins).find((pin) => {
+				if (pin.pin_type !== pinType) false;
+				if (pin.value_type !== pinValueType) {
+					if (
+						pinDataType !== IVariableType.Generic &&
+						pin.data_type !== IVariableType.Generic
+					)
+						return false;
+					if (
+						(options?.enforce_generic_value_type ?? false) ||
+						(pin.options?.enforce_generic_value_type ?? false)
+					)
+						return false;
+				}
+				if (
+					pin.data_type === IVariableType.Generic &&
+					pinDataType !== IVariableType.Execution
+				)
+					return true;
+				if (
+					pinDataType === IVariableType.Generic &&
+					pin.data_type !== IVariableType.Execution
+				)
+					return true;
+				return pin.data_type === pinDataType;
+			});
+			const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
+			if (!sourcePin || !sourceNode) {
+				return;
+			}
+			if (!pin) {
+				return;
+			}
+
+			const command = connectPinsCommand({
+				from_node:
+					droppedPin.pin_type === "Output" ? sourceNode.id : newLayer.id,
+				from_pin: droppedPin.pin_type === "Output" ? sourcePin.id : pin?.id,
+				to_node: droppedPin.pin_type === "Input" ? sourceNode.id : newLayer.id,
+				to_pin: droppedPin.pin_type === "Input" ? sourcePin.id : pin?.id,
+			});
+
+			await executeCommand(command);
+		},
+		[
+			clickPosition,
+			boardId,
+			droppedPin,
+			board.data?.refs,
+			executeCommand,
+			pinCache,
+			currentLayer,
+			screenToFlowPosition,
+		],
+	);
+
 	const handleDrop = useCallback(
 		async (event: any) => {
 			const variable: IVariable = event.detail.variable;
@@ -694,7 +995,7 @@ export function FlowBoard({
 
 	useEffect(() => {
 		if (!board.data) return;
-
+		boardRef.current = board.data;
 		const parsed = parseBoard(
 			board.data,
 			appId,
@@ -707,6 +1008,7 @@ export function FlowBoard({
 			nodes,
 			edges,
 			currentLayer,
+			boardRef,
 		);
 
 		setNodes(parsed.nodes);
@@ -719,6 +1021,7 @@ export function FlowBoard({
 			flowNode: FlowNode,
 			commentNode: CommentNode,
 			layerNode: LayerNode,
+			layerInnerNode: LayerInnerNode,
 			node: FlowNode,
 		}),
 		[],
@@ -1192,6 +1495,10 @@ export function FlowBoard({
 								refs={board.data?.refs || {}}
 								onClose={() => setDroppedPin(undefined)}
 								nodes={catalog.data ?? []}
+								onPlaceholder={async (name) => {
+									await placePlaceholder(name);
+									setDroppedPin(undefined);
+								}}
 								onNodePlace={async (node) => {
 									await placeNode(node);
 								}}
@@ -1232,6 +1539,7 @@ export function FlowBoard({
 										onConnect={onConnect}
 										onReconnect={onReconnect}
 										onReconnectStart={onReconnectStart}
+										onMoveEnd={onMoveEnd}
 										// onEdgeDoubleClick={(e, edge) => {
 										// 	console.dir({e, edge})
 										// }}
@@ -1325,7 +1633,16 @@ export function FlowBoard({
 							collapsible={true}
 							autoSave="flow-logs"
 						>
-							{currentMetadata && <Traces appId={appId} boardId={boardId} />}
+							{board.data && currentMetadata && (
+								<Traces
+									appId={appId}
+									boardId={boardId}
+									board={boardRef}
+									onFocusNode={(nodeId: string) => {
+										focusNode(nodeId);
+									}}
+								/>
+							)}
 						</ResizablePanel>
 					</ResizablePanelGroup>
 				</ResizablePanel>

@@ -94,8 +94,6 @@ impl Command for UpsertLayerCommand {
             self.layer.coordinates = center_position;
         }
 
-        board.fix_pins_set_layer();
-
         Ok(())
     }
 
@@ -129,8 +127,6 @@ impl Command for UpsertLayerCommand {
                 layer.parent_id = old_layer_id.clone();
             }
         }
-
-        board.fix_pins_set_layer();
 
         Ok(())
     }

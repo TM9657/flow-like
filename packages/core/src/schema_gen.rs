@@ -35,7 +35,6 @@ use crate::{
     },
     hub::{BitSearchQuery, Hub},
     profile::Profile,
-    utils::file::FileMetadata,
 };
 use flow_like_model_provider::{
     history::History,
@@ -169,7 +168,7 @@ pub fn generate_schema(base_path: PathBuf) -> flow_like_types::Result<()> {
     generate_and_save_schema::<App>(&base_path, "app/app.json")?;
     generate_and_save_schema::<AppSearchQuery>(&base_path, "app/app-search-query.json")?;
 
-    generate_and_save_schema::<FileMetadata>(&base_path, "files/file-metadata.json")?;
+    generate_and_save_schema::<StorageItem>(&base_path, "files/file-metadata.json")?;
 
     Ok(())
 }

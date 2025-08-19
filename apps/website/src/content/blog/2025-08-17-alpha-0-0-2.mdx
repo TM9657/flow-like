@@ -1,0 +1,117 @@
+---
+title: "Flow-Like Alpha v0.0.2 — Rapid Prototyping, Security, and Execution Fixes 🚀"
+description: "Flow-Like Alpha v0.0.2 introduces Rapid Prototyping mode, new models, secure offline sharing, and execution fixes."
+date: 2025-08-17
+tags: ["release", "alpha", "alpha-0.0.2"]
+cover: "/images/alpha-0-0-2.jpg"
+draft: false
+---
+
+Three months after our very first public alpha — and just one week after shipping **Alpha v0.0.1** — we’re back with **Alpha v0.0.2** (published Aug 17, 2025).
+This tag is all about **faster prototyping, stronger security, and smoother execution**. ([GitHub][1])
+
+> ⚠️ Alpha quality: still not production — please test, break, and report. ([GitHub][1])
+
+---
+
+## What’s new
+
+### Rapid Prototyping Mode (Layered Nodes)
+
+The biggest addition in this release is **Rapid Prototyping mode**. You can now drop in **placeholder nodes** to sketch workflows before wiring them to real technical implementations.
+
+Instead of switching between “business idea” and “technical solution,” you can now **combine both in one flow**. Early brainstorming is smoother, and sharing concepts with teammates is easier.
+
+Here’s a short demo:
+
+<video
+  src="/posts/rapid-prototyping.webm"
+  controls
+  autoPlay
+  muted
+  class="rounded-xl shadow-lg my-4 w-full"
+/>
+
+This lays the foundation for fast idea-to-execution pipelines: start with abstract nodes, then refine them into fully operational ones as the project matures.
+
+---
+
+### New Models: Qwen 3 & Qwen 2.5 VL
+
+We’ve added support for two major new models:
+
+- **Qwen 3** → a strong reasoning-first language model, tuned for **logic, analysis, and code-heavy workflows**.
+- **Qwen 2.5 VL** → a multimodal vision-language model that handles **images + text** together, making it perfect for visual automation, annotation, and AI agents that need to “see” and “read.”
+
+These models join our growing library, giving you broader options for experimentation and production-like testing.
+
+---
+
+### Lockable Layers
+
+A small but highly requested feature: you can now **lock layers**.
+No more accidental nudges when presenting or collaborating — lock them in place once your structure is set, and focus on the logic.
+
+---
+
+### New E-Mail Nodes (SMTP + IMAP)
+
+We’re bringing automation straight to your inbox.
+With the new **generic SMTP and IMAP nodes**, you can now:
+
+- **Read your mails** directly in a flow
+- **Organize mails into folders** automatically
+- **Manage your folder structure**
+- **Create drafts** for review or scheduled sending
+- **Send messages directly** from Flow-Like
+- …and much more!
+
+Everything is ready for **mailbox automation** — whether you’re building personal workflows or enterprise-scale mail processing pipelines.
+
+---
+
+### Secure Offline Sharing (xChaCha20 + BLAKE3-HMAC)
+
+For teams that need to share flows **offline** or in **air-gapped environments**, we’ve built a secure sharing mechanism powered by modern cryptography:
+
+- **xChaCha20** → a stream cipher designed for performance and safety, with a 192-bit nonce that eliminates the risks of nonce reuse.
+- **BLAKE3 (HMAC)** → a fast, parallelizable hashing algorithm used here for authentication and integrity checks.
+
+The combination means you get **enterprise-grade encryption** without sacrificing speed, ensuring your flows remain private and tamper-proof.
+
+---
+
+### Execution Fixes: Nested + Parallel
+
+We’ve smoothed out execution logic across the board:
+
+- **Nested Parallel Execution** now behaves as expected.
+- **Parallel Model Execution** allows for parallel model and embedding model invocation.
+
+Complex orchestration is now much more reliable.
+
+---
+
+## Thank you, community & contributors
+
+This release was heavily shaped by your feedback from v0.0.1.
+Every report, idea, and suggestion helps make Flow-Like stronger. Please keep them coming. 💙 ([GitHub][1])
+
+---
+
+## Get it & try it
+
+Grab installers and artifacts from the **Alpha v0.0.2 release page** — then open an issue with repro steps if something breaks. We’re still reading everything. ([GitHub][1])
+
+---
+
+## What’s next
+
+- Richer typing across nodes and data edges
+- Built-in evaluation tools for flows
+- Governance & observability for enterprise workflows
+
+If you’re experimenting with us this early, you’re helping shape the foundation of Flow-Like.
+Thanks for being here!
+
+[1]: https://github.com/TM9657/flow-like/releases/tag/alpha-v0.0.2 "Release Flow Like - Alpha v0.0.2 · TM9657/flow-like · GitHub"
