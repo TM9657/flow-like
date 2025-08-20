@@ -13,7 +13,6 @@ async fn db_connection(app_handle: &AppHandle, app_id: String, table_name: Optio
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
     let table_name = table_name.unwrap_or("default".to_string());
     let board_dir = Path::from("apps").child(app_id).child("storage").child("db");
-    println!("Using board directory: {:?}", board_dir);
     let db = if let Some(credentials) = &credentials {
                 credentials.to_db(board_dir).await?
             } else {

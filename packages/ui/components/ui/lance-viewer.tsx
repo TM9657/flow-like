@@ -95,7 +95,7 @@ export interface ArrowSchemaJSON {
 }
 
 export interface LanceDBExplorerProps {
-  arrowSchema: ArrowSchemaJSON;
+  arrowSchema?: ArrowSchemaJSON;
   onSwitchPage: (
     offset: number,
     limit: number,
@@ -201,10 +201,12 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
   }, [settingsId, tableName, columnVisibility, columnOrder, sorting, pageSize]);
 
   useEffect(() => {
-    if (arrowSchema) {
+    if (arrowSchema?.fields?.length) {
       setSchema(arrowToLanceSchema(arrowSchema));
-      loadSettings();
+    } else {
+      setSchema(null);
     }
+    loadSettings();
   }, [arrowSchema, loadSettings]);
 
   useEffect(() => {
@@ -228,18 +230,24 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
           const pageEnd = (page - 1) * pageSize + count;
           return count < pageSize ? pageEnd : Math.max(prev, 0);
         });
+        if (res.length) {
+          setSchema((prev) => prev ?? inferSchemaFromRows(res, tableName));
+        }
       } else {
         const rows = res.data ?? [];
         setData(rows);
         setLastCount(rows.length);
         if (typeof res.total === "number") setTotal(res.total);
+        if (rows.length) {
+          setSchema((prev) => prev ?? inferSchemaFromRows(rows, tableName));
+        }
       }
     } catch (e: any) {
       setError(e?.message ?? "Failed to load data");
     } finally {
       setLoading(false);
     }
-  }, [onSwitchPage, page, pageSize]);
+  }, [onSwitchPage, page, pageSize, tableName]);
 
   useEffect(() => {
     load();
@@ -1127,4 +1135,72 @@ const describeField = (f: LanceField): string => {
     default:
       return f.kind;
   }
+};
+
+// Infer schema from values when no Arrow schema is provided
+const inferSchemaFromRows = (rows: Record<string, any>[], tableName?: string): LanceSchema => {
+  const sample = rows.slice(0, 100);
+  const keys = new Set<string>();
+  sample.forEach((r) => Object.keys(r ?? {}).forEach((k) => keys.add(k)));
+  const fields: LanceField[] = Array.from(keys).map((name) => inferField(name, sample.map((r) => r?.[name])));
+  return { table: tableName ?? "table", fields };
+};
+
+const inferField = (name: string, values: any[]): LanceField => {
+  const nonNull = values.filter((v) => v !== null && v !== undefined);
+  if (!nonNull.length) return { name, kind: "unknown" };
+
+  // Vector: numeric arrays with consistent length
+  if (nonNull.every((v) => Array.isArray(v) && v.every((n: any) => Number.isFinite(Number(n))))) {
+    const len = nonNull[0].length;
+    const consistent = nonNull.every((v) => v.length === len);
+    if (len > 0 && consistent) return { name, kind: "vector", dims: len };
+  }
+
+  // Array
+  if (nonNull.every((v) => Array.isArray(v))) {
+    const flat = (nonNull as any[]).flatMap((a: any[]) => a);
+    const itemKind = inferPrimitiveKind(flat);
+    return { name, kind: "array", items: itemKind };
+  }
+
+  // Boolean
+  if (nonNull.every((v) => typeof v === "boolean")) return { name, kind: "boolean" };
+
+  // Number
+  if (nonNull.every((v) => typeof v === "number" && Number.isFinite(v))) return { name, kind: "number" };
+
+  // Date (Date objects or ISO-like strings)
+  if (nonNull.every((v) => v instanceof Date || (typeof v === "string" && isISODateString(v)))) {
+    return { name, kind: "date" };
+  }
+
+  // Object
+  if (nonNull.every((v) => typeof v === "object" && v !== null && !Array.isArray(v))) {
+    return { name, kind: "object" };
+  }
+
+  // String
+  if (nonNull.every((v) => typeof v === "string")) return { name, kind: "string" };
+
+  return { name, kind: "unknown" };
+};
+
+const inferPrimitiveKind = (vals: any[]): LanceFieldKind | LanceField => {
+  const nonNull = vals.filter((v) => v !== null && v !== undefined);
+  if (!nonNull.length) return "unknown";
+  if (nonNull.every((v) => typeof v === "boolean")) return "boolean";
+  if (nonNull.every((v) => typeof v === "number" && Number.isFinite(v))) return "number";
+  if (nonNull.every((v) => typeof v === "string")) return "string";
+  if (nonNull.every((v) => v instanceof Date || (typeof v === "string" && isISODateString(v)))) return "date";
+  if (nonNull.every((v) => Array.isArray(v) && v.every((n: any) => Number.isFinite(Number(n))))) {
+    const len = (nonNull[0] as any[]).length;
+    const consistent = nonNull.every((v) => (v as any[]).length === len);
+    if (len > 0 && consistent) return { name: "", kind: "vector", dims: len }; // unused name
+  }
+  return "unknown";
+};
+
+const isISODateString = (s: string): boolean => {
+  return /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z?)?$/.test(s);
 };

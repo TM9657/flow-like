@@ -37,6 +37,7 @@ export default function Page(): React.ReactElement {
 	const searchParams = useSearchParams();
 	const id = searchParams?.get("id") ?? null;
 	const tableParam = searchParams?.get("table") ?? null;
+
 	const pathname = usePathname();
 
 	const table = useMemo(() => {
