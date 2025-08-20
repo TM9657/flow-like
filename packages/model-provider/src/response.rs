@@ -15,26 +15,26 @@ pub struct FunctionCall {
     pub function: ResponseFunction,
 }
 
-impl Default for FunctionCall {
-    fn default() -> Self {
-        FunctionCall {
-            index: None,
-            id: "".to_string(),
-            tool_type: None,
-            function: ResponseFunction {
-                name: None,
-                arguments: None,
-            },
-        }
-    }
-}
+//impl Default for FunctionCall {
+//    fn default() -> Self {
+//        FunctionCall {
+//            index: None,
+//            id: "".to_string(),
+//            tool_type: None,
+//            function: ResponseFunction {
+//                name: None,
+//                arguments: None,
+//            },
+//        }
+//    }
+//}
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct ResponseFunction {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub arguments: Option<String>,
+    //#[serde(skip_serializing_if = "Option::is_none")]
+    pub name: String,
+    //#[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: String,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -90,7 +90,7 @@ pub struct ResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio: Option<Audio>,
 
-    #[serde(default)]
+    //#[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Vec<FunctionCall>,
 }
 
@@ -147,29 +147,8 @@ impl ResponseMessage {
                     );
                 }
 
-                if let Some(function_name) = function_call.function.name {
-                    existing_tool_call.function.name = Some(
-                        existing_tool_call
-                            .function
-                            .name
-                            .as_deref()
-                            .unwrap_or("")
-                            .to_string()
-                            + &function_name,
-                    );
-                }
-
-                if let Some(arguments) = function_call.function.arguments {
-                    existing_tool_call.function.arguments = Some(
-                        existing_tool_call
-                            .function
-                            .arguments
-                            .as_deref()
-                            .unwrap_or("")
-                            .to_string()
-                            + &arguments,
-                    );
-                }
+                existing_tool_call.function.name += &function_call.function.name;
+                existing_tool_call.function.arguments += &function_call.function.arguments;
 
                 return;
             }
