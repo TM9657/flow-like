@@ -1,10 +1,11 @@
 // Implementation according to
 // https://modelcontextprotocol.io/docs/concepts/sampling/
 
+use flow_like_types::{Value, json};
+use schemars::JsonSchema;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 
 use crate::response::Response;
 
@@ -17,10 +18,22 @@ pub struct ToolCall {
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 pub struct ToolCallFunction {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub arguments: Option<String>,
+    //#[serde(skip_serializing_if = "Option::is_none")]
+    pub name: String,
+    #[serde(deserialize_with = "arguments_as_str")]
+    pub arguments: String,
+}
+
+/// Handles arguments incoming as str (e.g. for cloud-based LLM providers) or map (local LLM providers)
+fn arguments_as_str<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = Value::deserialize(deserializer)?;
+    match v {
+        Value::String(s) => Ok(s), // already a string
+        other => json::to_string(&other).map_err(serde::de::Error::custom), // object/array/number → stringified JSON
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
@@ -88,6 +101,26 @@ impl HistoryMessage {
     }
 }
 
+impl HistoryMessage {
+    /// Returns a copy of the entire text-related content as single String
+    pub fn as_str(&self) -> String {
+        match &self.content {
+            MessageContent::String(s) => return s.clone(),
+            MessageContent::Contents(contents) => contents
+                .iter()
+                .filter_map(|content| {
+                    if let Content::Text { text, .. } = content {
+                        Some(text.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<&str>>()
+                .join("\n"),
+        }
+    }
+}
+
 impl fmt::Display for History {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.messages.len() > 0 {
@@ -98,13 +131,13 @@ impl fmt::Display for History {
                     Role::System => " S |",
                     Role::Tool => " T |",
                     Role::User => " H |",
-                    Role::Function => " F |"
+                    Role::Function => " F |",
                 };
                 history_str.push_str(m);
             }
-            return write!(f, "{}", history_str)
+            return write!(f, "{}", history_str);
         } else {
-            return write!(f, "[]")
+            return write!(f, "[]");
         }
     }
 }
@@ -249,17 +282,18 @@ impl History {
                     let mut prompt = String::new();
                     for content in contents {
                         match content {
-                            Content::Text { content_type: _, text } => {
+                            Content::Text {
+                                content_type: _,
+                                text,
+                            } => {
                                 prompt.push_str(&text);
-                            },
+                            }
                             _ => {}
                         }
                     }
-                    return Some(prompt)
-                },
-                MessageContent::String(content) => {
-                    return Some(content.to_string())
+                    return Some(prompt);
                 }
+                MessageContent::String(content) => return Some(content.to_string()),
             }
         }
         None
@@ -342,7 +376,7 @@ pub struct HistoryJSONSchemaDefine {
     pub schema_type: Option<HistoryJSONSchemaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "enum")]
     pub enum_values: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<HashMap<String, Box<HistoryJSONSchemaDefine>>>,
