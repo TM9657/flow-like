@@ -18,8 +18,24 @@ import {
 	useCallback,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
+import {
+	DndContext,
+	type DragEndEvent,
+	PointerSensor,
+	useSensor,
+	useSensors,
+	closestCenter,
+} from "@dnd-kit/core";
+import {
+	SortableContext,
+	verticalListSortingStrategy,
+	useSortable,
+	arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
 	type IPin,
 	type IPinOptions,
@@ -179,7 +195,6 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 		(id: string, patch: Partial<PinEdit>) => {
 			setPin(id, (p) => {
 				const next: PinEdit = { ...p, ...patch };
-				// keep name derived from friendly_name
 				if (patch.friendly_name !== undefined) {
 					next.name = toMachineName(patch.friendly_name);
 				}
@@ -241,12 +256,21 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 			const copy = { ...prev };
 			delete copy[id];
 
-			// Reindex remaining pins in the same group
 			const remaining = Object.values(copy).filter(
 				(p) => p.pin_type === pin.pin_type,
 			);
 			const re = reindex(sortByIndex(remaining));
 			for (const p of re) copy[p.id] = { ...copy[p.id], index: p.index };
+			return copy;
+		});
+	}, []);
+
+	const reorderByIds = useCallback((orderedIds: string[]) => {
+		setEdits((prev) => {
+			const copy = { ...prev };
+			orderedIds.forEach((id, i) => {
+				if (copy[id]) copy[id] = { ...copy[id], index: i + 1 };
+			});
 			return copy;
 		});
 	}, []);
@@ -280,7 +304,6 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 			nextPins[edit.id] = merged;
 		}
 
-		// Reindex per group to keep indexes contiguous
 		const nextInputs = reindex(
 			sortByIndex(
 				Object.values(nextPins).filter((p) => p.pin_type === IPinType.Input),
@@ -345,6 +368,7 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							onMoveUp={(id) => movePin(id, "up")}
 							onMoveDown={(id) => movePin(id, "down")}
 							onRemove={removePin}
+							onReorder={reorderByIds}
 						/>
 					</TabsContent>
 
@@ -365,6 +389,7 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							onMoveUp={(id) => movePin(id, "up")}
 							onMoveDown={(id) => movePin(id, "down")}
 							onRemove={removePin}
+							onReorder={reorderByIds}
 						/>
 					</TabsContent>
 				</Tabs>
@@ -385,14 +410,10 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 	);
 };
 
-// Helpers for parsing user inputs
-const toCSV = (arr?: string[] | null) =>
-	arr && arr.length > 0 ? arr.join(", ") : "";
+// Helpers
+const toCSV = (arr?: string[] | null) => (arr && arr.length > 0 ? arr.join(", ") : "");
 const fromCSVStrings = (s: string): string[] =>
-	s
-		.split(",")
-		.map((x) => x.trim())
-		.filter((x) => x.length > 0);
+	s.split(",").map((x) => x.trim()).filter((x) => x.length > 0);
 
 interface PinListProps {
 	items: PinEdit[];
@@ -400,6 +421,7 @@ interface PinListProps {
 	onMoveUp: (id: string) => void;
 	onMoveDown: (id: string) => void;
 	onRemove: (id: string) => void;
+	onReorder: (orderedIds: string[]) => void;
 }
 
 const PinValueTypeDropdown: React.FC<{
@@ -421,34 +443,19 @@ const PinValueTypeDropdown: React.FC<{
 				</button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="start">
-				<DropdownMenuItem
-					className="gap-2"
-					onClick={() => onChange(IValueType.Normal)}
-				>
-					<div
-						className="w-4 h-2 rounded-full"
-						style={{ backgroundColor: color }}
-					/>
+				<DropdownMenuItem className="gap-2" onClick={() => onChange(IValueType.Normal)}>
+					<div className="w-4 h-2 rounded-full" style={{ backgroundColor: color }} />
 					Single
 				</DropdownMenuItem>
-				<DropdownMenuItem
-					className="gap-2"
-					onClick={() => onChange(IValueType.Array)}
-				>
+				<DropdownMenuItem className="gap-2" onClick={() => onChange(IValueType.Array)}>
 					<GripIcon className="w-4 h-4" style={{ color }} />
 					Array
 				</DropdownMenuItem>
-				<DropdownMenuItem
-					className="gap-2"
-					onClick={() => onChange(IValueType.HashSet)}
-				>
+				<DropdownMenuItem className="gap-2" onClick={() => onChange(IValueType.HashSet)}>
 					<EllipsisVerticalIcon className="w-4 h-4" style={{ color }} />
 					Set
 				</DropdownMenuItem>
-				<DropdownMenuItem
-					className="gap-2"
-					onClick={() => onChange(IValueType.HashMap)}
-				>
+				<DropdownMenuItem className="gap-2" onClick={() => onChange(IValueType.HashMap)}>
 					<ListIcon className="w-4 h-4" style={{ color }} />
 					Map
 				</DropdownMenuItem>
@@ -463,10 +470,7 @@ const PinDataTypeSelectInline: React.FC<{
 	className?: string;
 }> = ({ value, onChange, className }) => {
 	return (
-		<Select
-			value={value}
-			onValueChange={(val) => onChange(val as IVariableType)}
-		>
+		<Select value={value} onValueChange={(val) => onChange(val as IVariableType)}>
 			<SelectTrigger className={`h-7 w-[140px] text-xs ${className ?? ""}`}>
 				<SelectValue placeholder="Data Type" />
 			</SelectTrigger>
@@ -492,7 +496,26 @@ const PinList: React.FC<PinListProps> = ({
 	onMoveUp,
 	onMoveDown,
 	onRemove,
+	onReorder,
 }) => {
+	const sensors = useSensors(
+		useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+	);
+	const ids = useMemo(() => items.map((p) => p.id), [items]);
+
+	const handleDragEnd = useCallback(
+		(e: DragEndEvent) => {
+			const { active, over } = e;
+			if (!over || active.id === over.id) return;
+			const from = ids.indexOf(String(active.id));
+			const to = ids.indexOf(String(over.id));
+			if (from === -1 || to === -1) return;
+			const next = arrayMove(ids, from, to);
+			onReorder(next);
+		},
+		[ids, onReorder],
+	);
+
 	return (
 		<ScrollArea className="h-96 max-h-96 overflow-auto rounded-md border">
 			<div className="p-2 space-y-2">
@@ -501,116 +524,133 @@ const PinList: React.FC<PinListProps> = ({
 						No pins in this group.
 					</div>
 				)}
-				{items.map((pin, idx) => (
-					<div
-						key={pin.id}
-						className="group rounded-md border bg-card hover:bg-accent/30 transition-colors"
-					>
-						{/* Compact header */}
-						<div className="flex items-center gap-2 px-2 py-1 border-b">
-							<GripVerticalIcon className="h-4 w-4 text-muted-foreground" />
-							<PinValueTypeDropdown
-								value_type={pin.value_type}
-								data_type={pin.data_type}
-								onChange={(vt) => onEdit(pin.id, { value_type: vt })}
-								className="shrink-0"
-							/>
-							<div className="flex-1 truncate text-sm font-medium">
-								{pin.friendly_name ?? pin.name ?? pin.id}
-								<span className="ml-2 text-[10px] text-muted-foreground">
-									({pin.id})
-								</span>
-							</div>
-							{/* Inline data type select in header */}
-							<PinDataTypeSelectInline
-								value={pin.data_type}
-								onChange={(dt) => onEdit(pin.id, { data_type: dt })}
-								className="hidden sm:flex"
-							/>
-							{/* Icon-only actions */}
-							<Button
-								variant="ghost"
-								size="icon"
-								onClick={() => onMoveUp(pin.id)}
-								disabled={idx === 0}
-								title="Move up"
-							>
-								<ArrowUpIcon className="h-4 w-4" />
-							</Button>
-							<Button
-								variant="ghost"
-								size="icon"
-								onClick={() => onMoveDown(pin.id)}
-								disabled={idx === items.length - 1}
-								title="Move down"
-							>
-								<ArrowDownIcon className="h-4 w-4" />
-							</Button>
-							<Button
-								variant="destructive"
-								size="icon"
-								onClick={() => onRemove(pin.id)}
-								title="Remove pin"
-							>
-								<Trash2Icon className="h-4 w-4 text-destructive-foreground" />
-							</Button>
-							<Button
-								variant="ghost"
-								size="icon"
-								onClick={() =>
-									(
-										document.getElementById(
-											`opts-${pin.id}`,
-										) as HTMLButtonElement
-									)?.click()
-								}
-								title="Options"
-							>
-								<SlidersHorizontalIcon className="h-4 w-4" />
-							</Button>
-						</div>
-
-						{/* Slim body: two fields, smaller controls */}
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-2">
-							<div className="space-y-1.5">
-								<Label className="text-xs">Friendly Name</Label>
-								<Input
-									className="h-8"
-									value={pin.friendly_name}
-									onChange={(e) =>
-										onEdit(pin.id, { friendly_name: e.target.value })
-									}
-								/>
-								<small className="text-[10px] text-muted-foreground">
-									Saved as: {toMachineName(pin.friendly_name)}
-								</small>
-							</div>
-
-							<div className="space-y-1.5">
-								<Label className="text-xs">Description</Label>
-								<Input
-									className="h-8"
-									value={pin.description}
-									onChange={(e) =>
-										onEdit(pin.id, { description: e.target.value })
-									}
-									placeholder="Optional"
-								/>
-							</div>
-						</div>
-
-						{/* Hidden inline Options trigger (button in header clicks this) */}
-						<div className="sr-only">
-							<PinOptionsButton
+				<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+					<SortableContext items={ids} strategy={verticalListSortingStrategy}>
+						{items.map((pin, idx) => (
+							<SortablePinRow
+								key={pin.id}
 								pin={pin}
-								onApply={(opts) => onEdit(pin.id, { options: opts })}
-								onSchemaChange={(schema) => onEdit(pin.id, { schema })}
+								idx={idx}
+								total={items.length}
+								onEdit={onEdit}
+								onMoveUp={onMoveUp}
+								onMoveDown={onMoveDown}
+								onRemove={onRemove}
 							/>
-						</div>
-					</div>
-				))}
+						))}
+					</SortableContext>
+				</DndContext>
 			</div>
 		</ScrollArea>
+	);
+};
+
+const SortablePinRow: React.FC<{
+	pin: PinEdit;
+	idx: number;
+	total: number;
+	onEdit: (id: string, patch: Partial<PinEdit>) => void;
+	onMoveUp: (id: string) => void;
+	onMoveDown: (id: string) => void;
+	onRemove: (id: string) => void;
+}> = ({ pin, idx, total, onEdit, onMoveUp, onMoveDown, onRemove }) => {
+	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+		id: pin.id,
+	});
+	const style: React.CSSProperties = {
+		transform: transform ? CSS.Transform.toString(transform) : undefined,
+		transition,
+	};
+
+	return (
+		<div
+			ref={setNodeRef}
+			style={style}
+			className={`group rounded-md border bg-card hover:bg-accent/30 transition-colors ${isDragging ? "opacity-60" : ""}`}
+		>
+			<div className="flex items-center gap-2 px-2 py-1 border-b">
+				<button
+					type="button"
+					title="Drag to reorder"
+					className="inline-flex h-5 w-5 items-center justify-center text-muted-foreground cursor-grab active:cursor-grabbing"
+					{...attributes}
+					{...listeners}
+					onClick={(e) => e.stopPropagation()}
+				>
+					<GripVerticalIcon className="h-4 w-4" />
+				</button>
+				<PinValueTypeDropdown
+					value_type={pin.value_type}
+					data_type={pin.data_type}
+					onChange={(vt) => onEdit(pin.id, { value_type: vt })}
+					className="shrink-0"
+				/>
+				<div className="flex-1 truncate text-sm font-medium">
+					{pin.friendly_name ?? pin.name ?? pin.id}
+					<span className="ml-2 text-[10px] text-muted-foreground">({pin.id})</span>
+				</div>
+				<PinDataTypeSelectInline
+					value={pin.data_type}
+					onChange={(dt) => onEdit(pin.id, { data_type: dt })}
+					className="hidden sm:flex"
+				/>
+				<Button variant="ghost" size="icon" onClick={() => onMoveUp(pin.id)} disabled={idx === 0} title="Move up">
+					<ArrowUpIcon className="h-4 w-4" />
+				</Button>
+				<Button
+					variant="ghost"
+					size="icon"
+					onClick={() => onMoveDown(pin.id)}
+					disabled={idx === total - 1}
+					title="Move down"
+				>
+					<ArrowDownIcon className="h-4 w-4" />
+				</Button>
+				<Button variant="destructive" size="icon" onClick={() => onRemove(pin.id)} title="Remove pin">
+					<Trash2Icon className="h-4 w-4 text-destructive-foreground" />
+				</Button>
+				<Button
+					variant="ghost"
+					size="icon"
+					onClick={() => (document.getElementById(`opts-${pin.id}`) as HTMLButtonElement)?.click()}
+					title="Options"
+				>
+					<SlidersHorizontalIcon className="h-4 w-4" />
+				</Button>
+			</div>
+
+			<div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-2">
+				<div className="space-y-1.5">
+					<Label className="text-xs">Friendly Name</Label>
+					<Input
+						className="h-8"
+						value={pin.friendly_name}
+						onChange={(e) => onEdit(pin.id, { friendly_name: e.target.value })}
+					/>
+					<small className="text-[10px] text-muted-foreground">
+						Saved as: {toMachineName(pin.friendly_name)}
+					</small>
+				</div>
+
+				<div className="space-y-1.5">
+					<Label className="text-xs">Description</Label>
+					<Input
+						className="h-8"
+						value={pin.description}
+						onChange={(e) => onEdit(pin.id, { description: e.target.value })}
+						placeholder="Optional"
+					/>
+				</div>
+			</div>
+
+			<div className="sr-only">
+				<PinOptionsButton
+					pin={pin}
+					onApply={(opts) => onEdit(pin.id, { options: opts })}
+					onSchemaChange={(schema) => onEdit(pin.id, { schema })}
+				/>
+			</div>
+		</div>
 	);
 };
 
@@ -638,7 +678,6 @@ const PinOptionsButton: React.FC<PinOptionsButtonProps> = ({
 
 	return (
 		<>
-			{/* Hidden trigger, header’s icon-click will activate this via id */}
 			<Button
 				id={`opts-${pin.id}`}
 				variant="outline"
@@ -657,7 +696,6 @@ const PinOptionsButton: React.FC<PinOptionsButtonProps> = ({
 					</DialogHeader>
 
 					<div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-						{/* Schema in Options */}
 						<div className="space-y-1.5 md:col-span-6">
 							<Label className="text-xs">Schema</Label>
 							<Input

@@ -43,7 +43,7 @@ import {
 	removeVariableCommand,
 	upsertVariableCommand,
 } from "../../../lib";
-import type { IBoard, IVariable } from "../../../lib/schema/flow/board";
+import { IPinType, type IBoard, type IVariable } from "../../../lib/schema/flow/board";
 import { IVariableType } from "../../../lib/schema/flow/node";
 import { IValueType } from "../../../lib/schema/flow/pin";
 import { convertJsonToUint8Array } from "../../../lib/uint8";
@@ -324,6 +324,15 @@ export function Variable({
 
 	if (preview) return element;
 
+	const selectPreviewElement = useCallback((type: IVariableType) => {
+		return (
+			<div className="flex items-center gap-2">
+				<div className={`size-2 rounded-full`} style={{ backgroundColor: typeToColor(type) }} />
+				<span>{type}</span>
+			</div>
+		);
+	}, []);
+
 	return (
 		<Sheet
 			open={openEdit}
@@ -382,15 +391,17 @@ export function Variable({
 						<SelectContent>
 							<SelectGroup>
 								<SelectLabel>Variable Type</SelectLabel>
-								<SelectItem value="Boolean">Boolean</SelectItem>
-								<SelectItem value="Date">Date</SelectItem>
-								<SelectItem value="Float">Float</SelectItem>
-								<SelectItem value="Integer">Integer</SelectItem>
-								<SelectItem value="Generic">Generic</SelectItem>
-								<SelectItem value="PathBuf">PathBuf</SelectItem>
-								<SelectItem value="String">String</SelectItem>
-								<SelectItem value="Struct">Struct</SelectItem>
-								<SelectItem value="Byte">Byte</SelectItem>
+								<SelectItem value="Boolean">
+									{selectPreviewElement(IVariableType.Boolean)}
+								</SelectItem>
+								<SelectItem value="Date">{selectPreviewElement(IVariableType.Date)}</SelectItem>
+								<SelectItem value="Float">{selectPreviewElement(IVariableType.Float)}</SelectItem>
+								<SelectItem value="Integer">{selectPreviewElement(IVariableType.Integer)}</SelectItem>
+								<SelectItem value="Generic">{selectPreviewElement(IVariableType.Generic)}</SelectItem>
+								<SelectItem value="PathBuf">{selectPreviewElement(IVariableType.PathBuf)}</SelectItem>
+								<SelectItem value="String">{selectPreviewElement(IVariableType.String)}</SelectItem>
+								<SelectItem value="Struct">{selectPreviewElement(IVariableType.Struct)}</SelectItem>
+								<SelectItem value="Byte">{selectPreviewElement(IVariableType.Byte)}</SelectItem>
 							</SelectGroup>
 						</SelectContent>
 					</Select>
