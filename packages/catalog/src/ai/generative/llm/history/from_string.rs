@@ -76,7 +76,7 @@ impl NodeLogic for HistoryFromStringNode {
             }],
         );
 
-        // set outpts
+        // set outputs
         context.set_pin_value("history", json!(history)).await?;
         Ok(())
     }
