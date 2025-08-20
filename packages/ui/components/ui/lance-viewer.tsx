@@ -4,6 +4,7 @@ import {
   type ColumnOrderState,
   type SortingState,
   type VisibilityState,
+  type ColumnSizingState,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
@@ -23,10 +24,13 @@ import {
   MoreHorizontal,
   Save,
   Search,
-  X
+  X,
+  RefreshCcw,
+  SlidersHorizontal,
+  ClipboardList
 } from "lucide-react";
 import * as React from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Dexie, { type Table } from "dexie";
 import { cn } from "../../lib";
 import {
@@ -122,6 +126,8 @@ interface TableSettings {
   columnOrder: string[];
   sorting: SortingState;
   pageSize: number;
+  columnSizing?: ColumnSizingState;
+  density?: "compact" | "comfortable" | "spacious";
 }
 
 class SettingsDB extends Dexie {
@@ -132,11 +138,20 @@ class SettingsDB extends Dexie {
     this.version(1).stores({
       tableSettings: "id, tableName"
     });
+    this.version(2).stores({
+      tableSettings: "id, tableName"
+    }).upgrade((tx) => {
+      return tx.table("tableSettings").toCollection().modify((s: any) => {
+        if (s.columnSizing == null) s.columnSizing = {};
+        if (s.density == null) s.density = "comfortable";
+      });
+    });
   }
 }
 
 const db = new SettingsDB();
 const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_DENSITY: "compact" | "comfortable" | "spacious" = "comfortable";
 
 const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
   tableName = "table",
@@ -169,89 +184,112 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
   const [lastCount, setLastCount] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
 
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const [density, setDensity] = useState<"compact" | "comfortable" | "spacious">(DEFAULT_DENSITY);
+
   const settingsId = `${tableName}_settings`;
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  const loadSettings = useCallback(async () => {
-    try {
-      const settings = await db.tableSettings.get(settingsId);
-      if (settings) {
-        setColumnVisibility(settings.columnVisibility);
-        setColumnOrder(settings.columnOrder);
-        setSorting(settings.sorting);
-        setPageSize(settings.pageSize);
+  // Stable default for page size (avoid depending on array identity)
+  const pageSizeDefault = useMemo(
+    () => pageSizeOptions?.[0] ?? DEFAULT_PAGE_SIZE,
+    [pageSizeOptions?.[0]]
+  );
+
+  // Keep latest onSwitchPage without re-creating loaders
+  const onSwitchPageRef = useRef(onSwitchPage);
+  useEffect(() => {
+    onSwitchPageRef.current = onSwitchPage;
+  }, [onSwitchPage]);
+
+  // Load schema (if provided) and settings once on mount/when inputs change
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (arrowSchema?.fields?.length) setSchema(arrowToLanceSchema(arrowSchema));
+      else setSchema(null);
+
+      try {
+        const settings = await db.tableSettings.get(settingsId);
+        if (settings && !cancelled) {
+          setColumnVisibility(settings.columnVisibility ?? {});
+          setColumnOrder(settings.columnOrder ?? []);
+          setSorting(settings.sorting ?? []);
+          setPageSize(settings.pageSize ?? pageSizeDefault);
+          setColumnSizing(settings.columnSizing ?? {});
+          setDensity(settings.density ?? DEFAULT_DENSITY);
+        }
+      } catch (error) {
+        console.warn("Failed to load settings:", error);
+      } finally {
+        if (!cancelled) setSettingsLoaded(true);
       }
-    } catch (error) {
-      console.warn("Failed to load settings:", error);
-    }
-  }, [settingsId]);
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [arrowSchema, settingsId, pageSizeDefault]);
 
-  const saveSettings = useCallback(async () => {
-    try {
-      await db.tableSettings.put({
+  // Persist settings whenever they change (skip until loaded)
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    db.tableSettings
+      .put({
         id: settingsId,
         tableName,
         columnVisibility,
         columnOrder,
         sorting,
         pageSize,
-      });
-    } catch (error) {
-      console.warn("Failed to save settings:", error);
-    }
-  }, [settingsId, tableName, columnVisibility, columnOrder, sorting, pageSize]);
-
-  useEffect(() => {
-    if (arrowSchema?.fields?.length) {
-      setSchema(arrowToLanceSchema(arrowSchema));
-    } else {
-      setSchema(null);
-    }
-    loadSettings();
-  }, [arrowSchema, loadSettings]);
-
-  useEffect(() => {
-    saveSettings();
-  }, [saveSettings]);
+        columnSizing,
+        density,
+      })
+      .catch((error) => console.warn("Failed to save settings:", error));
+  }, [settingsLoaded, settingsId, tableName, columnVisibility, columnOrder, sorting, pageSize, columnSizing, density]);
 
   useEffect(() => {
     if (typeof totalProp === "number") setTotal(totalProp);
   }, [totalProp]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await onSwitchPage((page - 1) * pageSize, pageSize);
-      if (Array.isArray(res)) {
-        setData(res);
-        setLastCount(res.length);
-        setTotal((prev) => {
-          const count = res.length;
-          const pageEnd = (page - 1) * pageSize + count;
-          return count < pageSize ? pageEnd : Math.max(prev, 0);
-        });
-        if (res.length) {
-          setSchema((prev) => prev ?? inferSchemaFromRows(res, tableName));
-        }
-      } else {
-        const rows = res.data ?? [];
-        setData(rows);
-        setLastCount(rows.length);
-        if (typeof res.total === "number") setTotal(res.total);
-        if (rows.length) {
-          setSchema((prev) => prev ?? inferSchemaFromRows(rows, tableName));
-        }
-      }
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  }, [onSwitchPage, page, pageSize, tableName]);
-
+  // Load page data – stable effect that doesn't depend on onSwitchPage identity
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    const run = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const fn = onSwitchPageRef.current;
+        const res = await fn((page - 1) * pageSize, pageSize);
+        if (Array.isArray(res)) {
+          if (cancelled) return;
+          setData(res);
+          setLastCount(res.length);
+          setTotal((prev) => {
+            const count = res.length;
+            const pageEnd = (page - 1) * pageSize + count;
+            return count < pageSize ? pageEnd : Math.max(prev, 0);
+          });
+          if (res.length) {
+            setSchema((prev) => prev ?? inferSchemaFromRows(res, tableName));
+          }
+        } else {
+          const rows = res?.data ?? [];
+          if (cancelled) return;
+          setData(rows);
+          setLastCount(rows.length);
+          if (typeof res?.total === "number") setTotal(res.total);
+          if (rows.length) {
+            setSchema((prev) => prev ?? inferSchemaFromRows(rows, tableName));
+          }
+        }
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? "Failed to load data");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [page, pageSize, tableName]);
 
   const columns = useMemo<ColumnDef<Record<string, any>>[]>(() => {
     if (!schema) return [];
@@ -291,6 +329,7 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
       rowSelection,
       columnFilters,
       globalFilter: globalQuery,
+      columnSizing,
     },
     onColumnVisibilityChange: setColumnVisibility,
     onColumnOrderChange: setColumnOrder,
@@ -298,6 +337,7 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
     onRowSelectionChange: setRowSelection,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalQuery,
+    onColumnSizingChange: setColumnSizing,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -321,6 +361,14 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
     navigator.clipboard.writeText(csv.join("\n"));
   }, [table]);
 
+  const copySelectedAsJSON = useCallback(() => {
+    const rows = table.getSelectedRowModel().rows;
+    const json = JSON.stringify(rows.map((r) => r.original), null, 2);
+    navigator.clipboard.writeText(json);
+  }, [table]);
+
+  const selectedCount = table.getSelectedRowModel().rows.length;
+
   const currentFrom = (page - 1) * pageSize + 1;
   const currentTo = Math.min(page * pageSize, total || 0);
   const knowsTotal = typeof total === "number" && total > 0;
@@ -339,6 +387,7 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
         <div className="text-sm text-muted-foreground">{tableName}</div>
         <Separator orientation="vertical" className="mx-1" />
         <div className="ml-auto flex items-center gap-2">
+          <DensityToggle value={density} onChange={setDensity} />
           <Button
             variant="outline"
             size="sm"
@@ -402,10 +451,22 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
                   </TableCell>
                 </TableRow>
               ) : table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id} className="hover:bg-muted/30">
+                table.getRowModel().rows.map((row, idx) => (
+                  <TableRow
+                    key={row.id}
+                    className={cn(
+                      "hover:bg-muted/30",
+                      "odd:bg-muted/10",
+                      density === "compact" ? "h-8" : density === "spacious" ? "h-14" : "h-10"
+                    )}
+                  >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
+                      <TableCell
+                        key={cell.id}
+                        className={cn(
+                          density === "compact" ? "py-1" : density === "spacious" ? "py-3" : "py-2"
+                        )}
+                      >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>
                     ))}
@@ -414,7 +475,11 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
               ) : (
                 <TableRow>
                   <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                    No results.
+                    <div className="flex w-full h-full items-center justify-center">
+                      <div className="flex items-center gap-2">
+                        <Info className="h-4 w-4" /> No results.
+                      </div>
+                    </div>
                   </TableCell>
                 </TableRow>
               )}
@@ -431,6 +496,9 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
               </>
             ) : (
               <>—</>
+            )}
+            {selectedCount > 0 && (
+              <Badge variant="secondary" className="ml-2">{selectedCount} selected</Badge>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -479,6 +547,20 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={copySelectedAsCSV}>
                   <Download className="h-4 w-4 mr-2" /> Copy selected as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={copySelectedAsJSON}>
+                  <ClipboardList className="h-4 w-4 mr-2" /> Copy selected as JSON
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    setColumnVisibility({});
+                    setColumnOrder([]);
+                    setSorting([]);
+                    setColumnSizing({});
+                  }}
+                >
+                  <RefreshCcw className="h-4 w-4 mr-2" /> Reset layout
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -620,6 +702,8 @@ const ColumnVisibilityDropdown: React.FC<{
   visibility: VisibilityState;
   onChange: React.Dispatch<React.SetStateAction<VisibilityState>>;
 }> = ({ columns, visibility, onChange }) => {
+  const [query, setQuery] = useState("");
+
   const isVisible = useCallback(
     (id: string) => (visibility[id] ?? true) === true,
     [visibility]
@@ -632,25 +716,29 @@ const ColumnVisibilityDropdown: React.FC<{
     [onChange]
   );
 
+  const filtered = useMemo(
+    () =>
+      columns
+        .filter((c) => c.canHide)
+        .filter((c) => !query || c.id.toLowerCase().includes(query.toLowerCase())),
+    [columns, query]
+  );
+
   const showAll = useCallback(() => {
     onChange((prev) => {
       const next = { ...prev };
-      columns.forEach((c) => {
-        if (c.canHide) next[c.id] = true;
-      });
+      filtered.forEach((c) => { next[c.id] = true; });
       return next;
     });
-  }, [columns, onChange]);
+  }, [filtered, onChange]);
 
   const hideAll = useCallback(() => {
     onChange((prev) => {
       const next = { ...prev };
-      columns.forEach((c) => {
-        if (c.canHide) next[c.id] = false;
-      });
+      filtered.forEach((c) => { next[c.id] = false; });
       return next;
     });
-  }, [columns, onChange]);
+  }, [filtered, onChange]);
 
   return (
     <DropdownMenu>
@@ -659,19 +747,29 @@ const ColumnVisibilityDropdown: React.FC<{
           <Columns3 className="h-4 w-4 mr-2" /> Columns
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel className="flex items-center justify-between">
+          <span>Toggle columns</span>
+          <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+        </DropdownMenuLabel>
+        <div className="px-2 pb-2">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter columns…"
+            className="h-8"
+          />
+        </div>
+        <div className="px-2 pb-2 flex items-center justify-between gap-2">
+        <div className="flex flex-row items-center gap-2">
+          <Button size="sm" variant="outline" onClick={showAll}>All</Button>
+          <Button size="sm" variant="outline" onClick={hideAll}>None</Button>
+        </div>
+          <span className="text-xs text-muted-foreground">{filtered.length}/{columns.filter(c => c.canHide).length}</span>
+        </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={showAll}>
-          Show all
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={hideAll}>
-          Hide all
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        {columns
-          .filter((c) => c.canHide)
-          .map((c) => (
+        <div className="max-h-64 overflow-auto pr-1">
+          {filtered.map((c) => (
             <DropdownMenuCheckboxItem
               key={c.id}
               className="capitalize"
@@ -682,6 +780,37 @@ const ColumnVisibilityDropdown: React.FC<{
               {c.id}
             </DropdownMenuCheckboxItem>
           ))}
+          {filtered.length === 0 && (
+            <div className="px-2 py-2 text-xs text-muted-foreground">No columns.</div>
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
+const DensityToggle: React.FC<{
+  value: "compact" | "comfortable" | "spacious";
+  onChange: (v: "compact" | "comfortable" | "spacious") => void;
+}> = ({ value, onChange }) => {
+  const label = value === "compact" ? "Compact" : value === "spacious" ? "Spacious" : "Comfort";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" title="Row density">
+          <SlidersHorizontal className="h-4 w-4 mr-2" /> {label}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem onClick={() => onChange("compact")}>
+          Compact
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onChange("comfortable")}>
+          Comfortable
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onChange("spacious")}>
+          Spacious
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -859,7 +988,7 @@ const CellViewDialog: React.FC<{
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span>{isEditing ? `Edit ${field.name}` : `Preview ${field.name}`}</span>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 mr-4">
               <div className="flex items-center gap-2">
                 <Label htmlFor="edit-switch" className="text-xs text-muted-foreground">
                   Edit
