@@ -118,7 +118,6 @@ const navigationItems = [
 		label: "Explore Data",
 		icon: DatabaseIcon,
 		description: "Browse and query your data",
-		disabled: true,
 	},
 	{
 		href: "/library/config/team",
@@ -290,8 +289,8 @@ export default function Id({
 			<main className="flex min-h-screen max-h-screen overflow-hidden flex-col w-full p-6 gap-6">
 				{/* Enhanced Breadcrumb - Hidden when maximized */}
 				{!isMaximized && (
-					<Card className="border-0 shadow-sm bg-gradient-to-r from-background to-muted/20">
-						<CardContent className="p-4 flex flex-row items-center justify-between">
+					<Card className="border-0 shadow-sm bg-gradient-to-r from-background to-muted/20 h-fit max-h-fit py-4">
+						<CardContent className="p-4 py-0 flex flex-row items-center justify-between">
 							<Breadcrumb>
 								<BreadcrumbList>
 									<BreadcrumbItem>
@@ -358,8 +357,8 @@ export default function Id({
 				>
 					{/* Enhanced Navigation - Hidden when maximized */}
 					{!isMaximized && (
-						<Card className="h-full flex flex-col flex-grow max-h-full overflow-hidden">
-							<CardHeader className="pb-3 pt-3 border-b relative">
+						<Card className="h-full flex flex-col flex-grow max-h-full overflow-hidden py-2">
+							<CardHeader className="pb-2 pt-2 border-b relative h-fit">
 								<div className="flex flex-col gap-3">
 									<div className="flex items-center gap-2 w-full">
 										<div className="relative">

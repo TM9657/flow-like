@@ -22,7 +22,7 @@
 
 > *Any flow you like.*
 
-🚀 Flow Like offers **Typed** Workflows. Compared to tools like n8n, these can actually scale.
+🚀 With **Typed** Workflows, Flow-Like is ready for projects of any size.
 
 🔀 Flow-Like is an enterprise-grade **workflow operating system**.
 

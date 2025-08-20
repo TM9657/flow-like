@@ -65,6 +65,11 @@ impl LanceDBVectorStore {
         }
     }
 
+    pub async fn list_tables(&self) -> Result<Vec<String>> {
+        let tables = self.connection.table_names().execute().await?;
+        Ok(tables)
+    }
+
     pub async fn to_datafusion(&self) -> Result<lancedb::table::datafusion::BaseTableAdapter> {
         let table = self
             .table
