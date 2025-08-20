@@ -31,6 +31,22 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// dnd-kit imports
+import {
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import Dexie, { type Table } from "dexie";
 import { cn } from "../../lib";
 import {
@@ -380,6 +396,11 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
     className,
   );
 
+  // dnd-kit sensors for better UX (avoid accidental drags)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
+
   return (
     <div className={containerCls}>
       <div className="flex items-center gap-2 flex-shrink-0">
@@ -431,17 +452,74 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
         <div className="flex-1 w-full overflow-auto">
           <DataTable className="w-full">
             <TableHeader className="sticky top-0 bg-card z-10">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <DraggableTableHead
-                      key={header.id}
-                      header={header}
-                      table={table}
-                    />
-                  ))}
-                </TableRow>
-              ))}
+              {table.getHeaderGroups().map((headerGroup) => {
+                const headers = headerGroup.headers.filter(
+                  (h) => h.column.getIsVisible?.() !== false
+                );
+                const draggableItems = headers
+                  .map((h) => h.id)
+                  .filter((id) => id !== "select"); // keep 'select' anchored
+
+                const handleDragEnd = (e: DragEndEvent) => {
+                  const { active, over } = e;
+                  if (!over || active.id === over.id) return;
+
+                  const visibleDraggable = headers
+                    .map((h) => h.id)
+                    .filter((id) => id !== "select");
+
+                  if (
+                    !visibleDraggable.includes(String(active.id)) ||
+                    !visibleDraggable.includes(String(over.id))
+                  )
+                    return;
+
+                  const from = visibleDraggable.indexOf(String(active.id));
+                  const to = visibleDraggable.indexOf(String(over.id));
+                  const newVisible = arrayMove(visibleDraggable, from, to);
+
+                  const allIds = table.getAllLeafColumns().map((c: any) => c.id);
+                  const prevOrder = [
+                    ...table.getState().columnOrder,
+                    ...allIds.filter(
+                      (id: string) => !table.getState().columnOrder.includes(id)
+                    ),
+                  ];
+
+                  const setToReorder = new Set(visibleDraggable);
+                  const pool = [...newVisible];
+                  const nextOrder = prevOrder.map((id) =>
+                    setToReorder.has(id) ? pool.shift()! : id
+                  );
+
+                  table.setColumnOrder(nextOrder);
+                };
+
+                return (
+                  <DndContext
+                    key={headerGroup.id}
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={draggableItems}
+                      strategy={horizontalListSortingStrategy}
+                    >
+                      <TableRow>
+                        {headerGroup.headers.map((header) => (
+                          <SortableHeaderCell
+                            key={header.id}
+                            header={header}
+                            table={table}
+                            isDraggable={header.id !== "select"}
+                          />
+                        ))}
+                      </TableRow>
+                    </SortableContext>
+                  </DndContext>
+                );
+              })}
             </TableHeader>
             <TableBody>
               {loading ? (
@@ -579,106 +657,53 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 
 export default LanceDBExplorer;
 
-const DraggableTableHead: React.FC<{ header: any; table: any }> = ({ header, table }) => {
-  // Skip rendering for hidden columns to keep header in sync with body
-  if (!header.column.getIsVisible()) return null;
+// Replace DraggableTableHead with dnd-kit powered SortableHeaderCell
+const SortableHeaderCell: React.FC<{
+  header: any;
+  table: any;
+  isDraggable?: boolean;
+}> = ({ header, table, isDraggable = true }) => {
+  if (!header.column.getIsVisible?.()) return null;
 
-  const { getState, setColumnOrder } = table;
-  const { columnOrder } = getState();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+  } = useSortable({
+    id: header.id,
+    disabled: !isDraggable,
+  });
 
-  const [isDragging, setIsDragging] = useState(false);
-  const [draggedOver, setDraggedOver] = useState<string | null>(null);
-
-  const isDraggable = header.id !== "select";
-
-  const columnOrderIds = useMemo(() => [
-    ...columnOrder,
-    ...table.getAllLeafColumns().map((d: any) => d.id).filter((id: string) => !columnOrder.includes(id)),
-  ], [columnOrder, table]);
-
-  const reorderColumn = useCallback((draggedColumnId: string, targetColumnId: string, position: "left" | "right") => {
-    setColumnOrder(() => {
-      const newColumnOrder = [...columnOrderIds];
-      const draggedIndex = newColumnOrder.indexOf(draggedColumnId);
-      const targetIndex = newColumnOrder.indexOf(targetColumnId);
-
-      if (draggedIndex === -1 || targetIndex === -1) return newColumnOrder;
-
-      newColumnOrder.splice(draggedIndex, 1);
-
-      const insertIndex = position === "left" ? targetIndex : targetIndex + 1;
-      newColumnOrder.splice(insertIndex, 0, draggedColumnId);
-
-      return newColumnOrder;
-    });
-  }, [columnOrderIds, setColumnOrder]);
-
-  const handleDragStart = useCallback((e: React.DragEvent) => {
-    if (!isDraggable) return;
-    setIsDragging(true);
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", header.id);
-
-    if (e.dataTransfer.setDragImage) {
-      const dragImage = document.createElement("div");
-      dragImage.textContent = header.id;
-      dragImage.style.cssText = "position: absolute; top: -1000px; background: white; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;";
-      document.body.appendChild(dragImage);
-      e.dataTransfer.setDragImage(dragImage, 0, 0);
-      setTimeout(() => document.body.removeChild(dragImage), 0);
-    }
-  }, [isDraggable, header.id]);
-
-  const handleDragEnd = useCallback(() => {
-    setIsDragging(false);
-    setDraggedOver(null);
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (!isDraggable) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDraggedOver(header.id);
-  }, [isDraggable, header.id]);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setDraggedOver(null);
-    }
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const draggedColumnId = e.dataTransfer.getData("text/plain");
-    const targetColumnId = header.id;
-
-    if (draggedColumnId && draggedColumnId !== targetColumnId && isDraggable) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const position = e.clientX < rect.left + rect.width / 2 ? "left" : "right";
-      reorderColumn(draggedColumnId, targetColumnId, position);
-    }
-    setDraggedOver(null);
-  }, [header.id, isDraggable, reorderColumn]);
+  const style: React.CSSProperties = {
+    transform: transform ? CSS.Translate.toString(transform) : undefined,
+    transition,
+  };
 
   return (
     <TableHead
-      style={{ width: header.getSize() }}
+      ref={setNodeRef}
+      style={{ width: header.getSize(), ...style }}
       className={cn(
         "relative group border-b bg-muted/30 select-none",
-        isDragging && "opacity-50",
-        draggedOver === header.id && "bg-primary/10",
-        isDraggable && "cursor-move"
+        isDragging && "opacity-50 ring-1 ring-primary/40",
+        isOver && "bg-primary/10"
       )}
-      draggable={isDraggable}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
     >
       <div className="flex items-center gap-1">
         {isDraggable && (
-          <GripVertical className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" />
+          <span
+            title="Drag to reorder"
+            className="inline-flex h-4 w-4 items-center justify-center text-muted-foreground cursor-grab active:cursor-grabbing"
+            {...attributes}
+            {...listeners}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GripVertical className="h-3 w-3 opacity-70" />
+          </span>
         )}
         {header.isPlaceholder ? null : (
           <div
