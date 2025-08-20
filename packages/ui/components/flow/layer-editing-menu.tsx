@@ -89,6 +89,15 @@ type PinEdit = {
 	value_type: IValueType;
 };
 
+function selectPreviewElement(type: IVariableType){
+		return (
+			<div className="flex items-center gap-2">
+				<div className={`size-2 rounded-full`} style={{ backgroundColor: typeToColor(type) }} />
+				<span>{type}</span>
+			</div>
+		);
+	}
+
 const normalizeValueType = (vt: any): IValueType => {
 	const s = String(vt ?? "").toLowerCase();
 	if (s === "array") return IValueType.Array;
@@ -475,16 +484,18 @@ const PinDataTypeSelectInline: React.FC<{
 				<SelectValue placeholder="Data Type" />
 			</SelectTrigger>
 			<SelectContent>
-				<SelectItem value={IVariableType.Boolean}>Boolean</SelectItem>
-				<SelectItem value={IVariableType.Byte}>Byte</SelectItem>
-				<SelectItem value={IVariableType.Date}>Date</SelectItem>
-				<SelectItem value={IVariableType.Execution}>Execution</SelectItem>
-				<SelectItem value={IVariableType.Float}>Float</SelectItem>
-				<SelectItem value={IVariableType.Generic}>Generic</SelectItem>
-				<SelectItem value={IVariableType.Integer}>Integer</SelectItem>
-				<SelectItem value={IVariableType.PathBuf}>PathBuf</SelectItem>
-				<SelectItem value={IVariableType.String}>String</SelectItem>
-				<SelectItem value={IVariableType.Struct}>Struct</SelectItem>
+				<SelectItem value={IVariableType.Boolean}>
+					{selectPreviewElement(IVariableType.Boolean)}
+				</SelectItem>
+				<SelectItem value={IVariableType.Byte}>{selectPreviewElement(IVariableType.Byte)}</SelectItem>
+				<SelectItem value={IVariableType.Date}>{selectPreviewElement(IVariableType.Date)}</SelectItem>
+				<SelectItem value={IVariableType.Execution}>{selectPreviewElement(IVariableType.Execution)}</SelectItem>
+				<SelectItem value={IVariableType.Float}>{selectPreviewElement(IVariableType.Float)}</SelectItem>
+				<SelectItem value={IVariableType.Generic}>{selectPreviewElement(IVariableType.Generic)}</SelectItem>
+				<SelectItem value={IVariableType.Integer}>{selectPreviewElement(IVariableType.Integer)}</SelectItem>
+				<SelectItem value={IVariableType.PathBuf}>{selectPreviewElement(IVariableType.PathBuf)}</SelectItem>
+				<SelectItem value={IVariableType.String}>{selectPreviewElement(IVariableType.String)}</SelectItem>
+				<SelectItem value={IVariableType.Struct}>{selectPreviewElement(IVariableType.Struct)}</SelectItem>
 			</SelectContent>
 		</Select>
 	);

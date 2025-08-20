@@ -1,4 +1,4 @@
-import { useDraggable } from "@dnd-kit/core";
+import { useDraggable, /* DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors, closestCenter, */ useDroppable } from "@dnd-kit/core";
 import { createId } from "@paralleldrive/cuid2";
 import {
 	CirclePlusIcon,
@@ -8,8 +8,11 @@ import {
 	GripIcon,
 	ListIcon,
 	Trash2Icon,
+  ChevronDown,
+  ChevronRight,
+  FolderIcon,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useMemo, useEffect } from "react";
 import { Button } from "../../../components/ui/button";
 import {
 	DropdownMenu,
@@ -80,6 +83,24 @@ export function VariablesMenu({
 		[board],
 	);
 
+  const tree = useMemo(() => buildCategoryTree(Object.values(board.variables)), [board.variables]);
+
+  // Listen for cross-folder drops dispatched by FlowWrapper
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { variable, targetPath } = (e as CustomEvent).detail as {
+        variable: IVariable;
+        targetPath: string;
+      };
+      if (!variable?.editable) return;
+      const nextCategory = targetPath === "__root" ? undefined : targetPath;
+      if (variable.category === nextCategory) return;
+      void upsertVariable({ ...variable, category: nextCategory });
+    };
+    document.addEventListener("variables-folder-drop", handler as EventListener);
+    return () => document.removeEventListener("variables-folder-drop", handler as EventListener);
+  }, [upsertVariable]);
+
 	return (
 		<div className="flex flex-col gap-2 p-4">
 			<div className="flex flex-row items-center gap-4 mb-2">
@@ -95,7 +116,7 @@ export function VariablesMenu({
 							value_type: IValueType.Normal,
 							secret: false,
 							editable: true,
-							category: "General",
+							category: "New",
 							default_value: convertJsonToUint8Array(""),
 							description: "",
 						});
@@ -105,28 +126,18 @@ export function VariablesMenu({
 					New
 				</Button>
 			</div>
-			{Object.values(board.variables)
-				.sort((a, b) => a.name.localeCompare(b.name))
-				.map((variable) => (
-					<Variable
-						key={variable.id}
-						variable={variable}
-						onVariableChange={(variable) => {
-							if (!variable.editable) {
-								// toast.error("This variable is not editable")
-								return;
-							}
-							upsertVariable(variable);
-						}}
-						onVariableDeleted={(variable) => {
-							if (!variable.editable) {
-								// toast.error("This variable is not editable")
-								return;
-							}
-							removeVariable(variable);
-						}}
-					/>
-				))}
+
+      <CategoryTree
+        root={tree}
+        onVariableChange={(variable) => {
+          if (!variable.editable) return;
+          upsertVariable(variable);
+        }}
+        onVariableDeleted={(variable) => {
+          if (!variable.editable) return;
+          removeVariable(variable);
+        }}
+      />
 		</div>
 	);
 }
@@ -160,18 +171,14 @@ export function Variable({
 		variableType: IVariableType,
 	) {
 		if (valueType === IValueType.Array) {
-			console.log("Returning empty array");
 			return [];
 		}
-
 		if (valueType === IValueType.HashSet) {
 			return new Set();
 		}
-
 		if (valueType === IValueType.HashMap) {
 			return new Map();
 		}
-
 		switch (variableType) {
 			case IVariableType.Boolean:
 				return false;
@@ -288,28 +295,24 @@ export function Variable({
 	const element = (
 		<div
 			ref={setNodeRef}
-			// style={{ transform: `translate(${transform?.x ?? 0}px, ${transform?.y ?? 0}px)` }}
-			className={`relative flex flex-row items-center justify-between gap-2 border p-1 px-2 rounded-md bg-card text-card-foreground z-100 ${transform && "opacity-0"} ${!variable.editable ? "text-muted-foreground " : ""}`}
+			className={`relative flex w-full flex-row items-center justify-between gap-2 border p-1 px-2 rounded-md bg-card text-card-foreground ${transform ? "opacity-40" : ""} ${!variable.editable ? "text-muted-foreground" : ""}`}
 			{...listeners}
 			{...attributes}
 		>
 			<div className="flex flex-row gap-2 items-center" data-no-dnd>
 				{isArrayDropdown}
-				<p
-					className={`text-start line-clamp-2 ${!variable.editable ? "text-muted-foreground" : ""}`}
-				>
+				<p className={`text-start line-clamp-2 ${!variable.editable ? "text-muted-foreground" : ""}`}>
 					{localVariable.name}
 				</p>
 			</div>
 			<div className="flex flex-row items-center gap-2" data-no-dnd>
 				<Button
 					disabled={!variable.editable}
-					variant={"ghost"}
-					size={"icon"}
+					variant="ghost"
+					size="icon"
 					onClick={(event) => {
 						event.stopPropagation();
 						setLocalVariable((old) => ({ ...old, exposed: !old.exposed }));
-						console.log(localVariable);
 					}}
 				>
 					{localVariable.exposed ? (
@@ -327,7 +330,7 @@ export function Variable({
 	const selectPreviewElement = useCallback((type: IVariableType) => {
 		return (
 			<div className="flex items-center gap-2">
-				<div className={`size-2 rounded-full`} style={{ backgroundColor: typeToColor(type) }} />
+				<div className="size-2 rounded-full" style={{ backgroundColor: typeToColor(type) }} />
 				<span>{type}</span>
 			</div>
 		);
@@ -344,7 +347,7 @@ export function Variable({
 				}
 			}}
 		>
-			<SheetTrigger>{element}</SheetTrigger>
+			<SheetTrigger asChild>{element}</SheetTrigger>
 			<SheetContent className="flex flex-col gap-6 max-h-screen overflow-hidden px-3 pt-2 pb-4">
 				<SheetHeader>
 					<SheetTitle className="flex flex-row items-center gap-2">
@@ -357,6 +360,7 @@ export function Variable({
 						<Separator />
 					</SheetDescription>
 				</SheetHeader>
+
 				<div className="grid w-full max-w-sm items-center gap-1.5">
 					<Label htmlFor="name">Variable Name</Label>
 					<Input
@@ -368,6 +372,26 @@ export function Variable({
 						placeholder="Name"
 					/>
 				</div>
+
+				<div className="grid w-full max-w-sm items-center gap-1.5">
+					<Label htmlFor="category">Category</Label>
+					<Input
+						id="category"
+						value={localVariable.category ?? ""}
+						onChange={(e) => {
+							const v = e.target.value;
+							setLocalVariable((old) => ({
+								...old,
+								category: v.trim() === "" ? undefined : v,
+							}));
+						}}
+						placeholder="e.g. Main/Bools"
+					/>
+					<small className="text-[0.8rem] text-muted-foreground">
+						Use “/” to create nested folders. Leave empty for top-level.
+					</small>
+				</div>
+
 				<div className="grid w-full max-w-sm items-center gap-1.5">
 					<div className="flex flex-row items-center gap-2">
 						{isArrayDropdown}
@@ -406,6 +430,7 @@ export function Variable({
 						</SelectContent>
 					</Select>
 				</div>
+
 				<div className="flex flex-col gap-1">
 					<div className="flex items-center space-x-2">
 						<Switch
@@ -422,6 +447,7 @@ export function Variable({
 						of your App.
 					</small>
 				</div>
+
 				<div className="flex flex-col gap-1">
 					<div className="flex items-center space-x-2">
 						<Switch
@@ -437,7 +463,9 @@ export function Variable({
 						A secret Variable will be covered for input (e.g passwords)
 					</small>
 				</div>
+
 				<Separator />
+
 				<div className="flex grow h-full flex-col max-h-full overflow-auto">
 					{!localVariable.exposed && (
 						<VariablesMenuEdit
@@ -452,8 +480,9 @@ export function Variable({
 						/>
 					)}
 				</div>
+
 				<Button
-					variant={"destructive"}
+					variant="destructive"
 					onClick={() => {
 						onVariableDeleted(variable);
 					}}
@@ -502,3 +531,164 @@ export function ValueTypeIcon({
 		/>
 	);
 }
+
+// Category grouping
+
+type CategoryNode = {
+  name: string;
+  path: string;
+  vars: IVariable[];
+  children: Record<string, CategoryNode>;
+};
+
+const buildCategoryTree = (vars: IVariable[]): CategoryNode => {
+  const root: CategoryNode = { name: "", path: "", vars: [], children: {} };
+  for (const v of vars) {
+    const raw = (v as any)?.category as string | null | undefined;
+    const cat = (raw ?? "").trim();
+    if (!cat) {
+      root.vars.push(v);
+      continue;
+    }
+    const segments = cat.split("/").map((s) => s.trim()).filter(Boolean);
+    let node = root;
+    let path = "";
+    for (const seg of segments) {
+      path = path ? `${path}/${seg}` : seg;
+      if (!node.children[seg]) node.children[seg] = { name: seg, path, vars: [], children: {} };
+      node = node.children[seg];
+    }
+    node.vars.push(v);
+  }
+  return root;
+};
+
+const countRecursive = (node: CategoryNode): number =>
+  node.vars.length + Object.values(node.children).reduce((sum, c) => sum + countRecursive(c), 0);
+
+const CategoryTree: React.FC<{
+  root: CategoryNode;
+  onVariableChange: (v: IVariable) => void;
+  onVariableDeleted: (v: IVariable) => void;
+}> = ({ root, onVariableChange, onVariableDeleted }) => {
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const isOpen = useCallback((path: string) => open[path] ?? true, [open]);
+  const toggle = useCallback((path: string) => {
+    setOpen((prev) => ({ ...prev, [path]: !(prev[path] ?? true) }));
+  }, []);
+
+  // Root droppable to move items to top-level (category undefined)
+  const { setNodeRef: setRootRef, isOver: rootOver } = useDroppable({ id: "__root" });
+
+  const childKeys = useMemo(
+    () => Object.keys(root.children).sort((a, b) => a.localeCompare(b)),
+    [root.children]
+  );
+  const varsSorted = useMemo(
+    () => [...root.vars].sort((a, b) => a.name.localeCompare(b.name)),
+    [root.vars]
+  );
+
+  return (
+    <div
+      ref={setRootRef}
+      className={`space-y-2 rounded-md ${rootOver ? "ring-1 ring-primary/40" : ""}`}
+    >
+      {varsSorted.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {varsSorted.map((variable) => (
+            <Variable
+              key={variable.id}
+              variable={variable}
+              onVariableChange={onVariableChange}
+              onVariableDeleted={onVariableDeleted}
+            />
+          ))}
+        </div>
+      )}
+      {childKeys.length > 0 && (
+        <div className="space-y-2">
+          {childKeys.map((k) => (
+            <FolderNode
+              key={root.children[k].path}
+              node={root.children[k]}
+              depth={1}
+              isOpen={isOpen}
+              toggle={toggle}
+              onVariableChange={onVariableChange}
+              onVariableDeleted={onVariableDeleted}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const FolderNode: React.FC<{
+  node: CategoryNode;
+  depth: number;
+  isOpen: (path: string) => boolean;
+  toggle: (path: string) => void;
+  onVariableChange: (v: IVariable) => void;
+  onVariableDeleted: (v: IVariable) => void;
+}> = ({ node, depth, isOpen, toggle, onVariableChange, onVariableDeleted }) => {
+  const { setNodeRef, isOver } = useDroppable({ id: node.path });
+  const childKeys = useMemo(
+    () => Object.keys(node.children).sort((a, b) => a.localeCompare(b)),
+    [node.children]
+  );
+  const varsSorted = useMemo(
+    () => [...node.vars].sort((a, b) => a.name.localeCompare(b.name)),
+    [node.vars]
+  );
+  const total = countRecursive(node);
+
+  return (
+    <div className="rounded-md border">
+      <button
+        ref={setNodeRef}
+        type="button"
+        className={`w-full flex items-center gap-2 px-2 py-2 hover:bg-accent/50 ${isOver ? "bg-primary/5" : ""}`}
+        onClick={() => toggle(node.path)}
+      >
+        {isOpen(node.path) ? (
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        )}
+        <FolderIcon className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">{node.name}</span>
+        <span className="ml-auto text-xs text-muted-foreground">{total}</span>
+      </button>
+
+      {isOpen(node.path) && (
+        <div className="p-2 pt-1 space-y-2">
+          {varsSorted.map((variable) => (
+            <Variable
+              key={variable.id}
+              variable={variable}
+              onVariableChange={onVariableChange}
+              onVariableDeleted={onVariableDeleted}
+            />
+          ))}
+          {childKeys.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {childKeys.map((k) => (
+                <FolderNode
+                  key={node.children[k].path}
+                  node={node.children[k]}
+                  depth={depth + 1}
+                  isOpen={isOpen}
+                  toggle={toggle}
+                  onVariableChange={onVariableChange}
+                  onVariableDeleted={onVariableDeleted}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
