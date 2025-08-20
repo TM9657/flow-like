@@ -1,6 +1,7 @@
 /// # Simple Agent Node
+/// This is an LLM-controlled while loop over an arbitrary number of flow-leafes with back-propagation of leaf outputs into the agent.
 /// Recursive LLM-invokes until no more tool calls are made or recursion limit hit.
-/// Effectively, this is an LLM-controlled while loop over an arbitrary number of flow-leafes with back-propagation of leaf outputs into the agent.
+/// Effectively, this node allows the LLM to control it's own execution until further human input required.
 use crate::ai::generative::llm::invoke_with_tools::extract_tagged;
 use crate::utils::json::parse_with_schema::tool_call_from_str;
 use flow_like::{
@@ -196,7 +197,7 @@ impl NodeLogic for SimpleAgentNode {
 
             // re-evaluate history + set system prompt
             let mut external_history = context.evaluate_pin::<History>("history").await?;
-            external_history.set_system_prompt(system_prompt.to_string());            
+            external_history.set_system_prompt(system_prompt.to_string());
             context.log_message(
                 &format!(
                     "[agent iter {}] previous external history: {}",
@@ -227,9 +228,12 @@ impl NodeLogic for SimpleAgentNode {
                                 format!("[tooloutput]: {}", new_message.as_str())
                             }
                         } else {
-                            context.log_message("New tool message is missing a tool call id", LogLevel::Warn);
+                            context.log_message(
+                                "New tool message is missing a tool call id",
+                                LogLevel::Warn,
+                            );
                             format!("[tooloutput]: {}", new_message.as_str())
-                        };                        
+                        };
                         let message = HistoryMessage {
                             role: Role::User,
                             content: MessageContent::Contents(vec![Content::Text {
@@ -238,10 +242,10 @@ impl NodeLogic for SimpleAgentNode {
                             }]),
                             tool_call_id: None,
                             tool_calls: None,
-                            name: None
+                            name: None,
                         };
                         internal_history.messages.push(message);
-                    },
+                    }
                     _ => {
                         // if there are tool calls from a previous iteration not answered by tool outputs we warn the user
                         if unanswered_tool_calls.len() > 0 {

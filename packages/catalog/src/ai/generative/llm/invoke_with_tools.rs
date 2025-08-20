@@ -1,3 +1,8 @@
+/// # Invoke LLMs With Tools
+/// Make an LLM Invoke / Chat Completion Request allowing for tool calls with dedicated output pins.
+/// Iterates over all tool calls in LLM response.
+/// Once no more tool calls, stop execution.
+use crate::utils::json::parse_with_schema::tool_call_from_str;
 use flow_like::{
     bit::Bit,
     flow::{
@@ -10,7 +15,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_model_provider::{
-    history::{History, Tool, ToolChoice, ToolCall},
+    history::{History, Tool, ToolCall, ToolChoice},
     response::Response,
 };
 use flow_like_types::{Error, Value, anyhow, async_trait, json, regex::Regex};
@@ -18,7 +23,6 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-use crate::utils::json::parse_with_schema::tool_call_from_str;
 
 const SP_TEMPLATE_AUTO: &str = r#"
 # Instruction
@@ -343,7 +347,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         // LLM wants to make tool calls -> execute subcontexts
         if tool_calls.len() > 0 {
             if let ToolChoice::None = tool_choice {
-                return Err(anyhow!("LLM made tool calls but tool choice is None!"))
+                return Err(anyhow!("LLM made tool calls but tool choice is None!"));
             };
 
             //let tool_call_id_pin = context.get_pin_by_name("tool_call_id").await?;
@@ -398,8 +402,10 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         } else {
             match tool_choice {
                 ToolChoice::Required => {
-                    return Err(anyhow!("LLM made no tool calls but at least one is required!"))
-                },
+                    return Err(anyhow!(
+                        "LLM made no tool calls but at least one is required!"
+                    ));
+                }
                 _ => {
                     context
                         .set_pin_value("response", json::json!(response))
