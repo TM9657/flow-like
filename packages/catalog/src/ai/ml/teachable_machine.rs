@@ -10,7 +10,7 @@ use flow_like::{
 };
 use flow_like_types::{
     JsonSchema, Result, async_trait,
-    image::{imageops::FilterType, RgbImage, imageops},
+    image::{RgbImage, imageops, imageops::FilterType},
     json::{Deserialize, Serialize, json},
     tokio,
 };
@@ -177,7 +177,10 @@ impl NodeLogic for TeachableMachineNode {
                                 p[c] as f32 / 127.5 - 1.0
                             },
                         );
-                        (TypedFact::dt_shape(f32::datum_type(), input_shape), arr.into())
+                        (
+                            TypedFact::dt_shape(f32::datum_type(), input_shape),
+                            arr.into(),
+                        )
                     }
                     DatumType::U8 => {
                         let arr = tract_ndarray::Array4::<u8>::from_shape_fn(
@@ -187,12 +190,15 @@ impl NodeLogic for TeachableMachineNode {
                                 p[c]
                             },
                         );
-                        (TypedFact::dt_shape(u8::datum_type(), input_shape), arr.into())
+                        (
+                            TypedFact::dt_shape(u8::datum_type(), input_shape),
+                            arr.into(),
+                        )
                     }
                     dt => {
                         return Err(flow_like_types::anyhow!(
                             "Unsupported input dtype: {dt:?} (only F32 and U8 are supported)"
-                        ))
+                        ));
                     }
                 };
 
@@ -302,7 +308,9 @@ impl NodeLogic for PredictionClassOrLabelNode {
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         let prediction: ClassPrediction = context.evaluate_pin("prediction").await?;
 
-        context.set_pin_value("class_idx", json!(prediction.class_idx)).await?;
+        context
+            .set_pin_value("class_idx", json!(prediction.class_idx))
+            .await?;
         context
             .set_pin_value("label", json!(prediction.label.clone().unwrap_or_default()))
             .await?;
@@ -351,7 +359,9 @@ impl NodeLogic for PredictionScoreNode {
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         let prediction: ClassPrediction = context.evaluate_pin("prediction").await?;
 
-        context.set_pin_value("score", json!(prediction.score)).await?;
+        context
+            .set_pin_value("score", json!(prediction.score))
+            .await?;
         Ok(())
     }
 }

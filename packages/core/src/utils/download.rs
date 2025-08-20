@@ -3,11 +3,11 @@ use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::{Path, blake3};
 use flow_like_types::intercom::{InterComCallback, InterComEvent};
 use flow_like_types::reqwest::Client;
-use flow_like_types::sync::{mpsc, Mutex};
+use flow_like_types::sync::{Mutex, mpsc};
 use flow_like_types::tokio::fs::{self as async_fs, OpenOptions};
 use flow_like_types::tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use flow_like_types::tokio::spawn;
-use flow_like_types::tokio::sync::{oneshot, Semaphore};
+use flow_like_types::tokio::sync::{Semaphore, oneshot};
 use flow_like_types::tokio::task::yield_now;
 use flow_like_types::tokio::time::Instant;
 use flow_like_types::{anyhow, bail, reqwest};
@@ -15,8 +15,8 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::sync::Arc;
-use std::time::Duration;
 use std::sync::OnceLock;
+use std::time::Duration;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BitDownloadEvent {
@@ -379,4 +379,3 @@ async fn process_download_bit(
 
     Ok(store_path)
 }
-

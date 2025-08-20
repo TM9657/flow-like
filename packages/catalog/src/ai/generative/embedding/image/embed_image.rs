@@ -1,4 +1,7 @@
-use crate::{ai::generative::embedding::{CachedEmbeddingModel, CachedEmbeddingModelObject}, image::NodeImage};
+use crate::{
+    ai::generative::embedding::{CachedEmbeddingModel, CachedEmbeddingModelObject},
+    image::NodeImage,
+};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -39,14 +42,9 @@ impl NodeLogic for EmbedImageNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin(
-            "image",
-            "Image",
-            "The image to embed",
-            VariableType::Struct,
-        )
-        .set_schema::<NodeImage>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin("image", "Image", "The image to embed", VariableType::Struct)
+            .set_schema::<NodeImage>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
             "model",
@@ -100,9 +98,7 @@ impl NodeLogic for EmbedImageNode {
         let mut embeddings = vec![];
 
         if let Some(embedding_model) = &embedding_model.image_model {
-            let vecs = embedding_model
-                .image_embed(vec![dynamic_image])
-                .await?;
+            let vecs = embedding_model.image_embed(vec![dynamic_image]).await?;
             embeddings = vecs;
         } else {
             bail!("Bit not an image embedding model");

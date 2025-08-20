@@ -84,12 +84,8 @@ pub fn emit_throttled<T>(
     });
 }
 
-pub fn emit_to_main_throttled<T>(
-    app: &AppHandle,
-    event: &str,
-    payload: T,
-    min_interval: Duration,
-) where
+pub fn emit_to_main_throttled<T>(app: &AppHandle, event: &str, payload: T, min_interval: Duration)
+where
     T: Serialize + Send + 'static + Clone,
 {
     emit_throttled(app, UiEmitTarget::Main, event, payload, min_interval);
