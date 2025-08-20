@@ -48,7 +48,7 @@ impl NodeLogic for RandomIntegerInRangeNode {
         let max: i64 = context.evaluate_pin("max").await?;
 
         if min >= max {
-            return Err(anyhow!("Cannot set min equal or greater than max!"))
+            return Err(anyhow!("min must be less than max"))
         }
 
         let random_integer = {
