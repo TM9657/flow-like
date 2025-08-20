@@ -1,39 +1,39 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
-	ReadonlyURLSearchParams,
-	usePathname,
-	useRouter,
-	useSearchParams,
-} from "next/navigation";
-import { useTauriInvoke } from "../../../../components/useInvoke";
-import NotFound from "../not-found";
-import {
-	Database,
-	Columns,
-	Search,
-	ArrowUpAZ,
-	ArrowDownAZ,
-	RefreshCw,
-	X,
-	ChevronRight,
-	ArrowLeftIcon,
-} from "lucide-react";
-import {
-	Badge,
 	Button,
 	Card,
 	CardHeader,
 	CardTitle,
-	ScrollArea,
 	Input,
+	ScrollArea,
 } from "@tm9657/flow-like-ui";
 import LanceDBExplorer from "@tm9657/flow-like-ui/components/ui/lance-viewer";
-import { invoke } from "@tauri-apps/api/core";
+import {
+	ArrowDownAZ,
+	ArrowLeftIcon,
+	ArrowUpAZ,
+	ChevronRight,
+	Columns,
+	Database,
+	RefreshCw,
+	Search,
+	X,
+} from "lucide-react";
+import {
+	type ReadonlyURLSearchParams,
+	usePathname,
+	useRouter,
+	useSearchParams,
+} from "next/navigation";
+import type React from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useTauriInvoke } from "../../../../components/useInvoke";
+import NotFound from "../not-found";
 
 export default function Page(): React.ReactElement {
-	const router = useRouter()
+	const router = useRouter();
 	const searchParams = useSearchParams();
 	const id = searchParams?.get("id") ?? null;
 	const tableParam = searchParams?.get("table") ?? null;
@@ -52,34 +52,55 @@ export default function Page(): React.ReactElement {
 	if (!id) return <NotFound />;
 
 	return table ? (
-		<TableView table={table} appId={id} onBack={() => {
-			const params = new URLSearchParams(searchParams?.toString() ?? "");
-			params.delete("table");
-			router.push(`${pathname}?${params.toString()}`);
-		}} />
+		<TableView
+			table={table}
+			appId={id}
+			onBack={() => {
+				const params = new URLSearchParams(searchParams?.toString() ?? "");
+				params.delete("table");
+				router.push(`${pathname}?${params.toString()}`);
+			}}
+		/>
 	) : (
 		<DatabaseOverview appId={id} searchParams={searchParams} />
 	);
 }
 
-function TableView({ table, appId, onBack }: Readonly<{ table: string, appId: string, onBack: () => void }>) {
+function TableView({
+	table,
+	appId,
+	onBack,
+}: Readonly<{ table: string; appId: string; onBack: () => void }>) {
 	const schema = useTauriInvoke<any>("db_schema", { appId, tableName: table });
 	const list = useTauriInvoke<any>("db_list", { appId, tableName: table });
 	return (
 		<div className="flex flex-col h-full flex-grow max-h-full overflow-hidden">
-			{schema.data && list.data && <LanceDBExplorer tableName={table} arrowSchema={schema.data} onSwitchPage={async (offset, limit) => {
-				const items = await invoke<any>("db_list", { appId, tableName: table, offset, limit });
-				return items;
-			}} >
-				<Button variant={"default"} size={"sm"} onClick={
-					() => {
-						onBack();
-					}
-				}>
-					<ArrowLeftIcon/>
-					Back
-				</Button>
-			</LanceDBExplorer>}
+			{schema.data && list.data && (
+				<LanceDBExplorer
+					tableName={table}
+					arrowSchema={schema.data}
+					onSwitchPage={async (offset, limit) => {
+						const items = await invoke<any>("db_list", {
+							appId,
+							tableName: table,
+							offset,
+							limit,
+						});
+						return items;
+					}}
+				>
+					<Button
+						variant={"default"}
+						size={"sm"}
+						onClick={() => {
+							onBack();
+						}}
+					>
+						<ArrowLeftIcon />
+						Back
+					</Button>
+				</LanceDBExplorer>
+			)}
 		</div>
 	);
 }
@@ -118,24 +139,27 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 		const queryLower = query.trim().toLowerCase();
 
 		return processedTables
-			.filter(table =>
-				!queryLower || table.name.toLowerCase().includes(queryLower)
+			.filter(
+				(table) => !queryLower || table.name.toLowerCase().includes(queryLower),
 			)
 			.sort((a, b) =>
 				sortAsc
 					? collator.compare(a.name, b.name)
-					: collator.compare(b.name, a.name)
+					: collator.compare(b.name, a.name),
 			);
 	}, [processedTables, query, sortAsc]);
 
-	const navigateToTable = useCallback((tableName: string) => {
-		const params = new URLSearchParams(searchParams?.toString() ?? "");
-		params.set("table", encodeURIComponent(tableName));
-		router.push(`${pathname}?${params.toString()}`);
-	}, [router, pathname, searchParams]);
+	const navigateToTable = useCallback(
+		(tableName: string) => {
+			const params = new URLSearchParams(searchParams?.toString() ?? "");
+			params.set("table", encodeURIComponent(tableName));
+			router.push(`${pathname}?${params.toString()}`);
+		},
+		[router, pathname, searchParams],
+	);
 
 	const refreshTables = useCallback(() => {
-		tables.refetch()
+		tables.refetch();
 	}, [tables.refetch]);
 
 	const clearSearch = useCallback(() => {
@@ -143,7 +167,7 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 	}, []);
 
 	const toggleSort = useCallback(() => {
-		setSortAsc(prev => !prev);
+		setSortAsc((prev) => !prev);
 	}, []);
 
 	if (tables.isLoading) {
@@ -166,11 +190,7 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 				onRefresh={refreshTables}
 			/>
 
-			<SearchInput
-				value={query}
-				onChange={setQuery}
-				onClear={clearSearch}
-			/>
+			<SearchInput value={query} onChange={setQuery} onClear={clearSearch} />
 
 			<TableGrid
 				tables={filteredAndSortedTables}
@@ -230,7 +250,11 @@ interface SearchInputProps {
 	onClear: () => void;
 }
 
-const SearchInput: React.FC<SearchInputProps> = ({ value, onChange, onClear }) => (
+const SearchInput: React.FC<SearchInputProps> = ({
+	value,
+	onChange,
+	onClear,
+}) => (
 	<div className="relative max-w-xl">
 		<Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
 		<Input
@@ -259,7 +283,11 @@ interface TableGridProps {
 	searchQuery: string;
 }
 
-const TableGrid: React.FC<TableGridProps> = ({ tables, onSelectTable, searchQuery }) => {
+const TableGrid: React.FC<TableGridProps> = ({
+	tables,
+	onSelectTable,
+	searchQuery,
+}) => {
 	if (!tables.length && searchQuery) {
 		return (
 			<div className="rounded-lg border bg-card p-8 text-center">

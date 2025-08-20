@@ -1,5 +1,20 @@
 "use client";
 
+import {
+	DndContext,
+	type DragEndEvent,
+	PointerSensor,
+	closestCenter,
+	useSensor,
+	useSensors,
+} from "@dnd-kit/core";
+import {
+	SortableContext,
+	arrayMove,
+	useSortable,
+	verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { createId } from "@paralleldrive/cuid2";
 import {
 	ArrowDownIcon,
@@ -18,24 +33,8 @@ import {
 	useCallback,
 	useEffect,
 	useMemo,
-	useRef,
 	useState,
 } from "react";
-import {
-	DndContext,
-	type DragEndEvent,
-	PointerSensor,
-	useSensor,
-	useSensors,
-	closestCenter,
-} from "@dnd-kit/core";
-import {
-	SortableContext,
-	verticalListSortingStrategy,
-	useSortable,
-	arrayMove,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import {
 	type IPin,
 	type IPinOptions,
@@ -89,14 +88,17 @@ type PinEdit = {
 	value_type: IValueType;
 };
 
-function selectPreviewElement(type: IVariableType){
-		return (
-			<div className="flex items-center gap-2">
-				<div className={`size-2 rounded-full`} style={{ backgroundColor: typeToColor(type) }} />
-				<span>{type}</span>
-			</div>
-		);
-	}
+function selectPreviewElement(type: IVariableType) {
+	return (
+		<div className="flex items-center gap-2">
+			<div
+				className={`size-2 rounded-full`}
+				style={{ backgroundColor: typeToColor(type) }}
+			/>
+			<span>{type}</span>
+		</div>
+	);
+}
 
 const normalizeValueType = (vt: any): IValueType => {
 	const s = String(vt ?? "").toLowerCase();
@@ -423,9 +425,13 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 };
 
 // Helpers
-const toCSV = (arr?: string[] | null) => (arr && arr.length > 0 ? arr.join(", ") : "");
+const toCSV = (arr?: string[] | null) =>
+	arr && arr.length > 0 ? arr.join(", ") : "";
 const fromCSVStrings = (s: string): string[] =>
-	s.split(",").map((x) => x.trim()).filter((x) => x.length > 0);
+	s
+		.split(",")
+		.map((x) => x.trim())
+		.filter((x) => x.length > 0);
 
 interface PinListProps {
 	items: PinEdit[];
@@ -455,19 +461,34 @@ const PinValueTypeDropdown: React.FC<{
 				</button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="start">
-				<DropdownMenuItem className="gap-2" onClick={() => onChange(IValueType.Normal)}>
-					<div className="w-4 h-2 rounded-full" style={{ backgroundColor: color }} />
+				<DropdownMenuItem
+					className="gap-2"
+					onClick={() => onChange(IValueType.Normal)}
+				>
+					<div
+						className="w-4 h-2 rounded-full"
+						style={{ backgroundColor: color }}
+					/>
 					Single
 				</DropdownMenuItem>
-				<DropdownMenuItem className="gap-2" onClick={() => onChange(IValueType.Array)}>
+				<DropdownMenuItem
+					className="gap-2"
+					onClick={() => onChange(IValueType.Array)}
+				>
 					<GripIcon className="w-4 h-4" style={{ color }} />
 					Array
 				</DropdownMenuItem>
-				<DropdownMenuItem className="gap-2" onClick={() => onChange(IValueType.HashSet)}>
+				<DropdownMenuItem
+					className="gap-2"
+					onClick={() => onChange(IValueType.HashSet)}
+				>
 					<EllipsisVerticalIcon className="w-4 h-4" style={{ color }} />
 					Set
 				</DropdownMenuItem>
-				<DropdownMenuItem className="gap-2" onClick={() => onChange(IValueType.HashMap)}>
+				<DropdownMenuItem
+					className="gap-2"
+					onClick={() => onChange(IValueType.HashMap)}
+				>
 					<ListIcon className="w-4 h-4" style={{ color }} />
 					Map
 				</DropdownMenuItem>
@@ -482,7 +503,10 @@ const PinDataTypeSelectInline: React.FC<{
 	className?: string;
 }> = ({ value, onChange, className }) => {
 	return (
-		<Select value={value} onValueChange={(val) => onChange(val as IVariableType)}>
+		<Select
+			value={value}
+			onValueChange={(val) => onChange(val as IVariableType)}
+		>
 			<SelectTrigger className={`h-7 w-[140px] text-xs ${className ?? ""}`}>
 				<SelectValue placeholder="Data Type" />
 			</SelectTrigger>
@@ -490,15 +514,33 @@ const PinDataTypeSelectInline: React.FC<{
 				<SelectItem value={IVariableType.Boolean}>
 					{selectPreviewElement(IVariableType.Boolean)}
 				</SelectItem>
-				<SelectItem value={IVariableType.Byte}>{selectPreviewElement(IVariableType.Byte)}</SelectItem>
-				<SelectItem value={IVariableType.Date}>{selectPreviewElement(IVariableType.Date)}</SelectItem>
-				<SelectItem value={IVariableType.Execution}>{selectPreviewElement(IVariableType.Execution)}</SelectItem>
-				<SelectItem value={IVariableType.Float}>{selectPreviewElement(IVariableType.Float)}</SelectItem>
-				<SelectItem value={IVariableType.Generic}>{selectPreviewElement(IVariableType.Generic)}</SelectItem>
-				<SelectItem value={IVariableType.Integer}>{selectPreviewElement(IVariableType.Integer)}</SelectItem>
-				<SelectItem value={IVariableType.PathBuf}>{selectPreviewElement(IVariableType.PathBuf)}</SelectItem>
-				<SelectItem value={IVariableType.String}>{selectPreviewElement(IVariableType.String)}</SelectItem>
-				<SelectItem value={IVariableType.Struct}>{selectPreviewElement(IVariableType.Struct)}</SelectItem>
+				<SelectItem value={IVariableType.Byte}>
+					{selectPreviewElement(IVariableType.Byte)}
+				</SelectItem>
+				<SelectItem value={IVariableType.Date}>
+					{selectPreviewElement(IVariableType.Date)}
+				</SelectItem>
+				<SelectItem value={IVariableType.Execution}>
+					{selectPreviewElement(IVariableType.Execution)}
+				</SelectItem>
+				<SelectItem value={IVariableType.Float}>
+					{selectPreviewElement(IVariableType.Float)}
+				</SelectItem>
+				<SelectItem value={IVariableType.Generic}>
+					{selectPreviewElement(IVariableType.Generic)}
+				</SelectItem>
+				<SelectItem value={IVariableType.Integer}>
+					{selectPreviewElement(IVariableType.Integer)}
+				</SelectItem>
+				<SelectItem value={IVariableType.PathBuf}>
+					{selectPreviewElement(IVariableType.PathBuf)}
+				</SelectItem>
+				<SelectItem value={IVariableType.String}>
+					{selectPreviewElement(IVariableType.String)}
+				</SelectItem>
+				<SelectItem value={IVariableType.Struct}>
+					{selectPreviewElement(IVariableType.Struct)}
+				</SelectItem>
 			</SelectContent>
 		</Select>
 	);
@@ -538,7 +580,11 @@ const PinList: React.FC<PinListProps> = ({
 						No pins in this group.
 					</div>
 				)}
-				<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+				<DndContext
+					sensors={sensors}
+					collisionDetection={closestCenter}
+					onDragEnd={handleDragEnd}
+				>
 					<SortableContext items={ids} strategy={verticalListSortingStrategy}>
 						{items.map((pin, idx) => (
 							<SortablePinRow
@@ -568,7 +614,14 @@ const SortablePinRow: React.FC<{
 	onMoveDown: (id: string) => void;
 	onRemove: (id: string) => void;
 }> = ({ pin, idx, total, onEdit, onMoveUp, onMoveDown, onRemove }) => {
-	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({
 		id: pin.id,
 	});
 	const style: React.CSSProperties = {
@@ -663,7 +716,9 @@ const SortablePinRow: React.FC<{
 							{pin.friendly_name ?? pin.name ?? pin.id}
 						</button>
 					)}
-					<span className="ml-2 text-[10px] text-muted-foreground">({pin.id})</span>
+					<span className="ml-2 text-[10px] text-muted-foreground">
+						({pin.id})
+					</span>
 				</div>
 
 				<PinDataTypeSelectInline
@@ -672,7 +727,13 @@ const SortablePinRow: React.FC<{
 					className="hidden sm:flex"
 				/>
 
-				<Button variant="ghost" size="icon" onClick={() => onMoveUp(pin.id)} disabled={idx === 0} title="Move up">
+				<Button
+					variant="ghost"
+					size="icon"
+					onClick={() => onMoveUp(pin.id)}
+					disabled={idx === 0}
+					title="Move up"
+				>
 					<ArrowUpIcon className="h-4 w-4" />
 				</Button>
 				<Button
@@ -684,13 +745,22 @@ const SortablePinRow: React.FC<{
 				>
 					<ArrowDownIcon className="h-4 w-4" />
 				</Button>
-				<Button variant="destructive" size="icon" onClick={() => onRemove(pin.id)} title="Remove pin">
+				<Button
+					variant="destructive"
+					size="icon"
+					onClick={() => onRemove(pin.id)}
+					title="Remove pin"
+				>
 					<Trash2Icon className="h-4 w-4 text-destructive-foreground" />
 				</Button>
 				<Button
 					variant="ghost"
 					size="icon"
-					onClick={() => (document.getElementById(`opts-${pin.id}`) as HTMLButtonElement)?.click()}
+					onClick={() =>
+						(
+							document.getElementById(`opts-${pin.id}`) as HTMLButtonElement
+						)?.click()
+					}
 					title="Options"
 				>
 					<SlidersHorizontalIcon className="h-4 w-4" />

@@ -1,18 +1,21 @@
-import { useDraggable, /* DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors, closestCenter, */ useDroppable } from "@dnd-kit/core";
+import {
+	useDraggable,
+	/* DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors, closestCenter, */ useDroppable,
+} from "@dnd-kit/core";
 import { createId } from "@paralleldrive/cuid2";
 import {
+	ChevronDown,
+	ChevronRight,
 	CirclePlusIcon,
 	EllipsisVerticalIcon,
 	EyeIcon,
 	EyeOffIcon,
+	FolderIcon,
 	GripIcon,
 	ListIcon,
 	Trash2Icon,
-  ChevronDown,
-  ChevronRight,
-  FolderIcon,
 } from "lucide-react";
-import { useCallback, useState, useMemo, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import {
 	DropdownMenu,
@@ -46,7 +49,7 @@ import {
 	removeVariableCommand,
 	upsertVariableCommand,
 } from "../../../lib";
-import { IPinType, type IBoard, type IVariable } from "../../../lib/schema/flow/board";
+import type { IBoard, IVariable } from "../../../lib/schema/flow/board";
 import { IVariableType } from "../../../lib/schema/flow/node";
 import { IValueType } from "../../../lib/schema/flow/pin";
 import { convertJsonToUint8Array } from "../../../lib/uint8";
@@ -83,23 +86,33 @@ export function VariablesMenu({
 		[board],
 	);
 
-  const tree = useMemo(() => buildCategoryTree(Object.values(board.variables)), [board.variables]);
+	const tree = useMemo(
+		() => buildCategoryTree(Object.values(board.variables)),
+		[board.variables],
+	);
 
-  // Listen for cross-folder drops dispatched by FlowWrapper
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { variable, targetPath } = (e as CustomEvent).detail as {
-        variable: IVariable;
-        targetPath: string;
-      };
-      if (!variable?.editable) return;
-      const nextCategory = targetPath === "__root" ? undefined : targetPath;
-      if (variable.category === nextCategory) return;
-      void upsertVariable({ ...variable, category: nextCategory });
-    };
-    document.addEventListener("variables-folder-drop", handler as EventListener);
-    return () => document.removeEventListener("variables-folder-drop", handler as EventListener);
-  }, [upsertVariable]);
+	// Listen for cross-folder drops dispatched by FlowWrapper
+	useEffect(() => {
+		const handler = (e: Event) => {
+			const { variable, targetPath } = (e as CustomEvent).detail as {
+				variable: IVariable;
+				targetPath: string;
+			};
+			if (!variable?.editable) return;
+			const nextCategory = targetPath === "__root" ? undefined : targetPath;
+			if (variable.category === nextCategory) return;
+			void upsertVariable({ ...variable, category: nextCategory });
+		};
+		document.addEventListener(
+			"variables-folder-drop",
+			handler as EventListener,
+		);
+		return () =>
+			document.removeEventListener(
+				"variables-folder-drop",
+				handler as EventListener,
+			);
+	}, [upsertVariable]);
 
 	return (
 		<div className="flex flex-col gap-2 p-4">
@@ -127,17 +140,17 @@ export function VariablesMenu({
 				</Button>
 			</div>
 
-      <CategoryTree
-        root={tree}
-        onVariableChange={(variable) => {
-          if (!variable.editable) return;
-          upsertVariable(variable);
-        }}
-        onVariableDeleted={(variable) => {
-          if (!variable.editable) return;
-          removeVariable(variable);
-        }}
-      />
+			<CategoryTree
+				root={tree}
+				onVariableChange={(variable) => {
+					if (!variable.editable) return;
+					upsertVariable(variable);
+				}}
+				onVariableDeleted={(variable) => {
+					if (!variable.editable) return;
+					removeVariable(variable);
+				}}
+			/>
 		</div>
 	);
 }
@@ -301,7 +314,9 @@ export function Variable({
 		>
 			<div className="flex flex-row gap-2 items-center" data-no-dnd>
 				{isArrayDropdown}
-				<p className={`text-start line-clamp-2 ${!variable.editable ? "text-muted-foreground" : ""}`}>
+				<p
+					className={`text-start line-clamp-2 ${!variable.editable ? "text-muted-foreground" : ""}`}
+				>
 					{localVariable.name}
 				</p>
 			</div>
@@ -330,7 +345,10 @@ export function Variable({
 	const selectPreviewElement = useCallback((type: IVariableType) => {
 		return (
 			<div className="flex items-center gap-2">
-				<div className="size-2 rounded-full" style={{ backgroundColor: typeToColor(type) }} />
+				<div
+					className="size-2 rounded-full"
+					style={{ backgroundColor: typeToColor(type) }}
+				/>
 				<span>{type}</span>
 			</div>
 		);
@@ -418,14 +436,30 @@ export function Variable({
 								<SelectItem value="Boolean">
 									{selectPreviewElement(IVariableType.Boolean)}
 								</SelectItem>
-								<SelectItem value="Date">{selectPreviewElement(IVariableType.Date)}</SelectItem>
-								<SelectItem value="Float">{selectPreviewElement(IVariableType.Float)}</SelectItem>
-								<SelectItem value="Integer">{selectPreviewElement(IVariableType.Integer)}</SelectItem>
-								<SelectItem value="Generic">{selectPreviewElement(IVariableType.Generic)}</SelectItem>
-								<SelectItem value="PathBuf">{selectPreviewElement(IVariableType.PathBuf)}</SelectItem>
-								<SelectItem value="String">{selectPreviewElement(IVariableType.String)}</SelectItem>
-								<SelectItem value="Struct">{selectPreviewElement(IVariableType.Struct)}</SelectItem>
-								<SelectItem value="Byte">{selectPreviewElement(IVariableType.Byte)}</SelectItem>
+								<SelectItem value="Date">
+									{selectPreviewElement(IVariableType.Date)}
+								</SelectItem>
+								<SelectItem value="Float">
+									{selectPreviewElement(IVariableType.Float)}
+								</SelectItem>
+								<SelectItem value="Integer">
+									{selectPreviewElement(IVariableType.Integer)}
+								</SelectItem>
+								<SelectItem value="Generic">
+									{selectPreviewElement(IVariableType.Generic)}
+								</SelectItem>
+								<SelectItem value="PathBuf">
+									{selectPreviewElement(IVariableType.PathBuf)}
+								</SelectItem>
+								<SelectItem value="String">
+									{selectPreviewElement(IVariableType.String)}
+								</SelectItem>
+								<SelectItem value="Struct">
+									{selectPreviewElement(IVariableType.Struct)}
+								</SelectItem>
+								<SelectItem value="Byte">
+									{selectPreviewElement(IVariableType.Byte)}
+								</SelectItem>
 							</SelectGroup>
 						</SelectContent>
 					</Select>
@@ -535,160 +569,167 @@ export function ValueTypeIcon({
 // Category grouping
 
 type CategoryNode = {
-  name: string;
-  path: string;
-  vars: IVariable[];
-  children: Record<string, CategoryNode>;
+	name: string;
+	path: string;
+	vars: IVariable[];
+	children: Record<string, CategoryNode>;
 };
 
 const buildCategoryTree = (vars: IVariable[]): CategoryNode => {
-  const root: CategoryNode = { name: "", path: "", vars: [], children: {} };
-  for (const v of vars) {
-    const raw = (v as any)?.category as string | null | undefined;
-    const cat = (raw ?? "").trim();
-    if (!cat) {
-      root.vars.push(v);
-      continue;
-    }
-    const segments = cat.split("/").map((s) => s.trim()).filter(Boolean);
-    let node = root;
-    let path = "";
-    for (const seg of segments) {
-      path = path ? `${path}/${seg}` : seg;
-      if (!node.children[seg]) node.children[seg] = { name: seg, path, vars: [], children: {} };
-      node = node.children[seg];
-    }
-    node.vars.push(v);
-  }
-  return root;
+	const root: CategoryNode = { name: "", path: "", vars: [], children: {} };
+	for (const v of vars) {
+		const raw = (v as any)?.category as string | null | undefined;
+		const cat = (raw ?? "").trim();
+		if (!cat) {
+			root.vars.push(v);
+			continue;
+		}
+		const segments = cat
+			.split("/")
+			.map((s) => s.trim())
+			.filter(Boolean);
+		let node = root;
+		let path = "";
+		for (const seg of segments) {
+			path = path ? `${path}/${seg}` : seg;
+			if (!node.children[seg])
+				node.children[seg] = { name: seg, path, vars: [], children: {} };
+			node = node.children[seg];
+		}
+		node.vars.push(v);
+	}
+	return root;
 };
 
 const countRecursive = (node: CategoryNode): number =>
-  node.vars.length + Object.values(node.children).reduce((sum, c) => sum + countRecursive(c), 0);
+	node.vars.length +
+	Object.values(node.children).reduce((sum, c) => sum + countRecursive(c), 0);
 
 const CategoryTree: React.FC<{
-  root: CategoryNode;
-  onVariableChange: (v: IVariable) => void;
-  onVariableDeleted: (v: IVariable) => void;
+	root: CategoryNode;
+	onVariableChange: (v: IVariable) => void;
+	onVariableDeleted: (v: IVariable) => void;
 }> = ({ root, onVariableChange, onVariableDeleted }) => {
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-  const isOpen = useCallback((path: string) => open[path] ?? true, [open]);
-  const toggle = useCallback((path: string) => {
-    setOpen((prev) => ({ ...prev, [path]: !(prev[path] ?? true) }));
-  }, []);
+	const [open, setOpen] = useState<Record<string, boolean>>({});
+	const isOpen = useCallback((path: string) => open[path] ?? true, [open]);
+	const toggle = useCallback((path: string) => {
+		setOpen((prev) => ({ ...prev, [path]: !(prev[path] ?? true) }));
+	}, []);
 
-  // Root droppable to move items to top-level (category undefined)
-  const { setNodeRef: setRootRef, isOver: rootOver } = useDroppable({ id: "__root" });
+	// Root droppable to move items to top-level (category undefined)
+	const { setNodeRef: setRootRef, isOver: rootOver } = useDroppable({
+		id: "__root",
+	});
 
-  const childKeys = useMemo(
-    () => Object.keys(root.children).sort((a, b) => a.localeCompare(b)),
-    [root.children]
-  );
-  const varsSorted = useMemo(
-    () => [...root.vars].sort((a, b) => a.name.localeCompare(b.name)),
-    [root.vars]
-  );
+	const childKeys = useMemo(
+		() => Object.keys(root.children).sort((a, b) => a.localeCompare(b)),
+		[root.children],
+	);
+	const varsSorted = useMemo(
+		() => [...root.vars].sort((a, b) => a.name.localeCompare(b.name)),
+		[root.vars],
+	);
 
-  return (
-    <div
-      ref={setRootRef}
-      className={`space-y-2 rounded-md ${rootOver ? "ring-1 ring-primary/40" : ""}`}
-    >
-      {varsSorted.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {varsSorted.map((variable) => (
-            <Variable
-              key={variable.id}
-              variable={variable}
-              onVariableChange={onVariableChange}
-              onVariableDeleted={onVariableDeleted}
-            />
-          ))}
-        </div>
-      )}
-      {childKeys.length > 0 && (
-        <div className="space-y-2">
-          {childKeys.map((k) => (
-            <FolderNode
-              key={root.children[k].path}
-              node={root.children[k]}
-              depth={1}
-              isOpen={isOpen}
-              toggle={toggle}
-              onVariableChange={onVariableChange}
-              onVariableDeleted={onVariableDeleted}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
+	return (
+		<div
+			ref={setRootRef}
+			className={`space-y-2 rounded-md ${rootOver ? "ring-1 ring-primary/40" : ""}`}
+		>
+			{varsSorted.length > 0 && (
+				<div className="flex flex-col gap-2">
+					{varsSorted.map((variable) => (
+						<Variable
+							key={variable.id}
+							variable={variable}
+							onVariableChange={onVariableChange}
+							onVariableDeleted={onVariableDeleted}
+						/>
+					))}
+				</div>
+			)}
+			{childKeys.length > 0 && (
+				<div className="space-y-2">
+					{childKeys.map((k) => (
+						<FolderNode
+							key={root.children[k].path}
+							node={root.children[k]}
+							depth={1}
+							isOpen={isOpen}
+							toggle={toggle}
+							onVariableChange={onVariableChange}
+							onVariableDeleted={onVariableDeleted}
+						/>
+					))}
+				</div>
+			)}
+		</div>
+	);
 };
 
 const FolderNode: React.FC<{
-  node: CategoryNode;
-  depth: number;
-  isOpen: (path: string) => boolean;
-  toggle: (path: string) => void;
-  onVariableChange: (v: IVariable) => void;
-  onVariableDeleted: (v: IVariable) => void;
+	node: CategoryNode;
+	depth: number;
+	isOpen: (path: string) => boolean;
+	toggle: (path: string) => void;
+	onVariableChange: (v: IVariable) => void;
+	onVariableDeleted: (v: IVariable) => void;
 }> = ({ node, depth, isOpen, toggle, onVariableChange, onVariableDeleted }) => {
-  const { setNodeRef, isOver } = useDroppable({ id: node.path });
-  const childKeys = useMemo(
-    () => Object.keys(node.children).sort((a, b) => a.localeCompare(b)),
-    [node.children]
-  );
-  const varsSorted = useMemo(
-    () => [...node.vars].sort((a, b) => a.name.localeCompare(b.name)),
-    [node.vars]
-  );
-  const total = countRecursive(node);
+	const { setNodeRef, isOver } = useDroppable({ id: node.path });
+	const childKeys = useMemo(
+		() => Object.keys(node.children).sort((a, b) => a.localeCompare(b)),
+		[node.children],
+	);
+	const varsSorted = useMemo(
+		() => [...node.vars].sort((a, b) => a.name.localeCompare(b.name)),
+		[node.vars],
+	);
+	const total = countRecursive(node);
 
-  return (
-    <div className="rounded-md border">
-      <button
-        ref={setNodeRef}
-        type="button"
-        className={`w-full flex items-center gap-2 px-2 py-2 hover:bg-accent/50 ${isOver ? "bg-primary/5" : ""}`}
-        onClick={() => toggle(node.path)}
-      >
-        {isOpen(node.path) ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        )}
-        <FolderIcon className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{node.name}</span>
-        <span className="ml-auto text-xs text-muted-foreground">{total}</span>
-      </button>
+	return (
+		<div className="rounded-md border">
+			<button
+				ref={setNodeRef}
+				type="button"
+				className={`w-full flex items-center gap-2 px-2 py-2 hover:bg-accent/50 ${isOver ? "bg-primary/5" : ""}`}
+				onClick={() => toggle(node.path)}
+			>
+				{isOpen(node.path) ? (
+					<ChevronDown className="h-4 w-4 text-muted-foreground" />
+				) : (
+					<ChevronRight className="h-4 w-4 text-muted-foreground" />
+				)}
+				<FolderIcon className="h-4 w-4 text-muted-foreground" />
+				<span className="text-sm font-medium">{node.name}</span>
+				<span className="ml-auto text-xs text-muted-foreground">{total}</span>
+			</button>
 
-      {isOpen(node.path) && (
-        <div className="p-2 pt-1 space-y-2">
-          {varsSorted.map((variable) => (
-            <Variable
-              key={variable.id}
-              variable={variable}
-              onVariableChange={onVariableChange}
-              onVariableDeleted={onVariableDeleted}
-            />
-          ))}
-          {childKeys.length > 0 && (
-            <div className="mt-2 space-y-2">
-              {childKeys.map((k) => (
-                <FolderNode
-                  key={node.children[k].path}
-                  node={node.children[k]}
-                  depth={depth + 1}
-                  isOpen={isOpen}
-                  toggle={toggle}
-                  onVariableChange={onVariableChange}
-                  onVariableDeleted={onVariableDeleted}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
+			{isOpen(node.path) && (
+				<div className="p-2 pt-1 space-y-2">
+					{varsSorted.map((variable) => (
+						<Variable
+							key={variable.id}
+							variable={variable}
+							onVariableChange={onVariableChange}
+							onVariableDeleted={onVariableDeleted}
+						/>
+					))}
+					{childKeys.length > 0 && (
+						<div className="mt-2 space-y-2">
+							{childKeys.map((k) => (
+								<FolderNode
+									key={node.children[k].path}
+									node={node.children[k]}
+									depth={depth + 1}
+									isOpen={isOpen}
+									toggle={toggle}
+									onVariableChange={onVariableChange}
+									onVariableDeleted={onVariableDeleted}
+								/>
+							))}
+						</div>
+					)}
+				</div>
+			)}
+		</div>
+	);
 };
