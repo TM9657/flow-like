@@ -339,7 +339,10 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-5xl">
+			<DialogContent
+				className="sm:max-w-5xl"
+				onDoubleClick={(e) => e.stopPropagation()}
+			>
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2">
 						<SlidersHorizontalIcon className="h-5 w-5 text-primary" />
@@ -573,11 +576,31 @@ const SortablePinRow: React.FC<{
 		transition,
 	};
 
+	const [expanded, setExpanded] = useState(false);
+	const [editingName, setEditingName] = useState(false);
+	const [nameDraft, setNameDraft] = useState(pin.friendly_name);
+
+	useEffect(() => {
+		if (!editingName) setNameDraft(pin.friendly_name);
+	}, [pin.friendly_name, editingName]);
+
+	const commitName = useCallback(() => {
+		const next = (nameDraft ?? "").trim();
+		onEdit(pin.id, { friendly_name: next === "" ? pin.friendly_name : next });
+		setEditingName(false);
+	}, [nameDraft, onEdit, pin.id, pin.friendly_name]);
+
+	const cancelName = useCallback(() => {
+		setNameDraft(pin.friendly_name);
+		setEditingName(false);
+	}, [pin.friendly_name]);
+
 	return (
 		<div
 			ref={setNodeRef}
 			style={style}
 			className={`group rounded-md border bg-card hover:bg-accent/30 transition-colors ${isDragging ? "opacity-60" : ""}`}
+			onDoubleClick={(e) => e.stopPropagation()}
 		>
 			<div className="flex items-center gap-2 px-2 py-1 border-b">
 				<button
@@ -590,21 +613,65 @@ const SortablePinRow: React.FC<{
 				>
 					<GripVerticalIcon className="h-4 w-4" />
 				</button>
+
 				<PinValueTypeDropdown
 					value_type={pin.value_type}
 					data_type={pin.data_type}
 					onChange={(vt) => onEdit(pin.id, { value_type: vt })}
 					className="shrink-0"
 				/>
+
+				<button
+					type="button"
+					aria-expanded={expanded}
+					onClick={() => setExpanded((v) => !v)}
+					className="px-1 text-xs text-muted-foreground hover:text-foreground"
+					title={expanded ? "Collapse" : "Expand"}
+				>
+					{expanded ? "▾" : "▸"}
+				</button>
+
 				<div className="flex-1 truncate text-sm font-medium">
-					{pin.friendly_name ?? pin.name ?? pin.id}
+					{editingName ? (
+						<Input
+							className="h-7"
+							autoFocus
+							value={nameDraft}
+							onChange={(e) => setNameDraft(e.target.value)}
+							onBlur={commitName}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									commitName();
+								}
+								if (e.key === "Escape") {
+									e.preventDefault();
+									e.stopPropagation();
+									cancelName();
+								}
+							}}
+						/>
+					) : (
+						<button
+							type="button"
+							className="text-left truncate w-full"
+							onClick={(e) => {
+								e.stopPropagation();
+								setEditingName(true);
+							}}
+							title="Click to rename"
+						>
+							{pin.friendly_name ?? pin.name ?? pin.id}
+						</button>
+					)}
 					<span className="ml-2 text-[10px] text-muted-foreground">({pin.id})</span>
 				</div>
+
 				<PinDataTypeSelectInline
 					value={pin.data_type}
 					onChange={(dt) => onEdit(pin.id, { data_type: dt })}
 					className="hidden sm:flex"
 				/>
+
 				<Button variant="ghost" size="icon" onClick={() => onMoveUp(pin.id)} disabled={idx === 0} title="Move up">
 					<ArrowUpIcon className="h-4 w-4" />
 				</Button>
@@ -630,29 +697,19 @@ const SortablePinRow: React.FC<{
 				</Button>
 			</div>
 
-			<div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-2">
-				<div className="space-y-1.5">
-					<Label className="text-xs">Friendly Name</Label>
-					<Input
-						className="h-8"
-						value={pin.friendly_name}
-						onChange={(e) => onEdit(pin.id, { friendly_name: e.target.value })}
-					/>
-					<small className="text-[10px] text-muted-foreground">
-						Saved as: {toMachineName(pin.friendly_name)}
-					</small>
+			{expanded && (
+				<div className="p-2">
+					<div className="space-y-1.5">
+						<Label className="text-xs">Description</Label>
+						<Input
+							className="h-8"
+							value={pin.description}
+							onChange={(e) => onEdit(pin.id, { description: e.target.value })}
+							placeholder="Optional"
+						/>
+					</div>
 				</div>
-
-				<div className="space-y-1.5">
-					<Label className="text-xs">Description</Label>
-					<Input
-						className="h-8"
-						value={pin.description}
-						onChange={(e) => onEdit(pin.id, { description: e.target.value })}
-						placeholder="Optional"
-					/>
-				</div>
-			</div>
+			)}
 
 			<div className="sr-only">
 				<PinOptionsButton
@@ -700,7 +757,10 @@ const PinOptionsButton: React.FC<PinOptionsButtonProps> = ({
 				Options…
 			</Button>
 			<Dialog open={open} onOpenChange={setOpen}>
-				<DialogContent className="sm:max-w-lg">
+				<DialogContent
+					className="sm:max-w-lg"
+					onDoubleClick={(e) => e.stopPropagation()}
+				>
 					<DialogHeader>
 						<DialogTitle>Pin Options — {pin.friendly_name}</DialogTitle>
 						<DialogDescription>Advanced, optional settings.</DialogDescription>
