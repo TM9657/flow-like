@@ -7,6 +7,7 @@ pub mod make;
 pub mod clear;
 pub mod discard;
 pub mod has;
+pub mod is_empty;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
