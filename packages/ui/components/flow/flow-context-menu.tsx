@@ -438,9 +438,6 @@ export function FlowContextMenu({
 				open={isPlaceholderOpen}
 				onOpenChange={(open) => {
 					setIsPlaceholderOpen(open);
-					if (!open) {
-						onClose();
-					}
 				}}
 			>
 				<DialogContent

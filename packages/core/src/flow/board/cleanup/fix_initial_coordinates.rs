@@ -48,7 +48,7 @@ impl FixInitialCoordinates {
         let height = (max_y - min_y).max(60.0);
         let horizontal = width >= height;
         let axis = if horizontal { width } else { height };
-        let margin = (axis * 0.25).max(60.0).min(240.0);
+        let margin = (axis * 0.25).max(200.0).min(300.0);
 
         if horizontal {
             (
@@ -115,8 +115,8 @@ impl BoardCleanupLogic for FixInitialCoordinates {
 
         let coordinates = self.layer_coordinates.remove(&layer.id).unwrap_or_default();
         if coordinates.is_empty() {
-            layer.in_coordinates = Some((-150.0, 0.0, 0.0));
-            layer.out_coordinates = Some((150.0, 0.0, 0.0));
+            layer.in_coordinates = Some((-200.0, 0.0, 0.0));
+            layer.out_coordinates = Some((200.0, 0.0, 0.0));
             return;
         }
 

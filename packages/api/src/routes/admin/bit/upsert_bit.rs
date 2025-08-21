@@ -11,7 +11,7 @@ use axum::{
 };
 use flow_like::{bit::Bit, utils::http::HTTPClient};
 use flow_like_storage::object_store::PutPayload;
-use flow_like_types::tokio::{self, sync::mpsc};
+use flow_like_types::{tokio::{self, sync::mpsc}, Bytes};
 use flow_like_types::{create_id, reqwest};
 use futures_util::StreamExt;
 use futures_util::stream::{self, Stream};
@@ -199,7 +199,6 @@ async fn download_and_hash(
     state: AppState,
     tx: Option<mpsc::Sender<StreamMsg>>,
 ) -> flow_like_types::Result<()> {
-    // Get the E-Tag from the download link if available
     if bit.download_link.is_none() {
         tracing::warn!("No download link provided for bit {}", bit.id);
         return Ok(());
@@ -260,16 +259,46 @@ async fn download_and_hash(
 
     let path = flow_like_storage::object_store::path::Path::from("bits").child(e_tag.clone());
 
-    const CHUNK_SIZE: usize = 50 * 1024 * 1024; // 20MB chunks
+    // For ranged downloads
+    const CHUNK_SIZE: usize = 50 * 1024 * 1024; // 50MB chunks
+    // Multipart minimum part size on S3-compatible backends
+    const MIN_MULTIPART_PART_SIZE: usize = 5 * 1024 * 1024;
+    // Use single PUT for small objects
+    const SINGLE_PUT_THRESHOLD: u64 = MIN_MULTIPART_PART_SIZE as u64;
 
     let mut hasher = blake3::Hasher::new();
-    let mut upload_request = store.as_generic().put_multipart(&path).await?;
     let mut total_downloaded = 0u64;
 
-    if supports_ranges && content_length.is_some() {
+    // Fast path: small files -> single put (avoid multipart altogether)
+    if content_length.is_some() && content_length.unwrap() <= SINGLE_PUT_THRESHOLD {
+        let resp = client.get(url).send().await?;
+        let bytes = resp.bytes().await?;
+        hasher.update(&bytes);
+        total_downloaded = bytes.len() as u64;
+
+        store
+            .as_generic()
+            .put(&path, PutPayload::from_bytes(bytes))
+            .await?;
+
+        if let Some(tx) = &tx {
+            let _ = tx
+                .send(StreamMsg::Progress(Progress {
+                    stage: "downloading",
+                    message: None,
+                    downloaded: Some(total_downloaded),
+                    total: content_length,
+                    percent: Some(100.0),
+                    hash: None,
+                }))
+                .await;
+        }
+    } else if supports_ranges && content_length.is_some() {
+        // Ranged download with large parts (>= MIN_MULTIPART_PART_SIZE)
         let file_size = content_length.unwrap();
         let mut start = 0u64;
         let mut pending_upload = None;
+        let mut upload_request = store.as_generic().put_multipart(&path).await?;
 
         while start < file_size {
             let end = std::cmp::min(start + CHUNK_SIZE as u64 - 1, file_size - 1);
@@ -293,12 +322,6 @@ async fn download_and_hash(
                         pending_upload = Some(flow_like_types::tokio::spawn(upload_fut));
 
                         total_downloaded += end - start + 1;
-                        tracing::info!(
-                            "Downloaded {}/{} bytes ({:.1}%)",
-                            total_downloaded,
-                            file_size,
-                            (total_downloaded as f64 / file_size as f64) * 100.0
-                        );
 
                         if let Some(tx) = &tx {
                             let percent = (total_downloaded as f32 / file_size as f32) * 100.0;
@@ -340,21 +363,30 @@ async fn download_and_hash(
         if let Some(upload_task) = pending_upload {
             upload_task.await??;
         }
+
+        upload_request.complete().await?;
     } else {
+        // Streaming download without range support: buffer to meet multipart minimum part size
         let mut download_stream = client.get(url).send().await?.bytes_stream();
+        let mut upload_request = store.as_generic().put_multipart(&path).await?;
+        let mut buffer: Vec<u8> = Vec::with_capacity(MIN_MULTIPART_PART_SIZE * 2);
 
         while let Some(chunk_result) = download_stream.next().await {
             match chunk_result {
                 Ok(chunk) => {
                     hasher.update(&chunk);
-                    let len = chunk.len();
-                    let payload = PutPayload::from_bytes(chunk);
-                    upload_request.put_part(payload).await?;
+                    buffer.extend_from_slice(&chunk);
 
-                    total_downloaded += len as u64;
-                    if total_downloaded % (100 * 1024 * 1024) == 0 {
-                        // Log every 100MB
-                        tracing::info!("Downloaded {} bytes", total_downloaded);
+                    // Upload full-size parts as we accumulate them
+                    while buffer.len() >= MIN_MULTIPART_PART_SIZE {
+                        let part = buffer.split_off(MIN_MULTIPART_PART_SIZE);
+                        let to_upload = std::mem::replace(&mut buffer, part);
+                        total_downloaded += to_upload.len() as u64;
+                        let byte = Bytes::from(to_upload);
+                        upload_request
+                            .put_part(PutPayload::from_bytes(byte))
+                            .await?;
+
                         if let Some(tx) = &tx {
                             let percent = content_length
                                 .map(|total| (total_downloaded as f32 / total as f32) * 100.0)
@@ -378,9 +410,19 @@ async fn download_and_hash(
                 }
             }
         }
+
+        // Flush the remaining (last) part, can be smaller than MIN_MULTIPART_PART_SIZE
+        if !buffer.is_empty() {
+            total_downloaded += buffer.len() as u64;
+            let byte = Bytes::from(buffer);
+            upload_request
+                .put_part(PutPayload::from_bytes(byte))
+                .await?;
+        }
+
+        upload_request.complete().await?;
     }
 
-    upload_request.complete().await?;
     let file_hash = hasher.finalize().to_hex().to_string().to_lowercase();
     bit.hash = file_hash.clone();
     if bit.dependency_tree_hash.is_empty() {

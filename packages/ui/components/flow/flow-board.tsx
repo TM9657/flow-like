@@ -737,6 +737,8 @@ export function FlowBoard({
 
 	const placePlaceholder = useCallback(
 		async (name: string, position?: { x: number; y: number }) => {
+			const delayNode = catalog.data?.find((node) => node.name === "delay");
+
 			const refs = board.data?.refs ?? {};
 			const location = screenToFlowPosition({
 				x: position?.x ?? clickPosition.x,
@@ -752,7 +754,7 @@ export function FlowBoard({
 				connected_to: [],
 				depends_on: [],
 				description: "",
-				index: 0,
+				index: 1,
 				pin_type: IPinType.Input,
 				value_type: IValueType.Normal,
 				data_type: IVariableType.Execution,
@@ -828,6 +830,42 @@ export function FlowBoard({
 
 			const newLayerResult = await executeCommand(newLayerCommand, false);
 			const newLayer: ILayer = newLayerResult.layer;
+
+			if (delayNode) {
+				const placeDelayCommand = addNodeCommand({
+					node: delayNode,
+					current_layer: newLayer.id,
+				});
+
+				const placedNode = await executeCommand(placeDelayCommand.command);
+				const newNode: INode = placedNode.node;
+				const newNodeInPin = Object.values(newNode.pins).find(
+					(pin) =>
+						pin.pin_type === IPinType.Input &&
+						pin.data_type === IVariableType.Execution,
+				);
+				const newNodeOutPin = Object.values(newNode.pins).find(
+					(pin) =>
+						pin.pin_type === IPinType.Output &&
+						pin.data_type === IVariableType.Execution,
+				);
+
+				const connectOutput = connectPinsCommand({
+					from_node: newNode.id,
+					from_pin: newNodeOutPin!.id,
+					to_node: newLayer.id,
+					to_pin: execOutPin.id,
+				});
+
+				const connectInput = connectPinsCommand({
+					to_node: newNode.id,
+					to_pin: newNodeInPin!.id,
+					from_node: newLayer.id,
+					from_pin: execInPin.id,
+				});
+
+				await executeCommands([connectOutput, connectInput]);
+			}
 
 			if (!droppedPin) {
 				return;
@@ -1459,6 +1497,7 @@ export function FlowBoard({
 								nodes={catalog.data ?? []}
 								onPlaceholder={async (name) => {
 									await placePlaceholder(name);
+									setDroppedPin(undefined);
 								}}
 								onNodePlace={async (node) => {
 									await placeNode(node);

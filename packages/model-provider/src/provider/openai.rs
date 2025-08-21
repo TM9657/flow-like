@@ -1,13 +1,13 @@
 use flow_like_types::reqwest_eventsource::{Event, RequestBuilderExt};
 use futures::StreamExt;
-use openai_api_rs::v1::assistant::{AssistantObject, AssistantRequest, DeletionStatus};
+use openai_api_rs::v1::assistant::{AssistantObject, AssistantRequest};
 use openai_api_rs::v1::audio::{
     AudioSpeechRequest, AudioSpeechResponse, AudioTranscriptionRequest, AudioTranscriptionResponse,
     AudioTranslationRequest, AudioTranslationResponse,
 };
 use openai_api_rs::v1::batch::{BatchResponse, ListBatchResponse};
 use openai_api_rs::v1::chat_completion::{ChatCompletionRequest, ChatCompletionResponse};
-use openai_api_rs::v1::common;
+use openai_api_rs::v1::common::{self, DeletionStatus};
 use openai_api_rs::v1::completion::{CompletionRequest, CompletionResponse};
 use openai_api_rs::v1::edit::{EditRequest, EditResponse};
 use openai_api_rs::v1::embedding::{EmbeddingRequest, EmbeddingResponse};

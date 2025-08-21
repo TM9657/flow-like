@@ -76,13 +76,13 @@ impl EmbeddingFactory {
         bit: &Bit,
         app_state: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<Arc<dyn ImageEmbeddingModelLogic>> {
-        let provider = bit.try_to_provider();
+        let provider = bit.try_to_image_embedding();
         if provider.is_none() {
             return Err(flow_like_types::anyhow!("Model type not supported"));
         }
 
         let provider = provider.ok_or(flow_like_types::anyhow!("Model type not supported"))?;
-        let provider = provider.provider_name;
+        let provider = provider.provider.provider_name;
 
         if provider == "Local" {
             if let Some(model) = self.cached_image_models.get(&bit.id) {
