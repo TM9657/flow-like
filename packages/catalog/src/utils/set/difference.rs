@@ -51,7 +51,7 @@ impl NodeLogic for DifferenceSetNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let set_in_1: HashSet<Value> = context.evaluate_pin("set_in_1").await?;
         let set_in_2: HashSet<Value> = context.evaluate_pin("set_in_1").await?;
-        let result: HashSet<Value> = HashSet::from(set_in_1.difference(&set_in_2));
+        let result: HashSet<Value> = set_in_1.difference(&set_in_2).collect();
         context.set_pin_value("set_out", json!(result)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
