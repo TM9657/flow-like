@@ -11,6 +11,7 @@ pub mod is_empty;
 pub mod size;
 pub mod union;
 pub mod difference;
+pub mod is_subset;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
