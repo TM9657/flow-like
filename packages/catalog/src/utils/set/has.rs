@@ -58,7 +58,7 @@ impl NodeLogic for SetHasNode {
         let value: Value = context.evaluate_pin("value").await?;
         let includes = set_in.contains(&value);
 
-        context.set_pin_value("includes", json!(includes)).await?;
+        context.set_pin_value("contains", json!(includes)).await?;
         Ok(())
     }
 
