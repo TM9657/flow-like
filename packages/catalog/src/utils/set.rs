@@ -13,6 +13,7 @@ pub mod union;
 pub mod difference;
 pub mod is_subset;
 pub mod is_superset;
+pub mod pop;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
