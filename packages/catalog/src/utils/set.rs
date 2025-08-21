@@ -10,6 +10,7 @@ pub mod has;
 pub mod is_empty;
 pub mod size;
 pub mod union;
+pub mod difference;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
