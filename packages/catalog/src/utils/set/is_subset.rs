@@ -31,7 +31,7 @@ impl NodeLogic for SetIsSubsetNode {
             "Utils/Set",
         );
 
-        node.add_icon("/flow/icons/grip.svg");
+        node.add_icon("/flow/icons/ellipsis-vertical.svg");
 
         node.add_input_pin("set_in_1", "Set", "Your Smaller Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);

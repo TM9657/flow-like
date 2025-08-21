@@ -31,7 +31,7 @@ impl NodeLogic for SetIsSuperSetNode {
             "Utils/Set",
         );
 
-        node.add_icon("/flow/icons/grip.svg");
+        node.add_icon("/flow/icons/ellipsis-vertical.svg");
 
         node.add_input_pin("set_in_1", "Set", "Your Bigger Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
@@ -53,7 +53,7 @@ impl NodeLogic for SetIsSuperSetNode {
         let set_in_1: &HashSet<Value> = &context.evaluate_pin("set_in_1").await?;
         let set_in_2: &HashSet<Value> = &context.evaluate_pin("set_in_2").await?;
         let result = set_in_1.is_superset(&set_in_2);
-        context.set_pin_value("is_subset", json!(result)).await?;
+        context.set_pin_value("is_superset", json!(result)).await?;
         Ok(())
     }
 

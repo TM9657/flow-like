@@ -32,7 +32,7 @@ impl NodeLogic for DifferenceSetNode {
             "Utils/Set",
         );
 
-        node.add_icon("/flow/icons/grip.svg");
+        node.add_icon("/flow/icons/ellipsis-vertical.svg");
 
         node.add_input_pin("exec_in", "In", "", VariableType::Execution);
 

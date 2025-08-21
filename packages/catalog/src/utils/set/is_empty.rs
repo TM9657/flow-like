@@ -31,7 +31,7 @@ impl NodeLogic for SetIsEmptyNode {
             "Utils/Set",
         );
 
-        node.add_icon("/flow/icons/grip.svg");
+        node.add_icon("/flow/icons/ellipsis-vertical.svg");
 
         node.add_input_pin("set_in", "Set", "Your Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);

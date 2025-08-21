@@ -31,7 +31,7 @@ impl NodeLogic for MakeSetNode {
             "Utils/Set",
         );
 
-        node.add_icon("/flow/icons/grip.svg");
+        node.add_icon("/flow/icons/ellipsis-vertical.svg");
 
         node.add_output_pin(
             "set_out",
