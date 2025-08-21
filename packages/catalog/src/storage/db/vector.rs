@@ -130,7 +130,7 @@ impl NodeLogic for CreateLocalDatabaseNode {
             let board_dir = board_dir.child("db");
 
             let db = if let Some(credentials) = &context.credentials {
-                credentials.to_db(board_dir).await?
+                credentials.to_db(&table).await?
             } else {
                 context
                     .app_state

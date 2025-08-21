@@ -16,6 +16,7 @@ pub mod meta;
 pub mod roles;
 pub mod team;
 pub mod template;
+pub mod db;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -40,6 +41,7 @@ pub fn routes() -> Router<AppState> {
         .nest("/{app_id}/events", events::routes())
         .nest("/{app_id}/data", data::routes())
         .nest("/{app_id}/invoke", invoke::routes())
+        .nest("/{app_id}/db", db::routes())
 }
 
 #[macro_export]

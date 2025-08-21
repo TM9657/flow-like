@@ -9,5 +9,6 @@ pub use lancedb;
 pub use object_store;
 pub use object_store::path::Path;
 pub use serde_arrow;
+pub use datafusion;
 
 // pub mod async_duckdb;

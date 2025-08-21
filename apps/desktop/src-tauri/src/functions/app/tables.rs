@@ -27,11 +27,11 @@ async fn db_connection(
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
     let table_name = table_name.unwrap_or("default".to_string());
     let board_dir = Path::from("apps")
-        .child(app_id)
+        .child(app_id.clone())
         .child("storage")
         .child("db");
     let db = if let Some(credentials) = &credentials {
-        credentials.to_db(board_dir).await?
+        credentials.to_db(&app_id).await?
     } else {
         flow_like_state
             .lock()

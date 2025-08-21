@@ -16,3 +16,9 @@ pub struct LanguageParams {
     pub limit: Option<u64>,
     pub offset: Option<u64>,
 }
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct PaginationParams {
+    pub limit: Option<u64>,
+    pub offset: Option<u64>,
+}

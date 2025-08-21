@@ -9,11 +9,13 @@ use flow_like::{
     utils::http::HTTPClient,
 };
 use flow_like_storage::object_store;
+#[cfg(feature = "aws")]
+use flow_like_storage::Path;
 use flow_like_types::{Result, anyhow, async_trait};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, to_string};
 use std::sync::Arc;
-
+use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
 use super::RuntimeCredentialsTrait;
 
 #[cfg(feature = "aws")]
@@ -183,6 +185,10 @@ impl RuntimeCredentialsTrait for AwsRuntimeCredentials {
             region: self.region.clone(),
             expiration: self.expiration,
         })
+    }
+
+    async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
+        self.into_shared_credentials().to_db(app_id).await
     }
 
     #[tracing::instrument(

@@ -7,6 +7,7 @@ use futures::TryStreamExt;
 use lancedb::index::scalar::BTreeIndexBuilder;
 use lancedb::index::scalar::BitmapIndexBuilder;
 use lancedb::index::scalar::LabelListIndexBuilder;
+use lancedb::index::IndexConfig;
 use lancedb::query::QueryExecutionOptions;
 use lancedb::{
     Connection, Table, connect,
@@ -70,6 +71,12 @@ impl LanceDBVectorStore {
         Ok(tables)
     }
 
+    pub async fn list_indices(&self) -> Result<Vec<IndexConfig>> {
+        let indices = self.table.clone().ok_or_else(|| anyhow!("Table not initialized"))?;
+        let indices = indices.list_indices().await?;
+        Ok(indices)
+    }
+
     pub async fn to_datafusion(&self) -> Result<lancedb::table::datafusion::BaseTableAdapter> {
         let table = self
             .table
@@ -95,7 +102,7 @@ impl LanceDBVectorStore {
     }
 }
 
-fn record_batches_to_vec(batches: Option<Vec<RecordBatch>>) -> Result<Vec<Value>> {
+pub fn record_batches_to_vec(batches: Option<Vec<RecordBatch>>) -> Result<Vec<Value>> {
     batches
         .as_ref()
         .ok_or(anyhow!("Error converting record batches to vec"))?;
