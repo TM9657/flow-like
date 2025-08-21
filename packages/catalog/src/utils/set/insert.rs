@@ -34,7 +34,7 @@ impl NodeLogic for InsertSetNode {
 
         node.add_input_pin("exec_in", "In", "", VariableType::Execution);
 
-        node.add_input_pin("set_in", "Set", "", VariableType::Generic)
+        node.add_input_pin("set_in", "Set", "Your Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
 
         node.add_input_pin("value", "Value", "Value to push", VariableType::Generic);
@@ -43,7 +43,7 @@ impl NodeLogic for InsertSetNode {
             .set_value_type(ValueType::HashSet);
 
         node.add_output_pin(
-            "existed_before", "Existed Before",
+            "existed_before", "Existed Before?",
             "Was the element there before?", VariableType::Boolean
         );
 

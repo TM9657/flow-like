@@ -34,7 +34,7 @@ impl NodeLogic for PopSetNode {
 
         node.add_input_pin("exec_in", "In", "", VariableType::Execution);
 
-        node.add_input_pin("set_in", "Set", "Your Hashset", VariableType::Generic)
+        node.add_input_pin("set_in", "Set", "Your Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
 
         node.add_output_pin("exec_out", "Out", "", VariableType::Execution);

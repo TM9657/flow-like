@@ -41,7 +41,7 @@ impl NodeLogic for SetIsSuperSetNode {
 
         node.add_output_pin(
             "is_superset",
-            "Is It A Superset?",
+            "Is Superset?",
             "Is the first set a superset of the second?",
             VariableType::Boolean,
         );

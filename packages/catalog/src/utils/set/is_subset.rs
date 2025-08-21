@@ -41,7 +41,7 @@ impl NodeLogic for SetIsSubsetNode {
 
         node.add_output_pin(
             "is_subset",
-            "Is It A Subset?",
+            "Is Subset?",
             "Is the first set a subset of the second?",
             VariableType::Boolean,
         );

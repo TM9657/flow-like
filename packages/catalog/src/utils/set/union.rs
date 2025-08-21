@@ -34,10 +34,10 @@ impl NodeLogic for UnionSetNode {
 
         node.add_input_pin("exec_in", "In", "", VariableType::Execution);
 
-        node.add_input_pin("set_in_1", "Set #1", "", VariableType::Generic)
+        node.add_input_pin("set_in_1", "Set 1", "Your First Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
 
-        node.add_input_pin("set_in_2", "Set #2", "", VariableType::Generic)
+        node.add_input_pin("set_in_2", "Set 2", "Your Second Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
 
         node.add_output_pin("set_out", "Set", "Combined Set", VariableType::Generic)

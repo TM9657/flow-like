@@ -38,7 +38,7 @@ impl NodeLogic for SetIsEmptyNode {
 
         node.add_output_pin(
             "is_empty",
-            "Is It Empty?",
+            "Is Empty?",
             "Does it have any values or not?",
             VariableType::Boolean,
         );

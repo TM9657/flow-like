@@ -40,7 +40,7 @@ impl NodeLogic for ClearSetNode {
 
         node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
 
-        node.add_output_pin("set_out", "Set", "Empty Set", VariableType::Generic)
+        node.add_output_pin("set_out", "Emptied", "Empty Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
 
         return node;

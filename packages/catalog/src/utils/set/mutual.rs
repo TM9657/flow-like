@@ -34,15 +34,15 @@ impl NodeLogic for IsMutualSetNode {
 
         node.add_input_pin("exec_in", "In", "", VariableType::Execution);
 
-        node.add_input_pin("set_in_1", "Set #1", "", VariableType::Generic)
+        node.add_input_pin("set_in_1", "Set 1", "", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
 
-        node.add_input_pin("set_in_2", "Set #2", "", VariableType::Generic)
+        node.add_input_pin("set_in_2", "Set 2", "", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
 
         node.add_output_pin(
             "is_mutual",
-            "Contains Mutual Element?",
+            "Mutual?",
             "Does it include a mutual element that both sets share or not?",
             VariableType::Boolean,
         );
