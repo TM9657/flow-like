@@ -39,8 +39,13 @@ impl NodeLogic for InsertSetNode {
 
         node.add_input_pin("value", "Value", "Value to push", VariableType::Generic);
 
-        node.add_output_pin("set_out", "Set", "", VariableType::Generic)
+        node.add_output_pin("set_out", "Set", "Adjusted Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
+
+        node.add_output_pin(
+            "existed_before", "Existed Before",
+            "Was the element there before?", VariableType::Boolean
+        );
 
         node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
 
@@ -50,8 +55,9 @@ impl NodeLogic for InsertSetNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let mut set_in: HashSet<Value> = context.evaluate_pin("set_in").await?;
         let element: Value = context.evaluate_pin("value").await?;
-        set_in.insert(element);
+        let was_there_before = set_in.insert(element);
         context.set_pin_value("set_out", json!(set_in)).await?;
+        context.set_pin_value("existed_before", json!(was_there_before)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
@@ -59,7 +65,8 @@ impl NodeLogic for InsertSetNode {
     async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
         let _ = node.match_type("set_out", board.clone(), Some(ValueType::HashSet), None);
         let _ = node.match_type("set_in", board.clone(), Some(ValueType::HashSet), None);
-        let _ = node.match_type("value", board, Some(ValueType::Normal), None);
-        node.harmonize_type(vec!["set_in", "set_out", "value"], true);
+        let _ = node.match_type("value", board.clone(), Some(ValueType::Normal), None);
+        let _ = node.match_type("existed_before", board, Some(ValueType::Normal), None);
+        node.harmonize_type(vec!["set_in", "set_out", "value", "existed_before"], true);
     }
 }
