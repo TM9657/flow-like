@@ -34,7 +34,7 @@ impl NodeLogic for DiscardSetNode {
 
         node.add_input_pin("exec_in", "In", "", VariableType::Execution);
 
-        node.add_input_pin("array_in", "Array", "Your Hashset", VariableType::Generic)
+        node.add_input_pin("set_in", "Set", "Your Hashset", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
 
         node.add_input_pin("value", "Value", "Value to remove", VariableType::Generic);

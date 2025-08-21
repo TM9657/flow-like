@@ -50,7 +50,7 @@ impl NodeLogic for UnionSetNode {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let set_in_1: HashSet<Value> = context.evaluate_pin("set_in_1").await?;
-        let set_in_2: HashSet<Value> = context.evaluate_pin("set_in_1").await?;
+        let set_in_2: HashSet<Value> = context.evaluate_pin("set_in_2").await?;
         let mut result = set_in_1.clone();
         result.extend(set_in_2);
         context.set_pin_value("set_out", json!(result)).await?;
