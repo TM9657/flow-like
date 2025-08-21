@@ -40,7 +40,7 @@ impl NodeLogic for SetGetSizeNode {
             "size",
             "Size",
             "How many elements does it have",
-            VariableType::Boolean,
+            VariableType::Integer,
         );
 
         return node;
