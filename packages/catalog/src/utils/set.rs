@@ -2,7 +2,15 @@ use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;
 
 pub mod to_array;
+pub mod push;
+pub mod make;
+pub mod clear;
+pub mod discard;
+pub mod has;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    vec![Arc::new(to_array::SetToArrayNode::default())]
+    vec![
+        Arc::new(to_array::SetToArrayNode::default()),
+        Arc::new(clear::ClearSetNode::default()),
+    ]
 }
