@@ -14,5 +14,6 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(clear::ClearSetNode::default()),
         Arc::new(discard::DiscardSetNode::default()),
         Arc::new(has::SetHasNode::default()),
+        Arc::new(make::MakeSetNode::default()),
     ]
 }
