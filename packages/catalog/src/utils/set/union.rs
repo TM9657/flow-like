@@ -62,7 +62,6 @@ impl NodeLogic for UnionSetNode {
         let _ = node.match_type("set_out", board.clone(), Some(ValueType::HashSet), None);
         let _ = node.match_type("set_in_1", board.clone(), Some(ValueType::HashSet), None);
         let _ = node.match_type("set_in_2", board.clone(), Some(ValueType::HashSet), None);
-        let _ = node.match_type("value", board.clone(), Some(ValueType::Normal), None);
         node.harmonize_type(vec!["set_in_1", "set_out", "set_in_2"], true);
     }
 }
