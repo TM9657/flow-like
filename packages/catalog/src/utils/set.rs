@@ -14,6 +14,7 @@ pub mod difference;
 pub mod is_subset;
 pub mod is_superset;
 pub mod pop;
+pub mod mutual;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
@@ -30,5 +31,6 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(is_superset::SetIsSuperSetNode::default()),
         Arc::new(is_subset::SetIsSubsetNode::default()),
         Arc::new(is_empty::SetIsEmptyNode::default()),
+        Arc::new(mutual::IsMutualSetNode::default()),
     ]
 }
