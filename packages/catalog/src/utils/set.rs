@@ -12,5 +12,6 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
         Arc::new(to_array::SetToArrayNode::default()),
         Arc::new(clear::ClearSetNode::default()),
+        Arc::new(discard::DiscardSetNode::default()),
     ]
 }
