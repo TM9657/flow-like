@@ -12,21 +12,21 @@ use flow_like_types::{Value, async_trait, json::json};
 use std::{collections::HashSet, sync::Arc};
 
 #[derive(Default)]
-pub struct PushSetNode {}
+pub struct InsertSetNode {}
 
-impl PushSetNode {
+impl InsertSetNode {
     pub fn new() -> Self {
-        PushSetNode {}
+        InsertSetNode {}
     }
 }
 
 #[async_trait]
-impl NodeLogic for PushSetNode {
+impl NodeLogic for InsertSetNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "push",
-            "Push Element",
-            "Pushes an element to the set",
+            "insert",
+            "Insert Element",
+            "Inserts an element to the set",
             "Utils/Set",
         );
 
