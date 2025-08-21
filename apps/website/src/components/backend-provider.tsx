@@ -69,8 +69,8 @@ export function EmptyBackendProvider({ data }: Readonly<{ data: string }>) {
 				defaultTheme="dark"
 				enableSystem
 				disableTransitionOnChange
-			>
-				<LoadingScreen />;
+				>
+				<LoadingScreen className="absolute top-0 left-0 right-0 bottom-0" />;
 			</ThemeProvider>
 		);
 	}
@@ -82,8 +82,10 @@ export function EmptyBackendProvider({ data }: Readonly<{ data: string }>) {
 			enableSystem
 			disableTransitionOnChange
 		>
-			<Suspense fallback={<LoadingScreen />}>
+			<Suspense fallback={<LoadingScreen className="absolute top-0 left-0 right-0 bottom-0" />}>
+			<div className="max-h-36">
 				<BoardWrapper nodes={nodes} edges={edges} />
+			</div>
 			</Suspense>
 		</ThemeProvider>
 	);

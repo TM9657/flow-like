@@ -1,16 +1,504 @@
 ---
-import { edges, nodes } from "../assets/board.json";
-import { EmptyBackendProvider } from "../components/backend-provider";
-import Layout from "../layouts/Layout.astro";
+// src/pages/index.astro (drop‑in replacement)
+const site = "https://flow-like.com";
+const github = "https://github.com/TM9657/flow-like";
+const docs = "https://flow-like.com/blog";
+const download = "https://github.com/TM9657/flow-like/releases";
 import "@tm9657/flow-like-ui/global.css";
-import "@xyflow/react/dist/style.css";
+import { EmptyBackendProvider } from "../components/backend-provider";
+import { BlogHeader } from "../components/blog-header";
 ---
 
-<head>
-	<Fragment slot="head">
-		<link rel="preload" as="fetch" href={"/board.json"} crossorigin="anonymous" />
-	</Fragment>
-</head>
-<Layout>
-	<EmptyBackendProvider data="/board.json" client:load />
-</Layout>
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flow‑Like — Typed Workflows that Scale (Fast, Robust, Local‑First)</title>
+    <meta name="description" content="Typed, scalable workflows with Rust performance. Build reliable systems that run locally, on edge, or in any cloud — with governance built‑in and effortless integration." />
+    <link rel="icon" href="/favicon.svg" />
+    <meta property="og:title" content="Flow‑Like — Typed Workflows that Scale" />
+    <meta property="og:description" content="Type‑safe workflows, predictable speed, and governance. Run anywhere: local, edge, or any cloud." />
+    <meta property="og:image" content="/og.webp" />
+    <meta property="og:url" content={site} />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground overflow-x-hidden">
+    <!-- Soft gradient background -->
+    <div aria-hidden="true" class="fixed inset-0 -z-20">
+      <div class="pointer-events-none absolute -inset-[40vmax] mx-auto aspect-square rounded-full blur-[120px] opacity-20 bg-gradient-to-br from-primary via-secondary to-accent animate-[spin_48s_linear_infinite]" style="animation-direction:reverse"></div>
+    </div>
+
+    <!-- Header -->
+    <BlogHeader />
+
+    <!-- HERO with pin wires (inspired by blog cover) -->
+    <section class="mx-auto max-w-7xl px-4 pt-12 lg:px-8 lg:pt-16">
+      <div id="hero-cover" class="relative">
+        <div id="hero-right-pin" class="size-4 bg-primary absolute top-14 -right-1.5 z-10 rounded-full"></div>
+        <div id="hero-left-pin" class="size-4 bg-pink-400 absolute top-1/2 -left-1.5 z-10 rounded-full"></div>
+        <div id="hero-right-pin-top" class="size-4 bg-foreground absolute top-6 -right-1.5 z-10 rounded-full"></div>
+        <div id="hero-left-pin-top" class="size-4 bg-foreground absolute top-28 -left-1.5 z-10 rounded-full"></div>
+
+        <svg id="hero-connections" class="pointer-events-none absolute top-0 left-0" style="overflow: hidden;" aria-hidden="true">
+          <path id="hero-right-conn" class="pin-conn text-primary" fill="none" />
+          <path id="hero-left-conn" class="pin-conn text-pink-400" fill="none" />
+          <path id="hero-right-conn-top" class="pin-conn-solid text-foreground" fill="none" />
+          <path id="hero-left-conn-top" class="pin-conn-solid text-foreground" fill="none" />
+        </svg>
+
+        <div class="relative overflow-hidden rounded-xl border border-border">
+          <div class="absolute inset-0 bg-gradient-to-tr from-background/70 via-background/20 to-transparent"></div>
+          <div class="relative grid lg:grid-cols-2">
+            <div class="p-6 sm:p-8 md:p-10">
+              <span class="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">Typed • Blazing fast • Robust</span>
+              <h1 class="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Typed workflows that <span class="text-primary">scale</span></h1>
+              <p class="mt-3 max-w-2xl text-muted-foreground">Design reliable systems with type‑safe graphs, Rust‑level performance, and built‑in governance. Run locally for a head start, then move to edge or any cloud without rewiring.</p>
+              <div class="mt-6 flex flex-wrap items-center gap-3">
+                <a href={download} class="inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow hover:bg-primary/90">Download</a>
+                <a href={docs} class="inline-flex items-center gap-2 rounded-2xl border border-border bg-muted px-6 py-3 text-sm font-semibold hover:bg-accent hover:text-accent-foreground">Explore docs</a>
+                <a href={github} class="inline-flex items-center gap-2 rounded-2xl border border-primary/30 bg-primary/10 px-6 py-3 text-sm font-semibold text-primary hover:bg-primary/20">Star on GitHub</a>
+              </div>
+              <div class="mt-5 grid grid-cols-2 gap-3 text-sm text-muted-foreground sm:max-w-lg">
+                <div class="rounded-lg border border-border bg-card p-3">🧩 <strong class="text-foreground">Type‑safe</strong> nodes & dataflow</div>
+                <div class="rounded-lg border border-border bg-card p-3">⚡ Rust core • predictable latency</div>
+                <div class="rounded-lg border border-border bg-card p-3">🔒 Governance & observability</div>
+                <div class="rounded-lg border border-border bg-card p-3">☁️ Run local, edge, any cloud</div>
+              </div>
+              <p class="mt-4 text-xs text-muted-foreground">Want AI too? Blend classical ML with GenAI when it helps — it’s one more set of typed nodes, not a separate stack.</p>
+            </div>
+            <div class="relative min-h-[260px]">
+				<EmptyBackendProvider data="/board.json" client:load />
+              <!-- <img src="/screenshot.png" alt="Flow‑Like Editor" class="absolute inset-0 h-full w-full object-cover" loading="eager" /> -->
+              <!-- <div class="absolute inset-0 bg-gradient-to-t from-background/70 via-background/0 to-background/0"></div> -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHY TYPED -->
+    <section id="typed" class="mx-auto max-w-7xl px-4 py-14 lg:px-8">
+      <div class="mx-auto max-w-3xl text-center">
+        <h2 class="text-3xl font-bold sm:text-4xl">Types make workflows reliable</h2>
+        <p class="mt-3 text-muted-foreground">Every port has an explicit type. You see both execution <em>and</em> data flow, catch errors early, and scale without brittle glue code.</p>
+      </div>
+      <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div class="rounded-2xl border border-border bg-card p-6">
+          <h3 class="font-semibold">Preflight validation</h3>
+          <p class="mt-1 text-sm text-muted-foreground">Graphs are validated before execution — incompatible ports are surfaced immediately.</p>
+        </div>
+        <div class="rounded-2xl border border-border bg-card p-6">
+          <h3 class="font-semibold">Typed dataflow</h3>
+          <p class="mt-1 text-sm text-muted-foreground">Inspect data shapes at each edge. Refactors stay safe as graphs grow.</p>
+        </div>
+        <div class="rounded-2xl border border-border bg-card p-6">
+          <h3 class="font-semibold">Deterministic performance</h3>
+          <p class="mt-1 text-sm text-muted-foreground">A Rust core compiles micro‑plans for stable latency across inputs.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- VISUAL BUILDER -->
+    <section id="builder" class="mx-auto max-w-7xl px-4 py-16 lg:px-8">
+      <div class="grid items-center gap-10 lg:grid-cols-2">
+        <div>
+          <h2 class="text-3xl font-bold sm:text-4xl">Design workflows visually</h2>
+          <p class="mt-3 text-muted-foreground">Drag nodes, wire typed pins, and validate as you go. Inline errors keep graphs shippable. Snapshot inputs to reproduce issues and compare runs.</p>
+          <ul class="mt-6 space-y-3 text-sm">
+            <li class="rounded-xl border border-border bg-card p-4"><strong>Typed pins</strong> — ports know their schema so refactors are safe.</li>
+            <li class="rounded-xl border border-border bg-card p-4"><strong>Inline validation</strong> — miswired edges are surfaced immediately.</li>
+            <li class="rounded-xl border border-border bg-card p-4"><strong>Observability</strong> — inspect payloads and timings at every edge.</li>
+          </ul>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <img src="/images/builder-canvas-1.png" alt="Canvas with typed pins" class="rounded-xl border border-border bg-card object-cover" loading="lazy" />
+          <img src="/images/builder-canvas-2.png" alt="Inline validation" class="rounded-xl border border-border bg-card object-cover" loading="lazy" />
+          <img src="/images/builder-canvas-3.png" alt="Node inspector" class="rounded-xl border border-border bg-card object-cover col-span-2" loading="lazy" />
+        </div>
+      </div>
+    </section>
+
+    <!-- PORTABILITY (UI lifecycle) -->
+    <section id="portability" class="relative mx-auto max-w-7xl px-4 py-16 lg:px-8">
+      <div class="absolute inset-x-0 top-0 -z-10 h-1/2 bg-gradient-to-b from-primary/5 to-transparent"></div>
+      <div class="grid items-center gap-10 lg:grid-cols-2">
+        <div>
+          <h2 class="text-3xl font-bold sm:text-4xl">Start offline. Go online later. Deploy with one click.</h2>
+          <p class="mt-3 text-muted-foreground">Manage the full lifecycle from the interface — no CLI required. Keep projects private and local, publish to your team when ready, and ship to production targets with a single action.</p>
+          <ol class="mt-6 space-y-4 text-sm">
+            <li class="rounded-2xl border border-border bg-card p-4">
+              <div class="font-semibold">1) Start Offline (Private & Secret)</div>
+              <p class="text-muted-foreground">Create an offline project on your machine. Your data stays local until you decide otherwise.</p>
+            </li>
+            <li class="rounded-2xl border border-border bg-card p-4">
+              <div class="font-semibold">2) Make it Online & Invite</div>
+              <p class="text-muted-foreground">Flip the project online and invite colleagues. Roles and approvals come along for the ride.</p>
+            </li>
+            <li class="rounded-2xl border border-border bg-card p-4">
+              <div class="font-semibold">3) Deploy to Production</div>
+              <p class="text-muted-foreground">Choose your target — Edge, Cloud, or on‑prem. Click deploy. Same validated graph, different runtime target.</p>
+            </li>
+          </ol>
+        </div>
+        <div class="relative">
+          <div class="rounded-2xl border border-border bg-card p-6">
+            <div class="grid grid-cols-3 gap-3 text-center text-xs">
+              <div class="rounded-lg border border-border bg-muted p-4">
+                <div class="mb-1 font-semibold">Offline</div>
+                <p class="text-muted-foreground">Private, local‑first dev</p>
+              </div>
+              <div class="rounded-lg border border-border bg-muted p-4">
+                <div class="mb-1 font-semibold">Team</div>
+                <p class="text-muted-foreground">Online, shared, governed</p>
+              </div>
+              <div class="rounded-lg border border-border bg-muted p-4">
+                <div class="mb-1 font-semibold">Production</div>
+                <p class="text-muted-foreground">Edge • Cloud • Anywhere</p>
+              </div>
+            </div>
+            <div class="mt-6 grid grid-cols-2 gap-4">
+              <img src="/images/portability-offline.png" alt="Create offline project" class="rounded-xl border border-border bg-background object-cover" loading="lazy" />
+              <img src="/images/portability-invite.png" alt="Invite teammates" class="rounded-xl border border-border bg-background object-cover" loading="lazy" />
+              <img src="/images/portability-deploy.png" alt="Deploy with one click" class="col-span-2 rounded-xl border border-border bg-background object-cover" loading="lazy" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PERFORMANCE: narrative + metrics -->
+    <section id="performance" class="mx-auto max-w-7xl px-4 py-16 lg:px-8">
+      <div class="grid items-start gap-10 lg:grid-cols-2">
+        <div>
+          <h2 class="text-3xl font-bold sm:text-4xl">Rust runtime for predictable speed</h2>
+          <p class="mt-3 text-muted-foreground">Flow‑Like’s runtime is written in Rust — tight memory control, back‑pressure aware IO, and zero‑copy on hot paths. Nodes are authored in Rust too, so you can lean on the ecosystem. We don’t compile every graph; instead, a Rust runtime schedules work efficiently so your flows stay fast and stable under load.</p>
+          <div class="mt-6 grid grid-cols-2 gap-4">
+            <div class="rounded-xl border border-border bg-card p-4"><div class="text-3xl font-extrabold">Rust</div><div class="text-sm text-muted-foreground">foundation for runtime & nodes</div></div>
+            <div class="rounded-xl border border-border bg-card p-4"><div class="text-3xl font-extrabold">0‑copy</div><div class="text-sm text-muted-foreground">hot paths</div></div>
+            <div class="rounded-xl border border-border bg-card p-4"><div class="text-3xl font-extrabold">Stable</div><div class="text-sm text-muted-foreground">latency under load</div></div>
+            <div class="rounded-xl border border-border bg-card p-4"><div class="text-3xl font-extrabold">Back‑pressure</div><div class="text-sm text-muted-foreground">aware IO</div></div>
+          </div>
+        </div>
+        <div>
+          <div class="rounded-2xl border border-border bg-gradient-to-b from-muted to-card p-6">
+            <div class="text-sm font-semibold">Instrumentation</div>
+            <p class="mt-2 text-sm text-muted-foreground">Trace spans, per‑edge timings, and payload previews — directly in the UI.</p>
+            <img src="/images/perf-traces.png" alt="Traces and timings" class="mt-4 rounded-xl border border-border bg-background object-cover" loading="lazy" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EXTENSIBLE: author your own nodes -->
+    <section id="extensible" class="relative mx-auto max-w-7xl px-4 py-16 lg:px-8">
+      <div class="grid items-start gap-10 lg:grid-cols-2">
+        <div>
+          <h2 class="text-3xl font-bold sm:text-4xl">Integrate your world with typed nodes</h2>
+          <p class="mt-3 text-muted-foreground">Wrap internal APIs, queues, PLCs, computer vision, or spreadsheets. Versioned ports and validation make shared nodes safe to reuse across teams.</p>
+          <ul class="mt-6 grid gap-3 text-sm">
+            <li class="rounded-xl border border-border bg-card p-4"><strong>Stable interfaces:</strong> in/out ports are versioned and validated.</li>
+            <li class="rounded-xl border border-border bg-card p-4"><strong>Testability:</strong> snapshot fixtures and property‑tests for ports.</li>
+            <li class="rounded-xl border border-border bg-card p-4"><strong>Distribution:</strong> publish nodes privately or on a marketplace.</li>
+          </ul>
+        </div>
+        <div class="rounded-2xl border border-border bg-card p-6">
+          <img src="/images/extensible-node-library.png" alt="Custom node library" class="rounded-xl border border-border bg-background object-cover" loading="lazy" />
+          <p class="mt-3 text-xs text-muted-foreground">Example: a private catalog of typed nodes shared across projects.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHITE‑LABEL / EMBED -->
+    <section id="whitelabel" class="mx-auto max-w-7xl px-4 py-16 lg:px-8">
+      <div class="rounded-2xl border border-border bg-card p-8">
+        <div class="grid gap-10 lg:grid-cols-2">
+          <div>
+            <h2 class="text-3xl font-bold sm:text-4xl">Embed, theme, and ship under your brand</h2>
+            <p class="mt-3 text-muted-foreground">Integrate the editor into your product or run the engine headless. Apply your design tokens and logo for a seamless white‑label experience — governance and observability stay intact.</p>
+            <ul class="mt-6 grid gap-3 text-sm">
+              <li class="rounded-xl border border-border bg-background p-4">Theme via design tokens or CSS variables</li>
+              <li class="rounded-xl border border-border bg-background p-4">Single‑sign‑on and secrets</li>
+              <li class="rounded-xl border border-border bg-background p-4">Usage metering & multi‑tenant ready</li>
+              <li class="rounded-xl border border-border bg-background p-4">SDKs & webhooks</li>
+            </ul>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <img src="/images/whitelabel/theme-1.png" alt="Dark theme variant" class="rounded-xl border border-border object-cover" loading="lazy" />
+            <img src="/images/whitelabel/theme-2.png" alt="Light theme variant" class="rounded-xl border border-border object-cover" loading="lazy" />
+            <img src="/images/whitelabel/theme-3.png" alt="Brand‑colored variant" class="rounded-xl border border-border object-cover" loading="lazy" />
+            <img src="/images/whitelabel/theme-4.png" alt="Compact layout variant" class="rounded-xl border border-border object-cover" loading="lazy" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ONE VIEW: business + data + implementation via layers -->
+    <section id="layers" class="mx-auto max-w-7xl px-4 py-16 lg:px-8">
+      <div class="mx-auto max-w-4xl text-center">
+        <h2 class="text-3xl font-bold sm:text-4xl">Business process, data, and implementation in one view</h2>
+        <p class="mt-3 text-muted-foreground">Use <strong>Layers</strong> so roles see what they need without leaving the canvas. Switch context — keep the graph.</p>
+      </div>
+
+      <div class="mx-auto mt-8 max-w-4xl">
+        <div id="layers-tabs" role="tablist" class="grid grid-cols-3 gap-2">
+          <button role="tab" aria-selected="true" data-target="business" class="rounded-xl border border-border bg-muted px-4 py-2 text-center text-sm font-medium hover:bg-accent hover:text-accent-foreground">Business</button>
+          <button role="tab" aria-selected="false" data-target="data" class="rounded-xl border border-border bg-muted px-4 py-2 text-center text-sm font-medium hover:bg-accent hover:text-accent-foreground">Data</button>
+          <button role="tab" aria-selected="false" data-target="impl" class="rounded-xl border border-border bg-muted px-4 py-2 text-center text-sm font-medium hover:bg-accent hover:text-accent-foreground">Implementation</button>
+        </div>
+
+        <div id="layers-panels" class="mt-4 space-y-3 text-sm">
+          <div id="panel-business" role="tabpanel" class="rounded-xl border border-border bg-background p-4">
+            <h3 class="font-semibold">Business</h3>
+            <p class="text-muted-foreground">Example: <em>Warranty Claim Intake</em>. Customer submits a claim → triage severity → approve or decline → notify customer → trigger payout or repair.</p>
+          </div>
+          <div id="panel-data" role="tabpanel" hidden class="rounded-xl border border-border bg-background p-4">
+            <h3 class="font-semibold">Data</h3>
+            <p class="text-muted-foreground">Source systems in one project: PostgreSQL <code>claims</code>, object storage for photos, and a document store for reports. Schemas appear at ports and are validated pre‑deploy.</p>
+          </div>
+          <div id="panel-impl" role="tabpanel" hidden class="rounded-xl border border-border bg-background p-4">
+            <h3 class="font-semibold">Implementation</h3>
+            <p class="text-muted-foreground">Typed nodes wired to the business flow: <code>HTTP.Intake</code> → <code>Classify.Image</code> → <code>Human.Approval</code> → <code>ERP.CreateCase</code> → <code>Notify.Email/SMS</code>. Tests and policies live on edges.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AI‑FIRST: classical + GenAI -->
+    <section id="ai-first" class="relative mx-auto max-w-7xl px-4 py-16 lg:px-8">
+      <div class="grid items-center gap-10 lg:grid-cols-2">
+        <div>
+          <h2 class="text-3xl font-bold sm:text-4xl">AI — classical first</h2>
+          <p class="mt-3 text-muted-foreground">Start with deterministic machine learning for predictable cost and accuracy: <strong>regression</strong>, <strong>classification</strong>, and <strong>object detection</strong>. Add LLMs for summarization, planning, or routing when they help — it’s just configuration, not a different stack.</p>
+          <ul class="mt-6 space-y-3 text-sm">
+            <li class="rounded-xl border border-border bg-card p-4"><strong>Regression</strong> — forecast demand, score risk, compute pricing.</li>
+            <li class="rounded-xl border border-border bg-card p-4"><strong>Classification</strong> — label events, triage tickets, route messages.</li>
+            <li class="rounded-xl border border-border bg-card p-4"><strong>Object detection</strong> — detect & count items in images or video.</li>
+            <li class="rounded-xl border border-border bg-card p-4"><strong>LLM routing (optional)</strong> — build agents/multi‑agent systems that can call tools and coordinate work.</li>
+          </ul>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-3">
+          <figure class="rounded-2xl border border-border bg-muted p-4 text-center">
+            <img src="/images/ai/regression.png" alt="Regression example chart" class="mx-auto rounded-lg border border-border bg-background object-cover" loading="lazy" />
+            <figcaption class="mt-2 text-xs text-muted-foreground">Regression</figcaption>
+          </figure>
+          <figure class="rounded-2xl border border-border bg-muted p-4 text-center">
+            <img src="/images/ai/classification.png" alt="Classification confusion matrix" class="mx-auto rounded-lg border border-border bg-background object-cover" loading="lazy" />
+            <figcaption class="mt-2 text-xs text-muted-foreground">Classification</figcaption>
+          </figure>
+          <figure class="rounded-2xl border border-border bg-muted p-4 text-center">
+            <img src="/images/ai/detection.png" alt="Object detection bounding boxes" class="mx-auto rounded-lg border border-border bg-background object-cover" loading="lazy" />
+            <figcaption class="mt-2 text-xs text-muted-foreground">Object Detection</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- CODE SAMPLE (kept) -->
+
+
+    <!-- RECOMMENDED READING -->
+    <section class="mx-auto max-w-7xl px-4 pb-8 lg:px-8">
+      <h2 class="text-2xl font-bold">Recommended reading</h2>
+      <p class="mt-1 text-sm text-muted-foreground">Deep dives and examples — including Teachable Machine as a simple on‑ramp.</p>
+      <div class="mt-4 grid gap-6 md:grid-cols-3">
+        <a href="https://flow-like.com/blog/typed-workflows/" class="group rounded-2xl border border-border bg-card p-5 transition hover:bg-muted">
+          <h3 class="font-semibold">Typed Workflows</h3>
+          <p class="mt-1 text-sm text-muted-foreground">Why types unlock scale, safety, and great DX.</p>
+          <span class="mt-3 inline-block text-xs text-primary group-hover:underline">Read post →</span>
+        </a>
+        <a href="https://flow-like.com/blog/agents-vs-automation/" class="group rounded-2xl border border-border bg-card p-5 transition hover:bg-muted">
+          <h3 class="font-semibold">Agents vs. Automation</h3>
+          <p class="mt-1 text-sm text-muted-foreground">Where agents shine — and where robust workflows win.</p>
+          <span class="mt-3 inline-block text-xs text-primary group-hover:underline">Read post →</span>
+        </a>
+        <a href="https://flow-like.com/blog/teachable-machine/" class="group rounded-2xl border border-border bg-card p-5 transition hover:bg-muted">
+          <h3 class="font-semibold">Teachable Machine</h3>
+          <p class="mt-1 text-sm text-muted-foreground">Beginner‑friendly example, exported as TFLite.</p>
+          <span class="mt-3 inline-block text-xs text-primary group-hover:underline">Read post →</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="mx-auto max-w-5xl px-4 py-16 lg:px-8">
+      <h2 class="text-center text-3xl font-bold sm:text-4xl">FAQ</h2>
+      <div class="mt-8 divide-y divide-border rounded-2xl border border-border bg-card p-4">
+        <details class="group p-4" open>
+          <summary class="flex cursor-pointer list-none items-center justify-between text-left font-medium">
+            <span>Where can I run Flow‑Like?</span>
+            <svg class="h-5 w-5 text-muted-foreground transition group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </summary>
+          <p class="mt-2 text-sm text-muted-foreground">Locally on macOS/Windows/Linux, on the edge, or in any cloud. Start local, move to cloud later without changing the graph.</p>
+        </details>
+        <details class="group p-4">
+          <summary class="flex cursor-pointer list-none items-center justify-between text-left font-medium">
+            <span>How do I integrate with my stack?</span>
+            <svg class="h-5 w-5 text-muted-foreground transition group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </summary>
+          <p class="mt-2 text-sm text-muted-foreground">Wrap systems as nodes with typed ports. Embed/white‑label the editor or run the engine headless inside your apps.</p>
+        </details>
+        <details class="group p-4">
+          <summary class="flex cursor-pointer list-none items-center justify-between text-left font-medium">
+            <span>What languages can I use for nodes?</span>
+            <svg class="h-5 w-5 text-muted-foreground transition group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </summary>
+          <p class="mt-2 text-sm text-muted-foreground">Nodes are authored in <strong>Rust</strong> today. A WASM node SDK is planned to broaden language support.</p>
+        </details>
+        <details class="group p-4">
+          <summary class="flex cursor-pointer list-none items-center justify-between text-left font-medium">
+            <span>Is there governance?</span>
+            <svg class="h-5 w-5 text-muted-foreground transition group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </summary>
+          <p class="mt-2 text-sm text-muted-foreground">Yes — approvals, policy guardrails, and versioned flows are first‑class concepts to help you meet operational and audit needs.</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-border py-10">
+      <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 text-sm text-muted-foreground md:flex-row lg:px-8">
+        <p>© {new Date().getFullYear()} Great‑Co.de • Munich</p>
+        <nav class="flex items-center gap-5">
+          <a class="hover:text-foreground" href={docs}>Blog</a>
+          <a class="hover:text-foreground" href="/privacy">Privacy</a>
+          <a class="hover:text-foreground" href={github}>GitHub</a>
+        </nav>
+      </div>
+    </footer>
+
+    <!-- PINS + WIRES styling & script (inspired by blog page) -->
+    <style>
+      .pin-conn-solid { stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+      .pin-conn { stroke: currentColor; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; stroke-dasharray: 10 10; animation: flow-dots 0.4s linear infinite; }
+      @keyframes flow-dots { to { stroke-dashoffset: -20px; } }
+      @media (prefers-reduced-motion: reduce) { .pin-conn { animation: none; } }
+
+      /* Tabs behavior (radio hack) */
+      #l1:checked ~ label[for="l1"], #l2:checked ~ label[for="l2"], #l3:checked ~ label[for="l3"] {}
+      /* Toggle panels */
+      #l1:checked ~ .layer.l1 { display:block; }
+      #l1:checked ~ .layer.l2, #l1:checked ~ .layer.l3 { display:none; }
+      #l2:checked ~ .layer.l2 { display:block; }
+      #l2:checked ~ .layer.l1, #l2:checked ~ .layer.l3 { display:none; }
+      #l3:checked ~ .layer.l3 { display:block; }
+      #l3:checked ~ .layer.l1, #l3:checked ~ .layer.l2 { display:none; }
+    </style>
+    <script>
+  // Helpers (pure JS)
+  const $ = (s: string, r = document) => r.querySelector(s);
+
+  const heroEl = document.getElementById('hero-cover');
+  const svg = document.getElementById('hero-connections');
+  const rp = document.getElementById('hero-right-pin');
+  const lp = document.getElementById('hero-left-pin');
+  const rpt = document.getElementById('hero-right-pin-top');
+  const lpt = document.getElementById('hero-left-pin-top');
+
+  // Size SVG to full viewport width, aligned to hero's left
+  const setSvgFrame = () => {
+    if (!heroEl || !svg) return;
+    const r = heroEl.getBoundingClientRect();
+    const vw = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
+
+    // Make the absolutely-positioned SVG cover the full viewport width,
+    // starting at the viewport's left edge (relative to the hero).
+    svg.style.left = `${-r.left}px`;
+    svg.style.width = `${vw}px`;
+    svg.style.height = `${r.height}px`;
+
+    // Use a viewBox whose min-x is negative hero.left so hero-local coordinates line up,
+    // and we can draw all the way to the viewport edges.
+    svg.setAttribute('viewBox', `${-r.left} 0 ${vw} ${r.height}`);
+    svg.setAttribute('width', String(vw));
+    svg.setAttribute('height', String(r.height));
+  };
+
+  // Curves
+  const bezier = (pin: HTMLElement, isRight: boolean, yOffset = 60) => {
+    const hr = heroEl?.getBoundingClientRect() ?? { left: 0, top: 0, width: 0, height: 0, right: 0 };
+    const pr = pin.getBoundingClientRect();
+
+    // Start in hero-local coords
+    const sx = pr.left - hr.left + pr.width / 2;
+    const sy = pr.top - hr.top + pr.height / 2;
+
+    // End at viewport edges (± extra beyond edge)
+    const extra = 200;
+    const vw = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
+    const ex = isRight ? vw - hr.left + extra : -hr.left - extra;
+    const ey = sy + (isRight ? yOffset : yOffset * 1.4);
+
+    const dx = ex - sx;
+    const cp1x = sx + dx * 0.4;
+    const cp2x = sx + dx * 0.8;
+
+    return `M${sx},${sy} C${cp1x},${sy} ${cp2x},${ey} ${ex},${ey}`;
+  };
+
+  const quad = (pin: HTMLElement, isRight: boolean, yOffset = -20) => {
+    const hr = heroEl?.getBoundingClientRect() ?? { left: 0, top: 0, width: 0, height: 0, right: 0 };
+    const pr = pin.getBoundingClientRect();
+
+    const sx = pr.left - hr.left + pr.width / 2;
+    const sy = pr.top - hr.top + pr.height / 2;
+
+    const extra = 300;
+    const vw = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
+    const ex = isRight ? vw - hr.left + extra : -hr.left - extra;
+    const ey = sy + (isRight ? yOffset : -yOffset);
+
+    const cp1x = sx + (ex - sx) * 0.6;
+
+    return `M${sx},${sy} Q${cp1x},${sy} ${ex},${ey}`;
+  };
+
+  const updatePaths = () => {
+    if (!heroEl || !svg) return;
+    setSvgFrame();
+
+    const rc = $('#hero-right-conn');
+    const lc = $('#hero-left-conn');
+    const rct = $('#hero-right-conn-top');
+    const lct = $('#hero-left-conn-top');
+
+    if (rp && rc) rc.setAttribute('d', bezier(rp, true));
+    if (lp && lc) lc.setAttribute('d', bezier(lp, false, 80));
+    if (rpt && rct) rct.setAttribute('d', quad(rpt, true));
+    if (lpt && lct) lct.setAttribute('d', quad(lpt, false));
+  };
+
+  // Keep it fresh on resize and whenever the hero resizes
+  const raf = (fn: FrameRequestCallback) => requestAnimationFrame(fn);
+  addEventListener('resize', () => raf(updatePaths));
+  addEventListener('load', () => raf(updatePaths));
+  setTimeout(() => raf(updatePaths), 50);
+
+  // React to content/layout changes without relying solely on window resize
+  if (window.ResizeObserver && heroEl) {
+    const ro = new ResizeObserver(() => raf(updatePaths));
+    ro.observe(heroEl);
+  }
+
+  // --- Tabs behavior (unchanged) ---
+  const tabs = document.querySelectorAll('#layers-tabs [role=tab]');
+  const panels = {
+    business: document.getElementById('panel-business'),
+    data: document.getElementById('panel-data'),
+    impl: document.getElementById('panel-impl'),
+  };
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabs.forEach(b => b.setAttribute('aria-selected', 'false'));
+      btn.setAttribute('aria-selected', 'true');
+      const t = btn.getAttribute('data-target');
+      Object.entries(panels).forEach(([k, el]) => {
+        if (!el) return;
+        if (k === t) el.removeAttribute('hidden');
+        else el.setAttribute('hidden', '');
+      });
+    });
+  });
+</script>
+  </body>
+</html>
