@@ -17,3 +17,4 @@ pub mod set_system;
 pub mod set_temperature;
 pub mod set_top_p;
 pub mod set_user;
+pub mod from_string;

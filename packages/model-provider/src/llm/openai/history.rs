@@ -80,8 +80,8 @@ impl From<History> for ChatCompletionRequest {
                         .into_iter()
                         .map(|tool_call| ToolCall {
                             function: ToolCallFunction {
-                                name: tool_call.function.name,
-                                arguments: tool_call.function.arguments,
+                                name: Some(tool_call.function.name),
+                                arguments: Some(tool_call.function.arguments),
                             },
                             id: tool_call.id,
                             r#type: tool_call.r#type,

@@ -43,8 +43,8 @@ impl From<ChatCompletionResponse> for Response {
                             id: tool_call.id,
                             tool_type: Some(tool_call.r#type), // Map type to tool_type
                             function: ResponseFunction {
-                                name: tool_call.function.name,
-                                arguments: tool_call.function.arguments,
+                                name: tool_call.function.name.unwrap_or("".to_string()),
+                                arguments: tool_call.function.arguments.unwrap_or("".to_string())
                             },
                         })
                         .collect();

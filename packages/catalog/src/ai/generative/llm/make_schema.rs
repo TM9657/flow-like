@@ -1,9 +1,8 @@
-use crate::ai::generative::llm::with_tools::extract_tagged;
 /// # Make OpenAI Function Node
 /// Function call definitions or JSON Schemas are tedious to write by hand so this is an utility node to help you out.
 /// Node execution can fail if the LLM produces an output that cannot be parsed as JSON schema.
 /// If node execution succeeds, however, the output is *guaranteed* to be a valid OpenAI-like Function Call Definition with valid JSON schema in the "parameters" section.
-use crate::utils::json::parse_with_schema::validate_openai_function_str;
+use crate::ai::generative::llm::invoke_with_tools::extract_tagged;
 use flow_like::{
     bit::Bit,
     flow::{
@@ -14,7 +13,9 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::history::{History, HistoryMessage, Role};
+use flow_like_model_provider::history::{
+    History, HistoryFunction, HistoryMessage, Role, Tool, ToolType,
+};
 use flow_like_types::{anyhow, async_trait, json};
 
 const SYSTEM_PROMPT: &str = r#"
@@ -32,7 +33,6 @@ Wrap function call json schema in <schema></schema> xml tags.
 # Required Response Format
 <schema>
 {
-  "type": "function",
   "name": "<name of the function>",
   "description": "<description of the function>",
   "parameters": {
@@ -44,10 +44,8 @@ Wrap function call json schema in <schema></schema> xml tags.
         },
         ...
     },
-    "required": [<list of required property args>],
-    "additionalProperties": false
-  },
-  "strict": true
+    "required": [<list of required property args>]
+  }
 }
 </schema>
 
@@ -58,7 +56,6 @@ call a weather api, with location arg for city or country and units temperature
 output:
 <schema>
 {
-  "type": "function",
   "name": "get_weather",
   "description": "Retrieves current weather for the given location.",
   "parameters": {
@@ -80,10 +77,8 @@ output:
     "required": [
       "location",
       "units"
-    ],
-    "additionalProperties": false
-  },
-  "strict": true
+    ]
+  }
 }
 </schema>
 
@@ -105,8 +100,8 @@ impl NodeLogic for LLMMakeSchema {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
             "llm_make_schema",
-            "Make Function Schema",
-            "Generate Function Definition for Tool Calls",
+            "Make Tool Schema",
+            "Generate Tool Definitions for Tool Calls",
             "AI/Generative",
         );
         node.add_icon("/flow/icons/bot-invoke.svg");
@@ -132,15 +127,16 @@ impl NodeLogic for LLMMakeSchema {
         );
 
         node.add_output_pin(
-            "function",
-            "Function",
-            "Generated Function Call Schema",
+            "tool",
+            "Tool",
+            "Generated Tool Definition",
             VariableType::Struct,
-        );
+        )
+        .set_schema::<Tool>();
 
         node.set_long_running(true);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
@@ -188,12 +184,24 @@ impl NodeLogic for LLMMakeSchema {
                 schema_str.len()
             )));
         };
-        let schema = validate_openai_function_str(&schema_str)?;
+
+        // attempt to load as HistoryFunction
+        let function: HistoryFunction = match json::from_str(&schema_str) {
+            Ok(value) => value,
+            Err(e) => {
+                return Err(anyhow!(
+                    "Failed to parse as tool function from llm response: {e:?}"
+                ));
+            }
+        };
+        // wrap as Tool object
+        let tool = Tool {
+            tool_type: ToolType::Function,
+            function: function,
+        };
 
         // set outputs
-        context
-            .set_pin_value("function", json::json!(schema))
-            .await?;
+        context.set_pin_value("tool", json::json!(tool)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
