@@ -12,7 +12,7 @@ use flow_like_types::{json, tokio};
 use futures::TryStreamExt;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 use crate::utils::UiEmitTarget;
 use crate::{

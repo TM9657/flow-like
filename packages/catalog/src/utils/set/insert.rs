@@ -43,8 +43,10 @@ impl NodeLogic for InsertSetNode {
             .set_value_type(ValueType::HashSet);
 
         node.add_output_pin(
-            "existed_before", "Existed Before?",
-            "Was the element there before?", VariableType::Boolean
+            "existed_before",
+            "Existed Before?",
+            "Was the element there before?",
+            VariableType::Boolean,
         );
 
         node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
@@ -57,7 +59,9 @@ impl NodeLogic for InsertSetNode {
         let element: Value = context.evaluate_pin("value").await?;
         let was_there_before = set_in.insert(element);
         context.set_pin_value("set_out", json!(set_in)).await?;
-        context.set_pin_value("existed_before", json!(was_there_before)).await?;
+        context
+            .set_pin_value("existed_before", json!(was_there_before))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }

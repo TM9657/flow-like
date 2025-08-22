@@ -10,7 +10,7 @@ use flow_like::{
     hub::BitSearchQuery,
 };
 use flow_like_types::intercom::BufferedInterComHandler;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 #[tauri::command(async)]
 pub async fn get_bit(

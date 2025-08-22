@@ -1,12 +1,8 @@
 use std::sync::Arc;
 
 use crate::{
-    ensure_permission,
-    error::ApiError,
-    middleware::jwt::AppUser,
-    permission::role_permission::RolePermissions,
-    routes::{LanguageParams, PaginationParams},
-    state::AppState,
+    ensure_permission, error::ApiError, middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions, routes::PaginationParams, state::AppState,
 };
 use axum::{
     Extension, Json,
@@ -17,10 +13,9 @@ use flow_like_storage::{
         VectorStore,
         lancedb::{LanceDBVectorStore, record_batches_to_vec},
     },
-    datafusion::{self, prelude::SessionContext},
+    datafusion::prelude::SessionContext,
 };
-use flow_like_types::{anyhow, bail};
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::StreamExt;
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct VectorQueryPayload {

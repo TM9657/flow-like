@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use flow_like::{
     flow::{
         board::Board,
@@ -10,6 +9,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::{async_trait, json::json};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -24,22 +24,12 @@ impl MakeSetNode {
 #[async_trait]
 impl NodeLogic for MakeSetNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
-        let mut node = Node::new(
-            "make_set",
-            "Make Set",
-            "Creates an empty set",
-            "Utils/Set",
-        );
+        let mut node = Node::new("make_set", "Make Set", "Creates an empty set", "Utils/Set");
 
         node.add_icon("/flow/icons/ellipsis-vertical.svg");
 
-        node.add_output_pin(
-            "set_out",
-            "Set",
-            "The created set",
-            VariableType::Generic,
-        )
-        .set_value_type(ValueType::HashSet);
+        node.add_output_pin("set_out", "Set", "The created set", VariableType::Generic)
+            .set_value_type(ValueType::HashSet);
 
         return node;
     }

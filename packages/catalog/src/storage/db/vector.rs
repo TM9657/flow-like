@@ -122,9 +122,10 @@ impl NodeLogic for CreateLocalDatabaseNode {
         let cache_key = format!("db_{}", table);
         let cache_set = context.cache.read().await.contains_key(&cache_key);
         if !cache_set {
-            let context_cache = context.execution_cache.clone().ok_or(flow_like_types::anyhow!(
-                "No execution cache found"
-            ))?;
+            let context_cache = context
+                .execution_cache
+                .clone()
+                .ok_or(flow_like_types::anyhow!("No execution cache found"))?;
             let app_id = context_cache.app_id.clone();
             let board_dir = context_cache.get_storage(false)?;
             let board_dir = board_dir.child("db");

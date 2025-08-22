@@ -17,9 +17,8 @@ use serde_json::json;
 use settings::Settings;
 use state::TauriFlowLikeState;
 use std::{sync::Arc, time::Duration};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
-use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(not(debug_assertions))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

@@ -9,9 +9,9 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::{Value, async_trait, json::json};
-use std::{collections::HashSet, sync::Arc};
 use std::collections::hash_set::Difference;
 use std::hash::RandomState;
+use std::{collections::HashSet, sync::Arc};
 
 #[derive(Default)]
 pub struct DifferenceSetNode {}
@@ -39,11 +39,21 @@ impl NodeLogic for DifferenceSetNode {
         node.add_input_pin("set_in_1", "Set 1", "Your First Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
 
-        node.add_input_pin("set_in_2", "Set 2", "Your Second Set", VariableType::Generic)
-            .set_value_type(ValueType::HashSet);
+        node.add_input_pin(
+            "set_in_2",
+            "Set 2",
+            "Your Second Set",
+            VariableType::Generic,
+        )
+        .set_value_type(ValueType::HashSet);
 
-        node.add_output_pin("set_out", "Difference", "The difference set", VariableType::Generic)
-            .set_value_type(ValueType::HashSet);
+        node.add_output_pin(
+            "set_out",
+            "Difference",
+            "The difference set",
+            VariableType::Generic,
+        )
+        .set_value_type(ValueType::HashSet);
 
         node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
 

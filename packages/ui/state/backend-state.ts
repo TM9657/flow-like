@@ -4,6 +4,7 @@ import type { IAIState } from "./backend-state/ai-state";
 import type { IAppState } from "./backend-state/app-state";
 import type { IBitState } from "./backend-state/bit-state";
 import type { IBoardState } from "./backend-state/board-state";
+import type { IDatabaseState } from "./backend-state/db-state";
 import type { IEventState } from "./backend-state/event-state";
 import type { IHelperState } from "./backend-state/helper-state";
 import type { IRoleState } from "./backend-state/role-state";
@@ -11,7 +12,6 @@ import type { IStorageState } from "./backend-state/storage-state";
 import type { ITeamState } from "./backend-state/team-state";
 import type { ITemplateState } from "./backend-state/template-state";
 import type { IUserState } from "./backend-state/user-state";
-import type { IDatabaseState } from "./backend-state/db-state";
 
 export * from "./backend-state/empty-states/index";
 
@@ -37,7 +37,7 @@ export type {
 	IMember,
 	IStorageItemActionResult,
 } from "./backend-state/types";
-export * from "./backend-state/db-state"
+export * from "./backend-state/db-state";
 
 export interface IBackendState {
 	appState: IAppState;

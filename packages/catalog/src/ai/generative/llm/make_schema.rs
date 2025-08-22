@@ -22,7 +22,7 @@ const SYSTEM_PROMPT: &str = r#"
 # Instructions
 You are a function call json schema generator.
 
-Given the user's input, infer a matching function call json schema. 
+Given the user's input, infer a matching function call json schema.
 
 At every input, reply with valid function call json schema.
 
@@ -50,7 +50,7 @@ Wrap function call json schema in <schema></schema> xml tags.
 </schema>
 
 # Example
-user: 
+user:
 call a weather api, with location arg for city or country and units temperature
 
 output:
@@ -197,7 +197,7 @@ impl NodeLogic for LLMMakeSchema {
         // wrap as Tool object
         let tool = Tool {
             tool_type: ToolType::Function,
-            function: function,
+            function,
         };
 
         // set outputs
