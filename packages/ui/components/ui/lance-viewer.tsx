@@ -24,7 +24,6 @@ import {
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
@@ -119,13 +118,22 @@ export interface ArrowSchemaJSON {
 
 export interface LanceDBExplorerProps {
   arrowSchema?: ArrowSchemaJSON;
-  onSwitchPage: (
-    offset: number,
-    limit: number,
-  ) => Promise<
-    Record<string, any>[] | { data: Record<string, any>[]; total?: number }
-  >;
+
+  // Controlled data from parent (e.g., React Query)
+  rows?: Record<string, any>[];
   total?: number;
+  loading?: boolean;
+  error?: string | null;
+
+  // Notify parent when page/size/query change
+  onPageRequest?: (args: {
+    page: number;
+    pageSize: number;
+    offset: number;
+    limit: number;
+    query?: string;
+  }) => void;
+
   pageSizeOptions?: readonly number[];
   initialMode?: "table" | "vector";
   onSearch?: (args: {
@@ -183,16 +191,17 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
   tableName = "table",
   children,
   arrowSchema,
-  onSwitchPage,
-  total: totalProp,
+  rows = [],
+  total,
+  loading = false,
+  error = null,
+  onPageRequest,
   pageSizeOptions = [25, 50, 100, 250],
   initialMode = "table",
   onSearch,
   className,
 }) => {
   const [schema, setSchema] = useState<LanceSchema | null>(null);
-  const [data, setData] = useState<Record<string, any>[]>([]);
-  const [total, setTotal] = useState<number>(totalProp ?? 0);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(
@@ -205,9 +214,7 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
   const [rowSelection, setRowSelection] = useState({});
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalQuery, setGlobalQuery] = useState("");
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [appliedQuery, setAppliedQuery] = useState("");
 
   const [lastCount, setLastCount] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
@@ -225,12 +232,6 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
     () => pageSizeOptions?.[0] ?? DEFAULT_PAGE_SIZE,
     [pageSizeOptions?.[0]],
   );
-
-  // Keep latest onSwitchPage without re-creating loaders
-  const onSwitchPageRef = useRef(onSwitchPage);
-  useEffect(() => {
-    onSwitchPageRef.current = onSwitchPage;
-  }, [onSwitchPage]);
 
   // Load schema (if provided) and settings once on mount/when inputs change
   useEffect(() => {
@@ -289,52 +290,21 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
     density,
   ]);
 
+  // Notify parent to fetch when page/pageSize/appliedQuery change (after settings loaded)
   useEffect(() => {
-    if (typeof totalProp === "number") setTotal(totalProp);
-  }, [totalProp]);
+    if (!settingsLoaded) return;
+    const offset = (page - 1) * pageSize;
+    const limit = pageSize;
+    onPageRequest?.({ page, pageSize, offset, limit, query: appliedQuery });
+  }, [page, pageSize, appliedQuery, settingsLoaded, onPageRequest]);
 
-  // Load page data – stable effect that doesn't depend on onSwitchPage identity
+  // Keep inferred schema from rows if no Arrow schema was provided
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const fn = onSwitchPageRef.current;
-        const res = await fn((page - 1) * pageSize, pageSize);
-        if (Array.isArray(res)) {
-          if (cancelled) return;
-          setData(res);
-          setLastCount(res.length);
-          setTotal((prev) => {
-            const count = res.length;
-            const pageEnd = (page - 1) * pageSize + count;
-            return count < pageSize ? pageEnd : Math.max(prev, 0);
-          });
-          if (res.length) {
-            setSchema((prev) => prev ?? inferSchemaFromRows(res, tableName));
-          }
-        } else {
-          const rows = res?.data ?? [];
-          if (cancelled) return;
-          setData(rows);
-          setLastCount(rows.length);
-          if (typeof res?.total === "number") setTotal(res.total);
-          if (rows.length) {
-            setSchema((prev) => prev ?? inferSchemaFromRows(rows, tableName));
-          }
-        }
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Failed to load data");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [page, pageSize, tableName]);
+    if (!arrowSchema && rows?.length) {
+      setSchema((prev) => prev ?? inferSchemaFromRows(rows, tableName));
+    }
+    setLastCount(rows?.length ?? 0);
+  }, [arrowSchema, rows, tableName]);
 
   const columns = useMemo<ColumnDef<Record<string, any>>[]>(() => {
     if (!schema) return [];
@@ -366,8 +336,8 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
     return base;
   }, [schema]);
 
-  const table = useReactTable({
-    data,
+    const table = useReactTable({
+    data: rows ?? [],
     columns,
     state: {
       columnVisibility,
@@ -375,25 +345,44 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
       sorting,
       rowSelection,
       columnFilters,
-      globalFilter: globalQuery,
+      globalFilter: appliedQuery,
       columnSizing,
+      pagination: {
+        pageIndex: Math.max(0, page - 1),
+        pageSize,
+      },
     },
     onColumnVisibilityChange: setColumnVisibility,
     onColumnOrderChange: setColumnOrder,
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
     onColumnFiltersChange: setColumnFilters,
-    onGlobalFilterChange: setGlobalQuery,
+    onGlobalFilterChange: setAppliedQuery,
     onColumnSizingChange: setColumnSizing,
+    onPaginationChange: (updater) => {
+      const next =
+        typeof updater === "function"
+          ? updater({ pageIndex: Math.max(0, page - 1), pageSize })
+          : updater;
+      if (next.pageSize !== pageSize) {
+        setPageSize(next.pageSize);
+        setPage(1);
+      } else if (next.pageIndex !== Math.max(0, page - 1)) {
+        setPage(next.pageIndex + 1);
+      }
+    },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     manualPagination: true,
-    pageCount: Math.ceil((total || 0) / pageSize) || -1,
+    pageCount:
+      typeof total === "number" && total > 0
+        ? Math.ceil((total ?? 0) / pageSize)
+        : undefined,
     defaultColumn: { minSize: 80, maxSize: 600 },
     enableColumnResizing: true,
     columnResizeMode: "onChange",
+    autoResetPageIndex: false,
   });
 
   const copySelectedAsCSV = useCallback(() => {
@@ -423,7 +412,7 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
   const currentFrom = (page - 1) * pageSize + 1;
   const currentTo = Math.min(page * pageSize, total || 0);
   const knowsTotal = typeof total === "number" && total > 0;
-  const isLastPage = knowsTotal ? currentTo >= total : lastCount < pageSize;
+  const isLastPage = knowsTotal ? currentTo >= (total ?? 0) : lastCount < pageSize;
 
   const containerCls = cn(
     "flex h-full w-full flex-col gap-3",
@@ -476,10 +465,16 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
       <Toolbar
         value={globalQuery}
         onValueChange={setGlobalQuery}
-        onSearch={() => setPage(1)}
+        onSearch={() => {
+          setAppliedQuery(globalQuery);
+          setPage(1);
+          onSearch?.({ query: globalQuery, mode: initialMode });
+        }}
         onReset={() => {
           setGlobalQuery("");
+          setAppliedQuery("");
           setPage(1);
+          onSearch?.({ query: "", mode: initialMode });
         }}
       />
 
@@ -570,7 +565,7 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
                   </TableCell>
                 </TableRow>
               ) : table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map((row, idx) => (
+                table.getRowModel().rows.map((row) => (
                   <TableRow
                     key={row.id}
                     className={cn(
@@ -625,7 +620,7 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
             {knowsTotal ? (
               <>
                 Showing <b>{currentFrom}</b>–<b>{currentTo}</b> of{" "}
-                <b>{total.toLocaleString()}</b>
+                <b>{(total ?? 0).toLocaleString()}</b>
               </>
             ) : (
               <>—</>
@@ -1453,7 +1448,7 @@ const formatDate = (v: any) => {
     const d = new Date(v);
     if (!isNaN(d.getTime()))
       return d.toISOString().replace("T", " ").slice(0, 19);
-  } catch { }
+  } catch {}
   return String(v);
 };
 
@@ -1462,7 +1457,9 @@ const describeField = (f: LanceField): string => {
     case "vector":
       return `${f.kind}${f.dims ? `(${f.dims})` : ""}`;
     case "array":
-      return `array<${typeof f.items === "string" ? f.items : ((f.items as any)?.kind ?? "unknown")}>`;
+      return `array<${
+        typeof f.items === "string" ? f.items : ((f.items as any)?.kind ?? "unknown")
+      }>`;
     default:
       return f.kind;
   }

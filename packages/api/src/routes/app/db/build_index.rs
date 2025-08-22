@@ -6,7 +6,7 @@ use axum::{
     Extension, Json,
     extract::{Path, State},
 };
-use flow_like_storage::databases::vector::{lancedb::LanceDBVectorStore, VectorStore};
+use flow_like_storage::databases::vector::{VectorStore, lancedb::LanceDBVectorStore};
 use flow_like_types::anyhow;
 use futures_util::{StreamExt, TryStreamExt};
 
@@ -16,7 +16,7 @@ pub enum IndexType {
     BTree,
     Bitmap,
     LabelList,
-    Auto
+    Auto,
 }
 
 impl IndexType {
@@ -51,7 +51,8 @@ pub async fn build_index(
     let connection = credentials.to_db(&app_id).await?.execute().await?;
     let db = LanceDBVectorStore::from_connection(connection, table).await;
 
-    db.index(&payload.column, Some(&payload.index_type.to_string())).await?;
+    db.index(&payload.column, Some(&payload.index_type.to_string()))
+        .await?;
 
     Ok(Json(()))
 }

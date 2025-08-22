@@ -6,7 +6,7 @@ use axum::{
     Extension, Json,
     extract::{Path, State},
 };
-use flow_like_storage::databases::vector::{lancedb::LanceDBVectorStore, VectorStore};
+use flow_like_storage::databases::vector::{VectorStore, lancedb::LanceDBVectorStore};
 use flow_like_types::anyhow;
 use futures_util::{StreamExt, TryStreamExt};
 

@@ -4,10 +4,10 @@ use flow_like_types::Cacheable;
 use flow_like_types::async_trait;
 use flow_like_types::{Result, Value, anyhow};
 use futures::TryStreamExt;
+use lancedb::index::IndexConfig;
 use lancedb::index::scalar::BTreeIndexBuilder;
 use lancedb::index::scalar::BitmapIndexBuilder;
 use lancedb::index::scalar::LabelListIndexBuilder;
-use lancedb::index::IndexConfig;
 use lancedb::query::QueryExecutionOptions;
 use lancedb::{
     Connection, Table, connect,
@@ -25,6 +25,23 @@ use crate::arrow_utils::record_batch_to_value;
 use crate::arrow_utils::value_to_batch_iterator;
 
 use super::VectorStore;
+
+#[derive(serde::Serialize)]
+pub struct IndexConfigDto {
+    name: String,
+    index_type: String, // render enum via Display
+    columns: Vec<String>,
+}
+
+impl From<IndexConfig> for IndexConfigDto {
+    fn from(idx: IndexConfig) -> Self {
+        Self {
+            name: idx.name,
+            index_type: idx.index_type.to_string(),
+            columns: idx.columns,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct LanceDBVectorStore {
@@ -71,10 +88,13 @@ impl LanceDBVectorStore {
         Ok(tables)
     }
 
-    pub async fn list_indices(&self) -> Result<Vec<IndexConfig>> {
-        let indices = self.table.clone().ok_or_else(|| anyhow!("Table not initialized"))?;
+    pub async fn list_indices(&self) -> Result<Vec<IndexConfigDto>> {
+        let indices = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
         let indices = indices.list_indices().await?;
-        Ok(indices)
+        Ok(indices.into_iter().map(IndexConfigDto::from).collect())
     }
 
     pub async fn to_datafusion(&self) -> Result<lancedb::table::datafusion::BaseTableAdapter> {

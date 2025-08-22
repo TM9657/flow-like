@@ -1,10 +1,19 @@
 use crate::{
-    ensure_permission, error::ApiError, middleware::jwt::AppUser, permission::role_permission::RolePermissions, routes::{LanguageParams, PaginationParams}, state::AppState
+    ensure_permission,
+    error::ApiError,
+    middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions,
+    routes::{LanguageParams, PaginationParams},
+    state::AppState,
 };
 use axum::{
-    extract::{Path, Query, State}, Extension, Json
+    Extension, Json,
+    extract::{Path, Query, State},
 };
-use flow_like_storage::{arrow_schema::Schema, databases::vector::{lancedb::LanceDBVectorStore, VectorStore}};
+use flow_like_storage::{
+    arrow_schema::Schema,
+    databases::vector::{VectorStore, lancedb::LanceDBVectorStore},
+};
 use flow_like_types::anyhow;
 use futures_util::{StreamExt, TryStreamExt};
 

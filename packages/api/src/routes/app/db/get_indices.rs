@@ -1,29 +1,25 @@
 use crate::{
-    ensure_permission, error::ApiError, middleware::jwt::AppUser, permission::role_permission::RolePermissions, routes::{LanguageParams, PaginationParams}, state::AppState
+    ensure_permission,
+    error::ApiError,
+    middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions,
+    routes::{LanguageParams, PaginationParams},
+    state::AppState,
 };
 use axum::{
-    extract::{Path, Query, State}, Extension, Json
+    Extension, Json,
+    extract::{Path, Query, State},
 };
-use flow_like_storage::{arrow_schema::Schema, databases::vector::{lancedb::LanceDBVectorStore, VectorStore}, lancedb::index::IndexConfig};
+use flow_like_storage::{
+    arrow_schema::Schema,
+    databases::vector::{
+        VectorStore,
+        lancedb::{IndexConfigDto, LanceDBVectorStore},
+    },
+    lancedb::index::IndexConfig,
+};
 use flow_like_types::anyhow;
 use futures_util::{StreamExt, TryStreamExt};
-
-#[derive(serde::Serialize)]
-pub struct IndexConfigDto {
-    name: String,
-    index_type: String,      // render enum via Display
-    columns: Vec<String>,
-}
-
-impl From<IndexConfig> for IndexConfigDto {
-    fn from(idx: IndexConfig) -> Self {
-        Self {
-            name: idx.name,
-            index_type: idx.index_type.to_string(),
-            columns: idx.columns,
-        }
-    }
-}
 
 #[tracing::instrument(name = "GET /apps/{app_id}/db/{table}/indices", skip(state, user))]
 pub async fn get_db_indices(
@@ -37,9 +33,7 @@ pub async fn get_db_indices(
     let connection = credentials.to_db(&app_id).await?.execute().await?;
     let db = LanceDBVectorStore::from_connection(connection, table).await;
 
-    let indices = db.list_indices().await?.into_iter()
-        .map(IndexConfigDto::from)
-        .collect::<Vec<_>>();
+    let indices = db.list_indices().await?;
 
     Ok(Json(indices))
 }

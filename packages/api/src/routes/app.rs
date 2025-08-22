@@ -10,13 +10,13 @@ pub mod internal;
 
 pub mod board;
 pub mod data;
+pub mod db;
 pub mod events;
 pub mod invoke;
 pub mod meta;
 pub mod roles;
 pub mod team;
 pub mod template;
-pub mod db;
 
 pub fn routes() -> Router<AppState> {
     Router::new()

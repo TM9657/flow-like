@@ -3,6 +3,7 @@ import {
 	EmptyAppState,
 	EmptyBitState,
 	EmptyBoardState,
+	EmptyDatabaseState,
 	EmptyEventState,
 	EmptyHelperState,
 	EmptyRoleState,
@@ -15,6 +16,7 @@ import {
 	type IBackendState,
 	type IBitState,
 	type IBoardState,
+	type IDatabaseState,
 	type IEventState,
 	type IHelperState,
 	type IRoleState,
@@ -41,6 +43,7 @@ export class EmptyBackend implements IBackendState {
 	teamState: ITeamState = new EmptyTeamState();
 	templateState: ITemplateState = new EmptyTemplateState();
 	userState: IUserState = new EmptyUserState();
+	dbState: IDatabaseState = new EmptyDatabaseState();
 }
 
 export function EmptyBackendProvider({ data }: Readonly<{ data: string }>) {

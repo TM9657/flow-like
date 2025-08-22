@@ -8,6 +8,8 @@ import {
 	CardTitle,
 	Input,
 	ScrollArea,
+	useBackend,
+	useInvoke,
 } from "@tm9657/flow-like-ui";
 import LanceDBExplorer from "@tm9657/flow-like-ui/components/ui/lance-viewer";
 import {
@@ -29,7 +31,6 @@ import {
 } from "next/navigation";
 import type React from "react";
 import { useCallback, useMemo, useState } from "react";
-import { useTauriInvoke } from "../../../../components/useInvoke";
 import NotFound from "../not-found";
 
 export default function Page(): React.ReactElement {
@@ -71,23 +72,25 @@ function TableView({
 	appId,
 	onBack,
 }: Readonly<{ table: string; appId: string; onBack: () => void }>) {
-	const schema = useTauriInvoke<any>("db_schema", { appId, tableName: table });
-	const list = useTauriInvoke<any>("db_list", { appId, tableName: table });
+	const backend = useBackend();
+	const schema = useInvoke(backend.dbState.getSchema, backend.dbState, [appId, table]);
+	const [offset, setOffset] = useState(0);
+	const [limit, setLimit] = useState(25);
+	const list = useInvoke(backend.dbState.listItems, backend.dbState, [appId, table, offset, limit])
+
 	return (
 		<div className="flex flex-col h-full flex-grow max-h-full overflow-hidden">
 			{schema.data && list.data && (
 				<LanceDBExplorer
 					tableName={table}
 					arrowSchema={schema.data}
-					onSwitchPage={async (offset, limit) => {
-						const items = await invoke<any>("db_list", {
-							appId,
-							tableName: table,
-							offset,
-							limit,
-						});
-						return items;
+					rows={list.data}
+					onPageRequest={(args) => {
+						setOffset((args.page - 1) * args.pageSize);
+						setLimit(args.pageSize);
 					}}
+					loading={list.isLoading}
+					error={list.error?.message}
 				>
 					<Button
 						variant={"default"}
@@ -119,9 +122,10 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 	appId,
 	searchParams,
 }) => {
+	const backend = useBackend()
 	const router = useRouter();
 	const pathname = usePathname();
-	const tables = useTauriInvoke<string[]>("db_table_names", { appId });
+	const tables = useInvoke(backend.dbState.listTables, backend.dbState, [appId]);
 
 	const [query, setQuery] = useState<string>("");
 	const [sortAsc, setSortAsc] = useState<boolean>(true);

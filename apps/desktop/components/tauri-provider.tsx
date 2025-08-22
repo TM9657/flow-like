@@ -9,6 +9,7 @@ import {
 	type IBit,
 	type IBitState,
 	type IBoardState,
+	IDatabaseState,
 	type IEventState,
 	type IGenericCommand,
 	type IHelperState,
@@ -43,6 +44,7 @@ import { StorageState } from "./tauri-provider/storage-state";
 import { TeamState } from "./tauri-provider/team-state";
 import { TemplateState } from "./tauri-provider/template-state";
 import { UserState } from "./tauri-provider/user-state";
+import { DatabaseState } from "./tauri-provider/db-state";
 
 // One-time resume guards for the whole app session
 declare global {
@@ -64,6 +66,7 @@ export class TauriBackend implements IBackendState {
 	templateState: ITemplateState;
 	userState: IUserState;
 	aiState: IAIState;
+	dbState: IDatabaseState;
 
 	constructor(
 		public readonly backgroundTaskHandler: (task: Promise<any>) => void,
@@ -82,6 +85,7 @@ export class TauriBackend implements IBackendState {
 		this.templateState = new TemplateState(this);
 		this.userState = new UserState(this);
 		this.aiState = new AiState(this);
+		this.dbState = new DatabaseState(this);
 	}
 
 	pushProfile(profile: IProfile) {

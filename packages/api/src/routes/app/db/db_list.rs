@@ -1,10 +1,16 @@
 use crate::{
-    ensure_permission, error::ApiError, middleware::jwt::AppUser, permission::role_permission::RolePermissions, routes::{LanguageParams, PaginationParams}, state::AppState
+    ensure_permission,
+    error::ApiError,
+    middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions,
+    routes::{LanguageParams, PaginationParams},
+    state::AppState,
 };
 use axum::{
-    extract::{Path, Query, State}, Extension, Json
+    Extension, Json,
+    extract::{Path, Query, State},
 };
-use flow_like_storage::databases::vector::{lancedb::LanceDBVectorStore, VectorStore};
+use flow_like_storage::databases::vector::{VectorStore, lancedb::LanceDBVectorStore};
 use flow_like_types::anyhow;
 use futures_util::{StreamExt, TryStreamExt};
 
@@ -13,7 +19,7 @@ pub async fn list_items(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Path((app_id, table)): Path<(String, String)>,
-    Query(params): Query<PaginationParams>
+    Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<flow_like_types::Value>>, ApiError> {
     ensure_permission!(user, &app_id, &state, RolePermissions::ReadFiles);
 
