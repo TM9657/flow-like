@@ -21,7 +21,7 @@ pub async fn storage_add(
     prefix: String,
 ) -> Result<String, TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
-    let (store, path) = construct_storage(&state, &app_id, &prefix, true).await?;
+    let (store, path) = construct_storage(&state, &app_id, &prefix).await?;
 
     let upload_url = store
         .sign("PUT", &path, Duration::from_secs(60 * 60 * 24))
@@ -39,7 +39,7 @@ pub async fn storage_remove(
 ) -> Result<(), TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
     for prefix in prefixes.iter() {
-        let (store, path) = construct_storage(&state, &app_id, prefix, false).await?;
+        let (store, path) = construct_storage(&state, &app_id, prefix).await?;
         let generic = store.as_generic();
         let locations = generic.list(Some(&path)).map_ok(|m| m.location).boxed();
         generic
@@ -62,7 +62,7 @@ pub async fn storage_rename(
     prefix: String,
 ) -> Result<(), TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
-    let (_store, _path) = construct_storage(&state, &app_id, &prefix, true).await?;
+    let (_store, _path) = construct_storage(&state, &app_id, &prefix).await?;
 
     Ok(())
 }
@@ -74,14 +74,27 @@ pub async fn storage_list(
     prefix: String,
 ) -> Result<Vec<StorageItem>, TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
-    let (store, path) = construct_storage(&state, &app_id, &prefix, false).await?;
+    let (store, path) = construct_storage(&state, &app_id, &prefix).await?;
     println!("Listing items in storage at path: {}, {:?}", path, store);
     let items = store
         .as_generic()
         .list_with_delimiter(Some(&path))
         .await
         .map_err(|e| anyhow!("Failed to list items: {}", e))?;
-    let items: Vec<StorageItem> = items
+    let folders = items.common_prefixes.into_iter().map(|p| {
+        let mut item = StorageItem::from(p);
+        // Split the location, skip the first three parts, and rejoin
+        let stripped_location = item
+            .location
+            .split('/')
+            .skip(3)
+            .collect::<Vec<_>>()
+            .join("/");
+        item.location = stripped_location;
+        item.is_dir = true;
+        item
+    }).collect::<Vec<StorageItem>>();
+    let mut items: Vec<StorageItem> = items
         .objects
         .into_iter()
         .map(|object| {
@@ -97,6 +110,7 @@ pub async fn storage_list(
             item
         })
         .collect();
+    items.extend(folders);
     println!("Listed {} items", items.len());
     Ok(items)
 }
@@ -111,7 +125,7 @@ pub async fn storage_get(
     let mut urls = Vec::with_capacity(prefixes.len());
 
     for prefix in prefixes.iter() {
-        let (store, path) = construct_storage(&state, &app_id, prefix, false).await?;
+        let (store, path) = construct_storage(&state, &app_id, prefix).await?;
         println!(
             "Generating signed URL for path: {:?}, from prefix: {:?}",
             path, prefix
@@ -153,7 +167,7 @@ pub async fn storage_to_fullpath(
     prefix: String,
 ) -> Result<String, TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
-    let (store, path) = construct_storage(&state, &app_id, &prefix, true).await?;
+    let (store, path) = construct_storage(&state, &app_id, &prefix).await?;
     let url = match store {
         FlowLikeStore::Local(store) => {
             let local_path = store

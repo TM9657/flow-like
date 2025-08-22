@@ -19,6 +19,7 @@ pub struct StorageItem {
     pub size: usize,
     pub e_tag: Option<String>,
     pub version: Option<String>,
+    pub is_dir: bool,
 }
 
 impl From<ObjectMeta> for StorageItem {
@@ -29,6 +30,20 @@ impl From<ObjectMeta> for StorageItem {
             size: meta.size,
             e_tag: meta.e_tag,
             version: meta.version,
+            is_dir: false,
+        }
+    }
+}
+
+impl From<Path> for StorageItem {
+    fn from(path: Path) -> Self {
+        Self {
+            location: path.to_string(),
+            last_modified: String::new(),
+            size: 0,
+            e_tag: None,
+            version: None,
+            is_dir: true,
         }
     }
 }
@@ -65,39 +80,19 @@ impl FlowLikeStore {
         }
     }
 
-    pub async fn create_folder(&self, path: &Path, folder_name: &str) -> Result<()> {
-        let content = b"0";
-        let dir_path = path.child(format!("_{}_._path", folder_name));
-        self.as_generic()
-            .put(&dir_path, PutPayload::from_static(content))
-            .await
-            .map_err(|e| anyhow!("Failed to create directory: {}", e))?;
-        Ok(())
-    }
-
     pub async fn construct_upload(
         &self,
         app_id: &str,
         prefix: &str,
-        construct_dirs: bool,
     ) -> Result<Path> {
-        let mut base_path = Path::from("apps").child(app_id).child("upload");
+        let base_path = Path::from("apps").child(app_id).child("upload");
 
-        let prefix_parts: Vec<&str> = prefix.split('/').filter(|s| !s.is_empty()).collect();
+        let final_path = prefix
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .fold(base_path, |acc, seg| acc.child(seg));
 
-        for (index, prefix) in prefix_parts.iter().enumerate() {
-            if construct_dirs && (!prefix_parts.is_empty()) && (index < prefix_parts.len() - 1) {
-                let dir_marker = base_path.child(format!("_{}_._path", prefix));
-                let exists = self.as_generic().head(&dir_marker).await;
-                if exists.is_err() {
-                    self.create_folder(&base_path, prefix).await?;
-                }
-            }
-
-            base_path = base_path.child(*prefix);
-        }
-
-        Ok(base_path)
+        Ok(final_path)
     }
 
     pub async fn sign(&self, method: &str, path: &Path, expires_after: Duration) -> Result<Url> {

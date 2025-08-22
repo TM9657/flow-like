@@ -34,7 +34,7 @@ pub async fn list_files(
         .await?;
     let project_dir = project_dir.to_store(false).await?;
     let path = project_dir
-        .construct_upload(&app_id, &payload.prefix, true)
+        .construct_upload(&app_id, &payload.prefix)
         .await?;
 
     let items = project_dir
@@ -43,7 +43,13 @@ pub async fn list_files(
         .await
         .map_err(|e| anyhow!("Failed to list items: {}", e))?;
 
-    let items: Vec<StorageItem> = items.objects.into_iter().map(StorageItem::from).collect();
+
+    let dirs = items.common_prefixes.into_iter()
+        .map(|p| StorageItem::from(p))
+        .collect::<Vec<_>>();
+
+    let mut items: Vec<StorageItem> = items.objects.into_iter().map(StorageItem::from).collect();
+    items.extend(dirs);
 
     Ok(Json(items))
 }

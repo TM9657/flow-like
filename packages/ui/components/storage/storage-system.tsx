@@ -13,7 +13,7 @@ import {
 	SortAscIcon,
 	UploadIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type IStorageItem, useBackend, useInvoke } from "../..";
 import {
@@ -73,11 +73,97 @@ export function StorageSystem({
 		[appId, prefix],
 	);
 
+	// ---------- Virtual folders (sessionStorage) ----------
+	const [creatingFolder, setCreatingFolder] = useState(false);
+	const [newFolderName, setNewFolderName] = useState("");
+	const [virtualFoldersHere, setVirtualFoldersHere] = useState<string[]>([]);
+
+	const storeKey = useMemo(() => `vfolders:${appId}`, [appId]);
+	const normalizePrefix = useCallback((p: string) => p.replace(/^\/+|\/+$/g, ""), []);
+	const currentParentKey = useMemo(() => normalizePrefix(prefix), [prefix, normalizePrefix]);
+
+	type VFMap = Record<string, string[]>; // parentPrefix -> [childFolderNames]
+	const readVF = useCallback((): VFMap => {
+		try {
+			const raw = sessionStorage.getItem(storeKey);
+			return raw ? (JSON.parse(raw) as VFMap) : {};
+		} catch {
+			return {};
+		}
+	}, [storeKey]);
+	const writeVF = useCallback((map: VFMap) => {
+		try {
+			sessionStorage.setItem(storeKey, JSON.stringify(map));
+		} catch {
+			// ignore
+		}
+	}, [storeKey]);
+
+	useEffect(() => {
+		const map = readVF();
+		setVirtualFoldersHere(map[currentParentKey] ?? []);
+	}, [currentParentKey, readVF]);
+
+	const addVirtualFolder = useCallback(
+		(name: string) => {
+			const clean = name.trim();
+			if (!clean) {
+				toast.error("Folder name cannot be empty");
+				return false;
+			}
+			if (/^[.]{1,2}$/.test(clean)) {
+				toast.error("Reserved name");
+				return false;
+			}
+			if (/[\\\/:*?"<>|]/.test(clean)) {
+				toast.error("Invalid characters in name");
+				return false;
+			}
+
+			// check duplicates against visible folders (backend + virtual)
+			const existingFolderNames = new Set(
+				(files.data ?? [])
+					.filter((f) => f.is_dir)
+					.map((f) => (f.location.split("/").pop() ?? "").toLowerCase()),
+			);
+			for (const v of virtualFoldersHere) existingFolderNames.add(v.toLowerCase());
+			if (existingFolderNames.has(clean.toLowerCase())) {
+				toast.error("A folder with that name already exists");
+				return false;
+			}
+
+			const all = readVF();
+			const next = new Set(all[currentParentKey] ?? []);
+			next.add(clean);
+			all[currentParentKey] = Array.from(next);
+			writeVF(all);
+			setVirtualFoldersHere(all[currentParentKey]);
+			toast.success("Folder created");
+			return true;
+		},
+		[files.data, virtualFoldersHere, currentParentKey, readVF, writeVF],
+	);
+
+	// Merge backend items with virtual folders for current prefix
+	const filesWithVirtual = useMemo<IStorageItem[]>(() => {
+		const base = (files.data ?? []).slice();
+		const have = new Set(base.map((f) => f.location));
+		const basePrefixNorm = normalizePrefix(prefix);
+		const locFor = (name: string) => (basePrefixNorm ? `${basePrefixNorm}/${name}` : name);
+		const virtualItems: IStorageItem[] = virtualFoldersHere
+			.filter((name) => !have.has(locFor(name)))
+			.map((name) => ({
+				location: locFor(name),
+				is_dir: true,
+				size: 0,
+				last_modified: new Date().toISOString(),
+			}) as IStorageItem);
+		return [...base, ...virtualItems];
+	}, [files.data, virtualFoldersHere, prefix, normalizePrefix]);
+
 	const [searchQuery, setSearchQuery] = useState("");
 	const [viewMode, setViewMode] = useState<"grid" | "list">("list");
-	const [sortBy, setSortBy] = useState<"name" | "date" | "size" | "type">(
-		"name",
-	);
+	const [sortBy, setSortBy] = useState<"name" | "date" | "size" | "type">("name");
 	const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 	const [isPreviewMaximized, setIsPreviewMaximized] = useState(false);
 
@@ -136,9 +222,7 @@ export function StorageSystem({
 				return;
 			}
 
-			const url = await backend.storageState.downloadStorageItems(appId, [
-				file,
-			]);
+			const url = await backend.storageState.downloadStorageItems(appId, [file]);
 
 			if (url.length === 0 || !url[0]?.url) {
 				toast.error("Failed to load file preview");
@@ -162,9 +246,7 @@ export function StorageSystem({
 				return;
 			}
 
-			const signedUrl = await backend.storageState.downloadStorageItems(appId, [
-				file,
-			]);
+			const signedUrl = await backend.storageState.downloadStorageItems(appId, [file]);
 
 			if (signedUrl.length === 0 || !signedUrl[0]?.url) {
 				toast.error("Failed to load file preview");
@@ -177,12 +259,9 @@ export function StorageSystem({
 			}
 
 			const fileUrl = signedUrl[0].url;
-			const fileName =
-				fileUrl.split("/").pop()?.split("?")[0] || "downloaded_file";
+			const fileName = fileUrl.split("/").pop()?.split("?")[0] || "downloaded_file";
 			const fileContent = await fetch(fileUrl).then((res) => res.blob());
-			const blob = new Blob([fileContent], {
-				type: "application/octet-stream",
-			});
+			const blob = new Blob([fileContent], { type: "application/octet-stream" });
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement("a");
 			a.href = url;
@@ -197,23 +276,17 @@ export function StorageSystem({
 
 	const filteredFiles = useMemo(
 		() =>
-			files.data?.filter((file) =>
-				file.location
-					.split("/")
-					.pop()
-					?.toLowerCase()
-					.includes(searchQuery.toLowerCase()),
+			filesWithVirtual?.filter((file) =>
+				file.location.split("/").pop()?.toLowerCase().includes(searchQuery.toLowerCase()),
 			) ?? [],
-		[files, searchQuery],
+		[filesWithVirtual, searchQuery],
 	);
 
 	const sortedFiles = useMemo(
 		() =>
 			[...filteredFiles].sort((a, b) => {
-				const getName = (file: IStorageItem) =>
-					file.location.split("/").pop() ?? "";
-				const isFolder = (file: IStorageItem) =>
-					file.location.endsWith("_._path");
+				const getName = (file: IStorageItem) => file.location.split("/").pop() ?? "";
+				const isFolder = (file: IStorageItem) => file.is_dir;
 
 				// Always sort folders first
 				if (isFolder(a) && !isFolder(b)) return -1;
@@ -227,8 +300,7 @@ export function StorageSystem({
 						break;
 					case "date":
 						comparison =
-							new Date(a.last_modified ?? 0).getTime() -
-							new Date(b.last_modified ?? 0).getTime();
+							new Date(a.last_modified ?? 0).getTime() - new Date(b.last_modified ?? 0).getTime();
 						break;
 					case "size":
 						comparison = (a.size ?? 0) - (b.size ?? 0);
@@ -246,12 +318,8 @@ export function StorageSystem({
 		[filteredFiles, sortBy, sortOrder],
 	);
 
-	const fileCount = files.data?.filter(
-		(f) => !f.location.endsWith("_._path"),
-	).length;
-	const folderCount = files.data?.filter((f) =>
-		f.location.endsWith("_._path"),
-	).length;
+	const fileCount = filesWithVirtual?.filter((f) => !f.is_dir).length ?? 0;
+	const folderCount = filesWithVirtual?.filter((f) => f.is_dir).length ?? 0;
 
 	return (
 		<div className="flex grow flex-col gap-4 min-h-full h-full max-h-full overflow-hidden w-full">
@@ -319,9 +387,7 @@ export function StorageSystem({
 								<span className="font-medium text-foreground capitalize">
 									{sortBy === "date" ? "Date modified" : sortBy}
 								</span>
-								<span className="text-xs">
-									{sortOrder === "asc" ? "↑" : "↓"}
-								</span>
+								<span className="text-xs">{sortOrder === "asc" ? "↑" : "↓"}</span>
 							</div>
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
@@ -333,11 +399,7 @@ export function StorageSystem({
 									<DropdownMenuItem
 										onClick={() => {
 											setSortBy("name");
-											setSortOrder(
-												sortBy === "name" && sortOrder === "asc"
-													? "desc"
-													: "asc",
-											);
+											setSortOrder(sortBy === "name" && sortOrder === "asc" ? "desc" : "asc");
 										}}
 										className="flex items-center justify-between"
 									>
@@ -351,11 +413,7 @@ export function StorageSystem({
 									<DropdownMenuItem
 										onClick={() => {
 											setSortBy("date");
-											setSortOrder(
-												sortBy === "date" && sortOrder === "asc"
-													? "desc"
-													: "asc",
-											);
+											setSortOrder(sortBy === "date" && sortOrder === "asc" ? "desc" : "asc");
 										}}
 										className="flex items-center justify-between"
 									>
@@ -369,11 +427,7 @@ export function StorageSystem({
 									<DropdownMenuItem
 										onClick={() => {
 											setSortBy("size");
-											setSortOrder(
-												sortBy === "size" && sortOrder === "asc"
-													? "desc"
-													: "asc",
-											);
+											setSortOrder(sortBy === "size" && sortOrder === "asc" ? "desc" : "asc");
 										}}
 										className="flex items-center justify-between"
 									>
@@ -387,11 +441,7 @@ export function StorageSystem({
 									<DropdownMenuItem
 										onClick={() => {
 											setSortBy("type");
-											setSortOrder(
-												sortBy === "type" && sortOrder === "asc"
-													? "desc"
-													: "asc",
-											);
+											setSortOrder(sortBy === "type" && sortOrder === "asc" ? "desc" : "asc");
 										}}
 										className="flex items-center justify-between"
 									>
@@ -406,35 +456,31 @@ export function StorageSystem({
 							</DropdownMenu>
 						</div>
 
+						{/* View toggle */}
 						<Tooltip>
 							<TooltipTrigger asChild>
-								<Button
-									variant="outline"
-									size="icon"
-									onClick={() =>
-										setViewMode(viewMode === "grid" ? "list" : "grid")
-									}
-								>
-									{viewMode === "grid" ? (
-										<ListIcon className="h-4 w-4" />
-									) : (
-										<GridIcon className="h-4 w-4" />
-									)}
+								<Button variant="outline" size="icon" onClick={() => setViewMode(viewMode === "grid" ? "list" : "grid")}>
+									{viewMode === "grid" ? <ListIcon className="h-4 w-4" /> : <GridIcon className="h-4 w-4" />}
 								</Button>
 							</TooltipTrigger>
-							<TooltipContent>
-								Switch to {viewMode === "grid" ? "list" : "grid"} view
-							</TooltipContent>
+							<TooltipContent>Switch to {viewMode === "grid" ? "list" : "grid"} view</TooltipContent>
 						</Tooltip>
 						<Separator orientation="vertical" className="h-6" />
 
+						{/* New virtual folder */}
 						<Tooltip>
 							<TooltipTrigger asChild>
-								<Button
-									variant="outline"
-									className="gap-2"
-									onClick={() => fileReference.current?.click()}
-								>
+								<Button variant="outline" className="gap-2" onClick={() => setCreatingFolder((v) => !v)}>
+									<FolderPlusIcon className="h-4 w-4" />
+									New Folder
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>Create a virtual folder (session only)</TooltipContent>
+						</Tooltip>
+
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button variant="outline" className="gap-2" onClick={() => fileReference.current?.click()}>
 									<UploadIcon className="h-4 w-4" />
 									Upload Files
 								</Button>
@@ -444,11 +490,7 @@ export function StorageSystem({
 
 						<Tooltip>
 							<TooltipTrigger asChild>
-								<Button
-									variant="outline"
-									className="gap-2"
-									onClick={() => folderReference.current?.click()}
-								>
+								<Button variant="outline" className="gap-2" onClick={() => folderReference.current?.click()}>
 									<FolderPlusIcon className="h-4 w-4" />
 									Upload Folder
 								</Button>
@@ -457,15 +499,10 @@ export function StorageSystem({
 						</Tooltip>
 					</div>
 				</div>
+
 				<div className="flex items-end gap-2 mt-2 justify-between">
-					{(files.data?.length ?? 0) > 0 && (
-						<StorageBreadcrumbs
-							appId={appId}
-							prefix={prefix}
-							updatePrefix={(prefix) => updatePrefix(prefix)}
-						/>
-					)}
-					{(files.data?.length ?? 0) > 0 && (
+					<StorageBreadcrumbs appId={appId} prefix={prefix} updatePrefix={(prefix) => updatePrefix(prefix)} />
+					{(filesWithVirtual.length ?? 0) > 0 && (
 						<div className="relative">
 							<SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
 							<Input
@@ -477,19 +514,60 @@ export function StorageSystem({
 						</div>
 					)}
 				</div>
+
+				{/* Inline create folder row */}
+				{creatingFolder && (
+					<div className="flex items-center gap-2 px-4">
+						<Input
+							placeholder="Folder name"
+							value={newFolderName}
+							onChange={(e) => setNewFolderName(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									if (addVirtualFolder(newFolderName)) {
+										setNewFolderName("");
+										setCreatingFolder(false);
+									}
+								}
+								if (e.key === "Escape") {
+									setCreatingFolder(false);
+									setNewFolderName("");
+								}
+							}}
+						/>
+						<Button
+							variant="default"
+							onClick={() => {
+								if (addVirtualFolder(newFolderName)) {
+									setNewFolderName("");
+									setCreatingFolder(false);
+								}
+							}}
+						>
+							Create
+						</Button>
+						<Button variant="ghost" onClick={() => { setCreatingFolder(false); setNewFolderName(""); }}>
+							Cancel
+						</Button>
+					</div>
+				)}
 			</div>
 
 			<Separator />
 
 			{/* Content Section */}
-			{(files.data?.length ?? 0) === 0 && (
+			{(filesWithVirtual.length ?? 0) === 0 && (
 				<div className="flex flex-col h-full w-full grow relative px-4">
 					<EmptyState
 						className="w-full h-full max-w-full border-2 border-dashed border-muted-foreground/25 rounded-lg"
 						title="No Files Found"
-						description="Get started by uploading your first files or folders to this storage space"
+						description="Get started by creating a folder or uploading your first files to this storage space"
 						action={[
 							{
+							label: "New Folder",
+							onClick: () => setCreatingFolder(true),
+						},
+						{
 								label: "Upload Files",
 								onClick: () => fileReference.current?.click(),
 							},
@@ -503,7 +581,7 @@ export function StorageSystem({
 				</div>
 			)}
 
-			{(files.data?.length ?? 0) > 0 && (
+			{(filesWithVirtual.length ?? 0) > 0 && (
 				<div className="flex flex-col gap-4 grow max-h-full h-full overflow-y-hidden px-4 pb-4">
 					{preview.url !== "" && (
 						<>
@@ -511,15 +589,8 @@ export function StorageSystem({
 								<div className="fixed inset-0 z-50 bg-background">
 									<div className="flex flex-col h-full w-full">
 										<div className="p-4 border-b bg-background flex items-center justify-between">
-											<h3 className="font-medium text-lg">
-												Preview - {preview.file.split("/").pop()}
-											</h3>
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={() => setIsPreviewMaximized(false)}
-												className="h-8 w-8 p-0"
-											>
+											<h3 className="font-medium text-lg">Preview - {preview.file.split("/").pop()}</h3>
+											<Button variant="ghost" size="sm" onClick={() => setIsPreviewMaximized(false)} className="h-8 w-8 p-0">
 												<MinimizeIcon className="h-4 w-4" />
 											</Button>
 										</div>
@@ -530,32 +601,13 @@ export function StorageSystem({
 								</div>
 							)}
 							{!isPreviewMaximized && (
-								<ResizablePanelGroup
-									direction="horizontal"
-									autoSaveId={"file_viewer"}
-									className="border rounded-lg"
-								>
+								<ResizablePanelGroup direction="horizontal" autoSaveId={"file_viewer"} className="border rounded-lg">
 									<ResizablePanel className="flex flex-col gap-2 grow overflow-y-hidden max-h-full h-full p-4 bg-background">
-										<div
-											key={sortBy}
-											className="flex flex-col grow max-h-full h-full overflow-hidden gap-2"
-										>
+										<div key={sortBy} className="flex flex-col grow max-h-full h-full overflow-hidden gap-2">
 											<div className="flex items-center gap-2 mb-2">
-												<h3 className="font-medium text-sm text-muted-foreground">
-													Files & Folders
-												</h3>
-												<Badge
-													variant="secondary"
-													className="px-2 py-1 text-xs"
-												>
-													{fileCount} files
-												</Badge>
-												<Badge
-													variant="secondary"
-													className="px-2 py-1 text-xs"
-												>
-													{folderCount} folders
-												</Badge>
+												<h3 className="font-medium text-sm text-muted-foreground">Files & Folders</h3>
+												<Badge variant="secondary" className="px-2 py-1 text-xs">{fileCount} files</Badge>
+												<Badge variant="secondary" className="px-2 py-1 text-xs">{folderCount} folders</Badge>
 											</div>
 											<div className="flex flex-col gap-2 grow max-h-full h-full overflow-auto">
 												{sortedFiles.map((file) => (
@@ -563,25 +615,16 @@ export function StorageSystem({
 														highlight={preview.file === file.location}
 														key={file.location}
 														file={file}
-														changePrefix={(new_prefix) =>
-															updatePrefix(`${prefix}/${new_prefix}`)
-														}
+														changePrefix={(new_prefix) => updatePrefix(`${prefix}/${new_prefix}`)}
 														loadFile={(file) => loadFile(file)}
 														deleteFile={async (file) => {
 															const filePrefix = `${prefix}/${file}`;
-															await backend.storageState.deleteStorageItems(
-																appId,
-																[filePrefix],
-															);
+															await backend.storageState.deleteStorageItems(appId, [filePrefix]);
 															await files.refetch();
 															toast.success("File deleted successfully");
 														}}
 														shareFile={async (file) => {
-															const downloadLinks =
-																await backend.storageState.downloadStorageItems(
-																	appId,
-																	[file],
-																);
+															const downloadLinks = await backend.storageState.downloadStorageItems(appId, [file]);
 															if (downloadLinks.length === 0) {
 																return;
 															}
@@ -591,22 +634,11 @@ export function StorageSystem({
 																return;
 															}
 
-															console.log(
-																"Copying download link to clipboard:",
-																firstItem.url,
-															);
 															try {
-																await navigator.clipboard.writeText(
-																	firstItem.url,
-																);
-																toast.success(
-																	"Copied download link to clipboard",
-																);
+																await navigator.clipboard.writeText(firstItem.url);
+																toast.success("Copied download link to clipboard");
 															} catch (error) {
-																console.error(
-																	"Failed to copy link to clipboard:",
-																	error,
-																);
+																console.error("Failed to copy link to clipboard:", error);
 															}
 														}}
 														downloadFile={async (file) => {
@@ -614,7 +646,7 @@ export function StorageSystem({
 														}}
 													/>
 												))}
-											</div>
+										</div>
 										</div>
 									</ResizablePanel>
 									<ResizableHandle className="mx-2" />
@@ -622,12 +654,7 @@ export function StorageSystem({
 										<div className="flex flex-col grow overflow-auto max-h-full h-full bg-muted/50 rounded-md border">
 											<div className="p-2 border-b bg-background rounded-t-md flex items-center justify-between">
 												<h3 className="font-medium text-sm">Preview</h3>
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => setIsPreviewMaximized(true)}
-													className="h-6 w-6 p-0"
-												>
+												<Button variant="ghost" size="sm" onClick={() => setIsPreviewMaximized(true)} className="h-6 w-6 p-0">
 													<MaximizeIcon className="h-3 w-3" />
 												</Button>
 											</div>
@@ -643,45 +670,29 @@ export function StorageSystem({
 					{preview.url === "" && (
 						<div className="flex flex-col grow max-h-full h-full overflow-auto gap-2 border rounded-lg p-4 bg-background">
 							<div className="flex items-center gap-2 mb-2">
-								<h3 className="font-medium text-sm text-muted-foreground">
-									Files & Folders
-								</h3>
-								<Badge variant="secondary" className="px-2 py-1 text-xs">
-									{fileCount} files
-								</Badge>
-								<Badge variant="secondary" className="px-2 py-1 text-xs">
-									{folderCount} folders
-								</Badge>
+								<h3 className="font-medium text-sm text-muted-foreground">Files & Folders</h3>
+								<Badge variant="secondary" className="px-2 py-1 text-xs">{fileCount} files</Badge>
+								<Badge variant="secondary" className="px-2 py-1 text-xs">{folderCount} folders</Badge>
 							</div>
-							<div
-								className={`grid gap-2 ${viewMode === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1"}`}
-							>
+							<div className={`grid gap-2 ${viewMode === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1"}`}>
 								{sortedFiles.map((file) => (
 									<FileOrFolder
 										highlight={preview.file === file.location}
 										key={file.location}
 										file={file}
 										changePrefix={(new_prefix) => {
-											setPreview({
-												url: "",
-												file: "",
-											});
+											setPreview({ url: "", file: "" });
 											updatePrefix(`${prefix}/${new_prefix}`);
 										}}
 										loadFile={loadFile}
 										deleteFile={async (file) => {
 											const filePrefix = `${prefix}/${file}`;
-											await backend.storageState.deleteStorageItems(appId, [
-												filePrefix,
-											]);
+											await backend.storageState.deleteStorageItems(appId, [filePrefix]);
 											await files.refetch();
 											toast.success("File deleted successfully");
 										}}
 										shareFile={async (file) => {
-											const downloadLinks =
-												await backend.storageState.downloadStorageItems(appId, [
-													file,
-												]);
+											const downloadLinks = await backend.storageState.downloadStorageItems(appId, [file]);
 											if (downloadLinks.length === 0) {
 												return;
 											}
@@ -693,10 +704,7 @@ export function StorageSystem({
 												await navigator.clipboard.writeText(firstItem.url);
 												toast.success("Copied download link to clipboard");
 											} catch (error) {
-												console.error(
-													"Failed to copy link to clipboard:",
-													error,
-												);
+												console.error("Failed to copy link to clipboard:", error);
 											}
 										}}
 										downloadFile={async (file) => {

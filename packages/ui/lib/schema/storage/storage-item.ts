@@ -4,5 +4,6 @@ export interface IStorageItem {
 	location: string;
 	size: number;
 	version?: null | string;
+	is_dir?: boolean;
 	[property: string]: any;
 }
