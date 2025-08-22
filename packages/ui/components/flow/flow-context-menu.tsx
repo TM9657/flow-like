@@ -392,6 +392,9 @@ export function FlowContextMenu({
 								setFilter(e.target.value);
 								search(e.target.value);
 							}}
+							onKeyDown={(e) => {
+								e.stopPropagation();
+							}}
 						/>
 					</div>
 					<div className="pr-1 flex flex-grow flex-col overflow-hidden">
