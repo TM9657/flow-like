@@ -234,9 +234,7 @@ export function FileOrFolder({
 										onClick={(e) => {
 											e.preventDefault();
 											e.stopPropagation();
-											deleteFile?.(
-												file.location.split("/").pop() ?? "",
-											);
+											deleteFile?.(file.location.split("/").pop() ?? "");
 											deleteFile?.(file.location.split("/").pop() ?? "");
 										}}
 									>

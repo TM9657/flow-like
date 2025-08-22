@@ -9,7 +9,7 @@ import {
 	type IBit,
 	type IBitState,
 	type IBoardState,
-	IDatabaseState,
+	type IDatabaseState,
 	type IEventState,
 	type IGenericCommand,
 	type IHelperState,
@@ -37,6 +37,7 @@ import { AiState } from "./tauri-provider/ai-state";
 import { AppState } from "./tauri-provider/app-state";
 import { BitState } from "./tauri-provider/bit-state";
 import { BoardState } from "./tauri-provider/board-state";
+import { DatabaseState } from "./tauri-provider/db-state";
 import { EventState } from "./tauri-provider/event-state";
 import { HelperState } from "./tauri-provider/helper-state";
 import { RoleState } from "./tauri-provider/role-state";
@@ -44,7 +45,6 @@ import { StorageState } from "./tauri-provider/storage-state";
 import { TeamState } from "./tauri-provider/team-state";
 import { TemplateState } from "./tauri-provider/template-state";
 import { UserState } from "./tauri-provider/user-state";
-import { DatabaseState } from "./tauri-provider/db-state";
 
 // One-time resume guards for the whole app session
 declare global {

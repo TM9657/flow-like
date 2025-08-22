@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
 	Badge,
 	IConnectionMode,
-	ISettingsProfile,
+	type ISettingsProfile,
 	IThemes,
 	Input,
 	type UseQueryResult,
@@ -12,6 +12,7 @@ import {
 	useInvalidateInvoke,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
+import { Button } from "@tm9657/flow-like-ui/components/ui/button";
 import {
 	Card,
 	CardContent,
@@ -29,7 +30,6 @@ import {
 } from "@tm9657/flow-like-ui/components/ui/select";
 import { Switch } from "@tm9657/flow-like-ui/components/ui/switch";
 import { Textarea } from "@tm9657/flow-like-ui/components/ui/textarea";
-import { Button } from "@tm9657/flow-like-ui/components/ui/button";
 import {
 	Calendar,
 	Camera,
@@ -37,10 +37,10 @@ import {
 	GitBranch,
 	Save,
 	Settings,
+	Upload,
 	User,
 	X,
 	Zap,
-	Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTauriInvoke } from "../../../components/useInvoke";
@@ -63,6 +63,7 @@ import MIDNIGHT_BLOOM from "./themes/midnight-bloom.json";
 import MOCHA_MOUSSE from "./themes/mocha-mousse.json";
 import MODERN_MINIMAL from "./themes/modern-minimal.json";
 
+import { useDebounce } from "@uidotdev/usehooks";
 import MONO from "./themes/mono.json";
 import NATURE from "./themes/nature.json";
 import NEO_BRUTALISM from "./themes/neo-brutalism.json";
@@ -80,7 +81,6 @@ import SUNSET_HORIZON from "./themes/sunset-horizon.json";
 import TANGERINE from "./themes/tangerine.json";
 import VINTAGE_PAPER from "./themes/vintage-paper.json";
 import VIOLET_BLOOM from "./themes/violet-bloom.json";
-import { useDebounce } from "@uidotdev/usehooks";
 
 const THEME_TRANSLATION: Record<IThemes, any> = {
 	[IThemes.FLOW_LIKE]: undefined,
@@ -172,12 +172,16 @@ export default function SettingsPage() {
 	);
 
 	// Local state for editing
-	const [localProfile, setLocalProfile] = useState<ISettingsProfile | null>(null);
+	const [localProfile, setLocalProfile] = useState<ISettingsProfile | null>(
+		null,
+	);
 	const debouncedLocalProfile = useDebounce(localProfile, 500);
 	const [hasChanges, setHasChanges] = useState(false);
 
 	// Theme selection + custom import UI state
-	const [themeSelectValue, setThemeSelectValue] = useState<string>(IThemes.FLOW_LIKE);
+	const [themeSelectValue, setThemeSelectValue] = useState<string>(
+		IThemes.FLOW_LIKE,
+	);
 	const [customCss, setCustomCss] = useState("");
 	const [customThemeName, setCustomThemeName] = useState("Custom Theme");
 	const [importError, setImportError] = useState<string | null>(null);
@@ -245,7 +249,9 @@ export default function SettingsPage() {
 							<User className="h-8 w-8 text-primary" />
 							{localProfile.hub_profile.name || "Profile Settings"}
 							{isCustomTheme && (
-								<Badge variant="secondary" className="ml-2">Custom theme</Badge>
+								<Badge variant="secondary" className="ml-2">
+									Custom theme
+								</Badge>
 							)}
 						</h1>
 						<p className="text-muted-foreground">
@@ -632,8 +638,14 @@ export default function SettingsPage() {
 												variant="default"
 												onClick={() => {
 													try {
-														const parsed = parseTweakcnTheme(customCss, customThemeName || "Custom Theme");
-														if (!parsed.light?.background && !parsed.dark?.background) {
+														const parsed = parseTweakcnTheme(
+															customCss,
+															customThemeName || "Custom Theme",
+														);
+														if (
+															!parsed.light?.background &&
+															!parsed.dark?.background
+														) {
 															throw new Error("No valid variables found.");
 														}
 														updateProfile({
@@ -645,7 +657,9 @@ export default function SettingsPage() {
 														setThemeSelectValue("CUSTOM");
 														setImportError(null);
 													} catch (err: any) {
-														setImportError(err?.message ?? "Failed to import theme.");
+														setImportError(
+															err?.message ?? "Failed to import theme.",
+														);
 													}
 												}}
 												className="flex items-center gap-2"
@@ -654,11 +668,14 @@ export default function SettingsPage() {
 												Import & Apply
 											</Button>
 											{importError && (
-												<span className="text-sm text-destructive">{importError}</span>
+												<span className="text-sm text-destructive">
+													{importError}
+												</span>
 											)}
 										</div>
 										<p className="text-xs text-muted-foreground">
-											Paste the full CSS including :root and .dark blocks from tweakcn.com.
+											Paste the full CSS including :root and .dark blocks from
+											tweakcn.com.
 										</p>
 									</div>
 								)}

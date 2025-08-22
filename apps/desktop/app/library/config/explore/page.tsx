@@ -1,6 +1,4 @@
 "use client";
-
-import { invoke } from "@tauri-apps/api/core";
 import {
 	Button,
 	Card,
@@ -73,10 +71,18 @@ function TableView({
 	onBack,
 }: Readonly<{ table: string; appId: string; onBack: () => void }>) {
 	const backend = useBackend();
-	const schema = useInvoke(backend.dbState.getSchema, backend.dbState, [appId, table]);
+	const schema = useInvoke(backend.dbState.getSchema, backend.dbState, [
+		appId,
+		table,
+	]);
 	const [offset, setOffset] = useState(0);
 	const [limit, setLimit] = useState(25);
-	const list = useInvoke(backend.dbState.listItems, backend.dbState, [appId, table, offset, limit])
+	const list = useInvoke(backend.dbState.listItems, backend.dbState, [
+		appId,
+		table,
+		offset,
+		limit,
+	]);
 
 	return (
 		<div className="flex flex-col h-full flex-grow max-h-full overflow-hidden">
@@ -122,10 +128,12 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 	appId,
 	searchParams,
 }) => {
-	const backend = useBackend()
+	const backend = useBackend();
 	const router = useRouter();
 	const pathname = usePathname();
-	const tables = useInvoke(backend.dbState.listTables, backend.dbState, [appId]);
+	const tables = useInvoke(backend.dbState.listTables, backend.dbState, [
+		appId,
+	]);
 
 	const [query, setQuery] = useState<string>("");
 	const [sortAsc, setSortAsc] = useState<boolean>(true);
