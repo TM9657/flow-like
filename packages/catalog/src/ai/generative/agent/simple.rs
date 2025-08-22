@@ -40,7 +40,7 @@ TOOLS_STR
 ## Tool Use Format
 <tooluse>
     {
-        "name": "<name of the tool you want to use>", 
+        "name": "<name of the tool you want to use>",
         "arguments": "<key: value dict for args as defined by schema of the tool you want to use>"
     }
 </tooluse>
@@ -168,7 +168,7 @@ impl NodeLogic for SimpleAgentNode {
         }
 
         // render system prompt with add-on for tool definitions
-        let system_prompt_tools = if tools.len() > 0 {
+        let system_prompt_tools = if !tools.is_empty() {
             SYSTEM_PROMPT_TEMPLATE.replace("TOOLS_STR", &tools_str) // todo: serlialize tools instead?
         } else {
             String::from("")
@@ -248,7 +248,7 @@ impl NodeLogic for SimpleAgentNode {
                     }
                     _ => {
                         // if there are tool calls from a previous iteration not answered by tool outputs we warn the user
-                        if unanswered_tool_calls.len() > 0 {
+                        if !unanswered_tool_calls.is_empty() {
                             context.log_message(&format!("There are open tool calls but incoming message hasn't role 'tool' but {:?} - this can lead to non-optimal performance.", new_message.role), LogLevel::Warn);
                         }
                         // if there aren't any tool calls (yet) to answer it's fine
@@ -310,7 +310,7 @@ impl NodeLogic for SimpleAgentNode {
             };
 
             // LLM wants to make tool calls -> execute subcontexts
-            if tool_calls.len() > 0 {
+            if !tool_calls.is_empty() {
                 let tool_call_id_pin = context.get_pin_by_name("tool_call_id").await?;
                 let tool_call_args_pin = context.get_pin_by_name("tool_call_args").await?;
                 for tool_call in tool_calls.iter() {

@@ -4,7 +4,6 @@ use aws_credentials::AwsRuntimeCredentials;
 use flow_like::credentials::SharedCredentials;
 use flow_like::flow_like_storage::files::store::FlowLikeStore;
 use flow_like::state::FlowLikeState;
-use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
 use flow_like_storage::lancedb::connection::ConnectBuilder;
 use flow_like_types::Result;
 use flow_like_types::async_trait;

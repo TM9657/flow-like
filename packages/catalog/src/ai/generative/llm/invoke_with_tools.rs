@@ -37,7 +37,7 @@ TOOLS_STR
 ## Tool Use Format
 <tooluse>
     {
-        "name": "<name of the tool you want to use>", 
+        "name": "<name of the tool you want to use>",
         "arguments": "<key: value dict for args as defined by schema of the tool you want to use>"
     }
 </tooluse>
@@ -67,7 +67,7 @@ TOOLS_STR
 ## Tool Use Format
 <tooluse>
     {
-        "name": "<name of the tool you want to use>", 
+        "name": "<name of the tool you want to use>",
         "arguments": "<key: value dict for args as defined by schema of the tool you want to use>"
     }
 </tooluse>
@@ -99,7 +99,7 @@ TOOL_STR
 ## Tool Use Format
 <tooluse>
     {
-        "name": "<name of the tool>", 
+        "name": "<name of the tool>",
         "arguments": "<key: value dict for args as defined by schema of the tool>"
     }
 </tooluse>
@@ -288,7 +288,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         }
 
         // render system prompt with add-on for tool definitions
-        let system_prompt_tools = if tools.len() > 0 {
+        let system_prompt_tools = if !tools.is_empty() {
             match tool_choice {
                 ToolChoice::Auto => SP_TEMPLATE_AUTO.replace("TOOLS_STR", &tools_str),
                 ToolChoice::Required => SP_TEMPLATE_REQUIRED.replace("TOOLS_STR", &tools_str),
@@ -345,7 +345,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         };
 
         // LLM wants to make tool calls -> execute subcontexts
-        if tool_calls.len() > 0 {
+        if !tool_calls.is_empty() {
             if let ToolChoice::None = tool_choice {
                 return Err(anyhow!("LLM made tool calls but tool choice is None!"));
             };

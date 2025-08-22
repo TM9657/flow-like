@@ -46,7 +46,7 @@ pub async fn list_files(
     let dirs = items
         .common_prefixes
         .into_iter()
-        .map(|p| StorageItem::from(p))
+        .map(StorageItem::from)
         .collect::<Vec<_>>();
 
     let mut items: Vec<StorageItem> = items.objects.into_iter().map(StorageItem::from).collect();

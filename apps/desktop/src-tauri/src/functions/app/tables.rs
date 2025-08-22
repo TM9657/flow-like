@@ -1,8 +1,7 @@
-use std::{ops::Deref, os::unix::raw::off_t, path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use flow_like::{
-    app::App,
     credentials::SharedCredentials,
     flow_like_storage::{
         Path,
@@ -13,15 +12,10 @@ use flow_like::{
         },
         datafusion::prelude::SessionContext,
     },
-    profile::ProfileApp,
 };
 use tauri::AppHandle;
-use tauri_plugin_dialog::DialogExt;
 
-use crate::{
-    functions::TauriFunctionError,
-    state::{TauriFlowLikeState, TauriSettingsState},
-};
+use crate::{functions::TauriFunctionError, state::TauriFlowLikeState};
 
 async fn db_connection(
     app_handle: &AppHandle,
@@ -29,7 +23,7 @@ async fn db_connection(
     table_name: Option<String>,
     credentials: Option<Arc<SharedCredentials>>,
 ) -> flow_like_types::Result<LanceDBVectorStore> {
-    let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
+    let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
     let table_name = table_name.unwrap_or("default".to_string());
     let board_dir = Path::from("apps")
         .child(app_id.clone())
@@ -141,12 +135,12 @@ pub async fn db_query(
             let items = db
                 .vector_search(vector_query.vector, filter_str, limit, offset)
                 .await?;
-            return Ok(items);
+            Ok(items)
         }
         (None, Some(fts_term), filter) => {
             let filter_str = filter.as_deref();
             let items = db.fts_search(&fts_term, filter_str, limit, offset).await?;
-            return Ok(items);
+            Ok(items)
         }
         (Some(vector_query), Some(fts_term), filter) => {
             let filter_str = filter.as_deref();
@@ -160,15 +154,13 @@ pub async fn db_query(
                     payload.rerank.unwrap_or(true),
                 )
                 .await?;
-            return Ok(items);
+            Ok(items)
         }
         (None, None, Some(filter)) => {
             let items = db.filter(&filter, limit, offset).await?;
-            return Ok(items);
+            Ok(items)
         }
-        _ => {
-            return Err(anyhow::anyhow!("No query parameters provided").into());
-        }
+        _ => Err(anyhow::anyhow!("No query parameters provided").into()),
     }
 }
 

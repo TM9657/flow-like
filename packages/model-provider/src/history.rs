@@ -105,7 +105,7 @@ impl HistoryMessage {
     /// Returns a copy of the entire text-related content as single String
     pub fn as_str(&self) -> String {
         match &self.content {
-            MessageContent::String(s) => return s.clone(),
+            MessageContent::String(s) => s.clone(),
             MessageContent::Contents(contents) => contents
                 .iter()
                 .filter_map(|content| {
@@ -123,7 +123,7 @@ impl HistoryMessage {
 
 impl fmt::Display for History {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.messages.len() > 0 {
+        if !self.messages.is_empty() {
             let mut history_str = String::from("| ");
             for message in self.messages.iter() {
                 let m = match message.role {
@@ -135,9 +135,9 @@ impl fmt::Display for History {
                 };
                 history_str.push_str(m);
             }
-            return write!(f, "{}", history_str);
+            write!(f, "{}", history_str)
         } else {
-            return write!(f, "[]");
+            write!(f, "[]")
         }
     }
 }
@@ -281,14 +281,12 @@ impl History {
                 MessageContent::Contents(contents) => {
                     let mut prompt = String::new();
                     for content in contents {
-                        match content {
-                            Content::Text {
-                                content_type: _,
-                                text,
-                            } => {
-                                prompt.push_str(&text);
-                            }
-                            _ => {}
+                        if let Content::Text {
+                            content_type: _,
+                            text,
+                        } = content
+                        {
+                            prompt.push_str(text);
                         }
                     }
                     return Some(prompt);

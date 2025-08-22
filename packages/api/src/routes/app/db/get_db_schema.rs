@@ -1,21 +1,15 @@
 use crate::{
-    ensure_permission,
-    error::ApiError,
-    middleware::jwt::AppUser,
-    permission::role_permission::RolePermissions,
-    routes::{LanguageParams, PaginationParams},
-    state::AppState,
+    ensure_permission, error::ApiError, middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions, state::AppState,
 };
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
+    extract::{Path, State},
 };
 use flow_like_storage::{
     arrow_schema::Schema,
     databases::vector::{VectorStore, lancedb::LanceDBVectorStore},
 };
-use flow_like_types::anyhow;
-use futures_util::{StreamExt, TryStreamExt};
 
 #[tracing::instrument(name = "GET /apps/{app_id}/db/{table}/schema", skip(state, user))]
 pub async fn get_db_schema(

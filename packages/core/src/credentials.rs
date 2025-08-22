@@ -1,7 +1,6 @@
 use aws_credentials::AwsSharedCredentials;
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::lancedb::connection::ConnectBuilder;
-use flow_like_storage::object_store;
 use flow_like_types::Result;
 use flow_like_types::async_trait;
 use serde::{Deserialize, Serialize};

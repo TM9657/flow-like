@@ -9,9 +9,6 @@ use flow_like::{
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
-#[cfg(feature = "aws")]
-use flow_like_storage::Path;
-use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
 use flow_like_storage::object_store;
 use flow_like_types::{Result, anyhow, async_trait};
 use serde::{Deserialize, Serialize};
