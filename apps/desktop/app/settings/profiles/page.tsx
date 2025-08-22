@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
 	Badge,
 	IConnectionMode,
+	ISettingsProfile,
 	IThemes,
 	Input,
 	type UseQueryResult,
@@ -28,8 +29,7 @@ import {
 } from "@tm9657/flow-like-ui/components/ui/select";
 import { Switch } from "@tm9657/flow-like-ui/components/ui/switch";
 import { Textarea } from "@tm9657/flow-like-ui/components/ui/textarea";
-import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
-import { useDebounce } from "@uidotdev/usehooks";
+import { Button } from "@tm9657/flow-like-ui/components/ui/button";
 import {
 	Calendar,
 	Camera,
@@ -40,8 +40,9 @@ import {
 	User,
 	X,
 	Zap,
+	Upload,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTauriInvoke } from "../../../components/useInvoke";
 import AMBER_MINIMAL from "./themes/amber-minimal.json";
 import AMETHYST_HAZE from "./themes/amethyst-haze.json";
@@ -79,6 +80,7 @@ import SUNSET_HORIZON from "./themes/sunset-horizon.json";
 import TANGERINE from "./themes/tangerine.json";
 import VINTAGE_PAPER from "./themes/vintage-paper.json";
 import VIOLET_BLOOM from "./themes/violet-bloom.json";
+import { useDebounce } from "@uidotdev/usehooks";
 
 const THEME_TRANSLATION: Record<IThemes, any> = {
 	[IThemes.FLOW_LIKE]: undefined,
@@ -119,6 +121,42 @@ const THEME_TRANSLATION: Record<IThemes, any> = {
 	[IThemes.VINTAGE_PAPER]: VINTAGE_PAPER,
 };
 
+// Parse tweakcn CSS → { id, light, dark } with camelCased keys
+interface ImportedTheme {
+	id: string;
+	light: Record<string, string>;
+	dark: Record<string, string>;
+}
+
+const toCamel = (name: string) =>
+	name.replace(/^-+/, "").replace(/-([a-z0-9])/gi, (_, c) => c.toUpperCase());
+
+const extractBlock = (input: string, selector: string) => {
+	const re = new RegExp(`${selector}\\s*\\{([\\s\\S]*?)\\}`, "m");
+	const m = input.match(re);
+	return m?.[1] ?? "";
+};
+
+const parseVars = (block: string) => {
+	const out: Record<string, string> = {};
+	const re = /--([a-z0-9-]+)\s*:\s*([^;]+);/gi;
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(block))) {
+		const key = toCamel(m[1]);
+		const val = m[2].trim();
+		out[key] = val;
+	}
+	return out;
+};
+
+function parseTweakcnTheme(input: string, id = "Custom Theme"): ImportedTheme {
+	const root = extractBlock(input, ":root");
+	const dark = extractBlock(input, "\\.dark");
+	const lightVars = parseVars(root);
+	const darkVars = parseVars(dark);
+	return { id, light: lightVars, dark: darkVars };
+}
+
 export default function SettingsPage() {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
@@ -134,11 +172,15 @@ export default function SettingsPage() {
 	);
 
 	// Local state for editing
-	const [localProfile, setLocalProfile] = useState<ISettingsProfile | null>(
-		null,
-	);
+	const [localProfile, setLocalProfile] = useState<ISettingsProfile | null>(null);
 	const debouncedLocalProfile = useDebounce(localProfile, 500);
 	const [hasChanges, setHasChanges] = useState(false);
+
+	// Theme selection + custom import UI state
+	const [themeSelectValue, setThemeSelectValue] = useState<string>(IThemes.FLOW_LIKE);
+	const [customCss, setCustomCss] = useState("");
+	const [customThemeName, setCustomThemeName] = useState("Custom Theme");
+	const [importError, setImportError] = useState<string | null>(null);
 
 	// Initialize local state when profile loads
 	useEffect(() => {
@@ -147,6 +189,19 @@ export default function SettingsPage() {
 			setHasChanges(false);
 		}
 	}, [currentProfile.data]);
+
+	// Keep Select value in sync with actual theme id, mapping non-enum ids to CUSTOM
+	useEffect(() => {
+		if (!localProfile) return;
+		const id = localProfile.hub_profile.theme?.id ?? IThemes.FLOW_LIKE;
+		const isKnown = Object.values(IThemes).includes(id as IThemes);
+		setThemeSelectValue(isKnown ? (id as string) : "CUSTOM");
+	}, [localProfile]);
+
+	const isCustomTheme = useMemo(() => {
+		const id = localProfile?.hub_profile?.theme?.id;
+		return !!id && !Object.values(IThemes).includes(id as IThemes);
+	}, [localProfile]);
 
 	useEffect(() => {
 		if (debouncedLocalProfile) {
@@ -160,7 +215,6 @@ export default function SettingsPage() {
 	// Update local state and trigger debounced save
 	const updateProfile = (updates: Partial<ISettingsProfile>) => {
 		if (!localProfile) return;
-
 		const newProfile = { ...localProfile, ...updates };
 		setLocalProfile(newProfile);
 		setHasChanges(true);
@@ -190,6 +244,9 @@ export default function SettingsPage() {
 						<h1 className="text-4xl font-bold tracking-tight flex items-center gap-3">
 							<User className="h-8 w-8 text-primary" />
 							{localProfile.hub_profile.name || "Profile Settings"}
+							{isCustomTheme && (
+								<Badge variant="secondary" className="ml-2">Custom theme</Badge>
+							)}
 						</h1>
 						<p className="text-muted-foreground">
 							Manage your profile settings and preferences
@@ -508,28 +565,31 @@ export default function SettingsPage() {
 							<CardTitle className="flex items-center gap-2">
 								<Settings className="h-5 w-5" />
 								Theme Settings
+								{isCustomTheme && <Badge className="ml-2">Custom</Badge>}
 							</CardTitle>
 							<CardDescription>
 								Customize your visual experience
 							</CardDescription>
 						</CardHeader>
 						<CardContent>
-							<div className="space-y-2">
+							<div className="space-y-3">
 								<Label htmlFor="theme">Theme</Label>
 								<Select
-									value={
-										localProfile?.hub_profile?.theme?.id ?? IThemes.FLOW_LIKE
-									}
-									onValueChange={(value: string) =>
-										updateProfile({
-											hub_profile: {
-												...localProfile.hub_profile,
-												theme:
-													THEME_TRANSLATION[value as IThemes] ??
-													THEME_TRANSLATION[IThemes.FLOW_LIKE],
-											},
-										})
-									}
+									value={themeSelectValue}
+									onValueChange={(value: string) => {
+										setThemeSelectValue(value);
+										setImportError(null);
+										if (Object.values(IThemes).includes(value as IThemes)) {
+											updateProfile({
+												hub_profile: {
+													...localProfile.hub_profile,
+													theme:
+														THEME_TRANSLATION[value as IThemes] ??
+														THEME_TRANSLATION[IThemes.FLOW_LIKE],
+												},
+											});
+										}
+									}}
 								>
 									<SelectTrigger>
 										<SelectValue placeholder="Select theme" />
@@ -540,8 +600,69 @@ export default function SettingsPage() {
 												{theme}
 											</SelectItem>
 										))}
+										<SelectItem value="CUSTOM">Custom (import)</SelectItem>
 									</SelectContent>
 								</Select>
+
+								{themeSelectValue === "CUSTOM" && (
+									<div className="mt-3 space-y-3">
+										<div className="grid gap-2">
+											<Label htmlFor="customThemeName">Theme Name</Label>
+											<Input
+												id="customThemeName"
+												placeholder="Custom Theme"
+												value={customThemeName}
+												onChange={(e) => setCustomThemeName(e.target.value)}
+											/>
+										</div>
+
+										<div className="grid gap-2">
+											<Label htmlFor="customTheme">Paste tweakcn export</Label>
+											<Textarea
+												id="customTheme"
+												placeholder="Paste the CSS export from tweakcn here"
+												rows={10}
+												value={customCss}
+												onChange={(e) => setCustomCss(e.target.value)}
+											/>
+										</div>
+
+										<div className="flex items-center gap-2">
+											<Button
+												variant="default"
+												onClick={() => {
+													try {
+														const parsed = parseTweakcnTheme(customCss, customThemeName || "Custom Theme");
+														if (!parsed.light?.background && !parsed.dark?.background) {
+															throw new Error("No valid variables found.");
+														}
+														updateProfile({
+															hub_profile: {
+																...localProfile.hub_profile,
+																theme: parsed as any,
+															},
+														});
+														setThemeSelectValue("CUSTOM");
+														setImportError(null);
+													} catch (err: any) {
+														setImportError(err?.message ?? "Failed to import theme.");
+													}
+												}}
+												className="flex items-center gap-2"
+											>
+												<Upload className="h-4 w-4" />
+												Import & Apply
+											</Button>
+											{importError && (
+												<span className="text-sm text-destructive">{importError}</span>
+											)}
+										</div>
+										<p className="text-xs text-muted-foreground">
+											Paste the full CSS including :root and .dark blocks from tweakcn.com.
+										</p>
+									</div>
+								)}
+
 								<p className="text-xs text-muted-foreground">
 									Credits to{" "}
 									<a
