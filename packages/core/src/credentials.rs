@@ -10,7 +10,7 @@ pub mod aws_credentials;
 #[async_trait]
 pub trait SharedCredentialsTrait {
     async fn to_store(&self, meta: bool) -> Result<FlowLikeStore>;
-    async fn to_db(&self, path: object_store::path::Path) -> Result<ConnectBuilder>;
+    async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder>;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -25,9 +25,9 @@ impl SharedCredentials {
         }
     }
 
-    pub async fn to_db(&self, path: object_store::path::Path) -> Result<ConnectBuilder> {
+    pub async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
         match self {
-            SharedCredentials::Aws(aws) => aws.to_db(path).await,
+            SharedCredentials::Aws(aws) => aws.to_db(app_id).await,
         }
     }
 }

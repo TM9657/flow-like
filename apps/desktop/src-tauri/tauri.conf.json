@@ -21,7 +21,8 @@
 				"transparent": false,
 				"skipTaskbar": false,
 				"decorations": true,
-				"maximized": false
+				"maximized": false,
+				"dragDropEnabled": true
 			}
 		],
 		"security": {

@@ -11,6 +11,7 @@ import type { IStorageState } from "./backend-state/storage-state";
 import type { ITeamState } from "./backend-state/team-state";
 import type { ITemplateState } from "./backend-state/template-state";
 import type { IUserState } from "./backend-state/user-state";
+import type { IDatabaseState } from "./backend-state/db-state";
 
 export * from "./backend-state/empty-states/index";
 
@@ -36,6 +37,7 @@ export type {
 	IMember,
 	IStorageItemActionResult,
 } from "./backend-state/types";
+export * from "./backend-state/db-state"
 
 export interface IBackendState {
 	appState: IAppState;
@@ -49,6 +51,7 @@ export interface IBackendState {
 	helperState: IHelperState;
 	eventState: IEventState;
 	aiState: IAIState;
+	dbState: IDatabaseState;
 }
 
 interface BackendStoreState {
