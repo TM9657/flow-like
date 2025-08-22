@@ -1,20 +1,20 @@
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;
 
-pub mod to_array;
-pub mod insert;
-pub mod make;
 pub mod clear;
+pub mod difference;
 pub mod discard;
 pub mod has;
+pub mod insert;
 pub mod is_empty;
-pub mod size;
-pub mod union;
-pub mod difference;
 pub mod is_subset;
 pub mod is_superset;
-pub mod pop;
+pub mod make;
 pub mod mutual;
+pub mod pop;
+pub mod size;
+pub mod to_array;
+pub mod union;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![

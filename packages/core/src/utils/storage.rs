@@ -21,9 +21,7 @@ pub async fn construct_storage(
         .clone()
         .ok_or(anyhow!("Project store not found"))?;
 
-    let base_path = project_store
-        .construct_upload(app_id, prefix)
-        .await?;
+    let base_path = project_store.construct_upload(app_id, prefix).await?;
 
     Ok((project_store, base_path))
 }

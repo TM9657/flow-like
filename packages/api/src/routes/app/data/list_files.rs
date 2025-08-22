@@ -43,8 +43,9 @@ pub async fn list_files(
         .await
         .map_err(|e| anyhow!("Failed to list items: {}", e))?;
 
-
-    let dirs = items.common_prefixes.into_iter()
+    let dirs = items
+        .common_prefixes
+        .into_iter()
         .map(|p| StorageItem::from(p))
         .collect::<Vec<_>>();
 

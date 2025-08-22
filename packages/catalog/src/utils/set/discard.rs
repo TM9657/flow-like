@@ -1,3 +1,4 @@
+use ahash::HashSet;
 use flow_like::{
     flow::{
         board::Board,
@@ -10,7 +11,6 @@ use flow_like::{
 };
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
-use ahash::HashSet;
 
 #[derive(Default)]
 pub struct DiscardSetNode {}
@@ -41,15 +41,15 @@ impl NodeLogic for DiscardSetNode {
 
         node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
 
-        node.add_output_pin(
-            "set_out",
-            "Set",
-            "Adjusted Set",
-            VariableType::Generic,
-        )
-        .set_value_type(ValueType::HashSet);
+        node.add_output_pin("set_out", "Set", "Adjusted Set", VariableType::Generic)
+            .set_value_type(ValueType::HashSet);
 
-        node.add_output_pin("has_removed", "Was Removed", "If the element was removed", VariableType::Boolean);
+        node.add_output_pin(
+            "has_removed",
+            "Was Removed",
+            "If the element was removed",
+            VariableType::Boolean,
+        );
 
         return node;
     }
@@ -62,7 +62,9 @@ impl NodeLogic for DiscardSetNode {
         let has_removed = set_out.remove(&element);
 
         context.set_pin_value("set_out", json!(set_out)).await?;
-        context.set_pin_value("has_removed", json!(has_removed)).await?;
+        context
+            .set_pin_value("has_removed", json!(has_removed))
+            .await?;
 
         context.activate_exec_pin("exec_out").await?;
         Ok(())

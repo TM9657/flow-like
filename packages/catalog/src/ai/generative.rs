@@ -1,6 +1,6 @@
+pub mod agent;
 pub mod embedding;
 pub mod llm;
-pub mod agent;
 
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;

@@ -1,5 +1,6 @@
 pub mod clear;
 pub mod from_messages;
+pub mod from_string;
 pub mod get_system;
 pub mod make;
 pub mod message;
@@ -17,4 +18,3 @@ pub mod set_system;
 pub mod set_temperature;
 pub mod set_top_p;
 pub mod set_user;
-pub mod from_string;

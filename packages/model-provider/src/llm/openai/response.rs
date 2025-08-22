@@ -44,7 +44,7 @@ impl From<ChatCompletionResponse> for Response {
                             tool_type: Some(tool_call.r#type), // Map type to tool_type
                             function: ResponseFunction {
                                 name: tool_call.function.name.unwrap_or("".to_string()),
-                                arguments: tool_call.function.arguments.unwrap_or("".to_string())
+                                arguments: tool_call.function.arguments.unwrap_or("".to_string()),
                             },
                         })
                         .collect();

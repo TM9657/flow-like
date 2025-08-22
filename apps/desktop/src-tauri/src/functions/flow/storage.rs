@@ -81,19 +81,23 @@ pub async fn storage_list(
         .list_with_delimiter(Some(&path))
         .await
         .map_err(|e| anyhow!("Failed to list items: {}", e))?;
-    let folders = items.common_prefixes.into_iter().map(|p| {
-        let mut item = StorageItem::from(p);
-        // Split the location, skip the first three parts, and rejoin
-        let stripped_location = item
-            .location
-            .split('/')
-            .skip(3)
-            .collect::<Vec<_>>()
-            .join("/");
-        item.location = stripped_location;
-        item.is_dir = true;
-        item
-    }).collect::<Vec<StorageItem>>();
+    let folders = items
+        .common_prefixes
+        .into_iter()
+        .map(|p| {
+            let mut item = StorageItem::from(p);
+            // Split the location, skip the first three parts, and rejoin
+            let stripped_location = item
+                .location
+                .split('/')
+                .skip(3)
+                .collect::<Vec<_>>()
+                .join("/");
+            item.location = stripped_location;
+            item.is_dir = true;
+            item
+        })
+        .collect::<Vec<StorageItem>>();
     let mut items: Vec<StorageItem> = items
         .objects
         .into_iter()

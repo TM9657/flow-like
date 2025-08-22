@@ -80,11 +80,7 @@ impl FlowLikeStore {
         }
     }
 
-    pub async fn construct_upload(
-        &self,
-        app_id: &str,
-        prefix: &str,
-    ) -> Result<Path> {
+    pub async fn construct_upload(&self, app_id: &str, prefix: &str) -> Result<Path> {
         let base_path = Path::from("apps").child(app_id).child("upload");
 
         let final_path = prefix
