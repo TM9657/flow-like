@@ -39,6 +39,7 @@ import designNeoBrutalism from "../images/index/theme-neo-brutalism.png";
 import designSoftPop from "../images/index/theme-soft-pop.png";
 import tracing from "../images/index/tracing.png";
 import nodeBig from "../images/index/node-big.png";
+import { BlogFooter } from "../components/blog-footer";
 
 const posts = (
 	await getCollection("blog", ({ data }) =>
@@ -70,7 +71,7 @@ const download = "https://github.com/TM9657/flow-like/releases";
 ---
 
 <!doctype html>
-<html lang="en" class="scroll-smooth">
+<html lang="en" class="scroll-smooth max-w-dvw overflow-x-hidden">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -387,7 +388,7 @@ const download = "https://github.com/TM9657/flow-like/releases";
 			class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
 		>
 			<div class="relative z-10 grid items-center gap-16 lg:grid-cols-5">
-				<div class="space-y-8 col-span-2">
+				<div class="space-y-8 w-full lg:col-span-2">
 					<div>
 						<div
 							class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6"
@@ -484,7 +485,7 @@ const download = "https://github.com/TM9657/flow-like/releases";
 				</div>
 
 				<!-- imagery stays but loses heavy frames -->
-				<div class="relative col-span-3">
+				<div class="relative w-full lg:col-span-3">
 					<div class="relative grid grid-cols-2 gap-6">
 						<div class="space-y-6">
 							<Image
@@ -2102,18 +2103,7 @@ const download = "https://github.com/TM9657/flow-like/releases";
 		</section>
 
 		<!-- Footer -->
-		<footer class="border-t border-border py-10">
-			<div
-				class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 text-sm text-muted-foreground md:flex-row lg:px-8"
-			>
-				<p>© {new Date().getFullYear()} Great-Co.de • Munich</p>
-				<nav class="flex items-center gap-5">
-					<a class="hover:text-foreground" href={docs}>Blog</a>
-					<a class="hover:text-foreground" href="/privacy">Privacy</a>
-					<a class="hover:text-foreground" href={github}>GitHub</a>
-				</nav>
-			</div>
-		</footer>
+		<BlogFooter/>
 
 		<!-- FLOW ENHANCEMENTS -->
 		<style>
