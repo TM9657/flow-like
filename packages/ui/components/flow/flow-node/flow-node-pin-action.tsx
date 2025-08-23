@@ -8,9 +8,9 @@ export function FlowPinAction({
 }: Readonly<{ action: IPinAction; index: number; input: boolean }>) {
 	return (
 		<button
-			className={`absolute flex flex-row items-center gap-1 top-0 translate-y-[-50%] translate-x-[-6px] ${input ? "left-0" : "right-0"}`}
+			className={`absolute flex flex-row items-center gap-1 top-0 translate-y-[-50%] translate-x-[-6px] ${input ? "-left-3" : "-right-6"}`}
 			style={{
-				top: index * 15,
+				top: (index - 1) * 15,
 				marginTop: "1.75rem",
 				height: 15,
 			}}
