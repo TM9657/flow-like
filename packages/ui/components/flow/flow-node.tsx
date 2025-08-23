@@ -151,10 +151,14 @@ const FlowNodeInner = memo(
 		const nodeStyle = useMemo(
 			() => ({
 				backgroundColor: props.selected
-					? typeToColor(Object.values(props.data.node.pins)?.[0]?.data_type ?? IVariableType.Generic)
+					? typeToColor(
+							Object.values(props.data.node.pins)?.[0]?.data_type ??
+								IVariableType.Generic,
+						)
 					: undefined,
 				borderColor: typeToColor(
-					Object.values(props.data.node.pins)?.[0]?.data_type ?? IVariableType.Generic,
+					Object.values(props.data.node.pins)?.[0]?.data_type ??
+						IVariableType.Generic,
 				),
 				borderWidth: "1px",
 				borderStyle: "solid",
@@ -302,44 +306,44 @@ const FlowNodeInner = memo(
 
 				if (!props?.data?.node?.pins) return;
 				const node = nodeGuard?.data?.node as INode | undefined;
-				if(!node) return;
+				if (!node) return;
 				const allPins = Object.values(node.pins);
 
 				const inputPins = allPins
-                    .filter((p) => p.pin_type === "Input" && p.id !== pinToRemove.id)
-                    .sort(sortPins)
-                    .map((p, i) => ({ ...p, index: i + 1 }));
+					.filter((p) => p.pin_type === "Input" && p.id !== pinToRemove.id)
+					.sort(sortPins)
+					.map((p, i) => ({ ...p, index: i + 1 }));
 
-                const outputPins = allPins
-                    .filter((p) => p.pin_type === "Output" && p.id !== pinToRemove.id)
-                    .sort(sortPins)
-                    .map((p, i) => ({ ...p, index: i + 1 }));
+				const outputPins = allPins
+					.filter((p) => p.pin_type === "Output" && p.id !== pinToRemove.id)
+					.sort(sortPins)
+					.map((p, i) => ({ ...p, index: i + 1 }));
 
 				const updatedPins: Record<string, IPin> = {};
-                [...inputPins, ...outputPins].forEach((p) => {
-                    updatedPins[p.id] = p;
-                });
-                node.pins = updatedPins;
+				[...inputPins, ...outputPins].forEach((p) => {
+					updatedPins[p.id] = p;
+				});
+				node.pins = updatedPins;
 
-                const command = updateNodeCommand({
-                    node: {
-                        ...node,
-                        coordinates: [nodeGuard.position.x, nodeGuard.position.y, 0],
-                    },
-                });
+				const command = updateNodeCommand({
+					node: {
+						...node,
+						coordinates: [nodeGuard.position.x, nodeGuard.position.y, 0],
+					},
+				});
 
-                const result = await backend.boardState.executeCommand(
-                    props.data.appId,
-                    props.data.boardId,
-                    command,
-                );
+				const result = await backend.boardState.executeCommand(
+					props.data.appId,
+					props.data.boardId,
+					command,
+				);
 
-                await pushCommand(result, false);
+				await pushCommand(result, false);
 
-                await invalidate(backend.boardState.getBoard, [
-                    props.data.appId,
-                    props.data.boardId,
-                ]);
+				await invalidate(backend.boardState.getBoard, [
+					props.data.appId,
+					props.data.boardId,
+				]);
 			},
 			[inputPins, outputPins, getNode],
 		);

@@ -1,13 +1,8 @@
 "use client";
-import {
-	Handle,
-	type HandleType,
-	Position,
-	useInternalNode,
-	useReactFlow,
-} from "@xyflow/react";
+import { Handle, type HandleType, Position, useReactFlow } from "@xyflow/react";
 import { EllipsisVerticalIcon, GripIcon, ListIcon, Trash2 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { useInvalidateInvoke } from "../../hooks";
 import { updateNodeCommand } from "../../lib";
 import type { ILayer } from "../../lib/schema/flow/board";
@@ -18,7 +13,6 @@ import { DynamicImage } from "../ui/dynamic-image";
 import { useUndoRedo } from "./flow-history";
 import { PinEdit } from "./flow-pin/pin-edit";
 import { typeToColor } from "./utils";
-import { toast } from "sonner";
 
 function FlowPinInnerComponent({
 	pin,
@@ -133,13 +127,7 @@ function FlowPinInnerComponent({
 		);
 		await pushCommand(result, false);
 		await refetchBoard();
-	}, [
-		pin.id,
-		defaultValue,
-		refetchBoard,
-		boardId,
-		pushCommand,
-	]);
+	}, [pin.id, defaultValue, refetchBoard, boardId, pushCommand]);
 
 	useEffect(() => {
 		updateNode();
@@ -266,19 +254,18 @@ function FlowPin({
 	skipOffset?: boolean;
 	onPinRemove: (pin: IPin) => Promise<void>;
 }>) {
-
-	if(pin.dynamic) {
+	if (pin.dynamic) {
 		return (
-		<FlowPinInner
-			key={pin.id}
-			appId={appId}
-			pin={pin}
-			boardId={boardId}
-			node={node}
-			skipOffset={skipOffset}
-			onPinRemove={onPinRemove}
-		/>
-	);
+			<FlowPinInner
+				key={pin.id}
+				appId={appId}
+				pin={pin}
+				boardId={boardId}
+				node={node}
+				skipOffset={skipOffset}
+				onPinRemove={onPinRemove}
+			/>
+		);
 	}
 
 	return (
