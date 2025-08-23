@@ -13,20 +13,13 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum NodeOrLayer {
     Node(Node),
     Layer(Layer),
 }
 
 impl NodeOrLayer {
-    fn is_node(&self) -> bool {
-        match self {
-            NodeOrLayer::Node(_) => true,
-            NodeOrLayer::Layer(_) => false,
-        }
-    }
-
     fn is_layer(&self) -> bool {
         match self {
             NodeOrLayer::Node(_) => false,
@@ -188,23 +181,13 @@ pub fn connect_pins(
     }
 
     if from_pin_ref.data_type != VariableType::Execution {
-        let mut old_depends_on = to_pin_ref.depends_on.clone();
         to_pin_ref.depends_on = BTreeSet::from([from_pin_ref.id.clone()]);
-        old_depends_on.remove(&from_pin_ref.id);
-
-        board.nodes.iter_mut().for_each(|(_, node)| {
-            node.pins.iter_mut().for_each(|(_, pin)| {
-                pin.connected_to.remove(&to_pin_ref.id);
-            });
-        });
-        board.layers.iter_mut().for_each(|(_, layer)| {
-            layer.pins.iter_mut().for_each(|(_, pin)| {
-                pin.connected_to.remove(&to_pin_ref.id);
-            });
-        });
     }
 
     from_pin_ref.connected_to.insert(to_pin_ref.id.clone());
+
+    println!("From Entity: {:?}", from_entity);
+    println!("To Entity: {:?}", to_entity);
 
     upsert_node_or_layer(board, from_entity);
     upsert_node_or_layer(board, to_entity);
@@ -233,6 +216,11 @@ pub fn disconnect_pins(
         NodeOrLayer::Layer(layer) => layer.pins.get_mut(to_pin),
     }
     .ok_or_else(|| flow_like_types::anyhow!("To Pin ({}) not found in container", to_pin))?;
+
+    println!(
+        "Disconnecting pins: {}:{} -> {}:{}",
+        from_node, from_pin, to_node, to_pin
+    );
 
     to_pin_ref.depends_on.remove(&from_pin_ref.id);
     from_pin_ref.connected_to.remove(&to_pin_ref.id);

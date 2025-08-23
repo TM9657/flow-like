@@ -316,6 +316,12 @@ impl Board {
             }
         }
 
+        for layer in self.layers.values() {
+            if let Some(pin) = layer.pins.get(pin_id) {
+                return Some(pin);
+            }
+        }
+
         None
     }
 
