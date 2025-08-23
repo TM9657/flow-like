@@ -69,7 +69,7 @@ const BubbleMenu = ({
 				left: position.x,
 				top: position.y,
 				transform: getTransform(),
-				...style
+				...style,
 			}}
 		>
 			<div

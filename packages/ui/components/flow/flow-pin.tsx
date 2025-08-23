@@ -5,15 +5,8 @@ import {
 	Position,
 	useInternalNode,
 } from "@xyflow/react";
-import { EllipsisVerticalIcon, GripIcon, ListIcon, Trash, Trash2 } from "lucide-react";
+import { EllipsisVerticalIcon, GripIcon, ListIcon, Trash2 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import {
-	ContextMenu,
-	ContextMenuContent,
-	ContextMenuItem,
-	ContextMenuLabel,
-	ContextMenuTrigger,
-} from "../../components/ui/context-menu";
 import { useInvalidateInvoke } from "../../hooks";
 import { updateNodeCommand } from "../../lib";
 import type { ILayer } from "../../lib/schema/flow/board";
@@ -24,7 +17,6 @@ import { DynamicImage } from "../ui/dynamic-image";
 import { useUndoRedo } from "./flow-history";
 import { PinEdit } from "./flow-pin/pin-edit";
 import { typeToColor } from "./utils";
-import { BubbleActions, Button } from "../ui";
 
 function FlowPinInnerComponent({
 	pin,
@@ -32,7 +24,7 @@ function FlowPinInnerComponent({
 	appId,
 	node,
 	skipOffset,
-	onPinRemove
+	onPinRemove,
 }: Readonly<{
 	pin: IPin;
 	boardId: string;
@@ -215,14 +207,26 @@ function FlowPinInnerComponent({
 						defaultValue={defaultValue}
 						changeDefaultValue={setDefaultValue}
 					/>
-					{pin.dynamic && <button className="opacity-0 hover:text-primary group-hover:opacity-100" title="Delete Pin" onClick={() => onPinRemove(pin)}>
-						<Trash2 className="w-2 h-2" />
-					</button>}
+					{pin.dynamic && (
+						<button
+							className="opacity-0 hover:text-primary group-hover:opacity-100"
+							title="Delete Pin"
+							onClick={() => onPinRemove(pin)}
+						>
+							<Trash2 className="w-2 h-2" />
+						</button>
+					)}
 				</div>
 			)}
-			{!shouldRenderPinEdit && pin.dynamic && <button className={`opacity-0 group-hover:opacity-100 hover:text-primary ${pin.pin_type === IPinType.Input ? "ml-3": "mr-3 right-0 absolute"}`} title="Delete Pin" onClick={() => onPinRemove(pin)}>
-				<Trash2 className="w-2 h-2" />
-			</button>}
+			{!shouldRenderPinEdit && pin.dynamic && (
+				<button
+					className={`opacity-0 group-hover:opacity-100 hover:text-primary ${pin.pin_type === IPinType.Input ? "ml-3" : "mr-3 right-0 absolute"}`}
+					title="Delete Pin"
+					onClick={() => onPinRemove(pin)}
+				>
+					<Trash2 className="w-2 h-2" />
+				</button>
+			)}
 		</MemoizedHandle>
 	);
 }
