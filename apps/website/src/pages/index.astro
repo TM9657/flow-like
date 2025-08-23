@@ -65,7 +65,7 @@ const descFor = (p: any) =>
 
 const site = "https://flow-like.com";
 const github = "https://github.com/TM9657/flow-like";
-const docs = "https://flow-like.com/blog";
+const docs = "https://docs.flow-like.com";
 const download = "https://github.com/TM9657/flow-like/releases";
 ---
 
@@ -926,7 +926,6 @@ const download = "https://github.com/TM9657/flow-like/releases";
 				</div>
 
 				<div class="relative">
-
 					<Image
 						src={nodeBig}
 						alt="Custom node library"
@@ -1714,197 +1713,169 @@ const download = "https://github.com/TM9657/flow-like/releases";
 			</div>
 		</div>
 
-		<!-- AI-FIRST -->
+		<!-- STORAGE and AI -->
 		<section
-			id="ai-first"
-			data-c1="hsl(160 84% 40% / .10)"
-			data-c2="hsl(180 80% 45% / .10)"
+			id="storage"
+			data-c1="hsl(199 89% 48% / .10)"
+			data-c2="hsl(243 75% 59% / .10)"
 			class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
 		>
 			<div class="relative z-10 grid items-start gap-10 lg:grid-cols-2">
 				<div>
-					<h2 class="text-3xl font-bold sm:text-4xl">
-						AI — classical first
-					</h2>
-					<p class="mt-3 text-muted-foreground">
-						You don’t write code here — you <strong
-							>drop nodes</strong
-						> and wire typed pins. Start with deterministic ML for predictable
-						cost/accuracy, then add LLM nodes when they help. Same graph,
-						same validations, same deployment.
-					</p>
+					<div>
+						<h2 class="text-3xl font-bold sm:text-4xl">
+							Storage that ships with every app
+						</h2>
+						<p class="mt-3 text-muted-foreground">
+							Each project includes <strong
+								>unlimited file storage</strong
+							> and <strong>unlimited databases</strong>. Use
+							files directly in your flows — read streams,
+							transform, and write back. Keep data in <strong
+								>classical SQL</strong
+							>, add <strong>full-text</strong> and
+							<strong>vector search</strong>, and combine them for
+							hybrid queries — all as typed nodes.
+						</p>
 
-					<!-- quick chips -->
-					<div class="mt-6 flex flex-wrap gap-2 text-sm">
-						<span class="ai-chip" data-t="emerald"
-							>🧮 Regression</span
-						>
-						<span class="ai-chip" data-t="indigo"
-							>🏷️ Classification</span
-						>
-						<span class="ai-chip" data-t="amber"
-							>🧠 Object detection</span
-						>
-						<span class="ai-chip" data-t="cyan"
-							>🤖 LLM routing (optional)</span
-						>
+						<!-- quick chips -->
+						<div class="mt-6 flex flex-wrap gap-2 text-sm">
+							<span class="fl-chip fl-chip--ghost" data-tint="sky"
+								>∞ Files</span
+							>
+							<span
+								class="fl-chip fl-chip--ghost"
+								data-tint="primary">∞ Databases</span
+							>
+							<span
+								class="fl-chip fl-chip--ghost"
+								data-tint="emerald"
+								>SQL + Full-text + Vector</span
+							>
+							<span
+								class="fl-chip fl-chip--ghost"
+								data-tint="amber">Inline in workflows</span
+							>
+						</div>
+					</div>
+					<div class="mt-12">
+						<div class="inline-flex items-center gap-2 rounded-full border border-slate-500/20 bg-slate-500/10 px-3 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-400">
+          AI Ready
+        </div>
+        <h3 class="mt-2 text-2xl font-semibold">AI — local & classical</h3>
+        <p class="mt-2 text-muted-foreground">
+          Drop <strong>LLM/VLM</strong> nodes that run locally or remotely, plus <strong>vision</strong>
+          (D-Fine, TFLite/ONNX) and <strong>regression/classification</strong>. Same typed pins, same deployment;
+          agents optional.
+        </p>
+        <div class="mt-4 flex flex-wrap gap-2 text-sm">
+          <span class="fl-chip fl-chip--ghost" data-tint="sky">Local LLM/VLM</span>
+          <span class="fl-chip fl-chip--ghost" data-tint="emerald">Regression / Classification</span>
+          <span class="fl-chip fl-chip--ghost" data-tint="amber">Vision: D-Fine, TFLite, ONNX</span>
+          <span class="fl-chip fl-chip--ghost" data-tint="primary">Agents optional</span>
+          <span class="fl-chip fl-chip--ghost" data-tint="sky">Runs offline</span>
+        </div>
 					</div>
 				</div>
 
-				<!-- patterns explained (no images) -->
+				<!-- patterns (no images) -->
 				<div class="space-y-4">
-					<!-- Regression -->
-					<details class="ai-block group" open>
-						<summary class="ai-summary">
-							<span class="ai-kicker" data-t="emerald"
-								>Regression</span
+					<!-- Files -->
+					<div
+						class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+					>
+						<div class="flex items-start gap-4">
+							<div
+								class="w-10 h-10 bg-gradient-to-br from-sky-500 to-cyan-500 rounded-lg flex items-center justify-center flex-shrink-0"
 							>
-							<span class="ai-title"
-								>Forecasts & scores with stable costs</span
-							>
-						</summary>
-						<div class="ai-body">
-							<div class="node-flow">
-								<span class="node">HTTP.Intake</span>
-								<span class="dash">···</span>
-								<span class="node" data-t="emerald"
-									>ML.Regressor</span
-								>
-								<span class="dash">···</span>
-								<span class="node">Decision.Score</span>
-								<span class="dash">···</span>
-								<span class="node">Notify / Webhook</span>
+								<LuDatabase className="w-5 h-5 text-white" />
 							</div>
-							<ul class="ai-points">
-								<li>
-									Typed inputs/outputs, snapshot fixtures for
-									repeatable runs.
-								</li>
-								<li>
-									Swap models (TFLite/ONNX/custom node)
-									without rewiring.
-								</li>
-								<li>
-									Policies & approvals can live on edges — no
-									new code paths.
-								</li>
-							</ul>
+							<div>
+								<h3 class="font-semibold text-lg">
+									Files (unlimited)
+								</h3>
+								<p class="text-muted-foreground">
+									Treat files as first-class data. Use <code
+										class="rounded bg-muted px-1.5 py-0.5"
+										>Read to String</code
+									>,
+									<code class="rounded bg-muted px-1.5 py-0.5"
+										>Write Bytes</code
+									>, and stream processors inside your graph —
+									no temp glue.
+								</p>
+							</div>
 						</div>
-					</details>
+					</div>
 
-					<!-- Classification -->
-					<details class="ai-block group">
-						<summary class="ai-summary">
-							<span class="ai-kicker" data-t="indigo"
-								>Classification</span
+					<!-- SQL -->
+					<div
+						class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+					>
+						<div class="flex items-start gap-4">
+							<div
+								class="w-10 h-10 bg-gradient-to-br from-emerald-500 to-green-500 rounded-lg flex items-center justify-center flex-shrink-0"
 							>
-							<span class="ai-title"
-								>Label, triage, and route events</span
-							>
-						</summary>
-						<div class="ai-body">
-							<div class="node-flow">
-								<span class="node">Queue.Read</span>
-								<span class="dash">···</span>
-								<span class="node" data-t="indigo"
-									>ML.Classifier</span
-								>
-								<span class="dash">···</span>
-								<span class="node">Route.ByLabel</span>
-								<span class="dash">···</span>
-								<span class="node">Topics A/B/C</span>
+								<LuCircleCheck className="w-5 h-5 text-white" />
 							</div>
-							<ul class="ai-points">
-								<li>
-									Versioned label sets; validation prevents
-									drift across teams.
-								</li>
-								<li>
-									Back-pressure aware runtime keeps latency
-									predictable at burst.
-								</li>
-								<li>
-									Observability shows per-edge payloads &
-									timings in the UI.
-								</li>
-							</ul>
+							<div>
+								<h3 class="font-semibold text-lg">
+									Classical SQL (unlimited DBs)
+								</h3>
+								<p class="text-muted-foreground">
+									Typed query/insert nodes with preflight
+									schema checks. Join, filter, and paginate
+									without leaving the canvas.
+								</p>
+							</div>
 						</div>
-					</details>
+					</div>
 
-					<!-- Detection -->
-					<details class="ai-block group">
-						<summary class="ai-summary">
-							<span class="ai-kicker" data-t="amber"
-								>Object detection</span
+					<!-- Full-text -->
+					<div
+						class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+					>
+						<div class="flex items-start gap-4">
+							<div
+								class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center flex-shrink-0"
 							>
-							<span class="ai-title"
-								>Count & track things in frames</span
-							>
-						</summary>
-						<div class="ai-body">
-							<div class="node-flow">
-								<span class="node">Camera.Read</span>
-								<span class="dash">···</span>
-								<span class="node" data-t="amber"
-									>Vision.Detect</span
-								>
-								<span class="dash">···</span>
-								<span class="node">Aggregate.Count</span>
-								<span class="dash">···</span>
-								<span class="node">Store / Alert</span>
+								<LuSearch className="w-5 h-5 text-white" />
 							</div>
-							<ul class="ai-points">
-								<li>
-									Zero-copy on hot paths; GPU/CPU targets
-									selectable at deploy.
-								</li>
-								<li>
-									Detections are typed (<code
-										>Detection[]</code
-									>) — safe to fan-out.
-								</li>
-								<li>Same graph runs local → edge → cloud.</li>
-							</ul>
+							<div>
+								<h3 class="font-semibold text-lg">
+									Full-text search
+								</h3>
+								<p class="text-muted-foreground">
+									Index documents, logs, or tickets and query
+									with ranking — results are typed for safe
+									downstream fan-out.
+								</p>
+							</div>
 						</div>
-					</details>
+					</div>
 
-					<!-- LLM routing -->
-					<details class="ai-block group">
-						<summary class="ai-summary">
-							<span class="ai-kicker" data-t="cyan"
-								>LLM routing</span
+					<!-- Vector & hybrid -->
+					<div
+						class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+					>
+						<div class="flex items-start gap-4">
+							<div
+								class="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg flex items-center justify-center flex-shrink-0"
 							>
-							<span class="ai-title"
-								>Use LLMs as planners, not the whole system</span
-							>
-						</summary>
-						<div class="ai-body">
-							<div class="node-flow">
-								<span class="node">HTTP.Intake</span>
-								<span class="dash">···</span>
-								<span class="node" data-t="cyan">LLM.Route</span
-								>
-								<span class="dash">···</span>
-								<span class="node">Tool.Call(s)</span>
-								<span class="dash">···</span>
-								<span class="node">Human.Approval</span>
+								<LuTrendingUp className="w-5 h-5 text-white" />
 							</div>
-							<ul class="ai-points">
-								<li>
-									Tools are typed nodes; the router outputs
-									structured calls.
-								</li>
-								<li>
-									Guardrails live at the edges (PII, spend
-									caps, escalation).
-								</li>
-								<li>
-									Turn it off and your deterministic path
-									still ships.
-								</li>
-							</ul>
+							<div>
+								<h3 class="font-semibold text-lg">
+									Vector & hybrid search
+								</h3>
+								<p class="text-muted-foreground">
+									Nearest-neighbor lookups with filters.
+									Combine vectors with SQL and full-text in
+									the same flow.
+								</p>
+							</div>
 						</div>
-					</details>
+					</div>
 				</div>
 			</div>
 		</section>
@@ -1957,7 +1928,7 @@ const download = "https://github.com/TM9657/flow-like/releases";
 					{
 						posts.map((p) => (
 							<a
-								href={`/blog/${p.slug}/`}
+								href={`/blog/${p.slug.split('-').slice(3).join('-')}/`}
 								aria-label={p.data.title}
 								rel="prefetch"
 								class="rr-card group relative overflow-hidden rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-all duration-300"
