@@ -45,6 +45,7 @@ import ToastProvider from "../components/toast-provider";
 import { UpdateProvider } from "../components/update-provider";
 import PostHogPageView from "./PostHogPageView";
 import { PHProvider } from "./provider";
+import { ReactScan } from "./ReactScanComponent";
 
 const persister = createIDBPersister();
 const queryClient = new QueryClient({
