@@ -1,4 +1,4 @@
-use crate::ai::onnx::detect::BoundingBox;
+use crate::ai::onnx::detection::BoundingBox;
 
 use flow_like::{
     flow::{

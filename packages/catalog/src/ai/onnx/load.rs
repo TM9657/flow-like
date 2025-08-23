@@ -1,6 +1,6 @@
 /// # ONNX Model Loader Nodes
 use crate::{
-    ai::onnx::{NodeOnnxSession, Provider, SessionWithMeta, classify, detect},
+    ai::onnx::{NodeOnnxSession, Provider, SessionWithMeta, classification, detection},
     storage::path::FlowPath,
 };
 use flow_like::{
@@ -34,7 +34,7 @@ pub fn determine_provider(session: &Session) -> Result<Provider, Error> {
             "Model is DfineLike with input shape ({},{})",
             input_width, input_height
         );
-        Ok(Provider::DfineLike(detect::DfineLike {
+        Ok(Provider::DfineLike(detection::DfineLike {
             input_width,
             input_height,
         }))
@@ -44,7 +44,7 @@ pub fn determine_provider(session: &Session) -> Result<Provider, Error> {
             "Model is YoloLike with input shape ({},{})",
             input_width, input_height
         );
-        Ok(Provider::YoloLike(detect::YoloLike {
+        Ok(Provider::YoloLike(detection::YoloLike {
             input_width,
             input_height,
         }))
@@ -54,7 +54,7 @@ pub fn determine_provider(session: &Session) -> Result<Provider, Error> {
             "Model is TimmLike with input shape ({},{})",
             input_width, input_height
         );
-        Ok(Provider::TimmLike(classify::TimmLike {
+        Ok(Provider::TimmLike(classification::TimmLike {
             input_width,
             input_height,
         }))

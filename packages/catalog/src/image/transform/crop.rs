@@ -1,4 +1,4 @@
-use crate::{ai::onnx::detect::BoundingBox, image::NodeImage};
+use crate::{ai::onnx::detection::BoundingBox, image::NodeImage};
 
 use flow_like::{
     flow::{
