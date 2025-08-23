@@ -1,12 +1,8 @@
 "use client";
-import {
-	Handle,
-	type HandleType,
-	Position,
-	useInternalNode,
-} from "@xyflow/react";
+import { Handle, type HandleType, Position, useReactFlow } from "@xyflow/react";
 import { EllipsisVerticalIcon, GripIcon, ListIcon, Trash2 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { useInvalidateInvoke } from "../../hooks";
 import { updateNodeCommand } from "../../lib";
 import type { ILayer } from "../../lib/schema/flow/board";
@@ -31,11 +27,11 @@ function FlowPinInnerComponent({
 	appId: string;
 	node: INode | ILayer;
 	skipOffset?: boolean;
-	onPinRemove: (pin: IPin) => Promise<void>;
+	onPinRemove?: (pin: IPin) => Promise<void>;
 }>) {
 	const { pushCommand } = useUndoRedo(appId, boardId);
 	const invalidate = useInvalidateInvoke();
-	const currentNode = useInternalNode(node?.id);
+	const { getNode } = useReactFlow();
 
 	const [defaultValue, setDefaultValue] = useState(pin.default_value);
 
@@ -100,11 +96,16 @@ function FlowPinInnerComponent({
 
 	const updateNode = useCallback(async () => {
 		if (node.nodes) return;
-		const translatedNode = node as INode;
+		const currentNode = getNode(node.id);
+		if (!currentNode) return;
+		const translatedNode = currentNode?.data?.node as INode | undefined;
+		if (!translatedNode) {
+			toast.error("Node not found");
+			return;
+		}
 		if (defaultValue === undefined) return;
 		if (defaultValue === null) return;
 		if (defaultValue === pin.default_value) return;
-		if (!currentNode) return;
 		const backend = useBackendStore.getState().backend;
 		if (!backend) return;
 		const command = updateNodeCommand({
@@ -113,7 +114,7 @@ function FlowPinInnerComponent({
 				hash: undefined,
 				coordinates: [currentNode.position.x, currentNode.position.y, 0],
 				pins: {
-					...node.pins,
+					...translatedNode.pins,
 					[pin.id]: { ...pin, default_value: defaultValue },
 				},
 			},
@@ -126,15 +127,7 @@ function FlowPinInnerComponent({
 		);
 		await pushCommand(result, false);
 		await refetchBoard();
-	}, [
-		pin.id,
-		defaultValue,
-		currentNode,
-		refetchBoard,
-		boardId,
-		node,
-		pushCommand,
-	]);
+	}, [pin.id, defaultValue, refetchBoard, boardId, pushCommand]);
 
 	useEffect(() => {
 		updateNode();
@@ -207,24 +200,24 @@ function FlowPinInnerComponent({
 						defaultValue={defaultValue}
 						changeDefaultValue={setDefaultValue}
 					/>
-					{pin.dynamic && (
+					{pin.dynamic && onPinRemove && (
 						<button
-							className="opacity-0 hover:text-primary group-hover:opacity-100"
+							className="opacity-0 bg-background border p-0.5 rounded-full group-hover:opacity-100 hover:text-primary"
 							title="Delete Pin"
 							onClick={() => onPinRemove(pin)}
 						>
-							<Trash2 className="w-2 h-2" />
+							<Trash2 className="w-1.5 h-1.5" />
 						</button>
 					)}
 				</div>
 			)}
-			{!shouldRenderPinEdit && pin.dynamic && (
+			{!shouldRenderPinEdit && onPinRemove && pin.dynamic && (
 				<button
-					className={`opacity-0 group-hover:opacity-100 hover:text-primary ${pin.pin_type === IPinType.Input ? "ml-3" : "mr-3 right-0 absolute"}`}
+					className={`opacity-0 bg-background border p-0.5 rounded-full group-hover:opacity-100 hover:text-primary ${pin.pin_type === IPinType.Input ? "ml-2" : "mr-2 right-0 absolute"}`}
 					title="Delete Pin"
 					onClick={() => onPinRemove(pin)}
 				>
-					<Trash2 className="w-2 h-2" />
+					<Trash2 className="w-1.5 h-1.5" />
 				</button>
 			)}
 		</MemoizedHandle>
@@ -261,14 +254,28 @@ function FlowPin({
 	skipOffset?: boolean;
 	onPinRemove: (pin: IPin) => Promise<void>;
 }>) {
+	if (pin.dynamic) {
+		return (
+			<FlowPinInner
+				key={pin.id}
+				appId={appId}
+				pin={pin}
+				boardId={boardId}
+				node={node}
+				skipOffset={skipOffset}
+				onPinRemove={onPinRemove}
+			/>
+		);
+	}
+
 	return (
 		<FlowPinInner
+			key={pin.id}
 			appId={appId}
 			pin={pin}
 			boardId={boardId}
 			node={node}
 			skipOffset={skipOffset}
-			onPinRemove={onPinRemove}
 		/>
 	);
 }

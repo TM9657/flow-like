@@ -151,10 +151,14 @@ const FlowNodeInner = memo(
 		const nodeStyle = useMemo(
 			() => ({
 				backgroundColor: props.selected
-					? typeToColor(Object.values(props.data.node.pins)[0].data_type)
+					? typeToColor(
+							Object.values(props.data.node.pins)?.[0]?.data_type ??
+								IVariableType.Generic,
+						)
 					: undefined,
 				borderColor: typeToColor(
-					Object.values(props.data.node.pins)[0].data_type,
+					Object.values(props.data.node.pins)?.[0]?.data_type ??
+						IVariableType.Generic,
 				),
 				borderWidth: "1px",
 				borderStyle: "solid",
@@ -293,23 +297,34 @@ const FlowNodeInner = memo(
 			[reactFlow, sortPins, pushCommand, invalidate],
 		);
 		const pinRemoveCallback = useCallback(
-			async (pin: IPin) => {
+			async (pinToRemove: IPin) => {
 				const backend = useBackendStore.getState().backend;
 				if (!backend) return;
 
 				const nodeGuard = getNode(props.id);
 				if (!nodeGuard) return;
 
-				if (!props.data.node.pins) return;
-				const node = nodeGuard?.data.node as INode;
-				const pins = Object.values(node.pins)
-					.filter((p) => p.id !== pin.id)
-					.sort(sortPins);
-				node.pins = {};
-				pins.forEach(
-					(pin, index) =>
-						(props.data.node.pins[pin.id] = { ...pin, index: index }),
-				);
+				if (!props?.data?.node?.pins) return;
+				const node = nodeGuard?.data?.node as INode | undefined;
+				if (!node) return;
+				const allPins = Object.values(node.pins);
+
+				const inputPins = allPins
+					.filter((p) => p.pin_type === "Input" && p.id !== pinToRemove.id)
+					.sort(sortPins)
+					.map((p, i) => ({ ...p, index: i + 1 }));
+
+				const outputPins = allPins
+					.filter((p) => p.pin_type === "Output" && p.id !== pinToRemove.id)
+					.sort(sortPins)
+					.map((p, i) => ({ ...p, index: i + 1 }));
+
+				const updatedPins: Record<string, IPin> = {};
+				[...inputPins, ...outputPins].forEach((p) => {
+					updatedPins[p.id] = p;
+				});
+				node.pins = updatedPins;
+
 				const command = updateNodeCommand({
 					node: {
 						...node,
