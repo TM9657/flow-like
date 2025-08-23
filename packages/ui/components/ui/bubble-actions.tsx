@@ -21,6 +21,7 @@ interface BubbleActionsProps {
 	side?: "top" | "bottom" | "left" | "right";
 	align?: "start" | "center" | "end";
 	trigger?: "hover" | "click";
+	style?: React.CSSProperties;
 }
 
 const BubbleMenu = ({
@@ -28,6 +29,7 @@ const BubbleMenu = ({
 	position,
 	side,
 	align,
+	style,
 	onActionClick,
 	onMouseEnter,
 	onMouseLeave,
@@ -36,6 +38,7 @@ const BubbleMenu = ({
 	position: { x: number; y: number };
 	side: "top" | "bottom" | "left" | "right";
 	align: "start" | "center" | "end";
+	style?: React.CSSProperties;
 	onActionClick: (action: BubbleAction) => void;
 	onMouseEnter?: () => void;
 	onMouseLeave?: () => void;
@@ -66,6 +69,7 @@ const BubbleMenu = ({
 				left: position.x,
 				top: position.y,
 				transform: getTransform(),
+				...style,
 			}}
 		>
 			<div
@@ -118,6 +122,7 @@ export function BubbleActions({
 	actions,
 	children,
 	className,
+	style,
 	side = "top",
 	align = "center",
 	trigger = "hover",
@@ -241,6 +246,7 @@ export function BubbleActions({
 			{isOpen &&
 				createPortal(
 					<BubbleMenu
+						style={style}
 						actions={actions}
 						position={position}
 						side={side}
