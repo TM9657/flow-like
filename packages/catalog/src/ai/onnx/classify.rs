@@ -1,5 +1,5 @@
 use crate::{
-    ai::ml::onnx::{NodeOnnxSession, Provider},
+    ai::onnx::{NodeOnnxSession, Provider},
     image::NodeImage,
 };
 use flow_like::{
