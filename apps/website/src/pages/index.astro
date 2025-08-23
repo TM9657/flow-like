@@ -1,13 +1,71 @@
 ---
-// src/pages/index.astro (drop‑in replacement)
+import { Image } from "astro:assets";
+import { getCollection } from "astro:content";
+import "@tm9657/flow-like-ui/global.css";
+import { EmptyBackendProvider } from "../components/backend-provider";
+import { BlogHeader } from "../components/blog-header";
+import {
+	LuBriefcaseBusiness,
+	LuChevronDown,
+	LuCircleCheck,
+	LuCircleGauge,
+	LuCode,
+	LuCodeXml,
+	LuDatabase,
+	LuFlaskConical,
+	LuHeart,
+	LuLock,
+	LuMoveRight,
+	LuPaintbrush,
+	LuPlug2,
+	LuSearch,
+	LuTrendingUp,
+	LuUnplug,
+	LuZap,
+} from "react-icons/lu";
+
+import designOverview from "../images/index/design-overview.png";
+import designValidation from "../images/index/design-validation.png";
+import library from "../images/index/library.png";
+import portabilityInvite from "../images/index/portability-invite.png";
+import portabilityOffline from "../images/index/portability-offline.png";
+import portabilityShare from "../images/index/portability-share.png";
+import designBubblegumLight from "../images/index/theme-bubblegum-light.png";
+import designBubblegum from "../images/index/theme-bubblegum.png";
+import designCatppuccin from "../images/index/theme-catppuccin.png";
+import designCosmicNight from "../images/index/theme-cosmic-night.png";
+import designDoom from "../images/index/theme-doom.png";
+import designNeoBrutalism from "../images/index/theme-neo-brutalism.png";
+import designSoftPop from "../images/index/theme-soft-pop.png";
+import tracing from "../images/index/tracing.png";
+
+const posts = (
+	await getCollection("blog", ({ data }) =>
+		import.meta.env.PROD ? !data.draft : true,
+	)
+)
+	.filter((p) => !p.data.draft)
+	.sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
+	.slice(0, 3);
+
+const thumbFor = (p: any) => {
+	const img =
+		p.data.thumb ??
+		p.data.thumbnail ??
+		p.data.image ??
+		p.data.cover ??
+		p.data.hero ??
+		p.data.ogImage;
+	return typeof img === "string" ? img : (img?.src ?? "/og.webp");
+};
+
+const descFor = (p: any) =>
+	p.data.excerpt ?? p.data.description ?? p.data.subtitle ?? "";
+
 const site = "https://flow-like.com";
 const github = "https://github.com/TM9657/flow-like";
 const docs = "https://flow-like.com/blog";
 const download = "https://github.com/TM9657/flow-like/releases";
-import "@tm9657/flow-like-ui/global.css";
-import { EmptyBackendProvider } from "../components/backend-provider";
-import { BlogHeader } from "../components/blog-header";
-import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 ---
 
 <!doctype html>
@@ -16,11 +74,11 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>
-			Flow‑Like — Typed Workflows that Scale (Fast, Robust, Local‑First)
+			Flow-Like — Typed Workflows that Scale (Fast, Robust, Local-First)
 		</title>
 		<meta
 			name="description"
-			content="Typed, scalable workflows with Rust performance. Build reliable systems that run locally, on edge, or in any cloud — with governance built‑in and effortless integration."
+			content="Typed, scalable workflows with Rust performance. Build reliable systems that run locally, on edge, or in any cloud — with governance built-in and effortless integration."
 		/>
 		<link rel="icon" href="/favicon.svg" />
 		<meta
@@ -47,26 +105,30 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 		<BlogHeader />
 
 		<!-- HERO with pin wires (inspired by blog cover) -->
-		<section class="mx-auto max-w-7xl px-4 pt-12 lg:px-8 lg:pt-16 pb-32">
+		<section
+			class="mx-auto max-w-7xl px-4 pt-8 md:pt-16 lg:pt-16 lg:px-8 pb-32 mt-0 md:mt-8 lg:mt-16"
+			data-c2="hsl(0 100% 63% / .10)"
+			data-c1="hsl(161 40% 44% / .10)"
+		>
 			<div id="hero-cover" class="relative">
 				<div
 					id="hero-right-pin"
-					class="size-4 bg-primary absolute top-14 -right-1.5 z-10 rounded-full"
+					class="size-4 bg-primary absolute top-60 -right-1.5 z-10 rounded-full"
 				>
 				</div>
 				<div
 					id="hero-left-pin"
-					class="size-4 bg-pink-400 absolute top-1/2 -left-1.5 z-10 rounded-full"
+					class="size-4 bg-emerald-500 absolute top-36 -left-1.5 z-10 rounded-full"
 				>
 				</div>
 				<div
 					id="hero-right-pin-top"
-					class="size-4 bg-foreground absolute top-6 -right-1.5 z-10 rounded-full"
+					class="size-4 bg-foreground absolute top-12 -right-1.5 z-10 rounded-full"
 				>
 				</div>
 				<div
 					id="hero-left-pin-top"
-					class="size-4 bg-foreground absolute top-28 -left-1.5 z-10 rounded-full"
+					class="size-4 bg-foreground absolute top-12 -left-1.5 z-10 rounded-full"
 				>
 				</div>
 
@@ -82,7 +144,7 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 						fill="none"></path>
 					<path
 						id="hero-left-conn"
-						class="pin-conn text-pink-400"
+						class="pin-conn text-emerald-500"
 						fill="none"></path>
 					<path
 						id="hero-right-conn-top"
@@ -101,17 +163,18 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 						class="absolute inset-0 bg-gradient-to-tr from-background/70 via-background/20 to-transparent"
 					>
 					</div>
-					<div class="relative grid lg:grid-cols-2">
+					<div class="relative grid lg:grid-cols-2 overflow-hidden">
 						<div class="p-6 sm:p-8 md:p-10">
 							<span
-								class="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground"
+								class="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1 text-[11px] font-medium text-muted-foreground"
 								>Typed • Blazing fast • Robust</span
 							>
 							<h1
 								class="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl"
 							>
 								Typed workflows that <span class="text-primary"
-									>scale</span>
+									>scale</span
+								>
 							</h1>
 							<p class="mt-3 max-w-2xl text-muted-foreground">
 								Design reliable systems with type‑safe graphs,
@@ -136,31 +199,30 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 									>Star on GitHub</a
 								>
 							</div>
+							<!-- Hero feature chips — ghost, subtle, correct order -->
 							<div
-								class="mt-5 grid grid-cols-2 gap-3 text-sm text-muted-foreground sm:max-w-lg"
+								class="mt-5 flex flex-wrap items-center gap-2.5 text-sm sm:max-w-xl"
 							>
-								<div
-									class="rounded-lg border border-border bg-card p-3"
+								<span
+									class="fl-chip fl-chip--ghost"
+									data-tint="primary"
+									>🧩 <b>Type-safe</b> graph contracts</span
 								>
-									🧩 <strong class="text-foreground"
-										>Type‑safe</strong
-									> nodes & dataflow
-								</div>
-								<div
-									class="rounded-lg border border-border bg-card p-3"
+								<span
+									class="fl-chip fl-chip--ghost"
+									data-tint="emerald"
+									>🔒 Governance & observability</span
 								>
-									⚡ Rust core • predictable latency
-								</div>
-								<div
-									class="rounded-lg border border-border bg-card p-3"
+								<span
+									class="fl-chip fl-chip--ghost"
+									data-tint="amber"
+									>⚡ Rust runtime • predictable latency</span
 								>
-									🔒 Governance & observability
-								</div>
-								<div
-									class="rounded-lg border border-border bg-card p-3"
+								<span
+									class="fl-chip fl-chip--ghost"
+									data-tint="sky"
+									>☁️ Run local → edge → cloud</span
 								>
-									☁️ Run local, edge, any cloud
-								</div>
 							</div>
 							<p class="mt-4 text-xs text-muted-foreground">
 								Want AI too? Blend classical ML with GenAI when
@@ -168,83 +230,147 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 								a separate stack.
 							</p>
 						</div>
-						<div class="relative min-h-[260px]">
+						<div class="relative min-h-[260px] max-h-full h-full">
 							<EmptyBackendProvider
 								data="/board.json"
 								client:load
 							/>
-							<!-- <img src="/screenshot.png" alt="Flow‑Like Editor" class="absolute inset-0 h-full w-full object-cover" loading="eager" /> -->
-							<!-- <div class="absolute inset-0 bg-gradient-to-t from-background/70 via-background/0 to-background/0"></div> -->
 						</div>
 					</div>
 				</div>
 			</div>
 		</section>
 
-		<!-- WHY TYPED -->
-		<section id="typed" class="relative mx-auto max-w-7xl px-4 py-32 lg:px-8 mb-32">
-			<div class="absolute inset-0 -mx-4 lg:-mx-8">
-				<div class="h-full w-full bg-gradient-to-br from-primary/5 via-secondary/5 to-tertiary/5 rounded-3xl border border-primary/10"></div>
-				<div class="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl opacity-20"></div>
-				<div class="absolute bottom-20 right-10 w-96 h-96 bg-secondary/10 rounded-full blur-3xl opacity-20"></div>
-			</div>
+		<!-- Ambient backdrop (now smooth via CSS custom props) -->
+		<div
+			id="ambient-flow"
+			aria-hidden="true"
+			class="pointer-events-none fixed inset-0 -z-[80]"
+			style="
+				--c2: hsl(0 100% 63% / .08);
+				--c1: hsl(161 40% 44% / .08);
+				background:
+					radial-gradient(1200px 600px at 20% 10%, var(--c1), transparent 60%),
+					radial-gradient(1200px 600px at 80% 90%, var(--c2), transparent 60%);
+			"
+		>
+		</div>
 
+		<!-- WHY TYPED -->
+		<section
+			id="typed"
+			class="relative mx-auto max-w-7xl px-4 py-32 lg:px-8 mt-8 pt-0"
+			data-c1="hsl(0 100% 63% / .10)"
+			data-c2="hsl(21 89% 67% / .10)"
+		>
 			<div class="relative z-10">
 				<div class="mx-auto max-w-4xl text-center">
-					<div class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-primary mb-6">
-						<div class="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
-						Type Safety
+					<div
+						class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-primary mb-6"
+					>
+						<div
+							class="w-2 h-2 bg-primary rounded-full animate-pulse"
+						>
+						</div>
+						Prototype → Production
 					</div>
-					<h2 class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-primary to-secondary bg-clip-text text-transparent">
-						Types make workflows <span class="text-primary">reliable</span>
+					<h2
+						class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-primary to-secondary bg-clip-text text-transparent"
+					>
+						Zero-to-prod, <span class="text-primary">by design</span
+						>
 					</h2>
-					<p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
-						Every port has an explicit type. You see both execution <em>and</em> data flow, catch errors early, and scale without brittle glue code.
+					<p
+						class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto"
+					>
+						The graph you sketch is the graph you deploy. Typed
+						ports, preflight validation, and a deterministic Rust
+						runtime mean no throwaway prototypes, no glue-code
+						rewrite, and no surprises when you flip from dev to
+						prod.
 					</p>
 				</div>
 
 				<div class="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-					<div class="group relative overflow-hidden rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm p-8 hover:bg-card/80 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/10">
-						<div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+					<!-- 1 -->
+					<div
+						class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300"
+					>
+						<div
+							class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+						>
+						</div>
 						<div class="relative z-10">
-							<div class="w-12 h-12 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center mb-4">
-								<svg class="w-6 h-6 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-								</svg>
+							<div
+								class="w-12 h-12 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center mb-4"
+							>
+								<LuCircleCheck
+									className="w-6 h-6 text-primary-foreground"
+								/>
 							</div>
-							<h3 class="text-xl font-semibold mb-3">Preflight validation</h3>
+							<h3 class="text-xl font-semibold mb-3">
+								Production-ready by default
+							</h3>
 							<p class="text-muted-foreground leading-relaxed">
-								Graphs are validated before execution — incompatible ports are surfaced immediately.
+								Preflight checks catch schema and wiring issues
+								before run. The same typed graph ships across
+								dev → staging → prod — no “hardening” rewrite.
 							</p>
 						</div>
 					</div>
 
-					<div class="group relative overflow-hidden rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm p-8 hover:bg-card/80 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-secondary/10">
-						<div class="absolute inset-0 bg-gradient-to-br from-secondary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+					<!-- 2 -->
+					<div
+						class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300"
+					>
+						<div
+							class="absolute inset-0 bg-gradient-to-br from-secondary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+						>
+						</div>
 						<div class="relative z-10">
-							<div class="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center mb-4">
-								<svg class="w-6 h-6 text-secondary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-								</svg>
+							<div
+								class="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center mb-4"
+							>
+								<LuZap
+									className="w-6 h-6 text-secondary-foreground"
+								/>
 							</div>
-							<h3 class="text-xl font-semibold mb-3">Typed dataflow</h3>
+							<h3 class="text-xl font-semibold mb-3">
+								Contracts that don’t drift
+							</h3>
 							<p class="text-muted-foreground leading-relaxed">
-								Inspect data shapes at each edge. Refactors stay safe as graphs grow.
+								Typed dataflow with versioned port schemas makes
+								refactors safe and reviewable. Changes are
+								validated, so prototypes stay deployable as they
+								evolve.
 							</p>
 						</div>
 					</div>
 
-					<div class="group relative overflow-hidden rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm p-8 hover:bg-card/80 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-tertiary/10 md:col-span-2 lg:col-span-1">
-						<div class="absolute inset-0 bg-gradient-to-br from-tertiary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+					<!-- 3 -->
+					<div
+						class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300 md:col-span-2 lg:col-span-1"
+					>
+						<div
+							class="absolute inset-0 bg-gradient-to-br from-tertiary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+						>
+						</div>
 						<div class="relative z-10">
-							<div class="w-12 h-12 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-xl flex items-center justify-center mb-4">
-								<svg class="w-6 h-6 text-tertiary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-								</svg>
+							<div
+								class="w-12 h-12 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-xl flex items-center justify-center mb-4"
+							>
+								<LuTrendingUp
+									className="w-6 h-6 text-tertiary-foreground"
+								/>
 							</div>
-							<h3 class="text-xl font-semibold mb-3">Deterministic performance</h3>
+							<h3 class="text-xl font-semibold mb-3">
+								Predictable in production
+							</h3>
 							<p class="text-muted-foreground leading-relaxed">
-								A Rust core compiles micro‑plans for stable latency across inputs.
+								Rust runtime compiles micro-plans, applies
+								back-pressure, and keeps latency stable under
+								load. Add approvals and policies without
+								changing the graph.
 							</p>
 						</div>
 					</div>
@@ -253,169 +379,250 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 		</section>
 
 		<!-- VISUAL BUILDER -->
-		<section id="builder" class="relative mx-auto max-w-7xl px-4 py-32 lg:px-8 mb-32 rounded-2xl overflow-hidden">
-			<div class="absolute inset-0 overflow-hidden -mx-4 lg:-mx-8">
-				<div class="h-full w-full bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-3xl border border-blue-500/10"></div>
-				<div class="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-full blur-3xl"></div>
-				<div class="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-green-500/20 to-blue-500/20 rounded-full blur-3xl"></div>
-			</div>
-
+		<section
+			id="builder"
+			data-c1="hsl(222 89% 60% / .10)"
+			data-c2="hsl(268 84% 62% / .10)"
+			class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+		>
 			<div class="relative z-10 grid items-center gap-16 lg:grid-cols-2">
 				<div class="space-y-8">
 					<div>
-						<div class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6">
-							<div class="w-2 h-2 bg-secondary rounded-full animate-pulse"></div>
+						<div
+							class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6"
+						>
+							<div
+								class="w-2 h-2 bg-secondary rounded-full animate-pulse"
+							>
+							</div>
 							Visual Design
 						</div>
-						<h2 class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground to-secondary bg-clip-text text-transparent">
-							Design workflows <span class="text-secondary">visually</span>
+						<h2
+							class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground to-secondary bg-clip-text text-transparent"
+						>
+							Design workflows <span class="text-secondary"
+								>visually</span
+							>
 						</h2>
 						<p class="mt-6 text-lg text-muted-foreground">
-							Drag nodes, wire typed pins, and validate as you go. Inline errors keep graphs shippable. Snapshot inputs to reproduce issues and compare runs.
+							Drag nodes, wire typed pins, and validate as you go.
+							Inline errors keep graphs shippable. Snapshot inputs
+							to reproduce issues and compare runs.
 						</p>
 					</div>
 
 					<div class="space-y-4">
-						<div class="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-r from-card/80 to-card/60 backdrop-blur-sm p-6 hover:from-card to-card/80 transition-all duration-300">
+						<div
+							class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+						>
 							<div class="flex items-start gap-4">
-								<div class="w-10 h-10 bg-gradient-to-br from-primary to-primary/60 rounded-lg flex items-center justify-center flex-shrink-0">
-									<svg class="w-5 h-5 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z"></path>
-									</svg>
+								<div
+									class="w-10 h-10 bg-gradient-to-br from-primary to-primary/60 rounded-lg flex items-center justify-center flex-shrink-0"
+								>
+									<LuUnplug
+										className="w-6 h-6 text-primary-foreground"
+									/>
 								</div>
 								<div>
-									<h3 class="font-semibold text-lg">Typed pins</h3>
-									<p class="text-muted-foreground">ports know their schema so refactors are safe.</p>
+									<h3 class="font-semibold text-lg">
+										Typed pins
+									</h3>
+									<p class="text-muted-foreground">
+										ports know their schema so refactors are
+										safe.
+									</p>
 								</div>
 							</div>
 						</div>
 
-						<div class="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-r from-card/80 to-card/60 backdrop-blur-sm p-6 hover:from-card to-card/80 transition-all duration-300">
+						<div
+							class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+						>
 							<div class="flex items-start gap-4">
-								<div class="w-10 h-10 bg-gradient-to-br from-secondary to-secondary/60 rounded-lg flex items-center justify-center flex-shrink-0">
-									<svg class="w-5 h-5 text-secondary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-									</svg>
+								<div
+									class="w-10 h-10 bg-gradient-to-br from-secondary to-secondary/60 rounded-lg flex items-center justify-center flex-shrink-0"
+								>
+									<LuLock
+										className="w-6 h-6 text-secondary-foreground"
+									/>
 								</div>
 								<div>
-									<h3 class="font-semibold text-lg">Inline validation</h3>
-									<p class="text-muted-foreground">miswired edges are surfaced immediately.</p>
+									<h3 class="font-semibold text-lg">
+										Inline validation
+									</h3>
+									<p class="text-muted-foreground">
+										miswired edges are surfaced immediately.
+									</p>
 								</div>
 							</div>
 						</div>
 
-						<div class="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-r from-card/80 to-card/60 backdrop-blur-sm p-6 hover:from-card to-card/80 transition-all duration-300">
+						<div
+							class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+						>
 							<div class="flex items-start gap-4">
-								<div class="w-10 h-10 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-lg flex items-center justify-center flex-shrink-0">
-									<svg class="w-5 h-5 text-tertiary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-									</svg>
+								<div
+									class="w-10 h-10 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-lg flex items-center justify-center flex-shrink-0"
+								>
+									<LuSearch
+										className="w-6 h-6 text-tertiary-foreground"
+									/>
 								</div>
 								<div>
-									<h3 class="font-semibold text-lg">Observability</h3>
-									<p class="text-muted-foreground">inspect payloads and timings at every edge.</p>
+									<h3 class="font-semibold text-lg">
+										Observability
+									</h3>
+									<p class="text-muted-foreground">
+										inspect payloads and timings at every
+										edge.
+									</p>
 								</div>
 							</div>
 						</div>
 					</div>
 				</div>
 
+				<!-- imagery stays but loses heavy frames -->
 				<div class="relative">
-					<div class="absolute inset-0 bg-gradient-to-br from-primary/10 via-secondary/10 to-tertiary/10 rounded-3xl blur-xl"></div>
 					<div class="relative grid grid-cols-2 gap-6">
 						<div class="space-y-6">
-							<div class="group overflow-hidden rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm hover:scale-105 transition-all duration-300">
-								<img
-									src="/images/builder-canvas-1.png"
-									alt="Canvas with typed pins"
-									class="w-full h-auto object-cover"
-									loading="lazy"
-								/>
-							</div>
-							<div class="group overflow-hidden rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm hover:scale-105 transition-all duration-300">
-								<img
-									src="/images/builder-canvas-2.png"
-									alt="Inline validation"
-									class="w-full h-auto object-cover"
-									loading="lazy"
-								/>
-							</div>
+							<Image
+								src={designValidation}
+								alt="Inline validation"
+								class="w-full h-auto rounded-2xl bg-background/40 backdrop-blur-sm object-cover"
+								loading="lazy"
+							/>
 						</div>
 						<div class="flex items-center">
-							<div class="group overflow-hidden rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm hover:scale-105 transition-all duration-300">
-								<img
-									src="/images/builder-canvas-3.png"
-									alt="Node inspector"
-									class="w-full h-auto object-cover"
-									loading="lazy"
-								/>
-							</div>
+							<Image
+								src={designOverview}
+								alt="Node inspector"
+								class="w-full h-auto rounded-2xl bg-background/40 backdrop-blur-sm object-cover"
+								loading="lazy"
+							/>
 						</div>
+					</div>
+					<div class="flex justify-end">
+						<video
+							src="/posts/rapid-prototyping.webm"
+							autoplay
+							muted
+							class="rounded-xl shadow-lg border border-muted/40 my-4 w-full"
+						></video>
 					</div>
 				</div>
 			</div>
 		</section>
 
-		<!-- PORTABILITY -->
-		<section id="portability" class="relative mx-auto max-w-7xl px-4 py-32 lg:px-8 mb-32">
-			<div class="absolute inset-0 -mx-4 lg:-mx-8">
-				<div class="h-full w-full bg-gradient-to-br from-primary/10 via-background to-secondary/10 rounded-3xl border border-primary/10"></div>
-				<div class="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary))_0%,transparent_50%),radial-gradient(circle_at_80%_80%,hsl(var(--secondary))_0%,transparent_50%)] opacity-10"></div>
+		<!-- Soft seam (lighter, no hard divider) -->
+		<div class="relative -my-2 h-10">
+			<div class="absolute inset-0">
+				<div
+					class="mx-auto max-w-7xl px-4 lg:px-8 h-full flex items-center"
+				>
+					<div
+						class="w-full h-px bg-gradient-to-r from-transparent via-border/60 to-transparent"
+					>
+					</div>
+				</div>
 			</div>
+		</div>
 
+		<!-- PORTABILITY (no big framed card around whole section) -->
+		<section
+			id="portability"
+			data-c1="hsl(var(--primary) / .10)"
+			data-c2="hsl(var(--secondary) / .10)"
+			class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+		>
 			<div class="relative z-10 grid items-center gap-16 lg:grid-cols-2">
 				<div class="space-y-8">
 					<div>
-						<div class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-primary mb-6">
-							<div class="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+						<div
+							class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-primary mb-6"
+						>
+							<div
+								class="w-2 h-2 bg-primary rounded-full animate-pulse"
+							>
+							</div>
 							Lifecycle Management
 						</div>
 						<h2 class="text-4xl font-bold sm:text-5xl">
-							Start <span class="text-primary">offline</span>. Go <span class="text-secondary">online</span> later. <span class="text-tertiary">Deploy</span> with one click.
+							Start <span class="text-primary">offline</span>. Go <span
+								class="text-secondary">online</span
+							> later. <span class="text-tertiary">Deploy</span> with
+							one click.
 						</h2>
 						<p class="mt-6 text-lg text-muted-foreground">
-							Manage the full lifecycle from the interface — no CLI required. Keep projects private and local, publish to your team when ready, and ship to production targets with a single action.
+							Manage the full lifecycle from the interface — no
+							CLI required. Keep projects private and local,
+							publish to your team when ready, and ship to
+							production targets with a single action.
 						</p>
 					</div>
 
 					<div class="space-y-6">
-						<div class="group relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10 backdrop-blur-sm p-6 hover:from-primary/10 hover:to-primary/20 transition-all duration-300">
+						<div
+							class="rounded-2xl border border-primary/20 bg-primary/5 p-6 backdrop-blur-sm"
+						>
 							<div class="flex items-start gap-4">
-								<div class="w-12 h-12 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-primary-foreground">
+								<div
+									class="w-12 h-12 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-primary-foreground"
+								>
 									1
 								</div>
 								<div>
-									<h3 class="text-xl font-semibold mb-2">Start Offline (Private & Secret)</h3>
+									<h3 class="text-xl font-semibold mb-2">
+										Start Offline (Private & Secret)
+									</h3>
 									<p class="text-muted-foreground">
-										Create an offline project on your machine. Your data stays local until you decide otherwise.
+										Create an offline project on your
+										machine. Your data stays local until you
+										decide otherwise.
 									</p>
 								</div>
 							</div>
 						</div>
 
-						<div class="group relative overflow-hidden rounded-2xl border border-secondary/20 bg-gradient-to-r from-secondary/5 to-secondary/10 backdrop-blur-sm p-6 hover:from-secondary/10 hover:to-secondary/20 transition-all duration-300">
+						<div
+							class="rounded-2xl border border-secondary/20 bg-secondary/5 p-6 backdrop-blur-sm"
+						>
 							<div class="flex items-start gap-4">
-								<div class="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-secondary-foreground">
+								<div
+									class="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-secondary-foreground"
+								>
 									2
 								</div>
 								<div>
-									<h3 class="text-xl font-semibold mb-2">Make it Online & Invite</h3>
+									<h3 class="text-xl font-semibold mb-2">
+										Make it Online & Invite
+									</h3>
 									<p class="text-muted-foreground">
-										Flip the project online and invite colleagues. Roles and approvals come along for the ride.
+										Flip the project online and invite
+										colleagues. Roles and approvals come
+										along for the ride.
 									</p>
 								</div>
 							</div>
 						</div>
 
-						<div class="group relative overflow-hidden rounded-2xl border border-tertiary/20 bg-gradient-to-r from-tertiary/5 to-tertiary/10 backdrop-blur-sm p-6 hover:from-tertiary/10 hover:to-tertiary/20 transition-all duration-300">
+						<div
+							class="rounded-2xl border border-tertiary/20 bg-tertiary/5 p-6 backdrop-blur-sm"
+						>
 							<div class="flex items-start gap-4">
-								<div class="w-12 h-12 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-tertiary-foreground">
+								<div
+									class="w-12 h-12 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-tertiary-foreground"
+								>
 									3
 								</div>
 								<div>
-									<h3 class="text-xl font-semibold mb-2">Deploy to Production</h3>
+									<h3 class="text-xl font-semibold mb-2">
+										Deploy to Production
+									</h3>
 									<p class="text-muted-foreground">
-										Choose your target — Edge, Cloud, or on‑prem. Click deploy. Same validated graph, different runtime target.
+										Choose your target — Edge, Cloud, or
+										on-prem. Click deploy. Same validated
+										graph, different runtime target.
 									</p>
 								</div>
 							</div>
@@ -423,104 +630,159 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 					</div>
 				</div>
 
+				<!-- light modules, no big container -->
 				<div class="relative">
-					<div class="absolute inset-0 bg-gradient-to-br from-card/20 to-background/20 rounded-3xl blur-xl"></div>
-					<div class="relative rounded-3xl border border-border/50 bg-card/80 backdrop-blur-sm p-8 hover:bg-card/90 transition-all duration-300">
-						<div class="grid grid-cols-3 gap-4 text-center text-sm mb-8">
-							<div class="rounded-2xl border border-primary/20 bg-primary/10 backdrop-blur-sm p-4 hover:bg-primary/20 transition-colors duration-300">
-								<div class="mb-2 font-semibold text-primary">Offline</div>
-								<p class="text-muted-foreground text-xs">
-									Private, local‑first dev
-								</p>
+					<div
+						class="grid grid-cols-3 gap-4 text-center text-sm mb-8"
+					>
+						<div
+							class="rounded-2xl border border-primary/20 bg-primary/10 backdrop-blur-sm p-4"
+						>
+							<div class="mb-2 font-semibold text-primary">
+								Offline
 							</div>
-							<div class="rounded-2xl border border-secondary/20 bg-secondary/10 backdrop-blur-sm p-4 hover:bg-secondary/20 transition-colors duration-300">
-								<div class="mb-2 font-semibold text-secondary">Team</div>
-								<p class="text-muted-foreground text-xs">
-									Online, shared, governed
-								</p>
-							</div>
-							<div class="rounded-2xl border border-tertiary/20 bg-tertiary/10 backdrop-blur-sm p-4 hover:bg-tertiary/20 transition-colors duration-300">
-								<div class="mb-2 font-semibold text-tertiary">Production</div>
-								<p class="text-muted-foreground text-xs">
-									Edge • Cloud • Anywhere
-								</p>
-							</div>
+							<p class="text-muted-foreground text-xs">
+								Private, local-first dev
+							</p>
 						</div>
-						<div class="grid grid-cols-2 gap-4">
-							<div class="group overflow-hidden rounded-xl border border-border/50 bg-background/80 backdrop-blur-sm hover:scale-105 transition-all duration-300">
-								<img
-									src="/images/portability-offline.png"
-									alt="Create offline project"
-									class="w-full h-auto object-cover"
-									loading="lazy"
-								/>
+						<div
+							class="rounded-2xl border border-secondary/20 bg-secondary/10 backdrop-blur-sm p-4"
+						>
+							<div class="mb-2 font-semibold text-secondary">
+								Team
 							</div>
-							<div class="group overflow-hidden rounded-xl border border-border/50 bg-background/80 backdrop-blur-sm hover:scale-105 transition-all duration-300">
-								<img
-									src="/images/portability-invite.png"
-									alt="Invite teammates"
-									class="w-full h-auto object-cover"
-									loading="lazy"
-								/>
-							</div>
-							<div class="group overflow-hidden rounded-xl border border-border/50 bg-background/80 backdrop-blur-sm hover:scale-105 transition-all duration-300 col-span-2">
-								<img
-									src="/images/portability-deploy.png"
-									alt="Deploy with one click"
-									class="w-full h-auto object-cover"
-									loading="lazy"
-								/>
-							</div>
+							<p class="text-muted-foreground text-xs">
+								Online, shared, governed
+							</p>
 						</div>
+						<div
+							class="rounded-2xl border border-tertiary/20 bg-tertiary/10 backdrop-blur-sm p-4"
+						>
+							<div class="mb-2 font-semibold text-tertiary">
+								Production
+							</div>
+							<p class="text-muted-foreground text-xs">
+								Edge • Cloud • Anywhere
+							</p>
+						</div>
+					</div>
+					<div class="grid grid-cols-2 gap-4">
+						<Image
+							src={portabilityOffline}
+							alt="Create offline project"
+							class="w-full h-auto rounded-xl bg-background/40 backdrop-blur-sm object-cover"
+							loading="lazy"
+						/>
+						<Image
+							src={portabilityInvite}
+							alt="Invite teammates"
+							class="w-full h-auto rounded-xl bg-background/40 backdrop-blur-sm object-cover"
+							loading="lazy"
+						/>
+						<Image
+							src={portabilityShare}
+							alt="Deploy with one click"
+							class="w-full h-auto rounded-xl bg-background/40 backdrop-blur-sm object-cover col-span-2"
+							loading="lazy"
+						/>
 					</div>
 				</div>
 			</div>
 		</section>
 
-		<!-- PERFORMANCE -->
-		<section id="performance" class="relative mx-auto max-w-7xl px-4 py-32 lg:px-8 mb-32">
-			<div class="absolute inset-0 overflow-hidden -mx-4 lg:-mx-8">
-				<div class="h-full w-full bg-gradient-to-br from-orange-500/5 to-red-500/5 rounded-3xl border border-orange-500/10"></div>
-				<div class="absolute top-20 left-20 w-64 h-64 bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-full blur-3xl"></div>
-				<div class="absolute bottom-20 right-20 w-80 h-80 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-full blur-3xl"></div>
+		<!-- Soft seam -->
+		<div class="relative -my-2 h-10">
+			<div class="absolute inset-0">
+				<div
+					class="mx-auto max-w-7xl px-4 lg:px-8 h-full flex items-center"
+				>
+					<div
+						class="w-full h-px bg-gradient-to-r from-transparent via-border/60 to-transparent"
+					>
+					</div>
+				</div>
 			</div>
+		</div>
 
+		<!-- PERFORMANCE -->
+		<section
+			id="performance"
+			data-c1="hsl(24 96% 60% / .10)"
+			data-c2="hsl(280 85% 65% / .10)"
+			class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+		>
 			<div class="relative z-10 grid items-start gap-16 lg:grid-cols-2">
 				<div class="space-y-8">
 					<div>
-						<div class="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-orange-600 dark:text-orange-400 mb-6">
-							<div class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
+						<div
+							class="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-orange-600 dark:text-orange-400 mb-6"
+						>
+							<div
+								class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"
+							>
+							</div>
 							Rust Performance
 						</div>
-						<h2 class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-orange-500 to-red-500 bg-clip-text text-transparent">
-							Rust runtime for <span class="text-orange-500">predictable</span> speed
+						<h2
+							class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-orange-500 to-red-500 bg-clip-text text-transparent"
+						>
+							Rust runtime for <span class="text-orange-500"
+								>predictable</span
+							> speed
 						</h2>
 						<p class="mt-6 text-lg text-muted-foreground">
-							Flow‑Like's runtime is written in Rust — tight memory control, back‑pressure aware IO, and zero‑copy on hot paths. Nodes are authored in Rust too, so you can lean on the ecosystem.
+							Flow-Like's runtime is written in Rust — tight
+							memory control, back-pressure aware IO, and
+							zero-copy on hot paths. Nodes are authored in Rust
+							too, so you can lean on the ecosystem.
 						</p>
 					</div>
 
 					<div class="grid grid-cols-2 gap-8">
-						<div class="group relative overflow-hidden rounded-2xl border border-orange-500/20 bg-gradient-to-br from-orange-500/10 to-red-500/10 backdrop-blur-sm p-8 hover:from-orange-500/20 hover:to-red-500/20 transition-all duration-300 hover:scale-105">
-							<div class="text-5xl font-extrabold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent mb-3">Rust</div>
+						<div
+							class="rounded-2xl border border-orange-500/20 bg-gradient-to-br from-orange-500/10 to-red-500/10 backdrop-blur-sm p-8"
+						>
+							<div
+								class="text-5xl font-extrabold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent mb-3"
+							>
+								Rust
+							</div>
 							<div class="text-sm text-muted-foreground">
 								foundation for runtime & nodes
 							</div>
 						</div>
-						<div class="group relative overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-purple-500/10 backdrop-blur-sm p-8 hover:from-blue-500/20 hover:to-purple-500/20 transition-all duration-300 hover:scale-105">
-							<div class="text-5xl font-extrabold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent mb-3">0‑copy</div>
+						<div
+							class="rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-purple-500/10 backdrop-blur-sm p-8"
+						>
+							<div
+								class="text-5xl font-extrabold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent mb-3"
+							>
+								0-copy
+							</div>
 							<div class="text-sm text-muted-foreground">
 								hot paths
 							</div>
 						</div>
-						<div class="group relative overflow-hidden rounded-2xl border border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-sm p-8 hover:from-green-500/20 hover:to-emerald-500/20 transition-all duration-300 hover:scale-105">
-							<div class="text-5xl font-extrabold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent mb-3">Stable</div>
+						<div
+							class="rounded-2xl border border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-sm p-8"
+						>
+							<div
+								class="text-5xl font-extrabold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent mb-3"
+							>
+								Stable
+							</div>
 							<div class="text-sm text-muted-foreground">
 								latency under load
 							</div>
 						</div>
-						<div class="group relative overflow-hidden rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-sm p-8 hover:from-purple-500/20 hover:to-pink-500/20 transition-all duration-300 hover:scale-105">
-							<div class="text-5xl font-extrabold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent mb-3">Back‑pressure</div>
+						<div
+							class="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-sm p-8"
+						>
+							<div
+								class="text-5xl font-extrabold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent mb-3"
+							>
+								Back-pressure
+							</div>
 							<div class="text-sm text-muted-foreground">
 								aware IO
 							</div>
@@ -529,215 +791,329 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 				</div>
 
 				<div class="relative">
-					<div class="absolute inset-0 bg-gradient-to-br from-card/20 to-background/20 rounded-3xl blur-xl"></div>
-					<div class="relative rounded-3xl border border-border/50 bg-gradient-to-b from-card/80 to-card/60 backdrop-blur-sm p-8 hover:from-card/90 hover:to-card/80 transition-all duration-300">
+					<div
+						class="rounded-3xl border border-border/40 bg-gradient-to-b from-card/60 to-card/40 backdrop-blur-sm p-8"
+					>
 						<div class="mb-6">
-							<div class="text-lg font-semibold mb-2">Instrumentation</div>
+							<div class="text-lg font-semibold mb-2">
+								Instrumentation
+							</div>
 							<p class="text-muted-foreground">
-								Trace spans, per‑edge timings, and payload previews — directly in the UI.
+								Trace spans, per-edge timings, and payload
+								previews — directly in the UI.
 							</p>
 						</div>
-						<div class="group overflow-hidden rounded-2xl border border-border/50 bg-background/80 backdrop-blur-sm hover:scale-105 transition-all duration-300">
-							<img
-								src="/images/perf-traces.png"
-								alt="Traces and timings"
-								class="w-full h-auto object-cover"
-								loading="lazy"
-							/>
-						</div>
+						<Image
+							src={tracing}
+							alt="Traces and timings"
+							class="w-full h-auto rounded-2xl bg-background/40 backdrop-blur-sm object-cover"
+							loading="lazy"
+						/>
 					</div>
 				</div>
 			</div>
 		</section>
 
-		<!-- EXTENSIBLE -->
-		<section id="extensible" class="relative mx-auto max-w-7xl px-4 py-32 lg:px-8 mb-32">
-			<div class="absolute inset-0 -mx-4 lg:-mx-8">
-				<div class="h-full w-full bg-gradient-to-br from-secondary/5 via-background to-tertiary/5 rounded-3xl border border-secondary/10"></div>
-				<div class="absolute top-10 right-10 w-72 h-72 bg-secondary/10 rounded-full blur-3xl opacity-30"></div>
-				<div class="absolute bottom-10 left-10 w-96 h-96 bg-tertiary/10 rounded-full blur-3xl opacity-30"></div>
+		<!-- Soft seam -->
+		<div class="relative -my-2 h-10">
+			<div class="absolute inset-0">
+				<div
+					class="mx-auto max-w-7xl px-4 lg:px-8 h-full flex items-center"
+				>
+					<div
+						class="w-full h-px bg-gradient-to-r from-transparent via-border/60 to-transparent"
+					>
+					</div>
+				</div>
 			</div>
+		</div>
 
+		<!-- EXTENSIBLE -->
+		<section
+			id="extensible"
+			data-c1="hsl(200 90% 60% / .10)"
+			data-c2="hsl(150 80% 60% / .10)"
+			class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+		>
 			<div class="relative z-10 grid items-start gap-16 lg:grid-cols-2">
 				<div class="space-y-8">
 					<div>
-						<div class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6">
-							<div class="w-2 h-2 bg-secondary rounded-full animate-pulse"></div>
+						<div
+							class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6"
+						>
+							<div
+								class="w-2 h-2 bg-secondary rounded-full animate-pulse"
+							>
+							</div>
 							Extensibility
 						</div>
-						<h2 class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-secondary to-tertiary bg-clip-text text-transparent">
-							Integrate your world with <span class="text-secondary">typed</span> nodes
+						<h2
+							class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-secondary to-tertiary bg-clip-text text-transparent"
+						>
+							Integrate your world with <span
+								class="text-secondary">typed</span
+							> nodes
 						</h2>
 						<p class="mt-6 text-lg text-muted-foreground">
-							Wrap internal APIs, queues, PLCs, computer vision, or spreadsheets. Versioned ports and validation make shared nodes safe to reuse across teams.
+							Wrap internal APIs, queues, PLCs, computer vision,
+							or spreadsheets. Versioned ports and validation make
+							shared nodes safe to reuse across teams.
 						</p>
 					</div>
 
 					<div class="space-y-4">
-						<div class="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-r from-card/80 to-card/60 backdrop-blur-sm p-6 hover:from-card to-card/80 transition-all duration-300">
+						<div
+							class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6"
+						>
 							<div class="flex items-center gap-3 mb-2">
-								<div class="w-8 h-8 bg-gradient-to-br from-primary to-primary/60 rounded-lg flex items-center justify-center">
-									<svg class="w-4 h-4 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-									</svg>
+								<div
+									class="w-8 h-8 bg-gradient-to-br from-primary to-primary/60 rounded-lg flex items-center justify-center"
+								>
+									<LuPlug2
+										className="w-4 h-4 text-primary-foreground"
+									/>
 								</div>
-								<h3 class="font-semibold text-lg">Stable interfaces</h3>
+								<h3 class="font-semibold text-lg">
+									Stable interfaces
+								</h3>
 							</div>
-							<p class="text-muted-foreground">in/out ports are versioned and validated.</p>
+							<p class="text-muted-foreground">
+								in/out ports are versioned and validated.
+							</p>
 						</div>
 
-						<div class="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-r from-card/80 to-card/60 backdrop-blur-sm p-6 hover:from-card to-card/80 transition-all duration-300">
+						<div
+							class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6"
+						>
 							<div class="flex items-center gap-3 mb-2">
-								<div class="w-8 h-8 bg-gradient-to-br from-secondary to-secondary/60 rounded-lg flex items-center justify-center">
-									<svg class="w-4 h-4 text-secondary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-									</svg>
+								<div
+									class="w-8 h-8 bg-gradient-to-br from-secondary to-secondary/60 rounded-lg flex items-center justify-center"
+								>
+									<LuFlaskConical
+										className="w-4 h-4 text-secondary-foreground"
+									/>
 								</div>
-								<h3 class="font-semibold text-lg">Testability</h3>
+								<h3 class="font-semibold text-lg">
+									Testability
+								</h3>
 							</div>
-							<p class="text-muted-foreground">snapshot fixtures and property‑tests for ports.</p>
+							<p class="text-muted-foreground">
+								snapshot fixtures and property-tests for ports.
+							</p>
 						</div>
 
-						<div class="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-r from-card/80 to-card/60 backdrop-blur-sm p-6 hover:from-card to-card/80 transition-all duration-300">
+						<div
+							class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6"
+						>
 							<div class="flex items-center gap-3 mb-2">
-								<div class="w-8 h-8 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-lg flex items-center justify-center">
-									<svg class="w-4 h-4 text-tertiary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
-									</svg>
+								<div
+									class="w-8 h-8 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-lg flex items-center justify-center"
+								>
+									<LuHeart
+										className="w-4 h-4 text-tertiary-foreground"
+									/>
 								</div>
-								<h3 class="font-semibold text-lg">Distribution</h3>
+								<h3 class="font-semibold text-lg">
+									Distribution
+								</h3>
 							</div>
-							<p class="text-muted-foreground">publish nodes privately or on a marketplace.</p>
+							<p class="text-muted-foreground">
+								publish nodes privately or on a marketplace.
+							</p>
 						</div>
 					</div>
 				</div>
 
 				<div class="relative">
-					<div class="absolute inset-0 bg-gradient-to-br from-card/20 to-background/20 rounded-3xl blur-xl"></div>
-					<div class="relative rounded-3xl border border-border/50 bg-card/80 backdrop-blur-sm p-8 hover:bg-card/90 transition-all duration-300">
-						<div class="group overflow-hidden rounded-2xl border border-border/50 bg-background/80 backdrop-blur-sm hover:scale-105 transition-all duration-300">
-							<img
-								src="/images/extensible-node-library.png"
-								alt="Custom node library"
-								class="w-full h-auto object-cover"
-								loading="lazy"
-							/>
-						</div>
-						<p class="mt-4 text-sm text-muted-foreground">
-							Example: a private catalog of typed nodes shared across projects.
-						</p>
-					</div>
+					<Image
+						src={library}
+						alt="Custom node library"
+						class="w-full h-auto rounded-3xl bg-background/40 backdrop-blur-sm object-cover"
+						loading="lazy"
+					/>
 				</div>
 			</div>
 		</section>
 
-		<!-- WHITE‑LABEL / EMBED -->
-		<section id="whitelabel" class="relative mx-auto max-w-7xl px-4 py-32 lg:px-8 mb-32">
-			<div class="absolute inset-0 overflow-hidden -mx-4 lg:-mx-8">
-				<div class="h-full w-full bg-gradient-to-br from-violet-500/5 to-purple-500/5 rounded-3xl border border-violet-500/10"></div>
-				<div class="absolute -top-40 left-1/2 -translate-x-1/2 w-96 h-96 bg-gradient-to-br from-violet-500/20 to-purple-500/20 rounded-full blur-3xl"></div>
+		<!-- Soft seam -->
+		<div class="relative -my-2 h-10">
+			<div class="absolute inset-0">
+				<div
+					class="mx-auto max-w-7xl px-4 lg:px-8 h-full flex items-center"
+				>
+					<div
+						class="w-full h-px bg-gradient-to-r from-transparent via-border/60 to-transparent"
+					>
+					</div>
+				</div>
 			</div>
+		</div>
 
+		<!-- WHITE-LABEL / EMBED -->
+		<section
+			id="whitelabel"
+			data-c1="hsl(262 83% 66% / .10)"
+			data-c2="hsl(292 84% 65% / .10)"
+			class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+		>
 			<div class="relative z-10">
-				<div class="absolute inset-0 -m-8 lg:-m-16 bg-gradient-to-br from-card/80 to-card/60 backdrop-blur-sm rounded-3xl border border-border/50"></div>
-				<div class="relative rounded-3xl p-12 lg:p-16">
+				<div
+					class="relative rounded-3xl p-12 lg:p-16 border border-border/40 bg-card/40 backdrop-blur-sm"
+				>
 					<div class="grid gap-16 lg:grid-cols-2">
 						<div class="space-y-8">
 							<div>
-								<div class="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-violet-600 dark:text-violet-400 mb-6">
-									<div class="w-2 h-2 bg-violet-500 rounded-full animate-pulse"></div>
+								<div
+									class="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-violet-600 dark:text-violet-400 mb-6"
+								>
+									<div
+										class="w-2 h-2 bg-violet-500 rounded-full animate-pulse"
+									>
+									</div>
 									White-label Ready
 								</div>
-								<h2 class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-violet-500 to-purple-500 bg-clip-text text-transparent">
-									Embed, theme, and ship under <span class="text-violet-500">your brand</span>
+								<h2
+									class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-violet-500 to-purple-500 bg-clip-text text-transparent"
+								>
+									Embed, theme, and ship under <span
+										class="text-violet-500">your brand</span
+									>
 								</h2>
 								<p class="mt-6 text-lg text-muted-foreground">
-									Integrate the editor into your product or run the engine headless. Apply your design tokens and logo for a seamless white‑label experience — governance and observability stay intact.
+									Integrate the editor into your product or
+									run the engine headless. Apply your design
+									tokens and logo for a seamless white-label
+									experience — governance and observability
+									stay intact.
 								</p>
 							</div>
 
 							<div class="grid gap-4">
-								<div class="group relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-r from-violet-500/10 to-purple-500/10 backdrop-blur-sm p-6 hover:from-violet-500/20 hover:to-purple-500/20 transition-all duration-300">
+								<div
+									class="rounded-2xl border border-violet-500/20 bg-violet-500/10 backdrop-blur-sm p-6"
+								>
 									<div class="flex items-center gap-3">
-										<div class="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-500 rounded-lg flex items-center justify-center">
-											<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z"></path>
-											</svg>
+										<div
+											class="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-500 rounded-lg flex items-center justify-center"
+										>
+											<LuPaintbrush
+												className="w-4 h-4 text-white"
+											/>
 										</div>
-										<span class="font-medium">Theme via design tokens or CSS variables</span>
+										<span class="font-medium"
+											>Theme via design tokens or CSS
+											variables</span
+										>
 									</div>
 								</div>
-								<div class="group relative overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 backdrop-blur-sm p-6 hover:from-blue-500/20 hover:to-cyan-500/20 transition-all duration-300">
+								<div
+									class="rounded-2xl border border-blue-500/20 bg-blue-500/10 backdrop-blur-sm p-6"
+								>
 									<div class="flex items-center gap-3">
-										<div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
-											<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-											</svg>
+										<div
+											class="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center"
+										>
+											<LuLock
+												className="w-4 h-4 text-white"
+											/>
 										</div>
-										<span class="font-medium">Single‑sign‑on and secrets</span>
+										<span class="font-medium"
+											>Single-sign-on and secrets</span
+										>
 									</div>
 								</div>
-								<div class="group relative overflow-hidden rounded-2xl border border-green-500/20 bg-gradient-to-r from-green-500/10 to-emerald-500/10 backdrop-blur-sm p-6 hover:from-green-500/20 hover:to-emerald-500/20 transition-all duration-300">
+								<div
+									class="rounded-2xl border border-green-500/20 bg-green-500/10 backdrop-blur-sm p-6"
+								>
 									<div class="flex items-center gap-3">
-										<div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
-											<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-											</svg>
+										<div
+											class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center"
+										>
+											<LuCircleGauge
+												className="w-4 h-4 text-white"
+											/>
 										</div>
-										<span class="font-medium">Usage metering & multi‑tenant ready</span>
+										<span class="font-medium"
+											>Usage metering & multi-tenant ready</span
+										>
 									</div>
 								</div>
-								<div class="group relative overflow-hidden rounded-2xl border border-orange-500/20 bg-gradient-to-r from-orange-500/10 to-red-500/10 backdrop-blur-sm p-6 hover:from-orange-500/20 hover:to-red-500/20 transition-all duration-300">
+								<div
+									class="rounded-2xl border border-orange-500/20 bg-orange-500/10 backdrop-blur-sm p-6"
+								>
 									<div class="flex items-center gap-3">
-										<div class="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
-											<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
-											</svg>
+										<div
+											class="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center"
+										>
+											<LuCodeXml
+												className="w-4 h-4 text-white"
+											/>
 										</div>
-										<span class="font-medium">SDKs & webhooks</span>
+										<span class="font-medium"
+											>SDKs & webhooks</span
+										>
 									</div>
 								</div>
 							</div>
 						</div>
 
 						<div class="relative">
-							<div class="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-purple-500/10 rounded-2xl blur-xl"></div>
-							<div class="relative grid grid-cols-2 gap-6">
+							<div class="grid grid-cols-2 gap-6">
 								<div class="space-y-6">
-									<div class="group overflow-hidden rounded-2xl border border-border/50 hover:scale-105 transition-all duration-300">
-										<img
-											src="/images/whitelabel/theme-1.png"
-											alt="Dark theme variant"
-											class="w-full h-auto object-cover"
-											loading="lazy"
-										/>
-									</div>
-									<div class="group overflow-hidden rounded-2xl border border-border/50 hover:scale-105 transition-all duration-300">
-										<img
-											src="/images/whitelabel/theme-2.png"
-											alt="Light theme variant"
-											class="w-full h-auto object-cover"
-											loading="lazy"
-										/>
-									</div>
+									<Image
+										src={designCatppuccin}
+										alt="Dark theme variant"
+										class="w-full h-auto rounded-2xl object-cover"
+										loading="lazy"
+									/>
+									<Image
+										src={designCosmicNight}
+										alt="Light theme variant"
+										class="w-full h-auto rounded-2xl object-cover"
+										loading="lazy"
+									/>
 								</div>
 								<div class="space-y-6">
-									<div class="group overflow-hidden rounded-2xl border border-border/50 hover:scale-105 transition-all duration-300">
-										<img
-											src="/images/whitelabel/theme-3.png"
-											alt="Brand‑colored variant"
-											class="w-full h-auto object-cover"
-											loading="lazy"
-										/>
-									</div>
-									<div class="group overflow-hidden rounded-2xl border border-border/50 hover:scale-105 transition-all duration-300">
-										<img
-											src="/images/whitelabel/theme-4.png"
-											alt="Compact layout variant"
-											class="w-full h-auto object-cover"
-											loading="lazy"
-										/>
-									</div>
+									<Image
+										src={designNeoBrutalism}
+										alt="Brand-colored variant"
+										class="w-full h-auto rounded-2xl object-cover"
+										loading="lazy"
+									/>
+									<Image
+										src={designSoftPop}
+										alt="Compact layout variant"
+										class="w-full h-auto rounded-2xl object-cover"
+										loading="lazy"
+									/>
+								</div>
+								<div class="space-y-6">
+									<Image
+										src={designBubblegum}
+										alt="Brand-colored variant"
+										class="w-full h-auto rounded-2xl object-cover"
+										loading="lazy"
+									/>
+									<Image
+										src={designBubblegumLight}
+										alt="Compact layout variant"
+										class="w-full h-auto rounded-2xl object-cover"
+										loading="lazy"
+									/>
+								</div>
+								<div class="space-y-6">
+									<Image
+										src={designDoom}
+										alt="Brand-colored variant"
+										class="w-full h-auto rounded-2xl object-cover"
+										loading="lazy"
+									/>
+									<Image
+										src={designNeoBrutalism}
+										alt="Compact layout variant"
+										class="w-full h-auto rounded-2xl object-cover"
+										loading="lazy"
+									/>
 								</div>
 							</div>
 						</div>
@@ -746,25 +1122,50 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 			</div>
 		</section>
 
-		<!-- ONE VIEW: business + data + implementation via layers -->
-		<section id="layers" class="relative mx-auto max-w-7xl px-4 py-32 lg:px-8 mb-32">
-			<div class="absolute inset-0 -mx-4 lg:-mx-8">
-				<div class="h-full w-full bg-gradient-to-br from-indigo-500/5 via-background to-cyan-500/5 rounded-3xl border border-indigo-500/10"></div>
-				<div class="absolute top-20 left-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl opacity-30"></div>
-				<div class="absolute bottom-20 right-10 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl opacity-30"></div>
+		<!-- Soft seam -->
+		<div class="relative -my-2 h-10">
+			<div class="absolute inset-0">
+				<div
+					class="mx-auto max-w-7xl px-4 lg:px-8 h-full flex items-center"
+				>
+					<div
+						class="w-full h-px bg-gradient-to-r from-transparent via-border/60 to-transparent"
+					>
+					</div>
+				</div>
 			</div>
+		</div>
 
+		<!-- ONE VIEW: business + data + implementation via layers -->
+		<section
+			id="layers"
+			data-c1="hsl(243 85% 64% / .10)"
+			data-c2="hsl(190 90% 60% / .10)"
+			class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+		>
 			<div class="relative z-10">
 				<div class="mx-auto max-w-4xl text-center">
-					<div class="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 mb-6">
-						<div class="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+					<div
+						class="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 mb-6"
+					>
+						<div
+							class="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"
+						>
+						</div>
 						Multi-Layer Views
 					</div>
-					<h2 class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-indigo-500 to-cyan-500 bg-clip-text text-transparent">
-						Business process, data, and implementation in <span class="text-indigo-500">one view</span>
+					<h2
+						class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-indigo-500 to-cyan-500 bg-clip-text text-transparent"
+					>
+						Business process, data, and implementation in <span
+							class="text-indigo-500">one view</span
+						>
 					</h2>
-					<p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
-						Use <strong>Layers</strong> so roles see what they need without leaving the canvas. Switch context — keep the graph.
+					<p
+						class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto"
+					>
+						Use <strong>Layers</strong> so roles see what they need without
+						leaving the canvas. Switch context — keep the graph.
 					</p>
 				</div>
 
@@ -772,57 +1173,140 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 					<div class="grid gap-16 lg:grid-cols-2 items-center">
 						<!-- Layer Visualization -->
 						<div class="relative order-2 lg:order-1">
-							<div class="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-cyan-500/10 rounded-3xl blur-xl"></div>
 							<div class="relative space-y-6">
 								<div class="text-center mb-8">
-									<h3 class="text-xl font-semibold mb-2">Layer Stack Visualization</h3>
-									<p class="text-sm text-muted-foreground">Three interconnected views of the same workflow</p>
+									<h3 class="text-xl font-semibold mb-2">
+										Layer Stack Visualization
+									</h3>
+									<p class="text-sm text-muted-foreground">
+										Three interconnected views of the same
+										workflow
+									</p>
 								</div>
 
 								<!-- Layer Stack -->
 								<div class="relative mx-auto w-80 h-80">
 									<!-- Implementation Layer (Bottom) -->
-									<div class="absolute inset-0 transform rotate-3 translate-x-4 translate-y-4">
-										<div class="w-full h-full rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-sm p-6 shadow-xl">
-											<div class="flex items-center gap-3 mb-4">
-												<div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
-													<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+									<div
+										class="absolute inset-0 transform rotate-3 translate-x-4 translate-y-4"
+									>
+										<div
+											class="w-full h-full rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-sm p-6 shadow-xl"
+										>
+											<div
+												class="flex items-center gap-3 mb-4"
+											>
+												<div
+													class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center"
+												>
+													<svg
+														class="w-4 h-4 text-white"
+														fill="none"
+														stroke="currentColor"
+														viewBox="0 0 24 24"
+													>
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															stroke-width="2"
+															d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+														></path>
 													</svg>
 												</div>
-												<span class="font-semibold text-green-700 dark:text-green-300">Implementation</span>
+												<span
+													class="font-semibold text-green-700 dark:text-green-300"
+													>Implementation</span
+												>
 											</div>
 											<div class="space-y-3">
-												<div class="h-2 bg-green-500/30 rounded-full"></div>
-												<div class="h-2 bg-green-500/20 rounded-full w-3/4"></div>
-												<div class="h-2 bg-green-500/25 rounded-full w-5/6"></div>
-												<div class="grid grid-cols-3 gap-2 mt-4">
-													<div class="h-6 bg-green-500/20 rounded"></div>
-													<div class="h-6 bg-green-500/30 rounded"></div>
-													<div class="h-6 bg-green-500/25 rounded"></div>
+												<div
+													class="h-2 bg-green-500/30 rounded-full"
+												>
+												</div>
+												<div
+													class="h-2 bg-green-500/20 rounded-full w-3/4"
+												>
+												</div>
+												<div
+													class="h-2 bg-green-500/25 rounded-full w-5/6"
+												>
+												</div>
+												<div
+													class="grid grid-cols-3 gap-2 mt-4"
+												>
+													<div
+														class="h-6 bg-green-500/20 rounded"
+													>
+													</div>
+													<div
+														class="h-6 bg-green-500/30 rounded"
+													>
+													</div>
+													<div
+														class="h-6 bg-green-500/25 rounded"
+													>
+													</div>
 												</div>
 											</div>
 										</div>
 									</div>
 
 									<!-- Data Layer (Middle) -->
-									<div class="absolute inset-0 transform rotate-1 translate-x-2 translate-y-2">
-										<div class="w-full h-full rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 backdrop-blur-sm p-6 shadow-xl">
-											<div class="flex items-center gap-3 mb-4">
-												<div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
-													<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+									<div
+										class="absolute inset-0 transform rotate-1 translate-x-2 translate-y-2"
+									>
+										<div
+											class="w-full h-full rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 backdrop-blur-sm p-6 shadow-xl"
+										>
+											<div
+												class="flex items-center gap-3 mb-4"
+											>
+												<div
+													class="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center"
+												>
+													<svg
+														class="w-4 h-4 text-white"
+														fill="none"
+														stroke="currentColor"
+														viewBox="0 0 24 24"
+													>
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															stroke-width="2"
+															d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"
+														></path>
 													</svg>
 												</div>
-												<span class="font-semibold text-blue-700 dark:text-blue-300">Data</span>
+												<span
+													class="font-semibold text-blue-700 dark:text-blue-300"
+													>Data</span
+												>
 											</div>
 											<div class="space-y-3">
-												<div class="h-2 bg-blue-500/30 rounded-full"></div>
-												<div class="h-2 bg-blue-500/20 rounded-full w-4/5"></div>
-												<div class="h-2 bg-blue-500/25 rounded-full w-2/3"></div>
-												<div class="grid grid-cols-2 gap-2 mt-4">
-													<div class="h-8 bg-blue-500/20 rounded"></div>
-													<div class="h-8 bg-blue-500/30 rounded"></div>
+												<div
+													class="h-2 bg-blue-500/30 rounded-full"
+												>
+												</div>
+												<div
+													class="h-2 bg-blue-500/20 rounded-full w-4/5"
+												>
+												</div>
+												<div
+													class="h-2 bg-blue-500/25 rounded-full w-2/3"
+												>
+												</div>
+												<div
+													class="grid grid-cols-2 gap-2 mt-4"
+												>
+													<div
+														class="h-8 bg-blue-500/20 rounded"
+													>
+													</div>
+													<div
+														class="h-8 bg-blue-500/30 rounded"
+													>
+													</div>
 												</div>
 											</div>
 										</div>
@@ -830,40 +1314,82 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 
 									<!-- Business Layer (Top) -->
 									<div class="absolute inset-0">
-										<div class="w-full h-full rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 backdrop-blur-sm p-6 shadow-xl">
-											<div class="flex items-center gap-3 mb-4">
-												<div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center">
-													<LuBriefcaseBusiness/>
+										<div
+											class="w-full h-full rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 backdrop-blur-sm p-6 shadow-xl"
+										>
+											<div
+												class="flex items-center gap-3 mb-4"
+											>
+												<div
+													class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center"
+												>
+													<LuBriefcaseBusiness />
 												</div>
-												<span class="font-semibold text-indigo-700 dark:text-indigo-300">Business</span>
+												<span
+													class="font-semibold text-indigo-700 dark:text-indigo-300"
+													>Business</span
+												>
 											</div>
 											<div class="space-y-3">
-												<div class="h-2 bg-indigo-500/30 rounded-full"></div>
-												<div class="h-2 bg-indigo-500/20 rounded-full w-5/6"></div>
-												<div class="h-2 bg-indigo-500/25 rounded-full w-3/4"></div>
+												<div
+													class="h-2 bg-indigo-500/30 rounded-full"
+												>
+												</div>
+												<div
+													class="h-2 bg-indigo-500/20 rounded-full w-5/6"
+												>
+												</div>
+												<div
+													class="h-2 bg-indigo-500/25 rounded-full w-3/4"
+												>
+												</div>
 												<div class="flex gap-2 mt-4">
-													<div class="h-10 w-10 bg-indigo-500/20 rounded-full"></div>
-													<div class="h-10 w-10 bg-indigo-500/30 rounded-full"></div>
-													<div class="h-10 w-10 bg-indigo-500/25 rounded-full"></div>
+													<div
+														class="h-10 w-10 bg-indigo-500/20 rounded-full"
+													>
+													</div>
+													<div
+														class="h-10 w-10 bg-indigo-500/30 rounded-full"
+													>
+													</div>
+													<div
+														class="h-10 w-10 bg-indigo-500/25 rounded-full"
+													>
+													</div>
 												</div>
 											</div>
 										</div>
 									</div>
 								</div>
 
-								<!-- Connection Lines -->
-								<div class="absolute inset-0 pointer-events-none">
-									<svg class="w-full h-full" viewBox="0 0 320 320">
-										<path d="M 50 280 Q 160 200 270 120" stroke="currentColor" stroke-width="2" stroke-dasharray="5,5" fill="none" class="text-indigo-500/30 animate-pulse" />
-										<path d="M 30 260 Q 160 180 290 140" stroke="currentColor" stroke-width="2" stroke-dasharray="5,5" fill="none" class="text-blue-500/30 animate-pulse" style="animation-delay: 0.5s" />
-									</svg>
-								</div>
+								<!-- Subtle connectors -->
+								<svg
+									class="absolute inset-0 w-full h-full pointer-events-none"
+									viewBox="0 0 320 320"
+								>
+									<path
+										d="M 50 280 Q 160 200 270 120"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-dasharray="5,5"
+										fill="none"
+										class="text-indigo-500/30"></path>
+									<path
+										d="M 30 260 Q 160 180 290 140"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-dasharray="5,5"
+										fill="none"
+										class="text-blue-500/30"></path>
+								</svg>
 							</div>
 						</div>
 
-						<!-- Tab Interface -->
+						<!-- Tabs -->
 						<div class="order-1 lg:order-2">
-							<div class="rounded-3xl border border-border/50 bg-card/80 backdrop-blur-sm p-8 hover:bg-card/90 transition-all duration-300">
+							<div
+								class="rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 transition-all duration-300"
+							>
 								<div
 									id="layers-tabs"
 									role="tablist"
@@ -873,11 +1399,17 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 										role="tab"
 										aria-selected="true"
 										data-target="business"
-										class="layers-tab active rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 backdrop-blur-sm px-6 py-4 text-center text-sm font-semibold transition-all duration-300 hover:from-indigo-500/20 hover:to-purple-500/20"
+										class="layers-tab active rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 backdrop-blur-sm px-6 py-4 text-center text-sm font-semibold transition-all duration-300"
+									>
+										<div
+											class="flex items-center justify-center gap-2"
 										>
-										<div class="flex items-center justify-center gap-2">
-											<div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center">
-												<LuBriefcaseBusiness className="w-4 h-4 text-white" />
+											<div
+												class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center"
+											>
+												<LuBriefcaseBusiness
+													className="w-4 h-4 text-white"
+												/>
 											</div>
 											<span>Process</span>
 										</div>
@@ -886,11 +1418,17 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 										role="tab"
 										aria-selected="false"
 										data-target="data"
-										class="layers-tab rounded-2xl border border-border/50 bg-muted/50 backdrop-blur-sm px-6 py-4 text-center text-sm font-semibold transition-all duration-300 hover:bg-accent hover:text-accent-foreground"
+										class="layers-tab rounded-2xl border border-border/40 bg-muted/40 backdrop-blur-sm px-6 py-4 text-center text-sm font-semibold transition-all duration-300 hover:bg-accent hover:text-accent-foreground"
+									>
+										<div
+											class="flex items-center justify-center gap-2"
 										>
-										<div class="flex items-center justify-center gap-2">
-											<div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
-												<LuDatabase className="w-4 h-4 text-white" />
+											<div
+												class="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center"
+											>
+												<LuDatabase
+													className="w-4 h-4 text-white"
+												/>
 											</div>
 											<span>Data</span>
 										</div>
@@ -899,43 +1437,94 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 										role="tab"
 										aria-selected="false"
 										data-target="impl"
-										class="layers-tab rounded-2xl border border-border/50 bg-muted/50 backdrop-blur-sm px-6 py-4 text-center text-sm font-semibold transition-all duration-300 hover:bg-accent hover:text-accent-foreground"
+										class="layers-tab rounded-2xl border border-border/40 bg-muted/40 backdrop-blur-sm px-6 py-4 text-center text-sm font-semibold transition-all duration-300 hover:bg-accent hover:text-accent-foreground"
+									>
+										<div
+											class="flex items-center justify-center gap-2"
 										>
-										<div class="flex items-center justify-center gap-2">
-											<div class="w-8 h-8 size-8 min-w-8 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
-												<LuCode className="w-4 h-4 text-white" />
+											<div
+												class="w-8 h-8 size-8 min-w-8 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center"
+											>
+												<LuCode
+													className="w-4 h-4 text-white"
+												/>
 											</div>
 											<span>Logic</span>
 										</div>
 									</button>
 								</div>
 
-								<div id="layers-panels" class="relative min-h-[200px]">
+								<div
+									id="layers-panels"
+									class="relative min-h-fit h-fit transition-all"
+								>
 									<div
 										id="panel-business"
 										role="tabpanel"
-										class="layers-panel absolute inset-0 opacity-100 transition-all duration-300"
+										class="layers-panel active inset-0"
 									>
-										<div class="rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 backdrop-blur-sm p-8">
+										<div
+											class="rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 backdrop-blur-sm p-8"
+										>
 											<div class="flex items-start gap-4">
-												<div class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl flex items-center justify-center flex-shrink-0">
-													<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-													</svg>
+												<div
+													class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl flex items-center justify-center flex-shrink-0"
+												>
+													<LuBriefcaseBusiness
+														className="w-6 h-6 text-white"
+													/>
 												</div>
 												<div>
-													<h3 class="text-2xl font-bold mb-4">Business Layer</h3>
-													<p class="text-lg text-muted-foreground leading-relaxed">
-														Example: <em>Warranty Claim Intake</em>. Customer submits a claim → triage severity → approve or decline → notify customer → trigger payout or repair.
+													<h3
+														class="text-2xl font-bold mb-4"
+													>
+														Business Layer
+													</h3>
+													<p
+														class="text-lg text-muted-foreground leading-relaxed"
+													>
+														Example: <em
+															>Warranty Claim
+															Intake</em
+														>. Customer submits a
+														claim → triage severity
+														→ approve or decline →
+														notify customer →
+														trigger payout or
+														repair.
 													</p>
-													<div class="mt-6 grid grid-cols-2 gap-4">
-														<div class="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4">
-															<div class="mb-2 font-semibold text-indigo-700 dark:text-indigo-300">Process Flow</div>
-															<div class="text-sm text-muted-foreground">Visual workflow representation</div>
+													<div
+														class="mt-6 grid grid-cols-2 gap-4"
+													>
+														<div
+															class="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4"
+														>
+															<div
+																class="mb-2 font-semibold text-indigo-700 dark:text-indigo-300"
+															>
+																Process Flow
+															</div>
+															<div
+																class="text-sm text-muted-foreground"
+															>
+																Visual workflow
+																representation
+															</div>
 														</div>
-														<div class="rounded-xl border border-purple-500/20 bg-purple-500/10 p-4">
-															<div class="mb-2 font-semibold text-purple-700 dark:text-purple-300">Decision Points</div>
-															<div class="text-sm text-muted-foreground">Approval gates and routing</div>
+														<div
+															class="rounded-xl border border-purple-500/20 bg-purple-500/10 p-4"
+														>
+															<div
+																class="mb-2 font-semibold text-purple-700 dark:text-purple-300"
+															>
+																Decision Points
+															</div>
+															<div
+																class="text-sm text-muted-foreground"
+															>
+																Approval gates
+																and routing
+															</div>
 														</div>
 													</div>
 												</div>
@@ -945,28 +1534,73 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 									<div
 										id="panel-data"
 										role="tabpanel"
-										class="layers-panel absolute inset-0 opacity-0 transition-all duration-300 pointer-events-none"
+										class="layers-panel inset-0"
+										hidden
 									>
-										<div class="rounded-2xl border border-blue-500/20 bg-gradient-to-r from-blue-500/5 to-cyan-500/5 backdrop-blur-sm p-8">
+										<div
+											class="rounded-2xl border border-blue-500/20 bg-gradient-to-r from-blue-500/5 to-cyan-500/5 backdrop-blur-sm p-8"
+										>
 											<div class="flex items-start gap-4">
-												<div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center flex-shrink-0">
-													<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
-													</svg>
+												<div
+													class="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center flex-shrink-0"
+												>
+													<LuDatabase
+														className="w-6 h-6 text-white"
+													/>
 												</div>
 												<div>
-													<h3 class="text-2xl font-bold mb-4">Data Layer</h3>
-													<p class="text-lg text-muted-foreground leading-relaxed">
-														Source systems in one project: PostgreSQL <code class="rounded bg-muted px-2 py-1">claims</code>, object storage for photos, and a document store for reports. Schemas appear at ports and are validated pre‑deploy.
+													<h3
+														class="text-2xl font-bold mb-4"
+													>
+														Data Layer
+													</h3>
+													<p
+														class="text-lg text-muted-foreground leading-relaxed"
+													>
+														Source systems in one
+														project: PostgreSQL <code
+															class="rounded bg-muted px-2 py-1"
+															>claims</code
+														>, object storage for
+														photos, and a document
+														store for reports.
+														Schemas appear at ports
+														and are validated
+														pre-deploy.
 													</p>
-													<div class="mt-6 grid grid-cols-2 gap-4">
-														<div class="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4">
-															<div class="font-semibold text-blue-700 dark:text-blue-300">Schema Validation</div>
-															<div class="text-sm text-muted-foreground">Type-safe data contracts</div>
+													<div
+														class="mt-6 grid grid-cols-2 gap-4"
+													>
+														<div
+															class="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4"
+														>
+															<div
+																class="font-semibold text-blue-700 dark:text-blue-300"
+															>
+																Schema
+																Validation
+															</div>
+															<div
+																class="text-sm text-muted-foreground"
+															>
+																Type-safe data
+																contracts
+															</div>
 														</div>
-														<div class="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4">
-															<div class="font-semibold text-cyan-700 dark:text-cyan-300">Data Sources</div>
-															<div class="text-sm text-muted-foreground">Multiple system integration</div>
+														<div
+															class="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4"
+														>
+															<div
+																class="font-semibold text-cyan-700 dark:text-cyan-300"
+															>
+																Data Sources
+															</div>
+															<div
+																class="text-sm text-muted-foreground"
+															>
+																Multiple system
+																integration
+															</div>
 														</div>
 													</div>
 												</div>
@@ -976,300 +1610,518 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 									<div
 										id="panel-impl"
 										role="tabpanel"
-										class="layers-panel absolute inset-0 opacity-0 transition-all duration-300 pointer-events-none"
+										class="layers-panel inset-0"
+										hidden
 									>
-										<div class="rounded-2xl border border-green-500/20 bg-gradient-to-r from-green-500/5 to-emerald-500/5 backdrop-blur-sm p-8">
+										<div
+											class="rounded-2xl border border-green-500/20 bg-gradient-to-r from-green-500/5 to-emerald-500/5 backdrop-blur-sm p-8"
+										>
 											<div class="flex items-start gap-4">
-												<div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center flex-shrink-0">
-													<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
-													</svg>
+												<div
+													class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center flex-shrink-0"
+												>
+													<LuCode
+														className="w-6 h-6 text-white"
+													/>
 												</div>
 												<div>
-													<h3 class="text-2xl font-bold mb-4">Implementation Layer</h3>
-													<p class="text-lg text-muted-foreground leading-relaxed">
-														Typed nodes wired to the business flow: <code class="rounded bg-muted px-2 py-1">HTTP.Intake</code> → <code class="rounded bg-muted px-2 py-1">Classify.Image</code> → <code class="rounded bg-muted px-2 py-1">Human.Approval</code> → <code class="rounded bg-muted px-2 py-1">ERP.CreateCase</code> → <code class="rounded bg-muted px-2 py-1">Notify.Email/SMS</code>. Tests and policies live on edges.
+													<h3
+														class="text-2xl font-bold mb-4"
+													>
+														Implementation Layer
+													</h3>
+													<p
+														class="text-lg text-muted-foreground leading-relaxed"
+													>
+														Typed nodes wired to the
+														business flow: <code
+															class="rounded bg-muted px-2 py-1"
+															>HTTP.Intake</code
+														> → <code
+															class="rounded bg-muted px-2 py-1"
+															>Classify.Image</code
+														> → <code
+															class="rounded bg-muted px-2 py-1"
+															>Human.Approval</code
+														> → <code
+															class="rounded bg-muted px-2 py-1"
+															>ERP.CreateCase</code
+														> → <code
+															class="rounded bg-muted px-2 py-1"
+															>Notify.Email/SMS</code
+														>. Tests and policies
+														live on edges.
 													</p>
-													<div class="mt-6 grid grid-cols-2 gap-4">
-														<div class="rounded-xl border border-green-500/20 bg-green-500/10 p-4">
-															<div class="font-semibold text-green-700 dark:text-green-300">Typed Nodes</div>
-															<div class="text-sm text-muted-foreground">Runtime-safe components</div>
+													<div
+														class="mt-6 grid grid-cols-2 gap-4"
+													>
+														<div
+															class="rounded-xl border border-green-500/20 bg-green-500/10 p-4"
+														>
+															<div
+																class="font-semibold text-green-700 dark:text-green-300"
+															>
+																Typed Nodes
+															</div>
+															<div
+																class="text-sm text-muted-foreground"
+															>
+																Runtime-safe
+																components
+															</div>
 														</div>
-														<div class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
-															<div class="font-semibold text-emerald-700 dark:text-emerald-300">Edge Policies</div>
-															<div class="text-sm text-muted-foreground">Testing and governance</div>
+														<div
+															class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4"
+														>
+															<div
+																class="font-semibold text-emerald-700 dark:text-emerald-300"
+															>
+																Edge Policies
+															</div>
+															<div
+																class="text-sm text-muted-foreground"
+															>
+																Testing and
+																governance
+															</div>
 														</div>
 													</div>
 												</div>
 											</div>
 										</div>
 									</div>
-								</div>
+								</div><!-- /panels -->
 							</div>
 						</div>
 					</div>
-				</div>
+				</div><!-- /container -->
 			</div>
 		</section>
 
-		<!-- AI‑FIRST: classical + GenAI -->
+		<!-- Soft seam -->
+		<div class="relative -my-2 h-10">
+			<div class="absolute inset-0">
+				<div
+					class="mx-auto max-w-7xl px-4 lg:px-8 h-full flex items-center"
+				>
+					<div
+						class="w-full h-px bg-gradient-to-r from-transparent via-border/60 to-transparent"
+					>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- AI-FIRST -->
 		<section
 			id="ai-first"
-			class="relative mx-auto max-w-7xl px-4 py-32 lg:px-8 mb-32"
+			data-c1="hsl(160 84% 40% / .10)"
+			data-c2="hsl(180 80% 45% / .10)"
+			class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
 		>
-			<div class="absolute inset-0 -mx-4 lg:-mx-8">
-				<div class="h-full w-full bg-gradient-to-br from-emerald-500/5 via-background to-teal-500/5 rounded-3xl border border-emerald-500/10"></div>
-			</div>
-
-			<div class="relative z-10 grid items-center gap-10 lg:grid-cols-2">
+			<div class="relative z-10 grid items-start gap-10 lg:grid-cols-2">
 				<div>
 					<h2 class="text-3xl font-bold sm:text-4xl">
 						AI — classical first
 					</h2>
 					<p class="mt-3 text-muted-foreground">
-						Start with deterministic machine learning for
-						predictable cost and accuracy: <strong
-							>regression</strong
-						>, <strong>classification</strong>, and <strong
-							>object detection</strong
-						>. Add LLMs for summarization, planning, or routing when
-						they help — it’s just configuration, not a different
-						stack.
+						You don’t write code here — you <strong
+							>drop nodes</strong
+						> and wire typed pins. Start with deterministic ML for predictable
+						cost/accuracy, then add LLM nodes when they help. Same graph,
+						same validations, same deployment.
 					</p>
-					<ul class="mt-6 space-y-3 text-sm">
-						<li class="rounded-xl border border-border bg-card p-4">
-							<strong>Regression</strong> — forecast demand, score
-							risk, compute pricing.
-						</li>
-						<li class="rounded-xl border border-border bg-card p-4">
-							<strong>Classification</strong> — label events, triage
-							tickets, route messages.
-						</li>
-						<li class="rounded-xl border border-border bg-card p-4">
-							<strong>Object detection</strong> — detect & count items
-							in images or video.
-						</li>
-						<li class="rounded-xl border border-border bg-card p-4">
-							<strong>LLM routing (optional)</strong> — build agents/multi‑agent
-							systems that can call tools and coordinate work.
-						</li>
-					</ul>
+
+					<!-- quick chips -->
+					<div class="mt-6 flex flex-wrap gap-2 text-sm">
+						<span class="ai-chip" data-t="emerald"
+							>🧮 Regression</span
+						>
+						<span class="ai-chip" data-t="indigo"
+							>🏷️ Classification</span
+						>
+						<span class="ai-chip" data-t="amber"
+							>🧠 Object detection</span
+						>
+						<span class="ai-chip" data-t="cyan"
+							>🤖 LLM routing (optional)</span
+						>
+					</div>
 				</div>
-				<div class="grid gap-4 sm:grid-cols-3">
-					<figure
-						class="rounded-2xl border border-border bg-muted p-4 text-center"
-					>
-						<img
-							src="/images/ai/regression.png"
-							alt="Regression example chart"
-							class="mx-auto rounded-lg border border-border bg-background object-cover"
-							loading="lazy"
-						/>
-						<figcaption class="mt-2 text-xs text-muted-foreground">
-							Regression
-						</figcaption>
-					</figure>
-					<figure
-						class="rounded-2xl border border-border bg-muted p-4 text-center"
-					>
-						<img
-							src="/images/ai/classification.png"
-							alt="Classification confusion matrix"
-							class="mx-auto rounded-lg border border-border bg-background object-cover"
-							loading="lazy"
-						/>
-						<figcaption class="mt-2 text-xs text-muted-foreground">
-							Classification
-						</figcaption>
-					</figure>
-					<figure
-						class="rounded-2xl border border-border bg-muted p-4 text-center"
-					>
-						<img
-							src="/images/ai/detection.png"
-							alt="Object detection bounding boxes"
-							class="mx-auto rounded-lg border border-border bg-background object-cover"
-							loading="lazy"
-						/>
-						<figcaption class="mt-2 text-xs text-muted-foreground">
-							Object Detection
-						</figcaption>
-					</figure>
+
+				<!-- patterns explained (no images) -->
+				<div class="space-y-4">
+					<!-- Regression -->
+					<details class="ai-block group" open>
+						<summary class="ai-summary">
+							<span class="ai-kicker" data-t="emerald"
+								>Regression</span
+							>
+							<span class="ai-title"
+								>Forecasts & scores with stable costs</span
+							>
+						</summary>
+						<div class="ai-body">
+							<div class="node-flow">
+								<span class="node">HTTP.Intake</span>
+								<span class="dash">···</span>
+								<span class="node" data-t="emerald"
+									>ML.Regressor</span
+								>
+								<span class="dash">···</span>
+								<span class="node">Decision.Score</span>
+								<span class="dash">···</span>
+								<span class="node">Notify / Webhook</span>
+							</div>
+							<ul class="ai-points">
+								<li>
+									Typed inputs/outputs, snapshot fixtures for
+									repeatable runs.
+								</li>
+								<li>
+									Swap models (TFLite/ONNX/custom node)
+									without rewiring.
+								</li>
+								<li>
+									Policies & approvals can live on edges — no
+									new code paths.
+								</li>
+							</ul>
+						</div>
+					</details>
+
+					<!-- Classification -->
+					<details class="ai-block group">
+						<summary class="ai-summary">
+							<span class="ai-kicker" data-t="indigo"
+								>Classification</span
+							>
+							<span class="ai-title"
+								>Label, triage, and route events</span
+							>
+						</summary>
+						<div class="ai-body">
+							<div class="node-flow">
+								<span class="node">Queue.Read</span>
+								<span class="dash">···</span>
+								<span class="node" data-t="indigo"
+									>ML.Classifier</span
+								>
+								<span class="dash">···</span>
+								<span class="node">Route.ByLabel</span>
+								<span class="dash">···</span>
+								<span class="node">Topics A/B/C</span>
+							</div>
+							<ul class="ai-points">
+								<li>
+									Versioned label sets; validation prevents
+									drift across teams.
+								</li>
+								<li>
+									Back-pressure aware runtime keeps latency
+									predictable at burst.
+								</li>
+								<li>
+									Observability shows per-edge payloads &
+									timings in the UI.
+								</li>
+							</ul>
+						</div>
+					</details>
+
+					<!-- Detection -->
+					<details class="ai-block group">
+						<summary class="ai-summary">
+							<span class="ai-kicker" data-t="amber"
+								>Object detection</span
+							>
+							<span class="ai-title"
+								>Count & track things in frames</span
+							>
+						</summary>
+						<div class="ai-body">
+							<div class="node-flow">
+								<span class="node">Camera.Read</span>
+								<span class="dash">···</span>
+								<span class="node" data-t="amber"
+									>Vision.Detect</span
+								>
+								<span class="dash">···</span>
+								<span class="node">Aggregate.Count</span>
+								<span class="dash">···</span>
+								<span class="node">Store / Alert</span>
+							</div>
+							<ul class="ai-points">
+								<li>
+									Zero-copy on hot paths; GPU/CPU targets
+									selectable at deploy.
+								</li>
+								<li>
+									Detections are typed (<code
+										>Detection[]</code
+									>) — safe to fan-out.
+								</li>
+								<li>Same graph runs local → edge → cloud.</li>
+							</ul>
+						</div>
+					</details>
+
+					<!-- LLM routing -->
+					<details class="ai-block group">
+						<summary class="ai-summary">
+							<span class="ai-kicker" data-t="cyan"
+								>LLM routing</span
+							>
+							<span class="ai-title"
+								>Use LLMs as planners, not the whole system</span
+							>
+						</summary>
+						<div class="ai-body">
+							<div class="node-flow">
+								<span class="node">HTTP.Intake</span>
+								<span class="dash">···</span>
+								<span class="node" data-t="cyan">LLM.Route</span
+								>
+								<span class="dash">···</span>
+								<span class="node">Tool.Call(s)</span>
+								<span class="dash">···</span>
+								<span class="node">Human.Approval</span>
+							</div>
+							<ul class="ai-points">
+								<li>
+									Tools are typed nodes; the router outputs
+									structured calls.
+								</li>
+								<li>
+									Guardrails live at the edges (PII, spend
+									caps, escalation).
+								</li>
+								<li>
+									Turn it off and your deterministic path
+									still ships.
+								</li>
+							</ul>
+						</div>
+					</details>
 				</div>
 			</div>
 		</section>
 
-		<!-- RECOMMENDED READING -->
-		<section class="relative mx-auto max-w-7xl px-4 py-32 lg:px-8 mb-32">
-			<div class="absolute inset-0 -mx-4 lg:-mx-8">
-				<div class="h-full w-full bg-gradient-to-br from-slate-500/5 via-background to-zinc-500/5 rounded-3xl border border-slate-500/10"></div>
-				<div class="absolute top-10 right-10 w-64 h-64 bg-slate-500/10 rounded-full blur-3xl opacity-30"></div>
-				<div class="absolute bottom-10 left-10 w-80 h-80 bg-zinc-500/10 rounded-full blur-3xl opacity-30"></div>
+		<!-- Soft seam -->
+		<div class="relative -my-2 h-10">
+			<div class="absolute inset-0">
+				<div
+					class="mx-auto max-w-7xl px-4 lg:px-8 h-full flex items-center"
+				>
+					<div
+						class="w-full h-px bg-gradient-to-r from-transparent via-border/60 to-transparent"
+					>
+					</div>
+				</div>
 			</div>
+		</div>
 
+		<!-- RECOMMENDED READING -->
+		<section
+			data-c1="hsl(220 10% 60% / .10)"
+			data-c2="hsl(260 9% 55% / .10)"
+			class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+		>
 			<div class="relative z-10">
 				<div class="text-center mb-16">
-					<div class="inline-flex items-center gap-2 rounded-full border border-slate-500/20 bg-slate-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 mb-6">
-						<div class="w-2 h-2 bg-slate-500 rounded-full animate-pulse"></div>
+					<div
+						class="inline-flex items-center gap-2 rounded-full border border-slate-500/20 bg-slate-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 mb-6"
+					>
+						<div
+							class="w-2 h-2 bg-slate-500 rounded-full animate-pulse"
+						>
+						</div>
 						Learning Resources
 					</div>
-					<h2 class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-slate-600 to-zinc-600 bg-clip-text text-transparent">
+					<h2
+						class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-slate-600 to-zinc-600 bg-clip-text text-transparent"
+					>
 						Recommended <span class="text-slate-600">reading</span>
 					</h2>
-					<p class="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
-						Deep dives and examples — including Teachable Machine as a simple on‑ramp.
+					<p
+						class="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto"
+					>
+						Deep dives and examples — including Teachable Machine as
+						a simple on-ramp.
 					</p>
 				</div>
 
 				<div class="grid gap-8 md:grid-cols-3">
-					<a
-						href="https://flow-like.com/blog/typed-workflows/"
-						class="group relative overflow-hidden rounded-3xl border border-border/50 bg-gradient-to-br from-card/80 to-card/60 backdrop-blur-sm p-8 transition-all duration-300 hover:from-card hover:to-card/80 hover:scale-105 hover:shadow-2xl hover:shadow-primary/10"
-					>
-						<div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-						<div class="relative z-10">
-							<div class="w-12 h-12 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center mb-6">
-								<svg class="w-6 h-6 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-								</svg>
-							</div>
-							<h3 class="text-xl font-bold mb-3">Typed Workflows</h3>
-							<p class="text-muted-foreground leading-relaxed mb-6">
-								Why types unlock scale, safety, and great DX.
-							</p>
-							<span class="inline-flex items-center gap-2 text-sm font-semibold text-primary group-hover:gap-3 transition-all duration-300">
-								Read post
-								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
-								</svg>
-							</span>
-						</div>
-					</a>
+					{
+						posts.map((p) => (
+							<a
+								href={`/blog/${p.slug}/`}
+								aria-label={p.data.title}
+								rel="prefetch"
+								class="rr-card group relative overflow-hidden rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-all duration-300"
+							>
+								<img
+									src={thumbFor(p)}
+									alt={p.data.title}
+									class="rr-thumb absolute inset-0 h-full w-full object-cover opacity-90"
+									loading="lazy"
+									sizes="(min-width:1024px) 33vw, 100vw"
+								/>
+								<div class="absolute inset-0 bg-gradient-to-t from-background/95 via-background/80 to-background/60" />
 
-					<a
-						href="https://flow-like.com/blog/agents-vs-automation/"
-						class="group relative overflow-hidden rounded-3xl border border-border/50 bg-gradient-to-br from-card/80 to-card/60 backdrop-blur-sm p-8 transition-all duration-300 hover:from-card hover:to-card/80 hover:scale-105 hover:shadow-2xl hover:shadow-secondary/10"
-					>
-						<div class="absolute inset-0 bg-gradient-to-br from-secondary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-						<div class="relative z-10">
-							<div class="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center mb-6">
-								<svg class="w-6 h-6 text-secondary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
-								</svg>
-							</div>
-							<h3 class="text-xl font-bold mb-3">Agents vs. Automation</h3>
-							<p class="text-muted-foreground leading-relaxed mb-6">
-								Where agents shine — and where robust workflows win.
-							</p>
-							<span class="inline-flex items-center gap-2 text-sm font-semibold text-secondary group-hover:gap-3 transition-all duration-300">
-								Read post
-								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
-								</svg>
-							</span>
-						</div>
-					</a>
+								<div class="relative z-10 p-6 sm:p-8 flex min-h-[18rem] items-end">
+									<div class="space-y-3">
+										<h3 class="text-xl font-semibold leading-tight group-hover:underline decoration-primary/60 underline-offset-4">
+											{p.data.title}
+										</h3>
 
-					<a
-						href="https://flow-like.com/blog/teachable-machine/"
-						class="group relative overflow-hidden rounded-3xl border border-border/50 bg-gradient-to-br from-card/80 to-card/60 backdrop-blur-sm p-8 transition-all duration-300 hover:from-card hover:to-card/80 hover:scale-105 hover:shadow-2xl hover:shadow-tertiary/10"
-					>
-						<div class="absolute inset-0 bg-gradient-to-br from-tertiary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-						<div class="relative z-10">
-							<div class="w-12 h-12 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-xl flex items-center justify-center mb-6">
-								<svg class="w-6 h-6 text-tertiary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-								</svg>
-							</div>
-							<h3 class="text-xl font-bold mb-3">Teachable Machine</h3>
-							<p class="text-muted-foreground leading-relaxed mb-6">
-								Beginner‑friendly example, exported as TFLite.
-							</p>
-							<span class="inline-flex items-center gap-2 text-sm font-semibold text-tertiary group-hover:gap-3 transition-all duration-300">
-								Read post
-								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
-								</svg>
-							</span>
-						</div>
-					</a>
+										{descFor(p) && (
+											<p class="text-sm text-foreground">
+												{descFor(p)}
+											</p>
+										)}
+
+										<span class="inline-flex items-center gap-2 text-sm font-semibold text-primary/90 group-hover:translate-x-0.5 transition">
+											Read post
+											<LuMoveRight className="w-4 h-4 text-primary" />
+										</span>
+									</div>
+								</div>
+							</a>
+						))
+					}
 				</div>
 			</div>
 		</section>
 
-		<!-- FAQ -->
-		<section id="faq" class="relative mx-auto max-w-5xl px-4 py-32 lg:px-8 mb-32">
-			<div class="absolute inset-0 -mx-4 lg:-mx-8">
-				<div class="h-full w-full bg-gradient-to-br from-amber-500/5 via-background to-orange-500/5 rounded-3xl border border-amber-500/10"></div>
-				<div class="absolute top-20 left-10 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl opacity-30"></div>
-				<div class="absolute bottom-20 right-10 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl opacity-30"></div>
+		<!-- Soft seam -->
+		<div class="relative -my-2 h-10">
+			<div class="absolute inset-0">
+				<div
+					class="mx-auto max-w-7xl px-4 lg:px-8 h-full flex items-center"
+				>
+					<div
+						class="w-full h-px bg-gradient-to-r from-transparent via-border/60 to-transparent"
+					>
+					</div>
+				</div>
 			</div>
+		</div>
 
+		<!-- FAQ -->
+		<section
+			id="faq"
+			data-c1="hsl(35 96% 55% / .10)"
+			data-c2="hsl(18 94% 52% / .10)"
+			class="relative mx-auto max-w-5xl px-4 py-28 lg:px-8 mb-10"
+		>
 			<div class="relative z-10">
 				<div class="text-center mb-16">
-					<div class="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-amber-600 dark:text-amber-400 mb-6">
-						<div class="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+					<div
+						class="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-amber-600 dark:text-amber-400 mb-6"
+					>
+						<div
+							class="w-2 h-2 bg-amber-500 rounded-full animate-pulse"
+						>
+						</div>
 						Questions & Answers
 					</div>
-					<h2 class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-amber-600 to-orange-600 bg-clip-text text-transparent">
-						Frequently Asked <span class="text-amber-600">Questions</span>
+					<h2
+						class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-amber-600 to-orange-600 bg-clip-text text-transparent"
+					>
+						Frequently Asked <span class="text-amber-600"
+							>Questions</span
+						>
 					</h2>
 				</div>
 
-				<div class="rounded-3xl border border-border/50 bg-gradient-to-br from-card/80 to-card/60 backdrop-blur-sm p-8 divide-y divide-border/50">
+				<div
+					class="rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 divide-y divide-border/40"
+				>
 					<details class="group py-6 first:pt-0 last:pb-0" open>
-						<summary class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-primary transition-colors duration-200">
-							<span>Where can I run Flow‑Like?</span>
-							<div class="w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-primary group-open:to-primary/80 transition-all duration-200">
-								<svg class="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-200 group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-								</svg>
+						<summary
+							class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-primary transition-colors duration-200"
+						>
+							<span>Where can I run Flow-Like?</span>
+							<div
+								class="w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-primary group-open:to-primary/80 transition-all duration-200"
+							>
+								<LuChevronDown
+									className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-200 group-open:rotate-180"
+								/>
 							</div>
 						</summary>
-						<p class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-primary/20">
-							Locally on macOS/Windows/Linux, on the edge, or in any cloud. Start local, move to cloud later without changing the graph.
+						<p
+							class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-primary/20"
+						>
+							Locally on macOS/Windows/Linux, on the edge, or in
+							any cloud. Start local, move to cloud later without
+							changing the graph.
 						</p>
 					</details>
 
 					<details class="group py-6">
-						<summary class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-secondary transition-colors duration-200">
+						<summary
+							class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-secondary transition-colors duration-200"
+						>
 							<span>How do I integrate with my stack?</span>
-							<div class="w-8 h-8 bg-gradient-to-br from-secondary/20 to-secondary/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-secondary group-open:to-secondary/80 transition-all duration-200">
-								<svg class="h-4 w-4 text-secondary group-open:text-secondary-foreground transition-all duration-200 group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-								</svg>
+							<div
+								class="w-8 h-8 bg-gradient-to-br from-secondary/20 to-secondary/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-secondary group-open:to-secondary/80 transition-all duration-200"
+							>
+								<LuChevronDown
+									className="h-4 w-4 text-secondary group-open:text-primary-foreground transition-all duration-200 group-open:rotate-180"
+								/>
 							</div>
 						</summary>
-						<p class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-secondary/20">
-							Wrap systems as nodes with typed ports. Embed/white‑label the editor or run the engine headless inside your apps.
+						<p
+							class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-secondary/20"
+						>
+							Wrap systems as nodes with typed ports.
+							Embed/white-label the editor or run the engine
+							headless inside your apps.
 						</p>
 					</details>
 
 					<details class="group py-6">
-						<summary class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-tertiary transition-colors duration-200">
+						<summary
+							class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-tertiary transition-colors duration-200"
+						>
 							<span>What languages can I use for nodes?</span>
-							<div class="w-8 h-8 bg-gradient-to-br from-tertiary/20 to-tertiary/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-tertiary group-open:to-tertiary/80 transition-all duration-200">
-								<svg class="h-4 w-4 text-tertiary group-open:text-tertiary-foreground transition-all duration-200 group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-								</svg>
+							<div
+								class="w-8 h-8 bg-gradient-to-br from-tertiary/20 to-tertiary/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-tertiary group-open:to-tertiary/80 transition-all duration-200"
+							>
+								<LuChevronDown
+									className="h-4 w-4 text-tertiary group-open:text-primary-foreground transition-all duration-200 group-open:rotate-180"
+								/>
 							</div>
 						</summary>
-						<p class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-tertiary/20">
-							Nodes are authored in <strong>Rust</strong> today. A WASM node SDK is planned to broaden language support.
+						<p
+							class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-tertiary/20"
+						>
+							Nodes are authored in <strong>Rust</strong> today. A
+							WASM node SDK is planned to broaden language support.
 						</p>
 					</details>
 
 					<details class="group py-6 last:pb-0">
-						<summary class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-amber-600 transition-colors duration-200">
+						<summary
+							class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-amber-600 transition-colors duration-200"
+						>
 							<span>Is there governance?</span>
-							<div class="w-8 h-8 bg-gradient-to-br from-amber-500/20 to-amber-500/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-amber-500 group-open:to-amber-500/80 transition-all duration-200">
-								<svg class="h-4 w-4 text-amber-600 group-open:text-white transition-all duration-200 group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-								</svg>
+							<div
+								class="w-8 h-8 bg-gradient-to-br from-emerald-500/20 to-emerald-500/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-emerald-500 group-open:to-emerald-500/80 transition-all duration-200"
+							>
+								<LuChevronDown
+									className="h-4 w-4 text-emerald-500 group-open:text-primary-foreground transition-all duration-200 group-open:rotate-180"
+								/>
 							</div>
 						</summary>
-						<p class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-amber-500/20">
-							Yes — approvals, policy guardrails, and versioned flows are first‑class concepts to help you meet operational and audit needs.
+						<p
+							class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-amber-500/20"
+						>
+							Yes — approvals, policy guardrails, and versioned
+							flows are first-class concepts to help you meet
+							operational and audit needs.
 						</p>
 					</details>
 				</div>
@@ -1281,7 +2133,7 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 			<div
 				class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 text-sm text-muted-foreground md:flex-row lg:px-8"
 			>
-				<p>© {new Date().getFullYear()} Great‑Co.de • Munich</p>
+				<p>© {new Date().getFullYear()} Great-Co.de • Munich</p>
 				<nav class="flex items-center gap-5">
 					<a class="hover:text-foreground" href={docs}>Blog</a>
 					<a class="hover:text-foreground" href="/privacy">Privacy</a>
@@ -1290,8 +2142,232 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 			</div>
 		</footer>
 
-		<!-- PINS + WIRES styling & script (inspired by blog page) -->
+		<!-- FLOW ENHANCEMENTS -->
 		<style>
+			.ai-chip {
+				--t: 215 16% 47%;
+				display: inline-flex;
+				align-items: center;
+				gap: 0.5rem;
+				padding: 0.25rem 0.6rem;
+				border-radius: 9999px;
+				border: 1px solid hsl(var(--t) / 0.22);
+				color: hsl(var(--t) / 0.86);
+				background: transparent;
+				line-height: 1;
+			}
+			.ai-chip[data-t="emerald"] {
+				--t: 160 84% 40%;
+			}
+			.ai-chip[data-t="indigo"] {
+				--t: 243 75% 59%;
+			}
+			.ai-chip[data-t="amber"] {
+				--t: 28 96% 54%;
+			}
+			.ai-chip[data-t="cyan"] {
+				--t: 199 89% 48%;
+			}
+
+			/* blocks */
+			.ai-block {
+				border: 1px solid hsl(var(--border) / 0.6);
+				background: linear-gradient(
+					180deg,
+					hsl(var(--card) / 0.45),
+					hsl(var(--card) / 0.35)
+				);
+				border-radius: 1rem;
+				overflow: hidden;
+			}
+			.ai-summary {
+				display: flex;
+				align-items: center;
+				gap: 0.75rem;
+				padding: 0.9rem 1rem;
+				cursor: pointer;
+				list-style: none;
+				user-select: none;
+			}
+			.ai-summary::-webkit-details-marker {
+				display: none;
+			}
+			.ai-kicker {
+				--t: 215 16% 47%;
+				display: inline-flex;
+				align-items: center;
+				gap: 0.4rem;
+				font-size: 0.7rem;
+				font-weight: 700;
+				letter-spacing: 0.02em;
+				padding: 0.25rem 0.5rem;
+				border-radius: 0.5rem;
+				border: 1px solid hsl(var(--t) / 0.3);
+				color: hsl(var(--t));
+				background: hsl(var(--t) / 0.08);
+			}
+			.ai-kicker[data-t="emerald"] {
+				--t: 160 84% 40%;
+			}
+			.ai-kicker[data-t="indigo"] {
+				--t: 243 75% 59%;
+			}
+			.ai-kicker[data-t="amber"] {
+				--t: 28 96% 54%;
+			}
+			.ai-kicker[data-t="cyan"] {
+				--t: 199 89% 48%;
+			}
+
+			.ai-title {
+				font-weight: 600;
+			}
+
+			.ai-body {
+				padding: 0.75rem 1rem 1rem 1rem;
+				border-top: 1px solid hsl(var(--border) / 0.6);
+			}
+
+			/* mini “node” flow (no images) */
+			.node-flow {
+				display: flex;
+				align-items: center;
+				flex-wrap: wrap;
+				gap: 0.4rem 0.5rem;
+				padding: 0.5rem;
+				border-radius: 0.75rem;
+				background: hsl(var(--muted) / 0.35);
+				border: 1px dashed hsl(var(--border) / 0.7);
+				margin-bottom: 0.5rem;
+			}
+			.node {
+				--t: var(--foreground);
+				display: inline-flex;
+				align-items: center;
+				gap: 0.4rem;
+				padding: 0.35rem 0.6rem;
+				border-radius: 0.6rem;
+				border: 1px solid hsl(var(--border) / 0.9);
+				background: hsl(var(--background) / 0.6);
+				font-size: 0.85rem;
+				font-weight: 600;
+			}
+			.node[data-t="emerald"] {
+				border-color: hsl(160 84% 40% / 0.45);
+			}
+			.node[data-t="indigo"] {
+				border-color: hsl(243 75% 59% / 0.45);
+			}
+			.node[data-t="amber"] {
+				border-color: hsl(28 96% 54% / 0.45);
+			}
+			.node[data-t="cyan"] {
+				border-color: hsl(199 89% 48% / 0.45);
+			}
+			.dash {
+				opacity: 0.5;
+				letter-spacing: 0.2em;
+			}
+
+			.ai-points {
+				margin: 0.25rem 0 0 0;
+				padding-left: 1rem;
+				color: hsl(var(--muted-foreground));
+			}
+			.ai-points li {
+				list-style: "–  ";
+				margin: 0.25rem 0;
+			}
+			.rr-card {
+				isolation: isolate;
+			}
+			.rr-card::before {
+				content: "";
+				position: absolute;
+				inset: -1px;
+				border-radius: inherit;
+				z-index: 0;
+				background: radial-gradient(
+						120% 120% at 10% 10%,
+						hsl(var(--primary) / 0.15),
+						transparent 40%
+					),
+					radial-gradient(
+						120% 120% at 90% 90%,
+						hsl(var(--secondary) / 0.15),
+						transparent 40%
+					);
+				opacity: 0.35;
+				transition: opacity 0.25s ease;
+			}
+			.rr-card:hover::before {
+				opacity: 0.6;
+			}
+			.rr-thumb {
+				transition:
+					transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
+					opacity 0.25s ease;
+			}
+			.rr-card:hover .rr-thumb {
+				transform: scale(1.04);
+				opacity: 1;
+			}
+			.rr-pill {
+				backdrop-filter: blur(4px);
+			}
+			@media (prefers-reduced-motion: reduce) {
+				.rr-thumb {
+					transition: none;
+				}
+				.rr-card::before {
+					transition: none;
+				}
+			}
+			.fl-chip {
+				--t: 215 16% 47%; /* default tint */
+				display: inline-flex;
+				align-items: center;
+				gap: 0.5rem;
+				padding: 0.25rem 0.6rem;
+				border-radius: 9999px;
+				border: 1px solid hsl(var(--t) / 0.22);
+				background: transparent;
+				color: hsl(var(--t) / 0.86);
+				line-height: 1;
+				white-space: nowrap;
+				transition:
+					background 0.15s ease,
+					border-color 0.15s ease,
+					transform 0.15s ease;
+			}
+			.fl-chip b {
+				font-weight: 600;
+				color: inherit;
+			}
+			.fl-chip--ghost:hover {
+				background: hsl(var(--t) / 0.08);
+				transform: translateY(-1px);
+			}
+
+			/* tints */
+			.fl-chip[data-tint="primary"] {
+				--t: 0 100% 63%;
+			}
+			.fl-chip[data-tint="emerald"] {
+				--t: 160 84% 40%;
+			}
+			.fl-chip[data-tint="amber"] {
+				--t: 28 96% 54%;
+			}
+			.fl-chip[data-tint="sky"] {
+				--t: 199 89% 48%;
+			}
+
+			@media (prefers-reduced-motion: reduce) {
+				.fl-chip {
+					transition: none;
+				}
+			}
 			.pin-conn-solid {
 				stroke: currentColor;
 				stroke-width: 3;
@@ -1349,8 +2425,13 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 
 			/* Enhanced glassmorphism and animations */
 			@keyframes float {
-				0%, 100% { transform: translateY(0px); }
-				50% { transform: translateY(-20px); }
+				0%,
+				100% {
+					transform: translateY(0px);
+				}
+				50% {
+					transform: translateY(-20px);
+				}
 			}
 
 			.animate-float {
@@ -1376,7 +2457,8 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 
 			/* Custom gradient animations */
 			@keyframes gradient-x {
-				0%, 100% {
+				0%,
+				100% {
 					background-size: 200% 200%;
 					background-position: left center;
 				}
@@ -1396,21 +2478,62 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 			}
 
 			.layers-panel {
-				transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
+				transition:
+					opacity 300ms ease-in-out,
+					transform 300ms ease-in-out;
+			}
+			/* Smooth ambient color changes using CSS custom property transitions */
+			@supports (background: paint(worklet)) or (color: oklch(0 0 0)) {
+				/* Register animatable color custom properties (Houdini) */
+				@property --c1 {
+					syntax: "<color>";
+					inherits: true;
+					initial-value: hsla(0, 0%, 0%, 0);
+				}
+				@property --c2 {
+					syntax: "<color>";
+					inherits: true;
+					initial-value: hsla(0, 0%, 0%, 0);
+				}
+			}
+			#ambient-flow {
+				transition:
+					--c1 700ms ease,
+					--c2 700ms ease,
+					opacity 250ms ease;
 			}
 
-			.layers-panel:not(.active) {
+			/* Panels fade smoother */
+			.layers-panel {
 				opacity: 0;
 				pointer-events: none;
-				transform: translateY(10px);
+				transform: translateY(8px);
+				transition:
+					opacity 220ms ease,
+					transform 220ms ease;
 			}
-
 			.layers-panel.active {
 				opacity: 1;
 				pointer-events: auto;
 				transform: translateY(0);
 			}
+			.layers-tab.active {
+				outline: none;
+				box-shadow: 0 0 0 1px
+					color-mix(in oklab, currentColor 30%, transparent);
+			}
+
+			/* Respect reduced motion */
+			@media (prefers-reduced-motion: reduce) {
+				#ambient-flow {
+					transition: none !important;
+				}
+				.layers-panel {
+					transition: none !important;
+				}
+			}
 		</style>
+
 		<script>
 			// Helpers (pure JS)
 			const $ = (s: string, r = document) => r.querySelector(s);
@@ -1557,6 +2680,90 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 					});
 				});
 			});
+
+			(function () {
+				const ambient = document.getElementById("ambient-flow");
+				const sections = document.querySelectorAll(
+					"section[data-c1][data-c2]",
+				);
+				if (!ambient || !sections.length) return;
+
+				const supportsHoudini = !!(
+					window.CSS && "registerProperty" in CSS
+				);
+				// Fallback: if we can't animate custom props, softly crossfade opacity on change
+				const softFade = () => {
+					ambient.style.opacity = "0.92";
+					requestAnimationFrame(() => {
+						ambient.style.opacity = "1";
+					});
+				};
+
+				const setAmbient = (el: Element) => {
+					const c1 =
+						el.getAttribute("data-c1") || "hsl(222 89% 60% / .08)";
+					const c2 =
+						el.getAttribute("data-c2") || "hsl(268 84% 62% / .08)";
+					// Update CSS variables so background stays the same, only colors change
+					ambient.style.setProperty("--c1", c1);
+					ambient.style.setProperty("--c2", c2);
+					if (!supportsHoudini) softFade();
+				};
+
+				const io = new IntersectionObserver(
+					(entries) => {
+						entries.forEach((e) => {
+							if (
+								e.isIntersecting &&
+								e.intersectionRatio > 0.35
+							) {
+								setAmbient(e.target);
+							}
+						});
+					},
+					{ threshold: [0.35, 0.6, 0.9] },
+				);
+
+				sections.forEach((s, i) => {
+					io.observe(s);
+					if (i === 0) setAmbient(s);
+				});
+			})();
+
+			(function () {
+				const tabs = document.querySelectorAll(
+					"#layers-tabs [role=tab]",
+				);
+				const panels: any = {
+					business: document.getElementById("panel-business"),
+					data: document.getElementById("panel-data"),
+					impl: document.getElementById("panel-impl"),
+				};
+				if (!tabs.length) return;
+				const activate = (key: any) => {
+					Object.values(panels).forEach((el: any) => {
+						if (!el) return;
+						el.classList.remove("active");
+						el.setAttribute("hidden", "");
+					});
+					if (panels[key]) {
+						panels[key].classList.add("active");
+						panels[key].removeAttribute("hidden");
+					}
+				};
+				tabs.forEach((btn) => {
+					btn.addEventListener("click", () => {
+						tabs.forEach((b) => {
+							b.setAttribute("aria-selected", "false");
+							b.classList.remove("active");
+						});
+						btn.setAttribute("aria-selected", "true");
+						btn.classList.add("active");
+						const t = btn.getAttribute("data-target");
+						activate(t);
+					});
+				});
+			})();
 		</script>
 	</body>
 </html>
