@@ -186,9 +186,6 @@ pub fn connect_pins(
 
     from_pin_ref.connected_to.insert(to_pin_ref.id.clone());
 
-    println!("From Entity: {:?}", from_entity);
-    println!("To Entity: {:?}", to_entity);
-
     upsert_node_or_layer(board, from_entity);
     upsert_node_or_layer(board, to_entity);
 
@@ -216,11 +213,6 @@ pub fn disconnect_pins(
         NodeOrLayer::Layer(layer) => layer.pins.get_mut(to_pin),
     }
     .ok_or_else(|| flow_like_types::anyhow!("To Pin ({}) not found in container", to_pin))?;
-
-    println!(
-        "Disconnecting pins: {}:{} -> {}:{}",
-        from_node, from_pin, to_node, to_pin
-    );
 
     to_pin_ref.depends_on.remove(&from_pin_ref.id);
     from_pin_ref.connected_to.remove(&to_pin_ref.id);
