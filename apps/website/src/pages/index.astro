@@ -38,6 +38,7 @@ import designDoom from "../images/index/theme-doom.png";
 import designNeoBrutalism from "../images/index/theme-neo-brutalism.png";
 import designSoftPop from "../images/index/theme-soft-pop.png";
 import tracing from "../images/index/tracing.png";
+import nodeBig from "../images/index/node-big.png";
 
 const posts = (
 	await getCollection("blog", ({ data }) =>
@@ -385,8 +386,8 @@ const download = "https://github.com/TM9657/flow-like/releases";
 			data-c2="hsl(268 84% 62% / .10)"
 			class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
 		>
-			<div class="relative z-10 grid items-center gap-16 lg:grid-cols-2">
-				<div class="space-y-8">
+			<div class="relative z-10 grid items-center gap-16 lg:grid-cols-5">
+				<div class="space-y-8 col-span-2">
 					<div>
 						<div
 							class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6"
@@ -483,7 +484,7 @@ const download = "https://github.com/TM9657/flow-like/releases";
 				</div>
 
 				<!-- imagery stays but loses heavy frames -->
-				<div class="relative">
+				<div class="relative col-span-3">
 					<div class="relative grid grid-cols-2 gap-6">
 						<div class="space-y-6">
 							<Image
@@ -925,10 +926,11 @@ const download = "https://github.com/TM9657/flow-like/releases";
 				</div>
 
 				<div class="relative">
+
 					<Image
-						src={library}
+						src={nodeBig}
 						alt="Custom node library"
-						class="w-full h-auto rounded-3xl bg-background/40 backdrop-blur-sm object-cover"
+						class="w-full h-auto rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm object-cover p-2"
 						loading="lazy"
 					/>
 				</div>
