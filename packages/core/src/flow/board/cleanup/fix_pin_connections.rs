@@ -26,47 +26,61 @@ impl BoardCleanupLogic for FixPinsCleanup {
     }
 
     fn main_pin_iteration(&mut self, pin: &mut Pin, pin_lookup: &PinLookup) {
+        let owner_parent_id_opt = pin_lookup
+            .get(&pin.id)
+            .map(|(_, owner_parent)| owner_parent.id().to_string());
+
         for connected_to in pin.connected_to.iter() {
-            if let Some((target_pin, _)) = pin_lookup.get(connected_to) {
-                if !target_pin.depends_on.contains(&pin.id)
-                    && let Some((_, owner_parent)) = pin_lookup.get(&pin.id)
-                {
-                    self.node_pins_connected_to_remove
-                        .entry(owner_parent.id().to_string())
-                        .or_default()
-                        .entry(pin.id.clone())
-                        .or_default()
-                        .insert(connected_to.clone());
+            match pin_lookup.get(connected_to) {
+                Some((target_pin, _)) => {
+                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref() {
+                        if !target_pin.depends_on.contains(&pin.id) {
+                            self.node_pins_connected_to_remove
+                                .entry(owner_parent_id.clone())
+                                .or_default()
+                                .entry(pin.id.clone())
+                                .or_default()
+                                .insert(connected_to.clone());
+                        }
+                    }
                 }
-            } else if let Some((_, owner_parent)) = pin_lookup.get(&pin.id) {
-                self.node_pins_connected_to_remove
-                    .entry(owner_parent.id().to_string())
-                    .or_default()
-                    .entry(pin.id.clone())
-                    .or_default()
-                    .insert(connected_to.clone());
+                None => {
+                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref() {
+                        self.node_pins_connected_to_remove
+                            .entry(owner_parent_id.clone())
+                            .or_default()
+                            .entry(pin.id.clone())
+                            .or_default()
+                            .insert(connected_to.clone());
+                    }
+                }
             }
         }
 
         for depends_on in pin.depends_on.iter() {
-            if let Some((target_pin, _)) = pin_lookup.get(depends_on) {
-                if !target_pin.connected_to.contains(&pin.id)
-                    && let Some((_, owner_parent)) = pin_lookup.get(&pin.id)
-                {
-                    self.node_pins_depends_on_remove
-                        .entry(owner_parent.id().to_string())
-                        .or_default()
-                        .entry(pin.id.clone())
-                        .or_default()
-                        .insert(depends_on.clone());
+            match pin_lookup.get(depends_on) {
+                Some((target_pin, _)) => {
+                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref() {
+                        if !target_pin.connected_to.contains(&pin.id) {
+                            self.node_pins_depends_on_remove
+                                .entry(owner_parent_id.clone())
+                                .or_default()
+                                .entry(pin.id.clone())
+                                .or_default()
+                                .insert(depends_on.clone());
+                        }
+                    }
                 }
-            } else if let Some((_, owner_parent)) = pin_lookup.get(&pin.id) {
-                self.node_pins_depends_on_remove
-                    .entry(owner_parent.id().to_string())
-                    .or_default()
-                    .entry(pin.id.clone())
-                    .or_default()
-                    .insert(depends_on.clone());
+                None => {
+                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref() {
+                        self.node_pins_depends_on_remove
+                            .entry(owner_parent_id.clone())
+                            .or_default()
+                            .entry(pin.id.clone())
+                            .or_default()
+                            .insert(depends_on.clone());
+                    }
+                }
             }
         }
     }

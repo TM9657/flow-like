@@ -1,5 +1,6 @@
 pub mod clear;
 pub mod from_messages;
+pub mod from_string;
 pub mod get_system;
 pub mod make;
 pub mod message;

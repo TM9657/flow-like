@@ -89,8 +89,8 @@ pub fn convert_bedrock_stream_output(
                                 id: "".to_string(),
                                 index: None,
                                 function: ResponseFunction {
-                                    name: None,
-                                    arguments: Some(tool.input.clone()),
+                                    name: "".to_string(),
+                                    arguments: tool.input.clone(),
                                 },
                                 tool_type: None,
                             }]),
@@ -118,8 +118,8 @@ pub fn convert_bedrock_stream_output(
                             id: tool.tool_use_id.clone(),
                             index: None,
                             function: ResponseFunction {
-                                name: Some(tool.name.clone()),
-                                arguments: None,
+                                name: tool.name.clone(),
+                                arguments: "".to_string(),
                             },
                             tool_type: None,
                         }]),

@@ -1,0 +1,1214 @@
+---
+import {
+    LuCircleCheck,
+    LuDatabase,
+    LuSearch,
+    LuTrendingUp,
+    LuFileText,
+    LuImage,
+    LuLock,
+    LuLink,
+    LuHash,
+    LuShieldCheck,
+} from "react-icons/lu";
+---
+
+<section
+    id="storage"
+    data-c1="hsl(200 90% 60% / .10)"
+    data-c2="hsl(150 80% 60% / .10)"
+    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+>
+    <!-- soft grid bg -->
+    <div aria-hidden="true" class="pointer-events-none absolute inset-0">
+        <div
+            class="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"
+        >
+        </div>
+    </div>
+
+    <div class="relative z-10">
+        <div class="mx-auto max-w-4xl text-center">
+            <div
+                class="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-sky-700 dark:text-sky-300 mb-6"
+            >
+                Storage & Search — Built-in
+            </div>
+            <h2
+                class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-sky-500 to-violet-500 bg-clip-text text-transparent"
+            >
+                Files, tables, and hybrid search — all in your graph
+            </h2>
+            <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
+                Every project ships with <b>files</b>, <b>tables</b>, and <b
+                    >search</b
+                > that plug straight into nodes. Stream bytes, validate schemas,
+                and combine SQL + full-text + vectors in one flow.
+            </p>
+        </div>
+
+        <!-- Stage -->
+        <div class="mx-auto mt-16 max-w-6xl">
+            <div
+                class="stage rounded-3xl border border-border/40 backdrop-blur-sm overflow-hidden"
+            >
+                <!-- top tabs -->
+                <div
+                    id="store-tabs"
+                    role="tablist"
+                    aria-label="Storage demos"
+                    class="relative grid grid-cols-3 gap-2 p-3"
+                >
+                    <span
+                        id="store-indicator"
+                        class="absolute top-3 left-3 h-[calc(100%-24px)] rounded-2xl border border-border/60 bg-muted/60 backdrop-blur-sm transition-[transform,width] duration-300 ease-out will-change-transform pointer-events-none"
+                    ></span>
+
+                    <button
+                        role="tab"
+                        aria-controls="pane-files"
+                        aria-selected="true"
+                        data-target="files"
+                        class="store-tab relative z-10 rounded-2xl px-4 py-3 text-sm font-semibold"
+                    >
+                        <span class="flex items-center justify-center gap-2">
+                            <span
+                                class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-sky-500 to-cyan-500"
+                            >
+                                <LuDatabase className="w-4 h-4 text-white" />
+                            </span>
+                            Files
+                        </span>
+                    </button>
+
+                    <button
+                        role="tab"
+                        aria-controls="pane-tables"
+                        aria-selected="false"
+                        data-target="tables"
+                        class="store-tab relative z-10 rounded-2xl px-4 py-3 text-sm font-semibold"
+                    >
+                        <span class="flex items-center justify-center gap-2">
+                            <span
+                                class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-emerald-500 to-green-500"
+                            >
+                                <LuCircleCheck className="w-4 h-4 text-white" />
+                            </span>
+                            Tables
+                        </span>
+                    </button>
+
+                    <button
+                        role="tab"
+                        aria-controls="pane-search"
+                        aria-selected="false"
+                        data-target="search"
+                        class="store-tab relative z-10 rounded-2xl px-4 py-3 text-sm font-semibold"
+                    >
+                        <span class="flex items-center justify-center gap-2">
+                            <span
+                                class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-500"
+                            >
+                                <LuSearch className="w-4 h-4 text-white" />
+                            </span>
+                            Search
+                        </span>
+                    </button>
+                </div>
+
+                <!-- grid: demo | copy -->
+                <div
+                    class="grid lg:grid-cols-[1.1fr_1fr] gap-0 border-t border-border/40"
+                >
+                    <!-- DEMO -->
+                    <div class="relative p-4 lg:p-6">
+                        <div class="h-[min(60vh,560px)] min-h-[360px]">
+                            <!-- panes stacked -->
+                            <div
+                                id="pane-files"
+                                role="tabpanel"
+                                aria-hidden="false"
+                                class="pane data-[state=active]:opacity-100 data-[state=active]:translate-y-0"
+                            >
+                                <div class="card">
+                                    <header class="card-h">
+                                        <span class="muted"
+                                            >apps/acme/vaults/</span
+                                        ><b>runtime-files/</b>
+                                        <span
+                                            class="muted ml-auto flex items-center gap-2 text-xs"
+                                        >
+                                            <LuLock className="w-3.5 h-3.5" /> presigned
+                                            <LuHash className="w-3.5 h-3.5" /> etag
+                                        </span>
+                                    </header>
+                                    <ul class="file-list">
+                                        <li>
+                                            <span class="badge"
+                                                ><LuImage
+                                                    className="w-3.5 h-3.5"
+                                                /> img_3421.webp</span
+                                            >
+                                            <span class="meta"
+                                                >1280×720 • 84 KB • <span
+                                                    class="ok">etag:3c9af…</span
+                                                ></span
+                                            >
+                                        </li>
+                                        <li>
+                                            <span class="badge"
+                                                ><LuFileText
+                                                    className="w-3.5 h-3.5"
+                                                /> invoice-4201.pdf</span
+                                            >
+                                            <span class="meta"
+                                                >3 pages • 186 KB • <LuLink
+                                                    className="inline -mt-0.5"
+                                                /> signed url</span
+                                            >
+                                        </li>
+                                        <li>
+                                            <span class="badge"
+                                                ><LuImage
+                                                    className="w-3.5 h-3.5"
+                                                /> claim_10023.jpg</span
+                                            >
+                                            <span class="meta"
+                                                >3024×2016 • 1.4 MB • streaming</span
+                                            >
+                                        </li>
+                                        <li>
+                                            <span class="badge"
+                                                ><LuFileText
+                                                    className="w-3.5 h-3.5"
+                                                /> notes.txt</span
+                                            >
+                                            <span class="meta"
+                                                >2.1 KB • utf-8 • cache hit</span
+                                            >
+                                        </li>
+                                    </ul>
+                                    <footer class="card-f">
+                                        <span class="chip" data-tint="sky"
+                                            >Read Stream</span
+                                        >
+                                        <span class="chip" data-tint="violet"
+                                            >Transform</span
+                                        >
+                                        <span class="chip" data-tint="emerald"
+                                            >Write Bytes</span
+                                        >
+                                        <span class="chip" data-tint="amber"
+                                            >Presign</span
+                                        >
+                                    </footer>
+                                </div>
+                            </div>
+
+                            <div
+                                id="pane-tables"
+                                role="tabpanel"
+                                aria-hidden="true"
+                                class="pane"
+                            >
+                                <div class="card">
+                                    <header class="card-h">
+                                        <b>claims</b>
+                                        <span class="muted">public</span>
+                                        <span
+                                            class="muted ml-auto flex items-center gap-2 text-xs"
+                                        >
+                                            <LuShieldCheck
+                                                className="w-3.5 h-3.5"
+                                            /> schema OK
+                                        </span>
+                                    </header>
+                                    <div class="table">
+                                        <div class="t-row t-h">
+                                            <div>ID</div><div>
+                                                customer_id
+                                            </div><div>amount</div><div>
+                                                status
+                                            </div>
+                                        </div>
+                                        <div class="t-row">
+                                            <div>10023</div><div>c_491</div><div
+                                            >
+                                                € 489.00
+                                            </div><div>
+                                                <span class="pill ok"
+                                                    >approved</span
+                                                >
+                                            </div>
+                                        </div>
+                                        <div class="t-row">
+                                            <div>10024</div><div>c_812</div><div
+                                            >
+                                                € 79.00
+                                            </div><div>
+                                                <span class="pill warn"
+                                                    >triage</span
+                                                >
+                                            </div>
+                                        </div>
+                                        <div class="t-row">
+                                            <div>10025</div><div>c_901</div><div
+                                            >
+                                                € 129.00
+                                            </div><div>
+                                                <span class="pill">pending</span
+                                                >
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <footer class="card-f">
+                                        <span class="chip" data-tint="indigo"
+                                            >Preflight</span
+                                        >
+                                        <span class="chip" data-tint="blue"
+                                            >Typed Query</span
+                                        >
+                                        <span class="chip" data-tint="slate"
+                                            >Paginate</span
+                                        >
+                                    </footer>
+                                </div>
+                            </div>
+
+                            <div
+                                id="pane-search"
+                                role="tabpanel"
+                                aria-hidden="true"
+                                class="pane"
+                            >
+                                <div class="card">
+                                    <header class="card-h">
+                                        <b>Hybrid search</b>
+                                        <span class="muted"
+                                            >Compose retrieval with nodes</span
+                                        >
+                                        <span
+                                            class="ml-auto flex items-center gap-2 text-xs"
+                                        >
+                                            <span
+                                                class="chip"
+                                                data-tint="violet"
+                                                data-variant="outline"
+                                                >Powered by LanceDB</span
+                                            >
+                                        </span>
+                                    </header>
+
+                                    <!-- toggles -->
+                                    <div
+                                        class="togglebar"
+                                        role="group"
+                                        aria-label="Hybrid features"
+                                    >
+                                        <button
+                                            class="toggle is-on"
+                                            data-k="vec"
+                                            aria-pressed="true"
+                                            ><span class="dot"></span> Vector (k-NN)</button
+                                        >
+                                        <button
+                                            class="toggle is-on"
+                                            data-k="fts"
+                                            aria-pressed="true"
+                                            ><span class="dot"></span> Full-text
+                                            (BM25)</button
+                                        >
+                                        <button
+                                            class="toggle is-on"
+                                            data-k="sql"
+                                            aria-pressed="true"
+                                            ><span class="dot"></span> Filter (SQL)</button
+                                        >
+                                    </div>
+
+                                    <!-- mini node graph -->
+                                    <div
+                                        id="search-graph"
+                                        class="mini-graph"
+                                        data-vec="1"
+                                        data-fts="1"
+                                        data-sql="1"
+                                    >
+                                        <svg
+                                            viewBox="0 0 640 220"
+                                            aria-hidden="true"
+                                        >
+                                            <!-- edges -->
+                                            <path
+                                                class="edge base"
+                                                d="M 100 70 C 140 70, 150 70, 190 70"
+                                            ></path>
+                                            <!-- Input -> Embed -->
+                                            <path
+                                                class="edge vec"
+                                                d="M 310 70 C 340 70, 330 70, 360 70"
+                                            ></path>
+                                            <!-- Embed -> kNN -->
+                                            <path
+                                                class="edge fts"
+                                                d="M 100 70 C 170 70, 290 150, 360 150"
+                                            ></path>
+                                            <!-- Input -> BM25 -->
+                                            <path
+                                                class="edge vec"
+                                                d="M 430 70 C 480 90, 480 90, 520 100"
+                                            ></path>
+                                            <!-- kNN -> Merge -->
+                                            <path
+                                                class="edge fts"
+                                                d="M 430 150 C 480 130, 480 130, 520 120"
+                                            ></path>
+                                            <!-- BM25 -> Merge -->
+                                            <path
+                                                class="edge sql"
+                                                d="M 560 120 C 580 140, 580 150, 590 160"
+                                            ></path>
+
+                                            <!-- nodes -->
+                                            <rect
+                                                class="node base"
+                                                x="40"
+                                                y="40"
+                                                width="120"
+                                                height="60"
+                                                rx="12"></rect><text
+                                                class="label"
+                                                x="100"
+                                                y="75"
+                                                text-anchor="middle"
+                                                >Input.Text</text
+                                            >
+
+                                            <rect
+                                                class="node vec"
+                                                x="190"
+                                                y="40"
+                                                width="120"
+                                                height="60"
+                                                rx="12"></rect><text
+                                                class="label"
+                                                x="250"
+                                                y="75"
+                                                text-anchor="middle">Embed</text
+                                            >
+                                            <rect
+                                                class="node vec"
+                                                x="360"
+                                                y="40"
+                                                width="120"
+                                                height="60"
+                                                rx="12"></rect><text
+                                                class="label"
+                                                x="420"
+                                                y="75"
+                                                text-anchor="middle"
+                                                >kNN (LanceDB)</text
+                                            >
+
+                                            <rect
+                                                class="node fts"
+                                                x="360"
+                                                y="120"
+                                                width="120"
+                                                height="60"
+                                                rx="12"></rect><text
+                                                class="label"
+                                                x="420"
+                                                y="155"
+                                                text-anchor="middle">BM25</text
+                                            >
+
+                                            <rect
+                                                class="node merge"
+                                                x="500"
+                                                y="90"
+                                                width="80"
+                                                height="40"
+                                                rx="10"></rect><text
+                                                class="label"
+                                                x="540"
+                                                y="115"
+                                                text-anchor="middle">Merge</text
+                                            >
+
+                                            <rect
+                                                class="node sql"
+                                                x="560"
+                                                y="140"
+                                                width="80"
+                                                height="40"
+                                                rx="10"></rect><text
+                                                class="label"
+                                                x="600"
+                                                y="165"
+                                                text-anchor="middle"
+                                                >Filter</text
+                                            >
+                                        </svg>
+                                    </div>
+
+                                    <!-- results -->
+                                    <ul class="results">
+                                        <li>
+                                            <span class="title"
+                                                >"warranty claim approved for
+                                                unit A12"</span
+                                            >
+                                            <span class="score"
+                                                >score 0.82 • k=20 •
+                                                merged(vector+fts)</span
+                                            >
+                                            <p class="snippet">
+                                                …triage complete — <mark
+                                                    >approval</mark
+                                                > granted based on photo evidence…
+                                            </p>
+                                        </li>
+                                        <li>
+                                            <span class="title"
+                                                >"declined: missing receipt"</span
+                                            >
+                                            <span class="score"
+                                                >score 0.71 • k=20 •
+                                                filter(amount &lt; 500)</span
+                                            >
+                                            <p class="snippet">
+                                                …request <mark>declined</mark> due
+                                                to insufficient documentation…
+                                            </p>
+                                        </li>
+                                    </ul>
+
+                                    <footer class="card-f">
+                                        <span class="chip" data-tint="emerald"
+                                            >ANN k-NN</span
+                                        >
+                                        <span class="chip" data-tint="violet"
+                                            >BM25</span
+                                        >
+                                        <span class="chip" data-tint="amber"
+                                            >Typed Filters</span
+                                        >
+                                    </footer>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- COPY / BENEFITS -->
+                    <div class="relative p-4 lg:p-6">
+                        <div
+                            class="h-[min(56vh,520px)] min-h-[360px] flex flex-col px-2"
+                        >
+                            <h3 class="text-2xl font-semibold">
+                                Storage that ships with every app
+                            </h3>
+                            <p class="mt-3 text-muted-foreground">
+                                Unlimited files and unlimited databases, wired
+                                into nodes. Read streams, transform, and write
+                                back with typed pins. Keep data in SQL, add
+                                full-text and vectors, and combine them for
+                                hybrid queries.
+                            </p>
+
+                            <div class="mt-6 grid grid-cols-2 gap-3 text-sm">
+                                <div class="benefit">
+                                    <span class="emoji">⚡</span>
+                                    Stream & transform in-graph
+                                </div>
+                                <div class="benefit">
+                                    <span class="emoji">🧾</span>
+                                    Typed schemas & preflight checks
+                                </div>
+                                <div class="benefit">
+                                    <span class="emoji">🔐</span>
+                                    Presigned URLs + scoped access
+                                </div>
+                                <div class="benefit">
+                                    <span class="emoji">♻️</span>
+                                    ETag caching & diff-based sync
+                                </div>
+                                <div class="benefit">
+                                    <span class="emoji">🧠</span>
+                                    Full-text + vector side-by-side
+                                </div>
+                                <div class="benefit">
+                                    <span class="emoji">📦</span>
+                                    Object-store first (local/S3/Azure)
+                                </div>
+                            </div>
+
+                            <div
+                                class="mt-auto pt-6 flex flex-wrap gap-2 text-sm"
+                            >
+                                <span class="chip hi" data-tint="sky"
+                                    >∞ Files</span
+                                >
+                                <span class="chip hi" data-tint="emerald"
+                                    >∞ Databases</span
+                                >
+                                <span class="chip hi" data-tint="violet"
+                                    >SQL · FTS · Vector</span
+                                >
+                                <span class="chip" data-tint="amber"
+                                    ><LuTrendingUp
+                                        className="w-3.5 h-3.5 -mt-0.5"
+                                    /> Hybrid queries</span
+                                >
+                                <span class="chip" data-tint="slate"
+                                    >Inline in workflows</span
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div><!-- /stage -->
+        </div>
+    </div>
+</section>
+
+<script>
+    (() => {
+        type DemoKey = "files" | "tables" | "search";
+
+        const tablist = document.getElementById(
+            "store-tabs",
+        ) as HTMLElement | null;
+        if (!tablist) return;
+
+        const tabs = Array.from(
+            tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+        );
+        const panes: Record<DemoKey, HTMLElement | null> = {
+            files: document.getElementById("pane-files"),
+            tables: document.getElementById("pane-tables"),
+            search: document.getElementById("pane-search"),
+        };
+        const indicator = document.getElementById(
+            "store-indicator",
+        ) as HTMLSpanElement | null;
+
+        const setActive = (key: DemoKey): void => {
+            tabs.forEach((t) =>
+                t.setAttribute(
+                    "aria-selected",
+                    String(t.dataset.target === key),
+                ),
+            );
+            (Object.entries(panes) as [DemoKey, HTMLElement | null][]).forEach(
+                ([k, el]) => {
+                    if (!el) return;
+                    el.dataset.state = k === key ? "active" : "inactive";
+                    el.setAttribute("aria-hidden", String(k !== key));
+                },
+            );
+
+            const active = tabs.find((t) => t.dataset.target === key);
+            if (active && indicator) {
+                indicator.style.width = `${active.offsetWidth}px`;
+                indicator.style.transform = `translateX(${active.offsetLeft}px)`;
+            }
+        };
+
+        // init
+        setActive(
+            (tabs.find((t) => t.getAttribute("aria-selected") === "true")
+                ?.dataset.target ?? "files") as DemoKey,
+        );
+        tabs.forEach((btn) =>
+            btn.addEventListener("click", () =>
+                setActive(btn.dataset.target as DemoKey),
+            ),
+        );
+
+        // keyboard nav
+        tablist.addEventListener("keydown", (e: KeyboardEvent) => {
+            const i = tabs.findIndex(
+                (t) => t.getAttribute("aria-selected") === "true",
+            );
+            let n = i;
+            switch (e.key) {
+                case "ArrowRight":
+                    n = (i + 1) % tabs.length;
+                    break;
+                case "ArrowLeft":
+                    n = (i - 1 + tabs.length) % tabs.length;
+                    break;
+                case "Home":
+                    n = 0;
+                    break;
+                case "End":
+                    n = tabs.length - 1;
+                    break;
+                case "Enter":
+                case " ":
+                    e.preventDefault();
+                    setActive(tabs[i].dataset.target as DemoKey);
+                    return;
+                default:
+                    return;
+            }
+            e.preventDefault();
+            tabs[n].focus();
+            setActive(tabs[n].dataset.target as DemoKey);
+        });
+
+        // Hybrid builder (search pane)
+        type Step = { label: string; tint: string };
+
+        const pipe = document.getElementById("pipe") as HTMLElement | null;
+        const elVEC = document.querySelector<HTMLInputElement>(".b-vec");
+        const elFTS = document.querySelector<HTMLInputElement>(".b-fts");
+        const elSQL = document.querySelector<HTMLInputElement>(".b-sql");
+
+        function renderPipeline(): void {
+            if (!pipe) return;
+
+            const steps: Step[] = [];
+            // Always start with the query text / embedding
+            steps.push({ label: "Input.Text", tint: "slate" });
+
+            if (elVEC?.checked) {
+                steps.push({ label: "Embed", tint: "sky" });
+                steps.push({ label: "Vector.kNN (LanceDB)", tint: "emerald" });
+            }
+            if (elFTS?.checked)
+                steps.push({ label: "Full-text (BM25)", tint: "violet" });
+
+            // Merge when both are on
+            if (elVEC?.checked && elFTS?.checked)
+                steps.push({ label: "Merge.Rank", tint: "indigo" });
+
+            if (elSQL?.checked)
+                steps.push({ label: "Filter.SQL", tint: "amber" });
+
+            steps.push({ label: "Return.TypedRows", tint: "slate" });
+
+            // Render chips with arrows
+            pipe.innerHTML = steps
+                .map(
+                    (s, i) =>
+                        `<span class="pipe-step chip" data-tint="${s.tint}" data-variant="solid">${s.label}</span>` +
+                        (i < steps.length - 1
+                            ? `<span class="pipe-arrow">→</span>`
+                            : ""),
+                )
+                .join("");
+        }
+
+        [elSQL, elFTS, elVEC].forEach((el) =>
+            el?.addEventListener("change", renderPipeline),
+        );
+        renderPipeline();
+
+        // keep indicator aligned on resize
+        const ro = new ResizeObserver(() => {
+            const active = tabs.find(
+                (t) => t.getAttribute("aria-selected") === "true",
+            );
+            if (active && indicator) {
+                indicator.style.width = `${active.offsetWidth}px`;
+                indicator.style.transform = `translateX(${active.offsetLeft}px)`;
+            }
+        });
+        ro.observe(tablist);
+        tabs.forEach((t) => ro.observe(t));
+
+        const graph = document.getElementById(
+            "search-graph",
+        ) as HTMLElement | null;
+        const toggles = Array.from(
+            document.querySelectorAll<HTMLButtonElement>(".togglebar .toggle"),
+        );
+
+        const setToggle = (k: "vec" | "fts" | "sql", on: boolean) => {
+            if (!graph) return;
+            graph.dataset[k] = on ? "1" : "0";
+            const btn = toggles.find((b) => b.dataset.k === k);
+            if (btn) btn.setAttribute("aria-pressed", String(on));
+        };
+
+        toggles.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const k = btn.dataset.k as "vec" | "fts" | "sql";
+                const on = btn.getAttribute("aria-pressed") !== "true";
+                setToggle(k, on);
+            });
+        });
+
+        // initial state (all on)
+        setToggle("vec", true);
+        setToggle("fts", true);
+        setToggle("sql", true);
+    })();
+</script>
+
+<style>
+    .stage {
+        --stage-h: min(56vh, 520px);
+    }
+    .stage > .grid {
+        align-items: center;
+    }
+
+    /* panes */
+    .pane {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        transform: translateY(6px);
+        transition:
+            opacity 220ms ease,
+            transform 220ms ease;
+        pointer-events: none;
+        margin: 0.5rem;
+    }
+    .pane[data-state="active"] {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
+
+    /* cards */
+    .card {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        border-radius: 1.25rem;
+        border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+        background: linear-gradient(
+                to bottom right,
+                color-mix(in oklch, var(--muted) 6%, transparent),
+                transparent
+            ),
+            color-mix(in oklch, var(--card) 92%, transparent);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+        overflow: hidden;
+    }
+    .card-h,
+    .card-f {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.9rem 1rem;
+    }
+    .card-h {
+        border-bottom: 1px solid
+            color-mix(in oklch, var(--border) 60%, transparent);
+        font-weight: 600;
+    }
+    .card-f {
+        gap: 0.5rem;
+        margin-top: auto;
+        border-top: 1px solid
+            color-mix(in oklch, var(--border) 60%, transparent);
+    }
+    .muted {
+        color: color-mix(in oklch, var(--muted-foreground) 100%, transparent);
+    }
+    .ok {
+        color: color-mix(in oklch, limegreen 55%, white 40%);
+    }
+
+    .chip {
+        --c: 220 8% 60%; /* default neutral (H S L for local chip vars) */
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.32rem 0.66rem;
+        border-radius: 9999px;
+        border: 1px solid hsl(var(--c) / 0.38);
+        background: hsl(var(--c) / 0.14);
+        color: hsl(var(--c) / 0.96);
+        font-weight: 600;
+        font-size: 0.8rem;
+        line-height: 1;
+        transition:
+            transform 0.15s ease,
+            background 0.15s ease,
+            border-color 0.15s ease;
+    }
+    .chip:hover {
+        transform: translateY(-1px);
+        background: hsl(var(--c) / 0.22);
+        border-color: hsl(var(--c) / 0.5);
+    }
+    .chip.hi {
+        background: hsl(var(--c) / 0.22);
+        border-color: hsl(var(--c) / 0.5);
+    }
+    .chip[data-variant="solid"] {
+        background: hsl(var(--c));
+        color: white;
+        border-color: hsl(var(--c));
+    }
+    .chip[data-variant="outline"] {
+        background: transparent;
+        color: hsl(var(--c));
+        border-color: hsl(var(--c) / 0.6);
+    }
+
+    /* tints (these are tailwind-like / local HSL triples kept as-is) */
+    .chip[data-tint="sky"] {
+        --c: 199 89% 48%;
+    }
+    .chip[data-tint="blue"] {
+        --c: 213 94% 67%;
+    }
+    .chip[data-tint="violet"] {
+        --c: 263 83% 66%;
+    }
+    .chip[data-tint="indigo"] {
+        --c: 243 85% 64%;
+    }
+    .chip[data-tint="emerald"] {
+        --c: 160 84% 40%;
+    }
+    .chip[data-tint="green"] {
+        --c: 142 71% 45%;
+    }
+    .chip[data-tint="amber"] {
+        --c: 28 96% 54%;
+    }
+    .chip[data-tint="rose"] {
+        --c: 346 77% 57%;
+    }
+    .chip[data-tint="slate"] {
+        --c: 215 16% 47%;
+    }
+
+    .chip svg {
+        width: 1rem;
+        height: 1rem;
+        margin-top: -0.05rem;
+    }
+
+    /* files list */
+    .file-list {
+        padding: 0.75rem 1rem;
+        display: grid;
+        gap: 0.6rem;
+    }
+    .file-list li {
+        gap: 1rem;
+        padding: 0.55rem 0.7rem;
+        border: 1px dashed color-mix(in oklch, var(--border) 60%, transparent);
+        border-radius: 0.8rem;
+        background: color-mix(in oklch, var(--muted) 12%, transparent);
+    }
+    .file-list .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+    .file-list .meta {
+        font-size: 0.8rem;
+        color: color-mix(in oklch, var(--muted-foreground) 100%, transparent);
+    }
+    .file-list li {
+        grid-template-columns: 1fr auto;
+        display: grid;
+    }
+    .file-list .meta {
+        text-align: right;
+    }
+
+    /* stage background mixes with shadcn card token (oklch token) */
+    .stage {
+        background: radial-gradient(
+                120% 120% at 15% 5%,
+                rgba(255, 255, 255, 0.06),
+                transparent 55%
+            ),
+            linear-gradient(to bottom, rgba(0, 0, 0, 0.08), transparent 40%),
+            color-mix(in oklch, var(--card) 34%, transparent);
+    }
+
+    /* tables */
+    .table {
+        padding: 0.75rem 1rem;
+        display: grid;
+        gap: 0.4rem;
+    }
+    .t-row {
+        display: grid;
+        grid-template-columns: 1.2fr 1.2fr 1fr 1fr;
+        gap: 0.6rem;
+        padding: 0.45rem 0.6rem;
+        border-radius: 0.6rem;
+        border: 1px solid color-mix(in oklch, var(--border) 50%, transparent);
+        background: color-mix(in oklch, var(--muted) 10%, transparent);
+    }
+    .t-row.t-h {
+        font-size: 0.85rem;
+        font-weight: 700;
+        background: color-mix(in oklch, var(--muted) 18%, transparent);
+    }
+    .pill {
+        padding: 0.1rem 0.45rem;
+        border-radius: 0.6rem;
+        background: color-mix(in oklch, var(--muted) 28%, transparent);
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+    .pill.ok {
+        background: color-mix(in oklch, limegreen 35%, transparent);
+    }
+    .pill.warn {
+        background: color-mix(in oklch, orange 35%, transparent);
+    }
+
+    /* builder + code */
+    .builder {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+        padding: 0.8rem 1rem 0.2rem;
+    }
+    .builder label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+    }
+    .code {
+        margin: 0.6rem 1rem 0;
+        padding: 0.8rem 1rem;
+        border-radius: 0.8rem;
+        background: #0b0d12;
+        border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+        color: #d4e2ff;
+        font-size: 0.85rem;
+        line-height: 1.45;
+        overflow: auto;
+    }
+    .results {
+        padding: 0.8rem 1rem 1rem;
+        display: grid;
+        gap: 0.6rem;
+    }
+    .results li {
+        padding: 0.55rem 0.7rem;
+        border-radius: 0.8rem;
+        background: color-mix(in oklch, var(--muted) 10%, transparent);
+        border: 1px solid color-mix(in oklch, var(--border) 50%, transparent);
+    }
+    .results .title {
+        font-weight: 700;
+    }
+    .results .score {
+        font-size: 0.75rem;
+        color: oklch(var(--muted-foreground));
+    }
+    .results .snippet {
+        font-size: 0.85rem;
+        color: oklch(var(--foreground) / 0.9);
+    }
+    .results mark {
+        background: color-mix(in oklch, gold 25%, transparent);
+        padding: 0.05rem 0.2rem;
+        border-radius: 0.25rem;
+    }
+
+    /* tabs */
+    .store-tab {
+        color: color-mix(in oklch, var(--foreground) 82%, transparent);
+    }
+    .store-tab[aria-selected="true"] {
+        color: var(--foreground);
+    }
+    #store-indicator {
+        box-shadow:
+            0 0 0 1px color-mix(in oklch, var(--border) 80%, transparent),
+            0 6px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .pipeline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem 0.5rem;
+        align-items: center;
+        padding: 0.6rem 1rem 0.2rem;
+    }
+    .pipe-step {
+        font-weight: 700;
+        font-size: 0.78rem;
+    }
+    .pipe-arrow {
+        opacity: 0.65;
+        margin: 0 0.2rem;
+    }
+
+    .builder {
+        row-gap: 0.4rem;
+    }
+
+    @media (max-width: 1023px) {
+        .stage > .grid {
+            grid-template-columns: 1fr;
+        }
+        #store-indicator {
+            display: none;
+        }
+        .card {
+            border-radius: 1rem;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        #store-indicator,
+        .pane {
+            transition: none !important;
+        }
+    }
+
+    /* toggles (node features) */
+    .togglebar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        padding: 0.7rem 1rem 0.2rem;
+    }
+    .toggle {
+        --on: 1;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.32rem 0.6rem;
+        border-radius: 0.7rem;
+        font-size: 0.85rem;
+        font-weight: 700;
+        border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+        background: color-mix(in oklch, var(--muted) 16%, transparent);
+        color: color-mix(in oklch, var(--foreground) 90%, transparent);
+        transition:
+            transform 0.15s ease,
+            background 0.15s ease,
+            border-color 0.15s ease;
+    }
+    .toggle .dot {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 9999px;
+        background: var(--primary);
+        opacity: 0.8;
+    }
+    .toggle:is(:hover, .is-on) {
+        transform: translateY(-1px);
+    }
+    .toggle[aria-pressed="false"] {
+        opacity: 0.7;
+        background: color-mix(in oklch, var(--muted) 10%, transparent);
+
+        .dot {
+            background: var(--muted);
+        }
+    }
+
+    /* mini graph */
+    .mini-graph svg {
+        width: 100%;
+        height: 220px;
+        display: block;
+    }
+    .mini-graph .node {
+        fill: color-mix(in oklch, var(--muted) 100%, transparent);
+        stroke: color-mix(in oklch, var(--border) 70%, transparent);
+        stroke-width: 1.25;
+    }
+    .mini-graph .label {
+        font-size: 12.5px;
+        font-weight: 800;
+        fill: color-mix(in oklch, var(--foreground) 92%, transparent);
+        paint-order: stroke;
+        stroke: rgba(0, 0, 0, 0.55);
+        stroke-width: 0.6px;
+    }
+    .mini-graph .edge {
+        fill: none;
+        stroke-linecap: round;
+        stroke-width: 2;
+        stroke-dasharray: 8 8;
+        opacity: 0.9;
+    }
+    @keyframes flow {
+        to {
+            stroke-dashoffset: -1000;
+        }
+    }
+
+    .mini-graph .edge.base {
+        stroke: hsl(215 16% 60% / 0.8);
+    }
+    .mini-graph .node.base {
+        stroke: hsl(215 16% 60% / 0.8);
+    }
+    .mini-graph .edge.vec,
+    .mini-graph .node.vec {
+        stroke: hsl(160 84% 40% / 0.9);
+    }
+    .mini-graph .edge.fts,
+    .mini-graph .node.fts {
+        stroke: hsl(263 83% 66% / 0.9);
+    }
+    .mini-graph .edge.sql,
+    .mini-graph .node.sql {
+        stroke: hsl(28 96% 54% / 0.9);
+    }
+    .mini-graph .node.merge {
+        stroke: hsl(243 85% 64% / 0.9);
+    }
+
+    .mini-graph[data-vec="1"] .edge.vec {
+        animation: flow 15s linear infinite;
+    }
+    .mini-graph[data-fts="1"] .edge.fts {
+        animation: flow 15s linear infinite;
+        animation-delay: 0.12s;
+    }
+    .mini-graph[data-sql="1"] .edge.sql {
+        animation: flow 15s linear infinite;
+        animation-delay: 0.24s;
+    }
+
+    /* dim features when off (no layout jump) */
+    .mini-graph[data-vec="0"] .node.vec {
+        fill: var(--card);
+        stroke: var(--muted);
+    }
+
+    .mini-graph[data-vec="0"] .edge.vec {
+        opacity: 0.18;
+    }
+
+    .mini-graph[data-fts="0"] .node.fts {
+        fill: var(--card);
+        stroke: var(--muted);
+    }
+
+    .mini-graph[data-fts="0"] .edge.fts {
+        opacity: 0.18;
+    }
+
+    .mini-graph[data-sql="0"] .node.sql {
+        fill: var(--card);
+        stroke: var(--muted);
+    }
+    .mini-graph[data-sql="0"] .edge.sql {
+        opacity: 0.18;
+    }
+
+    /* results polish */
+    .results li {
+        border-left: 3px solid oklch(var(--border));
+    }
+    .results li:first-child {
+        border-left-color: color-mix(in oklch, limegreen 60%, transparent);
+    }
+</style>

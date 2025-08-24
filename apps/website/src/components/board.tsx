@@ -27,9 +27,8 @@ export default function Board({
 	}, []);
 
 	return (
-		<div className="min-h-dvh h-dvh max-h-dvh w-full flex-1 flex-grow">
 			<ReactFlow
-				className="h-full w-full min-h-dvh min-w-dvw"
+				className="absolute top-0 left-0 right-0 bottom-0"
 				suppressHydrationWarning
 				nodesDraggable={false}
 				nodesConnectable={false}
@@ -44,20 +43,27 @@ export default function Board({
 						nodes: isMobile
 							? [
 									{
-										id: "u7urfocffhjtbwdwlore8u4w",
+										id: "j7a5erre9fwqhbq1k5f27tma",
 									},
+									{
+										id: "hh8j23jlgf45jwqb2iwxzkt5"
+									}
 								]
 							: [
 									{
-										id: "u7urfocffhjtbwdwlore8u4w",
+										id: "j7a5erre9fwqhbq1k5f27tma",
 									},
+									{
+										id: "hh8j23jlgf45jwqb2iwxzkt5"
+									}
 								],
+								padding: 0.25,
+
 					});
 				}}
 				proOptions={{ hideAttribution: true }}
 			>
 				<Background variant={BackgroundVariant.Dots} gap={12} size={1} />
 			</ReactFlow>
-		</div>
 	);
 }

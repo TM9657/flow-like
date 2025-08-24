@@ -1,10 +1,11 @@
 // Implementation according to
 // https://modelcontextprotocol.io/docs/concepts/sampling/
 
-use std::collections::HashMap;
-
+use flow_like_types::{Value, json};
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::HashMap;
+use std::fmt;
 
 use crate::response::Response;
 
@@ -17,10 +18,22 @@ pub struct ToolCall {
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 pub struct ToolCallFunction {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub arguments: Option<String>,
+    //#[serde(skip_serializing_if = "Option::is_none")]
+    pub name: String,
+    #[serde(deserialize_with = "arguments_as_str")]
+    pub arguments: String,
+}
+
+/// Handles arguments incoming as str (e.g. for cloud-based LLM providers) or map (local LLM providers)
+fn arguments_as_str<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = Value::deserialize(deserializer)?;
+    match v {
+        Value::String(s) => Ok(s), // already a string
+        other => json::to_string(&other).map_err(serde::de::Error::custom), // object/array/number → stringified JSON
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
@@ -84,6 +97,47 @@ impl HistoryMessage {
             name: None,
             tool_call_id: None,
             tool_calls: None,
+        }
+    }
+}
+
+impl HistoryMessage {
+    /// Returns a copy of the entire text-related content as single String
+    pub fn as_str(&self) -> String {
+        match &self.content {
+            MessageContent::String(s) => s.clone(),
+            MessageContent::Contents(contents) => contents
+                .iter()
+                .filter_map(|content| {
+                    if let Content::Text { text, .. } = content {
+                        Some(text.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<&str>>()
+                .join("\n"),
+        }
+    }
+}
+
+impl fmt::Display for History {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if !self.messages.is_empty() {
+            let mut history_str = String::from("| ");
+            for message in self.messages.iter() {
+                let m = match message.role {
+                    Role::Assistant => " A |",
+                    Role::System => " S |",
+                    Role::Tool => " T |",
+                    Role::User => " H |",
+                    Role::Function => " F |",
+                };
+                history_str.push_str(m);
+            }
+            write!(f, "{}", history_str)
+        } else {
+            write!(f, "[]")
         }
     }
 }
@@ -215,13 +269,36 @@ impl History {
         self.messages.push(message);
     }
 
-    pub fn set_system_prompt(&mut self, prompt: String) {
-        let system_prompt_index = self
-            .messages
+    pub fn get_system_prompt_index(&self) -> Option<usize> {
+        self.messages
             .iter()
-            .position(|message| message.role == Role::System);
+            .position(|message| message.role == Role::System)
+    }
 
-        if let Some(index) = system_prompt_index {
+    pub fn get_system_prompt(&self) -> Option<String> {
+        if let Some(index) = self.get_system_prompt_index() {
+            match &self.messages[index].content {
+                MessageContent::Contents(contents) => {
+                    let mut prompt = String::new();
+                    for content in contents {
+                        if let Content::Text {
+                            content_type: _,
+                            text,
+                        } = content
+                        {
+                            prompt.push_str(text);
+                        }
+                    }
+                    return Some(prompt);
+                }
+                MessageContent::String(content) => return Some(content.to_string()),
+            }
+        }
+        None
+    }
+
+    pub fn set_system_prompt(&mut self, prompt: String) {
+        if let Some(index) = self.get_system_prompt_index() {
             self.messages[index].content = MessageContent::Contents(vec![Content::Text {
                 content_type: ContentType::Text,
                 text: prompt,
@@ -297,7 +374,7 @@ pub struct HistoryJSONSchemaDefine {
     pub schema_type: Option<HistoryJSONSchemaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "enum")]
     pub enum_values: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<HashMap<String, Box<HistoryJSONSchemaDefine>>>,

@@ -73,7 +73,7 @@ impl NodeLogic for ListLocalDatabaseNode {
             .db
             .clone();
         let database = database.read().await;
-        let results = database.list(limit as usize, offset as usize).await?;
+        let results = database.list(None, limit as usize, offset as usize).await?;
         context.set_pin_value("values", json!(results)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())

@@ -17,9 +17,8 @@ use serde_json::json;
 use settings::Settings;
 use state::TauriFlowLikeState;
 use std::{sync::Arc, time::Duration};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
-use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(not(debug_assertions))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -286,6 +285,14 @@ pub fn run() {
             functions::app::delete_app,
             functions::app::sharing::export_app_to_file,
             functions::app::sharing::import_app_from_file,
+            functions::app::tables::db_table_names,
+            functions::app::tables::db_schema,
+            functions::app::tables::db_list,
+            functions::app::tables::build_index,
+            functions::app::tables::db_add,
+            functions::app::tables::db_delete,
+            functions::app::tables::db_indices,
+            functions::app::tables::db_query,
             functions::bit::get_bit,
             functions::bit::is_bit_installed,
             functions::bit::get_bit_size,

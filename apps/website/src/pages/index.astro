@@ -1,16 +1,229 @@
 ---
-import { edges, nodes } from "../assets/board.json";
-import { EmptyBackendProvider } from "../components/backend-provider";
-import Layout from "../layouts/Layout.astro";
 import "@tm9657/flow-like-ui/global.css";
-import "@xyflow/react/dist/style.css";
+import { BlogHeader } from "../components/blog-header";
+
+import AmbientGlow from "../components/ambient-glow.astro";
+import SoftSeam from "../components/soft-seam.astro";
+
+import DesignWorkflowsVisually from "../sections/design-workflows-visually.astro";
+import ZeroToProd from "../sections/zero-to-prod.astro";
+import Hero from "../sections/hero.astro";
+import FAQ from "../sections/faq.astro";
+import Portability from "../sections/portability.astro";
+import Performance from "../sections/performance.astro";
+import Extensibility from "../sections/extensibility.astro";
+import Theming from "../sections/theming.astro";
+import ProcessCombination from "../sections/process-combination.astro";
+import Storage from "../sections/storage.astro";
+import Reading from "../sections/reading.astro";
+import { BlogFooter } from "../components/blog-footer";
+
+// --- SEO constants ---
+const site = "https://flow-like.com";
+const title = "Flow-Like — Typed Workflows that Scale (Fast, Robust, Local-First)";
+const description =
+  "Typed, scalable workflows with Rust performance. Build reliable systems that run locally, on edge, or in any cloud — with governance built-in and effortless integration. Skip the Prototype!";
+const keywords = [
+  "workflow automation","visual programming","typed workflows","Rust",
+  "local-first","ETL","data pipelines","RAG","orchestration","DevOps"
+].join(", ");
+const appName = "Flow-Like";
+const orgName = "TM9657 GmbH";
+const canonicalUrl = site;
+const ogImage = `${site}/og.png`;
+const ogImageAlt = "Flow-Like — Typed Workflows that Scale";
+const twitterCard = "summary_large_image";
+
+const github = "https://github.com/TM9657/flow-like";
+const docs = "https://docs.flow-like.com";
+const download = "https://github.com/TM9657/flow-like/releases";
+
+// --- JSON-LD blocks ---
+const ldOrganization = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: orgName,
+  url: site,
+  logo: `${site}/favicon.svg`,
+  sameAs: [github, docs]
+};
+
+const ldSoftware = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: appName,
+  applicationCategory: "DeveloperApplication",
+  applicationSubCategory: "Workflow automation",
+  operatingSystem: "macOS, Windows, Linux",
+  url: site,
+  downloadUrl: download,
+  image: ogImage,
+  description,
+  license: `${github}/blob/main/LICENSE`
+};
+
+const ldWebSite = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: appName,
+  url: site,
+  publisher: {
+    "@type": "Organization",
+    name: orgName
+  },
+  inLanguage: "en"
+};
+
+const ldWebPage = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  url: site,
+  name: title,
+  description,
+  isPartOf: {
+    "@type": "WebSite",
+    url: site,
+    name: appName
+  },
+  inLanguage: "en"
+};
 ---
 
-<head>
-	<Fragment slot="head">
-		<link rel="preload" as="fetch" href={"/board.json"} crossorigin="anonymous" />
-	</Fragment>
-</head>
-<Layout>
-	<EmptyBackendProvider data="/board.json" client:load />
-</Layout>
+<!doctype html>
+<html lang="en" class="scroll-smooth max-w-full overflow-x-hidden" style="overflow-x: hidden;">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="keywords" content={keywords} />
+    <meta name="application-name" content={appName} />
+    <meta name="apple-mobile-web-app-title" content={appName} />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="format-detection" content="telephone=no, address=no, email=no, url=no" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+    <meta name="generator" content={Astro.generator} />
+
+    <!-- Canonical & alternates -->
+    <link rel="canonical" href={canonicalUrl} />
+    <link rel="alternate" type="application/rss+xml" title="Flow-Like Blog" href="/rss.xml" />
+
+    <!-- Favicons / PWA -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#0ea5e9" />
+    <meta name="msapplication-TileColor" content="#0ea5e9" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0f19" media="(prefers-color-scheme: dark)" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={appName} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={site} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:alt" content={ogImageAlt} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content={twitterCard} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
+
+    <!-- Resource Hints -->
+    <link rel="preconnect" href="https://docs.flow-like.com" crossorigin />
+    <link rel="preconnect" href="https://github.com" crossorigin />
+
+    <!-- Structured Data (inline, non-blocking) -->
+    <script type="application/ld+json">{JSON.stringify(ldOrganization)}</script>
+    <script type="application/ld+json">{JSON.stringify(ldSoftware)}</script>
+    <script type="application/ld+json">{JSON.stringify(ldWebSite)}</script>
+    <script type="application/ld+json">{JSON.stringify(ldWebPage)}</script>
+
+    <!-- Performance helpers -->
+    <style is:global>
+      /* Only paint off-screen sections when needed */
+      .cv { content-visibility: auto; contain-intrinsic-size: 1000px; }
+      @media (max-width: 1024px) { .cv { contain-intrinsic-size: 1400px; } }
+      @media (prefers-reduced-motion: reduce) { .cv { contain-intrinsic-size: 1200px; } }
+
+      /* Keep seams tiny so they don't claim large intrinsic sizes */
+      .cv--seam { contain-intrinsic-size: 24px; }
+
+      /* Defensive: avoid accidental transform promotions on everything */
+      [data-no-layer] { will-change: auto !important; }
+
+      /* Make the page dot color 20% opaque (mix the theme color with transparent).
+         This overrides the existing tailwind-arbitrary background so the dots become 20% transparent. */
+      body {
+        background-image: radial-gradient(color-mix(in srgb, var(--muted) 20%, transparent) 1px, transparent 1px) !important;
+        background-size: 16px 16px !important;
+        background-attachment: fixed !important;
+      }
+    </style>
+  </head>
+
+  <body
+    class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground overflow-x-hidden max-w-full
+            bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px] bg-fixed"
+  >
+    {/* Decorative, no a11y cost */}
+
+    {/* Keep header & hero eager for better LCP */}
+
+    <main id="content" class="contents w-full">
+	  <BlogHeader client:load />
+	  <Hero />
+	  <AmbientGlow />
+      <div class="cv"><ZeroToProd /></div>
+      <div class="cv"><DesignWorkflowsVisually /></div>
+
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+
+      <div class="cv"><Portability /></div>
+
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+
+      <div class="cv"><Performance /></div>
+
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+
+      <div class="cv"><Extensibility /></div>
+
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+
+      <div class="cv"><Theming /></div>
+
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+
+      <div class="cv"><ProcessCombination /></div>
+
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+
+      <div class="cv"><Storage /></div>
+
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+
+      <div class="cv"><Reading /></div>
+
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+
+      <div class="cv"><FAQ /></div>
+    </main>
+
+    <BlogFooter />
+  </body>
+</html>

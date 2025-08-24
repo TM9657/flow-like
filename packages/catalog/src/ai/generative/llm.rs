@@ -3,11 +3,11 @@ pub mod find_llm;
 pub mod history;
 pub mod invoke;
 pub mod invoke_simple;
+pub mod invoke_with_tools;
 pub mod make_schema;
 pub mod preferences;
 pub mod response;
 pub mod with_structured_output;
-pub mod with_tools;
 
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;
@@ -41,9 +41,10 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(history::set_stop::SetHistoryStopWordsNode::default()),
         Arc::new(history::set_response_format::SetHistoryResponseFormatNode::default()),
         Arc::new(history::set_n::SetHistoryNNode::default()),
+        Arc::new(history::from_string::HistoryFromStringNode::default()),
         Arc::new(branch::LLMBranchNode::default()),
         Arc::new(with_structured_output::LLMWithStructuredOutput::default()),
-        Arc::new(with_tools::LLMWithTools::default()),
+        Arc::new(invoke_with_tools::InvokeLLMWithToolsNode::default()),
         Arc::new(make_schema::LLMMakeSchema::default()),
     ];
 

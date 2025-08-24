@@ -111,6 +111,7 @@ impl NodeLogic for HybridSearchLocalDatabaseNode {
                 vector,
                 &search,
                 filter,
+                None,
                 limit as usize,
                 offset as usize,
                 rerank,

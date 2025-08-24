@@ -13,7 +13,7 @@ import {
 	SortAscIcon,
 	UploadIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type IStorageItem, useBackend, useInvoke } from "../..";
 import {
@@ -72,6 +72,108 @@ export function StorageSystem({
 		backend.storageState,
 		[appId, prefix],
 	);
+
+	// ---------- Virtual folders (sessionStorage) ----------
+	const [creatingFolder, setCreatingFolder] = useState(false);
+	const [newFolderName, setNewFolderName] = useState("");
+	const [virtualFoldersHere, setVirtualFoldersHere] = useState<string[]>([]);
+
+	const storeKey = useMemo(() => `vfolders:${appId}`, [appId]);
+	const normalizePrefix = useCallback(
+		(p: string) => p.replace(/^\/+|\/+$/g, ""),
+		[],
+	);
+	const currentParentKey = useMemo(
+		() => normalizePrefix(prefix),
+		[prefix, normalizePrefix],
+	);
+
+	type VFMap = Record<string, string[]>; // parentPrefix -> [childFolderNames]
+	const readVF = useCallback((): VFMap => {
+		try {
+			const raw = sessionStorage.getItem(storeKey);
+			return raw ? (JSON.parse(raw) as VFMap) : {};
+		} catch {
+			return {};
+		}
+	}, [storeKey]);
+	const writeVF = useCallback(
+		(map: VFMap) => {
+			try {
+				sessionStorage.setItem(storeKey, JSON.stringify(map));
+			} catch {
+				// ignore
+			}
+		},
+		[storeKey],
+	);
+
+	useEffect(() => {
+		const map = readVF();
+		setVirtualFoldersHere(map[currentParentKey] ?? []);
+	}, [currentParentKey, readVF]);
+
+	const addVirtualFolder = useCallback(
+		(name: string) => {
+			const clean = name.trim();
+			if (!clean) {
+				toast.error("Folder name cannot be empty");
+				return false;
+			}
+			if (/^[.]{1,2}$/.test(clean)) {
+				toast.error("Reserved name");
+				return false;
+			}
+			if (/[\\\/:*?"<>|]/.test(clean)) {
+				toast.error("Invalid characters in name");
+				return false;
+			}
+
+			// check duplicates against visible folders (backend + virtual)
+			const existingFolderNames = new Set(
+				(files.data ?? [])
+					.filter((f) => f.is_dir)
+					.map((f) => (f.location.split("/").pop() ?? "").toLowerCase()),
+			);
+			for (const v of virtualFoldersHere)
+				existingFolderNames.add(v.toLowerCase());
+			if (existingFolderNames.has(clean.toLowerCase())) {
+				toast.error("A folder with that name already exists");
+				return false;
+			}
+
+			const all = readVF();
+			const next = new Set(all[currentParentKey] ?? []);
+			next.add(clean);
+			all[currentParentKey] = Array.from(next);
+			writeVF(all);
+			setVirtualFoldersHere(all[currentParentKey]);
+			toast.success("Folder created");
+			return true;
+		},
+		[files.data, virtualFoldersHere, currentParentKey, readVF, writeVF],
+	);
+
+	// Merge backend items with virtual folders for current prefix
+	const filesWithVirtual = useMemo<IStorageItem[]>(() => {
+		const base = (files.data ?? []).slice();
+		const have = new Set(base.map((f) => f.location));
+		const basePrefixNorm = normalizePrefix(prefix);
+		const locFor = (name: string) =>
+			basePrefixNorm ? `${basePrefixNorm}/${name}` : name;
+		const virtualItems: IStorageItem[] = virtualFoldersHere
+			.filter((name) => !have.has(locFor(name)))
+			.map(
+				(name) =>
+					({
+						location: locFor(name),
+						is_dir: true,
+						size: 0,
+						last_modified: new Date().toISOString(),
+					}) as IStorageItem,
+			);
+		return [...base, ...virtualItems];
+	}, [files.data, virtualFoldersHere, prefix, normalizePrefix]);
 
 	const [searchQuery, setSearchQuery] = useState("");
 	const [viewMode, setViewMode] = useState<"grid" | "list">("list");
@@ -197,14 +299,14 @@ export function StorageSystem({
 
 	const filteredFiles = useMemo(
 		() =>
-			files.data?.filter((file) =>
+			filesWithVirtual?.filter((file) =>
 				file.location
 					.split("/")
 					.pop()
 					?.toLowerCase()
 					.includes(searchQuery.toLowerCase()),
 			) ?? [],
-		[files, searchQuery],
+		[filesWithVirtual, searchQuery],
 	);
 
 	const sortedFiles = useMemo(
@@ -212,8 +314,7 @@ export function StorageSystem({
 			[...filteredFiles].sort((a, b) => {
 				const getName = (file: IStorageItem) =>
 					file.location.split("/").pop() ?? "";
-				const isFolder = (file: IStorageItem) =>
-					file.location.endsWith("_._path");
+				const isFolder = (file: IStorageItem) => file.is_dir;
 
 				// Always sort folders first
 				if (isFolder(a) && !isFolder(b)) return -1;
@@ -246,12 +347,8 @@ export function StorageSystem({
 		[filteredFiles, sortBy, sortOrder],
 	);
 
-	const fileCount = files.data?.filter(
-		(f) => !f.location.endsWith("_._path"),
-	).length;
-	const folderCount = files.data?.filter((f) =>
-		f.location.endsWith("_._path"),
-	).length;
+	const fileCount = filesWithVirtual?.filter((f) => !f.is_dir).length ?? 0;
+	const folderCount = filesWithVirtual?.filter((f) => f.is_dir).length ?? 0;
 
 	return (
 		<div className="flex grow flex-col gap-4 min-h-full h-full max-h-full overflow-hidden w-full">
@@ -406,6 +503,7 @@ export function StorageSystem({
 							</DropdownMenu>
 						</div>
 
+						{/* View toggle */}
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<Button
@@ -427,6 +525,23 @@ export function StorageSystem({
 							</TooltipContent>
 						</Tooltip>
 						<Separator orientation="vertical" className="h-6" />
+
+						{/* New virtual folder */}
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									variant="outline"
+									className="gap-2"
+									onClick={() => setCreatingFolder((v) => !v)}
+								>
+									<FolderPlusIcon className="h-4 w-4" />
+									New Folder
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>
+								Create a virtual folder (session only)
+							</TooltipContent>
+						</Tooltip>
 
 						<Tooltip>
 							<TooltipTrigger asChild>
@@ -457,15 +572,14 @@ export function StorageSystem({
 						</Tooltip>
 					</div>
 				</div>
+
 				<div className="flex items-end gap-2 mt-2 justify-between">
-					{(files.data?.length ?? 0) > 0 && (
-						<StorageBreadcrumbs
-							appId={appId}
-							prefix={prefix}
-							updatePrefix={(prefix) => updatePrefix(prefix)}
-						/>
-					)}
-					{(files.data?.length ?? 0) > 0 && (
+					<StorageBreadcrumbs
+						appId={appId}
+						prefix={prefix}
+						updatePrefix={(prefix) => updatePrefix(prefix)}
+					/>
+					{(filesWithVirtual.length ?? 0) > 0 && (
 						<div className="relative">
 							<SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
 							<Input
@@ -477,18 +591,65 @@ export function StorageSystem({
 						</div>
 					)}
 				</div>
+
+				{/* Inline create folder row */}
+				{creatingFolder && (
+					<div className="flex items-center gap-2 px-4">
+						<Input
+							placeholder="Folder name"
+							value={newFolderName}
+							onChange={(e) => setNewFolderName(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									if (addVirtualFolder(newFolderName)) {
+										setNewFolderName("");
+										setCreatingFolder(false);
+									}
+								}
+								if (e.key === "Escape") {
+									setCreatingFolder(false);
+									setNewFolderName("");
+								}
+							}}
+						/>
+						<Button
+							variant="default"
+							onClick={() => {
+								if (addVirtualFolder(newFolderName)) {
+									setNewFolderName("");
+									setCreatingFolder(false);
+								}
+							}}
+						>
+							Create
+						</Button>
+						<Button
+							variant="ghost"
+							onClick={() => {
+								setCreatingFolder(false);
+								setNewFolderName("");
+							}}
+						>
+							Cancel
+						</Button>
+					</div>
+				)}
 			</div>
 
 			<Separator />
 
 			{/* Content Section */}
-			{(files.data?.length ?? 0) === 0 && (
+			{(filesWithVirtual.length ?? 0) === 0 && (
 				<div className="flex flex-col h-full w-full grow relative px-4">
 					<EmptyState
 						className="w-full h-full max-w-full border-2 border-dashed border-muted-foreground/25 rounded-lg"
 						title="No Files Found"
-						description="Get started by uploading your first files or folders to this storage space"
+						description="Get started by creating a folder or uploading your first files to this storage space"
 						action={[
+							{
+								label: "New Folder",
+								onClick: () => setCreatingFolder(true),
+							},
 							{
 								label: "Upload Files",
 								onClick: () => fileReference.current?.click(),
@@ -503,7 +664,7 @@ export function StorageSystem({
 				</div>
 			)}
 
-			{(files.data?.length ?? 0) > 0 && (
+			{(filesWithVirtual.length ?? 0) > 0 && (
 				<div className="flex flex-col gap-4 grow max-h-full h-full overflow-y-hidden px-4 pb-4">
 					{preview.url !== "" && (
 						<>
@@ -591,10 +752,6 @@ export function StorageSystem({
 																return;
 															}
 
-															console.log(
-																"Copying download link to clipboard:",
-																firstItem.url,
-															);
 															try {
 																await navigator.clipboard.writeText(
 																	firstItem.url,
@@ -662,10 +819,7 @@ export function StorageSystem({
 										key={file.location}
 										file={file}
 										changePrefix={(new_prefix) => {
-											setPreview({
-												url: "",
-												file: "",
-											});
+											setPreview({ url: "", file: "" });
 											updatePrefix(`${prefix}/${new_prefix}`);
 										}}
 										loadFile={loadFile}

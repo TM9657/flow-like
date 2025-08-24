@@ -1,7 +1,7 @@
-use flow_like_types::image::DynamicImage;
 use flow_like_types::Cacheable;
 use flow_like_types::Result;
 use flow_like_types::async_trait;
+use flow_like_types::image::DynamicImage;
 use std::sync::Arc;
 
 use crate::embedding::GeneralTextSplitter;

@@ -1,7 +1,7 @@
 "use client";
 
 import { VariableIcon } from "lucide-react";
-import { memo, useEffect, useState } from "react";
+import { type FC, memo, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { IValueType } from "../../../lib";
 import {
@@ -17,26 +17,28 @@ import { EnumVariable } from "./variable-types/enum-variable";
 import { FnVariable } from "./variable-types/fn-select";
 import { VarVariable } from "./variable-types/var-select";
 
-export function PinEdit({
+interface PinEditProps {
+	readonly nodeId: string;
+	readonly pin: IPin;
+	readonly defaultValue: any;
+	readonly appId: string;
+	readonly boardId: string;
+	readonly changeDefaultValue: (value: any) => void;
+}
+
+export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 	nodeId,
 	pin,
 	defaultValue,
 	appId,
 	boardId,
 	changeDefaultValue,
-}: Readonly<{
-	nodeId: string;
-	pin: IPin;
-	defaultValue: any;
-	appId: string;
-	boardId: string;
-	changeDefaultValue: (value: any) => void;
-}>) {
+}: PinEditProps) {
 	const [cachedDefaultValue, setCachedDefaultValue] = useState(defaultValue);
 
 	useEffect(() => {
 		changeDefaultValue(cachedDefaultValue);
-	}, [cachedDefaultValue]);
+	}, [cachedDefaultValue, changeDefaultValue]);
 
 	if (pin.pin_type === IPinType.Output)
 		return <VariableDescription pin={pin} />;
@@ -111,7 +113,7 @@ export function PinEdit({
 	return (
 		<WithMenu nodeId={nodeId} pin={pin} defaultValue={cachedDefaultValue} />
 	);
-}
+});
 
 function WithMenuInner({
 	nodeId,

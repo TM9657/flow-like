@@ -4,6 +4,7 @@ use flow_like_types::Cacheable;
 use flow_like_types::async_trait;
 use flow_like_types::{Result, Value, anyhow};
 use futures::TryStreamExt;
+use lancedb::index::IndexConfig;
 use lancedb::index::scalar::BTreeIndexBuilder;
 use lancedb::index::scalar::BitmapIndexBuilder;
 use lancedb::index::scalar::LabelListIndexBuilder;
@@ -24,6 +25,23 @@ use crate::arrow_utils::record_batch_to_value;
 use crate::arrow_utils::value_to_batch_iterator;
 
 use super::VectorStore;
+
+#[derive(serde::Serialize)]
+pub struct IndexConfigDto {
+    name: String,
+    index_type: String, // render enum via Display
+    columns: Vec<String>,
+}
+
+impl From<IndexConfig> for IndexConfigDto {
+    fn from(idx: IndexConfig) -> Self {
+        Self {
+            name: idx.name,
+            index_type: idx.index_type.to_string(),
+            columns: idx.columns,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct LanceDBVectorStore {
@@ -65,6 +83,20 @@ impl LanceDBVectorStore {
         }
     }
 
+    pub async fn list_tables(&self) -> Result<Vec<String>> {
+        let tables = self.connection.table_names().execute().await?;
+        Ok(tables)
+    }
+
+    pub async fn list_indices(&self) -> Result<Vec<IndexConfigDto>> {
+        let indices = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+        let indices = indices.list_indices().await?;
+        Ok(indices.into_iter().map(IndexConfigDto::from).collect())
+    }
+
     pub async fn to_datafusion(&self) -> Result<lancedb::table::datafusion::BaseTableAdapter> {
         let table = self
             .table
@@ -90,7 +122,7 @@ impl LanceDBVectorStore {
     }
 }
 
-fn record_batches_to_vec(batches: Option<Vec<RecordBatch>>) -> Result<Vec<Value>> {
+pub fn record_batches_to_vec(batches: Option<Vec<RecordBatch>>) -> Result<Vec<Value>> {
     batches
         .as_ref()
         .ok_or(anyhow!("Error converting record batches to vec"))?;
@@ -119,6 +151,7 @@ impl VectorStore for LanceDBVectorStore {
         &self,
         vector: Vec<f64>,
         filter: Option<&str>,
+        select: Option<Vec<String>>,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Value>> {
@@ -139,6 +172,10 @@ impl VectorStore for LanceDBVectorStore {
             query = query.only_if(filter);
         }
 
+        if let Some(select) = select {
+            query = query.select(lancedb::query::Select::Columns(select));
+        }
+
         let result = query.execute().await?;
         let result = result.try_collect::<Vec<_>>().await.ok();
         let result = record_batches_to_vec(result)?;
@@ -149,6 +186,7 @@ impl VectorStore for LanceDBVectorStore {
         &self,
         text: &str,
         filter: Option<&str>,
+        select: Option<Vec<String>>,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Value>> {
@@ -167,6 +205,10 @@ impl VectorStore for LanceDBVectorStore {
             query = query.only_if(filter);
         }
 
+        if let Some(select) = select {
+            query = query.select(lancedb::query::Select::Columns(select));
+        }
+
         let result = query.execute().await?;
         let result = result.try_collect::<Vec<_>>().await.ok();
         let result = record_batches_to_vec(result)?;
@@ -178,6 +220,7 @@ impl VectorStore for LanceDBVectorStore {
         vector: Vec<f64>,
         text: &str,
         filter: Option<&str>,
+        select: Option<Vec<String>>,
         limit: usize,
         offset: usize,
         rerank: bool,
@@ -205,6 +248,10 @@ impl VectorStore for LanceDBVectorStore {
             query = query.only_if(filter);
         }
 
+        if let Some(select) = select {
+            query = query.select(lancedb::query::Select::Columns(select));
+        }
+
         let result = query
             .execute_hybrid(QueryExecutionOptions::default())
             .await?;
@@ -213,13 +260,23 @@ impl VectorStore for LanceDBVectorStore {
         Ok(result)
     }
 
-    async fn filter(&self, filter: &str, limit: usize, offset: usize) -> Result<Vec<Value>> {
+    async fn filter(
+        &self,
+        filter: &str,
+        select: Option<Vec<String>>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Value>> {
         let table = self
             .table
             .clone()
             .ok_or_else(|| anyhow!("Table not initialized"))?;
 
-        let query = table.query().limit(limit).only_if(filter).offset(offset);
+        let mut query = table.query().limit(limit).only_if(filter).offset(offset);
+
+        if let Some(select) = select {
+            query = query.select(lancedb::query::Select::Columns(select));
+        }
 
         let result = query.execute().await?;
         let result = result.try_collect::<Vec<_>>().await.ok();
@@ -340,19 +397,24 @@ impl VectorStore for LanceDBVectorStore {
         return Ok(());
     }
 
-    async fn list(&self, limit: usize, offset: usize) -> Result<Vec<Value>> {
+    async fn list(
+        &self,
+        select: Option<Vec<String>>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Value>> {
         let table = self
             .table
             .clone()
             .ok_or_else(|| anyhow!("Table not initialized"))?;
 
-        let result = table
-            .query()
-            .limit(limit)
-            .offset(offset)
-            .execute()
-            .await
-            .ok();
+        let mut query = table.query().limit(limit).offset(offset);
+
+        if let Some(select) = select {
+            query = query.select(lancedb::query::Select::Columns(select));
+        }
+
+        let result = query.execute().await.ok();
 
         result.as_ref().ok_or(anyhow!("Error executing query"))?;
 
@@ -475,7 +537,9 @@ mod tests {
 
         db.upsert(json_records, "id".to_string()).await?;
 
-        let search_results: Vec<Value> = db.vector_search(vec![1.0, 2.0, 3.0], None, 10, 0).await?;
+        let search_results: Vec<Value> = db
+            .vector_search(vec![1.0, 2.0, 3.0], None, None, 10, 0)
+            .await?;
 
         assert!(!search_results.is_empty());
 
@@ -515,7 +579,7 @@ mod tests {
         db.upsert(json_records, "id".to_string()).await?;
         db.index("name", Some("FULL TEXT")).await?;
 
-        let search_results: Vec<Value> = db.fts_search("Alice", None, 10, 0).await?;
+        let search_results: Vec<Value> = db.fts_search("Alice", None, None, 10, 0).await?;
 
         assert!(!search_results.is_empty());
 
@@ -554,7 +618,9 @@ mod tests {
 
         db.upsert(json_records, "id".to_string()).await?;
 
-        let search_results: Vec<Value> = db.vector_search(vec![2.0, 3.0, 4.0], None, 10, 0).await?;
+        let search_results: Vec<Value> = db
+            .vector_search(vec![2.0, 3.0, 4.0], None, None, 10, 0)
+            .await?;
 
         assert!(!search_results.is_empty());
 
@@ -594,7 +660,7 @@ mod tests {
         db.upsert(json_records, "id".to_string()).await?;
 
         let search_results: Vec<Value> = db
-            .vector_search(vec![1.0, 2.0, 3.0], Some("id = 2"), 10, 0)
+            .vector_search(vec![1.0, 2.0, 3.0], Some("id = 2"), None, 10, 0)
             .await?;
 
         assert!(!search_results.is_empty());
@@ -655,6 +721,52 @@ mod tests {
             .unwrap();
         let resolved = resolved.clone();
         assert_eq!(resolved.connection.uri(), db.connection.uri());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_lance_select() -> Result<()> {
+        let test_path = format!("./tmp/{}", create_id());
+        std::fs::create_dir_all(&test_path).unwrap();
+        let mut db = LanceDBVectorStore::new(PathBuf::from(&test_path), "t".to_string()).await?;
+        let records = vec![
+            TestStruct {
+                id: 1,
+                name: "Alice".to_string(),
+                vector: vec![1.0, 2.0, 3.0],
+            },
+            TestStruct {
+                id: 2,
+                name: "Bob".to_string(),
+                vector: vec![2.0, 3.0, 4.0],
+            },
+        ];
+
+        let json_records: Vec<Value> = records
+            .clone()
+            .into_iter()
+            .map(to_value)
+            .collect::<Result<_, _>>()?;
+
+        db.upsert(json_records, "id".to_string()).await?;
+
+        let select = Some(vec!["id".to_string(), "name".to_string()]);
+        let results: Vec<Value> = db.list(select, 10, 0).await?;
+
+        assert!(!results.is_empty());
+
+        let first_item: TestStruct2 = from_value(results[0].clone())?;
+
+        assert_eq!(
+            first_item,
+            TestStruct2 {
+                id: records[0].id,
+                name: records[0].name.clone()
+            }
+        );
+
+        std::fs::remove_dir_all(&test_path).unwrap();
 
         Ok(())
     }
