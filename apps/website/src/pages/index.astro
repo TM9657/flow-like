@@ -19,80 +19,190 @@ import Reading from "../sections/reading.astro";
 
 import { BlogFooter } from "../components/blog-footer";
 
+// --- SEO constants ---
 const site = "https://flow-like.com";
+const title = "Flow-Like — Typed Workflows that Scale (Fast, Robust, Local-First)";
+const description =
+  "Typed, scalable workflows with Rust performance. Build reliable systems that run locally, on edge, or in any cloud — with governance built-in and effortless integration. Skip the Prototype!";
+const keywords = [
+  "workflow automation","visual programming","typed workflows","Rust",
+  "local-first","ETL","data pipelines","RAG","orchestration","DevOps"
+].join(", ");
+const appName = "Flow-Like";
+const orgName = "TM9657 GmbH";
+const canonicalUrl = site;
+const ogImage = `${site}/og.png`;
+const ogImageAlt = "Flow-Like — Typed Workflows that Scale";
+const twitterCard = "summary_large_image";
+
+const github = "https://github.com/TM9657/flow-like";
+const docs = "https://docs.flow-like.com";
+const download = "https://github.com/TM9657/flow-like/releases";
+
+// --- JSON-LD blocks ---
+const ldOrganization = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: orgName,
+  url: site,
+  logo: `${site}/favicon.svg`,
+  sameAs: [github, docs]
+};
+
+const ldSoftware = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: appName,
+  applicationCategory: "DeveloperApplication",
+  applicationSubCategory: "Workflow automation",
+  operatingSystem: "macOS, Windows, Linux",
+  url: site,
+  downloadUrl: download,
+  image: ogImage,
+  description,
+  license: `${github}/blob/main/LICENSE`
+};
+
+const ldWebSite = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: appName,
+  url: site,
+  publisher: {
+    "@type": "Organization",
+    name: orgName
+  },
+  inLanguage: "en"
+};
+
+const ldWebPage = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  url: site,
+  name: title,
+  description,
+  isPartOf: {
+    "@type": "WebSite",
+    url: site,
+    name: appName
+  },
+  inLanguage: "en"
+};
 ---
 
 <!doctype html>
 <html lang="en" class="scroll-smooth max-w-dvw overflow-x-hidden">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>
-			Flow-Like — Typed Workflows that Scale (Fast, Robust, Local-First)
-		</title>
-		<meta
-			name="description"
-			content="Typed, scalable workflows with Rust performance. Build reliable systems that run locally, on edge, or in any cloud — with governance built-in and effortless integration."
-		/>
-		<link rel="icon" href="/favicon.svg" />
-		<meta
-			property="og:title"
-			content="Flow‑Like — Typed Workflows that Scale"
-		/>
-		<meta
-			property="og:description"
-			content="Type‑safe workflows, predictable speed, and governance. Run anywhere: local, edge, or any cloud."
-		/>
-		<meta property="og:image" content="/og.webp" />
-		<meta property="og:url" content={site} />
-		<meta name="twitter:card" content="summary_large_image" />
-	</head>
-	<body
-		class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground overflow-x-hidden"
-	>
-		<div
-			class="pointer-events-none fixed inset-0 h-full w-full bg-background bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px] -z-[100] opacity-20"
-		>
-		</div>
-		<AmbientGlow />
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
 
-		<BlogHeader />
-		<Hero />
-		<ZeroToProd />
-		<DesignWorkflowsVisually />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="keywords" content={keywords} />
+    <meta name="application-name" content={appName} />
+    <meta name="apple-mobile-web-app-title" content={appName} />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="format-detection" content="telephone=no, address=no, email=no, url=no" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+    <meta name="generator" content={Astro.generator} />
 
-		<SoftSeam />
+    <!-- Canonical & alternates -->
+    <link rel="canonical" href={canonicalUrl} />
+    <link rel="alternate" type="application/rss+xml" title="Flow-Like Blog" href="/rss.xml" />
 
-		<Portability />
+    <!-- Favicons / PWA -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#0ea5e9" />
+    <meta name="msapplication-TileColor" content="#0ea5e9" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0f19" media="(prefers-color-scheme: dark)" />
 
-		<SoftSeam />
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={appName} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={site} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:alt" content={ogImageAlt} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="en_US" />
 
-		<Performance />
+    <!-- Twitter -->
+    <meta name="twitter:card" content={twitterCard} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
+    <!-- If you have official handles, uncomment:
+    <meta name="twitter:site" content="@YOUR_HANDLE" />
+    <meta name="twitter:creator" content="@YOUR_HANDLE" />
+    -->
 
-		<SoftSeam />
+    <!-- Structured Data -->
+    <script type="application/ld+json">{JSON.stringify(ldOrganization)}</script>
+    <script type="application/ld+json">{JSON.stringify(ldSoftware)}</script>
+    <script type="application/ld+json">{JSON.stringify(ldWebSite)}</script>
+    <script type="application/ld+json">{JSON.stringify(ldWebPage)}</script>
+  </head>
 
-		<Extensibility />
+  <body
+    class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground overflow-x-hidden max-w-screen"
+  >
+    <div
+      class="pointer-events-none fixed inset-0 h-full w-full bg-background bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px] -z-[100] opacity-20"
+    ></div>
+    <AmbientGlow />
 
-		<SoftSeam />
+    <BlogHeader />
+    <Hero />
+    <ZeroToProd />
+    <DesignWorkflowsVisually />
 
-		<Theming />
+    <SoftSeam />
 
-		<SoftSeam />
+    <Portability />
 
-		<ProcessCombination />
+    <SoftSeam />
 
-		<SoftSeam />
+    <Performance />
 
-		<Storage />
+    <SoftSeam />
 
-		<SoftSeam />
+    <Extensibility />
 
-		<Reading />
+    <SoftSeam />
 
-		<SoftSeam />
+    <Theming />
 
-		<FAQ />
+    <SoftSeam />
 
-		<BlogFooter />
-	</body>
+    <ProcessCombination />
+
+    <SoftSeam />
+
+    <Storage />
+
+    <SoftSeam />
+
+    <Reading />
+
+    <SoftSeam />
+
+    <FAQ />
+
+    <BlogFooter />
+  </body>
 </html>

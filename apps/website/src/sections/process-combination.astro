@@ -4,277 +4,486 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 ---
 
 <section
-id="layers"
-class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
-data-c1="hsl(0 100% 63% / .10)"
+    id="layers"
+    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+    data-c1="hsl(0 100% 63% / .10)"
     data-c2="hsl(262 100% 63% / .10)"
 >
-  <!-- soft grid bg -->
-  <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-    <div class="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"></div>
-  </div>
-
-  <div class="relative z-10">
-    <div class="mx-auto max-w-4xl text-center">
-      <div class="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 mb-6">
-        <div class="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
-        Multi-Layer Views
-      </div>
-      <h2 class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-indigo-500 to-cyan-500 bg-clip-text text-transparent">
-        Business process, data, and implementation in <span class="text-indigo-500">one view</span>
-      </h2>
-      <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
-        Use <strong>Layers</strong> so roles see what they need without leaving the canvas. Switch context — keep the graph.
-      </p>
+    <!-- soft grid bg -->
+    <div aria-hidden="true" class="pointer-events-none absolute inset-0">
+        <div
+            class="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"
+        >
+        </div>
     </div>
 
-    <!-- STAGE: tabs + viz + panel (no vertical stacking) -->
-    <div class="mx-auto mt-16 max-w-6xl">
-      <div class="stage rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden">
-        <!-- tabs -->
-        <div id="layers-tabs" role="tablist" aria-label="Layer views"
-             class="relative grid grid-cols-3 gap-2 p-3">
-          <span id="tab-indicator" class="absolute top-3 left-3 h-[calc(100%-24px)] rounded-2xl border border-border/60 bg-muted/60 backdrop-blur-sm transition-[transform,width] duration-300 ease-out will-change-transform pointer-events-none"></span>
-
-          <button id="tab-business" role="tab" aria-controls="panel-business" aria-selected="true"
-                  data-target="business"
-                  class="layers-tab relative z-10 rounded-2xl px-4 py-3 text-sm font-semibold">
-            <span class="flex items-center justify-center gap-2">
-              <span class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-500">
-                <LuBriefcaseBusiness className="w-4 h-4 text-white" />
-              </span>
-              <span>Process</span>
-            </span>
-          </button>
-
-          <button id="tab-data" role="tab" aria-controls="panel-data" aria-selected="false"
-                  data-target="data"
-                  class="layers-tab relative z-10 rounded-2xl px-4 py-3 text-sm font-semibold">
-            <span class="flex items-center justify-center gap-2">
-              <span class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-500 to-cyan-500">
-                <LuDatabase className="w-4 h-4 text-white" />
-              </span>
-              <span>Data</span>
-            </span>
-          </button>
-
-          <button id="tab-impl" role="tab" aria-controls="panel-impl" aria-selected="false"
-                  data-target="impl"
-                  class="layers-tab relative z-10 rounded-2xl px-4 py-3 text-sm font-semibold">
-            <span class="flex items-center justify-center gap-2">
-              <span class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-green-500 to-emerald-500">
-                <LuCode className="w-4 h-4 text-white" />
-              </span>
-              <span>Logic</span>
-            </span>
-          </button>
+    <div class="relative z-10">
+        <div class="mx-auto max-w-4xl text-center">
+            <div
+                class="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 mb-6"
+            >
+                <div class="w-2 h-2 bg-indigo-500 rounded-full animate-pulse">
+                </div>
+                Multi-Layer Views
+            </div>
+            <h2
+                class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-indigo-500 to-cyan-500 bg-clip-text text-transparent"
+            >
+                Business process, data, and implementation in <span
+                    class="text-indigo-500">one view</span
+                >
+            </h2>
+            <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
+                Use <strong>Layers</strong> so roles see what they need without leaving
+                the canvas. Switch context — keep the graph.
+            </p>
         </div>
 
-        <!-- grid: viz | panel -->
-        <div class="grid lg:grid-cols-[1fr_0.9fr] gap-0 border-t border-border/40">
-          <div class="relative p-4 lg:p-6">
-            <!-- Force LayerViz to fill the left side and stay crisp -->
-            <div class="h-[min(56vh,520px)] min-h-[360px]">
-              <LayerViz />
+        <!-- STAGE: tabs + viz + panel (no vertical stacking) -->
+        <div class="mx-auto mt-16 max-w-6xl">
+            <div
+                class="stage rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden"
+            >
+                <!-- tabs -->
+                <div
+                    id="layers-tabs"
+                    role="tablist"
+                    aria-label="Layer views"
+                    class="relative grid grid-cols-3 gap-2 p-3"
+                >
+                    <span
+                        id="tab-indicator"
+                        class="absolute top-3 left-3 h-[calc(100%-24px)] rounded-2xl border border-border/60 bg-muted/60 backdrop-blur-sm transition-[transform,width] duration-300 ease-out will-change-transform pointer-events-none"
+                    ></span>
+
+                    <button
+                        id="tab-business"
+                        role="tab"
+                        aria-controls="panel-business"
+                        aria-selected="true"
+                        data-target="business"
+                        class="layers-tab relative z-10 rounded-2xl px-4 py-3 text-sm font-semibold"
+                    >
+                        <span class="flex items-center justify-center gap-2">
+                            <span
+                                class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-500"
+                            >
+                                <LuBriefcaseBusiness
+                                    className="w-4 h-4 text-white"
+                                />
+                            </span>
+                            <span>Process</span>
+                        </span>
+                    </button>
+
+                    <button
+                        id="tab-data"
+                        role="tab"
+                        aria-controls="panel-data"
+                        aria-selected="false"
+                        data-target="data"
+                        class="layers-tab relative z-10 rounded-2xl px-4 py-3 text-sm font-semibold"
+                    >
+                        <span class="flex items-center justify-center gap-2">
+                            <span
+                                class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-500 to-cyan-500"
+                            >
+                                <LuDatabase className="w-4 h-4 text-white" />
+                            </span>
+                            <span>Data</span>
+                        </span>
+                    </button>
+
+                    <button
+                        id="tab-impl"
+                        role="tab"
+                        aria-controls="panel-impl"
+                        aria-selected="false"
+                        data-target="impl"
+                        class="layers-tab relative z-10 rounded-2xl px-4 py-3 text-sm font-semibold"
+                    >
+                        <span class="flex items-center justify-center gap-2">
+                            <span
+                                class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-green-500 to-emerald-500"
+                            >
+                                <LuCode className="w-4 h-4 text-white" />
+                            </span>
+                            <span>Logic</span>
+                        </span>
+                    </button>
+                </div>
+
+                <!-- grid: viz | panel -->
+                <div
+                    class="grid lg:grid-cols-[1fr_0.9fr] gap-0 border-t border-border/40"
+                >
+                    <div class="relative p-4 lg:p-6">
+                        <!-- Force LayerViz to fill the left side and stay crisp -->
+                        <div class="h-[min(56vh,520px)] min-h-[360px]">
+                            <LayerViz />
+                        </div>
+                    </div>
+
+                    <div class="relative p-4 lg:p-6">
+                        <div
+                            id="layers-panels"
+                            class="relative h-[min(56vh,520px)] min-h-[360px]"
+                        >
+                            <!-- panels are absolutely stacked; we just fade between them -->
+                            <article
+                                id="panel-business"
+                                role="tabpanel"
+                                aria-labelledby="tab-business"
+                                aria-hidden="false"
+                                class="panel data-[state=active]:opacity-100 data-[state=active]:translate-y-0"
+                            >
+                                <h3 class="text-xl font-bold mb-2">
+                                    Business Layer
+                                </h3>
+                                <p
+                                    class="text-muted-foreground leading-relaxed"
+                                >
+                                    <em>Warranty Claim Intake</em>: submit →
+                                    triage → approve/decline → notify →
+                                    payout/repair.
+                                </p>
+                                <div class="mt-6 grid grid-cols-2 gap-4">
+                                    <div
+                                        class="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4"
+                                    >
+                                        <div
+                                            class="mb-1 font-semibold text-indigo-700 dark:text-indigo-300"
+                                        >
+                                            Process Flow
+                                        </div>
+                                        <div
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Visual workflow representation
+                                        </div>
+                                    </div>
+                                    <div
+                                        class="rounded-xl border border-purple-500/20 bg-purple-500/10 p-4"
+                                    >
+                                        <div
+                                            class="mb-1 font-semibold text-purple-700 dark:text-purple-300"
+                                        >
+                                            Decision Points
+                                        </div>
+                                        <div
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Approval gates & routing
+                                        </div>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article
+                                id="panel-data"
+                                role="tabpanel"
+                                aria-labelledby="tab-data"
+                                aria-hidden="true"
+                                class="panel"
+                            >
+                                <h3 class="text-xl font-bold mb-2">
+                                    Data Layer
+                                </h3>
+                                <p
+                                    class="text-muted-foreground leading-relaxed"
+                                >
+                                    PostgreSQL <code
+                                        class="rounded bg-muted px-1.5 py-0.5"
+                                        >claims</code
+                                    >, object storage (photos), document store
+                                    (reports). Schemas appear at ports and
+                                    validate pre-deploy.
+                                </p>
+                                <div class="mt-6 grid grid-cols-2 gap-4">
+                                    <div
+                                        class="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4"
+                                    >
+                                        <div
+                                            class="font-semibold text-blue-700 dark:text-blue-300"
+                                        >
+                                            Schema Validation
+                                        </div>
+                                        <div
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Type-safe data contracts
+                                        </div>
+                                    </div>
+                                    <div
+                                        class="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4"
+                                    >
+                                        <div
+                                            class="font-semibold text-cyan-700 dark:text-cyan-300"
+                                        >
+                                            Data Sources
+                                        </div>
+                                        <div
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Multiple system integration
+                                        </div>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article
+                                id="panel-impl"
+                                role="tabpanel"
+                                aria-labelledby="tab-impl"
+                                aria-hidden="true"
+                                class="panel"
+                            >
+                                <h3 class="text-xl font-bold mb-2">
+                                    Implementation Layer
+                                </h3>
+                                <p
+                                    class="text-muted-foreground leading-relaxed"
+                                >
+                                    <code class="rounded bg-muted px-1.5 py-0.5"
+                                        >HTTP.Intake</code
+                                    > →
+                                    <code class="rounded bg-muted px-1.5 py-0.5"
+                                        >Classify.Image</code
+                                    > →
+                                    <code class="rounded bg-muted px-1.5 py-0.5"
+                                        >Human.Approval</code
+                                    > →
+                                    <code class="rounded bg-muted px-1.5 py-0.5"
+                                        >ERP.CreateCase</code
+                                    > →
+                                    <code class="rounded bg-muted px-1.5 py-0.5"
+                                        >Notify.Email/SMS</code
+                                    >. Tests & policies live on edges.
+                                </p>
+                                <div class="mt-6 grid grid-cols-2 gap-4">
+                                    <div
+                                        class="rounded-xl border border-green-500/20 bg-green-500/10 p-4"
+                                    >
+                                        <div
+                                            class="font-semibold text-green-700 dark:text-green-300"
+                                        >
+                                            Typed Nodes
+                                        </div>
+                                        <div
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Runtime-safe components
+                                        </div>
+                                    </div>
+                                    <div
+                                        class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4"
+                                    >
+                                        <div
+                                            class="font-semibold text-emerald-700 dark:text-emerald-300"
+                                        >
+                                            Edge Policies
+                                        </div>
+                                        <div
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Testing & governance
+                                        </div>
+                                    </div>
+                                </div>
+                            </article>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
-
-          <div class="relative p-4 lg:p-6">
-            <div id="layers-panels" class="relative h-[min(56vh,520px)] min-h-[360px]">
-              <!-- panels are absolutely stacked; we just fade between them -->
-              <article id="panel-business" role="tabpanel" aria-labelledby="tab-business" aria-hidden="false"
-                       class="panel data-[state=active]:opacity-100 data-[state=active]:translate-y-0">
-                <h3 class="text-xl font-bold mb-2">Business Layer</h3>
-                <p class="text-muted-foreground leading-relaxed">
-                  <em>Warranty Claim Intake</em>: submit → triage → approve/decline → notify → payout/repair.
-                </p>
-                <div class="mt-6 grid grid-cols-2 gap-4">
-                  <div class="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4">
-                    <div class="mb-1 font-semibold text-indigo-700 dark:text-indigo-300">Process Flow</div>
-                    <div class="text-xs text-muted-foreground">Visual workflow representation</div>
-                  </div>
-                  <div class="rounded-xl border border-purple-500/20 bg-purple-500/10 p-4">
-                    <div class="mb-1 font-semibold text-purple-700 dark:text-purple-300">Decision Points</div>
-                    <div class="text-xs text-muted-foreground">Approval gates & routing</div>
-                  </div>
-                </div>
-              </article>
-
-              <article id="panel-data" role="tabpanel" aria-labelledby="tab-data" aria-hidden="true" class="panel">
-                <h3 class="text-xl font-bold mb-2">Data Layer</h3>
-                <p class="text-muted-foreground leading-relaxed">
-                  PostgreSQL <code class="rounded bg-muted px-1.5 py-0.5">claims</code>, object storage (photos), document store (reports). Schemas appear at ports and validate pre-deploy.
-                </p>
-                <div class="mt-6 grid grid-cols-2 gap-4">
-                  <div class="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4">
-                    <div class="font-semibold text-blue-700 dark:text-blue-300">Schema Validation</div>
-                    <div class="text-xs text-muted-foreground">Type-safe data contracts</div>
-                  </div>
-                  <div class="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4">
-                    <div class="font-semibold text-cyan-700 dark:text-cyan-300">Data Sources</div>
-                    <div class="text-xs text-muted-foreground">Multiple system integration</div>
-                  </div>
-                </div>
-              </article>
-
-              <article id="panel-impl" role="tabpanel" aria-labelledby="tab-impl" aria-hidden="true" class="panel">
-                <h3 class="text-xl font-bold mb-2">Implementation Layer</h3>
-                <p class="text-muted-foreground leading-relaxed">
-                  <code class="rounded bg-muted px-1.5 py-0.5">HTTP.Intake</code> →
-                  <code class="rounded bg-muted px-1.5 py-0.5">Classify.Image</code> →
-                  <code class="rounded bg-muted px-1.5 py-0.5">Human.Approval</code> →
-                  <code class="rounded bg-muted px-1.5 py-0.5">ERP.CreateCase</code> →
-                  <code class="rounded bg-muted px-1.5 py-0.5">Notify.Email/SMS</code>.
-                  Tests & policies live on edges.
-                </p>
-                <div class="mt-6 grid grid-cols-2 gap-4">
-                  <div class="rounded-xl border border-green-500/20 bg-green-500/10 p-4">
-                    <div class="font-semibold text-green-700 dark:text-green-300">Typed Nodes</div>
-                    <div class="text-xs text-muted-foreground">Runtime-safe components</div>
-                  </div>
-                  <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
-                    <div class="font-semibold text-emerald-700 dark:text-emerald-300">Edge Policies</div>
-                    <div class="text-xs text-muted-foreground">Testing & governance</div>
-                  </div>
-                </div>
-              </article>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div><!-- /stage -->
-  </div>
+        </div><!-- /stage -->
+    </div>
 </section>
 
 <script>
-(() => {
-  type PanelKey = "business" | "data" | "impl";
+    (() => {
+        type PanelKey = "business" | "data" | "impl";
 
-  const tablist = document.getElementById("layers-tabs") as HTMLElement | null;
-  if (!tablist) return;
+        const tablist = document.getElementById(
+            "layers-tabs",
+        ) as HTMLElement | null;
+        if (!tablist) return;
 
-  const tabs = Array.from(
-    tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-  );
+        const tabs = Array.from(
+            tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+        );
 
-  const panels: Record<PanelKey, HTMLElement | null> = {
-    business: document.getElementById("panel-business"),
-    data: document.getElementById("panel-data"),
-    impl: document.getElementById("panel-impl"),
-  };
+        const panels: Record<PanelKey, HTMLElement | null> = {
+            business: document.getElementById("panel-business"),
+            data: document.getElementById("panel-data"),
+            impl: document.getElementById("panel-impl"),
+        };
 
-  const viz = document.getElementById("viz-layers") as HTMLElement | null;
-  const indicator = document.getElementById("tab-indicator") as HTMLSpanElement | null;
+        const viz = document.getElementById("viz-layers") as HTMLElement | null;
+        const indicator = document.getElementById(
+            "tab-indicator",
+        ) as HTMLSpanElement | null;
 
-  const setActive = (key: PanelKey): void => {
-    tabs.forEach((t) =>
-      t.setAttribute("aria-selected", String(t.dataset.target === key))
-    );
+        const setActive = (key: PanelKey): void => {
+            tabs.forEach((t) =>
+                t.setAttribute(
+                    "aria-selected",
+                    String(t.dataset.target === key),
+                ),
+            );
 
-    (Object.entries(panels) as [PanelKey, HTMLElement | null][])
-      .forEach(([k, el]) => {
-        if (!el) return;
-        const active = k === key;
-        el.dataset.state = active ? "active" : "inactive";
-        el.setAttribute("aria-hidden", String(!active));
-      });
+            (
+                Object.entries(panels) as [PanelKey, HTMLElement | null][]
+            ).forEach(([k, el]) => {
+                if (!el) return;
+                const active = k === key;
+                el.dataset.state = active ? "active" : "inactive";
+                el.setAttribute("aria-hidden", String(!active));
+            });
 
-    if (viz) viz.setAttribute("data-active", key);
+            if (viz) viz.setAttribute("data-active", key);
 
-    const activeTab = tabs.find((t) => t.dataset.target === key);
-    if (activeTab && indicator) {
-      const { offsetLeft, offsetWidth } = activeTab;
-      indicator.style.width = `${offsetWidth}px`;
-      indicator.style.transform = `translateX(${offsetLeft}px)`;
-    }
-  };
+            const activeTab = tabs.find((t) => t.dataset.target === key);
+            if (activeTab && indicator) {
+                const { offsetLeft, offsetWidth } = activeTab;
+                indicator.style.width = `${offsetWidth}px`;
+                indicator.style.transform = `translateX(${offsetLeft}px)`;
+            }
+        };
 
-  const initial = (tabs.find((t) =>
-    t.getAttribute("aria-selected") === "true"
-  )?.dataset.target ?? "business") as PanelKey;
-  setActive(initial);
+        const initial = (tabs.find(
+            (t) => t.getAttribute("aria-selected") === "true",
+        )?.dataset.target ?? "business") as PanelKey;
+        setActive(initial);
 
-  tabs.forEach((btn) =>
-    btn.addEventListener("click", () =>
-      setActive(btn.dataset.target as PanelKey)
-    )
-  );
+        tabs.forEach((btn) =>
+            btn.addEventListener("click", () =>
+                setActive(btn.dataset.target as PanelKey),
+            ),
+        );
 
-  tablist.addEventListener("keydown", (e: KeyboardEvent) => {
-    const i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
-    let n = i;
+        tablist.addEventListener("keydown", (e: KeyboardEvent) => {
+            const i = tabs.findIndex(
+                (t) => t.getAttribute("aria-selected") === "true",
+            );
+            let n = i;
 
-    switch (e.key) {
-      case "ArrowRight": n = (i + 1) % tabs.length; break;
-      case "ArrowLeft":  n = (i - 1 + tabs.length) % tabs.length; break;
-      case "Home":       n = 0; break;
-      case "End":        n = tabs.length - 1; break;
-      case "Enter":
-      case " ":
-        e.preventDefault();
-        setActive(tabs[i].dataset.target as PanelKey);
-        return;
-      default: return;
-    }
-    e.preventDefault();
-    tabs[n].focus();
-    setActive(tabs[n].dataset.target as PanelKey);
-  });
+            switch (e.key) {
+                case "ArrowRight":
+                    n = (i + 1) % tabs.length;
+                    break;
+                case "ArrowLeft":
+                    n = (i - 1 + tabs.length) % tabs.length;
+                    break;
+                case "Home":
+                    n = 0;
+                    break;
+                case "End":
+                    n = tabs.length - 1;
+                    break;
+                case "Enter":
+                case " ":
+                    e.preventDefault();
+                    setActive(tabs[i].dataset.target as PanelKey);
+                    return;
+                default:
+                    return;
+            }
+            e.preventDefault();
+            tabs[n].focus();
+            setActive(tabs[n].dataset.target as PanelKey);
+        });
 
-  const ro = new ResizeObserver(() => {
-    const active = tabs.find((t) => t.getAttribute("aria-selected") === "true");
-    if (active && indicator) {
-      indicator.style.width = `${active.offsetWidth}px`;
-      indicator.style.transform = `translateX(${active.offsetLeft}px)`;
-    }
-  });
+        const ro = new ResizeObserver(() => {
+            const active = tabs.find(
+                (t) => t.getAttribute("aria-selected") === "true",
+            );
+            if (active && indicator) {
+                indicator.style.width = `${active.offsetWidth}px`;
+                indicator.style.transform = `translateX(${active.offsetLeft}px)`;
+            }
+        });
 
-  ro.observe(tablist);
-  tabs.forEach((t) => ro.observe(t));
-})();
+        ro.observe(tablist);
+        tabs.forEach((t) => ro.observe(t));
+    })();
 </script>
 
 <style>
-  /* Stage layout + fixed height to avoid big empty areas */
-  .stage { --stage-h: min(56vh, 520px); }
+    /* Stage layout + fixed height to avoid big empty areas */
+    .stage {
+        --stage-h: min(56vh, 520px);
+    }
 
-  /* Panels: stacked in place (no layout shift) */
-  .panel {
-    position: absolute; inset: 0;
-    opacity: 0; transform: translateY(6px);
-    transition: opacity 220ms ease, transform 220ms ease;
-    pointer-events: none; padding: .5rem;
-  }
-  .panel[data-state="active"] {
-    opacity: 1; transform: translateY(0); pointer-events: auto;
-  }
+    /* Panels: stacked in place (no layout shift) */
+    .panel {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        transform: translateY(6px);
+        transition:
+            opacity 220ms ease,
+            transform 220ms ease;
+        pointer-events: none;
+        padding: 0.5rem;
+    }
+    .panel[data-state="active"] {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
 
-  /* Tabs text color */
-  .layers-tab { color: hsl(var(--foreground)/.82); }
-  .layers-tab[aria-selected="true"] { color: hsl(var(--foreground)); }
+    /* Tabs text color */
+    .layers-tab {
+        color: hsl(var(--foreground) / 0.82);
+    }
+    .layers-tab[aria-selected="true"] {
+        color: hsl(var(--foreground));
+    }
 
-  /* Make LayerViz fill left column and keep ghosts visible */
-  #viz-layers { width: 100% !important; height: 100% !important; max-width: none !important; }
-  #viz-layers .plane { opacity: .33; filter: saturate(.95) brightness(.98); }
-  #viz-layers[data-active="business"] [data-k="business"],
-  #viz-layers[data-active="data"]     [data-k="data"],
-  #viz-layers[data-active="impl"]     [data-k="impl"] {
-    opacity: 1; filter: none;
-  }
+    /* Make LayerViz fill left column and keep ghosts visible */
+    #viz-layers {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+    }
+    #viz-layers .plane {
+        opacity: 0.33;
+        filter: saturate(0.95) brightness(0.98);
+    }
+    #viz-layers[data-active="business"] [data-k="business"],
+    #viz-layers[data-active="data"] [data-k="data"],
+    #viz-layers[data-active="impl"] [data-k="impl"] {
+        opacity: 1;
+        filter: none;
+    }
 
-  /* Crisp labels inside the viz (override) */
-  #viz-layers svg { text-rendering: geometricPrecision; -webkit-font-smoothing: antialiased; }
-  #viz-layers .label { filter: none; paint-order: stroke; stroke: rgba(0,0,0,.55); stroke-width: .6px; font-size: 14px; }
+    /* Crisp labels inside the viz (override) */
+    #viz-layers svg {
+        text-rendering: geometricPrecision;
+        -webkit-font-smoothing: antialiased;
+    }
+    #viz-layers .label {
+        filter: none;
+        paint-order: stroke;
+        stroke: rgba(0, 0, 0, 0.55);
+        stroke-width: 0.6px;
+        font-size: 14px;
+    }
 
-  @media (max-width: 1023px) {
-    /* On mobile: stack but still within one stage block */
-    .stage .grid { grid-template-columns: 1fr; }
-    #tab-indicator { display: none; } /* simpler UI on small screens */
-  }
+    @media (max-width: 1023px) {
+        /* On mobile: stack but still within one stage block */
+        .stage .grid {
+            grid-template-columns: 1fr;
+        }
+        #tab-indicator {
+            display: none;
+        } /* simpler UI on small screens */
+    }
 
-  @media (prefers-reduced-motion: reduce) {
-    #tab-indicator, .panel { transition: none !important; }
-  }
-
-
+    @media (prefers-reduced-motion: reduce) {
+        #tab-indicator,
+        .panel {
+            transition: none !important;
+        }
+    }
 </style>

@@ -1,6 +1,5 @@
 ---
 import { Image } from "astro:assets";
-
 import { LuLock, LuSearch, LuUnplug } from "react-icons/lu";
 
 import designOverview from "../images/index/design-overview.png";
@@ -8,129 +7,288 @@ import designValidation from "../images/index/design-validation.png";
 ---
 
 <section
-    id="builder"
-    data-c1="hsl(222 89% 60% / .10)"
-    data-c2="hsl(268 84% 62% / .10)"
-    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+  id="builder"
+  data-c1="hsl(222 89% 60% / .10)"
+  data-c2="hsl(268 84% 62% / .10)"
+  class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
 >
-    <div class="relative z-10 grid items-center gap-16 lg:grid-cols-5">
-        <div class="space-y-8 w-full lg:col-span-2">
+  <!-- decorative bg -->
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_15%_25%,var(--c1,transparent),transparent)]"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_85%_35%,var(--c2,transparent),transparent)]"></div>
+    <div class="absolute inset-0 [mask-image:radial-gradient(70%_70%_at_50%_40%,black,transparent)] bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"></div>
+  </div>
+
+  <div class="relative z-10 grid items-start gap-10 lg:gap-16 lg:grid-cols-12">
+    <!-- LEFT: sticky copy -->
+    <div class="space-y-8 w-full lg:col-span-5 lg:sticky lg:top-24 reveal">
+      <div>
+        <div
+          class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6"
+        >
+          <div class="w-2 h-2 bg-secondary rounded-full animate-pulse"></div>
+          Visual Design
+        </div>
+
+        <h2
+          class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground to-secondary bg-clip-text text-transparent leading-tight"
+        >
+          Design workflows <span class="text-secondary">visually</span>
+        </h2>
+
+        <p class="mt-6 text-lg text-muted-foreground">
+          Drag nodes, wire typed pins, and validate as you go. Inline errors keep graphs
+          shippable. Snapshot inputs to reproduce issues and compare runs.
+        </p>
+      </div>
+
+      <!-- feature cards -->
+      <div class="space-y-4">
+        <div
+          class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300 reveal"
+        >
+          <div class="flex items-start gap-4">
+            <div
+              class="w-10 h-10 bg-gradient-to-br from-primary to-primary/60 rounded-lg flex items-center justify-center flex-shrink-0"
+            >
+              <LuUnplug className="w-6 h-6 text-primary-foreground" />
+            </div>
             <div>
-                <div
-                    class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6"
-                >
-                    <div
-                        class="w-2 h-2 bg-secondary rounded-full animate-pulse"
-                    >
-                    </div>
-                    Visual Design
-                </div>
-                <h2
-                    class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground to-secondary bg-clip-text text-transparent"
-                >
-                    Design workflows <span class="text-secondary">visually</span
-                    >
-                </h2>
-                <p class="mt-6 text-lg text-muted-foreground">
-                    Drag nodes, wire typed pins, and validate as you go. Inline
-                    errors keep graphs shippable. Snapshot inputs to reproduce
-                    issues and compare runs.
-                </p>
+              <h3 class="font-semibold text-lg">Typed pins</h3>
+              <p class="text-muted-foreground">Ports know their schema, so refactors are safe.</p>
             </div>
-
-            <div class="space-y-4">
-                <div
-                    class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
-                >
-                    <div class="flex items-start gap-4">
-                        <div
-                            class="w-10 h-10 bg-gradient-to-br from-primary to-primary/60 rounded-lg flex items-center justify-center flex-shrink-0"
-                        >
-                            <LuUnplug
-                                className="w-6 h-6 text-primary-foreground"
-                            />
-                        </div>
-                        <div>
-                            <h3 class="font-semibold text-lg">Typed pins</h3>
-                            <p class="text-muted-foreground">
-                                ports know their schema so refactors are safe.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div
-                    class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
-                >
-                    <div class="flex items-start gap-4">
-                        <div
-                            class="w-10 h-10 bg-gradient-to-br from-secondary to-secondary/60 rounded-lg flex items-center justify-center flex-shrink-0"
-                        >
-                            <LuLock
-                                className="w-6 h-6 text-secondary-foreground"
-                            />
-                        </div>
-                        <div>
-                            <h3 class="font-semibold text-lg">
-                                Inline validation
-                            </h3>
-                            <p class="text-muted-foreground">
-                                miswired edges are surfaced immediately.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div
-                    class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
-                >
-                    <div class="flex items-start gap-4">
-                        <div
-                            class="w-10 h-10 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-lg flex items-center justify-center flex-shrink-0"
-                        >
-                            <LuSearch
-                                className="w-6 h-6 text-tertiary-foreground"
-                            />
-                        </div>
-                        <div>
-                            <h3 class="font-semibold text-lg">Observability</h3>
-                            <p class="text-muted-foreground">
-                                inspect payloads and timings at every edge.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+          </div>
         </div>
 
-        <!-- imagery stays but loses heavy frames -->
-        <div class="relative w-full lg:col-span-3">
-            <div class="relative grid grid-cols-2 gap-6">
-                <div class="space-y-6">
-                    <Image
-                        src={designValidation}
-                        alt="Inline validation"
-                        class="w-full h-auto rounded-2xl bg-background/40 backdrop-blur-sm object-cover"
-                        loading="lazy"
-                    />
-                </div>
-                <div class="flex items-center">
-                    <Image
-                        src={designOverview}
-                        alt="Node inspector"
-                        class="w-full h-auto rounded-2xl bg-background/40 backdrop-blur-sm object-cover"
-                        loading="lazy"
-                    />
-                </div>
+        <div
+          class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300 reveal"
+        >
+          <div class="flex items-start gap-4">
+            <div
+              class="w-10 h-10 bg-gradient-to-br from-secondary to-secondary/60 rounded-lg flex items-center justify-center flex-shrink-0"
+            >
+              <LuLock className="w-6 h-6 text-secondary-foreground" />
             </div>
-            <div class="flex justify-end">
-                <video
-                    src="/posts/rapid-prototyping.webm"
-                    autoplay
-                    muted
-                    class="rounded-xl shadow-lg border border-muted/40 my-4 w-full"
-                ></video>
+            <div>
+              <h3 class="font-semibold text-lg">Inline validation</h3>
+              <p class="text-muted-foreground">Miswired edges surface immediately.</p>
             </div>
+          </div>
         </div>
+
+        <div
+          class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300 reveal"
+        >
+          <div class="flex items-start gap-4">
+            <div
+              class="w-10 h-10 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-lg flex items-center justify-center flex-shrink-0"
+            >
+              <LuSearch className="w-6 h-6 text-tertiary-foreground" />
+            </div>
+            <div>
+              <h3 class="font-semibold text-lg">Observability</h3>
+              <p class="text-muted-foreground">Inspect payloads and timings at every edge.</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- RIGHT: parallax mosaic + video, with lightbox -->
+    <div class="relative w-full lg:col-span-7">
+      <!-- subtle spotlight -->
+      <div aria-hidden="true" class="absolute -top-8 -left-6 w-40 h-40 rounded-full bg-secondary/20 blur-3xl"></div>
+
+      <div class="relative grid grid-cols-12 gap-6">
+        <!-- Tall validation shot -->
+        <figure
+          class="group col-span-12 md:col-span-6 relative overflow-hidden rounded-2xl ring-1 ring-border/40 bg-background/40 backdrop-blur-sm shadow-xl reveal"
+          data-parallax="8"
+          data-zoomable
+        >
+          <Image
+            src={designValidation}
+            alt="Inline validation"
+            class="w-full h-full object-cover select-none transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+            loading="lazy"
+            decoding="async"
+            widths={[768, 1024, 1280, 1600, 1920, 2240]}
+            sizes="(min-width:1024px) 36rem, 92vw"
+            format="webp"
+          />
+          <figcaption class="absolute left-3 bottom-3 rounded-md border border-border/50 bg-background/70 backdrop-blur px-2.5 py-1 text-xs">
+            Inline validation
+          </figcaption>
+        </figure>
+
+        <!-- Wide overview shot -->
+        <figure
+          class="group col-span-12 md:col-span-6 relative overflow-hidden rounded-2xl ring-1 ring-border/40 bg-background/40 backdrop-blur-sm shadow-xl reveal"
+          data-parallax="4"
+          data-zoomable
+        >
+          <Image
+            src={designOverview}
+            alt="Node inspector & overview"
+            class="w-full h-full object-cover select-none transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+            loading="lazy"
+            decoding="async"
+            widths={[768, 1024, 1280, 1600, 1920, 2240]}
+            sizes="(min-width:1024px) 36rem, 92vw"
+            format="webp"
+          />
+          <figcaption class="absolute right-3 bottom-3 rounded-md border border-border/50 bg-background/70 backdrop-blur px-2.5 py-1 text-xs">
+            Overview & inspector
+          </figcaption>
+        </figure>
+
+        <!-- Video tile -->
+        <figure
+          class="group col-span-12 relative overflow-hidden rounded-2xl ring-1 ring-border/40 bg-background/40 backdrop-blur-sm shadow-xl reveal mt-10"
+          data-parallax="2"
+        >
+          <button
+            type="button"
+            class="absolute z-10 left-3 top-3 rounded-full border border-border/50 bg-background/70 backdrop-blur px-3 py-1 text-xs font-medium hover:scale-[1.03] active:scale-[0.98] transition"
+            data-lightbox-video="/posts/rapid-prototyping.webm"
+          >
+            Expand
+          </button>
+          <video
+            src="/posts/rapid-prototyping.webm"
+            autoplay
+            muted
+            playsinline
+            loop
+            class="w-full h-[320px] sm:h-[380px] lg:h-[420px] object-cover"
+          ></video>
+          <figcaption class="absolute left-3 bottom-3 rounded-md border border-border/50 bg-background/70 backdrop-blur px-2.5 py-1 text-xs">
+            Rapid prototyping (live)
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+
+  <!-- lightbox dialog (images + video) -->
+  <dialog
+    data-lightbox
+    class="backdrop:bg-black/70 rounded-2xl open:fixed open:inset-0 open:m-0 open:min-h-[100dvh] open:flex open:items-center open:justify-center p-0 max-w-[98vw] w-[98vw] m-0"
+  >
+    <div class="relative w-full">
+      <button
+        type="button"
+        aria-label="Close"
+        class="absolute right-3 top-3 z-10 rounded-full border border-border/50 bg-background/80 backdrop-blur px-3 py-1 text-xs font-medium hover:scale-[1.03] active:scale-[0.98] transition"
+        data-lightbox-close
+      >
+        Close
+      </button>
+      <div class="rounded-xl ring-1 ring-border/50 overflow-hidden shadow-2xl">
+        <!-- container for injected media -->
+        <div data-lightbox-body></div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- helpers: reveal, parallax, lightbox -->
+  <script is:inline>
+    (() => {
+      const reduce = matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+
+      // reveal-on-view
+      const reveals = document.querySelectorAll("#builder .reveal");
+      if (reveals.length && !reduce) {
+        const io = new IntersectionObserver((entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              e.target.classList.add("in");
+              io.unobserve(e.target);
+            }
+          });
+        }, { threshold: 0.12 });
+        reveals.forEach((el) => io.observe(el));
+      } else {
+        reveals.forEach((el) => el.classList.add("in"));
+      }
+
+      // parallax (lightweight)
+      const px = document.querySelectorAll("#builder [data-parallax]");
+      if (px.length && !reduce) {
+        const onScroll = () => {
+          const vh = window.innerHeight;
+          px.forEach((el) => {
+            const speed = Number(el.getAttribute("data-parallax")) || 6;
+            const rect = el.getBoundingClientRect();
+            const center = rect.top + rect.height / 2 - vh / 2;
+            const y = Math.max(-24, Math.min(24, -center / (40 / speed)));
+            el.style.transform = `translateY(${y}px)`;
+          });
+        };
+        onScroll();
+        window.addEventListener("scroll", onScroll, { passive: true });
+      }
+
+      // lightbox for images & video
+      const dlg = document.querySelector("#builder [data-lightbox]");
+      const body = dlg?.querySelector("[data-lightbox-body]");
+      const closeBtn = dlg?.querySelector("[data-lightbox-close]");
+
+      // images
+      document.querySelectorAll("#builder [data-zoomable] img").forEach((img) => {
+        img.style.cursor = "zoom-in";
+        img.addEventListener("click", () => {
+          if (!dlg || !body) return;
+          body.innerHTML = "";
+          const el = document.createElement("img");
+          el.src = (img.currentSrc || img.src);
+          el.alt = img.alt || "image";
+          el.className = "w-full h-auto object-contain";
+          body.appendChild(el);
+          dlg.showModal();
+        });
+      });
+
+      // video
+      document.querySelectorAll("#builder [data-lightbox-video]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const src = btn.getAttribute("data-lightbox-video");
+          if (!src || !dlg || !body) return;
+          body.innerHTML = "";
+          const v = document.createElement("video");
+          v.src = src;
+          v.controls = true;
+          v.autoplay = true;
+          v.playsInline = true;
+          v.className = "w-full h-auto";
+          body.appendChild(v);
+          dlg.showModal();
+        });
+      });
+
+      closeBtn?.addEventListener("click", () => dlg?.close());
+      dlg?.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });
+    })();
+  </script>
+
+  <style>
+    :where(#builder) { --c1: attr(data-c1); --c2: attr(data-c2); }
+
+    /* ensure dialog has no UA margin and is centered when opened (fallback for browsers/Tailwind variants) */
+    #builder [data-lightbox] { margin: 0; }
+    #builder [data-lightbox][open] {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh; /* covers mobile viewport correctly */
+      margin: 0;
+      padding: 0;
+    }
+
+    /* reveal animation */
+    #builder .reveal { opacity: 0; transform: translateY(12px); transition: opacity .6s ease, transform .6s ease; }
+    #builder .reveal.in { opacity: 1; transform: none; }
+  </style>
 </section>

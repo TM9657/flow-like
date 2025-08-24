@@ -4,106 +4,170 @@ import tracing from "../images/index/tracing.png";
 ---
 
 <section
-    id="performance"
-    data-c1="hsl(24 96% 60% / .10)"
-    data-c2="hsl(280 85% 65% / .10)"
-    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+  id="performance"
+  data-c1="hsl(24 96% 60% / .10)"
+  data-c2="hsl(280 85% 65% / .10)"
+  class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
 >
-    <div class="relative z-10 grid items-start gap-16 lg:grid-cols-2">
-        <div class="space-y-8">
-            <div>
-                <div
-                    class="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-orange-600 dark:text-orange-400 mb-6"
-                >
-                    <div
-                        class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"
-                    >
-                    </div>
-                    Rust Performance
-                </div>
-                <h2
-                    class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-orange-500 to-red-500 bg-clip-text text-transparent"
-                >
-                    Rust runtime for <span class="text-orange-500"
-                        >predictable</span
-                    > speed
-                </h2>
-                <p class="mt-6 text-lg text-muted-foreground">
-                    Flow-Like's runtime is written in Rust — tight memory
-                    control, back-pressure aware IO, and zero-copy on hot paths.
-                    Nodes are authored in Rust too, so you can lean on the
-                    ecosystem.
-                </p>
-            </div>
+  <!-- decorative bg -->
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_20%_20%,var(--c1,transparent),transparent)]"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_80%_30%,var(--c2,transparent),transparent)]"></div>
+    <div class="absolute inset-0 [mask-image:radial-gradient(60%_60%_at_50%_40%,black,transparent)] bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"></div>
+  </div>
 
-            <div class="grid grid-cols-2 gap-8">
-                <div
-                    class="rounded-2xl border border-orange-500/20 bg-gradient-to-br from-orange-500/10 to-red-500/10 backdrop-blur-sm p-8"
-                >
-                    <div
-                        class="text-5xl font-extrabold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent mb-3"
-                    >
-                        Rust
-                    </div>
-                    <div class="text-sm text-muted-foreground">
-                        foundation for runtime & nodes
-                    </div>
-                </div>
-                <div
-                    class="rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-purple-500/10 backdrop-blur-sm p-8"
-                >
-                    <div
-                        class="text-5xl font-extrabold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent mb-3"
-                    >
-                        0-copy
-                    </div>
-                    <div class="text-sm text-muted-foreground">hot paths</div>
-                </div>
-                <div
-                    class="rounded-2xl border border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-sm p-8"
-                >
-                    <div
-                        class="text-5xl font-extrabold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent mb-3"
-                    >
-                        Stable
-                    </div>
-                    <div class="text-sm text-muted-foreground">
-                        latency under load
-                    </div>
-                </div>
-                <div
-                    class="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-sm p-8"
-                >
-                    <div
-                        class="text-5xl font-extrabold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent mb-3"
-                    >
-                        Back-pressure
-                    </div>
-                    <div class="text-sm text-muted-foreground">aware IO</div>
-                </div>
-            </div>
-        </div>
+  <!-- big visual with overlayed copy -->
+  <div class="relative reveal">
+    <figure
+      class="group relative rounded-3xl border border-border/40 bg-gradient-to-b from-card/70 to-card/40 backdrop-blur-sm shadow-2xl overflow-hidden"
+    >
+      <!-- BIG: fixed height for readability; scales with viewport -->
+      <div class="relative h-[68vh] min-h-[520px] lg:h-[calc(760px)]">
+        <!-- glow -->
+        <div class="absolute inset-0 -z-10 rounded-[1.6rem] bg-[conic-gradient(at_50%_50%,theme(colors.orange.500/.25),transparent_30%,theme(colors.purple.500/.25),transparent_60%)] blur-2xl opacity-40 group-hover:opacity-60 transition-opacity"></div>
 
-        <div class="relative">
-            <div
-                class="rounded-3xl border border-border/40 bg-gradient-to-b from-card/60 to-card/40 backdrop-blur-sm p-8"
+        <!-- the screenshot (no cropping, super crisp) -->
+        <Image
+          src={tracing}
+          alt="Traces and timings — Flow-Like instrumentation"
+          class="absolute inset-0 m-auto h-full w-full object-contain select-none transition-transform duration-700 ease-out group-hover:scale-[1.015] mt-28 ml-10"
+          loading="lazy"
+          decoding="async"
+          widths={[1280,1600,1920,2240,2560,2880,3200]}
+          sizes="min(100vw, 80rem)"
+          quality={"max"}
+          format="webp"
+        />
+
+        <!-- overlayed copy -->
+        <div
+          class="absolute left-0 top-0 p-4 sm:p-6 lg:p-8 w-[min(40rem,92vw)]"
+        >
+          <div
+            class="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-orange-600 dark:text-orange-400 mb-4"
+          >
+            <div class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
+            Rust Performance
+          </div>
+
+          <div
+            class="rounded-2xl border border-border/40 bg-background/70 backdrop-blur-xl p-5 sm:p-6 lg:p-7 shadow-lg"
+          >
+            <h2
+              class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-orange-500 to-red-500 bg-clip-text text-transparent leading-tight"
             >
-                <div class="mb-6">
-                    <div class="text-lg font-semibold mb-2">
-                        Instrumentation
-                    </div>
-                    <p class="text-muted-foreground">
-                        Trace spans, per-edge timings, and payload previews —
-                        directly in the UI.
-                    </p>
-                </div>
-                <Image
-                    src={tracing}
-                    alt="Traces and timings"
-                    class="w-full h-auto rounded-2xl bg-background/40 backdrop-blur-sm object-cover"
-                    loading="lazy"
-                />
+              Rust runtime for <span class="text-orange-500">predictable</span> speed
+            </h2>
+            <p class="mt-4 sm:mt-5 text-base sm:text-lg text-muted-foreground">
+              Tight memory control, back-pressure aware IO, and zero-copy on hot paths.
+              Nodes are authored in Rust too — lean on the ecosystem without sacrificing performance.
+            </p>
+
+            <!-- compact feature tags -->
+            <div class="mt-5 flex flex-wrap gap-2">
+              <span class="rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-xs font-medium">Rust runtime</span>
+              <span class="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-xs font-medium">0-copy hot paths</span>
+              <span class="rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1 text-xs font-medium">Stable latency</span>
+              <span class="rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1 text-xs font-medium">Back-pressure IO</span>
             </div>
+
+            <!-- benchmark hint -->
+            <div class="mt-4 text-xs sm:text-sm text-muted-foreground">
+              Benchmarks <span class="opacity-80">(coming soon…)</span>
+            </div>
+          </div>
         </div>
+
+        <!-- zoom control -->
+        <button
+          type="button"
+          aria-label="Open trace screenshot in full screen"
+          class="absolute right-4 top-4 z-10 rounded-full border border-border/50 bg-background/70 backdrop-blur px-3 py-1 text-xs font-medium hover:scale-[1.03] active:scale-[0.98] transition"
+          data-zoom-open
+        >
+          Zoom
+        </button>
+      </div>
+    </figure>
+  </div>
+
+  <!-- fullscreen zoom dialog -->
+  <dialog
+    data-zoom-dialog
+    class="backdrop:bg-black/70 rounded-2xl open:fixed open:inset-0 open:m-0 open:min-h-[100dvh] open:min-w-[100dvw] open:flex open:items-center open:justify-center p-0 m-0"
+  >
+    <div class="relative w-full max-w-[100dvw] mx-auto">
+      <button
+        type="button"
+        aria-label="Close"
+        class="absolute right-3 top-3 z-10 rounded-full border border-border/50 bg-background/80 backdrop-blur px-3 py-1 text-xs font-medium hover:scale-[1.03] active:scale-[0.98] transition"
+        data-zoom-close
+      >
+        Close
+      </button>
+      <div class="rounded-xl ring-1 ring-border/50 overflow-hidden shadow-2xl">
+        <Image
+          src={tracing}
+          alt="Traces and timings — full size"
+          class="w-full h-auto object-contain"
+          loading="eager"
+          decoding="async"
+          widths={[1600,1920,2240,2560,2880,3200,3840]}
+          quality={"max"}
+          sizes="98vw"
+          format="webp"
+        />
+      </div>
     </div>
+  </dialog>
+
+  <!-- reveal + zoom helpers -->
+  <script is:inline>
+    (() => {
+      const reduceMotion = matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+      // reveal
+      const r = document.querySelectorAll("#performance .reveal");
+      if (r.length && !reduceMotion) {
+        const io = new IntersectionObserver((es) => {
+          es.forEach((e) => {
+            if (e.isIntersecting) {
+              e.target.classList.add("in");
+              io.unobserve(e.target);
+            }
+          });
+        }, { threshold: 0.12 });
+        r.forEach((el) => io.observe(el));
+      } else {
+        r.forEach((el) => el.classList.add("in"));
+      }
+      // zoom dialog
+      const dlg = document.querySelector("#performance [data-zoom-dialog]");
+      const openBtn = document.querySelector("#performance [data-zoom-open]");
+      const closeBtn = document.querySelector("#performance [data-zoom-close]");
+      openBtn?.addEventListener("click", () => dlg?.showModal());
+      closeBtn?.addEventListener("click", () => dlg?.close());
+      dlg?.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });
+    })();
+  </script>
+
+  <style>
+    :where(#performance) { --c1: attr(data-c1); --c2: attr(data-c2); }
+
+    /* ensure dialog has no UA margin and is centered when opened (fallback for browsers/Tailwind variants) */
+    #performance [data-zoom-dialog] { margin: 0; }
+    #performance [data-zoom-dialog][open] {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh; /* covers mobile viewport correctly */
+      margin: 0;
+      padding: 0;
+    }
+
+    /* reveal animation */
+    #performance .reveal { opacity: 0; transform: translateY(12px); transition: opacity .6s ease, transform .6s ease; }
+    #performance .reveal.in { opacity: 1; transform: none; }
+  </style>
 </section>
