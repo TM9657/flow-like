@@ -1,5 +1,15 @@
 "use client";
 import {
+	PersistQueryClientProvider,
+	QueryClient,
+	ReactFlowProvider,
+} from "@tm9657/flow-like-ui";
+import { ThemeProvider } from "@tm9657/flow-like-ui/components/theme-provider";
+import { Toaster } from "@tm9657/flow-like-ui/components/ui/sonner";
+import { TooltipProvider } from "@tm9657/flow-like-ui/components/ui/tooltip";
+import "@tm9657/flow-like-ui/global.css";
+import { createIDBPersister } from "@tm9657/flow-like-ui/lib/persister";
+import {
 	Architects_Daughter,
 	DM_Sans,
 	Fira_Code,
@@ -26,16 +36,6 @@ import {
 	Space_Grotesk,
 	Space_Mono,
 } from "next/font/google";
-import "@tm9657/flow-like-ui/global.css";
-import {
-	PersistQueryClientProvider,
-	QueryClient,
-	ReactFlowProvider,
-} from "@tm9657/flow-like-ui";
-import { ThemeProvider } from "@tm9657/flow-like-ui/components/theme-provider";
-import { Toaster } from "@tm9657/flow-like-ui/components/ui/sonner";
-import { TooltipProvider } from "@tm9657/flow-like-ui/components/ui/tooltip";
-import { createIDBPersister } from "@tm9657/flow-like-ui/lib/persister";
 import { AppSidebar } from "../components/app-sidebar";
 import { DesktopAuthProvider } from "../components/auth-provider";
 import GlobalAnchorHandler from "../components/global-anchor-component";

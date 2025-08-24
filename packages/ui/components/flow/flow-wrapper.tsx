@@ -48,16 +48,33 @@ export function FlowWrapper({
 		<DndContext
 			sensors={sensors}
 			onDragEnd={(event) => {
-				if (event.over?.id !== "flow") return;
-				console.dir(event);
-				const mouseEvent: MouseEvent = event.activatorEvent as MouseEvent;
-				setDetail({
-					variable: event.active.data.current as IVariable,
-					screenPosition: {
-						x: mouseEvent.screenX + event.delta.x,
-						y: mouseEvent.screenY + event.delta.y,
-					},
-				});
+				if (!event.over) return;
+				const overId = String(event.over.id);
+				const variable = event.active.data.current as IVariable | undefined;
+				if (!variable) return;
+
+				// Dropped on the canvas -> ask user whether to Get/Set
+				if (overId === "flow") {
+					const mouseEvent: MouseEvent = event.activatorEvent as MouseEvent;
+					setDetail({
+						variable,
+						screenPosition: {
+							x: mouseEvent.screenX + event.delta.x,
+							y: mouseEvent.screenY + event.delta.y,
+						},
+					});
+					return;
+				}
+
+				// Dropped on a folder or root -> broadcast to VariablesMenu
+				document.dispatchEvent(
+					new CustomEvent("variables-folder-drop", {
+						detail: {
+							variable,
+							targetPath: overId, // "__root" for top-level
+						},
+					}),
+				);
 			}}
 		>
 			<FlowBoard

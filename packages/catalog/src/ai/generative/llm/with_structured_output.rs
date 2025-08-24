@@ -3,10 +3,8 @@
 /// Effectively, this is a forced single-tool call configuration.
 /// Node execution can fail if the LLM produces an output that cannot be parsed as JSON or if the JSON produced violates the specified schema.
 /// If node execution succeeds, however, the output is *guaranteed* to be valid JSON data that aligns with the specified schema.
-use crate::ai::generative::llm::with_tools::extract_tagged;
-use crate::utils::json::parse_with_schema::{
-    validate_openai_function_str, validate_openai_tool_call_str,
-};
+use crate::ai::generative::llm::invoke_with_tools::extract_tagged;
+use crate::utils::json::parse_with_schema::tool_call_from_str;
 use flow_like::{
     bit::Bit,
     flow::{
@@ -17,8 +15,8 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::history::{History, HistoryMessage, Role};
-use flow_like_types::{anyhow, async_trait, json};
+use flow_like_model_provider::history::{History, HistoryMessage, Role, Tool};
+use flow_like_types::{Value, anyhow, async_trait, json};
 
 const SYSTEM_PROMPT_TEMPLATE: &str = r#"
 # Instructions
@@ -41,7 +39,7 @@ TOOL_STR
 <tooluse>
     {
         "name": "<name of the tool>",
-        "args": "<key: value dict for args as defined by schema>"
+        "arguments": "<key: value dict for args as defined by schema>"
     }
 </tooluse>
 
@@ -77,9 +75,9 @@ impl NodeLogic for LLMWithStructuredOutput {
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
-            "schema",
-            "Schema",
-            "JSON Schema or OpenAI Function Definition",
+            "tool",
+            "Tool/Schema",
+            "Tool Definition / JSON Schema for Structured Response",
             VariableType::String,
         );
 
@@ -114,9 +112,15 @@ impl NodeLogic for LLMWithStructuredOutput {
 
         // fetch inputs
         let model = context.evaluate_pin::<Bit>("model").await?;
-        let definition_str: String = context.evaluate_pin("schema").await?; // todo: at some point this will be a struct
+        let tool_str: String = context.evaluate_pin("tool").await?; // todo: at some point this will be a struct
         let prompt = context.evaluate_pin::<String>("prompt").await?;
-        let functions = vec![validate_openai_function_str(&definition_str)?];
+
+        // load tool definition
+        let tool: Tool = match json::from_str(&tool_str) {
+            Ok(tool) => tool,
+            Err(err) => return Err(anyhow!("Failed to parse tool definition: {err:?}")),
+        };
+        let tools = vec![tool];
 
         // load model
         let mut model_name = model.id.clone();
@@ -125,7 +129,7 @@ impl NodeLogic for LLMWithStructuredOutput {
         }
         // construct system prompt + history
         let mut history = History::new(model_name.clone(), vec![]);
-        let system_prompt = SYSTEM_PROMPT_TEMPLATE.replace("TOOL_STR", &definition_str);
+        let system_prompt = SYSTEM_PROMPT_TEMPLATE.replace("TOOL_STR", &tool_str);
         history.set_system_prompt(system_prompt.to_string());
         history.push_message(HistoryMessage::from_string(Role::User, &prompt));
 
@@ -157,12 +161,11 @@ impl NodeLogic for LLMWithStructuredOutput {
                 tool_calls_str.len()
             )));
         };
-        let tool_call = validate_openai_tool_call_str(&functions, &tool_call_str)?;
+        let tool_call = tool_call_from_str(&tools, &tool_call_str)?;
+        let tool_call_args: Value = json::from_str(&tool_call.function.arguments)?;
 
         // set outputs
-        context
-            .set_pin_value("response", json::json!(tool_call.args))
-            .await?;
+        context.set_pin_value("response", tool_call_args).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }

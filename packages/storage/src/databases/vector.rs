@@ -18,6 +18,7 @@ pub trait VectorStore: Send + Sync {
         &self,
         vector: Vec<f64>,
         filter: Option<&str>,
+        select: Option<Vec<String>>,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Value>>;
@@ -36,6 +37,7 @@ pub trait VectorStore: Send + Sync {
         &self,
         text: &str,
         filter: Option<&str>,
+        select: Option<Vec<String>>,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Value>>;
@@ -56,6 +58,7 @@ pub trait VectorStore: Send + Sync {
         vector: Vec<f64>,
         text: &str,
         filter: Option<&str>,
+        select: Option<Vec<String>>,
         limit: usize,
         offset: usize,
         rerank: bool,
@@ -71,7 +74,13 @@ pub trait VectorStore: Send + Sync {
     /// # Returns
     ///
     /// A result containing a vector of JSON-encoded query results or an error.
-    async fn filter(&self, filter: &str, limit: usize, offset: usize) -> Result<Vec<Value>>;
+    async fn filter(
+        &self,
+        filter: &str,
+        select: Option<Vec<String>>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Value>>;
 
     /// Upsert items into the vector store.
     ///
@@ -130,7 +139,12 @@ pub trait VectorStore: Send + Sync {
     /// # Returns
     ///
     /// A result containing a vector of JSON-encoded items or an error.
-    async fn list(&self, limit: usize, offset: usize) -> Result<Vec<Value>>;
+    async fn list(
+        &self,
+        select: Option<Vec<String>>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Value>>;
 
     /// Purge all data from the vector store.
     ///

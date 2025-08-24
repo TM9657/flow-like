@@ -9,7 +9,6 @@ pub async fn construct_storage(
     state: &Arc<Mutex<FlowLikeState>>,
     app_id: &str,
     prefix: &str,
-    construct_dirs: bool,
 ) -> Result<(FlowLikeStore, Path)> {
     let project_store = state
         .lock()
@@ -22,9 +21,7 @@ pub async fn construct_storage(
         .clone()
         .ok_or(anyhow!("Project store not found"))?;
 
-    let base_path = project_store
-        .construct_upload(app_id, prefix, construct_dirs)
-        .await?;
+    let base_path = project_store.construct_upload(app_id, prefix).await?;
 
     Ok((project_store, base_path))
 }

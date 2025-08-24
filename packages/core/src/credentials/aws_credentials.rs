@@ -1,7 +1,7 @@
 use crate::credentials::SharedCredentialsTrait;
 use flow_like_storage::lancedb::connection::ConnectBuilder;
-use flow_like_storage::object_store;
 use flow_like_storage::object_store::aws::AmazonS3Builder;
+use flow_like_storage::{Path, object_store};
 use flow_like_storage::{files::store::FlowLikeStore, lancedb};
 use flow_like_types::{Result, anyhow, async_trait};
 use serde::{Deserialize, Serialize};
@@ -61,7 +61,11 @@ impl SharedCredentialsTrait for AwsSharedCredentials {
     }
 
     #[tracing::instrument(name = "AwsSharedCredentials::to_db", skip(self), level = "debug")]
-    async fn to_db(&self, path: object_store::path::Path) -> Result<ConnectBuilder> {
+    async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
+        let path = Path::from("apps")
+            .child(app_id)
+            .child("storage")
+            .child("db");
         let connection = make_s3_builder(
             self.content_bucket.clone(),
             self.access_key_id

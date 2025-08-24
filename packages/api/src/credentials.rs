@@ -4,6 +4,7 @@ use aws_credentials::AwsRuntimeCredentials;
 use flow_like::credentials::SharedCredentials;
 use flow_like::flow_like_storage::files::store::FlowLikeStore;
 use flow_like::state::FlowLikeState;
+use flow_like_storage::lancedb::connection::ConnectBuilder;
 use flow_like_types::Result;
 use flow_like_types::async_trait;
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,7 @@ pub mod aws_credentials;
 #[async_trait]
 pub trait RuntimeCredentialsTrait {
     async fn to_state(&self, state: AppState) -> Result<FlowLikeState>;
+    async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder>;
     fn into_shared_credentials(&self) -> SharedCredentials;
 }
 
@@ -75,6 +77,13 @@ impl RuntimeCredentials {
         match self {
             #[cfg(feature = "aws")]
             RuntimeCredentials::Aws(aws) => aws.into_shared_credentials().to_store(meta).await,
+        }
+    }
+
+    pub async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
+        match self {
+            #[cfg(feature = "aws")]
+            RuntimeCredentials::Aws(aws) => aws.to_db(app_id).await,
         }
     }
 

@@ -1,0 +1,362 @@
+---
+import { Image } from "astro:assets";
+
+import portabilityInvite from "../images/index/portability-invite.png";
+import portabilityOffline from "../images/index/portability-offline.png";
+import portabilityShare from "../images/index/portability-share.png";
+---
+
+<section
+  id="portability"
+  data-c1="hsl(var(--primary) / .10)"
+  data-c2="hsl(var(--secondary) / .10)"
+  class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+  data-stage="offline"
+>
+  <!-- deco bg -->
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_18%_22%,var(--c1,transparent),transparent)]"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_82%_34%,var(--c2,transparent),transparent)]"></div>
+    <div class="absolute inset-0 [mask-image:radial-gradient(70%_70%_at_50%_40%,black,transparent)] bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"></div>
+  </div>
+
+  <div class="relative z-10 grid items-center gap-14 lg:gap-16 lg:grid-cols-12">
+    <!-- LEFT: copy + stage tabs + steps -->
+    <div class="space-y-8 lg:col-span-5 reveal">
+      <div>
+        <div class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-primary mb-6">
+          <div class="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+          Lifecycle Management
+        </div>
+
+        <h2 class="text-4xl font-bold sm:text-5xl leading-tight">
+          Start <span class="text-primary">offline</span>. Go <span class="text-secondary">online</span> later. <span class="text-tertiary">Deploy</span> with one click.
+        </h2>
+
+        <p class="mt-6 text-lg text-muted-foreground max-w-prose">
+          Manage the full lifecycle from the interface — no CLI required. Keep projects private and local, publish to your team when ready, and ship to production targets with a single action.
+        </p>
+      </div>
+
+      <!-- Stage tabs -->
+      <div class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-2 reveal">
+        <div class="flex items-center gap-2">
+          <button type="button" data-tab="offline"
+            class="stage-tab aria-selected:shadow-sm aria-selected:border-primary/40 aria-selected:bg-primary/10 aria-selected:text-primary flex-1 rounded-xl border border-transparent px-4 py-2 text-sm font-medium transition">
+            Offline
+          </button>
+          <button type="button" data-tab="team"
+            class="stage-tab aria-selected:shadow-sm aria-selected:border-secondary/40 aria-selected:bg-secondary/10 aria-selected:text-secondary flex-1 rounded-xl border border-transparent px-4 py-2 text-sm font-medium transition">
+            Team
+          </button>
+          <button type="button" data-tab="prod"
+            class="stage-tab aria-selected:shadow-sm aria-selected:border-tertiary/40 aria-selected:bg-tertiary/10 aria-selected:text-tertiary flex-1 rounded-xl border border-transparent px-4 py-2 text-sm font-medium transition">
+            Production
+          </button>
+        </div>
+
+        <!-- track -->
+        <div class="mt-3">
+          <ol class="flex items-center gap-3">
+            <li class="flex items-center gap-2">
+              <span class="size-2 rounded-full bg-primary animate-pulse"></span>
+              <span class="text-xs font-medium">Offline</span>
+            </li>
+            <div class="relative h-1 flex-1">
+              <div class="absolute inset-0 rounded-full bg-muted/50"></div>
+              <div class="absolute inset-0 overflow-hidden rounded-full">
+                <div class="h-full w-[160%] animate-flow bg-[linear-gradient(90deg,theme(colors.primary.DEFAULT/.0),theme(colors.primary.DEFAULT/.6),theme(colors.secondary.DEFAULT/.0))]"></div>
+              </div>
+            </div>
+            <li class="flex items-center gap-2">
+              <span class="size-2 rounded-full bg-secondary animate-pulse [animation-delay:.25s]"></span>
+              <span class="text-xs font-medium">Team</span>
+            </li>
+            <div class="relative h-1 flex-1">
+              <div class="absolute inset-0 rounded-full bg-muted/50"></div>
+              <div class="absolute inset-0 overflow-hidden rounded-full">
+                <div class="h-full w-[160%] animate-flow bg-[linear-gradient(90deg,theme(colors.primary.DEFAULT/.0),theme(colors.primary.DEFAULT/.6),theme(colors.secondary.DEFAULT/.0))] [animation-delay:.15s]"></div>
+              </div>
+            </div>
+            <li class="flex items-center gap-2">
+              <span class="size-2 rounded-full bg-tertiary animate-pulse [animation-delay:.4s]"></span>
+              <span class="text-xs font-medium">Prod</span>
+            </li>
+          </ol>
+          <p class="mt-2 text-xs text-muted-foreground">Same validated graph — different targets.</p>
+        </div>
+      </div>
+
+      <!-- Steps -->
+      <div class="space-y-4">
+        <article class="group relative overflow-hidden rounded-2xl border border-primary/20 bg-primary/5 p-6 backdrop-blur-sm reveal">
+          <div aria-hidden="true" class="step-overlay absolute -inset-[1px] rounded-2xl"></div>
+          <div class="relative z-10 flex items-start gap-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-primary-foreground">1</div>
+            <div>
+              <h3 class="text-xl font-semibold mb-1.5">Start Offline (Private & Secret)</h3>
+              <p class="text-muted-foreground">Create an offline project on your machine. Your data stays local until you decide otherwise.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="group relative overflow-hidden rounded-2xl border border-secondary/20 bg-secondary/5 p-6 backdrop-blur-sm reveal">
+          <div aria-hidden="true" class="step-overlay absolute -inset-[1px] rounded-2xl"></div>
+          <div class="relative z-10 flex items-start gap-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-secondary-foreground">2</div>
+            <div>
+              <h3 class="text-xl font-semibold mb-1.5">Make it Online & Invite</h3>
+              <p class="text-muted-foreground">Flip the project online and invite colleagues. Roles and approvals come along for the ride.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="group relative overflow-hidden rounded-2xl border border-tertiary/20 bg-tertiary/5 p-6 backdrop-blur-sm reveal">
+          <div aria-hidden="true" class="step-overlay absolute -inset-[1px] rounded-2xl"></div>
+          <div class="relative z-10 flex items-start gap-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-tertiary-foreground">3</div>
+            <div>
+              <h3 class="text-xl font-semibold mb-1.5">Deploy to Production</h3>
+              <p class="text-muted-foreground">Choose your target — Edge, Cloud, or on-prem. Click deploy. Same validated graph, different runtime target.</p>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- RIGHT: big stage viewer with lightbox -->
+    <div class="lg:col-span-7">
+      <figure class="group relative rounded-3xl border border-border/40 bg-gradient-to-b from-card/70 to-card/40 backdrop-blur-sm p-3 sm:p-4 lg:p-6 shadow-2xl reveal overflow-hidden">
+        <!-- glow -->
+        <div class="absolute inset-0 -z-10 rounded-[1.6rem] bg-[conic-gradient(at_50%_50%,theme(colors.primary.DEFAULT/.25),transparent_30%,theme(colors.secondary.DEFAULT/.25),transparent_60%)] blur-2xl opacity-40 group-hover:opacity-60 transition-opacity"></div>
+
+        <button type="button" aria-label="Open screenshot in full screen"
+          class="absolute right-4 top-4 z-10 rounded-full border border-border/50 bg-background/70 backdrop-blur px-3 py-1 text-xs font-medium hover:scale-[1.03] active:scale-[0.98] transition"
+          data-zoom-open>
+          Expand
+        </button>
+
+        <div class="relative aspect-[16/10] w-full overflow-hidden rounded-2xl ring-1 ring-border/50 shadow-xl lg:shadow-2xl">
+          <!-- OFFLINE -->
+          <Image
+            src={portabilityOffline}
+            alt="Create offline project"
+            class="stage-img absolute inset-0 m-auto h-full w-full object-contain select-none transition-opacity duration-500 ease-out opacity-100"
+            loading="lazy"
+            decoding="async"
+            widths={[1024,1280,1600,1920,2240]}
+            sizes="(min-width:1024px) 44rem, 96vw"
+            format="webp"
+            quality={"max"}
+            data-stage-img="offline"
+          />
+          <!-- TEAM -->
+          <Image
+            src={portabilityInvite}
+            alt="Invite teammates"
+            class="stage-img absolute inset-0 m-auto h-full w-full object-contain select-none transition-opacity duration-500 ease-out opacity-0"
+            loading="lazy"
+            decoding="async"
+            widths={[1024,1280,1600,1920,2240]}
+            sizes="(min-width:1024px) 44rem, 96vw"
+            format="webp"
+            quality={"max"}
+            data-stage-img="team"
+          />
+          <!-- PROD -->
+          <Image
+            src={portabilityShare}
+            alt="Deploy with one click"
+            class="stage-img absolute inset-0 m-auto h-full w-full object-contain select-none transition-opacity duration-500 ease-out opacity-0"
+            loading="lazy"
+            decoding="async"
+            widths={[1024,1280,1600,1920,2240]}
+            sizes="(min-width:1024px) 44rem, 96vw"
+            format="webp"
+            quality={"max"}
+            data-stage-img="prod"
+          />
+
+          <!-- caption -->
+          <figcaption class="absolute inset-x-3 bottom-3 sm:inset-x-4 sm:bottom-4">
+            <div class="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-background/70 backdrop-blur px-3 py-2 text-xs sm:text-sm">
+              <span class="font-medium" data-stage-label>Offline</span>
+              <span class="text-muted-foreground">Local-first → Share → Deploy</span>
+            </div>
+          </figcaption>
+        </div>
+      </figure>
+    </div>
+  </div>
+
+  <!-- fullscreen lightbox -->
+  <dialog
+    data-zoom-dialog
+    class="backdrop:bg-black/70 rounded-2xl open:fixed open:inset-0 open:m-0 open:min-h-[100dvh] open:min-w-[100dvw] open:flex open:items-center open:justify-center p-0 m-0"
+  >
+    <div class="relative w-full max-w-[100dvw] mx-auto">
+       <button type="button" aria-label="Close"
+         class="absolute right-3 top-3 z-10 rounded-full border border-border/50 bg-background/80 backdrop-blur px-3 py-1 text-xs font-medium hover:scale-[1.03] active:scale-[0.98] transition"
+         data-zoom-close>
+         Close
+       </button>
+       <div class="rounded-xl ring-1 ring-border/50 overflow-hidden shadow-2xl">
+         <img alt="Portability — full size" data-zoom-img class="w-full h-auto object-contain" />
+       </div>
+     </div>
+   </dialog>
+
+   <!-- helpers -->
+   <script is:inline>
+     (() => {
+       const root = document.getElementById("portability");
+       const reduce = matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+
+       // reveal
+       const reveals = document.querySelectorAll("#portability .reveal");
+       if (reveals.length && !reduce) {
+         const io = new IntersectionObserver((entries) => {
+           entries.forEach((e) => {
+             if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+           });
+         }, { threshold: 0.12 });
+         reveals.forEach((el) => io.observe(el));
+       } else {
+         reveals.forEach((el) => el.classList.add("in"));
+       }
+
+       // stage tabs + autoplay before user interaction
+       const stages = ["offline", "team", "prod"];
+       const stageImgs = document.querySelectorAll("#portability .stage-img");
+       const stageLabel = document.querySelector("#portability [data-stage-label]");
+       const tabs = document.querySelectorAll("#portability .stage-tab");
+       let autoplayId = null;
+       let autoIndex = 0;
+
+       const setStage = (stage) => {
+         root?.setAttribute("data-stage", stage);
+         stageImgs.forEach((img) => {
+           img.style.opacity = img.getAttribute("data-stage-img") === stage ? "1" : "0";
+         });
+         stageLabel && (stageLabel.textContent = stage === "prod" ? "Production" :
+                                               stage === "team" ? "Team" : "Offline");
+         tabs.forEach((t) => t.setAttribute("aria-selected", t.getAttribute("data-tab") === stage ? "true" : "false"));
+       };
+
+       const startAutoplay = () => {
+         if (reduce || autoplayId) return;
+         autoplayId = setInterval(() => {
+           autoIndex = (autoIndex + 1) % stages.length;
+           setStage(stages[autoIndex]);
+         }, 1800);
+       };
+       const stopAutoplay = () => {
+         if (!autoplayId) return;
+         clearInterval(autoplayId);
+         autoplayId = null;
+       };
+
+       // bind tab clicks (stop autoplay on user interaction)
+       tabs.forEach((t) => {
+         t.addEventListener("click", (e) => { stopAutoplay(); setStage(t.getAttribute("data-tab")); });
+         t.addEventListener("keydown", stopAutoplay);
+       });
+
+       // stop autoplay on any user intent: hover over section, focusin
+       root?.addEventListener("mouseenter", stopAutoplay, { once: true });
+       root?.addEventListener("focusin", stopAutoplay, { once: true });
+
+       // initialize
+       setStage("offline");
+       startAutoplay();
+
+       // lightbox
+       const dlg = document.querySelector("#portability [data-zoom-dialog]");
+       const openBtn = document.querySelector("#portability [data-zoom-open]");
+       const closeBtn = document.querySelector("#portability [data-zoom-close]");
+       const zoomImg = document.querySelector("#portability [data-zoom-img]");
+
+       const currentStageSrc = () => {
+         const active = [...stageImgs].find((i) => i.style.opacity === "1") || stageImgs[0];
+         return (active.currentSrc || active.src);
+       };
+
+       openBtn?.addEventListener("click", () => {
+         stopAutoplay();
+         if (!dlg || !zoomImg) return;
+         zoomImg.src = currentStageSrc();
+         dlg.showModal();
+       });
+       closeBtn?.addEventListener("click", () => dlg?.close());
+       dlg?.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });
+
+       // also allow clicking the image itself
+       document.querySelectorAll("#portability .stage-img").forEach((img) => {
+         img.style.cursor = "zoom-in";
+         img.addEventListener("click", () => {
+           stopAutoplay();
+           if (!dlg || !zoomImg) return;
+           zoomImg.src = (img.currentSrc || img.src);
+           dlg.showModal();
+         });
+       });
+     })();
+   </script>
+
+   <style>
+    :where(#portability){ --c1: attr(data-c1); --c2: attr(data-c2); }
+
+    /* ensure dialog has no UA margin and is centered when opened (fallback for browsers/Tailwind variants) */
+    #portability [data-zoom-dialog] { margin: 0; }
+    #portability [data-zoom-dialog][open] {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* reveal animation */
+    #portability .reveal { opacity: 0; transform: translateY(12px); transition: opacity .6s ease, transform .6s ease; }
+    #portability .reveal.in { opacity: 1; transform: none; }
+
+    /* subtle hover lift for step cards */
+    #portability article.group { transition: transform .22s ease, box-shadow .22s ease; will-change: transform; }
+    #portability article.group:hover { transform: translateY(-6px) scale(1.01); box-shadow: 0 18px 40px rgba(2,6,23,0.18); }
+
+    /* unified smooth overlay for step cards */
+    #portability .step-overlay {
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      transition: opacity .32s ease, transform .32s ease, filter .32s ease;
+      transform: scale(1.03);
+      filter: blur(16px);
+      /* two soft radial glows to avoid blocky hard edges */
+      background-image:
+        radial-gradient(40% 40% at 12% 30%, color-mix(in oklch, var(--primary) 50%, transparent), transparent 35%),
+        radial-gradient(40% 40% at 86% 70%, color-mix(in oklch, var(--secondary) 30%, transparent), transparent 36%);
+    }
+    #portability article.group:hover .step-overlay { opacity: 0.12; transform: scale(1.01); filter: blur(18px); }
+
+    /* ensure content sits above the overlay */
+    #portability article .relative.z-10 { position: relative; z-index: 10; }
+
+    /* flowing gradient for the track */
+    @keyframes flow { 0% { transform: translateX(-60%);} 100% { transform: translateX(0%);} }
+    .animate-flow { animation: flow 2.2s linear infinite; }
+
+    /* tab state (fallback if aria-selected unsupported by styles) */
+    #portability [aria-selected="true"] { border-color: color-mix(in oklch, currentColor 40%, transparent); }
+
+    /* reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      #portability article.group,
+      #portability .animate-flow { transition: none !important; animation: none !important; transform: none !important; box-shadow: none !important; }
+      #portability .step-overlay { transition: none !important; filter: none !important; transform: none !important; opacity: 0.08 !important; }
+    }
+  </style>
+</section>

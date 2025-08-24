@@ -1,3 +1,7 @@
+/// # Make Message Node
+/// Create a new Message object with either image or image Message Content
+/// Set the message type via Role input.
+/// In case of a Tool Message, the associated Tool Call Id has to be provided as well
 use flow_like::{
     flow::{
         board::Board,
@@ -45,6 +49,7 @@ impl NodeLogic for MakeHistoryMessageNode {
                     "Assistant".to_string(),
                     "System".to_string(),
                     "User".to_string(),
+                    "Tool".to_string(),
                 ])
                 .build(),
         )
@@ -77,18 +82,25 @@ impl NodeLogic for MakeHistoryMessageNode {
             "Assistant" => Role::Assistant,
             "System" => Role::System,
             "User" => Role::User,
+            "Tool" => Role::Tool,
             _ => Role::User,
+        };
+
+        let tool_call_id = match role {
+            Role::Tool => {
+                let tool_call_id: String = context.evaluate_pin("tool_call_id").await?;
+                Some(tool_call_id)
+            }
+            _ => None,
         };
 
         let mut message: HistoryMessage = HistoryMessage {
             content: MessageContent::Contents(vec![]),
-            role: Role::User,
+            role,
             name: None,
-            tool_call_id: None,
+            tool_call_id,
             tool_calls: None,
         };
-
-        message.role = role;
 
         match message_type.as_str() {
             "Text" => {
@@ -123,6 +135,30 @@ impl NodeLogic for MakeHistoryMessageNode {
             .and_then(|bytes| flow_like_types::json::from_slice::<Value>(&bytes).ok())
             .and_then(|json| json.as_str().map(ToOwned::to_owned))
             .unwrap_or_default();
+
+        let role_pin: String = node
+            .get_pin_by_name("role")
+            .and_then(|pin| pin.default_value.clone())
+            .and_then(|bytes| flow_like_types::json::from_slice::<Value>(&bytes).ok())
+            .and_then(|json| json.as_str().map(ToOwned::to_owned))
+            .unwrap_or_default();
+
+        // sync role pin <-> tool call pin
+        match (role_pin.as_str(), node.get_pin_by_name("tool_call_id")) {
+            ("Tool", None) => {
+                node.add_input_pin(
+                    "tool_call_id",
+                    "Tool Call Id",
+                    "Tool Call Identifier",
+                    VariableType::String,
+                );
+            }
+            ("Tool", Some(_)) => {}
+            (_, Some(pin)) => {
+                node.pins.remove(&pin.id.clone());
+            }
+            _ => {}
+        }
 
         let text_pin = node.get_pin_by_name("text");
         let image_pin = node.get_pin_by_name("image");

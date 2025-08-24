@@ -7,7 +7,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::{
-    async_trait,
+    anyhow, async_trait,
     json::json,
     rand::{self, Rng},
 };
@@ -48,6 +48,10 @@ impl NodeLogic for RandomFloatInRangeNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let min: f64 = context.evaluate_pin("min").await?;
         let max: f64 = context.evaluate_pin("max").await?;
+
+        if min >= max {
+            return Err(anyhow!("min must be less than max"));
+        }
 
         let random_float = {
             let mut rng = rand::rng();

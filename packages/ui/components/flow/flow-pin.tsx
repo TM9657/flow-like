@@ -1,24 +1,13 @@
 "use client";
-import {
-	Handle,
-	type HandleType,
-	Position,
-	useInternalNode,
-} from "@xyflow/react";
-import { EllipsisVerticalIcon, GripIcon, ListIcon } from "lucide-react";
+import { Handle, type HandleType, Position, useReactFlow } from "@xyflow/react";
+import { EllipsisVerticalIcon, GripIcon, ListIcon, Trash2 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import {
-	ContextMenu,
-	ContextMenuContent,
-	ContextMenuItem,
-	ContextMenuLabel,
-	ContextMenuTrigger,
-} from "../../components/ui/context-menu";
+import { toast } from "sonner";
 import { useInvalidateInvoke } from "../../hooks";
 import { updateNodeCommand } from "../../lib";
 import type { ILayer } from "../../lib/schema/flow/board";
 import type { INode } from "../../lib/schema/flow/node";
-import { type IPin, IValueType } from "../../lib/schema/flow/pin";
+import { type IPin, IPinType, IValueType } from "../../lib/schema/flow/pin";
 import { useBackendStore } from "../../state/backend-state";
 import { DynamicImage } from "../ui/dynamic-image";
 import { useUndoRedo } from "./flow-history";
@@ -31,16 +20,18 @@ function FlowPinInnerComponent({
 	appId,
 	node,
 	skipOffset,
+	onPinRemove,
 }: Readonly<{
 	pin: IPin;
 	boardId: string;
 	appId: string;
 	node: INode | ILayer;
 	skipOffset?: boolean;
+	onPinRemove?: (pin: IPin) => Promise<void>;
 }>) {
 	const { pushCommand } = useUndoRedo(appId, boardId);
 	const invalidate = useInvalidateInvoke();
-	const currentNode = useInternalNode(node?.id);
+	const { getNode } = useReactFlow();
 
 	const [defaultValue, setDefaultValue] = useState(pin.default_value);
 
@@ -105,11 +96,16 @@ function FlowPinInnerComponent({
 
 	const updateNode = useCallback(async () => {
 		if (node.nodes) return;
-		const translatedNode = node as INode;
+		const currentNode = getNode(node.id);
+		if (!currentNode) return;
+		const translatedNode = currentNode?.data?.node as INode | undefined;
+		if (!translatedNode) {
+			toast.error("Node not found");
+			return;
+		}
 		if (defaultValue === undefined) return;
 		if (defaultValue === null) return;
 		if (defaultValue === pin.default_value) return;
-		if (!currentNode) return;
 		const backend = useBackendStore.getState().backend;
 		if (!backend) return;
 		const command = updateNodeCommand({
@@ -118,7 +114,7 @@ function FlowPinInnerComponent({
 				hash: undefined,
 				coordinates: [currentNode.position.x, currentNode.position.y, 0],
 				pins: {
-					...node.pins,
+					...translatedNode.pins,
 					[pin.id]: { ...pin, default_value: defaultValue },
 				},
 			},
@@ -131,15 +127,7 @@ function FlowPinInnerComponent({
 		);
 		await pushCommand(result, false);
 		await refetchBoard();
-	}, [
-		pin.id,
-		defaultValue,
-		currentNode,
-		refetchBoard,
-		boardId,
-		node,
-		pushCommand,
-	]);
+	}, [pin.id, defaultValue, refetchBoard, boardId, pushCommand]);
 
 	useEffect(() => {
 		updateNode();
@@ -199,7 +187,7 @@ function FlowPinInnerComponent({
 			position={pinTypeProps.position}
 			id={pin.id}
 			style={handleStyle}
-			className="flex flex-row items-center gap-1"
+			className="flex flex-row items-center gap-1 group"
 		>
 			{pinIcons}
 			{shouldRenderPinEdit && (
@@ -212,7 +200,25 @@ function FlowPinInnerComponent({
 						defaultValue={defaultValue}
 						changeDefaultValue={setDefaultValue}
 					/>
+					{pin.dynamic && onPinRemove && (
+						<button
+							className="opacity-0 bg-background border p-0.5 rounded-full group-hover:opacity-100 hover:text-primary"
+							title="Delete Pin"
+							onClick={() => onPinRemove(pin)}
+						>
+							<Trash2 className="w-1.5 h-1.5" />
+						</button>
+					)}
 				</div>
+			)}
+			{!shouldRenderPinEdit && onPinRemove && pin.dynamic && (
+				<button
+					className={`opacity-0 bg-background border p-0.5 rounded-full group-hover:opacity-100 hover:text-primary ${pin.pin_type === IPinType.Input ? "ml-2" : "mr-2 right-0 absolute"}`}
+					title="Delete Pin"
+					onClick={() => onPinRemove(pin)}
+				>
+					<Trash2 className="w-1.5 h-1.5" />
+				</button>
 			)}
 		</MemoizedHandle>
 	);
@@ -222,7 +228,6 @@ const MemoizedHandle = memo(Handle);
 
 function pinPropsAreEqual(prevProps: any, nextProps: any) {
 	return (
-		// prevProps.index === nextProps.index &&
 		prevProps.boardId === nextProps.boardId &&
 		prevProps.node?.id === nextProps.node?.id &&
 		prevProps.pin.id === nextProps.pin.id &&
@@ -249,33 +254,23 @@ function FlowPin({
 	skipOffset?: boolean;
 	onPinRemove: (pin: IPin) => Promise<void>;
 }>) {
-	if (pin.dynamic)
+	if (pin.dynamic) {
 		return (
-			<ContextMenu>
-				<ContextMenuTrigger>
-					<FlowPinInner
-						appId={appId}
-						pin={pin}
-						boardId={boardId}
-						node={node}
-						skipOffset={skipOffset}
-					/>
-				</ContextMenuTrigger>
-				<ContextMenuContent>
-					<ContextMenuLabel>Pin Actions</ContextMenuLabel>
-					<ContextMenuItem
-						onClick={() => {
-							onPinRemove(pin);
-						}}
-					>
-						Remove Pin
-					</ContextMenuItem>
-				</ContextMenuContent>
-			</ContextMenu>
+			<FlowPinInner
+				key={pin.id}
+				appId={appId}
+				pin={pin}
+				boardId={boardId}
+				node={node}
+				skipOffset={skipOffset}
+				onPinRemove={onPinRemove}
+			/>
 		);
+	}
 
 	return (
 		<FlowPinInner
+			key={pin.id}
 			appId={appId}
 			pin={pin}
 			boardId={boardId}

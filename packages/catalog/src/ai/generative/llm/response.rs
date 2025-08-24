@@ -1,4 +1,5 @@
 pub mod chunk;
+pub mod chunk_from_string;
 pub mod last_content;
 pub mod last_message;
 pub mod make;
@@ -20,5 +21,6 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(message::get_role::GetRoleNode::default()),
         Arc::new(chunk::get_token::GetTokenNode::default()),
         Arc::new(response_from_string::ResponseFromStringNode::default()),
+        Arc::new(chunk_from_string::ChunkFromStringNode::default()),
     ]
 }

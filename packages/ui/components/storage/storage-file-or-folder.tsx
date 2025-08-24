@@ -171,7 +171,7 @@ export function FileOrFolder({
 		[file.location],
 	);
 
-	if (file.location.endsWith("._path")) {
+	if (file.is_dir) {
 		return (
 			<div
 				className={`group relative rounded-lg border border-border/50 p-3 w-full transition-all duration-200 hover:border-primary/50 hover:shadow-md bg-linear-to-r from-background to-muted/20 ${
@@ -181,7 +181,7 @@ export function FileOrFolder({
 				<button
 					className="w-full flex flex-row justify-between items-center"
 					onClick={() => {
-						changePrefix?.(file.location.split("/").pop()?.slice(1, -7) ?? "");
+						changePrefix?.(file.location.split("/").pop() ?? file.location);
 					}}
 				>
 					<div className="flex flex-row items-center gap-3">
@@ -190,7 +190,7 @@ export function FileOrFolder({
 						</div>
 						<div className="flex flex-col items-start">
 							<p className="line-clamp-1 text-start font-medium text-foreground text-sm sm:text-base">
-								{file.location.split("/").pop()?.slice(1, -7)}
+								{file.location.split("/").pop()}
 							</p>
 							<Badge
 								variant="secondary"
@@ -234,9 +234,7 @@ export function FileOrFolder({
 										onClick={(e) => {
 											e.preventDefault();
 											e.stopPropagation();
-											deleteFile?.(
-												file.location.split("/").pop()?.slice(1, -7) ?? "",
-											);
+											deleteFile?.(file.location.split("/").pop() ?? "");
 											deleteFile?.(file.location.split("/").pop() ?? "");
 										}}
 									>

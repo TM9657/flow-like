@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
 use super::TauriFunctionError;
-use crate::{state::{TauriFlowLikeState, TauriSettingsState}, utils::UiEmitTarget};
+use crate::{
+    state::{TauriFlowLikeState, TauriSettingsState},
+    utils::UiEmitTarget,
+};
 use flow_like::{
     bit::{Bit, BitPack},
     hub::BitSearchQuery,
 };
 use flow_like_types::intercom::BufferedInterComHandler;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 #[tauri::command(async)]
 pub async fn get_bit(
@@ -91,8 +94,8 @@ pub async fn download_bit(app_handle: AppHandle, bit: Bit) -> Result<Vec<Bit>, T
                 Ok(())
             })
         }),
-        Some(250), // interval ms
-        Some(500), // capacity
+        Some(250),  // interval ms
+        Some(500),  // capacity
         Some(true), // background check
     ));
     let result = pack
