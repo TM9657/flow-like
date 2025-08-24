@@ -7,100 +7,117 @@ const download = "https://github.com/TM9657/flow-like/releases";
 ---
 
 <section
-    class="mx-auto max-w-7xl px-4 pt-8 md:pt-16 lg:pt-16 lg:px-8 pb-32 mt-0 md:mt-8 lg:mt-16"
+    class="mx-auto max-w-7xl px-4 pt-8 md:pt-16 lg:pt-16 lg:px-8 pb-12 mt-0 md:mt-8 lg:mt-16 overflow-x-hidden"
     data-c2="hsl(0 100% 63% / .10)"
     data-c1="hsl(161 40% 44% / .10)"
 >
     <div id="hero-cover" class="relative">
         <div
             id="hero-right-pin"
-            class="size-4 bg-primary absolute top-60 -right-1.5 z-10 rounded-full"
+            class="hidden md:block size-4 bg-primary absolute top-60 -right-1.5 z-10 rounded-full shadow-[0_0_0_4px_rgba(255,255,255,.15)]"
         >
         </div>
         <div
             id="hero-left-pin"
-            class="size-4 bg-emerald-500 absolute top-36 -left-1.5 z-10 rounded-full"
+            class="hidden md:block size-4 bg-emerald-500 absolute top-36 -left-1.5 z-10 rounded-full shadow-[0_0_0_4px_rgba(255,255,255,.15)]"
         >
         </div>
         <div
             id="hero-right-pin-top"
-            class="size-4 bg-foreground absolute top-12 -right-1.5 z-10 rounded-full"
+            class="hidden md:block size-4 bg-foreground absolute top-12 -right-1.5 z-10 rounded-full"
         >
         </div>
         <div
             id="hero-left-pin-top"
-            class="size-4 bg-foreground absolute top-12 -left-1.5 z-10 rounded-full"
+            class="hidden md:block size-4 bg-foreground absolute top-12 -left-1.5 z-10 rounded-full"
         >
         </div>
 
         <svg
             id="hero-connections"
-            class="pointer-events-none absolute top-0 left-0"
-            style="overflow: hidden;"
+            class="pointer-events-none fixed left-0 top-0 hidden md:block"
+            style="overflow:visible; z-index:1"
             aria-hidden="true"
         >
-            <path id="hero-right-conn" class="pin-conn text-primary" fill="none"
+            <path id="hero-right-conn" class="pin-conn text-primary pointer-events-none" fill="none"
             ></path>
             <path
                 id="hero-left-conn"
-                class="pin-conn text-emerald-500"
+                class="pin-conn text-emerald-500 pointer-events-none"
                 fill="none"></path>
             <path
                 id="hero-right-conn-top"
-                class="pin-conn-solid text-foreground"
+                class="pin-conn-solid text-foreground/70 pointer-events-none"
                 fill="none"></path>
             <path
                 id="hero-left-conn-top"
-                class="pin-conn-solid text-foreground"
+                class="pin-conn-solid text-foreground/70 pointer-events-none"
                 fill="none"></path>
         </svg>
 
+        <!-- hero card -->
         <div
-            class="relative overflow-hidden rounded-xl border border-border bg-background"
+            class="hero-card relative overflow-hidden rounded-2xl border border-border/80 bg-background/90 backdrop-blur [--ring:theme(colors.primary.DEFAULT/30)] motion-safe:transition-transform motion-safe:duration-300"
         >
+            <!-- subtle vignette and light sweep -->
             <div
-                class="absolute inset-0 bg-gradient-to-tr from-background/70 via-background/20 to-transparent"
+                aria-hidden="true"
+                class="pointer-events-none absolute inset-0"
             >
+                <div
+                    class="absolute inset-0 bg-gradient-to-tr from-background/70 via-background/30 to-transparent"
+                >
+                </div>
+                <div class="absolute -inset-0.5 opacity-0 hero-sheen"></div>
             </div>
+
             <div class="relative grid lg:grid-cols-2 overflow-hidden">
-                <div class="p-6 sm:p-8 md:p-10">
+                <!-- copy -->
+                <div
+                    class="p-6 sm:p-8 md:p-10 space-y-4 motion-safe:opacity-0 motion-safe:translate-y-3 will-change-transform reveal"
+                >
                     <span
                         class="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1 text-[11px] font-medium text-muted-foreground"
                         >Typed • Blazing fast • Robust</span
                     >
                     <h1
-                        class="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl"
+                        class="text-4xl font-extrabold tracking-tight sm:text-5xl leading-[1.05]"
                     >
                         Typed workflows that <span class="text-primary"
                             >scale</span
                         >
                     </h1>
-                    <p class="mt-3 max-w-2xl text-muted-foreground">
-                        Design reliable systems with type‑safe graphs,
-                        Rust‑level performance, and built‑in governance. Run
-                        locally for a head start, then move to edge or any cloud
-                        without rewiring.
+                    <p class="max-w-2xl text-muted-foreground">
+                        Design reliable systems with type-safe graphs,
+                        Rust-level performance, and built-in governance. Start
+                        local for a head start, then move to edge or any cloud —
+                        no rewiring.
                     </p>
-                    <div class="mt-6 flex flex-wrap items-center gap-3">
+
+                    <div class="pt-2 flex flex-wrap items-center gap-3">
                         <a
                             href={download}
-                            class="inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow hover:bg-primary/90"
-                            >Download</a
+                            class="fl-btn bg-primary text-primary-foreground shadow hover:bg-primary/90"
                         >
+                            Download
+                        </a>
                         <a
                             href={docs}
-                            class="inline-flex items-center gap-2 rounded-2xl border border-border bg-muted px-6 py-3 text-sm font-semibold hover:bg-accent hover:text-accent-foreground"
-                            >Explore docs</a
+                            class="fl-btn border border-border bg-muted text-foreground hover:bg-accent hover:text-accent-foreground"
                         >
+                            Explore docs
+                        </a>
                         <a
                             href={github}
-                            class="inline-flex items-center gap-2 rounded-2xl border border-primary/30 bg-primary/10 px-6 py-3 text-sm font-semibold text-primary hover:bg-primary/20"
-                            >Star on GitHub</a
+                            class="fl-btn border border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
                         >
+                            Star on GitHub
+                        </a>
                     </div>
-                    <!-- Hero feature chips — ghost, subtle, correct order -->
+
+                    <!-- chips -->
                     <div
-                        class="mt-5 flex flex-wrap items-center gap-2.5 text-sm sm:max-w-xl"
+                        class="pt-1 flex flex-wrap items-center gap-2.5 text-sm sm:max-w-xl"
                     >
                         <span class="fl-chip fl-chip--ghost" data-tint="primary"
                             >🧩 <b>Type-safe</b> graph contracts</span
@@ -115,14 +132,31 @@ const download = "https://github.com/TM9657/flow-like/releases";
                             >☁️ Run local → edge → cloud</span
                         >
                     </div>
-                    <p class="mt-4 text-xs text-muted-foreground">
+
+                    <p class="text-xs text-muted-foreground/90">
                         Want AI too? Blend classical ML with GenAI when it helps
                         — it’s one more set of typed nodes, not a separate
                         stack.
                     </p>
                 </div>
-                <div class="relative min-h-[260px] max-h-full h-full">
+
+                <!-- live board preview -->
+                <div
+                    class="relative min-h-[260px] h-full lg:min-h-[420px] motion-safe:opacity-0 will-change-transform reveal"
+                >
+                    <div
+                        class="absolute inset-0 bg-gradient-to-tr from-transparent via-background/20 to-background/0"
+                    >
+                    </div>
                     <EmptyBackendProvider data="/board.json" client:load />
+                    <!-- glassy labels overlay (non-blocking) -->
+                    <div
+                        aria-hidden="true"
+                        class="pointer-events-none absolute bottom-3 right-3 flex gap-2"
+                    >
+                        <span class="fl-glass-tag">Node Graph</span>
+                        <span class="fl-glass-tag">Live</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -130,8 +164,51 @@ const download = "https://github.com/TM9657/flow-like/releases";
 </section>
 
 <style>
+    /* Buttons */
+    .fl-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: 1rem;
+        padding: 0.75rem 1.25rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        transition:
+            transform 0.18s ease,
+            box-shadow 0.18s ease,
+            background 0.18s ease,
+            border-color 0.18s ease;
+        will-change: transform;
+    }
+    .fl-btn--primary {
+        background: hsl(var(--primary));
+        color: hsl(var(--primary-foreground));
+        box-shadow: 0 10px 18px -12px hsl(var(--primary) / 0.65);
+    }
+    .fl-btn--primary:hover {
+        transform: translateY(-1px);
+    }
+    .fl-btn--muted {
+        border: 1px solid hsl(var(--border));
+        background: hsl(var(--muted));
+        color: inherit;
+    }
+    .fl-btn--muted:hover {
+        background: hsl(var(--accent));
+        color: hsl(var(--accent-foreground));
+    }
+    .fl-btn--outline {
+        border: 1px solid hsl(var(--primary) / 0.35);
+        background: hsl(var(--primary) / 0.08);
+        color: hsl(var(--primary));
+    }
+    .fl-btn--outline:hover {
+        background: hsl(var(--primary) / 0.15);
+    }
+
+    /* Chips (yours, with hover tuned) */
     .fl-chip {
-        --t: 215 16% 47%; /* default tint */
+        --t: 215 16% 47%;
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
@@ -145,18 +222,18 @@ const download = "https://github.com/TM9657/flow-like/releases";
         transition:
             background 0.15s ease,
             border-color 0.15s ease,
-            transform 0.15s ease;
+            transform 0.15s ease,
+            box-shadow 0.15s ease;
     }
     .fl-chip b {
         font-weight: 600;
         color: inherit;
     }
     .fl-chip--ghost:hover {
-        background: hsl(var(--t) / 0.08);
+        background: hsl(var(--t) / 0.1);
         transform: translateY(-1px);
+        box-shadow: 0 4px 16px -10px hsl(var(--t) / 0.45);
     }
-
-    /* tints */
     .fl-chip[data-tint="primary"] {
         --t: 0 100% 63%;
     }
@@ -170,11 +247,33 @@ const download = "https://github.com/TM9657/flow-like/releases";
         --t: 199 89% 48%;
     }
 
-    @media (prefers-reduced-motion: reduce) {
-        .fl-chip {
-            transition: none;
-        }
+    /* Glass tags on preview */
+    .fl-glass-tag {
+        backdrop-filter: blur(6px);
+        background: color-mix(
+            in oklab,
+            transparent,
+            hsl(var(--foreground) / 0.06) 100%
+        );
+        border: 1px solid hsl(var(--border) / 0.6);
+        color: hsl(var(--muted-foreground));
+        font-size: 0.7rem;
+        padding: 0.2rem 0.55rem;
+        border-radius: 0.7rem;
     }
+
+    /* Card sheen (only when hovering card) */
+    .hero-card:hover .hero-sheen {
+        background: radial-gradient(
+            120px 120px at var(--mx, 50%) var(--my, 50%),
+            hsl(var(--primary) / 0.25),
+            transparent 60%
+        );
+        transition: opacity 0.25s ease;
+        opacity: 1;
+    }
+
+    /* SVG connections */
     .pin-conn-solid {
         stroke: currentColor;
         stroke-width: 3;
@@ -188,17 +287,37 @@ const download = "https://github.com/TM9657/flow-like/releases";
         stroke-linecap: round;
         stroke-linejoin: round;
         vector-effect: non-scaling-stroke;
-        stroke-dasharray: 10 10;
-        animation: flow-dots 0.4s linear infinite;
+        stroke-dasharray: 8 10;
+        animation: flow-dots 1.1s linear infinite;
     }
     @keyframes flow-dots {
         to {
-            stroke-dashoffset: -20px;
+            stroke-dashoffset: -18px;
         }
     }
+
+    /* Reveal on enter */
+    .reveal {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    .reveal.is-visible {
+        opacity: 1;
+        transform: none;
+        transition:
+            opacity 0.5s ease,
+            transform 0.5s ease;
+    }
+
     @media (prefers-reduced-motion: reduce) {
+        .fl-btn,
+        .fl-chip,
+        .reveal {
+            transition: none !important;
+            transform: none !important;
+        }
         .pin-conn {
-            animation: none;
+            animation: none !important;
         }
     }
 </style>
@@ -215,23 +334,20 @@ const download = "https://github.com/TM9657/flow-like/releases";
 
     const setSvgFrame = () => {
         if (!heroEl || !svg) return;
-        const r = heroEl.getBoundingClientRect();
+        const hr = heroEl.getBoundingClientRect();
         const vw = Math.max(
             document.documentElement.clientWidth,
             window.innerWidth || 0,
         );
 
-        // Make the absolutely-positioned SVG cover the full viewport width,
-        // starting at the viewport's left edge (relative to the hero).
-        svg.style.left = `${-r.left}px`;
+        // Fixed overlay spanning the viewport width, aligned to hero's top/height
+        svg.style.left = "0px";
+        svg.style.top = `${hr.top}px`;
         svg.style.width = `${vw}px`;
-        svg.style.height = `${r.height}px`;
-
-        // Use a viewBox whose min-x is negative hero.left so hero-local coordinates line up,
-        // and we can draw all the way to the viewport edges.
-        svg.setAttribute("viewBox", `${-r.left} 0 ${vw} ${r.height}`);
+        svg.style.height = `${hr.height}px`;
+        svg.setAttribute("viewBox", `0 0 ${vw} ${hr.height}`);
         svg.setAttribute("width", String(vw));
-        svg.setAttribute("height", String(r.height));
+        svg.setAttribute("height", String(hr.height));
     };
 
     const bezier = (pin: HTMLElement, isRight: boolean, yOffset = 60) => {
@@ -244,23 +360,24 @@ const download = "https://github.com/TM9657/flow-like/releases";
         };
         const pr = pin.getBoundingClientRect();
 
-        // Start in hero-local coords
-        const sx = pr.left - hr.left + pr.width / 2;
+        // Start in viewport coords (svg is fixed and left=0, top=hero.top)
+        const sx = pr.left + pr.width / 2;
         const sy = pr.top - hr.top + pr.height / 2;
 
-        // End at viewport edges (± extra beyond edge)
-        const extra = 200;
+        const isMobile = window.innerWidth < 768;
+        const extra = isMobile ? 50 : 220;
         const vw = Math.max(
             document.documentElement.clientWidth,
             window.innerWidth || 0,
         );
-        const ex = isRight ? vw - hr.left + extra : -hr.left - extra;
-        const ey = sy + (isRight ? yOffset : yOffset * 1.4);
+
+        // Go to/beyond screen edges
+        const ex = isRight ? vw + extra : -extra;
+        const ey = sy + (isRight ? yOffset : yOffset * 1.35);
 
         const dx = ex - sx;
-        const cp1x = sx + dx * 0.4;
-        const cp2x = sx + dx * 0.8;
-
+        const cp1x = sx + dx * 0.42;
+        const cp2x = sx + dx * 0.82;
         return `M${sx},${sy} C${cp1x},${sy} ${cp2x},${ey} ${ex},${ey}`;
     };
 
@@ -274,44 +391,58 @@ const download = "https://github.com/TM9657/flow-like/releases";
         };
         const pr = pin.getBoundingClientRect();
 
-        const sx = pr.left - hr.left + pr.width / 2;
+        const sx = pr.left + pr.width / 2;
         const sy = pr.top - hr.top + pr.height / 2;
 
-        const extra = 300;
+        const isMobile = window.innerWidth < 768;
+        const extra = isMobile ? 50 : 300;
         const vw = Math.max(
             document.documentElement.clientWidth,
             window.innerWidth || 0,
         );
-        const ex = isRight ? vw - hr.left + extra : -hr.left - extra;
+
+        const ex = isRight ? vw + extra : -extra;
         const ey = sy + (isRight ? yOffset : -yOffset);
-
         const cp1x = sx + (ex - sx) * 0.6;
-
         return `M${sx},${sy} Q${cp1x},${sy} ${ex},${ey}`;
     };
 
     const updatePaths = () => {
         if (!heroEl || !svg) return;
         setSvgFrame();
-
         const rc = $("#hero-right-conn");
         const lc = $("#hero-left-conn");
         const rct = $("#hero-right-conn-top");
         const lct = $("#hero-left-conn-top");
-
         if (rp && rc) rc.setAttribute("d", bezier(rp, true));
         if (lp && lc) lc.setAttribute("d", bezier(lp, false, 80));
         if (rpt && rct) rct.setAttribute("d", quad(rpt, true));
         if (lpt && lct) lct.setAttribute("d", quad(lpt, false));
     };
 
-    // Keep it fresh on resize and whenever the hero resizes
+    const revealEls = Array.from(document.querySelectorAll(".reveal"));
+    const io: any =
+        "IntersectionObserver" in window
+            ? new IntersectionObserver(
+                  (entries) => {
+                      for (const e of entries)
+                          if (e.isIntersecting) {
+                              e.target.classList.add("is-visible");
+                              io.unobserve(e.target);
+                          }
+                  },
+                  { rootMargin: "0px 0px -10% 0px", threshold: 0.15 },
+              )
+            : null;
+    if (io) revealEls.forEach((el) => io.observe(el));
+    else revealEls.forEach((el) => el.classList.add("is-visible"));
+
     const raf = (fn: FrameRequestCallback) => requestAnimationFrame(fn);
     addEventListener("resize", () => raf(updatePaths));
+    addEventListener("scroll", () => raf(updatePaths), { passive: true });
     addEventListener("load", () => raf(updatePaths));
     setTimeout(() => raf(updatePaths), 50);
 
-    // React to content/layout changes without relying solely on window resize
     if (window.ResizeObserver && heroEl) {
         const ro = new ResizeObserver(() => raf(updatePaths));
         ro.observe(heroEl);

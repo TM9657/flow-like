@@ -3,112 +3,170 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
 ---
 
 <section
-    id="typed"
-    class="relative mx-auto max-w-7xl px-4 py-32 lg:px-8 mt-8 pt-0"
-    data-c1="hsl(0 100% 63% / .10)"
-    data-c2="hsl(21 89% 67% / .10)"
+  id="typed"
+  class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 "
+  data-c1="hsl(0 100% 63% / .10)"
+  data-c2="hsl(21 89% 67% / .10)"
 >
-    <div class="relative z-10">
-        <div class="mx-auto max-w-4xl text-center">
-            <div
-                class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-primary mb-6"
-            >
-                <div class="w-2 h-2 bg-primary rounded-full animate-pulse">
-                </div>
-                Prototype → Production
-            </div>
-            <h2
-                class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-primary to-secondary bg-clip-text text-transparent"
-            >
-                Zero-to-prod, <span class="text-primary">by design</span>
-            </h2>
-            <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
-                The graph you sketch is the graph you deploy. Typed ports,
-                preflight validation, and a deterministic Rust runtime mean no
-                throwaway prototypes, no glue-code rewrite, and no surprises
-                when you flip from dev to prod.
-            </p>
-        </div>
+  <!-- decorative bg -->
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_15%_25%,var(--c1,transparent),transparent)]"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_85%_35%,var(--c2,transparent),transparent)]"></div>
+    <div class="absolute inset-0 [mask-image:radial-gradient(70%_70%_at_50%_40%,black,transparent)] bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"></div>
+  </div>
 
-        <div class="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-            <!-- 1 -->
-            <div
-                class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300"
-            >
-                <div
-                    class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                >
-                </div>
-                <div class="relative z-10">
-                    <div
-                        class="w-12 h-12 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center mb-4"
-                    >
-                        <LuCircleCheck
-                            className="w-6 h-6 text-primary-foreground"
-                        />
-                    </div>
-                    <h3 class="text-xl font-semibold mb-3">
-                        Production-ready by default
-                    </h3>
-                    <p class="text-muted-foreground leading-relaxed">
-                        Preflight checks catch schema and wiring issues before
-                        run. The same typed graph ships across dev → staging →
-                        prod — no “hardening” rewrite.
-                    </p>
-                </div>
-            </div>
+  <div class="relative z-10">
+    <!-- Headline -->
+    <div class="mx-auto max-w-4xl text-center reveal">
+      <div
+        class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-primary mb-6"
+      >
+        <div class="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+        Prototype → Production
+      </div>
 
-            <!-- 2 -->
-            <div
-                class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300"
-            >
-                <div
-                    class="absolute inset-0 bg-gradient-to-br from-secondary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                >
-                </div>
-                <div class="relative z-10">
-                    <div
-                        class="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center mb-4"
-                    >
-                        <LuZap className="w-6 h-6 text-secondary-foreground" />
-                    </div>
-                    <h3 class="text-xl font-semibold mb-3">
-                        Contracts that don’t drift
-                    </h3>
-                    <p class="text-muted-foreground leading-relaxed">
-                        Typed dataflow with versioned port schemas makes
-                        refactors safe and reviewable. Changes are validated, so
-                        prototypes stay deployable as they evolve.
-                    </p>
-                </div>
-            </div>
+      <h2
+        class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-primary to-secondary bg-clip-text text-transparent leading-tight"
+      >
+        Zero-to-prod, <span class="text-primary">by design</span>
+      </h2>
 
-            <!-- 3 -->
-            <div
-                class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300 md:col-span-2 lg:col-span-1"
-            >
-                <div
-                    class="absolute inset-0 bg-gradient-to-br from-tertiary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                >
-                </div>
-                <div class="relative z-10">
-                    <div
-                        class="w-12 h-12 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-xl flex items-center justify-center mb-4"
-                    >
-                        <LuTrendingUp
-                            className="w-6 h-6 text-tertiary-foreground"
-                        />
-                    </div>
-                    <h3 class="text-xl font-semibold mb-3">
-                        Predictable in production
-                    </h3>
-                    <p class="text-muted-foreground leading-relaxed">
-                        Rust runtime compiles micro-plans, applies
-                        back-pressure, and keeps latency stable under load. Add
-                        approvals and policies without changing the graph.
-                    </p>
-                </div>
-            </div>
-        </div>
+      <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
+        The graph you sketch is the graph you deploy. Typed ports, preflight validation,
+        and a deterministic Rust runtime mean no throwaway prototypes, no glue-code rewrite,
+        and no surprises when you flip from dev to prod.
+      </p>
     </div>
+
+    <!-- Animated pipeline: Dev → Staging → Prod -->
+    <div class="mt-10">
+      <ol
+        class="mx-auto max-w-3xl flex items-center justify-between gap-3 rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm px-4 py-3 reveal"
+      >
+        <li class="flex items-center gap-2">
+          <span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-sm font-medium">Dev</span>
+        </li>
+        <div class="relative h-1 flex-1">
+          <div class="absolute inset-0 rounded-full bg-muted/50"></div>
+          <div class="absolute inset-0 rounded-full overflow-hidden">
+            <div class="h-full w-[160%] animate-flow bg-[linear-gradient(90deg,theme(colors.primary.DEFAULT/.0),theme(colors.primary.DEFAULT/.6),theme(colors.secondary.DEFAULT/.0))]"></div>
+          </div>
+        </div>
+        <li class="flex items-center gap-2">
+          <span class="size-2 rounded-full bg-amber-500 animate-pulse [animation-delay:.2s]"></span>
+          <span class="text-sm font-medium">Staging</span>
+        </li>
+        <div class="relative h-1 flex-1">
+          <div class="absolute inset-0 rounded-full bg-muted/50"></div>
+          <div class="absolute inset-0 rounded-full overflow-hidden">
+            <div class="h-full w-[160%] animate-flow bg-[linear-gradient(90deg,theme(colors.primary.DEFAULT/.0),theme(colors.primary.DEFAULT/.6),theme(colors.secondary.DEFAULT/.0))] [animation-delay:.15s]"></div>
+          </div>
+        </div>
+        <li class="flex items-center gap-2">
+          <span class="size-2 rounded-full bg-primary animate-pulse [animation-delay:.4s]"></span>
+          <span class="text-sm font-medium">Prod</span>
+        </li>
+      </ol>
+      <p class="mt-2 text-center text-xs text-muted-foreground reveal">
+        Same typed graph across environments — no “hardening” rewrite.
+      </p>
+    </div>
+
+    <!-- Feature cards -->
+    <div class="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <!-- 1 -->
+      <article
+        class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300 reveal"
+      >
+        <div class="relative z-10">
+          <div class="w-12 h-12 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center mb-4">
+            <LuCircleCheck className="w-6 h-6 text-primary-foreground" />
+          </div>
+          <h3 class="text-xl font-semibold mb-3">Production-ready by default</h3>
+          <p class="text-muted-foreground leading-relaxed">
+            Preflight checks catch schema & wiring issues before run. The same typed graph ships across
+            dev → staging → prod — no “hardening” rewrite.
+          </p>
+        </div>
+
+        <!-- shine -->
+        <div aria-hidden="true" class="absolute -top-16 -left-16 size-32 rounded-full bg-primary/15 blur-3xl group-hover:translate-x-4 group-hover:translate-y-4 transition-transform"></div>
+      </article>
+
+      <!-- 2 -->
+      <article
+        class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300 reveal"
+      >
+
+        <div class="relative z-10">
+          <div class="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center mb-4">
+            <LuZap className="w-6 h-6 text-secondary-foreground" />
+          </div>
+          <h3 class="text-xl font-semibold mb-3">Contracts that don’t drift</h3>
+          <p class="text-muted-foreground leading-relaxed">
+            Typed dataflow with versioned port schemas makes refactors safe & reviewable. Changes are validated,
+            so prototypes stay deployable as they evolve.
+          </p>
+        </div>
+
+        <div aria-hidden="true" class="absolute -bottom-16 -right-16 size-32 rounded-full bg-secondary/15 blur-3xl group-hover:-translate-x-4 group-hover:-translate-y-4 transition-transform"></div>
+      </article>
+
+      <!-- 3 -->
+      <article
+        class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300 md:col-span-2 lg:col-span-1 reveal"
+      >
+        <div class="relative z-10">
+          <div class="w-12 h-12 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-xl flex items-center justify-center mb-4">
+            <LuTrendingUp className="w-6 h-6 text-tertiary-foreground" />
+          </div>
+          <h3 class="text-xl font-semibold mb-3">Predictable in production</h3>
+          <p class="text-muted-foreground leading-relaxed">
+            The Rust runtime compiles micro-plans, applies back-pressure, and keeps latency stable under load.
+            Add approvals & policies without changing the graph.
+          </p>
+        </div>
+
+        <div aria-hidden="true" class="absolute top-1/2 -translate-y-1/2 -left-20 size-32 rounded-full bg-tertiary/15 blur-3xl group-hover:translate-x-3 transition-transform"></div>
+      </article>
+    </div>
+  </div>
+
+  <!-- helpers -->
+  <script is:inline>
+    (() => {
+      const reduce = matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+
+      // reveal-on-view
+      const reveals = document.querySelectorAll("#typed .reveal");
+      if (reveals.length && !reduce) {
+        const io = new IntersectionObserver((entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              e.target.classList.add("in");
+              io.unobserve(e.target);
+            }
+          });
+        }, { threshold: 0.12 });
+        reveals.forEach((el) => io.observe(el));
+      } else {
+        reveals.forEach((el) => el.classList.add("in"));
+      }
+    })();
+  </script>
+
+  <style>
+    :where(#typed) { --c1: attr(data-c1); --c2: attr(data-c2); }
+    /* reveal animation */
+    #typed .reveal { opacity: 0; transform: translateY(12px); transition: opacity .6s ease, transform .6s ease; }
+    #typed .reveal.in { opacity: 1; transform: none; }
+
+    /* flowing gradient in the pipeline */
+    @keyframes flow {
+      0% { transform: translateX(-60%); }
+      100% { transform: translateX(0%); }
+    }
+    .animate-flow { animation: flow 2.2s linear infinite; }
+  </style>
 </section>

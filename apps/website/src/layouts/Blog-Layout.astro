@@ -12,7 +12,7 @@ const canonical = new URL(Astro.url.pathname, site).toString();
 
 const title = data.title ?? "Flow-Like Blog";
 const desc = data.description ?? "Enterprise-grade workflow automation built for scale.";
-const cover = data.cover ?? "/og.webp";
+const cover = data.cover ?? "/og.png";
 
 function toIsoDate(d: string | Date | undefined): string | undefined {
   if (!d) return undefined;
