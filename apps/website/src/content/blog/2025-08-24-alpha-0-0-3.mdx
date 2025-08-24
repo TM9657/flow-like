@@ -1,0 +1,143 @@
+---
+title: "Flow-Like Alpha v0.0.3 — Tables, Themes, Agents, and Smoother Editing ✨"
+description: "Alpha v0.0.3 brings a fast Table Preview, custom themes, an Agent node, drag-and-drop pin editing, variable folders, and lots of fixes."
+date: 2025-08-24
+tags: ["release", "alpha", "alpha-0.0.3"]
+cover: "/images/alpha-0-0-3.jpg"
+draft: false
+------------
+
+One week after **Alpha v0.0.2** (Aug 17, 2025), we’re shipping **Alpha v0.0.3** with a focus on **data visibility, theming, agentic workflows, and quality-of-life editing**. Thank you for the fast feedback loop — it’s pushing the platform forward at high speed. 💙
+
+> ⚠️ **Alpha quality**: still not production. Please test aggressively and file issues with repro steps. We read everything.
+
+---
+
+## Highlights
+
+### Fast **Table Preview** (Data at a glance) — [#161](https://github.com/TM9657/flow-like/issues/161)
+
+Quickly inspect tabular results right inside Flow-Like. The new preview is built for iteration:
+
+* Smooth scrolling on large tables
+* Column autosizing & resizing
+* Sticky header and row index for orientation
+* Type badges on columns to spot schema issues early
+* Copy single cell / row actions for rapid debugging
+
+Perfect for validating intermediate steps, CSVs, query results, and model outputs — without leaving your flow.
+
+---
+
+### **Create Your Own Theme** — [#219](https://github.com/TM9657/flow-like/issues/219)
+
+Make Flow-Like feel like *your* workspace. You can now design themes end-to-end:
+
+* Define brand colors, radii, and surface styles
+* Preview changes live across nodes, pins, and panels
+* Save and switch between multiple themes per workspace
+
+Great for white-label deployments and teams that care about consistent visual language.
+
+---
+
+### **Simple Agent Node** (formerly “Tool Calling”) — thanks @simonjanssen
+
+PR with docs & examples: [https://github.com/TM9657/flow-like/pull/180](https://github.com/TM9657/flow-like/pull/180)
+
+Bring agentic behaviors into any workflow with a single node:
+
+* Register tools (functions) the model may call
+* Let the node plan → call tools → integrate results → continue
+* Works with structured inputs/outputs so you can keep it **typed**
+* Designed to chain with parsing, validation, and downstream nodes
+
+This is a clean foundation for assistants that reason, act, and report back — right inside your graph.
+
+---
+
+### **HashSet Nodes** — thanks @GitBrincie212 🎉
+
+New set-oriented building blocks for concise logic:
+
+* Create, insert, remove
+* `contains`, `len`, `is_empty`
+* `union`, `intersection`, `difference` for branching logic
+
+These nodes make list de-duplication, membership checks, and set math a snap.
+
+---
+
+### **Drag & Drop for Pin Editing** + Optimized Pin Editor
+
+Editing pins is now **direct-manipulation**:
+
+* Reorder pins via drag & drop
+* Faster, cleaner editor with clearer affordances
+* Reduced layout jank and improved focus handling
+
+Together with execution & typing improvements from 0.0.2, editing complex nodes is far less fiddly.
+
+---
+
+### **Variable Folders**
+
+Keep large projects tidy:
+
+* Group variables into folders
+* Collapse/expand to reduce visual noise
+* Search still finds variables across folders
+
+---
+
+### Storage UX: **Create Folders Directly** — [#211](https://github.com/TM9657/flow-like/issues/211)
+
+No more “upload a dummy folder” workaround. You can now create folders from the storage tab in one click.
+
+---
+
+### **New Landing Page**
+
+We refreshed the website to better convey Flow-Like’s mission (typed, local-first workflows that scale) and to showcase the velocity of recent releases. More demos and deep dives are coming.
+
+---
+
+## Bug Fixes
+
+* Fixed focus bug in node search field — [#220](https://github.com/TM9657/flow-like/issues/220)
+* Changing a pin’s default **after** a connection no longer breaks the connection — [#153](https://github.com/TM9657/flow-like/issues/153)
+* “Call by reference” on nodes with many inputs now renders correctly — [#128](https://github.com/TM9657/flow-like/issues/128)
+* The **Add** button for pins works correctly in all cases — [#172](https://github.com/TM9657/flow-like/issues/172)
+* **Layer Pins** correctly connect to **Generics** — [#208](https://github.com/TM9657/flow-like/issues/208)
+
+---
+
+## Smaller Changes
+
+* Color indicator added to the **Variable Type** selector (quicker at-a-glance parsing)
+* **Message Node** now supports **Tool Messages** (richer agent/LLM interactions)
+
+---
+
+## Thank you
+
+Huge thanks to everyone filing issues, cutting PRs, and stress-testing the alpha — especially **@GitBrincie212** and **@simonjanssen** this cycle. Keep the feedback flowing. 💙
+
+---
+
+## Get it & try it
+
+Grab installers and artifacts from the **Alpha v0.0.3 release page** and tell us what breaks — ideally with steps, logs, and screenshots. We’ll keep iterating fast. ([GitHub][1])
+
+---
+
+## What’s next
+
+* Deeper type coverage across pins and edges
+* Agent playground & evaluation tools
+* More data views (diffs, schema checks)
+* Governance & observability for enterprise workflows
+
+Early testers shape the roadmap — your feedback directly impacts what ships next.
+
+[1]: https://github.com/TM9657/flow-like/releases/tag/alpha-v0.0.3 "Release Flow-Like — Alpha v0.0.3 · TM9657/flow-like · GitHub"
