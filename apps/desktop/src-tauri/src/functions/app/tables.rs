@@ -85,7 +85,7 @@ pub async fn db_list(
     let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
     let limit = limit.unwrap_or(100).min(250) as usize;
     let offset = offset.unwrap_or(0) as usize;
-    let items = db.list(limit, offset).await?;
+    let items = db.list(None, limit, offset).await?;
     Ok(items)
 }
 
@@ -102,6 +102,7 @@ pub struct QueryTablePayload {
     filter: Option<String>,
     fts_term: Option<String>,
     rerank: Option<bool>,
+    select: Option<Vec<String>>,
 }
 
 #[tauri::command(async)]
@@ -133,13 +134,21 @@ pub async fn db_query(
         (Some(vector_query), None, filter) => {
             let filter_str = filter.as_deref();
             let items = db
-                .vector_search(vector_query.vector, filter_str, limit, offset)
+                .vector_search(
+                    vector_query.vector,
+                    filter_str,
+                    payload.select,
+                    limit,
+                    offset,
+                )
                 .await?;
             Ok(items)
         }
         (None, Some(fts_term), filter) => {
             let filter_str = filter.as_deref();
-            let items = db.fts_search(&fts_term, filter_str, limit, offset).await?;
+            let items = db
+                .fts_search(&fts_term, filter_str, payload.select, limit, offset)
+                .await?;
             Ok(items)
         }
         (Some(vector_query), Some(fts_term), filter) => {
@@ -149,6 +158,7 @@ pub async fn db_query(
                     vector_query.vector,
                     &fts_term,
                     filter_str,
+                    payload.select,
                     limit,
                     offset,
                     payload.rerank.unwrap_or(true),
@@ -157,7 +167,7 @@ pub async fn db_query(
             Ok(items)
         }
         (None, None, Some(filter)) => {
-            let items = db.filter(&filter, limit, offset).await?;
+            let items = db.filter(&filter, payload.select, limit, offset).await?;
             Ok(items)
         }
         _ => Err(anyhow::anyhow!("No query parameters provided").into()),

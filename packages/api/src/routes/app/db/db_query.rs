@@ -30,6 +30,7 @@ pub struct QueryTablePayload {
     filter: Option<String>,
     fts_term: Option<String>,
     rerank: Option<bool>,
+    select: Option<Vec<String>>,
 }
 
 #[tracing::instrument(name = "POST /apps/{app_id}/db/{table}/query", skip(state, user))]
@@ -63,13 +64,21 @@ pub async fn query_table(
         (Some(vector_query), None, filter) => {
             let filter_str = filter.as_deref();
             let items = db
-                .vector_search(vector_query.vector, filter_str, limit, offset)
+                .vector_search(
+                    vector_query.vector,
+                    filter_str,
+                    payload.select,
+                    limit,
+                    offset,
+                )
                 .await?;
             return Ok(Json(items));
         }
         (None, Some(fts_term), filter) => {
             let filter_str = filter.as_deref();
-            let items = db.fts_search(&fts_term, filter_str, limit, offset).await?;
+            let items = db
+                .fts_search(&fts_term, filter_str, payload.select, limit, offset)
+                .await?;
             return Ok(Json(items));
         }
         (Some(vector_query), Some(fts_term), filter) => {
@@ -79,6 +88,7 @@ pub async fn query_table(
                     vector_query.vector,
                     &fts_term,
                     filter_str,
+                    payload.select,
                     limit,
                     offset,
                     payload.rerank.unwrap_or(true),
@@ -87,7 +97,7 @@ pub async fn query_table(
             return Ok(Json(items));
         }
         (None, None, Some(filter)) => {
-            let items = db.filter(&filter, limit, offset).await?;
+            let items = db.filter(&filter, payload.select, limit, offset).await?;
             return Ok(Json(items));
         }
         _ => {

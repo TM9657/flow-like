@@ -1,0 +1,117 @@
+---
+import { LuChevronDown } from "react-icons/lu";
+---
+
+<section
+    id="faq"
+    data-c1="hsl(35 96% 55% / .10)"
+    data-c2="hsl(18 94% 52% / .10)"
+    class="relative mx-auto max-w-5xl px-4 py-28 lg:px-8 mb-10"
+>
+    <div class="relative z-10">
+        <div class="text-center mb-16">
+            <div
+                class="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-amber-600 dark:text-amber-400 mb-6"
+            >
+                <div class="w-2 h-2 bg-amber-500 rounded-full animate-pulse">
+                </div>
+                Questions & Answers
+            </div>
+            <h2
+                class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-amber-600 to-orange-600 bg-clip-text text-transparent"
+            >
+                Frequently Asked <span class="text-amber-600">Questions</span>
+            </h2>
+        </div>
+
+        <div
+            class="rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 divide-y divide-border/40"
+        >
+            <details class="group py-6 first:pt-0 last:pb-0" open>
+                <summary
+                    class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-primary transition-colors duration-200"
+                >
+                    <span>Where can I run Flow-Like?</span>
+                    <div
+                        class="w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-primary group-open:to-primary/80 transition-all duration-200"
+                    >
+                        <LuChevronDown
+                            className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-200 group-open:rotate-180"
+                        />
+                    </div>
+                </summary>
+                <p
+                    class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-primary/20"
+                >
+                    Locally on macOS/Windows/Linux, on the edge, or in any
+                    cloud. Start local, move to cloud later without changing the
+                    graph.
+                </p>
+            </details>
+
+            <details class="group py-6">
+                <summary
+                    class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-secondary transition-colors duration-200"
+                >
+                    <span>How do I integrate with my stack?</span>
+                    <div
+                        class="w-8 h-8 bg-gradient-to-br from-secondary/20 to-secondary/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-secondary group-open:to-secondary/80 transition-all duration-200"
+                    >
+                        <LuChevronDown
+                            className="h-4 w-4 text-secondary group-open:text-primary-foreground transition-all duration-200 group-open:rotate-180"
+                        />
+                    </div>
+                </summary>
+                <p
+                    class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-secondary/20"
+                >
+                    Wrap systems as nodes with typed ports. Embed/white-label
+                    the editor or run the engine headless inside your apps.
+                </p>
+            </details>
+
+            <details class="group py-6">
+                <summary
+                    class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-tertiary transition-colors duration-200"
+                >
+                    <span>What languages can I use for nodes?</span>
+                    <div
+                        class="w-8 h-8 bg-gradient-to-br from-tertiary/20 to-tertiary/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-tertiary group-open:to-tertiary/80 transition-all duration-200"
+                    >
+                        <LuChevronDown
+                            className="h-4 w-4 text-tertiary group-open:text-primary-foreground transition-all duration-200 group-open:rotate-180"
+                        />
+                    </div>
+                </summary>
+                <p
+                    class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-tertiary/20"
+                >
+                    Nodes are authored in <strong>Rust</strong> today. A WASM node
+                    SDK is planned to broaden language support.
+                </p>
+            </details>
+
+            <details class="group py-6 last:pb-0">
+                <summary
+                    class="flex cursor-pointer list-none items-center justify-between text-left font-semibold text-lg group-hover:text-amber-600 transition-colors duration-200"
+                >
+                    <span>Is there governance?</span>
+                    <div
+                        class="w-8 h-8 bg-gradient-to-br from-emerald-500/20 to-emerald-500/10 rounded-lg flex items-center justify-center group-open:bg-gradient-to-br group-open:from-emerald-500 group-open:to-emerald-500/80 transition-all duration-200"
+                    >
+                        <LuChevronDown
+                            className="h-4 w-4 text-emerald-500 group-open:text-primary-foreground transition-all duration-200 group-open:rotate-180"
+                        />
+                    </div>
+                </summary>
+                <p
+                    class="mt-4 text-muted-foreground leading-relaxed pl-2 border-l-2 border-amber-500/20"
+                >
+                    Yes — approvals, policy guardrails, and versioned flows are
+                    first-class concepts to help you meet operational and audit
+                    needs.
+                </p>
+            </details>
+        </div>
+    </div>
+</section>

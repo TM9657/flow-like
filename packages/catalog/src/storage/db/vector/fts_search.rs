@@ -96,7 +96,7 @@ impl NodeLogic for FTSLocalDatabaseNode {
             .clone();
         let database = database.read().await;
         let results = database
-            .fts_search(&search, filter, limit as usize, offset as usize)
+            .fts_search(&search, filter, None, limit as usize, offset as usize)
             .await?;
         context.set_pin_value("values", json!(results)).await?;
         context.activate_exec_pin("exec_out").await?;

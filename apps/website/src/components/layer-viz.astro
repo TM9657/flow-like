@@ -1,0 +1,288 @@
+---
+---
+
+<div class="relative order-2 lg:order-1">
+    <div class="relative space-y-6">
+        <div class="text-center mb-8">
+            <h3 class="text-xl font-semibold mb-2">
+                Layer Stack Visualization
+            </h3>
+            <p class="text-sm text-muted-foreground">
+                Three interconnected views of the same workflow
+            </p>
+        </div>
+
+        <!-- Layer Visualization (clean isometric stack) -->
+        <div class="order-2 lg:order-1">
+            <div
+                id="viz-layers"
+                data-active="business"
+                class="layers-iso mx-auto w-full max-w-[560px] h-[360px]"
+            >
+                <!-- Business (top) -->
+                <div
+                    class="plane"
+                    data-k="business"
+                    style="--accent:243 85% 64%"
+                >
+                    <svg viewBox="0 0 640 400" aria-hidden="true">
+                        <!-- frame -->
+                        <rect
+                            x="8"
+                            y="8"
+                            width="624"
+                            height="384"
+                            rx="20"
+                            fill="hsl(var(--accent) / .06)"
+                            stroke="hsl(var(--accent) / .28)"></rect>
+                        <!-- edges -->
+                        <path
+                            class="edge"
+                            d="M130 160 C200 160, 240 160, 310 160"></path>
+                        <path
+                            class="edge"
+                            d="M310 160 C390 160, 430 210, 500 210"></path>
+                        <path
+                            class="edge"
+                            d="M310 160 C390 160, 430 110, 500 110"></path>
+                        <!-- nodes -->
+                        <rect
+                            class="node"
+                            x="80"
+                            y="130"
+                            width="100"
+                            height="60"
+                            rx="10"></rect>
+                        <text class="label" x="130" y="165" text-anchor="middle"
+                            >Start</text
+                        >
+
+                        <rect
+                            class="node"
+                            x="270"
+                            y="130"
+                            width="110"
+                            height="60"
+                            rx="10"></rect>
+                        <text class="label" x="325" y="165" text-anchor="middle"
+                            >Triage</text
+                        >
+
+                        <rect
+                            class="node"
+                            x="490"
+                            y="80"
+                            width="100"
+                            height="60"
+                            rx="10"></rect>
+                        <text class="label" x="540" y="115" text-anchor="middle"
+                            >Approve</text
+                        >
+
+                        <rect
+                            class="node"
+                            x="490"
+                            y="180"
+                            width="100"
+                            height="60"
+                            rx="10"></rect>
+                        <text class="label" x="540" y="215" text-anchor="middle"
+                            >Decline</text
+                        >
+                    </svg>
+                </div>
+
+                <!-- Data (middle) -->
+                <div class="plane" data-k="data" style="--accent:199 89% 48%">
+                    <svg viewBox="0 0 640 400" aria-hidden="true">
+                        <rect
+                            x="8"
+                            y="8"
+                            width="624"
+                            height="384"
+                            rx="20"
+                            fill="hsl(var(--accent) / .06)"
+                            stroke="hsl(var(--accent) / .28)"></rect>
+                        <path
+                            class="edge"
+                            d="M140 230 C220 230, 260 200, 340 200"></path>
+                        <path
+                            class="edge"
+                            d="M340 200 C420 200, 470 240, 540 240"></path>
+                        <rect
+                            class="node"
+                            x="90"
+                            y="200"
+                            width="110"
+                            height="60"
+                            rx="10"></rect>
+                        <text class="label" x="145" y="235" text-anchor="middle"
+                            >SQL.claims</text
+                        >
+
+                        <rect
+                            class="node"
+                            x="300"
+                            y="170"
+                            width="120"
+                            height="60"
+                            rx="10"></rect>
+                        <text class="label" x="360" y="205" text-anchor="middle"
+                            >FT.index</text
+                        >
+
+                        <rect
+                            class="node"
+                            x="500"
+                            y="210"
+                            width="110"
+                            height="60"
+                            rx="10"></rect>
+                        <text class="label" x="555" y="245" text-anchor="middle"
+                            >Vector.store</text
+                        >
+                    </svg>
+                </div>
+
+                <!-- Implementation (bottom) -->
+                <div class="plane" data-k="impl" style="--accent:160 84% 40%">
+                    <svg viewBox="0 0 640 400" aria-hidden="true">
+                        <rect
+                            x="8"
+                            y="8"
+                            width="624"
+                            height="384"
+                            rx="20"
+                            fill="hsl(var(--accent) / .06)"
+                            stroke="hsl(var(--accent) / .28)"></rect>
+                        <path
+                            class="edge"
+                            d="M90 120 C200 120, 220 200, 330 200"></path>
+                        <path
+                            class="edge"
+                            d="M330 200 C430 200, 450 280, 560 280"></path>
+                        <rect
+                            class="node"
+                            x="60"
+                            y="90"
+                            width="120"
+                            height="60"
+                            rx="10"></rect>
+                        <text class="label" x="120" y="125" text-anchor="middle"
+                            >HTTP.Intake</text
+                        >
+
+                        <rect
+                            class="node"
+                            x="290"
+                            y="170"
+                            width="120"
+                            height="60"
+                            rx="10"></rect>
+                        <text class="label" x="350" y="205" text-anchor="middle"
+                            >Classify</text
+                        >
+
+                        <rect
+                            class="node"
+                            x="520"
+                            y="250"
+                            width="120"
+                            height="60"
+                            rx="10"></rect>
+                        <text class="label" x="580" y="285" text-anchor="middle"
+                            >Notify</text
+                        >
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const viz = document.getElementById("viz-layers");
+    const tabs = document.querySelectorAll("#layers-tabs [role=tab]");
+    tabs.forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const t = btn.getAttribute("data-target");
+            if (viz && t) viz.setAttribute("data-active", t); // highlight matching pane
+        });
+    });
+</script>
+
+<style>
+    .layers-iso {
+        position: relative;
+        perspective: 1200px;
+        transform-style: preserve-3d;
+    }
+    .layers-iso .plane {
+        position: absolute;
+        inset: 0;
+        transform: rotateX(55deg) rotateZ(-2deg) translateZ(var(--z, 0));
+        transition:
+            transform 0.45s ease,
+            opacity 0.28s ease,
+            filter 0.28s ease;
+        filter: saturate(0.85) brightness(0.95);
+        opacity: 0.55;
+    }
+    .layers-iso .plane svg {
+        width: 100%;
+        height: 100%;
+        border-radius: 18px;
+        background: linear-gradient(
+            to br,
+            hsl(var(--accent) / 0.06),
+            transparent
+        );
+        box-shadow: 0 10px 30px hsl(var(--accent) / 0.18);
+        border: 1px solid hsl(var(--accent) / 0.28);
+    }
+
+    /* depth ordering */
+    .layers-iso [data-k="business"] {
+        --z: 140px;
+    }
+    .layers-iso [data-k="data"] {
+        --z: 70px;
+    }
+    .layers-iso [data-k="impl"] {
+        --z: 0px;
+    }
+
+    /* highlight active plane */
+    .layers-iso[data-active="business"] [data-k="business"],
+    .layers-iso[data-active="data"] [data-k="data"],
+    .layers-iso[data-active="impl"] [data-k="impl"] {
+        opacity: 1;
+        filter: none;
+        transform: rotateX(55deg) rotateZ(-2deg) translateZ(var(--z))
+            scale(1.02);
+    }
+
+    /* tiny graph styling */
+    .layers-iso .node {
+        fill: hsl(var(--accent) / 0.14);
+        stroke: hsl(var(--accent) / 0.6);
+    }
+    .layers-iso .edge {
+        stroke: hsl(var(--accent) / 0.55);
+        stroke-width: 2;
+        fill: none;
+        stroke-linecap: round;
+        stroke-dasharray: 6 6;
+    }
+    .layers-iso .label {
+        fill: hsl(var(--accent));
+        font-weight: 700;
+        font-size: 12px;
+    }
+
+    /* subtle hover lift */
+    .layers-iso:hover .plane {
+        transform: rotateX(55deg) rotateZ(-2deg) translateZ(var(--z))
+            translateY(-2px);
+    }
+</style>

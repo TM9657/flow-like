@@ -1,0 +1,417 @@
+---
+import LayerViz from "../components/layer-viz.astro";
+import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
+---
+
+<section
+    id="layers"
+    data-c1="hsl(243 85% 64% / .10)"
+    data-c2="hsl(190 90% 60% / .10)"
+    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+>
+    <div class="relative z-10">
+        <div class="mx-auto max-w-4xl text-center">
+            <div
+                class="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 mb-6"
+            >
+                <div class="w-2 h-2 bg-indigo-500 rounded-full animate-pulse">
+                </div>
+                Multi-Layer Views
+            </div>
+            <h2
+                class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-indigo-500 to-cyan-500 bg-clip-text text-transparent"
+            >
+                Business process, data, and implementation in <span
+                    class="text-indigo-500">one view</span
+                >
+            </h2>
+            <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
+                Use <strong>Layers</strong> so roles see what they need without leaving
+                the canvas. Switch context — keep the graph.
+            </p>
+        </div>
+
+        <div class="mx-auto mt-16 max-w-6xl">
+            <div class="grid gap-16 lg:grid-cols-2 items-center">
+                <!-- Layer Visualization -->
+                <LayerViz />
+
+                <!-- Tabs -->
+                <div class="order-1 lg:order-2">
+                    <div
+                        class="rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 transition-all duration-300"
+                    >
+                        <div
+                            id="layers-tabs"
+                            role="tablist"
+                            class="grid grid-cols-3 gap-3 mb-8"
+                        >
+                            <button
+                                role="tab"
+                                aria-selected="true"
+                                data-target="business"
+                                class="layers-tab active rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 backdrop-blur-sm px-6 py-4 text-center text-sm font-semibold transition-all duration-300"
+                            >
+                                <div
+                                    class="flex items-center justify-center gap-2"
+                                >
+                                    <div
+                                        class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center"
+                                    >
+                                        <LuBriefcaseBusiness
+                                            className="w-4 h-4 text-white"
+                                        />
+                                    </div>
+                                    <span>Process</span>
+                                </div>
+                            </button>
+                            <button
+                                role="tab"
+                                aria-selected="false"
+                                data-target="data"
+                                class="layers-tab rounded-2xl border border-border/40 bg-muted/40 backdrop-blur-sm px-6 py-4 text-center text-sm font-semibold transition-all duration-300 hover:bg-accent hover:text-accent-foreground"
+                            >
+                                <div
+                                    class="flex items-center justify-center gap-2"
+                                >
+                                    <div
+                                        class="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center"
+                                    >
+                                        <LuDatabase
+                                            className="w-4 h-4 text-white"
+                                        />
+                                    </div>
+                                    <span>Data</span>
+                                </div>
+                            </button>
+                            <button
+                                role="tab"
+                                aria-selected="false"
+                                data-target="impl"
+                                class="layers-tab rounded-2xl border border-border/40 bg-muted/40 backdrop-blur-sm px-6 py-4 text-center text-sm font-semibold transition-all duration-300 hover:bg-accent hover:text-accent-foreground"
+                            >
+                                <div
+                                    class="flex items-center justify-center gap-2"
+                                >
+                                    <div
+                                        class="w-8 h-8 size-8 min-w-8 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center"
+                                    >
+                                        <LuCode
+                                            className="w-4 h-4 text-white"
+                                        />
+                                    </div>
+                                    <span>Logic</span>
+                                </div>
+                            </button>
+                        </div>
+
+                        <div
+                            id="layers-panels"
+                            class="relative min-h-fit h-fit transition-all"
+                        >
+                            <div
+                                id="panel-business"
+                                role="tabpanel"
+                                class="layers-panel active inset-0"
+                            >
+                                <div
+                                    class="rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 backdrop-blur-sm p-8"
+                                >
+                                    <div class="flex items-start gap-4">
+                                        <div
+                                            class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl flex items-center justify-center flex-shrink-0"
+                                        >
+                                            <LuBriefcaseBusiness
+                                                className="w-6 h-6 text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-2xl font-bold mb-4">
+                                                Business Layer
+                                            </h3>
+                                            <p
+                                                class="text-lg text-muted-foreground leading-relaxed"
+                                            >
+                                                Example: <em
+                                                    >Warranty Claim Intake</em
+                                                >. Customer submits a claim →
+                                                triage severity → approve or
+                                                decline → notify customer →
+                                                trigger payout or repair.
+                                            </p>
+                                            <div
+                                                class="mt-6 grid grid-cols-2 gap-4"
+                                            >
+                                                <div
+                                                    class="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4"
+                                                >
+                                                    <div
+                                                        class="mb-2 font-semibold text-indigo-700 dark:text-indigo-300"
+                                                    >
+                                                        Process Flow
+                                                    </div>
+                                                    <div
+                                                        class="text-sm text-muted-foreground"
+                                                    >
+                                                        Visual workflow
+                                                        representation
+                                                    </div>
+                                                </div>
+                                                <div
+                                                    class="rounded-xl border border-purple-500/20 bg-purple-500/10 p-4"
+                                                >
+                                                    <div
+                                                        class="mb-2 font-semibold text-purple-700 dark:text-purple-300"
+                                                    >
+                                                        Decision Points
+                                                    </div>
+                                                    <div
+                                                        class="text-sm text-muted-foreground"
+                                                    >
+                                                        Approval gates and
+                                                        routing
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div
+                                id="panel-data"
+                                role="tabpanel"
+                                class="layers-panel inset-0"
+                                hidden
+                            >
+                                <div
+                                    class="rounded-2xl border border-blue-500/20 bg-gradient-to-r from-blue-500/5 to-cyan-500/5 backdrop-blur-sm p-8"
+                                >
+                                    <div class="flex items-start gap-4">
+                                        <div
+                                            class="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center flex-shrink-0"
+                                        >
+                                            <LuDatabase
+                                                className="w-6 h-6 text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-2xl font-bold mb-4">
+                                                Data Layer
+                                            </h3>
+                                            <p
+                                                class="text-lg text-muted-foreground leading-relaxed"
+                                            >
+                                                Source systems in one project:
+                                                PostgreSQL <code
+                                                    class="rounded bg-muted px-2 py-1"
+                                                    >claims</code
+                                                >, object storage for photos,
+                                                and a document store for
+                                                reports. Schemas appear at ports
+                                                and are validated pre-deploy.
+                                            </p>
+                                            <div
+                                                class="mt-6 grid grid-cols-2 gap-4"
+                                            >
+                                                <div
+                                                    class="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4"
+                                                >
+                                                    <div
+                                                        class="font-semibold text-blue-700 dark:text-blue-300"
+                                                    >
+                                                        Schema Validation
+                                                    </div>
+                                                    <div
+                                                        class="text-sm text-muted-foreground"
+                                                    >
+                                                        Type-safe data contracts
+                                                    </div>
+                                                </div>
+                                                <div
+                                                    class="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4"
+                                                >
+                                                    <div
+                                                        class="font-semibold text-cyan-700 dark:text-cyan-300"
+                                                    >
+                                                        Data Sources
+                                                    </div>
+                                                    <div
+                                                        class="text-sm text-muted-foreground"
+                                                    >
+                                                        Multiple system
+                                                        integration
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div
+                                id="panel-impl"
+                                role="tabpanel"
+                                class="layers-panel inset-0"
+                                hidden
+                            >
+                                <div
+                                    class="rounded-2xl border border-green-500/20 bg-gradient-to-r from-green-500/5 to-emerald-500/5 backdrop-blur-sm p-8"
+                                >
+                                    <div class="flex items-start gap-4">
+                                        <div
+                                            class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center flex-shrink-0"
+                                        >
+                                            <LuCode
+                                                className="w-6 h-6 text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-2xl font-bold mb-4">
+                                                Implementation Layer
+                                            </h3>
+                                            <p
+                                                class="text-lg text-muted-foreground leading-relaxed"
+                                            >
+                                                Typed nodes wired to the
+                                                business flow: <code
+                                                    class="rounded bg-muted px-2 py-1"
+                                                    >HTTP.Intake</code
+                                                > → <code
+                                                    class="rounded bg-muted px-2 py-1"
+                                                    >Classify.Image</code
+                                                > → <code
+                                                    class="rounded bg-muted px-2 py-1"
+                                                    >Human.Approval</code
+                                                > → <code
+                                                    class="rounded bg-muted px-2 py-1"
+                                                    >ERP.CreateCase</code
+                                                > → <code
+                                                    class="rounded bg-muted px-2 py-1"
+                                                    >Notify.Email/SMS</code
+                                                >. Tests and policies live on
+                                                edges.
+                                            </p>
+                                            <div
+                                                class="mt-6 grid grid-cols-2 gap-4"
+                                            >
+                                                <div
+                                                    class="rounded-xl border border-green-500/20 bg-green-500/10 p-4"
+                                                >
+                                                    <div
+                                                        class="font-semibold text-green-700 dark:text-green-300"
+                                                    >
+                                                        Typed Nodes
+                                                    </div>
+                                                    <div
+                                                        class="text-sm text-muted-foreground"
+                                                    >
+                                                        Runtime-safe components
+                                                    </div>
+                                                </div>
+                                                <div
+                                                    class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4"
+                                                >
+                                                    <div
+                                                        class="font-semibold text-emerald-700 dark:text-emerald-300"
+                                                    >
+                                                        Edge Policies
+                                                    </div>
+                                                    <div
+                                                        class="text-sm text-muted-foreground"
+                                                    >
+                                                        Testing and governance
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div><!-- /panels -->
+                    </div>
+                </div>
+            </div>
+        </div><!-- /container -->
+    </div>
+</section>
+
+<script>
+    const tabs = document.querySelectorAll("#layers-tabs [role=tab]");
+    const panels = {
+        business: document.getElementById("panel-business"),
+        data: document.getElementById("panel-data"),
+        impl: document.getElementById("panel-impl"),
+    };
+    tabs.forEach((btn) => {
+        btn.addEventListener("click", () => {
+            tabs.forEach((b) => b.setAttribute("aria-selected", "false"));
+            btn.setAttribute("aria-selected", "true");
+            const t = btn.getAttribute("data-target");
+            Object.entries(panels).forEach(([k, el]) => {
+                if (!el) return;
+                if (k === t) el.removeAttribute("hidden");
+                else el.setAttribute("hidden", "");
+            });
+        });
+    });
+
+    (function () {
+        const tabs = document.querySelectorAll("#layers-tabs [role=tab]");
+        const panels: any = {
+            business: document.getElementById("panel-business"),
+            data: document.getElementById("panel-data"),
+            impl: document.getElementById("panel-impl"),
+        };
+        if (!tabs.length) return;
+        const activate = (key: any) => {
+            Object.values(panels).forEach((el: any) => {
+                if (!el) return;
+                el.classList.remove("active");
+                el.setAttribute("hidden", "");
+            });
+            if (panels[key]) {
+                panels[key].classList.add("active");
+                panels[key].removeAttribute("hidden");
+            }
+        };
+        tabs.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                tabs.forEach((b) => {
+                    b.setAttribute("aria-selected", "false");
+                    b.classList.remove("active");
+                });
+                btn.setAttribute("aria-selected", "true");
+                btn.classList.add("active");
+                const t = btn.getAttribute("data-target");
+                activate(t);
+            });
+        });
+    })();
+</script>
+
+<style>
+    .layers-panel {
+        transition:
+            opacity 300ms ease-in-out,
+            transform 300ms ease-in-out;
+    }
+    /* Smooth ambient color changes using CSS custom property transitions */
+
+    /* Panels fade smoother */
+    .layers-panel {
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(8px);
+        transition:
+            opacity 220ms ease,
+            transform 220ms ease;
+    }
+    .layers-panel.active {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+    }
+    .layers-tab.active {
+        outline: none;
+        box-shadow: 0 0 0 1px color-mix(in oklab, currentColor 30%, transparent);
+    }
+</style>

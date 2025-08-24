@@ -1,0 +1,109 @@
+---
+import { Image } from "astro:assets";
+import tracing from "../images/index/tracing.png";
+---
+
+<section
+    id="performance"
+    data-c1="hsl(24 96% 60% / .10)"
+    data-c2="hsl(280 85% 65% / .10)"
+    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+>
+    <div class="relative z-10 grid items-start gap-16 lg:grid-cols-2">
+        <div class="space-y-8">
+            <div>
+                <div
+                    class="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-orange-600 dark:text-orange-400 mb-6"
+                >
+                    <div
+                        class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"
+                    >
+                    </div>
+                    Rust Performance
+                </div>
+                <h2
+                    class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-orange-500 to-red-500 bg-clip-text text-transparent"
+                >
+                    Rust runtime for <span class="text-orange-500"
+                        >predictable</span
+                    > speed
+                </h2>
+                <p class="mt-6 text-lg text-muted-foreground">
+                    Flow-Like's runtime is written in Rust — tight memory
+                    control, back-pressure aware IO, and zero-copy on hot paths.
+                    Nodes are authored in Rust too, so you can lean on the
+                    ecosystem.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-8">
+                <div
+                    class="rounded-2xl border border-orange-500/20 bg-gradient-to-br from-orange-500/10 to-red-500/10 backdrop-blur-sm p-8"
+                >
+                    <div
+                        class="text-5xl font-extrabold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent mb-3"
+                    >
+                        Rust
+                    </div>
+                    <div class="text-sm text-muted-foreground">
+                        foundation for runtime & nodes
+                    </div>
+                </div>
+                <div
+                    class="rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-purple-500/10 backdrop-blur-sm p-8"
+                >
+                    <div
+                        class="text-5xl font-extrabold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent mb-3"
+                    >
+                        0-copy
+                    </div>
+                    <div class="text-sm text-muted-foreground">hot paths</div>
+                </div>
+                <div
+                    class="rounded-2xl border border-green-500/20 bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-sm p-8"
+                >
+                    <div
+                        class="text-5xl font-extrabold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent mb-3"
+                    >
+                        Stable
+                    </div>
+                    <div class="text-sm text-muted-foreground">
+                        latency under load
+                    </div>
+                </div>
+                <div
+                    class="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-sm p-8"
+                >
+                    <div
+                        class="text-5xl font-extrabold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent mb-3"
+                    >
+                        Back-pressure
+                    </div>
+                    <div class="text-sm text-muted-foreground">aware IO</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="relative">
+            <div
+                class="rounded-3xl border border-border/40 bg-gradient-to-b from-card/60 to-card/40 backdrop-blur-sm p-8"
+            >
+                <div class="mb-6">
+                    <div class="text-lg font-semibold mb-2">
+                        Instrumentation
+                    </div>
+                    <p class="text-muted-foreground">
+                        Trace spans, per-edge timings, and payload previews —
+                        directly in the UI.
+                    </p>
+                </div>
+                <Image
+                    src={tracing}
+                    alt="Traces and timings"
+                    class="w-full h-auto rounded-2xl bg-background/40 backdrop-blur-sm object-cover"
+                    loading="lazy"
+                />
+            </div>
+        </div>
+    </div>
+</section>

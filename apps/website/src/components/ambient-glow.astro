@@ -1,0 +1,87 @@
+<div
+	id="ambient-flow"
+	aria-hidden="true"
+	class="pointer-events-none fixed inset-0 -z-[80]"
+	style="
+				--c2: hsl(0 100% 63% / .08);
+				--c1: hsl(161 40% 44% / .08);
+				background:
+					radial-gradient(1200px 600px at 20% 10%, var(--c1), transparent 60%),
+					radial-gradient(1200px 600px at 80% 90%, var(--c2), transparent 60%);
+			"
+>
+</div>
+
+<style>
+	#ambient-flow {
+		transition:
+			--c1 700ms ease,
+			--c2 700ms ease,
+			opacity 250ms ease;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		#ambient-flow {
+			transition: none !important;
+		}
+		.layers-panel {
+			transition: none !important;
+		}
+	}
+
+	@supports (background: paint(worklet)) or (color: oklch(0 0 0)) {
+		/* Register animatable color custom properties (Houdini) */
+		@property --c1 {
+			syntax: "<color>";
+			inherits: true;
+			initial-value: hsla(0, 0%, 0%, 0);
+		}
+		@property --c2 {
+			syntax: "<color>";
+			inherits: true;
+			initial-value: hsla(0, 0%, 0%, 0);
+		}
+	}
+</style>
+
+<script>
+	(function () {
+		const ambient = document.getElementById("ambient-flow");
+		const sections = document.querySelectorAll("section[data-c1][data-c2]");
+		if (!ambient || !sections.length) return;
+
+		const supportsHoudini = !!(window.CSS && "registerProperty" in CSS);
+		// Fallback: if we can't animate custom props, softly crossfade opacity on change
+		const softFade = () => {
+			ambient.style.opacity = "0.92";
+			requestAnimationFrame(() => {
+				ambient.style.opacity = "1";
+			});
+		};
+
+		const setAmbient = (el: Element) => {
+			const c1 = el.getAttribute("data-c1") || "hsl(222 89% 60% / .08)";
+			const c2 = el.getAttribute("data-c2") || "hsl(268 84% 62% / .08)";
+			// Update CSS variables so background stays the same, only colors change
+			ambient.style.setProperty("--c1", c1);
+			ambient.style.setProperty("--c2", c2);
+			if (!supportsHoudini) softFade();
+		};
+
+		const io = new IntersectionObserver(
+			(entries) => {
+				entries.forEach((e) => {
+					if (e.isIntersecting && e.intersectionRatio > 0.35) {
+						setAmbient(e.target);
+					}
+				});
+			},
+			{ threshold: [0.35, 0.6, 0.9] },
+		);
+
+		sections.forEach((s, i) => {
+			io.observe(s);
+			if (i === 0) setAmbient(s);
+		});
+	})();
+</script>

@@ -1,0 +1,106 @@
+---
+import { Image } from "astro:assets";
+
+import nodeBig from "../images/index/node-big.png";
+import { LuFlaskConical, LuHeart, LuPlug2 } from "react-icons/lu";
+---
+
+<section
+    id="extensible"
+    data-c1="hsl(200 90% 60% / .10)"
+    data-c2="hsl(150 80% 60% / .10)"
+    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+>
+    <div class="relative z-10 grid items-start gap-16 lg:grid-cols-2">
+        <div class="space-y-8">
+            <div>
+                <div
+                    class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6"
+                >
+                    <div
+                        class="w-2 h-2 bg-secondary rounded-full animate-pulse"
+                    >
+                    </div>
+                    Extensibility
+                </div>
+                <h2
+                    class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-secondary to-tertiary bg-clip-text text-transparent"
+                >
+                    Integrate your world with <span class="text-secondary"
+                        >typed</span
+                    > nodes
+                </h2>
+                <p class="mt-6 text-lg text-muted-foreground">
+                    Wrap internal APIs, queues, PLCs, computer vision, or
+                    spreadsheets. Versioned ports and validation make shared
+                    nodes safe to reuse across teams.
+                </p>
+            </div>
+
+            <div class="space-y-4">
+                <div
+                    class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6"
+                >
+                    <div class="flex items-center gap-3 mb-2">
+                        <div
+                            class="w-8 h-8 bg-gradient-to-br from-primary to-primary/60 rounded-lg flex items-center justify-center"
+                        >
+                            <LuPlug2
+                                className="w-4 h-4 text-primary-foreground"
+                            />
+                        </div>
+                        <h3 class="font-semibold text-lg">Stable interfaces</h3>
+                    </div>
+                    <p class="text-muted-foreground">
+                        in/out ports are versioned and validated.
+                    </p>
+                </div>
+
+                <div
+                    class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6"
+                >
+                    <div class="flex items-center gap-3 mb-2">
+                        <div
+                            class="w-8 h-8 bg-gradient-to-br from-secondary to-secondary/60 rounded-lg flex items-center justify-center"
+                        >
+                            <LuFlaskConical
+                                className="w-4 h-4 text-secondary-foreground"
+                            />
+                        </div>
+                        <h3 class="font-semibold text-lg">Testability</h3>
+                    </div>
+                    <p class="text-muted-foreground">
+                        snapshot fixtures and property-tests for ports.
+                    </p>
+                </div>
+
+                <div
+                    class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6"
+                >
+                    <div class="flex items-center gap-3 mb-2">
+                        <div
+                            class="w-8 h-8 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-lg flex items-center justify-center"
+                        >
+                            <LuHeart
+                                className="w-4 h-4 text-tertiary-foreground"
+                            />
+                        </div>
+                        <h3 class="font-semibold text-lg">Distribution</h3>
+                    </div>
+                    <p class="text-muted-foreground">
+                        publish nodes privately or on a marketplace.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="relative">
+            <Image
+                src={nodeBig}
+                alt="Custom node library"
+                class="w-full h-auto rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm object-cover p-2"
+                loading="lazy"
+            />
+        </div>
+    </div>
+</section>

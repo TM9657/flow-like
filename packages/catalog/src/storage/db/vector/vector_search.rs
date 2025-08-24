@@ -90,7 +90,7 @@ impl NodeLogic for VectorSearchLocalDatabaseNode {
             .clone();
         let database = database.read().await;
         let results = database
-            .vector_search(vector, filter, limit as usize, offset as usize)
+            .vector_search(vector, filter, None, limit as usize, offset as usize)
             .await?;
         context.set_pin_value("values", json!(results)).await?;
         context.activate_exec_pin("exec_out").await?;

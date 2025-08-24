@@ -1,0 +1,157 @@
+---
+import { Image } from "astro:assets";
+
+import portabilityInvite from "../images/index/portability-invite.png";
+import portabilityOffline from "../images/index/portability-offline.png";
+import portabilityShare from "../images/index/portability-share.png";
+---
+
+<section
+    id="portability"
+    data-c1="hsl(var(--primary) / .10)"
+    data-c2="hsl(var(--secondary) / .10)"
+    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+>
+    <div class="relative z-10 grid items-center gap-16 lg:grid-cols-2">
+        <div class="space-y-8">
+            <div>
+                <div
+                    class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-primary mb-6"
+                >
+                    <div class="w-2 h-2 bg-primary rounded-full animate-pulse">
+                    </div>
+                    Lifecycle Management
+                </div>
+                <h2 class="text-4xl font-bold sm:text-5xl">
+                    Start <span class="text-primary">offline</span>. Go <span
+                        class="text-secondary">online</span
+                    > later. <span class="text-tertiary">Deploy</span> with one click.
+                </h2>
+                <p class="mt-6 text-lg text-muted-foreground">
+                    Manage the full lifecycle from the interface — no CLI
+                    required. Keep projects private and local, publish to your
+                    team when ready, and ship to production targets with a
+                    single action.
+                </p>
+            </div>
+
+            <div class="space-y-6">
+                <div
+                    class="rounded-2xl border border-primary/20 bg-primary/5 p-6 backdrop-blur-sm"
+                >
+                    <div class="flex items-start gap-4">
+                        <div
+                            class="w-12 h-12 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-primary-foreground"
+                        >
+                            1
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-semibold mb-2">
+                                Start Offline (Private & Secret)
+                            </h3>
+                            <p class="text-muted-foreground">
+                                Create an offline project on your machine. Your
+                                data stays local until you decide otherwise.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="rounded-2xl border border-secondary/20 bg-secondary/5 p-6 backdrop-blur-sm"
+                >
+                    <div class="flex items-start gap-4">
+                        <div
+                            class="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-secondary-foreground"
+                        >
+                            2
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-semibold mb-2">
+                                Make it Online & Invite
+                            </h3>
+                            <p class="text-muted-foreground">
+                                Flip the project online and invite colleagues.
+                                Roles and approvals come along for the ride.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="rounded-2xl border border-tertiary/20 bg-tertiary/5 p-6 backdrop-blur-sm"
+                >
+                    <div class="flex items-start gap-4">
+                        <div
+                            class="w-12 h-12 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl font-bold text-tertiary-foreground"
+                        >
+                            3
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-semibold mb-2">
+                                Deploy to Production
+                            </h3>
+                            <p class="text-muted-foreground">
+                                Choose your target — Edge, Cloud, or on-prem.
+                                Click deploy. Same validated graph, different
+                                runtime target.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- light modules, no big container -->
+        <div class="relative">
+            <div class="grid grid-cols-3 gap-4 text-center text-sm mb-8">
+                <div
+                    class="rounded-2xl border border-primary/20 bg-primary/10 backdrop-blur-sm p-4"
+                >
+                    <div class="mb-2 font-semibold text-primary">Offline</div>
+                    <p class="text-muted-foreground text-xs">
+                        Private, local-first dev
+                    </p>
+                </div>
+                <div
+                    class="rounded-2xl border border-secondary/20 bg-secondary/10 backdrop-blur-sm p-4"
+                >
+                    <div class="mb-2 font-semibold text-secondary">Team</div>
+                    <p class="text-muted-foreground text-xs">
+                        Online, shared, governed
+                    </p>
+                </div>
+                <div
+                    class="rounded-2xl border border-tertiary/20 bg-tertiary/10 backdrop-blur-sm p-4"
+                >
+                    <div class="mb-2 font-semibold text-tertiary">
+                        Production
+                    </div>
+                    <p class="text-muted-foreground text-xs">
+                        Edge • Cloud • Anywhere
+                    </p>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <Image
+                    src={portabilityOffline}
+                    alt="Create offline project"
+                    class="w-full h-auto rounded-xl bg-background/40 backdrop-blur-sm object-cover"
+                    loading="lazy"
+                />
+                <Image
+                    src={portabilityInvite}
+                    alt="Invite teammates"
+                    class="w-full h-auto rounded-xl bg-background/40 backdrop-blur-sm object-cover"
+                    loading="lazy"
+                />
+                <Image
+                    src={portabilityShare}
+                    alt="Deploy with one click"
+                    class="w-full h-auto rounded-xl bg-background/40 backdrop-blur-sm object-cover col-span-2"
+                    loading="lazy"
+                />
+            </div>
+        </div>
+    </div>
+</section>
