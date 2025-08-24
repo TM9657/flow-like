@@ -230,7 +230,7 @@ const DatabaseHeader: React.FC<DatabaseHeaderProps> = ({
 			<div>
 				<h1 className="text-2xl font-semibold">Database Tables</h1>
 				<p className="text-sm text-muted-foreground">
-					Browse and inspect your project's database schema
+					Browse and inspect your project&apos;s database schema
 				</p>
 			</div>
 		</div>
@@ -306,7 +306,7 @@ const TableGrid: React.FC<TableGridProps> = ({
 				<Search className="mx-auto h-10 w-10 text-muted-foreground mb-4" />
 				<h3 className="text-lg font-semibold mb-2">No matches found</h3>
 				<p className="text-sm text-muted-foreground">
-					No tables match "<span className="font-medium">{searchQuery}</span>".
+					No tables match &quot;<span className="font-medium">{searchQuery}</span>&quot;.
 				</p>
 			</div>
 		);
@@ -395,7 +395,7 @@ const EmptyState: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
 			<Database className="mx-auto h-10 w-10 text-muted-foreground mb-4" />
 			<h3 className="text-lg font-semibold mb-2">No tables found</h3>
 			<p className="text-sm text-muted-foreground mb-4">
-				This project doesn't appear to have any database tables yet.
+				This project doesn&apos;t appear to have any database tables yet.
 			</p>
 			<Button onClick={onRetry}>
 				<RefreshCw className="mr-2 h-4 w-4" />
