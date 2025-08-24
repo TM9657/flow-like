@@ -24,7 +24,7 @@ pub async fn list_items(
     let connection = credentials.to_db(&app_id).await?.execute().await?;
     let db = LanceDBVectorStore::from_connection(connection, table).await;
 
-    let items = db.list(limit, offset).await?;
+    let items = db.list(None, limit, offset).await?;
 
     Ok(Json(items))
 }

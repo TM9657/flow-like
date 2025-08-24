@@ -1,0 +1,604 @@
+---
+import { Image } from "astro:assets";
+import { LuCircleGauge, LuCodeXml, LuLock, LuPaintbrush } from "react-icons/lu";
+
+import designBubblegumLight from "../images/index/theme-bubblegum-light.png";
+import designBubblegum from "../images/index/theme-bubblegum.png";
+import designCatppuccin from "../images/index/theme-catppuccin.png";
+import designCosmicNight from "../images/index/theme-cosmic-night.png";
+import designDoom from "../images/index/theme-doom.png";
+import designNeoBrutalism from "../images/index/theme-neo-brutalism.png";
+import designSoftPop from "../images/index/theme-soft-pop.png";
+---
+
+<section
+	id="whitelabel"
+	data-c1="hsl(262 83% 66% / .10)"
+	data-c2="hsl(292 84% 65% / .10)"
+	class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+>
+	<!-- decorative bg -->
+	<div aria-hidden="true" class="pointer-events-none absolute inset-0">
+		<div
+			class="absolute inset-0 [mask-image:radial-gradient(60%_60%_at_50%_40%,black,transparent)]"
+		>
+			<div
+				class="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.border/.18)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.border/.18)_1px,transparent_1px)] bg-[size:36px_36px]"
+			>
+			</div>
+		</div>
+		<div
+			class="absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl opacity-40"
+			style="background: radial-gradient(60% 60% at 50% 50%, var(--c1, hsl(262,83%,66%)) 0%, transparent 70%);"
+		>
+		</div>
+		<div
+			class="absolute -bottom-24 -right-24 h-72 w-72 rounded-full blur-3xl opacity-40"
+			style="background: radial-gradient(60% 60% at 50% 50%, var(--c2, hsl(292,84%,65%)) 0%, transparent 70%);"
+		>
+		</div>
+	</div>
+
+	<div class="relative z-10">
+		<div
+			class="relative rounded-3xl p-6 sm:p-10 lg:p-14 border border-border/40 bg-card/50 backdrop-blur-md overflow-hidden"
+		>
+			<div
+				aria-hidden="true"
+				class="pointer-events-none absolute -top-1/2 left-1/2 h-[120%] w-[140%] -translate-x-1/2 rotate-12 bg-gradient-to-r from-transparent via-white/6 to-transparent"
+			>
+			</div>
+
+			<div class="grid gap-12 lg:grid-cols-2">
+				<!-- LEFT -->
+				<div class="space-y-8">
+					<div>
+						<div
+							class="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 backdrop-blur px-4 py-1.5 text-sm font-medium text-violet-600 dark:text-violet-400 mb-5"
+						>
+							<span
+								class="w-2 h-2 bg-violet-500 rounded-full animate-pulse"
+							></span>
+							White-label Ready
+						</div>
+
+						<h2
+							class="text-4xl font-bold sm:text-5xl leading-tight"
+						>
+							<span
+								class="bg-gradient-to-r from-foreground via-violet-500 to-purple-500 bg-clip-text text-transparent"
+								>Embed, theme, and ship</span
+							>
+							under <span class="text-violet-500">your brand</span
+							>
+						</h2>
+
+						<p class="mt-5 text-lg text-muted-foreground">
+							Integrate the editor into your product or run the
+							engine headless. Apply your design tokens and logo
+							for a seamless white-label experience — governance
+							and observability stay intact.
+						</p>
+					</div>
+
+					<!-- MODE SWITCHER -->
+					<div id="wl-mode" class="space-y-4" data-mode="embed">
+						<div
+							class="inline-flex rounded-2xl border border-border/60 bg-muted/40 p-1 shadow-sm"
+						>
+							<label class="group relative">
+								<input
+									type="radio"
+									name="wl-mode"
+									value="embed"
+									class="peer sr-only"
+									checked
+								/>
+								<span
+									class="cursor-pointer select-none rounded-xl px-3.5 py-2.5 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
+									>Embed UI</span
+								>
+							</label>
+							<label class="group relative">
+								<input
+									type="radio"
+									name="wl-mode"
+									value="headless"
+									class="peer sr-only"
+								/>
+								<span
+									class="cursor-pointer select-none rounded-xl px-3.5 py-2.5 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
+									>Headless Engine</span
+								>
+							</label>
+							<label class="group relative">
+								<input
+									type="radio"
+									name="wl-mode"
+									value="hybrid"
+									class="peer sr-only"
+								/>
+								<span
+									class="cursor-pointer select-none rounded-xl px-3.5 py-2.5 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
+									>Hybrid</span
+								>
+							</label>
+						</div>
+
+						<div class="grid gap-3">
+							<div
+								data-slot="embed"
+								class="rounded-xl border border-violet-500/20 bg-violet-500/10 p-4 sm:p-5 flex items-start gap-3"
+							>
+								<div
+									class="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shrink-0"
+								>
+									<LuPaintbrush
+										className="w-4 h-4 text-white"
+									/>
+								</div>
+								<div>
+									<div class="font-medium">
+										Drop-in widget
+									</div>
+									<p class="text-sm text-muted-foreground">
+										Mount the visual editor in any route;
+										theme via CSS variables or tokens.
+									</p>
+								</div>
+							</div>
+
+							<div
+								data-slot="headless"
+								class="hidden rounded-xl border border-blue-500/20 bg-blue-500/10 p-4 sm:p-5 items-start gap-3"
+							>
+								<div
+									class="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shrink-0"
+								>
+									<LuCodeXml className="w-4 h-4 text-white" />
+								</div>
+								<div>
+									<div class="font-medium">
+										API-first runtime
+									</div>
+									<p class="text-sm text-muted-foreground">
+										Call the engine server-side (or edge);
+										control via SDKs & webhooks.
+									</p>
+								</div>
+							</div>
+
+							<div
+								data-slot="hybrid"
+								class="hidden rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 sm:p-5 items-start gap-3"
+							>
+								<div
+									class="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center shrink-0"
+								>
+									<LuCircleGauge
+										className="w-4 h-4 text-white"
+									/>
+								</div>
+								<div>
+									<div class="font-medium">
+										Local UI + remote compute
+									</div>
+									<p class="text-sm text-muted-foreground">
+										Edit locally, execute in your cluster
+										with usage metering & tenancy.
+									</p>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- FEATURES -->
+					<div class="grid gap-3 sm:grid-cols-2">
+						<div
+							class="group rounded-2xl border border-violet-500/20 bg-violet-500/10 p-5 transition hover:-translate-y-0.5 hover:shadow-xl"
+						>
+							<div class="flex items-center gap-3">
+								<div
+									class="w-9 h-9 bg-gradient-to-br from-violet-500 to-purple-500 rounded-lg grid place-items-center"
+								>
+									<LuPaintbrush
+										className="w-4 h-4 text-white"
+									/>
+								</div>
+								<div class="font-medium">
+									Design tokens & CSS vars
+								</div>
+							</div>
+							<p class="mt-2 text-sm text-muted-foreground">
+								Map your brand palette; instant dark/light
+								support.
+							</p>
+						</div>
+
+						<div
+							class="group rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5 transition hover:-translate-y-0.5 hover:shadow-xl"
+						>
+							<div class="flex items-center gap-3">
+								<div
+									class="w-9 h-9 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg grid place-items-center"
+								>
+									<LuLock className="w-4 h-4 text-white" />
+								</div>
+								<div class="font-medium">SSO & secrets</div>
+							</div>
+							<p class="mt-2 text-sm text-muted-foreground">
+								OIDC, JWT, and scoped secrets per tenant/app.
+							</p>
+						</div>
+
+						<div
+							class="group rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5 transition hover:-translate-y-0.5 hover:shadow-xl"
+						>
+							<div class="flex items-center gap-3">
+								<div
+									class="w-9 h-9 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg grid place-items-center"
+								>
+									<LuCircleGauge
+										className="w-4 h-4 text-white"
+									/>
+								</div>
+								<div class="font-medium">Usage metering</div>
+							</div>
+							<p class="mt-2 text-sm text-muted-foreground">
+								Per-tenant quotas, events, and audit trail.
+							</p>
+						</div>
+
+						<div
+							class="group rounded-2xl border border-orange-500/20 bg-orange-500/10 p-5 transition hover:-translate-y-0.5 hover:shadow-xl"
+						>
+							<div class="flex items-center gap-3">
+								<div
+									class="w-9 h-9 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg grid place-items-center"
+								>
+									<LuCodeXml className="w-4 h-4 text-white" />
+								</div>
+								<div class="font-medium">SDKs & webhooks</div>
+							</div>
+							<p class="mt-2 text-sm text-muted-foreground">
+								Control flows via SDKs and REST API.
+							</p>
+						</div>
+					</div>
+				</div>
+
+				<!-- RIGHT -->
+				<div class="relative">
+					<!-- COMPARISON: shared var lives on this root -->
+					<div
+						id="wl-compare-root"
+						class="relative rounded-2xl border border-border/40 overflow-hidden bg-background/60 backdrop-blur-md shadow-lg select-none touch-none"
+						style="--clip: 50%;"
+					>
+						<!-- bottom (dark) -->
+						<Image
+							src={designBubblegum}
+							alt="Dark theme"
+							class="w-full h-auto block"
+							loading="lazy"
+						/>
+						<!-- top (light), clipped via shared var -->
+						<div
+							class="pointer-events-none absolute inset-0"
+							style="clip-path: inset(0 calc(100% - var(--clip)) 0 0);"
+						>
+							<Image
+								src={designBubblegumLight}
+								alt="Light theme"
+								class="w-full h-auto block"
+								loading="lazy"
+							/>
+						</div>
+
+						<!-- draggable handle (uses same var) -->
+						<div
+							id="wl-compare-handle"
+							class="absolute inset-y-0"
+							style="left: var(--clip); transform: translateX(-50%);"
+						>
+							<div class="h-full w-px bg-border"></div>
+							<div
+								class="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 rounded-full border border-border bg-background px-2 py-1 text-xs shadow"
+							>
+								Drag
+							</div>
+						</div>
+
+						<!-- invisible drag layer -->
+						<button
+							id="wl-compare-drag"
+							type="button"
+							class="absolute inset-0 cursor-col-resize bg-transparent"
+							aria-label="Drag to compare themes"></button>
+
+						<div
+							class="p-3 sm:p-4 border-t border-border/60 bg-card/60 backdrop-blur"
+						>
+							<input
+								id="wl-compare-range"
+								type="range"
+								min="0"
+								max="100"
+								value="50"
+								class="w-full accent-violet-500"
+								aria-label="Compare light and dark theme"
+							/>
+						</div>
+					</div>
+
+					<!-- theme gallery -->
+					<div class="mt-6">
+						<div class="flex items-center justify-between mb-3">
+							<div
+								class="text-sm font-medium text-muted-foreground"
+							>
+								Theme presets
+							</div>
+							<div class="text-xs text-muted-foreground">
+								Scroll →
+							</div>
+						</div>
+						<div class="group relative">
+							<div
+								id="wl-gallery"
+								class="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+							>
+								<figure class="snap-start shrink-0 w-56">
+									<Image
+										src={designCatppuccin}
+										alt="Catppuccin"
+										class="rounded-xl border border-border/60 hover:shadow-lg transition"
+										loading="lazy"
+									/>
+									<figcaption
+										class="mt-2 text-xs text-muted-foreground"
+									>
+										Catppuccin
+									</figcaption>
+								</figure>
+								<figure class="snap-start shrink-0 w-56">
+									<Image
+										src={designCosmicNight}
+										alt="Cosmic Night"
+										class="rounded-xl border border-border/60 hover:shadow-lg transition"
+										loading="lazy"
+									/>
+									<figcaption
+										class="mt-2 text-xs text-muted-foreground"
+									>
+										Cosmic Night
+									</figcaption>
+								</figure>
+								<figure class="snap-start shrink-0 w-56">
+									<Image
+										src={designNeoBrutalism}
+										alt="Neo-Brutalism"
+										class="rounded-xl border border-border/60 hover:shadow-lg transition"
+										loading="lazy"
+									/>
+									<figcaption
+										class="mt-2 text-xs text-muted-foreground"
+									>
+										Neo-Brutalism
+									</figcaption>
+								</figure>
+								<figure class="snap-start shrink-0 w-56">
+									<Image
+										src={designSoftPop}
+										alt="Soft Pop"
+										class="rounded-xl border border-border/60 hover:shadow-lg transition"
+										loading="lazy"
+									/>
+									<figcaption
+										class="mt-2 text-xs text-muted-foreground"
+									>
+										Soft Pop
+									</figcaption>
+								</figure>
+								<figure class="snap-start shrink-0 w-56">
+									<Image
+										src={designDoom}
+										alt="Doom"
+										class="rounded-xl border border-border/60 hover:shadow-lg transition"
+										loading="lazy"
+									/>
+									<figcaption
+										class="mt-2 text-xs text-muted-foreground"
+									>
+										Doom
+									</figcaption>
+								</figure>
+							</div>
+						</div>
+					</div>
+
+					<div
+						class="mt-6 rounded-2xl border border-border/60 bg-muted/40 p-4 flex items-center gap-3"
+					>
+						<div
+							class="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 grid place-items-center text-white text-xs font-bold"
+						>
+							LOGO
+						</div>
+						<div class="text-sm">
+							<div class="font-medium">
+								Your logo, your tokens
+							</div>
+							<div class="text-muted-foreground">
+								Craft your brand in <a
+									href="https://tweakcn.com?ref=flow-like"
+									target="_blank"
+									rel="noopener noreferrer"
+									class="underline font-black">tweakcn</a
+								> — copy the tokens and paste to apply instantly.
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<script>
+	(function () {
+		const root = document.getElementById("wl-compare-root");
+		const range = document.getElementById("wl-compare-range");
+		const drag = document.getElementById("wl-compare-drag");
+		if (!root || !range || !drag) return;
+
+		const clamp = (n: number, min: number, max: number) =>
+			Math.max(min, Math.min(max, n));
+		const setClip = (pct: number) => {
+			const v = clamp(Math.round(pct), 0, 100);
+			root.style.setProperty("--clip", v + "%");
+			if ((range as HTMLInputElement).value !== String(v))
+				(range as HTMLInputElement).value = String(v);
+		};
+
+		// slider -> mask (FIXED)
+		range.addEventListener("input", (e) => {
+			const t = e.target;
+			if (t && "value" in t) setClip(parseFloat(t.value as string));
+		});
+
+		// drag on the image
+		let dragging = false;
+		const pctFromEvent = (ev: any) => {
+			const rect = root.getBoundingClientRect();
+			const cx =
+				("touches" in ev && ev.touches?.length
+					? ev.touches[0].clientX
+					: ev.clientX) - rect.left;
+			return (cx / rect.width) * 100;
+		};
+		const start = (ev: { preventDefault: () => void }) => {
+			dragging = true;
+			setClip(pctFromEvent(ev));
+			ev.preventDefault?.();
+		};
+		const move = (ev: any) => {
+			if (dragging) setClip(pctFromEvent(ev));
+		};
+		const end = () => {
+			dragging = false;
+		};
+
+		drag.addEventListener("mousedown", start);
+		window.addEventListener("mousemove", move);
+		window.addEventListener("mouseup", end);
+
+		drag.addEventListener("touchstart", start, { passive: false });
+		window.addEventListener("touchmove", move, { passive: false });
+		window.addEventListener("touchend", end);
+
+		// init
+		setClip(parseFloat((range as HTMLInputElement).value || "50"));
+	})();
+
+	// Mode switcher (unchanged)
+	(function () {
+		const root = document.getElementById("wl-mode");
+		if (!root) return;
+		const slots = Array.from(root.querySelectorAll("[data-slot]"));
+		root.addEventListener("change", (e) => {
+			const t = e.target as HTMLInputElement;
+			if (!t || t.name !== "wl-mode") return;
+			const val = t.value;
+			root.dataset.mode = val;
+			slots.forEach((el) => {
+				const on = el.getAttribute("data-slot") === val;
+				el.classList.toggle("hidden", !on);
+				el.classList.toggle("flex", on);
+			});
+		});
+	})();
+
+	// Auto-scroll the theme gallery
+	(function () {
+		const scroller = document.getElementById("wl-gallery");
+		if (!scroller) return;
+
+		const items = () => Array.from(scroller.querySelectorAll("figure"));
+		const positions = () => items().map((el) => el.offsetLeft);
+		let i = 0,
+			timer: string | number | NodeJS.Timeout | null | undefined = null,
+			userHold = false,
+			resumeTimeout: any = null;
+
+		const next = () => {
+			const pos = positions();
+			if (pos.length === 0) return;
+			i = (i + 1) % pos.length;
+			scroller.scrollTo({ left: pos[i], behavior: "smooth" });
+		};
+
+		const start = () => {
+			if (timer || userHold) return;
+			timer = setInterval(next, 3000);
+		};
+		const stop = () => {
+			if (timer) {
+				clearInterval(timer);
+				timer = null;
+			}
+		};
+
+		const pauseFor = (ms = 4000) => {
+			stop();
+			clearTimeout(resumeTimeout);
+			resumeTimeout = setTimeout(() => {
+				if (!userHold) start();
+			}, ms);
+		};
+
+		// pause on hover/focus/drag; resume on leave
+		scroller.addEventListener("mouseenter", () => {
+			userHold = true;
+			stop();
+		});
+		scroller.addEventListener("mouseleave", () => {
+			userHold = false;
+			start();
+		});
+		scroller.addEventListener("pointerdown", () => {
+			userHold = true;
+			stop();
+		});
+		scroller.addEventListener("pointerup", () => {
+			userHold = false;
+			pauseFor(2000);
+		});
+		scroller.addEventListener(
+			"touchstart",
+			() => {
+				userHold = true;
+				stop();
+			},
+			{ passive: true },
+		);
+		scroller.addEventListener("touchend", () => {
+			userHold = false;
+			pauseFor(2000);
+		});
+
+		// if user scrolls manually, pause briefly then resume
+		let lastScroll = 0;
+		scroller.addEventListener("scroll", () => {
+			const now = Date.now();
+			if (now - lastScroll > 100) pauseFor(3000);
+			lastScroll = now;
+		});
+
+		// recalc on resize (images can change widths)
+		window.addEventListener("resize", () => pauseFor(1000));
+
+		// kick off a moment after images likely in DOM
+		setTimeout(start, 600);
+	})();
+</script>

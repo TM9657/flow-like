@@ -1,0 +1,319 @@
+---
+import { EmptyBackendProvider } from "../components/backend-provider";
+
+const github = "https://github.com/TM9657/flow-like";
+const docs = "https://docs.flow-like.com";
+const download = "https://github.com/TM9657/flow-like/releases";
+---
+
+<section
+    class="mx-auto max-w-7xl px-4 pt-8 md:pt-16 lg:pt-16 lg:px-8 pb-32 mt-0 md:mt-8 lg:mt-16"
+    data-c2="hsl(0 100% 63% / .10)"
+    data-c1="hsl(161 40% 44% / .10)"
+>
+    <div id="hero-cover" class="relative">
+        <div
+            id="hero-right-pin"
+            class="size-4 bg-primary absolute top-60 -right-1.5 z-10 rounded-full"
+        >
+        </div>
+        <div
+            id="hero-left-pin"
+            class="size-4 bg-emerald-500 absolute top-36 -left-1.5 z-10 rounded-full"
+        >
+        </div>
+        <div
+            id="hero-right-pin-top"
+            class="size-4 bg-foreground absolute top-12 -right-1.5 z-10 rounded-full"
+        >
+        </div>
+        <div
+            id="hero-left-pin-top"
+            class="size-4 bg-foreground absolute top-12 -left-1.5 z-10 rounded-full"
+        >
+        </div>
+
+        <svg
+            id="hero-connections"
+            class="pointer-events-none absolute top-0 left-0"
+            style="overflow: hidden;"
+            aria-hidden="true"
+        >
+            <path id="hero-right-conn" class="pin-conn text-primary" fill="none"
+            ></path>
+            <path
+                id="hero-left-conn"
+                class="pin-conn text-emerald-500"
+                fill="none"></path>
+            <path
+                id="hero-right-conn-top"
+                class="pin-conn-solid text-foreground"
+                fill="none"></path>
+            <path
+                id="hero-left-conn-top"
+                class="pin-conn-solid text-foreground"
+                fill="none"></path>
+        </svg>
+
+        <div
+            class="relative overflow-hidden rounded-xl border border-border bg-background"
+        >
+            <div
+                class="absolute inset-0 bg-gradient-to-tr from-background/70 via-background/20 to-transparent"
+            >
+            </div>
+            <div class="relative grid lg:grid-cols-2 overflow-hidden">
+                <div class="p-6 sm:p-8 md:p-10">
+                    <span
+                        class="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1 text-[11px] font-medium text-muted-foreground"
+                        >Typed • Blazing fast • Robust</span
+                    >
+                    <h1
+                        class="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl"
+                    >
+                        Typed workflows that <span class="text-primary"
+                            >scale</span
+                        >
+                    </h1>
+                    <p class="mt-3 max-w-2xl text-muted-foreground">
+                        Design reliable systems with type‑safe graphs,
+                        Rust‑level performance, and built‑in governance. Run
+                        locally for a head start, then move to edge or any cloud
+                        without rewiring.
+                    </p>
+                    <div class="mt-6 flex flex-wrap items-center gap-3">
+                        <a
+                            href={download}
+                            class="inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow hover:bg-primary/90"
+                            >Download</a
+                        >
+                        <a
+                            href={docs}
+                            class="inline-flex items-center gap-2 rounded-2xl border border-border bg-muted px-6 py-3 text-sm font-semibold hover:bg-accent hover:text-accent-foreground"
+                            >Explore docs</a
+                        >
+                        <a
+                            href={github}
+                            class="inline-flex items-center gap-2 rounded-2xl border border-primary/30 bg-primary/10 px-6 py-3 text-sm font-semibold text-primary hover:bg-primary/20"
+                            >Star on GitHub</a
+                        >
+                    </div>
+                    <!-- Hero feature chips — ghost, subtle, correct order -->
+                    <div
+                        class="mt-5 flex flex-wrap items-center gap-2.5 text-sm sm:max-w-xl"
+                    >
+                        <span class="fl-chip fl-chip--ghost" data-tint="primary"
+                            >🧩 <b>Type-safe</b> graph contracts</span
+                        >
+                        <span class="fl-chip fl-chip--ghost" data-tint="emerald"
+                            >🔒 Governance & observability</span
+                        >
+                        <span class="fl-chip fl-chip--ghost" data-tint="amber"
+                            >⚡ Rust runtime • predictable latency</span
+                        >
+                        <span class="fl-chip fl-chip--ghost" data-tint="sky"
+                            >☁️ Run local → edge → cloud</span
+                        >
+                    </div>
+                    <p class="mt-4 text-xs text-muted-foreground">
+                        Want AI too? Blend classical ML with GenAI when it helps
+                        — it’s one more set of typed nodes, not a separate
+                        stack.
+                    </p>
+                </div>
+                <div class="relative min-h-[260px] max-h-full h-full">
+                    <EmptyBackendProvider data="/board.json" client:load />
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+    .fl-chip {
+        --t: 215 16% 47%; /* default tint */
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.6rem;
+        border-radius: 9999px;
+        border: 1px solid hsl(var(--t) / 0.22);
+        background: transparent;
+        color: hsl(var(--t) / 0.86);
+        line-height: 1;
+        white-space: nowrap;
+        transition:
+            background 0.15s ease,
+            border-color 0.15s ease,
+            transform 0.15s ease;
+    }
+    .fl-chip b {
+        font-weight: 600;
+        color: inherit;
+    }
+    .fl-chip--ghost:hover {
+        background: hsl(var(--t) / 0.08);
+        transform: translateY(-1px);
+    }
+
+    /* tints */
+    .fl-chip[data-tint="primary"] {
+        --t: 0 100% 63%;
+    }
+    .fl-chip[data-tint="emerald"] {
+        --t: 160 84% 40%;
+    }
+    .fl-chip[data-tint="amber"] {
+        --t: 28 96% 54%;
+    }
+    .fl-chip[data-tint="sky"] {
+        --t: 199 89% 48%;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .fl-chip {
+            transition: none;
+        }
+    }
+    .pin-conn-solid {
+        stroke: currentColor;
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        vector-effect: non-scaling-stroke;
+    }
+    .pin-conn {
+        stroke: currentColor;
+        stroke-width: 4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        vector-effect: non-scaling-stroke;
+        stroke-dasharray: 10 10;
+        animation: flow-dots 0.4s linear infinite;
+    }
+    @keyframes flow-dots {
+        to {
+            stroke-dashoffset: -20px;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .pin-conn {
+            animation: none;
+        }
+    }
+</style>
+
+<script>
+    const $ = (s: string, r = document) => r.querySelector(s);
+
+    const heroEl = document.getElementById("hero-cover");
+    const svg = document.getElementById("hero-connections");
+    const rp = document.getElementById("hero-right-pin");
+    const lp = document.getElementById("hero-left-pin");
+    const rpt = document.getElementById("hero-right-pin-top");
+    const lpt = document.getElementById("hero-left-pin-top");
+
+    const setSvgFrame = () => {
+        if (!heroEl || !svg) return;
+        const r = heroEl.getBoundingClientRect();
+        const vw = Math.max(
+            document.documentElement.clientWidth,
+            window.innerWidth || 0,
+        );
+
+        // Make the absolutely-positioned SVG cover the full viewport width,
+        // starting at the viewport's left edge (relative to the hero).
+        svg.style.left = `${-r.left}px`;
+        svg.style.width = `${vw}px`;
+        svg.style.height = `${r.height}px`;
+
+        // Use a viewBox whose min-x is negative hero.left so hero-local coordinates line up,
+        // and we can draw all the way to the viewport edges.
+        svg.setAttribute("viewBox", `${-r.left} 0 ${vw} ${r.height}`);
+        svg.setAttribute("width", String(vw));
+        svg.setAttribute("height", String(r.height));
+    };
+
+    const bezier = (pin: HTMLElement, isRight: boolean, yOffset = 60) => {
+        const hr = heroEl?.getBoundingClientRect() ?? {
+            left: 0,
+            top: 0,
+            width: 0,
+            height: 0,
+            right: 0,
+        };
+        const pr = pin.getBoundingClientRect();
+
+        // Start in hero-local coords
+        const sx = pr.left - hr.left + pr.width / 2;
+        const sy = pr.top - hr.top + pr.height / 2;
+
+        // End at viewport edges (± extra beyond edge)
+        const extra = 200;
+        const vw = Math.max(
+            document.documentElement.clientWidth,
+            window.innerWidth || 0,
+        );
+        const ex = isRight ? vw - hr.left + extra : -hr.left - extra;
+        const ey = sy + (isRight ? yOffset : yOffset * 1.4);
+
+        const dx = ex - sx;
+        const cp1x = sx + dx * 0.4;
+        const cp2x = sx + dx * 0.8;
+
+        return `M${sx},${sy} C${cp1x},${sy} ${cp2x},${ey} ${ex},${ey}`;
+    };
+
+    const quad = (pin: HTMLElement, isRight: boolean, yOffset = -20) => {
+        const hr = heroEl?.getBoundingClientRect() ?? {
+            left: 0,
+            top: 0,
+            width: 0,
+            height: 0,
+            right: 0,
+        };
+        const pr = pin.getBoundingClientRect();
+
+        const sx = pr.left - hr.left + pr.width / 2;
+        const sy = pr.top - hr.top + pr.height / 2;
+
+        const extra = 300;
+        const vw = Math.max(
+            document.documentElement.clientWidth,
+            window.innerWidth || 0,
+        );
+        const ex = isRight ? vw - hr.left + extra : -hr.left - extra;
+        const ey = sy + (isRight ? yOffset : -yOffset);
+
+        const cp1x = sx + (ex - sx) * 0.6;
+
+        return `M${sx},${sy} Q${cp1x},${sy} ${ex},${ey}`;
+    };
+
+    const updatePaths = () => {
+        if (!heroEl || !svg) return;
+        setSvgFrame();
+
+        const rc = $("#hero-right-conn");
+        const lc = $("#hero-left-conn");
+        const rct = $("#hero-right-conn-top");
+        const lct = $("#hero-left-conn-top");
+
+        if (rp && rc) rc.setAttribute("d", bezier(rp, true));
+        if (lp && lc) lc.setAttribute("d", bezier(lp, false, 80));
+        if (rpt && rct) rct.setAttribute("d", quad(rpt, true));
+        if (lpt && lct) lct.setAttribute("d", quad(lpt, false));
+    };
+
+    // Keep it fresh on resize and whenever the hero resizes
+    const raf = (fn: FrameRequestCallback) => requestAnimationFrame(fn);
+    addEventListener("resize", () => raf(updatePaths));
+    addEventListener("load", () => raf(updatePaths));
+    setTimeout(() => raf(updatePaths), 50);
+
+    // React to content/layout changes without relying solely on window resize
+    if (window.ResizeObserver && heroEl) {
+        const ro = new ResizeObserver(() => raf(updatePaths));
+        ro.observe(heroEl);
+    }
+</script>

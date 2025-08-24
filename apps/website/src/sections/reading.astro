@@ -1,0 +1,144 @@
+---
+import { getCollection } from "astro:content";
+
+import { LuMoveRight } from "react-icons/lu";
+
+const posts = (
+    await getCollection("blog", ({ data }) =>
+        import.meta.env.PROD ? !data.draft : true,
+    )
+)
+    .filter((p) => !p.data.draft)
+    .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
+    .slice(0, 3);
+
+const thumbFor = (p: any) => {
+    const img =
+        p.data.thumb ??
+        p.data.thumbnail ??
+        p.data.image ??
+        p.data.cover ??
+        p.data.hero ??
+        p.data.ogImage;
+    return typeof img === "string" ? img : (img?.src ?? "/og.webp");
+};
+
+const descFor = (p: any) =>
+    p.data.excerpt ?? p.data.description ?? p.data.subtitle ?? "";
+---
+
+<section
+    data-c1="hsl(220 10% 60% / .10)"
+    data-c2="hsl(260 9% 55% / .10)"
+    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+>
+    <div class="relative z-10">
+        <div class="text-center mb-16">
+            <div
+                class="inline-flex items-center gap-2 rounded-full border border-slate-500/20 bg-slate-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 mb-6"
+            >
+                <div class="w-2 h-2 bg-slate-500 rounded-full animate-pulse">
+                </div>
+                Learning Resources
+            </div>
+            <h2
+                class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-slate-600 to-zinc-600 bg-clip-text text-transparent"
+            >
+                Recommended <span class="text-slate-600">reading</span>
+            </h2>
+            <p class="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
+                Deep dives and examples — including Teachable Machine as a
+                simple on-ramp.
+            </p>
+        </div>
+
+        <div class="grid gap-8 md:grid-cols-3">
+            {
+                posts.map((p) => (
+                    <a
+                        href={`/blog/${p.slug.split("-").slice(3).join("-")}/`}
+                        aria-label={p.data.title}
+                        rel="prefetch"
+                        class="rr-card group relative overflow-hidden rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-all duration-300"
+                    >
+                        <img
+                            src={thumbFor(p)}
+                            alt={p.data.title}
+                            class="rr-thumb absolute inset-0 h-full w-full object-cover opacity-90"
+                            loading="lazy"
+                            sizes="(min-width:1024px) 33vw, 100vw"
+                        />
+                        <div class="absolute inset-0 bg-gradient-to-t from-background/95 via-background/80 to-background/60" />
+
+                        <div class="relative z-10 p-6 sm:p-8 flex min-h-[18rem] items-end">
+                            <div class="space-y-3">
+                                <h3 class="text-xl font-semibold leading-tight group-hover:underline decoration-primary/60 underline-offset-4">
+                                    {p.data.title}
+                                </h3>
+
+                                {descFor(p) && (
+                                    <p class="text-sm text-foreground">
+                                        {descFor(p)}
+                                    </p>
+                                )}
+
+                                <span class="inline-flex items-center gap-2 text-sm font-semibold text-primary/90 group-hover:translate-x-0.5 transition">
+                                    Read post
+                                    <LuMoveRight className="w-4 h-4 text-primary" />
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+                ))
+            }
+        </div>
+    </div>
+</section>
+
+<style>
+    .rr-card {
+        isolation: isolate;
+    }
+    .rr-card::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border-radius: inherit;
+        z-index: 0;
+        background: radial-gradient(
+                120% 120% at 10% 10%,
+                hsl(var(--primary) / 0.15),
+                transparent 40%
+            ),
+            radial-gradient(
+                120% 120% at 90% 90%,
+                hsl(var(--secondary) / 0.15),
+                transparent 40%
+            );
+        opacity: 0.35;
+        transition: opacity 0.25s ease;
+    }
+    .rr-card:hover::before {
+        opacity: 0.6;
+    }
+    .rr-thumb {
+        transition:
+            transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
+            opacity 0.25s ease;
+    }
+    .rr-card:hover .rr-thumb {
+        transform: scale(1.04);
+        opacity: 1;
+    }
+    .rr-pill {
+        backdrop-filter: blur(4px);
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .rr-thumb {
+            transition: none;
+        }
+        .rr-card::before {
+            transition: none;
+        }
+    }
+</style>

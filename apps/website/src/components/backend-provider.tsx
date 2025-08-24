@@ -90,9 +90,7 @@ export function EmptyBackendProvider({ data }: Readonly<{ data: string }>) {
 					<LoadingScreen className="absolute top-0 left-0 right-0 bottom-0" />
 				}
 			>
-				<div className="max-h-36">
 					<BoardWrapper nodes={nodes} edges={edges} />
-				</div>
 			</Suspense>
 		</ThemeProvider>
 	);

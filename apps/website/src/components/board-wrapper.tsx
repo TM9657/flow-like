@@ -5,12 +5,6 @@ import {
 } from "@tm9657/flow-like-ui";
 import { Suspense, lazy } from "react";
 
-const ThemeProvider = lazy(() =>
-	import("@tm9657/flow-like-ui").then((module) => ({
-		default: module.ThemeProvider,
-	})),
-);
-
 const PersistQueryClientProvider = lazy(() =>
 	import("@tm9657/flow-like-ui").then((module) => ({
 		default: module.PersistQueryClientProvider,
@@ -32,7 +26,9 @@ export default function BoardWrapper({
 					persister,
 				}}
 			>
-				<Board nodes={nodes} edges={edges} />
+				<div className="w-full h-full">
+					<Board nodes={nodes} edges={edges} />
+				</div>
 			</PersistQueryClientProvider>
 		</Suspense>
 	);

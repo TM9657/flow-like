@@ -1,0 +1,222 @@
+---
+import {
+    LuCircleCheck,
+    LuDatabase,
+    LuSearch,
+    LuTrendingUp,
+} from "react-icons/lu";
+---
+
+<section
+    id="storage"
+    data-c1="hsl(199 89% 48% / .10)"
+    data-c2="hsl(243 75% 59% / .10)"
+    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+>
+    <div class="relative z-10 grid items-start gap-10 lg:grid-cols-2">
+        <div>
+            <div>
+                <h2 class="text-3xl font-bold sm:text-4xl">
+                    Storage that ships with every app
+                </h2>
+                <p class="mt-3 text-muted-foreground">
+                    Each project includes <strong>unlimited file storage</strong
+                    > and <strong>unlimited databases</strong>. Use files
+                    directly in your flows — read streams, transform, and write
+                    back. Keep data in <strong>classical SQL</strong>, add <strong
+                        >full-text</strong
+                    > and
+                    <strong>vector search</strong>, and combine them for hybrid
+                    queries — all as typed nodes.
+                </p>
+
+                <!-- quick chips -->
+                <div class="mt-6 flex flex-wrap gap-2 text-sm">
+                    <span class="fl-chip fl-chip--ghost" data-tint="sky"
+                        >∞ Files</span
+                    >
+                    <span class="fl-chip fl-chip--ghost" data-tint="primary"
+                        >∞ Databases</span
+                    >
+                    <span class="fl-chip fl-chip--ghost" data-tint="emerald"
+                        >SQL + Full-text + Vector</span
+                    >
+                    <span class="fl-chip fl-chip--ghost" data-tint="amber"
+                        >Inline in workflows</span
+                    >
+                </div>
+            </div>
+            <div class="mt-12">
+                <div
+                    class="inline-flex items-center gap-2 rounded-full border border-slate-500/20 bg-slate-500/10 px-3 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-400"
+                >
+                    AI Ready
+                </div>
+                <h3 class="mt-2 text-2xl font-semibold">
+                    AI — local & classical
+                </h3>
+                <p class="mt-2 text-muted-foreground">
+                    Drop <strong>LLM/VLM</strong> nodes that run locally or remotely,
+                    plus <strong>vision</strong>
+                    (D-Fine, TFLite/ONNX) and <strong
+                        >regression/classification</strong
+                    >. Same typed pins, same deployment; agents optional.
+                </p>
+                <div class="mt-4 flex flex-wrap gap-2 text-sm">
+                    <span class="fl-chip fl-chip--ghost" data-tint="sky"
+                        >Local LLM/VLM</span
+                    >
+                    <span class="fl-chip fl-chip--ghost" data-tint="emerald"
+                        >Regression / Classification</span
+                    >
+                    <span class="fl-chip fl-chip--ghost" data-tint="amber"
+                        >Vision: D-Fine, TFLite, ONNX</span
+                    >
+                    <span class="fl-chip fl-chip--ghost" data-tint="primary"
+                        >Agents optional</span
+                    >
+                    <span class="fl-chip fl-chip--ghost" data-tint="sky"
+                        >Runs offline</span
+                    >
+                </div>
+            </div>
+        </div>
+
+        <!-- patterns (no images) -->
+        <div class="space-y-4">
+            <!-- Files -->
+            <div
+                class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+            >
+                <div class="flex items-start gap-4">
+                    <div
+                        class="w-10 h-10 bg-gradient-to-br from-sky-500 to-cyan-500 rounded-lg flex items-center justify-center flex-shrink-0"
+                    >
+                        <LuDatabase className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-lg">Files (unlimited)</h3>
+                        <p class="text-muted-foreground">
+                            Treat files as first-class data. Use <code
+                                class="rounded bg-muted px-1.5 py-0.5"
+                                >Read to String</code
+                            >,
+                            <code class="rounded bg-muted px-1.5 py-0.5"
+                                >Write Bytes</code
+                            >, and stream processors inside your graph — no temp
+                            glue.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SQL -->
+            <div
+                class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+            >
+                <div class="flex items-start gap-4">
+                    <div
+                        class="w-10 h-10 bg-gradient-to-br from-emerald-500 to-green-500 rounded-lg flex items-center justify-center flex-shrink-0"
+                    >
+                        <LuCircleCheck className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-lg">
+                            Classical SQL (unlimited DBs)
+                        </h3>
+                        <p class="text-muted-foreground">
+                            Typed query/insert nodes with preflight schema
+                            checks. Join, filter, and paginate without leaving
+                            the canvas.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Full-text -->
+            <div
+                class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+            >
+                <div class="flex items-start gap-4">
+                    <div
+                        class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center flex-shrink-0"
+                    >
+                        <LuSearch className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-lg">Full-text search</h3>
+                        <p class="text-muted-foreground">
+                            Index documents, logs, or tickets and query with
+                            ranking — results are typed for safe downstream
+                            fan-out.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vector & hybrid -->
+            <div
+                class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+            >
+                <div class="flex items-start gap-4">
+                    <div
+                        class="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg flex items-center justify-center flex-shrink-0"
+                    >
+                        <LuTrendingUp className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-lg">
+                            Vector & hybrid search
+                        </h3>
+                        <p class="text-muted-foreground">
+                            Nearest-neighbor lookups with filters. Combine
+                            vectors with SQL and full-text in the same flow.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+    .fl-chip {
+        --t: 215 16% 47%; /* default tint */
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.6rem;
+        border-radius: 9999px;
+        border: 1px solid hsl(var(--t) / 0.22);
+        background: transparent;
+        color: hsl(var(--t) / 0.86);
+        line-height: 1;
+        white-space: nowrap;
+        transition:
+            background 0.15s ease,
+            border-color 0.15s ease,
+            transform 0.15s ease;
+    }
+    .fl-chip b {
+        font-weight: 600;
+        color: inherit;
+    }
+    .fl-chip--ghost:hover {
+        background: hsl(var(--t) / 0.08);
+        transform: translateY(-1px);
+    }
+
+    /* tints */
+    .fl-chip[data-tint="primary"] {
+        --t: 0 100% 63%;
+    }
+    .fl-chip[data-tint="emerald"] {
+        --t: 160 84% 40%;
+    }
+    .fl-chip[data-tint="amber"] {
+        --t: 28 96% 54%;
+    }
+    .fl-chip[data-tint="sky"] {
+        --t: 199 89% 48%;
+    }
+</style>

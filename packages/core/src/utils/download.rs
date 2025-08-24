@@ -34,7 +34,7 @@ fn global_download_semaphore() -> &'static Semaphore {
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|&n| n > 0)
-            .unwrap_or(4);
+            .unwrap_or(5);
         Semaphore::new(max)
     })
 }

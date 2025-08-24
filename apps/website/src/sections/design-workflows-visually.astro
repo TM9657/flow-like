@@ -1,0 +1,136 @@
+---
+import { Image } from "astro:assets";
+
+import { LuLock, LuSearch, LuUnplug } from "react-icons/lu";
+
+import designOverview from "../images/index/design-overview.png";
+import designValidation from "../images/index/design-validation.png";
+---
+
+<section
+    id="builder"
+    data-c1="hsl(222 89% 60% / .10)"
+    data-c2="hsl(268 84% 62% / .10)"
+    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+>
+    <div class="relative z-10 grid items-center gap-16 lg:grid-cols-5">
+        <div class="space-y-8 w-full lg:col-span-2">
+            <div>
+                <div
+                    class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6"
+                >
+                    <div
+                        class="w-2 h-2 bg-secondary rounded-full animate-pulse"
+                    >
+                    </div>
+                    Visual Design
+                </div>
+                <h2
+                    class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground to-secondary bg-clip-text text-transparent"
+                >
+                    Design workflows <span class="text-secondary">visually</span
+                    >
+                </h2>
+                <p class="mt-6 text-lg text-muted-foreground">
+                    Drag nodes, wire typed pins, and validate as you go. Inline
+                    errors keep graphs shippable. Snapshot inputs to reproduce
+                    issues and compare runs.
+                </p>
+            </div>
+
+            <div class="space-y-4">
+                <div
+                    class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+                >
+                    <div class="flex items-start gap-4">
+                        <div
+                            class="w-10 h-10 bg-gradient-to-br from-primary to-primary/60 rounded-lg flex items-center justify-center flex-shrink-0"
+                        >
+                            <LuUnplug
+                                className="w-6 h-6 text-primary-foreground"
+                            />
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-lg">Typed pins</h3>
+                            <p class="text-muted-foreground">
+                                ports know their schema so refactors are safe.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+                >
+                    <div class="flex items-start gap-4">
+                        <div
+                            class="w-10 h-10 bg-gradient-to-br from-secondary to-secondary/60 rounded-lg flex items-center justify-center flex-shrink-0"
+                        >
+                            <LuLock
+                                className="w-6 h-6 text-secondary-foreground"
+                            />
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-lg">
+                                Inline validation
+                            </h3>
+                            <p class="text-muted-foreground">
+                                miswired edges are surfaced immediately.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-6 hover:bg-card/60 transition-all duration-300"
+                >
+                    <div class="flex items-start gap-4">
+                        <div
+                            class="w-10 h-10 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-lg flex items-center justify-center flex-shrink-0"
+                        >
+                            <LuSearch
+                                className="w-6 h-6 text-tertiary-foreground"
+                            />
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-lg">Observability</h3>
+                            <p class="text-muted-foreground">
+                                inspect payloads and timings at every edge.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- imagery stays but loses heavy frames -->
+        <div class="relative w-full lg:col-span-3">
+            <div class="relative grid grid-cols-2 gap-6">
+                <div class="space-y-6">
+                    <Image
+                        src={designValidation}
+                        alt="Inline validation"
+                        class="w-full h-auto rounded-2xl bg-background/40 backdrop-blur-sm object-cover"
+                        loading="lazy"
+                    />
+                </div>
+                <div class="flex items-center">
+                    <Image
+                        src={designOverview}
+                        alt="Node inspector"
+                        class="w-full h-auto rounded-2xl bg-background/40 backdrop-blur-sm object-cover"
+                        loading="lazy"
+                    />
+                </div>
+            </div>
+            <div class="flex justify-end">
+                <video
+                    src="/posts/rapid-prototyping.webm"
+                    autoplay
+                    muted
+                    class="rounded-xl shadow-lg border border-muted/40 my-4 w-full"
+                ></video>
+            </div>
+        </div>
+    </div>
+</section>
