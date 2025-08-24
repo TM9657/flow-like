@@ -33,6 +33,7 @@
 		"tailwindcss": "^4.1.11"
 	},
 	"devDependencies": {
+		"astro-compressor": "^1.1.2",
 		"postcss": "^8.4.49"
 	}
 }

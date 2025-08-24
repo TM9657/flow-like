@@ -16,7 +16,6 @@ import Theming from "../sections/theming.astro";
 import ProcessCombination from "../sections/process-combination.astro";
 import Storage from "../sections/storage.astro";
 import Reading from "../sections/reading.astro";
-
 import { BlogFooter } from "../components/blog-footer";
 
 // --- SEO constants ---
@@ -91,13 +90,10 @@ const ldWebPage = {
 ---
 
 <!doctype html>
-<html lang="en" class="scroll-smooth max-w-dvw overflow-x-hidden">
+<html lang="en" class="scroll-smooth max-w-full overflow-x-hidden" style="overflow-x: hidden;">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <title>{title}</title>
     <meta name="description" content={description} />
@@ -146,62 +142,87 @@ const ldWebPage = {
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
     <meta name="twitter:image:alt" content={ogImageAlt} />
-    <!-- If you have official handles, uncomment:
-    <meta name="twitter:site" content="@YOUR_HANDLE" />
-    <meta name="twitter:creator" content="@YOUR_HANDLE" />
-    -->
 
-    <!-- Structured Data -->
+    <!-- Resource Hints -->
+    <link rel="preconnect" href="https://docs.flow-like.com" crossorigin />
+    <link rel="preconnect" href="https://github.com" crossorigin />
+
+    <!-- Structured Data (inline, non-blocking) -->
     <script type="application/ld+json">{JSON.stringify(ldOrganization)}</script>
     <script type="application/ld+json">{JSON.stringify(ldSoftware)}</script>
     <script type="application/ld+json">{JSON.stringify(ldWebSite)}</script>
     <script type="application/ld+json">{JSON.stringify(ldWebPage)}</script>
+
+    <!-- Performance helpers -->
+    <style is:global>
+      /* Only paint off-screen sections when needed */
+      .cv { content-visibility: auto; contain-intrinsic-size: 1000px; }
+      @media (max-width: 1024px) { .cv { contain-intrinsic-size: 1400px; } }
+      @media (prefers-reduced-motion: reduce) { .cv { contain-intrinsic-size: 1200px; } }
+
+      /* Keep seams tiny so they don't claim large intrinsic sizes */
+      .cv--seam { contain-intrinsic-size: 24px; }
+
+      /* Defensive: avoid accidental transform promotions on everything */
+      [data-no-layer] { will-change: auto !important; }
+
+      /* Make the page dot color 20% opaque (mix the theme color with transparent).
+         This overrides the existing tailwind-arbitrary background so the dots become 20% transparent. */
+      body {
+        background-image: radial-gradient(color-mix(in srgb, var(--muted) 20%, transparent) 1px, transparent 1px) !important;
+        background-size: 16px 16px !important;
+        background-attachment: fixed !important;
+      }
+    </style>
   </head>
 
   <body
-    class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground overflow-x-hidden max-w-screen"
+    class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground overflow-x-hidden max-w-full
+            bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px] bg-fixed"
   >
-    <div
-      class="pointer-events-none fixed inset-0 h-full w-full bg-background bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px] -z-[100] opacity-20"
-    ></div>
-    <AmbientGlow />
+    {/* Decorative, no a11y cost */}
 
-    <BlogHeader />
-    <Hero />
-    <ZeroToProd />
-    <DesignWorkflowsVisually />
+    {/* Keep header & hero eager for better LCP */}
 
-    <SoftSeam />
+    <main id="content" class="contents w-full">
+	  <BlogHeader client:load />
+	  <Hero />
+	  <AmbientGlow />
+      <div class="cv"><ZeroToProd /></div>
+      <div class="cv"><DesignWorkflowsVisually /></div>
 
-    <Portability />
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
 
-    <SoftSeam />
+      <div class="cv"><Portability /></div>
 
-    <Performance />
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
 
-    <SoftSeam />
+      <div class="cv"><Performance /></div>
 
-    <Extensibility />
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
 
-    <SoftSeam />
+      <div class="cv"><Extensibility /></div>
 
-    <Theming />
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
 
-    <SoftSeam />
+      <div class="cv"><Theming /></div>
 
-    <ProcessCombination />
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
 
-    <SoftSeam />
+      <div class="cv"><ProcessCombination /></div>
 
-    <Storage />
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
 
-    <SoftSeam />
+      <div class="cv"><Storage /></div>
 
-    <Reading />
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
 
-    <SoftSeam />
+      <div class="cv"><Reading /></div>
 
-    <FAQ />
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+
+      <div class="cv"><FAQ /></div>
+    </main>
 
     <BlogFooter />
   </body>
