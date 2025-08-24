@@ -1,19 +1,19 @@
 ---
+
 ---
 
 <div class="relative order-2 lg:order-1">
     <div class="relative space-y-6">
         <div class="text-center mb-8">
             <h3 class="text-xl font-semibold mb-2">
-                Layer Stack Visualization
+                Your Business - Because it has Depth
             </h3>
             <p class="text-sm text-muted-foreground">
-                Three interconnected views of the same workflow
+                Three interconnected views of the same process
             </p>
         </div>
 
-        <!-- Layer Visualization (clean isometric stack) -->
-        <div class="order-2 lg:order-1">
+        <div class="order-2 lg:order-1 pt-4">
             <div
                 id="viz-layers"
                 data-active="business"
@@ -23,176 +23,273 @@
                 <div
                     class="plane"
                     data-k="business"
-                    style="--accent:243 85% 64%"
+                    style="--accent:243 85% 64%; --tx: 0px; --ty: 0px;"
                 >
-                    <svg viewBox="0 0 640 400" aria-hidden="true">
-                        <!-- frame -->
+                    <svg
+                        viewBox="0 0 640 400"
+                        aria-hidden="true"
+                        data-svg="business"
+                    >
                         <rect
                             x="8"
                             y="8"
                             width="624"
                             height="384"
                             rx="20"
-                            fill="hsl(var(--accent) / .06)"
+                            fill="hsl(var(--accent) / .12)"
                             stroke="hsl(var(--accent) / .28)"></rect>
-                        <!-- edges -->
-                        <path
-                            class="edge"
-                            d="M130 160 C200 160, 240 160, 310 160"></path>
-                        <path
-                            class="edge"
-                            d="M310 160 C390 160, 430 210, 500 210"></path>
-                        <path
-                            class="edge"
-                            d="M310 160 C390 160, 430 110, 500 110"></path>
+
                         <!-- nodes -->
                         <rect
                             class="node"
+                            data-id="start"
                             x="80"
-                            y="130"
-                            width="100"
-                            height="60"
-                            rx="10"></rect>
-                        <text class="label" x="130" y="165" text-anchor="middle"
-                            >Start</text
-                        >
-
-                        <rect
-                            class="node"
-                            x="270"
                             y="130"
                             width="110"
                             height="60"
-                            rx="10"></rect>
-                        <text class="label" x="325" y="165" text-anchor="middle"
-                            >Triage</text
+                            rx="12"></rect>
+                        <text
+                            class="label"
+                            data-for="start"
+                            x="135"
+                            y="165"
+                            text-anchor="middle">Start</text
                         >
 
                         <rect
                             class="node"
+                            data-id="triage"
+                            x="270"
+                            y="130"
+                            width="120"
+                            height="60"
+                            rx="12"></rect>
+                        <text
+                            class="label"
+                            data-for="triage"
+                            x="330"
+                            y="165"
+                            text-anchor="middle">Triage</text
+                        >
+
+                        <rect
+                            class="node"
+                            data-id="approve"
                             x="490"
                             y="80"
-                            width="100"
+                            width="110"
                             height="60"
-                            rx="10"></rect>
-                        <text class="label" x="540" y="115" text-anchor="middle"
-                            >Approve</text
+                            rx="12"></rect>
+                        <text
+                            class="label"
+                            data-for="approve"
+                            x="545"
+                            y="115"
+                            text-anchor="middle">Approve</text
                         >
 
                         <rect
                             class="node"
+                            data-id="decline"
                             x="490"
                             y="180"
-                            width="100"
+                            width="110"
                             height="60"
-                            rx="10"></rect>
-                        <text class="label" x="540" y="215" text-anchor="middle"
-                            >Decline</text
+                            rx="12"></rect>
+                        <text
+                            class="label"
+                            data-for="decline"
+                            x="545"
+                            y="215"
+                            text-anchor="middle">Decline</text
                         >
+
+                        <!-- edges (computed) -->
+                        <path
+                            class="edge"
+                            data-from="start"
+                            data-from-side="right"
+                            data-to="triage"
+                            data-to-side="left"></path>
+                        <path
+                            class="edge"
+                            data-from="triage"
+                            data-from-side="right"
+                            data-to="approve"
+                            data-to-side="left"></path>
+                        <path
+                            class="edge"
+                            data-from="triage"
+                            data-from-side="right"
+                            data-to="decline"
+                            data-to-side="left"></path>
                     </svg>
                 </div>
 
                 <!-- Data (middle) -->
-                <div class="plane" data-k="data" style="--accent:199 89% 48%">
-                    <svg viewBox="0 0 640 400" aria-hidden="true">
+                <div
+                    class="plane"
+                    data-k="data"
+                    style="--accent:199 89% 48%; --tx: 16px; --ty: 6px;"
+                >
+                    <svg
+                        viewBox="0 0 640 400"
+                        aria-hidden="true"
+                        data-svg="data"
+                    >
                         <rect
                             x="8"
                             y="8"
                             width="624"
                             height="384"
                             rx="20"
-                            fill="hsl(var(--accent) / .06)"
+                            fill="hsl(var(--accent) / .12)"
                             stroke="hsl(var(--accent) / .28)"></rect>
-                        <path
-                            class="edge"
-                            d="M140 230 C220 230, 260 200, 340 200"></path>
-                        <path
-                            class="edge"
-                            d="M340 200 C420 200, 470 240, 540 240"></path>
-                        <rect
-                            class="node"
-                            x="90"
-                            y="200"
-                            width="110"
-                            height="60"
-                            rx="10"></rect>
-                        <text class="label" x="145" y="235" text-anchor="middle"
-                            >SQL.claims</text
-                        >
 
+                        <!-- nodes (nudged to avoid overlap with HTTP.Intake) -->
                         <rect
                             class="node"
-                            x="300"
-                            y="170"
+                            data-id="sql"
+                            x="120"
+                            y="220"
                             width="120"
                             height="60"
-                            rx="10"></rect>
-                        <text class="label" x="360" y="205" text-anchor="middle"
-                            >FT.index</text
+                            rx="12"></rect>
+                        <text
+                            class="label"
+                            data-for="sql"
+                            x="180"
+                            y="255"
+                            text-anchor="middle">SQL.claims</text
                         >
 
                         <rect
                             class="node"
-                            x="500"
-                            y="210"
-                            width="110"
+                            data-id="index"
+                            x="320"
+                            y="175"
+                            width="120"
                             height="60"
-                            rx="10"></rect>
-                        <text class="label" x="555" y="245" text-anchor="middle"
-                            >Vector.store</text
+                            rx="12"></rect>
+                        <text
+                            class="label"
+                            data-for="index"
+                            x="380"
+                            y="210"
+                            text-anchor="middle">FT.index</text
                         >
+
+                        <rect
+                            class="node"
+                            data-id="vstore"
+                            x="520"
+                            y="220"
+                            width="120"
+                            height="60"
+                            rx="12"></rect>
+                        <text
+                            class="label"
+                            data-for="vstore"
+                            x="580"
+                            y="255"
+                            text-anchor="middle">Vector.store</text
+                        >
+
+                        <path
+                            class="edge"
+                            data-from="sql"
+                            data-from-side="right"
+                            data-to="index"
+                            data-to-side="left"></path>
+                        <path
+                            class="edge"
+                            data-from="index"
+                            data-from-side="right"
+                            data-to="vstore"
+                            data-to-side="left"></path>
                     </svg>
                 </div>
 
                 <!-- Implementation (bottom) -->
-                <div class="plane" data-k="impl" style="--accent:160 84% 40%">
-                    <svg viewBox="0 0 640 400" aria-hidden="true">
+                <div
+                    class="plane"
+                    data-k="impl"
+                    style="--accent:160 84% 40%; --tx:-14px; --ty:-8px;"
+                >
+                    <svg
+                        viewBox="0 0 640 400"
+                        aria-hidden="true"
+                        data-svg="impl"
+                    >
                         <rect
                             x="8"
                             y="8"
                             width="624"
                             height="384"
                             rx="20"
-                            fill="hsl(var(--accent) / .06)"
+                            fill="hsl(var(--accent) / .12)"
                             stroke="hsl(var(--accent) / .28)"></rect>
-                        <path
-                            class="edge"
-                            d="M90 120 C200 120, 220 200, 330 200"></path>
-                        <path
-                            class="edge"
-                            d="M330 200 C430 200, 450 280, 560 280"></path>
+
                         <rect
                             class="node"
-                            x="60"
+                            data-id="intake"
+                            x="40"
                             y="90"
-                            width="120"
+                            width="140"
                             height="60"
-                            rx="10"></rect>
-                        <text class="label" x="120" y="125" text-anchor="middle"
-                            >HTTP.Intake</text
+                            rx="12"></rect>
+                        <text
+                            class="label"
+                            data-for="intake"
+                            x="110"
+                            y="125"
+                            text-anchor="middle">HTTP.Intake</text
                         >
 
                         <rect
                             class="node"
+                            data-id="classify"
                             x="290"
                             y="170"
-                            width="120"
+                            width="130"
                             height="60"
-                            rx="10"></rect>
-                        <text class="label" x="350" y="205" text-anchor="middle"
-                            >Classify</text
+                            rx="12"></rect>
+                        <text
+                            class="label"
+                            data-for="classify"
+                            x="355"
+                            y="205"
+                            text-anchor="middle">Classify</text
                         >
 
                         <rect
                             class="node"
+                            data-id="notify"
                             x="520"
-                            y="250"
+                            y="260"
                             width="120"
                             height="60"
-                            rx="10"></rect>
-                        <text class="label" x="580" y="285" text-anchor="middle"
-                            >Notify</text
+                            rx="12"></rect>
+                        <text
+                            class="label"
+                            data-for="notify"
+                            x="580"
+                            y="295"
+                            text-anchor="middle">Notify</text
                         >
+
+                        <path
+                            class="edge"
+                            data-from="intake"
+                            data-from-side="right"
+                            data-to="classify"
+                            data-to-side="left"></path>
+                        <path
+                            class="edge"
+                            data-from="classify"
+                            data-from-side="right"
+                            data-to="notify"
+                            data-to-side="left"></path>
                     </svg>
                 </div>
             </div>
@@ -201,14 +298,67 @@
 </div>
 
 <script>
+    // Compute cubic Bézier between node edges so text stays readable.
+    function edgePoints(rect: any, side: any) {
+        const x = +rect.getAttribute("x"),
+            y = +rect.getAttribute("y");
+        const w = +rect.getAttribute("width"),
+            h = +rect.getAttribute("height");
+        if (side === "left") return { x: x, y: y + h / 2 };
+        if (side === "right") return { x: x + w, y: y + h / 2 };
+        if (side === "top") return { x: x + w / 2, y: y };
+        return { x: x + w / 2, y: y + h }; // bottom
+    }
+
+    function drawEdge(svg: any, edge: any) {
+        const fromId = edge.dataset.from,
+            toId = edge.dataset.to;
+        const fromSide = edge.dataset.fromSide || "right";
+        const toSide = edge.dataset.toSide || "left";
+
+        const from = svg.querySelector(`.node[data-id="${fromId}"]`);
+        const to = svg.querySelector(`.node[data-id="${toId}"]`);
+        if (!from || !to) return;
+
+        const p1 = edgePoints(from, fromSide);
+        const p2 = edgePoints(to, toSide);
+
+        const dx = Math.max(40, Math.abs(p2.x - p1.x));
+        const c1 = {
+            x: p1.x + (fromSide === "right" ? dx * 0.45 : -dx * 0.45),
+            y: p1.y,
+        };
+        const c2 = {
+            x: p2.x - (toSide === "left" ? dx * 0.45 : -dx * 0.45),
+            y: p2.y,
+        };
+
+        edge.setAttribute(
+            "d",
+            `M ${p1.x} ${p1.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${p2.x} ${p2.y}`,
+        );
+    }
+
+    function redrawAll() {
+        document.querySelectorAll(".layers-iso svg").forEach((svg) => {
+            svg.querySelectorAll(".edge").forEach((edge) =>
+                drawEdge(svg, edge),
+            );
+        });
+    }
+
     const viz = document.getElementById("viz-layers");
     const tabs = document.querySelectorAll("#layers-tabs [role=tab]");
     tabs.forEach((btn) => {
         btn.addEventListener("click", () => {
             const t = btn.getAttribute("data-target");
-            if (viz && t) viz.setAttribute("data-active", t); // highlight matching pane
+            if (viz && t) viz.setAttribute("data-active", t);
         });
     });
+
+    window.addEventListener("resize", redrawAll);
+    document.addEventListener("DOMContentLoaded", redrawAll);
+    setTimeout(redrawAll, 0);
 </script>
 
 <style>
@@ -220,20 +370,22 @@
     .layers-iso .plane {
         position: absolute;
         inset: 0;
-        transform: rotateX(55deg) rotateZ(-2deg) translateZ(var(--z, 0));
+        transform: rotateX(55deg) rotateZ(-2deg)
+            translate3d(var(--tx, 0), var(--ty, 0), var(--z, 0));
         transition:
             transform 0.45s ease,
             opacity 0.28s ease,
             filter 0.28s ease;
-        filter: saturate(0.85) brightness(0.95);
-        opacity: 0.55;
+        filter: saturate(0.9) brightness(0.95);
+        opacity: 0.30;
+        pointer-events: none;
     }
     .layers-iso .plane svg {
         width: 100%;
         height: 100%;
         border-radius: 18px;
         background: linear-gradient(
-            to br,
+            to bottom right,
             hsl(var(--accent) / 0.06),
             transparent
         );
@@ -252,37 +404,98 @@
         --z: 0px;
     }
 
-    /* highlight active plane */
+    /* active highlighting + animated flow */
+    @keyframes flow {
+        to {
+            stroke-dashoffset: -100;
+        }
+    }
+
     .layers-iso[data-active="business"] [data-k="business"],
     .layers-iso[data-active="data"] [data-k="data"],
     .layers-iso[data-active="impl"] [data-k="impl"] {
         opacity: 1;
         filter: none;
-        transform: rotateX(55deg) rotateZ(-2deg) translateZ(var(--z))
-            scale(1.02);
+        transform: rotateX(55deg) rotateZ(-2deg)
+            translate3d(var(--tx, 0), var(--ty, 0), var(--z)) scale(1.02);
+    }
+    .layers-iso[data-active="business"] [data-k="business"] .edge,
+    .layers-iso[data-active="data"] [data-k="data"] .edge,
+    .layers-iso[data-active="impl"] [data-k="impl"] .edge {
+        animation: flow 3.2s linear infinite;
     }
 
     /* tiny graph styling */
     .layers-iso .node {
-        fill: hsl(var(--accent) / 0.14);
-        stroke: hsl(var(--accent) / 0.6);
+        fill: hsl(var(--accent) / 0.32);
+        stroke: hsl(var(--accent) / 0.65);
+        stroke-width: 1.25;
+        filter: drop-shadow(0 2px 6px hsl(var(--accent) / 0.18));
     }
     .layers-iso .edge {
-        stroke: hsl(var(--accent) / 0.55);
+        stroke: hsl(var(--accent) / 0.6);
         stroke-width: 2;
         fill: none;
         stroke-linecap: round;
-        stroke-dasharray: 6 6;
+        stroke-dasharray: 10 8;
+        stroke-dashoffset: 0;
+        opacity: 0.9;
+        filter: drop-shadow(0 0 6px hsl(var(--accent) / 0.25));
     }
     .layers-iso .label {
         fill: hsl(var(--accent));
-        font-weight: 700;
-        font-size: 12px;
+        font-weight: 800;
+        font-size: 13px;
+        letter-spacing: 0.2px;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+        user-select: none;
     }
 
     /* subtle hover lift */
     .layers-iso:hover .plane {
-        transform: rotateX(55deg) rotateZ(-2deg) translateZ(var(--z))
-            translateY(-2px);
+        transform: rotateX(55deg) rotateZ(-2deg)
+            translate3d(var(--tx, 0), var(--ty, 0), var(--z)) translateY(-2px);
+    }
+
+    /* 1) Don't scale the active plane (prevents resample blur) */
+.layers-iso[data-active="business"] [data-k="business"],
+.layers-iso[data-active="data"]     [data-k="data"],
+.layers-iso[data-active="impl"]     [data-k="impl"] {
+  transform: rotateX(55deg) rotateZ(-2deg)
+             translate3d(var(--tx,0), var(--ty,0), var(--z));
+}
+
+/* 2) Ask SVG to render text precisely and remove blurring filters on labels */
+.layers-iso svg {
+  text-rendering: geometricPrecision;
+  font-kerning: normal;
+  -webkit-font-smoothing: antialiased;
+}
+.layers-iso .label {
+  /* no blur from shadows/filters on text */
+  filter: none;
+  /* crisp outline instead of glow */
+  paint-order: stroke;
+  stroke: rgba(0,0,0,.55);
+  stroke-width: .6px;
+  font-size: 14px;            /* +1px helps a lot */
+  letter-spacing: .15px;
+  user-select: none;
+}
+
+/* 3) Keep strokes crisp under transforms */
+.layers-iso .node,
+.layers-iso .edge {
+  vector-effect: non-scaling-stroke;
+}
+
+/* optional: tone down blur-inducing plane filter on active just in case */
+.layers-iso .plane { filter: saturate(.9) brightness(.95); }
+.layers-iso[data-active] [data-k] { filter: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+        .layers-iso .edge {
+            animation: none !important;
+        }
     }
 </style>
