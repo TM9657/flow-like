@@ -1,6 +1,6 @@
 import { Button } from "@tm9657/flow-like-ui";
 import { BsDiscord, BsGithub, BsTwitterX } from "react-icons/bs";
-import { LuBookHeart, LuBookMarked } from "react-icons/lu";
+import { LuBookHeart, LuBookMarked, LuDownload } from "react-icons/lu";
 
 export function Header() {
 	return (
@@ -14,6 +14,12 @@ export function Header() {
 					<Button variant={"outline"}>
 						<LuBookHeart width={5} height={5} className="w-5 h-5" />
 						Blog
+					</Button>
+				</a>
+				<a href="https://docs.flow-like.com" target="_blank" rel="noreferrer">
+					<Button variant={"outline"}>
+						<LuBookMarked className="w-5 h-5" />
+						Docs
 					</Button>
 				</a>
 				<a
@@ -39,10 +45,10 @@ export function Header() {
 						<BsDiscord width={5} height={5} className="w-5 h-5" />
 					</Button>
 				</a>
-				<a href="https://docs.flow-like.com" target="_blank" rel="noreferrer">
+				<a href="/download">
 					<Button>
-						<LuBookMarked className="w-5 h-5" />
-						Docs
+						<LuDownload className="w-5 h-5" />
+						Download
 					</Button>
 				</a>
 			</div>
