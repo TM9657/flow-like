@@ -11,13 +11,14 @@ use linfa_svm::Svm;
 use ndarray::{Array2, ArrayBase, Dim, OwnedRepr};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::sync::Arc;
 pub mod classification;
 pub mod clustering;
 pub mod dataset;
-pub mod reduction;
 pub mod load;
 pub mod prediction;
+pub mod reduction;
 pub mod save;
 
 /// Add Machine Learning Nodes to Catalog Lib
@@ -33,13 +34,26 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-/// Available Machine Learning Models from Linfa Crate
+/// # Unified Type for Machine Learning Models from Linfa Crate
+/// Untagged feature flag allows to auto-deserialize as the correct variant
 pub enum MLModel {
     KMeans(KMeans<f64, L2Dist>),
     SVMClass(Svm<f64, Pr>),
     SVMMultiClass(Vec<(usize, Svm<f64, Pr>)>),
     LinearRegression(FittedLinearRegression<f64>),
     PCA(Pca<f64>),
+}
+
+impl fmt::Display for MLModel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MLModel::KMeans(_) => write!(f, "KMeans Clustering"),
+            MLModel::LinearRegression(_) => write!(f, "Linear Regression"),
+            MLModel::SVMClass(_) => write!(f, "SVM Classification (Single Class)"),
+            MLModel::SVMMultiClass(_) => write!(f, "SVM Classification (Multiple Classes)"),
+            MLModel::PCA(_) => write!(f, "PCA"),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
