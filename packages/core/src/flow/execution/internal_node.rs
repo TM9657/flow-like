@@ -1,14 +1,14 @@
-use flow_like_types::{Value, json::json, sync::Mutex};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Weak},
-};
-
 use crate::flow::{
     node::{Node, NodeLogic, NodeState},
     pin::PinType,
     utils::evaluate_pin_value,
     variable::VariableType,
+};
+use ahash::{AHashMap, AHashSet};
+use flow_like_types::{Value, json::json, sync::Mutex};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Weak},
 };
 
 use super::{LogLevel, context::ExecutionContext, internal_pin::InternalPin, log::LogMessage};
@@ -18,6 +18,247 @@ pub enum InternalNodeError {
     DependencyFailed(String),
     ExecutionFailed(String),
     PinNotReady(String),
+}
+
+#[inline]
+fn ptr_key<T>(arc: &Arc<T>) -> usize {
+    Arc::as_ptr(arc) as usize
+}
+
+async fn exec_deps_from_map(
+    ctx: &mut ExecutionContext,
+    recursion_guard: &mut Option<std::collections::HashSet<String>>,
+    dependencies: &std::collections::HashMap<String, Vec<Arc<InternalNode>>>,
+) -> bool {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Phase {
+        Enter,
+        Exit,
+    }
+
+    let node = ctx.read_node().await;
+    let root_id = node.id.clone();
+
+    // Seed stack from the map (may be empty)
+    let mut stack: Vec<(Arc<InternalNode>, Phase)> = Vec::new();
+    if let Some(roots) = dependencies.get(&root_id) {
+        stack.reserve(roots.len().saturating_mul(2));
+        for dep in roots.iter() {
+            stack.push((dep.clone(), Phase::Enter));
+        }
+    }
+
+    // Pointer-keyed sets to avoid String hashing in the hot path.
+    let mut scheduled: AHashSet<usize> = AHashSet::with_capacity(stack.len().saturating_mul(2));
+    let mut visiting: AHashSet<usize> = AHashSet::with_capacity(stack.len().saturating_mul(2));
+
+    while let Some((n, phase)) = stack.pop() {
+        let n_ptr = ptr_key(&n);
+
+        match phase {
+            Phase::Enter => {
+                if scheduled.contains(&n_ptr) {
+                    continue;
+                }
+                if !visiting.insert(n_ptr) {
+                    ctx.log_message(
+                        "Cycle detected while resolving mapped dependencies",
+                        LogLevel::Error,
+                    );
+                    return false;
+                }
+                // Post-order
+                stack.push((n.clone(), Phase::Exit));
+
+                // Push this dependency’s own deps (if any) from the map
+                let dep_id = {
+                    let g = n.node.lock().await;
+                    g.id.clone()
+                };
+                if let Some(children) = dependencies.get(&dep_id) {
+                    for c in children.iter() {
+                        let c_ptr = ptr_key(c);
+                        if scheduled.contains(&c_ptr) {
+                            continue;
+                        }
+                        stack.push((c.clone(), Phase::Enter));
+                    }
+                }
+            }
+            Phase::Exit => {
+                visiting.remove(&n_ptr);
+                if scheduled.contains(&n_ptr) {
+                    continue;
+                }
+
+                // Guard & run the dependency node itself (no successors)
+                let (dep_id, dep_name) = {
+                    let g = n.node.lock().await;
+                    (g.id.clone(), g.friendly_name.clone())
+                };
+
+                if let Some(guard) = recursion_guard {
+                    if guard.contains(&dep_id) {
+                        ctx.log_message(
+                            &format!("Recursion detected for: {}, skipping execution", dep_id),
+                            LogLevel::Debug,
+                        );
+                        scheduled.insert(n_ptr);
+                        continue;
+                    }
+                }
+
+                let mut sub = ctx.create_sub_context(&n).await;
+                let mut log_message = LogMessage::new(
+                    &format!("Triggering mapped dependency: {}", dep_name),
+                    LogLevel::Debug,
+                    None,
+                );
+
+                // Reuse your non-recursive single-node runner
+                let res = run_node_logic_only(&mut sub, recursion_guard).await;
+
+                log_message.end();
+                ctx.log(log_message);
+                sub.end_trace();
+                ctx.push_sub_context(sub);
+
+                if res.is_err() {
+                    ctx.log_message("Failed to trigger mapped dependency", LogLevel::Error);
+                    return false;
+                }
+
+                scheduled.insert(n_ptr);
+            }
+        }
+    }
+
+    true
+}
+
+async fn run_node_logic_only(
+    ctx: &mut ExecutionContext,
+    recursion_guard: &mut Option<std::collections::HashSet<String>>,
+) -> flow_like_types::Result<(), InternalNodeError> {
+    ctx.set_state(NodeState::Running).await;
+    let node = ctx.read_node().await;
+
+    if recursion_guard.is_none() {
+        *recursion_guard = Some(std::collections::HashSet::new());
+    }
+    if let Some(guard) = recursion_guard {
+        if guard.contains(&node.id) {
+            ctx.log_message(
+                &format!("Recursion detected for: {}", &node.id),
+                LogLevel::Debug,
+            );
+            ctx.end_trace();
+            return Ok(());
+        }
+        guard.insert(node.id.clone());
+    }
+
+    let logic = ctx.node.logic.clone();
+    let mut log_message = LogMessage::new(
+        &format!("Starting Node Execution: {} [{}]", &node.name, &node.id),
+        LogLevel::Debug,
+        None,
+    );
+
+    let result = logic.run(ctx).await;
+
+    if let Err(e) = result {
+        let err_string = format!("{:?}", e);
+        ctx.log_message(
+            &format!("Failed to execute node: {}", &err_string),
+            LogLevel::Error,
+        );
+        log_message.end();
+        ctx.log(log_message);
+        ctx.end_trace();
+        ctx.set_state(NodeState::Error).await;
+        // NO handle_error() HERE — just bubble up
+        return Err(InternalNodeError::ExecutionFailed(node.id));
+    }
+
+    ctx.set_state(NodeState::Success).await;
+    log_message.end();
+    ctx.log(log_message);
+    ctx.end_trace();
+    Ok(())
+}
+
+// --- Helper: collect *pure* parent nodes for a given InternalNode ------------------
+async fn pure_parents_for_memo(
+    node: &Arc<InternalNode>,
+    memo: &mut AHashMap<usize, Vec<Arc<InternalNode>>>,
+) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
+    let key = ptr_key(node);
+    if let Some(v) = memo.get(&key) {
+        return Ok(v.clone());
+    }
+
+    let mut result: Vec<Arc<InternalNode>> = Vec::new();
+    let pins = node.pins.clone();
+
+    // Iterate only input, non-exec pins. Relay through standalone pins.
+    for pin in pins.values() {
+        let (is_input, is_exec, depends_on_len, depends_on) = {
+            let pin_guard = pin.lock().await;
+            let inner_pin = pin_guard.pin.lock().await;
+            let is_input = inner_pin.pin_type == PinType::Input;
+            let is_exec = inner_pin.data_type == VariableType::Execution;
+            let deps_len = pin_guard.depends_on.len();
+            (is_input, is_exec, deps_len, pin_guard.depends_on.clone())
+        };
+
+        if !is_input || is_exec {
+            continue;
+        }
+
+        // Pointer-keyed visited for pins; reserve generously to avoid rehash
+        let mut visited_pins: AHashSet<usize> =
+            AHashSet::with_capacity(depends_on_len.saturating_mul(4));
+        let mut stack: Vec<Weak<Mutex<InternalPin>>> = depends_on;
+
+        while let Some(dep_weak) = stack.pop() {
+            let Some(dep_arc) = dep_weak.upgrade() else {
+                continue;
+            };
+            let pin_key = ptr_key(&dep_arc);
+            if !visited_pins.insert(pin_key) {
+                continue;
+            }
+
+            let parent_opt = {
+                let dep_guard = dep_arc.lock().await;
+                if let Some(node_weak) = &dep_guard.node {
+                    node_weak.upgrade()
+                } else {
+                    // standalone/relay pin => follow further upstream
+                    if !dep_guard.depends_on.is_empty() {
+                        stack.extend(dep_guard.depends_on.iter().cloned());
+                    }
+                    None
+                }
+            };
+
+            if let Some(parent) = parent_opt {
+                if parent.is_pure().await {
+                    result.push(parent);
+                }
+            }
+        }
+    }
+
+    // (Optional) de-dup parents by pointer to avoid re-executing same pure node.
+    if result.len() > 1 {
+        let mut seen: AHashSet<usize> = AHashSet::with_capacity(result.len());
+        result.retain(|n| seen.insert(ptr_key(n)));
+    }
+
+    memo.insert(key, result.clone());
+    Ok(result)
 }
 
 pub struct InternalNode {
@@ -428,125 +669,146 @@ impl InternalNode {
         pins.is_none()
     }
 
-    async fn trigger_missing_dependencies(
+    pub async fn trigger_missing_dependencies(
         context: &mut ExecutionContext,
-        recursion_guard: &mut Option<HashSet<String>>,
-        with_successors: bool,
+        recursion_guard: &mut Option<std::collections::HashSet<String>>,
+        _with_successors: bool, // not used here
     ) -> bool {
-        let pins = context.node.pins.clone();
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum Phase {
+            Enter,
+            Exit,
+        }
 
-        // TODO: optimize this for parallel execution
-        for pin in pins.values() {
-            let dependencies = {
-                let pin_guard = pin.lock().await;
-                let pin = pin_guard.pin.lock().await;
+        let mut parents_memo: AHashMap<usize, Vec<Arc<InternalNode>>> = AHashMap::with_capacity(16);
 
-                if pin.pin_type != PinType::Input {
-                    continue;
-                }
+        // Seed: pure parents of the current node. Dedup by pointer.
+        let mut roots = match pure_parents_for_memo(&context.node, &mut parents_memo).await {
+            Ok(v) => v,
+            Err(_) => {
+                context.log_message("Failed to collect dependencies", LogLevel::Error);
+                return false;
+            }
+        };
+        if roots.len() > 1 {
+            let mut seen: AHashSet<usize> = AHashSet::with_capacity(roots.len());
+            roots.retain(|n| seen.insert(ptr_key(n)));
+        }
 
-                // we only trigger pure dependencies
-                if pin.data_type == VariableType::Execution {
-                    continue;
-                }
+        let mut stack: Vec<(Arc<InternalNode>, Phase)> =
+            Vec::with_capacity(roots.len().saturating_mul(2));
+        for n in roots {
+            stack.push((n, Phase::Enter));
+        }
 
-                pin_guard.depends_on.clone()
-            };
+        let mut scheduled: AHashSet<usize> = AHashSet::with_capacity(stack.len().saturating_mul(2));
+        let mut visiting: AHashSet<usize> = AHashSet::with_capacity(stack.len().saturating_mul(2));
 
-            let cap = dependencies.len();
-            let mut visited_pins: HashSet<usize> = HashSet::with_capacity(cap.saturating_mul(4));
-            let mut seen_nodes: HashSet<usize> = HashSet::with_capacity(cap.saturating_mul(2));
-            let mut stack: Vec<Weak<Mutex<InternalPin>>> = dependencies;
+        while let Some((node_arc, phase)) = stack.pop() {
+            let node_ptr = ptr_key(&node_arc);
 
-            while let Some(dep_weak) = stack.pop() {
-                let dep_arc = match dep_weak.upgrade() {
-                    Some(dep) => dep,
-                    None => {
-                        context.log_message("Failed to lock dependency", LogLevel::Error);
+            match phase {
+                Phase::Enter => {
+                    if scheduled.contains(&node_ptr) {
+                        continue;
+                    }
+                    if !visiting.insert(node_ptr) {
+                        context.log_message(
+                            "Cycle detected while resolving dependencies",
+                            LogLevel::Error,
+                        );
                         return false;
                     }
-                };
 
-                let pin_key = Arc::as_ptr(&dep_arc) as usize;
-                if !visited_pins.insert(pin_key) {
-                    continue;
-                }
+                    // Post-order: revisit on Exit
+                    stack.push((node_arc.clone(), Phase::Exit));
 
-                let parent_opt = {
-                    let dep_guard = dep_arc.lock().await;
-                    if let Some(node_weak) = &dep_guard.node {
-                        node_weak.upgrade()
-                    } else {
-                        // relay through standalone pins
-                        stack.extend(dep_guard.depends_on.iter().cloned());
-                        None
+                    // Push this node's pure parents first (dedup against scheduled for cheap)
+                    match pure_parents_for_memo(&node_arc, &mut parents_memo).await {
+                        Ok(parents) => {
+                            // Iterate parents in natural order; for more cache locality you could reverse.
+                            for p in parents {
+                                let p_ptr = ptr_key(&p);
+                                if scheduled.contains(&p_ptr) {
+                                    continue;
+                                }
+                                stack.push((p, Phase::Enter));
+                            }
+                        }
+                        Err(e) => {
+                            context.log_message(
+                                &format!("Failed to collect parents: {:?}", e),
+                                LogLevel::Error,
+                            );
+                            return false;
+                        }
                     }
-                };
-
-                let Some(parent) = parent_opt else { continue };
-
-                let node_key = Arc::as_ptr(&parent) as usize;
-                if !seen_nodes.insert(node_key) {
-                    continue;
                 }
+                Phase::Exit => {
+                    visiting.remove(&node_ptr);
+                    if scheduled.contains(&node_ptr) {
+                        continue;
+                    }
 
-                if !parent.is_pure().await {
-                    continue;
-                }
+                    // Get id/name once (short lock scope).
+                    let (node_id, node_name) = {
+                        let parent_node = node_arc.node.lock().await;
+                        (parent_node.id.clone(), parent_node.friendly_name.clone())
+                    };
 
-                let (node_id, node_name) = {
-                    let parent_node = parent.node.lock().await;
-                    (parent_node.id.clone(), parent_node.friendly_name.clone())
-                };
+                    if let Some(guard) = recursion_guard {
+                        if guard.contains(&node_id) {
+                            context.log_message(
+                                &format!(
+                                    "Recursion detected for: {}, skipping execution",
+                                    &node_id
+                                ),
+                                LogLevel::Debug,
+                            );
+                            scheduled.insert(node_ptr);
+                            continue;
+                        }
+                    }
 
-                if let Some(guard) = recursion_guard
-                    && guard.contains(&node_id)
-                {
-                    context.log_message(
-                        &format!("Recursion detected for: {}, skipping execution", &node_id),
+                    // Execute dependency (no successors)
+                    let mut sub = context.create_sub_context(&node_arc).await;
+                    let mut log_message = LogMessage::new(
+                        &format!("Triggering missing dependency: {}", &node_name),
                         LogLevel::Debug,
+                        None,
                     );
-                    continue;
-                }
+                    let res = run_node_logic_only(&mut sub, recursion_guard).await;
+                    log_message.end();
+                    context.log(log_message);
+                    sub.end_trace();
+                    context.push_sub_context(sub);
 
-                let mut sub_context = context.create_sub_context(&parent).await;
-                let mut log_message = LogMessage::new(
-                    &format!("Triggering missing dependency: {}", &node_name),
-                    LogLevel::Debug,
-                    None,
-                );
-                let success = Box::pin(InternalNode::trigger(
-                    &mut sub_context,
-                    recursion_guard,
-                    with_successors,
-                ))
-                .await;
-                log_message.end();
-                context.log(log_message);
-                sub_context.end_trace();
-                context.push_sub_context(sub_context);
+                    if res.is_err() {
+                        context.log_message(
+                            &format!("Failed to trigger dependency: {}", &node_name),
+                            LogLevel::Error,
+                        );
+                        return false;
+                    }
 
-                if success.is_err() {
-                    context.log_message(
-                        &format!("Failed to trigger dependency: {}", &node_name),
-                        LogLevel::Error,
-                    );
-                    return false;
+                    scheduled.insert(node_ptr);
                 }
             }
         }
+
         true
     }
 
     pub async fn handle_error(
         context: &mut ExecutionContext,
         error: &str,
-        recursion_guard: &mut Option<HashSet<String>>,
+        recursion_guard: &mut Option<std::collections::HashSet<String>>,
     ) -> Result<(), InternalNodeError> {
         let _ = context.activate_exec_pin("auto_handle_error").await;
         let _ = context
             .set_pin_value("auto_handle_error_string", json!(error))
             .await;
+
         let connected = context
             .node
             .get_error_handled_nodes()
@@ -558,6 +820,7 @@ impl InternalNode {
                 );
                 InternalNodeError::ExecutionFailed(context.id.clone())
             })?;
+
         if connected.is_empty() {
             context.log_message(
                 &format!("No error handling nodes found for: {}", &context.id),
@@ -566,58 +829,132 @@ impl InternalNode {
             return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
         }
 
-        for successor in connected {
-            let mut sub_context = context.create_sub_context(&successor).await;
-            let result = Box::pin(InternalNode::trigger(
-                &mut sub_context,
-                recursion_guard,
-                true,
-            ))
-            .await;
-            sub_context.end_trace();
-            context.push_sub_context(sub_context);
-            if result.is_err() {
-                let err_string = format!("{:?}", result.err());
-                let _ = context
+        // Iterate each error handler and walk its successors iteratively (DFS).
+        for handler in connected {
+            let mut sub = context.create_sub_context(&handler).await;
+
+            // Use SAME recursion_guard here (parity with original)
+            if !InternalNode::trigger_missing_dependencies(&mut sub, recursion_guard, false).await {
+                let err_string =
+                    "Failed to trigger missing dependencies for error handler".to_string();
+                let _ = sub
                     .set_pin_value("auto_handle_error_string", json!(err_string))
                     .await;
+                sub.end_trace();
+                context.push_sub_context(sub);
                 return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
             }
+
+            // run handler node
+            if let Err(e) = run_node_logic_only(&mut sub, recursion_guard).await {
+                let err_string = format!("{:?}", e);
+                let _ = sub
+                    .set_pin_value("auto_handle_error_string", json!(err_string))
+                    .await;
+                sub.end_trace();
+                context.push_sub_context(sub);
+                return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
+            }
+
+            // walk successors of the error handler (still using the same guard)
+            let mut stack: Vec<Arc<InternalNode>> = match handler.get_connected_exec(true).await {
+                Ok(v) => v,
+                Err(err) => {
+                    let err_string = format!("{:?}", err);
+                    let _ = sub
+                        .set_pin_value("auto_handle_error_string", json!(err_string))
+                        .await;
+                    sub.end_trace();
+                    context.push_sub_context(sub);
+                    return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
+                }
+            };
+
+            let mut seen_exec_ptrs: ahash::AHashSet<usize> =
+                ahash::AHashSet::with_capacity(stack.len().saturating_mul(2));
+
+            while let Some(next) = stack.pop() {
+                let key = Arc::as_ptr(&next) as usize;
+                if !seen_exec_ptrs.insert(key) {
+                    continue;
+                }
+
+                let mut sub2 = context.create_sub_context(&next).await;
+
+                if !InternalNode::trigger_missing_dependencies(&mut sub2, recursion_guard, false)
+                    .await
+                {
+                    let err_string =
+                        "Failed to trigger successor dependencies (error chain)".to_string();
+                    let _ = sub2
+                        .set_pin_value("auto_handle_error_string", json!(err_string))
+                        .await;
+                    sub2.end_trace();
+                    context.push_sub_context(sub2);
+                    let _ = sub
+                        .set_pin_value("auto_handle_error_string", json!("error chain aborted"))
+                        .await;
+                    sub.end_trace();
+                    context.push_sub_context(sub);
+                    return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
+                }
+
+                if let Err(e) = run_node_logic_only(&mut sub2, recursion_guard).await {
+                    let err_string = format!("{:?}", e);
+                    let _ = sub2
+                        .set_pin_value("auto_handle_error_string", json!(err_string))
+                        .await;
+                    sub2.end_trace();
+                    context.push_sub_context(sub2);
+                    let _ = sub
+                        .set_pin_value("auto_handle_error_string", json!("error chain aborted"))
+                        .await;
+                    sub.end_trace();
+                    context.push_sub_context(sub);
+                    return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
+                }
+
+                match next.get_connected_exec(true).await {
+                    Ok(more) => {
+                        for s in more {
+                            stack.push(s);
+                        }
+                    }
+                    Err(err) => {
+                        let err_string = format!("{:?}", err);
+                        let _ = sub2
+                            .set_pin_value("auto_handle_error_string", json!(err_string))
+                            .await;
+                        sub2.end_trace();
+                        context.push_sub_context(sub2);
+                        let _ = sub
+                            .set_pin_value("auto_handle_error_string", json!("error chain aborted"))
+                            .await;
+                        sub.end_trace();
+                        context.push_sub_context(sub);
+                        return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
+                    }
+                }
+
+                sub2.end_trace();
+                context.push_sub_context(sub2);
+            }
+
+            sub.end_trace();
+            context.push_sub_context(sub);
         }
+
         context.set_state(NodeState::Error).await;
         Ok(())
     }
 
     pub async fn trigger(
         context: &mut ExecutionContext,
-        recursion_guard: &mut Option<HashSet<String>>,
+        recursion_guard: &mut Option<std::collections::HashSet<String>>,
         with_successors: bool,
-    ) -> Result<(), InternalNodeError> {
-        context.set_state(NodeState::Running).await;
-        let node = context.read_node().await;
-        // create recursion guard if not present
-        if recursion_guard.is_none() {
-            *recursion_guard = Some(HashSet::new());
-        }
-
-        // check recursion guard
-        if let Some(recursion_guard) = recursion_guard {
-            if recursion_guard.contains(&node.id) {
-                context.log_message(
-                    &format!("Recursion detected for: {}", &node.id),
-                    LogLevel::Debug,
-                );
-                context.end_trace();
-                return Ok(());
-            }
-
-            recursion_guard.insert(node.id.clone());
-        }
-
-        let success =
-            InternalNode::trigger_missing_dependencies(context, recursion_guard, with_successors)
-                .await;
-        if !success {
+    ) -> flow_like_types::Result<(), InternalNodeError> {
+        // deps
+        if !InternalNode::trigger_missing_dependencies(context, recursion_guard, false).await {
             context.log_message("Failed to trigger missing dependencies", LogLevel::Error);
             context.end_trace();
             InternalNode::handle_error(
@@ -626,68 +963,90 @@ impl InternalNode {
                 recursion_guard,
             )
             .await?;
+            let node = context.read_node().await;
             return Err(InternalNodeError::DependencyFailed(node.id));
         }
 
-        let logic = context.node.logic.clone();
-
-        let mut log_message = LogMessage::new(
-            &format!("Starting Node Execution: {} [{}]", &node.name, &node.id),
-            LogLevel::Debug,
-            None,
-        );
-        let result = logic.run(context).await;
-        drop(logic);
-        if result.is_err() {
-            let err_string = format!("{:?}", result.err());
-            context.log_message(
-                &format!("Failed to execute node: {}", &err_string),
-                LogLevel::Error,
-            );
-            log_message.end();
-            context.log(log_message);
-            context.end_trace();
-            context.set_state(NodeState::Error).await;
+        // this node
+        if let Err(e) = run_node_logic_only(context, recursion_guard).await {
+            let err_string = format!("{:?}", e);
             InternalNode::handle_error(context, &err_string, recursion_guard).await?;
+            let node = context.read_node().await;
             return Err(InternalNodeError::ExecutionFailed(node.id));
         }
-        context.set_state(NodeState::Success).await;
-        log_message.end();
-        context.log(log_message);
-        context.end_trace();
 
+        // successors (DFS; fresh guard per successor to mirror old semantics)
         if with_successors {
             let successors = match context.node.get_connected_exec(true).await {
                 Ok(nodes) => nodes,
                 Err(err) => {
                     let err_string = format!("{:?}", err);
                     context.log_message(
-                        &format!("Failed to get successors: {}", err_string.clone()),
+                        &format!("Failed to get successors: {}", err_string),
                         LogLevel::Error,
                     );
                     InternalNode::handle_error(context, &err_string, recursion_guard).await?;
+                    let node = context.read_node().await;
                     return Err(InternalNodeError::ExecutionFailed(node.id));
                 }
             };
-            // TODO: optimize this for parallel execution
-            for successor in successors {
-                let mut sub_context = context.create_sub_context(&successor).await;
-                let result = Box::pin(InternalNode::trigger(
-                    &mut sub_context,
-                    &mut None,
-                    with_successors,
-                ))
-                .await;
-                sub_context.end_trace();
-                context.push_sub_context(sub_context);
-                if result.is_err() {
-                    let err_string = format!("{:?}", result.err());
-                    let _ = context.activate_exec_pin("auto_handle_error").await;
-                    let _ = context
-                        .set_pin_value("auto_handle_error_string", json!(err_string))
-                        .await;
+
+            let mut stack: Vec<Arc<InternalNode>> = Vec::with_capacity(successors.len());
+            stack.extend(successors);
+
+            let mut seen_exec_ptrs: ahash::AHashSet<usize> =
+                ahash::AHashSet::with_capacity(stack.len().saturating_mul(2));
+
+            while let Some(next) = stack.pop() {
+                let key = Arc::as_ptr(&next) as usize;
+                if !seen_exec_ptrs.insert(key) {
+                    continue;
+                }
+
+                let mut sub = context.create_sub_context(&next).await;
+                let mut local_guard: Option<std::collections::HashSet<String>> = None;
+
+                if !InternalNode::trigger_missing_dependencies(&mut sub, &mut local_guard, false)
+                    .await
+                {
+                    let err_string = "Failed to trigger successor dependencies".to_string();
+                    InternalNode::handle_error(&mut sub, &err_string, &mut local_guard).await?;
+                    sub.end_trace();
+                    context.push_sub_context(sub);
+                    let node = context.read_node().await;
                     return Err(InternalNodeError::ExecutionFailed(node.id));
                 }
+
+                if let Err(e) = run_node_logic_only(&mut sub, &mut local_guard).await {
+                    let err_string = format!("{:?}", e);
+                    let _ = sub.activate_exec_pin("auto_handle_error").await;
+                    let _ = sub
+                        .set_pin_value("auto_handle_error_string", json!(err_string))
+                        .await;
+                    sub.end_trace();
+                    context.push_sub_context(sub);
+                    let node = context.read_node().await;
+                    return Err(InternalNodeError::ExecutionFailed(node.id));
+                }
+
+                match next.get_connected_exec(true).await {
+                    Ok(more) => {
+                        for s in more {
+                            stack.push(s);
+                        }
+                    }
+                    Err(err) => {
+                        let err_string = format!("{:?}", err);
+                        InternalNode::handle_error(&mut sub, &err_string, &mut local_guard).await?;
+                        sub.end_trace();
+                        context.push_sub_context(sub);
+                        let node = context.read_node().await;
+                        return Err(InternalNodeError::ExecutionFailed(node.id));
+                    }
+                }
+
+                sub.end_trace();
+                context.push_sub_context(sub);
             }
         }
 
@@ -696,20 +1055,19 @@ impl InternalNode {
 
     pub async fn trigger_with_dependencies(
         context: &mut ExecutionContext,
-        recursion_guard: &mut Option<HashSet<String>>,
+        recursion_guard: &mut Option<std::collections::HashSet<String>>,
         with_successors: bool,
-        dependencies: &HashMap<String, Vec<Arc<InternalNode>>>,
-    ) -> Result<(), InternalNodeError> {
+        dependencies: &std::collections::HashMap<String, Vec<Arc<InternalNode>>>,
+    ) -> flow_like_types::Result<(), InternalNodeError> {
         context.set_state(NodeState::Running).await;
 
         let node = context.read_node().await;
 
         if recursion_guard.is_none() {
-            *recursion_guard = Some(HashSet::new());
+            *recursion_guard = Some(std::collections::HashSet::new());
         }
-
-        if let Some(recursion_guard) = recursion_guard {
-            if recursion_guard.contains(&node.id) {
+        if let Some(guard) = recursion_guard {
+            if guard.contains(&node.id) {
                 context.log_message(
                     &format!("Recursion detected for: {}", &node.id),
                     LogLevel::Debug,
@@ -717,40 +1075,18 @@ impl InternalNode {
                 context.end_trace();
                 return Ok(());
             }
-
-            recursion_guard.insert(node.id.clone());
+            guard.insert(node.id.clone());
         }
 
-        let mut executed_dependencies = HashSet::new();
-
-        // TODO: add the depth of the dependency, sort by depth and execute all nodes of the same depth in parallel (e.g parallel AI calls)
-        if let Some(dep) = dependencies.get(&node.id) {
-            for node_ref in dep.iter().rev() {
-                let mut sub_context = context.create_sub_context(node_ref).await;
-                let node_id = sub_context.trace.node_id.clone();
-                if executed_dependencies.contains(&node_id) {
-                    continue;
-                }
-                executed_dependencies.insert(node_id);
-                let result = Box::pin(InternalNode::trigger_with_dependencies(
-                    &mut sub_context,
-                    recursion_guard,
-                    false,
-                    &HashMap::new(),
-                ))
-                .await;
-                sub_context.end_trace();
-                context.push_sub_context(sub_context);
-                if result.is_err() {
-                    let err_string = format!("{:?}", result.err());
-                    InternalNode::handle_error(context, &err_string, recursion_guard).await?;
-                    return Err(InternalNodeError::DependencyFailed(node.id));
-                }
-            }
+        // 1) Execute precomputed dependencies iteratively (no recursion)
+        if !exec_deps_from_map(context, recursion_guard, dependencies).await {
+            let err = "Failed to trigger mapped dependencies".to_string();
+            InternalNode::handle_error(context, &err, recursion_guard).await?;
+            return Err(InternalNodeError::DependencyFailed(node.id.clone()));
         }
 
+        // 2) Run this node (no successors here)
         let logic = context.node.logic.clone();
-
         let mut log_message = LogMessage::new(
             &format!("Starting Node Execution: {} [{}]", &node.name, &node.id),
             LogLevel::Debug,
@@ -758,10 +1094,10 @@ impl InternalNode {
         );
         let result = logic.run(context).await;
 
-        if result.is_err() {
-            let err_string = format!("{:?}", result.err());
+        if let Err(e) = result {
+            let err_string = format!("{:?}", e);
             context.log_message(
-                &format!("Failed to execute node: {}", err_string.clone()),
+                &format!("Failed to execute node: {}", err_string),
                 LogLevel::Error,
             );
             log_message.end();
@@ -769,13 +1105,15 @@ impl InternalNode {
             context.end_trace();
             context.set_state(NodeState::Error).await;
             InternalNode::handle_error(context, &err_string, recursion_guard).await?;
-            return Err(InternalNodeError::ExecutionFailed(node.id));
+            return Err(InternalNodeError::ExecutionFailed(node.id.clone()));
         }
+
         context.set_state(NodeState::Success).await;
         log_message.end();
         context.log(log_message);
         context.end_trace();
 
+        // 3) Walk successors iteratively (DFS), like your non-recursive `trigger`
         if with_successors {
             let successors = match context.node.get_connected_exec(true).await {
                 Ok(nodes) => nodes,
@@ -786,26 +1124,66 @@ impl InternalNode {
                         LogLevel::Error,
                     );
                     InternalNode::handle_error(context, &err_string, recursion_guard).await?;
-                    return Err(InternalNodeError::ExecutionFailed(node.id));
+                    return Err(InternalNodeError::ExecutionFailed(node.id.clone()));
                 }
             };
-            // TODO: optimize this for parallel execution
-            for successor in successors {
-                let mut sub_context = context.create_sub_context(&successor).await;
-                let result = Box::pin(InternalNode::trigger_with_dependencies(
-                    &mut sub_context,
-                    &mut None,
-                    with_successors,
-                    dependencies,
-                ))
-                .await;
-                sub_context.end_trace();
-                context.push_sub_context(sub_context);
-                if result.is_err() {
-                    let err_string = format!("{:?}", result.err());
-                    InternalNode::handle_error(context, &err_string, recursion_guard).await?;
-                    return Err(InternalNodeError::ExecutionFailed(node.id));
+
+            let mut stack: Vec<Arc<InternalNode>> = Vec::with_capacity(successors.len());
+            stack.extend(successors);
+
+            let mut seen_exec_ptrs: ahash::AHashSet<usize> =
+                ahash::AHashSet::with_capacity(stack.len().saturating_mul(2));
+
+            while let Some(next) = stack.pop() {
+                let key = Arc::as_ptr(&next) as usize;
+                if !seen_exec_ptrs.insert(key) {
+                    continue;
                 }
+
+                let mut sub = context.create_sub_context(&next).await;
+
+                // Fresh recursion guard per successor to mirror original semantics
+                let mut local_guard: Option<std::collections::HashSet<String>> = None;
+
+                // Execute *its* mapped deps (fresh executed set semantics like before)
+                if !exec_deps_from_map(&mut sub, &mut local_guard, dependencies).await {
+                    let err_string = "Failed to trigger successor mapped dependencies".to_string();
+                    InternalNode::handle_error(&mut sub, &err_string, &mut local_guard).await?;
+                    sub.end_trace();
+                    context.push_sub_context(sub);
+                    return Err(InternalNodeError::ExecutionFailed(node.id.clone()));
+                }
+
+                // Run successor node
+                if let Err(e) = run_node_logic_only(&mut sub, &mut local_guard).await {
+                    let err_string = format!("{:?}", e);
+                    let _ = sub.activate_exec_pin("auto_handle_error").await;
+                    let _ = sub
+                        .set_pin_value("auto_handle_error_string", json!(err_string))
+                        .await;
+                    sub.end_trace();
+                    context.push_sub_context(sub);
+                    return Err(InternalNodeError::ExecutionFailed(node.id.clone()));
+                }
+
+                // Enqueue its successors (DFS)
+                match next.get_connected_exec(true).await {
+                    Ok(more) => {
+                        for s in more {
+                            stack.push(s);
+                        }
+                    }
+                    Err(err) => {
+                        let err_string = format!("{:?}", err);
+                        InternalNode::handle_error(&mut sub, &err_string, &mut local_guard).await?;
+                        sub.end_trace();
+                        context.push_sub_context(sub);
+                        return Err(InternalNodeError::ExecutionFailed(node.id.clone()));
+                    }
+                }
+
+                sub.end_trace();
+                context.push_sub_context(sub);
             }
         }
 

@@ -139,6 +139,7 @@ pub struct ExecutionContext {
     pub sub_traces: Vec<Trace>,
     pub app_state: Arc<Mutex<FlowLikeState>>,
     pub variables: Arc<Mutex<HashMap<String, Variable>>>,
+    pub started_by: Vec<Arc<Mutex<InternalPin>>>,
     pub cache: Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
     pub stage: ExecutionStage,
     pub log_level: LogLevel,
@@ -190,6 +191,7 @@ impl ExecutionContext {
         ExecutionContext {
             id,
             run_id,
+            started_by: vec![],
             run: run.clone(),
             app_state: state.clone(),
             node: node.clone(),
