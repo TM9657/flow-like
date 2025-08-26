@@ -1,6 +1,8 @@
 /// # Machine Learning Nodes
 use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
-use flow_like_types::{Cacheable, Error, Result, Value, anyhow, create_id, sync::Mutex};
+use flow_like_types::{
+    Cacheable, Error, Result, Value, anyhow, create_id, json::json, sync::Mutex,
+};
 use linfa::DatasetBase;
 use linfa::prelude::Pr;
 use linfa_clustering::KMeans;
@@ -8,7 +10,7 @@ use linfa_linear::FittedLinearRegression;
 use linfa_nn::distance::L2Dist;
 use linfa_reduction::Pca;
 use linfa_svm::Svm;
-use ndarray::{Array2, ArrayBase, Dim, OwnedRepr};
+use ndarray::{Array1, Array2, ArrayBase, Dim, OwnedRepr};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -20,6 +22,10 @@ pub mod load;
 pub mod prediction;
 pub mod reduction;
 pub mod save;
+
+/// Max number of records for train/prediction
+/// TODO: block-wise processing, at least for predictions
+pub const MAX_RECORDS: usize = 10000;
 
 /// Add Machine Learning Nodes to Catalog Lib
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
@@ -160,10 +166,24 @@ pub fn values_to_dataset(
     Ok(ds)
 }
 
-pub async fn load_dataset_from_db() -> Result<(), Error> {
-    Ok(())
-}
-
-pub fn load_dataset_from_csv() -> Result<(), Error> {
-    Ok(())
+/// Updates records with predictions by adding a new field.
+///
+/// # Arguments
+/// * `records` - a vector of JSON records
+/// * `predictions` - a 1D ndarray of `usize` predictions
+/// * `attr_name` - the name of the new attribute to insert
+///
+/// # Returns
+/// Updated vector of records with the new attribute.
+fn update_records_with_predictions(
+    mut records: Vec<Value>,
+    predictions: Array1<usize>,
+    attr_name: &str,
+) -> Vec<Value> {
+    for (record, pred) in records.iter_mut().zip(predictions.iter()) {
+        if let Value::Object(map) = record {
+            map.insert(attr_name.to_string(), json!(pred));
+        }
+    }
+    records
 }
