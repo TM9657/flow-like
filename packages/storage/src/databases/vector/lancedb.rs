@@ -439,7 +439,7 @@ impl VectorStore for LanceDBVectorStore {
 
     async fn purge(&self) -> Result<()> {
         let table = self.table.clone().ok_or(anyhow!("Table not initialized"))?;
-        table.delete("*").await?;
+        table.delete("1=1").await?;
         Ok(())
     }
 

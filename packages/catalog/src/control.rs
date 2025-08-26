@@ -7,6 +7,11 @@ pub mod par_execution;
 pub mod reroute;
 pub mod sequence;
 pub mod while_loop;
+pub mod do_n;
+pub mod do_once;
+pub mod flip_flop;
+pub mod for_each_with_break;
+pub mod gate;
 
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;
@@ -22,5 +27,10 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(reroute::RerouteNode::default()),
         Arc::new(while_loop::WhileLoopNode::default()),
         Arc::new(call_ref::CallReferenceNode::default()),
+        Arc::new(do_n::DoNNode::default()),
+        Arc::new(do_once::DoOnceNode::default()),
+        Arc::new(flip_flop::FlipFlopNode::default()),
+        Arc::new(for_each_with_break::ForEachWithBreakNode::default()),
+        Arc::new(gate::GateNode::default()),
     ]
 }

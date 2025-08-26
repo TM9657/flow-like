@@ -1,4 +1,5 @@
-use flow_like_types::{Value, sync::Mutex};
+use flow_like_types::{json::from_value, sync::Mutex, Value};
+use serde::de::DeserializeOwned;
 use std::{
     collections::HashSet,
     sync::{Arc, Weak},
@@ -121,6 +122,13 @@ impl InternalPin {
     pub async fn set_value(&self, value: Value) {
         let mut pin = self.pin.lock().await;
         pin.value = Some(Arc::new(Mutex::new(value)));
+    }
+
+    pub async fn get_value<T: DeserializeOwned>(&self) -> Option<T> {
+        let pin = self.pin.lock().await;
+        let value = pin.value.as_ref()?;
+        let value = value.lock().await;
+        from_value::<T>(value.clone()).ok()
     }
 
     pub async fn set_pin_by_ref(&self, value: Arc<Mutex<Value>>) {

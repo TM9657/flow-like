@@ -30,7 +30,7 @@ impl NodeLogic for VirtualDirNode {
             "Creates an in-memory virtual directory path",
             "Storage/Paths/Directories",
         );
-        node.add_icon("/flow/icons/memory.svg");
+        node.add_icon("/flow/icons/path.svg");
 
         node.add_input_pin(
             "exec_in",
