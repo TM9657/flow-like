@@ -123,7 +123,8 @@ impl NodeLogic for LoadOnnxNode {
         );
 
         node.add_output_pin("model", "Model", "ONNX Model Session", VariableType::Struct)
-            .set_schema::<NodeOnnxSession>();
+            .set_schema::<NodeOnnxSession>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node
     }
