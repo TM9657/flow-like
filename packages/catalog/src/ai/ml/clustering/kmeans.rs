@@ -1,3 +1,4 @@
+use crate::ai::ml::{MLModel, NodeMLModel, values_to_dataset};
 use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
 use flow_like::{
     flow::{
@@ -11,63 +12,14 @@ use flow_like::{
 };
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_types::{Result, Value, anyhow, async_trait, json::json};
+use linfa::traits::Fit;
+use linfa_clustering::KMeans;
+use linfa_nn::distance::L2Dist;
+use ndarray::{Array2, ArrayBase, Dim, OwnedRepr};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-use linfa::{DatasetBase, dataset};
-use ndarray::{Array2, ArrayBase, Dim, OwnedRepr};
-
-fn values_to_array(values: &[Value], col: &str) -> Result<Array2<f64>> {
-    // Determine dimensions
-    let rows = values.len();
-    let cols = values
-        .get(0)
-        .and_then(|obj| obj.get(col))
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.len())
-        .ok_or_else(|| anyhow!("Missing or invalid 'vector' in first element"))?;
-
-    // Preallocate flat storage
-    let mut flat = Vec::with_capacity(rows * cols);
-
-    for (i, obj) in values.iter().enumerate() {
-        let arr = obj
-            .get(col)
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| anyhow!("Row {i} missing 'vector'"))?;
-
-        if arr.len() != cols {
-            return Err(anyhow!(
-                "Row {i} has inconsistent length (expected {cols}, got {})",
-                arr.len()
-            ));
-        }
-
-        for (j, x) in arr.iter().enumerate() {
-            flat.push(
-                x.as_f64()
-                    .ok_or_else(|| anyhow!("Invalid f64 at row {i}, col {j}"))?,
-            );
-        }
-    }
-
-    Ok(Array2::from_shape_vec((rows, cols), flat)?)
-}
-
-pub fn values_to_dataset(
-    values: &[Value],
-    col: &str,
-) -> Result<
-    DatasetBase<
-        ArrayBase<OwnedRepr<f64>, Dim<[usize; 2]>>,
-        ArrayBase<OwnedRepr<()>, Dim<[usize; 1]>>,
-    >,
-> {
-    let array = values_to_array(values, col)?;
-    let ds = DatasetBase::from(array);
-    Ok(ds)
-}
 
 #[derive(Default)]
 pub struct FitKMeansNode {}
@@ -82,7 +34,7 @@ impl FitKMeansNode {
 impl NodeLogic for FitKMeansNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "train_kmeans",
+            "fit_kmeans",
             "Train KMeans",
             "Fit/Train KMeans Clustering Algorithm",
             "AI/ML/Clustering",
@@ -98,7 +50,7 @@ impl NodeLogic for FitKMeansNode {
             VariableType::Integer,
         )
         .set_options(PinOptions::new().set_range((1., 100.)).build())
-        .set_default_value(Some(json!(2.)));
+        .set_default_value(Some(json!(2)));
 
         node.add_input_pin(
             "source",
@@ -133,21 +85,26 @@ impl NodeLogic for FitKMeansNode {
             "Model",
             "Trained KMeans Clustering Model",
             VariableType::Struct,
-        );
+        )
+        .set_schema::<NodeMLModel>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         return node;
     }
 
-    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         // fetch inputs
         context.deactivate_exec_pin("exec_out").await?;
         let source: String = context.evaluate_pin("source").await?;
+        let n_clusters: usize = context.evaluate_pin("cluster").await?;
 
-        match source.as_str() {
+        // load dataset
+        let t0 = std::time::Instant::now();
+        let ds = match source.as_str() {
             "Database" => {
                 let database: NodeDBConnection = context.evaluate_pin("database").await?;
                 let records_col: String = context.evaluate_pin("records").await?;
-                let should_update: bool = context.evaluate_pin("update").await?;
+                //let should_update: bool = context.evaluate_pin("update").await?;
 
                 // fetch records
                 let records = {
@@ -158,15 +115,33 @@ impl NodeLogic for FitKMeansNode {
                         .clone();
                     let database = database.read().await;
                     database
-                        .filter("true", Some(vec![records_col]), 100, 0)
+                        .filter("true", Some(vec![records_col.to_string()]), 100, 0)
                         .await?
                 }; // drop db
-                context.log_message(&format!("got {} records", records.len()), LogLevel::Debug);
+                context.log_message(
+                    &format!("Loaded {} records from database", records.len()),
+                    LogLevel::Debug,
+                );
+
+                // make dataset
+                values_to_dataset(&records, &records_col)?
             }
-            _ => {}
-        }
+            _ => return Err(anyhow!("Datasource not implemented")),
+        };
+
+        let elapsed = t0.elapsed();
+        context.log_message(&format!("Preprocess data: {elapsed:?}"), LogLevel::Debug);
+
+        // train model
+        let t0 = std::time::Instant::now();
+        let kmeans: KMeans<f64, L2Dist> = KMeans::params(n_clusters).fit(&ds)?;
+        let elapsed = t0.elapsed();
+        context.log_message(&format!("Fit model: {elapsed:?}"), LogLevel::Debug);
 
         // set outputs
+        let model = MLModel::KMeans(kmeans);
+        let node_model = NodeMLModel::new(context, model).await;
+        context.set_pin_value("model", json!(node_model)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
@@ -199,25 +174,25 @@ impl NodeLogic for FitKMeansNode {
                 )
                 .set_default_value(Some(json!("vector")));
             }
-            if node.get_pin_by_name("update").is_none() {
-                node.add_input_pin(
-                    "update",
-                    "Update DB?",
-                    "Update database with predictions on training data?",
-                    VariableType::Boolean,
-                )
-                .set_default_value(Some(json!(false)));
-            }
-            if node.get_pin_by_name("database_out").is_none() {
-                node.add_output_pin(
-                    "database_out",
-                    "Database",
-                    "Updated Database Connection",
-                    VariableType::Struct,
-                )
-                .set_schema::<NodeDBConnection>()
-                .set_options(PinOptions::new().set_enforce_schema(true).build());
-            }
+            // if node.get_pin_by_name("update").is_none() {
+            //     node.add_input_pin(
+            //         "update",
+            //         "Update DB?",
+            //         "Update database with predictions on training data?",
+            //         VariableType::Boolean,
+            //     )
+            //     .set_default_value(Some(json!(false)));
+            // }
+            // if node.get_pin_by_name("database_out").is_none() {
+            //     node.add_output_pin(
+            //         "database_out",
+            //         "Database",
+            //         "Updated Database Connection",
+            //         VariableType::Struct,
+            //     )
+            //     .set_schema::<NodeDBConnection>()
+            //     .set_options(PinOptions::new().set_enforce_schema(true).build());
+            // }
             remove_pin(node, "csv");
         } else {
             if node.get_pin_by_name("csv").is_none() {
@@ -227,8 +202,8 @@ impl NodeLogic for FitKMeansNode {
             }
             remove_pin(node, "database");
             remove_pin(node, "records");
-            remove_pin(node, "update");
-            remove_pin(node, "database_out");
+            //remove_pin(node, "update");
+            //remove_pin(node, "database_out");
         }
     }
 }
