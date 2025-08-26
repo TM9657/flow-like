@@ -48,8 +48,9 @@ impl NodeLogic for GatherExecutionNode {
         for pin in &input_pins {
             let value: bool = match context.evaluate_pin_ref(pin.to_owned()).await {
                 Ok(value) => value,
-                Err(_) => {
+                Err(val) => {
                     // This means the pin is not set.
+                    context.log_message(&format!("Failed to evaluate pin {}", val), flow_like::flow::execution::LogLevel::Debug);
                     return Ok(());
                 }
             };
@@ -61,7 +62,7 @@ impl NodeLogic for GatherExecutionNode {
 
         context.activate_exec_pin("exec_done").await?;
         for pin in input_pins {
-            context.deactivate_exec_pin_ref(&pin).await?;
+            context.set_pin_ref_value(&pin, flow_like_types::Value::Bool(false)).await?;
         }
 
         return Ok(());
