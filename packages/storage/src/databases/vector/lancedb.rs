@@ -9,6 +9,10 @@ use lancedb::index::scalar::BTreeIndexBuilder;
 use lancedb::index::scalar::BitmapIndexBuilder;
 use lancedb::index::scalar::LabelListIndexBuilder;
 use lancedb::query::QueryExecutionOptions;
+use lancedb::table::AddColumnsResult;
+use lancedb::table::AlterColumnsResult;
+use lancedb::table::ColumnAlteration;
+use lancedb::table::NewColumnTransform;
 use lancedb::{
     Connection, Table, connect,
     index::{
@@ -86,6 +90,36 @@ impl LanceDBVectorStore {
     pub async fn list_tables(&self) -> Result<Vec<String>> {
         let tables = self.connection.table_names().execute().await?;
         Ok(tables)
+    }
+
+    pub async fn add_columns(&self, transform: NewColumnTransform, read_columns: Option<Vec<String>>) -> Result<AddColumnsResult> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+
+        let result = table.add_columns(transform, read_columns).await?;
+        Ok(result)
+    }
+
+    pub async fn drop_columns(&self, column_names: &[&str]) -> Result<()> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+
+        table.drop_columns(column_names).await?;
+        Ok(())
+    }
+
+    pub async fn alter_column(&self, alteration: &[ColumnAlteration]) -> Result<AlterColumnsResult> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+
+        let result = table.alter_columns(alteration).await?;
+        Ok(result)
     }
 
     pub async fn list_indices(&self) -> Result<Vec<IndexConfigDto>> {
