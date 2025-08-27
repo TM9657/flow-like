@@ -100,7 +100,7 @@ pub async fn put_data_url(url: &str, store: Arc<dyn ObjectStore>) -> Result<(Pat
 // ---------- helpers ----------
 
 fn filename_from_url_path(u: &Url) -> Option<String> {
-    u.path_segments()?.last().and_then(|seg| {
+    u.path_segments()?.next_back().and_then(|seg| {
         if seg.is_empty() {
             None
         } else {

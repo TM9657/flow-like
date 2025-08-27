@@ -103,15 +103,15 @@ async fn exec_deps_from_map(
                     (g.id.clone(), g.friendly_name.clone())
                 };
 
-                if let Some(guard) = recursion_guard {
-                    if guard.contains(&dep_id) {
-                        ctx.log_message(
-                            &format!("Recursion detected for: {}, skipping execution", dep_id),
-                            LogLevel::Debug,
-                        );
-                        scheduled.insert(n_ptr);
-                        continue;
-                    }
+                if let Some(guard) = recursion_guard
+                    && guard.contains(&dep_id)
+                {
+                    ctx.log_message(
+                        &format!("Recursion detected for: {}, skipping execution", dep_id),
+                        LogLevel::Debug,
+                    );
+                    scheduled.insert(n_ptr);
+                    continue;
                 }
 
                 let mut sub = ctx.create_sub_context(&n).await;
@@ -249,10 +249,10 @@ async fn pure_parents_for_memo(
                 }
             };
 
-            if let Some(parent) = parent_opt {
-                if parent.is_pure().await {
-                    result.push(parent);
-                }
+            if let Some(parent) = parent_opt
+                && parent.is_pure().await
+            {
+                result.push(parent);
             }
         }
     }
@@ -780,18 +780,15 @@ impl InternalNode {
                         (parent_node.id.clone(), parent_node.friendly_name.clone())
                     };
 
-                    if let Some(guard) = recursion_guard {
-                        if guard.contains(&node_id) {
-                            context.log_message(
-                                &format!(
-                                    "Recursion detected for: {}, skipping execution",
-                                    &node_id
-                                ),
-                                LogLevel::Debug,
-                            );
-                            scheduled.insert(node_ptr);
-                            continue;
-                        }
+                    if let Some(guard) = recursion_guard
+                        && guard.contains(&node_id)
+                    {
+                        context.log_message(
+                            &format!("Recursion detected for: {}, skipping execution", &node_id),
+                            LogLevel::Debug,
+                        );
+                        scheduled.insert(node_ptr);
+                        continue;
                     }
 
                     // Execute dependency (no successors)

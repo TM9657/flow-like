@@ -10,7 +10,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::{Value, async_trait};
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct ForEachWithBreakNode {}

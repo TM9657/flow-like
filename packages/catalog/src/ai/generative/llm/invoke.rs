@@ -22,12 +22,9 @@ use flow_like_types::{
     json::json,
     sync::{DashMap, Mutex},
 };
-use std::{
-    collections::HashSet,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 
 #[derive(Default)]

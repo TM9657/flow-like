@@ -6,9 +6,6 @@ use crate::flow::execution::internal_node::ExecutionTarget;
 use crate::profile::Profile;
 use crate::state::FlowLikeState;
 use ahash::{AHashMap, AHashSet, AHasher};
-use flow_like_types::utils::ptr_key;
-use std::hash::Hasher;
-use std::sync::atomic::Ordering;
 use context::ExecutionContext;
 use flow_like_storage::arrow_array::{RecordBatch, RecordBatchIterator};
 use flow_like_storage::arrow_schema::FieldRef;
@@ -21,6 +18,7 @@ use flow_like_types::Value;
 use flow_like_types::intercom::InterComCallback;
 use flow_like_types::json::to_vec;
 use flow_like_types::sync::{Mutex, RwLock};
+use flow_like_types::utils::ptr_key;
 use flow_like_types::{Cacheable, anyhow, create_id};
 use futures::StreamExt;
 use futures::future::BoxFuture;
@@ -31,6 +29,8 @@ use num_cpus;
 use once_cell::sync::Lazy;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::hash::Hasher;
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 use std::{
     sync::{Arc, Weak},
@@ -361,8 +361,14 @@ impl RunStack {
         self.stack.push(target);
     }
 
-    #[inline] fn hash(&self) -> u64 { self.hash }
-    #[inline] fn len(&self) -> usize { self.stack.len() }
+    #[inline]
+    fn hash(&self) -> u64 {
+        self.hash
+    }
+    #[inline]
+    fn len(&self) -> usize {
+        self.stack.len()
+    }
 }
 
 pub type EventTrigger =
@@ -590,7 +596,7 @@ impl InternalRun {
             if payload.id == node.id {
                 let target = ExecutionTarget {
                     node: internal_node.clone(),
-                    through_pins: vec![]
+                    through_pins: vec![],
                 };
                 stack.push(target);
             }

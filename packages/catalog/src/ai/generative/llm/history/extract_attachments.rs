@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use crate::{events::chat_event::Attachment, storage::path::FlowPath};
-use base64::{Engine as _, engine::general_purpose};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -12,18 +11,9 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_model_provider::history::{Content, History, MessageContent};
-use flow_like_storage::{
-    Path, blake3,
-    files::store::FlowLikeStore,
-    object_store::{ObjectStore, PutPayload},
-};
-use flow_like_types::{
-    Bytes, anyhow, async_trait,
-    json::json,
-    mime_guess::{self, mime},
-    reqwest::{self, Url},
-};
-use flow_like_types::{Cacheable, Result};
+use flow_like_storage::files::store::FlowLikeStore;
+use flow_like_types::Cacheable;
+use flow_like_types::{async_trait, json::json};
 
 fn extract_image_urls(history: &History) -> Vec<String> {
     history

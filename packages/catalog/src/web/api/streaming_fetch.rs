@@ -16,7 +16,7 @@ use flow_like_types::{
     reqwest,
     sync::{DashMap, Mutex},
 };
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use super::{HttpRequest, HttpResponse, StreamingCallback};
 

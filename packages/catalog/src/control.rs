@@ -21,7 +21,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(branch_node::BranchNode::default()),
         Arc::new(for_each::LoopNode::default()),
         Arc::new(sequence::SequenceNode::default()),
-        Arc::new(par_execution::ParallelExecutionNode::default()),
+        Arc::new(par_execution::ParallelExecutionNode),
         Arc::new(delay::DelayNode::default()),
         Arc::new(gather::GatherExecutionNode::default()),
         Arc::new(reroute::RerouteNode::default()),
