@@ -1,5 +1,5 @@
 /// # Machine Learning Nodes
-use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
+use flow_like::flow::{execution::context::ExecutionContext, node::{NodeLogic, Node}};
 use flow_like_types::{
     Cacheable, Error, Result, Value, anyhow, create_id, json::json, sync::Mutex,
 };
@@ -17,6 +17,7 @@ use std::fmt;
 use std::sync::Arc;
 pub mod classification;
 pub mod clustering;
+pub mod regression;
 pub mod dataset;
 pub mod load;
 pub mod prediction;
@@ -31,6 +32,8 @@ pub const MAX_RECORDS: usize = 10000;
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let nodes: Vec<Arc<dyn NodeLogic>> = vec![
         Arc::new(clustering::kmeans::FitKMeansNode::default()),
+        Arc::new(classification::svm::FitSVMMultiClassNode::default()),
+        Arc::new(regression::linear::FitLinearRegressionNode::default()),
         Arc::new(prediction::MLPredictNode::default()),
         Arc::new(save::SaveMLModelNode::default()),
         Arc::new(load::LoadMLModelNode::default()),
@@ -48,6 +51,32 @@ pub enum MLModel {
     SVMMultiClass(Vec<(usize, Svm<f64, Pr>)>),
     LinearRegression(FittedLinearRegression<f64>),
     PCA(Pca<f64>),
+}
+
+pub enum MLDataset {
+    Unlabeled(
+        DatasetBase<
+            ArrayBase<OwnedRepr<f64>, Dim<[usize; 2]>>,
+            ArrayBase<OwnedRepr<()>, Dim<[usize; 1]>>,
+        >,
+    ),
+    Classification(
+        DatasetBase<
+            ArrayBase<OwnedRepr<f64>, Dim<[usize; 2]>>,
+            ArrayBase<OwnedRepr<usize>, Dim<[usize; 1]>>,
+        >,
+    ),
+    Regression(
+        DatasetBase<
+            ArrayBase<OwnedRepr<f64>, Dim<[usize; 2]>>,
+            ArrayBase<OwnedRepr<f64>, Dim<[usize; 1]>>,
+        >,
+    ),
+}
+
+pub enum MLTargetType {
+    Numerical,
+    Categorical
 }
 
 impl fmt::Display for MLModel {
@@ -151,19 +180,30 @@ pub fn values_to_array(values: &[Value], col: &str) -> Result<Array2<f64>, Error
 }
 
 /// Utility: Load LanceDB records (column of vectors) as Linfa Database
+/// Optional target col for supervised training
 pub fn values_to_dataset(
     values: &[Value],
-    col: &str,
-) -> Result<
-    DatasetBase<
-        ArrayBase<OwnedRepr<f64>, Dim<[usize; 2]>>,
-        ArrayBase<OwnedRepr<()>, Dim<[usize; 1]>>,
-    >,
-    Error,
-> {
-    let array = values_to_array(values, col)?;
-    let ds = DatasetBase::from(array);
-    Ok(ds)
+    train_col: &str,
+    target_col: Option<&str>,
+    target_format: Option<MLTargetType>,
+) -> Result<MLDataset, Error> {
+    let train_array = values_to_array(values, train_col)?;
+    if let Some(target_col) = target_col {
+        let target_format = target_format.ok_or(anyhow!("Target Format Not Set!"))?;
+        let target_array = values_to_array(values, target_col)?;
+        match target_format {
+            MLTargetType::Categorical => {
+                let target_array = target_array.column(0).to_owned().mapv(|x| x as usize);
+                Ok(MLDataset::Classification(DatasetBase::from(train_array).with_targets(target_array)))
+            },
+            MLTargetType::Numerical => {
+                let target_array = target_array.column(0).to_owned();
+                Ok(MLDataset::Regression(DatasetBase::from(train_array).with_targets(target_array)))
+            }
+        }
+    } else {
+        Ok(MLDataset::Unlabeled(DatasetBase::from(train_array)))
+    }
 }
 
 /// Updates records with predictions by adding a new field.
@@ -175,15 +215,28 @@ pub fn values_to_dataset(
 ///
 /// # Returns
 /// Updated vector of records with the new attribute.
-fn update_records_with_predictions(
+fn update_records_with_predictions<T>(
     mut records: Vec<Value>,
-    predictions: Array1<usize>,
+    predictions: Array1<T>,
     attr_name: &str,
-) -> Vec<Value> {
+) -> Result<Vec<Value>, Error> 
+where
+    T: Copy + Serialize
+{
+    if records.len() != predictions.len() {
+        return Err(anyhow!("records and predictions have different lengths!"));
+    }
     for (record, pred) in records.iter_mut().zip(predictions.iter()) {
         if let Value::Object(map) = record {
             map.insert(attr_name.to_string(), json!(pred));
         }
     }
-    records
+    Ok(records)
+}
+
+/// Utility: Remove pin on update
+fn remove_pin(node: &mut Node, name: &str) {
+    if let Some(pin) = node.get_pin_by_name(name) {
+        node.pins.remove(&pin.id.clone());
+    }
 }

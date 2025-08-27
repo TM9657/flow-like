@@ -1,4 +1,4 @@
-use crate::ai::ml::{MLModel, NodeMLModel, values_to_dataset, MAX_RECORDS};
+use crate::ai::ml::{MAX_RECORDS, MLDataset, MLModel, NodeMLModel, remove_pin, values_to_dataset};
 use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
 use flow_like::{
     flow::{
@@ -15,10 +15,7 @@ use flow_like_types::{Result, Value, anyhow, async_trait, json::json};
 use linfa::traits::Fit;
 use linfa_clustering::KMeans;
 use linfa_nn::distance::L2Dist;
-use ndarray::{Array2, ArrayBase, Dim, OwnedRepr};
-use std::{
-    sync::Arc,
-};
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct FitKMeansNode {}
@@ -34,8 +31,8 @@ impl NodeLogic for FitKMeansNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
             "fit_kmeans",
-            "Train KMeans",
-            "Fit/Train KMeans Clustering Algorithm",
+            "Train Clustering (KMeans)",
+            "Fit/Train KMeans Clustering",
             "AI/ML/Clustering",
         );
         node.add_icon("/flow/icons/chart-network.svg");
@@ -82,7 +79,7 @@ impl NodeLogic for FitKMeansNode {
         node.add_output_pin(
             "model",
             "Model",
-            "Trained KMeans Clustering Model",
+            "Fitted/Trained KMeans Clustering Model",
             VariableType::Struct,
         )
         .set_schema::<NodeMLModel>()
@@ -123,15 +120,25 @@ impl NodeLogic for FitKMeansNode {
                     LogLevel::Debug,
                 );
                 let elapsed = t0.elapsed();
-                context.log_message(&format!("Preprocess data (db): {elapsed:?}"), LogLevel::Debug);
+                context.log_message(
+                    &format!("Preprocess data (db): {elapsed:?}"),
+                    LogLevel::Debug,
+                );
 
                 // make dataset
-                values_to_dataset(&records, &records_col)?
+                values_to_dataset(&records, &records_col, None, None)?
             }
             _ => return Err(anyhow!("Datasource not implemented")),
         };
+        let ds = match ds {
+            MLDataset::Unlabeled(ds) => ds,
+            _ => return Err(anyhow!("Invalid Dataset Format")),
+        };
         let elapsed = t0.elapsed();
-        context.log_message(&format!("Preprocess data (total): {elapsed:?}"), LogLevel::Debug);
+        context.log_message(
+            &format!("Preprocess data (total): {elapsed:?}"),
+            LogLevel::Debug,
+        );
 
         // train model
         let t0 = std::time::Instant::now();
@@ -169,8 +176,8 @@ impl NodeLogic for FitKMeansNode {
             if node.get_pin_by_name("records").is_none() {
                 node.add_input_pin(
                     "records",
-                    "Train Column",
-                    "Column containing records to train on",
+                    "Train Col",
+                    "Column containing the records to train on",
                     VariableType::String,
                 )
                 .set_default_value(Some(json!("vector")));
@@ -206,11 +213,5 @@ impl NodeLogic for FitKMeansNode {
             //remove_pin(node, "update");
             //remove_pin(node, "database_out");
         }
-    }
-}
-
-fn remove_pin(node: &mut Node, name: &str) {
-    if let Some(pin) = node.get_pin_by_name(name) {
-        node.pins.remove(&pin.id.clone());
     }
 }

@@ -70,8 +70,10 @@ impl NodeLogic for SaveMLModelNode {
             let model = node_model.get_model(context).await?;
             let model_guard = model.lock().await;
             match &*model_guard {
-                MLModel::KMeans(model) => json::to_vec_pretty(&model)?,
-                _ => return Err(anyhow!("Unknown model")),
+                MLModel::KMeans(model) => json::to_vec(&model)?,
+                MLModel::SVMMultiClass(models) => json::to_vec(&models)?,
+                MLModel::LinearRegression(model) => json::to_vec(&model)?,
+                _ => return Err(anyhow!("Unknown Model!")),
             }
         };
 
