@@ -495,20 +495,19 @@ impl InternalNode {
         let mut stack: Vec<Weak<Mutex<InternalPin>>> = Vec::with_capacity(64);
 
         for pin in self.pins.values() {
-            // Only consider exec OUTPUTs; evaluate filter after that
-            let pin_g = pin.lock().await;
-            let meta = pin_g.pin.lock().await;
-            if meta.pin_type != PinType::Output || meta.data_type != VariableType::Execution {
-                continue;
-            }
-            drop(meta);
-
             if filter_valid {
                 match evaluate_pin_value(pin.clone()).await {
                     Ok(Value::Bool(true)) => {}
                     _ => continue,
                 }
             }
+
+            let pin_g = pin.lock().await;
+            let meta = pin_g.pin.lock().await;
+            if meta.pin_type != PinType::Output || meta.data_type != VariableType::Execution {
+                continue;
+            }
+            drop(meta);
 
             let seeds = pin_g.connected_to.clone();
             drop(pin_g);

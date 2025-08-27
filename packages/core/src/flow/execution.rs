@@ -239,7 +239,6 @@ impl Run {
         let base_path = Path::from("runs")
             .child(self.app_id.clone())
             .child(self.board.id.clone());
-        println!("Flushing logs to {}", base_path);
         let db = db_fn(base_path.clone()).execute().await?;
 
         // 1) pre‑count total logs, reserve once, and find highest level in one pass
@@ -1023,6 +1022,7 @@ async fn step_core(
     } else {
         Some(target.through_pins.clone())
     };
+    print!("Context created!");
 
     if USE_DEPENDENCY_GRAPH {
         if let Err(err) =

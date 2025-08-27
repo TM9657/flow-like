@@ -26,7 +26,8 @@ async fn default_state() -> Arc<Mutex<FlowLikeState>> {
     let store = FlowLikeStore::Local(Arc::new(store));
     config.register_bits_store(store.clone());
     config.register_user_store(store.clone());
-    config.register_app_storage_store(store);
+    config.register_app_storage_store(store.clone());
+    config.register_app_meta_store(store);
     let (http_client, _refetch_rx) = HTTPClient::new();
     let state = FlowLikeState::new(config, http_client);
     Arc::new(Mutex::new(state))
