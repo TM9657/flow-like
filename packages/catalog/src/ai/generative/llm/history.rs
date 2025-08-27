@@ -1,4 +1,5 @@
 pub mod clear;
+pub mod extract_attachments;
 pub mod from_messages;
 pub mod from_string;
 pub mod get_system;
@@ -13,7 +14,6 @@ pub mod set_presence_penalty;
 pub mod set_response_format;
 pub mod set_seed;
 pub mod set_stop;
-pub mod extract_attachments;
 pub mod set_stream;
 pub mod set_system;
 pub mod set_temperature;

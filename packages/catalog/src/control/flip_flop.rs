@@ -1,6 +1,6 @@
 use flow_like::{
     flow::{
-        execution::{context::ExecutionContext, LogLevel},
+        execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic},
         variable::VariableType,
     },
@@ -17,7 +17,11 @@ use flow_like_types::{async_trait, json::json};
 #[derive(Default)]
 pub struct FlipFlopNode {}
 
-impl FlipFlopNode { pub fn new() -> Self { Self {} } }
+impl FlipFlopNode {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 #[async_trait]
 impl NodeLogic for FlipFlopNode {
@@ -34,26 +38,33 @@ impl NodeLogic for FlipFlopNode {
         node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
 
         // Parameters
-        node
-            .add_input_pin(
-                "start_on_a",
-                "Start On A",
-                "If true, first pass goes to A; otherwise to B",
-                VariableType::Boolean,
-            )
-            .set_default_value(Some(json!(true)));
+        node.add_input_pin(
+            "start_on_a",
+            "Start On A",
+            "If true, first pass goes to A; otherwise to B",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(true)));
 
         // Execution outputs
         node.add_output_pin("a", "A", "Fires on A side", VariableType::Execution);
         node.add_output_pin("b", "B", "Fires on B side", VariableType::Execution);
 
         // State/debug outputs (persist via writing in run)
-        node
-            .add_output_pin("is_a", "Is A", "Side that will fire on next trigger", VariableType::Boolean)
-            .set_default_value(Some(json!(true)));
-        node
-            .add_output_pin("tick", "Tick", "How many times FlipFlop has executed", VariableType::Integer)
-            .set_default_value(Some(json!(0)));
+        node.add_output_pin(
+            "is_a",
+            "Is A",
+            "Side that will fire on next trigger",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(true)));
+        node.add_output_pin(
+            "tick",
+            "Tick",
+            "How many times FlipFlop has executed",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(0)));
 
         node
     }

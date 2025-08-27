@@ -12,7 +12,9 @@ use flow_like_types::{async_trait, json::json};
 pub struct DoNNode {}
 
 impl DoNNode {
-    pub fn new() -> Self { Self {} }
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 
 #[async_trait]
@@ -30,36 +32,38 @@ impl NodeLogic for DoNNode {
         node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
 
         // Parameters
-        node
-            .add_input_pin(
-                "n",
-                "N",
-                "Number of times to allow execution to pass (>= 0)",
-                VariableType::Integer,
-            )
-            .set_default_value(Some(json!(1)));
+        node.add_input_pin(
+            "n",
+            "N",
+            "Number of times to allow execution to pass (>= 0)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(1)));
 
-        node
-            .add_input_pin(
-                "start_index",
-                "Start Index",
-                "Initial index before first pass (commonly 0)",
-                VariableType::Integer,
-            )
-            .set_default_value(Some(json!(0)));
+        node.add_input_pin(
+            "start_index",
+            "Start Index",
+            "Initial index before first pass (commonly 0)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(0)));
 
         // Reset is a boolean input (reads each trigger). If true, we'll reset the counter
         // before processing the current trigger. (If you prefer a dedicated Execution
         // reset input like in UE, we can add that variant as well.)
-        node
-            .add_input_pin(
-                "reset",
-                "Reset",
-                "If true on this trigger, reset the counter to Start Index before processing",
-                VariableType::Execution,
-            );
+        node.add_input_pin(
+            "reset",
+            "Reset",
+            "If true on this trigger, reset the counter to Start Index before processing",
+            VariableType::Execution,
+        );
         // Outputs
-        node.add_output_pin("then", "Then", "Fires while index < N", VariableType::Execution);
+        node.add_output_pin(
+            "then",
+            "Then",
+            "Fires while index < N",
+            VariableType::Execution,
+        );
 
         // We expose the counter for debugging/branching; we also use it to persist state
         // across triggers by writing the value each run.
@@ -96,8 +100,12 @@ impl NodeLogic for DoNNode {
         let mut index: i64 = context.evaluate_pin("index").await.unwrap_or(start_index);
 
         // Normalize inputs
-        if n < 0 { n = 0; }
-        if index < start_index { index = start_index; }
+        if n < 0 {
+            n = 0;
+        }
+        if index < start_index {
+            index = start_index;
+        }
 
         // Optional reset
         if do_reset {

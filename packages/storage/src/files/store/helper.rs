@@ -1,10 +1,14 @@
 // ---------- HTTP(S) ----------
 
-use std::sync::Arc;
 use crate::files::store::mime_guess::mime;
-use base64::{engine::general_purpose, Engine};
-use flow_like_types::{anyhow, Result, reqwest::{self, Url}, Bytes, mime_guess::{self}};
-use object_store::{path::Path, ObjectStore, PutPayload};
+use base64::{Engine, engine::general_purpose};
+use flow_like_types::{
+    Bytes, Result, anyhow,
+    mime_guess::{self},
+    reqwest::{self, Url},
+};
+use object_store::{ObjectStore, PutPayload, path::Path};
+use std::sync::Arc;
 
 pub async fn put_http(parsed: Url, store: Arc<dyn ObjectStore>) -> Result<(Path, usize)> {
     let client = flow_like_types::reqwest::Client::new();
@@ -96,8 +100,12 @@ pub async fn put_data_url(url: &str, store: Arc<dyn ObjectStore>) -> Result<(Pat
 // ---------- helpers ----------
 
 fn filename_from_url_path(u: &Url) -> Option<String> {
-    u.path_segments()?.last().and_then(|seg| {
-        if seg.is_empty() { None } else { Some(seg.to_string()) }
+    u.path_segments()?.next_back().and_then(|seg| {
+        if seg.is_empty() {
+            None
+        } else {
+            Some(seg.to_string())
+        }
     })
 }
 
@@ -157,9 +165,9 @@ fn ext_from_content_type(h: Option<&reqwest::header::HeaderValue>) -> Option<Str
 }
 
 fn ext_from_mime_str(s: &str) -> Option<String> {
-    s.parse::<mime::Mime>()
-        .ok()
-        .and_then(|m| mime_guess::get_mime_extensions(&m).and_then(|arr| arr.first().map(|e| e.to_string())))
+    s.parse::<mime::Mime>().ok().and_then(|m| {
+        mime_guess::get_mime_extensions(&m).and_then(|arr| arr.first().map(|e| e.to_string()))
+    })
 }
 
 fn sniff_ext(bytes: &Bytes) -> Option<String> {
@@ -173,14 +181,17 @@ fn hash_name(bytes: &Bytes) -> String {
 
 fn percent_decode(s: &str) -> Vec<u8> {
     // tolerate bad percent encodings by falling back to the raw bytes
-    percent_encoding::percent_decode_str(s).decode_utf8().map(|cow| cow.into_owned().into_bytes()).unwrap_or_else(|_| s.as_bytes().to_vec())
+    percent_encoding::percent_decode_str(s)
+        .decode_utf8()
+        .map(|cow| cow.into_owned().into_bytes())
+        .unwrap_or_else(|_| s.as_bytes().to_vec())
 }
 
 fn sanitize_for_path(name: &str) -> String {
     // Keep path-object safe: no slashes, no backslashes; conservative allowed set
     name.chars()
         .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' ) {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
                 c
             } else {
                 '-'

@@ -1,17 +1,24 @@
+use ahash::AHashSet;
 use flow_like::{
     flow::{
-        board::Board, execution::{context::ExecutionContext, internal_node::InternalNode, LogLevel}, node::{Node, NodeLogic}, pin::{PinOptions, ValueType}, variable::VariableType
+        board::Board,
+        execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
+        node::{Node, NodeLogic},
+        pin::{PinOptions, ValueType},
+        variable::VariableType,
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, Value};
-use std::{collections::HashSet, sync::Arc};
+use flow_like_types::{Value, async_trait};
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct ForEachWithBreakNode {}
 
 impl ForEachWithBreakNode {
-    pub fn new() -> Self { Self {} }
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 
 #[async_trait]
@@ -36,10 +43,13 @@ impl NodeLogic for ForEachWithBreakNode {
         .set_default_value(Some(Value::from(false)));
 
         // Data input
-        node
-            .add_input_pin("array", "Array", "Array to Loop", VariableType::Generic)
+        node.add_input_pin("array", "Array", "Array to Loop", VariableType::Generic)
             .set_value_type(ValueType::Array)
-            .set_options(PinOptions::new().set_enforce_generic_value_type(true).build());
+            .set_options(
+                PinOptions::new()
+                    .set_enforce_generic_value_type(true)
+                    .build(),
+            );
 
         // Execution outputs
         node.add_output_pin(
@@ -56,17 +66,25 @@ impl NodeLogic for ForEachWithBreakNode {
         );
 
         // Data outputs
-        node.add_output_pin("value", "Value", "The current item Value", VariableType::Generic);
-        node.add_output_pin("index", "Index", "Current Array Index", VariableType::Integer);
+        node.add_output_pin(
+            "value",
+            "Value",
+            "The current item Value",
+            VariableType::Generic,
+        );
+        node.add_output_pin(
+            "index",
+            "Index",
+            "Current Array Index",
+            VariableType::Integer,
+        );
         node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let break_pin = context.get_pin_by_name("break").await?;
 
-        let already_break = context
-                    .evaluate_pin_ref(break_pin.clone())
-                    .await?;
+        let already_break = context.evaluate_pin_ref(break_pin.clone()).await?;
 
         if already_break {
             context.log_message("ForEach(Break): breaking early", LogLevel::Debug);
@@ -83,7 +101,7 @@ impl NodeLogic for ForEachWithBreakNode {
         let array = context.get_pin_by_name("array").await?;
 
         let id = context.read_node().await.id.clone();
-        let recursion_guard = HashSet::from_iter(vec![id]);
+        let recursion_guard = AHashSet::from_iter(vec![id]);
 
         // Ensure proper exec pin state
         context.deactivate_exec_pin_ref(&done).await?;
@@ -100,19 +118,20 @@ impl NodeLogic for ForEachWithBreakNode {
         'outer: for (i, item) in array.iter().enumerate() {
             // Publish per-iteration values
             value.lock().await.set_value(item.to_owned()).await;
-            index
-                .lock()
-                .await
-                .set_value(Value::from(i))
-                .await;
+            index.lock().await.set_value(Value::from(i)).await;
 
             // Trigger connected body nodes sequentially
             let connected = exec_item.lock().await.get_connected_nodes().await;
             for node in connected.iter() {
                 let mut sub_context = context.create_sub_context(node).await;
-                let run = InternalNode::trigger(&mut sub_context, &mut Some(recursion_guard.clone()), true).await;
+                let run = InternalNode::trigger(
+                    &mut sub_context,
+                    &mut Some(recursion_guard.clone()),
+                    true,
+                )
+                .await;
                 sub_context.end_trace();
-                context.push_sub_context(sub_context);
+                context.push_sub_context(&mut sub_context);
 
                 if let Err(error) = run {
                     context.log_message(
@@ -122,10 +141,7 @@ impl NodeLogic for ForEachWithBreakNode {
                 }
 
                 // Check if a Break was requested during the body execution
-                match context
-                    .evaluate_pin_ref(break_pin.clone())
-                    .await
-                {
+                match context.evaluate_pin_ref(break_pin.clone()).await {
                     Ok(should_break) => {
                         println!("ForEach(Break): breaking at index {} - {}", i, should_break);
                         if should_break {
@@ -146,7 +162,6 @@ impl NodeLogic for ForEachWithBreakNode {
                 }
             }
         }
-
 
         context.deactivate_exec_pin_ref(&exec_item).await?;
         context.activate_exec_pin_ref(&done).await?;

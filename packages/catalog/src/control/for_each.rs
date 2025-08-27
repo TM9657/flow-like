@@ -97,7 +97,7 @@ impl NodeLogic for LoopNode {
                 let mut sub_context = context.create_sub_context(node).await;
                 let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
                 sub_context.end_trace();
-                context.push_sub_context(sub_context);
+                context.push_sub_context(&mut sub_context);
 
                 if run.is_err() {
                     let error = run.err().unwrap();
