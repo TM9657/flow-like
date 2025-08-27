@@ -151,7 +151,7 @@ impl NodeLogic for ParallelExecutionNode {
         // collect and push into parent; log failures on the parent
         while let Some(outcome) = tasks.next().await {
             match outcome {
-                TaskOutcome::Ok(sub) => context.push_sub_context(sub),
+                TaskOutcome::Ok(mut sub) => context.push_sub_context(&mut sub),
                 TaskOutcome::JoinErr(msg) => {
                     context.log_message(&format!("Thread join error: {msg}"), LogLevel::Error)
                 }

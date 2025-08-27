@@ -1,3 +1,4 @@
+use ahash::AHashSet;
 use flow_like::{
     bit::Bit,
     flow::{
@@ -23,12 +24,9 @@ use flow_like_types::{
     json::json,
     sync::{DashMap, Mutex},
 };
-use std::{
-    collections::HashSet,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 
 #[derive(Default)]
@@ -126,7 +124,7 @@ impl NodeLogic for InvokeLLMSimpleNode {
             let connected_nodes = connected_nodes.clone();
             let callback_count = Arc::clone(&callback_count); // Clone the Arc for use in the callback
             Box::pin(async move {
-                let mut recursion_guard = HashSet::new();
+                let mut recursion_guard = AHashSet::new();
                 recursion_guard.insert(parent_node_id.clone());
                 let string_token = input.get_streamed_token().unwrap_or("".to_string());
                 ctx.set_pin_value("token", json!(string_token)).await?;
@@ -182,8 +180,8 @@ impl NodeLogic for InvokeLLMSimpleNode {
 
         for entry in collection_nodes.iter() {
             let (_, sub_context) = entry.pair();
-            let sub_context = sub_context.lock().await;
-            context.push_sub_context(sub_context.clone());
+            let mut sub_context = sub_context.lock().await;
+            context.push_sub_context(&mut sub_context);
         }
 
         context
