@@ -1,9 +1,10 @@
 use super::log::LogMessage;
 use crate::flow::variable::Variable;
+use ahash::AHashMap;
 use flow_like_types::{create_id, sync::Mutex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, time::SystemTime};
+use std::{sync::Arc, time::SystemTime};
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct Trace {
@@ -14,7 +15,7 @@ pub struct Trace {
     pub end: SystemTime,
 
     // for debugging purposes only
-    pub variables: Option<HashMap<String, Variable>>,
+    pub variables: Option<Vec<Variable>>,
 }
 
 impl Trace {
@@ -42,7 +43,7 @@ impl Trace {
         self.end = SystemTime::now();
     }
 
-    pub async fn snapshot_variables(&mut self, variables: &Arc<Mutex<HashMap<String, Variable>>>) {
-        self.variables = Some(variables.lock().await.clone());
+    pub async fn snapshot_variables(&mut self, variables: &Arc<Mutex<AHashMap<String, Variable>>>) {
+        self.variables = Some(variables.lock().await.values().cloned().collect());
     }
 }

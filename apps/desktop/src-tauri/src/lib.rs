@@ -349,8 +349,12 @@ pub fn run() {
         builder = builder.plugin(tauri_plugin_devtools::init());
     }
 
+    let context: tauri::Context<_> = std::thread::spawn(|| tauri::generate_context!())
+        .join()
+        .expect("context thread");
+
     builder
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 

@@ -4,6 +4,7 @@ use std::sync::Arc;
 pub mod clear;
 pub mod difference;
 pub mod discard;
+pub mod from_array;
 pub mod has;
 pub mod insert;
 pub mod is_empty;
@@ -15,7 +16,6 @@ pub mod pop;
 pub mod size;
 pub mod to_array;
 pub mod union;
-pub mod from_array;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![

@@ -1,12 +1,12 @@
 use flow_like::{
     flow::{
-        execution::{context::ExecutionContext, LogLevel},
+        execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic},
         variable::VariableType,
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, Value};
+use flow_like_types::{Value, async_trait};
 
 /// Gate
 ///
@@ -22,7 +22,9 @@ use flow_like_types::{async_trait, Value};
 pub struct GateNode {}
 
 impl GateNode {
-    pub fn new() -> Self { Self {} }
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 
 #[async_trait]
@@ -37,33 +39,46 @@ impl NodeLogic for GateNode {
         node.add_icon("/flow/icons/gate.svg");
 
         // Execution inputs
-        node.add_input_pin("enter", "Enter", "Main execution input", VariableType::Execution);
+        node.add_input_pin(
+            "enter",
+            "Enter",
+            "Main execution input",
+            VariableType::Execution,
+        );
         node.add_input_pin("open", "Open", "Open the gate", VariableType::Execution);
         node.add_input_pin("close", "Close", "Close the gate", VariableType::Execution);
-        node.add_input_pin("toggle", "Toggle", "Toggle the gate", VariableType::Execution);
+        node.add_input_pin(
+            "toggle",
+            "Toggle",
+            "Toggle the gate",
+            VariableType::Execution,
+        );
 
         // Parameters
-        node
-            .add_input_pin(
-                "start_closed",
-                "Start Closed",
-                "If true, the gate starts closed (blocked)",
-                VariableType::Boolean,
-            )
-            .set_default_value(Some(Value::from(false)));
+        node.add_input_pin(
+            "start_closed",
+            "Start Closed",
+            "If true, the gate starts closed (blocked)",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(Value::from(false)));
 
         // Execution outputs
-        node.add_output_pin("exit", "Exit", "Fires when Enter passes through", VariableType::Execution);
+        node.add_output_pin(
+            "exit",
+            "Exit",
+            "Fires when Enter passes through",
+            VariableType::Execution,
+        );
 
         // State output (persisted across triggers via writes in `run`)
-        node
-            .add_output_pin(
-                "is_open",
-                "Is Open",
-                "Current open/closed state after this tick",
-                VariableType::Boolean,
-            )
-            .set_default_value(Some(Value::from(false)));
+        node.add_output_pin(
+            "is_open",
+            "Is Open",
+            "Current open/closed state after this tick",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(Value::from(false)));
 
         // Optional debug counters (commented out; enable if desired)
         // node.add_output_pin("pass_count", "Pass Count", "Times execution passed", VariableType::Integer)
@@ -89,7 +104,10 @@ impl NodeLogic for GateNode {
         let default_open = !start_closed;
 
         // Load persisted state (falls back to parameter on first run)
-        let mut is_open: bool = context.evaluate_pin("is_open").await.unwrap_or(default_open);
+        let mut is_open: bool = context
+            .evaluate_pin("is_open")
+            .await
+            .unwrap_or(default_open);
 
         // Apply control inputs first (these do not forward execution)
         if did_open {
@@ -115,7 +133,9 @@ impl NodeLogic for GateNode {
         }
 
         // Persist state
-        context.set_pin_value("is_open", Value::from(is_open)).await?;
+        context
+            .set_pin_value("is_open", Value::from(is_open))
+            .await?;
 
         // // Optional counters example
         // let mut pass_count: i64 = context.evaluate_pin("pass_count").await.unwrap_or(0);
