@@ -14,6 +14,7 @@ use crate::{
     profile::Profile,
     state::{FlowLikeState, FlowLikeStores, ToastEvent, ToastLevel},
 };
+use ahash::AHashMap;
 use flow_like_model_provider::provider::ModelProviderConfiguration;
 use flow_like_storage::object_store::path::Path;
 use flow_like_types::Value;
@@ -25,7 +26,7 @@ use flow_like_types::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     sync::{Arc, Weak},
 };
 
@@ -133,14 +134,14 @@ struct RunUpdateEvent {
 pub struct ExecutionContext {
     pub id: String,
     pub run: Weak<Mutex<Run>>,
-    pub nodes: Arc<HashMap<String, Arc<InternalNode>>>,
+    pub nodes: Arc<AHashMap<String, Arc<InternalNode>>>,
     pub profile: Arc<Profile>,
     pub node: Arc<InternalNode>,
     pub sub_traces: Vec<Trace>,
     pub app_state: Arc<Mutex<FlowLikeState>>,
-    pub variables: Arc<Mutex<HashMap<String, Variable>>>,
-    pub started_by: Vec<Arc<Mutex<InternalPin>>>,
-    pub cache: Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
+    pub variables: Arc<Mutex<AHashMap<String, Variable>>>,
+    pub started_by: Option<Vec<Arc<Mutex<InternalPin>>>>,
+    pub cache: Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,
     pub stage: ExecutionStage,
     pub log_level: LogLevel,
     pub trace: Trace,
@@ -149,6 +150,7 @@ pub struct ExecutionContext {
     pub stream_state: bool,
     pub credentials: Option<Arc<SharedCredentials>>,
     pub delegated: bool,
+    pub context_state: BTreeMap<String, Value>,
     run_id: String,
     state: NodeState,
     callback: InterComCallback,
@@ -156,12 +158,12 @@ pub struct ExecutionContext {
 
 impl ExecutionContext {
     pub async fn new(
-        nodes: Arc<HashMap<String, Arc<InternalNode>>>,
+        nodes: Arc<AHashMap<String, Arc<InternalNode>>>,
         run: &Weak<Mutex<Run>>,
         state: &Arc<Mutex<FlowLikeState>>,
         node: &Arc<InternalNode>,
-        variables: &Arc<Mutex<HashMap<String, Variable>>>,
-        cache: &Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
+        variables: &Arc<Mutex<AHashMap<String, Variable>>>,
+        cache: &Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,
         log_level: LogLevel,
         stage: ExecutionStage,
         profile: Arc<Profile>,
@@ -191,7 +193,7 @@ impl ExecutionContext {
         ExecutionContext {
             id,
             run_id,
-            started_by: vec![],
+            started_by: None,
             run: run.clone(),
             app_state: state.clone(),
             node: node.clone(),
@@ -206,11 +208,17 @@ impl ExecutionContext {
             execution_cache,
             stream_state,
             state: NodeState::Idle,
+            context_state: BTreeMap::new(),
             nodes,
             completion_callbacks,
             credentials,
             delegated: false,
         }
+    }
+
+    #[inline]
+    pub fn started_by_first(&self) -> Option<Arc<Mutex<InternalPin>>> {
+        self.started_by.as_ref().and_then(|v| v.first().cloned())
     }
 
     pub async fn create_sub_context(&self, node: &Arc<InternalNode>) -> ExecutionContext {
@@ -482,8 +490,8 @@ impl ExecutionContext {
         Ok(())
     }
 
-    pub fn push_sub_context(&mut self, context: ExecutionContext) {
-        let sub_traces = context.get_traces();
+    pub fn push_sub_context(&mut self, context: &mut ExecutionContext) {
+        let sub_traces = context.take_traces();
         self.sub_traces.extend(sub_traces);
     }
 
@@ -491,7 +499,7 @@ impl ExecutionContext {
         self.trace.finish();
     }
 
-    pub fn get_traces(&self) -> Vec<Trace> {
+    pub fn take_traces(&mut self) -> Vec<Trace> {
         let mut traces = self.sub_traces.clone();
         traces.push(self.trace.clone());
         traces.sort_by(|a, b| a.start.cmp(&b.start));

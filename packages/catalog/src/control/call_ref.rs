@@ -105,7 +105,7 @@ impl NodeLogic for CallReferenceNode {
         sub_context.delegated = true;
         let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
         sub_context.end_trace();
-        context.push_sub_context(sub_context);
+        context.push_sub_context(&mut sub_context);
 
         if run.is_err() {
             let node_name = node_ref.lock().await.friendly_name.clone();

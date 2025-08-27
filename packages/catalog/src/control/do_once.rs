@@ -1,6 +1,6 @@
 use flow_like::{
     flow::{
-        execution::{context::ExecutionContext, LogLevel},
+        execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic},
         variable::VariableType,
     },
@@ -16,7 +16,9 @@ use flow_like_types::{async_trait, json::json};
 pub struct DoOnceNode {}
 
 impl DoOnceNode {
-    pub fn new() -> Self { Self {} }
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 
 #[async_trait]
@@ -40,17 +42,21 @@ impl NodeLogic for DoOnceNode {
         );
 
         // Parameters
-        node
-            .add_input_pin(
-                "start_closed",
-                "Start Closed",
-                "If true, starts blocked until a Reset arrives",
-                VariableType::Boolean,
-            )
-            .set_default_value(Some(json!(false)));
+        node.add_input_pin(
+            "start_closed",
+            "Start Closed",
+            "If true, starts blocked until a Reset arrives",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(false)));
 
         // Outputs
-        node.add_output_pin("then", "Then", "Fires only the first allowed pass", VariableType::Execution);
+        node.add_output_pin(
+            "then",
+            "Then",
+            "Fires only the first allowed pass",
+            VariableType::Execution,
+        );
 
         node.add_output_pin(
             "has_fired",

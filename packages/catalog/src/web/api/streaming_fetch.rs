@@ -1,3 +1,4 @@
+use ahash::AHashSet;
 use flow_like::{
     flow::{
         execution::{
@@ -117,7 +118,7 @@ impl NodeLogic for StreamingHttpFetchNode {
             let parent_node_id = parent_node_id.clone();
 
             Box::pin(async move {
-                let mut recursion_guard = HashSet::new();
+                let mut recursion_guard = AHashSet::new();
                 recursion_guard.insert(parent_node_id.clone());
                 streaming_response_pin
                     .lock()

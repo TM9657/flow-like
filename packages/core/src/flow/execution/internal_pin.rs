@@ -1,4 +1,4 @@
-use flow_like_types::{json::from_value, sync::Mutex, Value};
+use flow_like_types::{Value, json::from_value, sync::Mutex};
 use serde::de::DeserializeOwned;
 use std::{
     collections::HashSet,

@@ -2,9 +2,13 @@ use super::board::ExecutionStage;
 use super::event::Event;
 use super::{board::Board, node::NodeState, variable::Variable};
 use crate::credentials::SharedCredentials;
+use crate::flow::execution::internal_node::ExecutionTarget;
 use crate::profile::Profile;
 use crate::state::FlowLikeState;
-use ahash::AHasher;
+use ahash::{AHashMap, AHashSet, AHasher};
+use flow_like_types::utils::ptr_key;
+use std::hash::Hasher;
+use std::sync::atomic::Ordering;
 use context::ExecutionContext;
 use flow_like_storage::arrow_array::{RecordBatch, RecordBatchIterator};
 use flow_like_storage::arrow_schema::FieldRef;
@@ -16,7 +20,7 @@ use flow_like_storage::{Path, serde_arrow};
 use flow_like_types::Value;
 use flow_like_types::intercom::InterComCallback;
 use flow_like_types::json::to_vec;
-use flow_like_types::sync::{DashMap, Mutex, RwLock};
+use flow_like_types::sync::{Mutex, RwLock};
 use flow_like_types::{Cacheable, anyhow, create_id};
 use futures::StreamExt;
 use futures::future::BoxFuture;
@@ -29,8 +33,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use std::{
-    collections::{HashMap, HashSet},
-    hash::{Hash, Hasher},
     sync::{Arc, Weak},
     time::SystemTime,
 };
@@ -221,7 +223,7 @@ pub struct Run {
     pub event_id: Option<String>,
     pub event_version: Option<String>,
 
-    pub visited_nodes: HashMap<String, LogLevel>,
+    pub visited_nodes: AHashMap<String, LogLevel>,
     pub log_store: Option<FlowLikeStore>,
     pub log_db: Option<
         Arc<dyn Fn(Path) -> flow_like_storage::lancedb::connection::ConnectBuilder + Send + Sync>,
@@ -332,8 +334,8 @@ impl Run {
 
 #[derive(Clone)]
 struct RunStack {
-    stack: Vec<Arc<InternalNode>>,
-    deduplication: HashSet<u64>,
+    stack: Vec<ExecutionTarget>,
+    deduplication: AHashSet<usize>,
     hash: u64,
 }
 
@@ -341,34 +343,27 @@ impl RunStack {
     fn with_capacity(capacity: usize) -> Self {
         RunStack {
             stack: Vec::with_capacity(capacity),
-            deduplication: HashSet::with_capacity(capacity),
+            deduplication: AHashSet::with_capacity(capacity.saturating_mul(2)),
             hash: 0u64,
         }
     }
 
-    fn push(&mut self, node_id: &str, node: Arc<InternalNode>) {
-        let mut hasher = AHasher::default();
-        node_id.hash(&mut hasher);
-        let hash = hasher.finish();
+    fn push(&mut self, target: ExecutionTarget) {
+        let nkey = ptr_key(&target.node);
 
-        if self.deduplication.contains(&hash) {
+        if !self.deduplication.insert(nkey) {
             return;
         }
 
-        self.deduplication.insert(hash);
-        self.hash ^= hash;
-        self.stack.push(node);
+        let mut h = AHasher::default();
+        h.write_usize(nkey);
+        self.hash ^= h.finish();
+
+        self.stack.push(target);
     }
 
-    #[inline]
-    fn hash(&self) -> u64 {
-        self.hash
-    }
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.stack.len()
-    }
+    #[inline] fn hash(&self) -> u64 { self.hash }
+    #[inline] fn len(&self) -> usize { self.stack.len() }
 }
 
 pub type EventTrigger =
@@ -377,18 +372,17 @@ pub type EventTrigger =
 #[derive(Clone)]
 pub struct InternalRun {
     pub run: Arc<Mutex<Run>>,
-    pub nodes: Arc<HashMap<String, Arc<InternalNode>>>,
-    pub dependencies: HashMap<String, Vec<Arc<InternalNode>>>,
-    pub pins: HashMap<String, Arc<Mutex<InternalPin>>>,
-    pub variables: Arc<Mutex<HashMap<String, Variable>>>,
-    pub cache: Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
+    pub nodes: Arc<AHashMap<String, Arc<InternalNode>>>,
+    pub dependencies: AHashMap<String, Vec<Arc<InternalNode>>>,
+    pub pins: AHashMap<String, Arc<Mutex<InternalPin>>>,
+    pub variables: Arc<Mutex<AHashMap<String, Variable>>>,
+    pub cache: Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,
     pub profile: Arc<Profile>,
     pub callback: InterComCallback,
     pub credentials: Option<Arc<SharedCredentials>>,
 
     stack: Arc<RunStack>,
     concurrency_limit: u64,
-    concurrency_map: Arc<DashMap<String, u64>>,
     cpus: usize,
     log_level: LogLevel,
     completion_callbacks: Arc<RwLock<Vec<EventTrigger>>>,
@@ -446,14 +440,14 @@ impl InternalRun {
                 format!("{}.{}.{}", major, minor, patch)
             }),
 
-            visited_nodes: HashMap::with_capacity(board.nodes.len()),
+            visited_nodes: AHashMap::with_capacity(board.nodes.len()),
             log_store,
             log_db: db,
         };
 
         let run = Arc::new(Mutex::new(run));
 
-        let mut dependencies = HashMap::with_capacity(board.nodes.len());
+        let mut dependencies = AHashMap::with_capacity(board.nodes.len());
 
         let event_variables = event
             .as_ref()
@@ -461,7 +455,7 @@ impl InternalRun {
             .unwrap_or_default();
 
         let variables = Arc::new(Mutex::new({
-            let mut map = HashMap::with_capacity(board.variables.len());
+            let mut map = AHashMap::with_capacity(board.variables.len());
             for (variable_id, board_variable) in &board.variables {
                 let variable = if board_variable.exposed {
                     event_variables.get(variable_id).unwrap_or(board_variable)
@@ -483,8 +477,8 @@ impl InternalRun {
             map
         }));
 
-        let mut pin_to_node = HashMap::with_capacity(board.nodes.len() * 3);
-        let mut pins = HashMap::with_capacity(board.nodes.len() * 3);
+        let mut pin_to_node = AHashMap::with_capacity(board.nodes.len() * 3);
+        let mut pins = AHashMap::with_capacity(board.nodes.len() * 3);
 
         for (node_id, node) in &board.nodes {
             for (pin_id, pin) in &node.pins {
@@ -544,8 +538,8 @@ impl InternalRun {
             }
         }
 
-        let mut dependency_map = HashMap::with_capacity(board.nodes.len());
-        let mut nodes = HashMap::with_capacity(board.nodes.len());
+        let mut dependency_map = AHashMap::with_capacity(board.nodes.len());
+        let mut nodes = AHashMap::with_capacity(board.nodes.len());
         let mut stack = RunStack::with_capacity(1);
 
         let registry = handler
@@ -558,8 +552,8 @@ impl InternalRun {
             .clone();
         for (node_id, node) in &board.nodes {
             let logic = registry.instantiate(node)?;
-            let mut node_pins = HashMap::new();
-            let mut pin_cache = HashMap::new();
+            let mut node_pins = AHashMap::new();
+            let mut pin_cache = AHashMap::new();
 
             for pin in node.pins.values() {
                 if let Some(internal_pin) = pins.get(&pin.id) {
@@ -595,19 +589,24 @@ impl InternalRun {
             }
 
             if payload.id == node.id {
-                stack.push(&node.id, internal_node.clone());
+                let target = ExecutionTarget {
+                    node: internal_node.clone(),
+                    through_pins: vec![]
+                };
+                stack.push(target);
             }
 
             nodes.insert(node_id.clone(), internal_node);
         }
 
         if USE_DEPENDENCY_GRAPH {
+            let mut recursion_filter: AHashSet<String> = AHashSet::new();
             for node_id in board.nodes.keys() {
                 let deps = recursive_get_deps(
                     node_id.to_string(),
                     &dependency_map,
                     &nodes,
-                    &mut HashSet::new(),
+                    &mut recursion_filter,
                 );
                 dependencies.insert(node_id.clone(), deps);
             }
@@ -627,10 +626,9 @@ impl InternalRun {
             nodes: Arc::new(nodes),
             pins,
             variables,
-            cache: Arc::new(RwLock::new(HashMap::new())),
+            cache: Arc::new(RwLock::new(AHashMap::new())),
             stack: Arc::new(stack),
-            concurrency_limit: 10,
-            concurrency_map: Arc::new(DashMap::with_capacity(board.nodes.len())),
+            concurrency_limit: 128_000,
             cpus: num_cpus::get(),
             callback,
             credentials: credentials.map(Arc::new),
@@ -688,7 +686,7 @@ impl InternalRun {
         let callback = self.callback.clone();
 
         let new_stack = futures::stream::iter(stack.stack.clone())
-            .map(|node| {
+            .map(|target| {
                 // Clone per iteration as needed
                 let dependencies = dependencies.clone();
                 let handler = handler.clone();
@@ -697,7 +695,6 @@ impl InternalRun {
                 let callback = callback.clone();
                 let stage = stage.clone();
                 let log_level = log_level;
-                let concurrency_map = self.concurrency_map.clone();
                 let completion_callbacks = self.completion_callbacks.clone();
                 let credentials = self.credentials.clone();
                 let nodes = self.nodes.clone();
@@ -705,7 +702,7 @@ impl InternalRun {
                 async move {
                     step_core(
                         nodes,
-                        &node,
+                        target,
                         concurrency_limit,
                         &handler,
                         &run,
@@ -716,20 +713,19 @@ impl InternalRun {
                         &dependencies,
                         &profile,
                         &callback,
-                        concurrency_map,
                         &completion_callbacks,
                         credentials,
                     )
                     .await
                 }
             })
-            .buffer_unordered(self.cpus * 3)
+            .buffer_unordered(self.cpus)
             .fold(
                 RunStack::with_capacity(stack.stack.len()),
                 |mut acc: RunStack, result| async move {
                     if let Ok(inner_iter) = result {
-                        for (key, node) in inner_iter {
-                            acc.push(&key, node);
+                        for node in inner_iter {
+                            acc.push(node);
                         }
                     }
                     acc
@@ -751,10 +747,10 @@ impl InternalRun {
         let cache = &self.cache;
         let concurrency_limit = self.concurrency_limit;
 
-        let node = stack.stack.first().unwrap();
+        let target = stack.stack.first().cloned().unwrap();
         let connected_nodes = step_core(
             self.nodes.clone(),
-            node,
+            target,
             concurrency_limit,
             handler,
             &self.run,
@@ -765,7 +761,6 @@ impl InternalRun {
             &self.dependencies,
             &self.profile,
             &self.callback,
-            self.concurrency_map.clone(),
             &self.completion_callbacks,
             self.credentials.clone(),
         )
@@ -773,8 +768,8 @@ impl InternalRun {
 
         let mut new_stack = RunStack::with_capacity(stack.len());
         if let Ok(nodes) = connected_nodes {
-            for (key, node) in nodes {
-                new_stack.push(&key, node);
+            for node in nodes {
+                new_stack.push(node);
             }
         }
 
@@ -938,9 +933,9 @@ impl InternalRun {
 
 fn recursive_get_deps(
     node_id: String,
-    dependencies: &HashMap<&String, Vec<(&String, &bool)>>,
-    lookup: &HashMap<String, Arc<InternalNode>>,
-    recursion_filter: &mut HashSet<String>,
+    dependencies: &AHashMap<&String, Vec<(&String, &bool)>>,
+    lookup: &AHashMap<String, Arc<InternalNode>>,
+    recursion_filter: &mut AHashSet<String>,
 ) -> Vec<Arc<InternalNode>> {
     if recursion_filter.contains(&node_id) {
         return vec![];
@@ -984,32 +979,27 @@ pub enum RunStatus {
 }
 
 async fn step_core(
-    nodes: Arc<HashMap<String, Arc<InternalNode>>>,
-    node: &Arc<InternalNode>,
+    nodes: Arc<AHashMap<String, Arc<InternalNode>>>,
+    target: ExecutionTarget,
     concurrency_limit: u64,
     handler: &Arc<Mutex<FlowLikeState>>,
     run: &Arc<Mutex<Run>>,
-    variables: &Arc<Mutex<HashMap<String, Variable>>>,
-    cache: &Arc<RwLock<HashMap<String, Arc<dyn Cacheable>>>>,
+    variables: &Arc<Mutex<AHashMap<String, Variable>>>,
+    cache: &Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,
     log_level: LogLevel,
     stage: ExecutionStage,
-    dependencies: &HashMap<String, Vec<Arc<InternalNode>>>,
+    dependencies: &AHashMap<String, Vec<Arc<InternalNode>>>,
     profile: &Arc<Profile>,
     callback: &InterComCallback,
-    concurrency_map: Arc<DashMap<String, u64>>,
     completion_callbacks: &Arc<RwLock<Vec<EventTrigger>>>,
     credentials: Option<Arc<SharedCredentials>>,
-) -> flow_like_types::Result<Vec<(String, Arc<InternalNode>)>> {
+) -> flow_like_types::Result<Vec<ExecutionTarget>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
     {
-        let mut limit = concurrency_map
-            .entry(node.node.lock().await.id.clone())
-            .or_insert(0);
-        if *limit >= concurrency_limit {
+        let calls_before = target.node.exec_calls.fetch_add(1, Ordering::Relaxed);
+        if calls_before >= concurrency_limit {
             return Err(anyhow!("Concurrency limit reached"));
         }
-
-        *limit += 1;
     }
 
     let weak_run = Arc::downgrade(run);
@@ -1017,7 +1007,7 @@ async fn step_core(
         nodes,
         &weak_run,
         handler,
-        node,
+        &target.node,
         variables,
         cache,
         log_level,
@@ -1028,6 +1018,11 @@ async fn step_core(
         credentials,
     )
     .await;
+    context.started_by = if target.through_pins.is_empty() {
+        None
+    } else {
+        Some(target.through_pins.clone())
+    };
 
     if USE_DEPENDENCY_GRAPH {
         if let Err(err) =
@@ -1042,7 +1037,7 @@ async fn step_core(
 
     {
         let mut run_locked = run.lock().await;
-        run_locked.traces.extend(context.get_traces());
+        run_locked.traces.extend(context.take_traces());
     }
 
     let state = context.get_state();
@@ -1050,12 +1045,10 @@ async fn step_core(
     drop(context);
 
     if state == NodeState::Success {
-        let connected = node.get_connected_exec(true).await.unwrap();
+        let connected = target.node.get_connected_exec(true).await.unwrap();
         let mut connected_nodes = Vec::with_capacity(connected.len());
         for connected_node in connected {
-            let id = connected_node.node.clone().lock().await.id.clone();
-
-            connected_nodes.push((id, connected_node.clone()));
+            connected_nodes.push(connected_node);
         }
         return Ok(connected_nodes);
     }

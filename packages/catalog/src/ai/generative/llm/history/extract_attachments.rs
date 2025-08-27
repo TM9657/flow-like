@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use crate::{events::chat_event::Attachment, storage::path::FlowPath};
+use base64::{Engine as _, engine::general_purpose};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -10,12 +12,18 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_model_provider::history::{Content, History, MessageContent};
-use flow_like_types::{anyhow, async_trait, json::json, mime_guess::{self, mime}, reqwest::{self, Url}, Bytes};
-use flow_like_storage::{blake3, files::store::FlowLikeStore, object_store::{ObjectStore, PutPayload}, Path};
+use flow_like_storage::{
+    Path, blake3,
+    files::store::FlowLikeStore,
+    object_store::{ObjectStore, PutPayload},
+};
+use flow_like_types::{
+    Bytes, anyhow, async_trait,
+    json::json,
+    mime_guess::{self, mime},
+    reqwest::{self, Url},
+};
 use flow_like_types::{Cacheable, Result};
-use base64::{Engine as _, engine::general_purpose};
-use crate::{events::chat_event::Attachment, storage::path::FlowPath};
-
 
 fn extract_image_urls(history: &History) -> Vec<String> {
     history
@@ -106,7 +114,9 @@ impl NodeLogic for ExtractAttachments {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
-        let mut attachments = context.evaluate_pin::<Vec<Attachment>>("attachments").await?;
+        let mut attachments = context
+            .evaluate_pin::<Vec<Attachment>>("attachments")
+            .await?;
 
         if let Ok(history) = context.evaluate_pin::<History>("history").await {
             let urls = extract_image_urls(&history);
@@ -144,7 +154,7 @@ impl NodeLogic for ExtractAttachments {
                         cache_store_ref: None,
                     };
                     paths.push(virtual_path);
-                },
+                }
                 Attachment::Complex(complex) => {
                     let (path, _len) = store.put_from_url(&complex.url).await?;
                     let virtual_path = FlowPath {

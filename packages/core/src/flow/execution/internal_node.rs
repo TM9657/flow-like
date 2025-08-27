@@ -5,11 +5,8 @@ use crate::flow::{
     variable::VariableType,
 };
 use ahash::{AHashMap, AHashSet};
-use flow_like_types::{Value, json::json, sync::Mutex};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Weak},
-};
+use flow_like_types::{Value, json::json, sync::Mutex, utils::ptr_key};
+use std::sync::{Arc, Weak, atomic::AtomicU64};
 
 use super::{LogLevel, context::ExecutionContext, internal_pin::InternalPin, log::LogMessage};
 
@@ -20,15 +17,28 @@ pub enum InternalNodeError {
     PinNotReady(String),
 }
 
-#[inline]
-fn ptr_key<T>(arc: &Arc<T>) -> usize {
-    Arc::as_ptr(arc) as usize
+#[derive(Clone)]
+pub struct ExecutionTarget {
+    pub node: Arc<InternalNode>,
+    pub through_pins: Vec<Arc<Mutex<InternalPin>>>,
+}
+
+impl ExecutionTarget {
+    async fn into_sub_context(&self, ctx: &mut ExecutionContext) -> ExecutionContext {
+        let mut sub = ctx.create_sub_context(&self.node).await;
+        sub.started_by = if self.through_pins.is_empty() {
+            None
+        } else {
+            Some(self.through_pins.clone())
+        };
+        sub
+    }
 }
 
 async fn exec_deps_from_map(
     ctx: &mut ExecutionContext,
-    recursion_guard: &mut Option<std::collections::HashSet<String>>,
-    dependencies: &std::collections::HashMap<String, Vec<Arc<InternalNode>>>,
+    recursion_guard: &mut Option<AHashSet<String>>,
+    dependencies: &AHashMap<String, Vec<Arc<InternalNode>>>,
 ) -> bool {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Phase {
@@ -39,7 +49,6 @@ async fn exec_deps_from_map(
     let node = ctx.read_node().await;
     let root_id = node.id.clone();
 
-    // Seed stack from the map (may be empty)
     let mut stack: Vec<(Arc<InternalNode>, Phase)> = Vec::new();
     if let Some(roots) = dependencies.get(&root_id) {
         stack.reserve(roots.len().saturating_mul(2));
@@ -48,7 +57,6 @@ async fn exec_deps_from_map(
         }
     }
 
-    // Pointer-keyed sets to avoid String hashing in the hot path.
     let mut scheduled: AHashSet<usize> = AHashSet::with_capacity(stack.len().saturating_mul(2));
     let mut visiting: AHashSet<usize> = AHashSet::with_capacity(stack.len().saturating_mul(2));
 
@@ -67,10 +75,8 @@ async fn exec_deps_from_map(
                     );
                     return false;
                 }
-                // Post-order
                 stack.push((n.clone(), Phase::Exit));
 
-                // Push this dependency’s own deps (if any) from the map
                 let dep_id = {
                     let g = n.node.lock().await;
                     g.id.clone()
@@ -121,7 +127,7 @@ async fn exec_deps_from_map(
                 log_message.end();
                 ctx.log(log_message);
                 sub.end_trace();
-                ctx.push_sub_context(sub);
+                ctx.push_sub_context(&mut sub);
 
                 if res.is_err() {
                     ctx.log_message("Failed to trigger mapped dependency", LogLevel::Error);
@@ -138,13 +144,13 @@ async fn exec_deps_from_map(
 
 async fn run_node_logic_only(
     ctx: &mut ExecutionContext,
-    recursion_guard: &mut Option<std::collections::HashSet<String>>,
+    recursion_guard: &mut Option<AHashSet<String>>,
 ) -> flow_like_types::Result<(), InternalNodeError> {
     ctx.set_state(NodeState::Running).await;
     let node = ctx.read_node().await;
 
     if recursion_guard.is_none() {
-        *recursion_guard = Some(std::collections::HashSet::new());
+        *recursion_guard = Some(AHashSet::new());
     }
     if let Some(guard) = recursion_guard {
         if guard.contains(&node.id) {
@@ -263,23 +269,25 @@ async fn pure_parents_for_memo(
 
 pub struct InternalNode {
     pub node: Arc<Mutex<Node>>,
-    pub pins: HashMap<String, Arc<Mutex<InternalPin>>>,
+    pub pins: AHashMap<String, Arc<Mutex<InternalPin>>>,
     pub logic: Arc<dyn NodeLogic>,
-    pin_name_cache: Mutex<HashMap<String, Vec<Arc<Mutex<InternalPin>>>>>,
+    pub exec_calls: AtomicU64,
+    pin_name_cache: Mutex<AHashMap<String, Vec<Arc<Mutex<InternalPin>>>>>,
 }
 
 impl InternalNode {
     pub fn new(
         node: Node,
-        pins: HashMap<String, Arc<Mutex<InternalPin>>>,
+        pins: AHashMap<String, Arc<Mutex<InternalPin>>>,
         logic: Arc<dyn NodeLogic>,
-        name_cache: HashMap<String, Vec<Arc<Mutex<InternalPin>>>>,
+        name_cache: AHashMap<String, Vec<Arc<Mutex<InternalPin>>>>,
     ) -> Self {
         InternalNode {
             node: Arc::new(Mutex::new(node)),
             pins,
             logic,
             pin_name_cache: Mutex::new(name_cache),
+            exec_calls: AtomicU64::new(0),
         }
     }
 
@@ -291,7 +299,7 @@ impl InternalNode {
             }
         }
 
-        let mut pins_by_name = HashMap::new();
+        let mut pins_by_name = AHashMap::new();
         for pin_ref in self.pins.values() {
             let pin_name = {
                 let pin_guard = pin_ref.lock().await;
@@ -413,8 +421,8 @@ impl InternalNode {
 
     pub async fn get_connected(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let mut connected = Vec::with_capacity(self.pins.len());
-        let mut seen_nodes: HashSet<usize> = HashSet::new();
-        let mut visited_pins: HashSet<usize> = HashSet::new();
+        let mut seen_nodes: AHashSet<usize> = AHashSet::new();
+        let mut visited_pins: AHashSet<usize> = AHashSet::new();
         let mut stack: Vec<Weak<Mutex<InternalPin>>> = Vec::new();
 
         for pin in self.pins.values() {
@@ -472,13 +480,29 @@ impl InternalNode {
     pub async fn get_connected_exec(
         &self,
         filter_valid: bool,
-    ) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
-        let mut connected = Vec::with_capacity(self.pins.len());
-        let mut seen_nodes: HashSet<usize> = HashSet::new();
-        let mut visited_pins: HashSet<usize> = HashSet::new();
-        let mut stack: Vec<Weak<Mutex<InternalPin>>> = Vec::new();
+    ) -> flow_like_types::Result<Vec<ExecutionTarget>> {
+        // node_ptr -> (node_arc, pins_vec, seen_pin_ptrs)
+        let mut groups: AHashMap<
+            usize,
+            (
+                Arc<InternalNode>,
+                Vec<Arc<Mutex<InternalPin>>>,
+                AHashSet<usize>,
+            ),
+        > = AHashMap::with_capacity(16);
+
+        let mut visited_pins: AHashSet<usize> = AHashSet::with_capacity(64);
+        let mut stack: Vec<Weak<Mutex<InternalPin>>> = Vec::with_capacity(64);
 
         for pin in self.pins.values() {
+            // Only consider exec OUTPUTs; evaluate filter after that
+            let pin_g = pin.lock().await;
+            let meta = pin_g.pin.lock().await;
+            if meta.pin_type != PinType::Output || meta.data_type != VariableType::Execution {
+                continue;
+            }
+            drop(meta);
+
             if filter_valid {
                 match evaluate_pin_value(pin.clone()).await {
                     Ok(Value::Bool(true)) => {}
@@ -486,58 +510,59 @@ impl InternalNode {
                 }
             }
 
-            let pin_guard = pin.lock().await;
-            let pin_meta = pin_guard.pin.lock().await;
+            let seeds = pin_g.connected_to.clone();
+            drop(pin_g);
 
-            if pin_meta.pin_type != PinType::Output {
-                continue;
-            }
-            if pin_meta.data_type != VariableType::Execution {
-                continue;
-            }
-            drop(pin_meta);
-
-            let seeds = pin_guard.connected_to.clone();
-            drop(pin_guard);
-
-            let cap = seeds.len();
             visited_pins.clear();
             stack.clear();
-            if stack.capacity() < cap {
-                stack.reserve(cap - stack.capacity());
-            }
             stack.extend(seeds);
 
             while let Some(next_weak) = stack.pop() {
-                let pin_arc = next_weak
-                    .upgrade()
-                    .ok_or(flow_like_types::anyhow!("Failed to lock Pin"))?;
-
-                let pin_key = Arc::as_ptr(&pin_arc) as usize;
-                if !visited_pins.insert(pin_key) {
+                let Some(pin_arc) = next_weak.upgrade() else {
+                    continue;
+                };
+                let pkey = ptr_key(&pin_arc);
+                if !visited_pins.insert(pkey) {
                     continue;
                 }
 
                 let parent_opt = {
-                    let guard = pin_arc.lock().await;
-                    if let Some(node_weak) = &guard.node {
-                        node_weak.upgrade()
+                    let g = pin_arc.lock().await;
+                    if let Some(node_w) = &g.node {
+                        node_w.upgrade()
                     } else {
-                        stack.extend(guard.connected_to.iter().cloned());
+                        // relay pin; keep walking
+                        stack.extend(g.connected_to.iter().cloned());
                         None
                     }
                 };
 
                 if let Some(parent) = parent_opt {
-                    let node_key = Arc::as_ptr(&parent) as usize;
-                    if seen_nodes.insert(node_key) {
-                        connected.push(parent);
+                    let nkey = ptr_key(&parent);
+                    let entry = groups.entry(nkey).or_insert_with(|| {
+                        (
+                            parent.clone(),
+                            Vec::with_capacity(2),
+                            AHashSet::with_capacity(4),
+                        )
+                    });
+                    // dedup pin within the node group
+                    if entry.2.insert(pkey) {
+                        entry.1.push(pin_arc.clone());
                     }
                 }
             }
         }
 
-        Ok(connected)
+        // materialize
+        let mut out = Vec::with_capacity(groups.len());
+        for (_, (node, pins, _seen)) in groups {
+            out.push(ExecutionTarget {
+                node,
+                through_pins: pins,
+            });
+        }
+        Ok(out)
     }
 
     pub async fn get_error_handled_nodes(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
@@ -566,8 +591,8 @@ impl InternalNode {
 
         let cap = seeds.len();
         let mut connected = Vec::with_capacity(cap);
-        let mut seen_nodes: HashSet<usize> = HashSet::with_capacity(cap.saturating_mul(2));
-        let mut visited_pins: HashSet<usize> = HashSet::with_capacity(cap.saturating_mul(4));
+        let mut seen_nodes: AHashSet<usize> = AHashSet::with_capacity(cap.saturating_mul(2));
+        let mut visited_pins: AHashSet<usize> = AHashSet::with_capacity(cap.saturating_mul(4));
         let mut stack: Vec<Weak<Mutex<InternalPin>>> = seeds;
 
         while let Some(next_weak) = stack.pop() {
@@ -604,8 +629,8 @@ impl InternalNode {
 
     pub async fn get_dependencies(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let mut dependencies = Vec::with_capacity(self.pins.len());
-        let mut seen_nodes: HashSet<usize> = HashSet::new();
-        let mut visited_pins: HashSet<usize> = HashSet::new();
+        let mut seen_nodes: AHashSet<usize> = AHashSet::new();
+        let mut visited_pins: AHashSet<usize> = AHashSet::new();
         let mut stack: Vec<Weak<Mutex<InternalPin>>> = Vec::new();
 
         for pin in self.pins.values() {
@@ -671,7 +696,7 @@ impl InternalNode {
 
     pub async fn trigger_missing_dependencies(
         context: &mut ExecutionContext,
-        recursion_guard: &mut Option<std::collections::HashSet<String>>,
+        recursion_guard: &mut Option<AHashSet<String>>,
         _with_successors: bool, // not used here
     ) -> bool {
         #[derive(Clone, Copy, PartialEq, Eq)]
@@ -781,7 +806,7 @@ impl InternalNode {
                     log_message.end();
                     context.log(log_message);
                     sub.end_trace();
-                    context.push_sub_context(sub);
+                    context.push_sub_context(&mut sub);
 
                     if res.is_err() {
                         context.log_message(
@@ -802,7 +827,7 @@ impl InternalNode {
     pub async fn handle_error(
         context: &mut ExecutionContext,
         error: &str,
-        recursion_guard: &mut Option<std::collections::HashSet<String>>,
+        recursion_guard: &mut Option<AHashSet<String>>,
     ) -> Result<(), InternalNodeError> {
         let _ = context.activate_exec_pin("auto_handle_error").await;
         let _ = context
@@ -841,7 +866,7 @@ impl InternalNode {
                     .set_pin_value("auto_handle_error_string", json!(err_string))
                     .await;
                 sub.end_trace();
-                context.push_sub_context(sub);
+                context.push_sub_context(&mut sub);
                 return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
             }
 
@@ -852,12 +877,12 @@ impl InternalNode {
                     .set_pin_value("auto_handle_error_string", json!(err_string))
                     .await;
                 sub.end_trace();
-                context.push_sub_context(sub);
+                context.push_sub_context(&mut sub);
                 return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
             }
 
             // walk successors of the error handler (still using the same guard)
-            let mut stack: Vec<Arc<InternalNode>> = match handler.get_connected_exec(true).await {
+            let mut stack: Vec<ExecutionTarget> = match handler.get_connected_exec(true).await {
                 Ok(v) => v,
                 Err(err) => {
                     let err_string = format!("{:?}", err);
@@ -865,7 +890,7 @@ impl InternalNode {
                         .set_pin_value("auto_handle_error_string", json!(err_string))
                         .await;
                     sub.end_trace();
-                    context.push_sub_context(sub);
+                    context.push_sub_context(&mut sub);
                     return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
                 }
             };
@@ -874,12 +899,12 @@ impl InternalNode {
                 ahash::AHashSet::with_capacity(stack.len().saturating_mul(2));
 
             while let Some(next) = stack.pop() {
-                let key = Arc::as_ptr(&next) as usize;
+                let key = Arc::as_ptr(&next.node) as usize;
                 if !seen_exec_ptrs.insert(key) {
                     continue;
                 }
 
-                let mut sub2 = context.create_sub_context(&next).await;
+                let mut sub2 = next.into_sub_context(context).await;
 
                 if !InternalNode::trigger_missing_dependencies(&mut sub2, recursion_guard, false)
                     .await
@@ -890,12 +915,12 @@ impl InternalNode {
                         .set_pin_value("auto_handle_error_string", json!(err_string))
                         .await;
                     sub2.end_trace();
-                    context.push_sub_context(sub2);
+                    context.push_sub_context(&mut sub2);
                     let _ = sub
                         .set_pin_value("auto_handle_error_string", json!("error chain aborted"))
                         .await;
                     sub.end_trace();
-                    context.push_sub_context(sub);
+                    context.push_sub_context(&mut sub);
                     return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
                 }
 
@@ -905,16 +930,16 @@ impl InternalNode {
                         .set_pin_value("auto_handle_error_string", json!(err_string))
                         .await;
                     sub2.end_trace();
-                    context.push_sub_context(sub2);
+                    context.push_sub_context(&mut sub2);
                     let _ = sub
                         .set_pin_value("auto_handle_error_string", json!("error chain aborted"))
                         .await;
                     sub.end_trace();
-                    context.push_sub_context(sub);
+                    context.push_sub_context(&mut sub);
                     return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
                 }
 
-                match next.get_connected_exec(true).await {
+                match next.node.get_connected_exec(true).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);
@@ -926,22 +951,22 @@ impl InternalNode {
                             .set_pin_value("auto_handle_error_string", json!(err_string))
                             .await;
                         sub2.end_trace();
-                        context.push_sub_context(sub2);
+                        context.push_sub_context(&mut sub2);
                         let _ = sub
                             .set_pin_value("auto_handle_error_string", json!("error chain aborted"))
                             .await;
                         sub.end_trace();
-                        context.push_sub_context(sub);
+                        context.push_sub_context(&mut sub);
                         return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
                     }
                 }
 
                 sub2.end_trace();
-                context.push_sub_context(sub2);
+                context.push_sub_context(&mut sub2);
             }
 
             sub.end_trace();
-            context.push_sub_context(sub);
+            context.push_sub_context(&mut sub);
         }
 
         context.set_state(NodeState::Error).await;
@@ -950,7 +975,7 @@ impl InternalNode {
 
     pub async fn trigger(
         context: &mut ExecutionContext,
-        recursion_guard: &mut Option<std::collections::HashSet<String>>,
+        recursion_guard: &mut Option<AHashSet<String>>,
         with_successors: bool,
     ) -> flow_like_types::Result<(), InternalNodeError> {
         // deps
@@ -991,20 +1016,20 @@ impl InternalNode {
                 }
             };
 
-            let mut stack: Vec<Arc<InternalNode>> = Vec::with_capacity(successors.len());
+            let mut stack: Vec<ExecutionTarget> = Vec::with_capacity(successors.len());
             stack.extend(successors);
 
             let mut seen_exec_ptrs: ahash::AHashSet<usize> =
                 ahash::AHashSet::with_capacity(stack.len().saturating_mul(2));
 
             while let Some(next) = stack.pop() {
-                let key = Arc::as_ptr(&next) as usize;
+                let key = Arc::as_ptr(&next.node) as usize;
                 if !seen_exec_ptrs.insert(key) {
                     continue;
                 }
 
-                let mut sub = context.create_sub_context(&next).await;
-                let mut local_guard: Option<std::collections::HashSet<String>> = None;
+                let mut sub = next.into_sub_context(context).await;
+                let mut local_guard: Option<AHashSet<String>> = None;
 
                 if !InternalNode::trigger_missing_dependencies(&mut sub, &mut local_guard, false)
                     .await
@@ -1012,7 +1037,7 @@ impl InternalNode {
                     let err_string = "Failed to trigger successor dependencies".to_string();
                     InternalNode::handle_error(&mut sub, &err_string, &mut local_guard).await?;
                     sub.end_trace();
-                    context.push_sub_context(sub);
+                    context.push_sub_context(&mut sub);
                     let node = context.read_node().await;
                     return Err(InternalNodeError::ExecutionFailed(node.id));
                 }
@@ -1024,12 +1049,12 @@ impl InternalNode {
                         .set_pin_value("auto_handle_error_string", json!(err_string))
                         .await;
                     sub.end_trace();
-                    context.push_sub_context(sub);
+                    context.push_sub_context(&mut sub);
                     let node = context.read_node().await;
                     return Err(InternalNodeError::ExecutionFailed(node.id));
                 }
 
-                match next.get_connected_exec(true).await {
+                match next.node.get_connected_exec(true).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);
@@ -1039,14 +1064,14 @@ impl InternalNode {
                         let err_string = format!("{:?}", err);
                         InternalNode::handle_error(&mut sub, &err_string, &mut local_guard).await?;
                         sub.end_trace();
-                        context.push_sub_context(sub);
+                        context.push_sub_context(&mut sub);
                         let node = context.read_node().await;
                         return Err(InternalNodeError::ExecutionFailed(node.id));
                     }
                 }
 
                 sub.end_trace();
-                context.push_sub_context(sub);
+                context.push_sub_context(&mut sub);
             }
         }
 
@@ -1055,16 +1080,16 @@ impl InternalNode {
 
     pub async fn trigger_with_dependencies(
         context: &mut ExecutionContext,
-        recursion_guard: &mut Option<std::collections::HashSet<String>>,
+        recursion_guard: &mut Option<AHashSet<String>>,
         with_successors: bool,
-        dependencies: &std::collections::HashMap<String, Vec<Arc<InternalNode>>>,
+        dependencies: &AHashMap<String, Vec<Arc<InternalNode>>>,
     ) -> flow_like_types::Result<(), InternalNodeError> {
         context.set_state(NodeState::Running).await;
 
         let node = context.read_node().await;
 
         if recursion_guard.is_none() {
-            *recursion_guard = Some(std::collections::HashSet::new());
+            *recursion_guard = Some(AHashSet::new());
         }
         if let Some(guard) = recursion_guard {
             if guard.contains(&node.id) {
@@ -1128,29 +1153,29 @@ impl InternalNode {
                 }
             };
 
-            let mut stack: Vec<Arc<InternalNode>> = Vec::with_capacity(successors.len());
+            let mut stack: Vec<ExecutionTarget> = Vec::with_capacity(successors.len());
             stack.extend(successors);
 
             let mut seen_exec_ptrs: ahash::AHashSet<usize> =
                 ahash::AHashSet::with_capacity(stack.len().saturating_mul(2));
 
             while let Some(next) = stack.pop() {
-                let key = Arc::as_ptr(&next) as usize;
+                let key = Arc::as_ptr(&next.node) as usize;
                 if !seen_exec_ptrs.insert(key) {
                     continue;
                 }
 
-                let mut sub = context.create_sub_context(&next).await;
+                let mut sub = next.into_sub_context(context).await;
 
                 // Fresh recursion guard per successor to mirror original semantics
-                let mut local_guard: Option<std::collections::HashSet<String>> = None;
+                let mut local_guard: Option<AHashSet<String>> = None;
 
                 // Execute *its* mapped deps (fresh executed set semantics like before)
                 if !exec_deps_from_map(&mut sub, &mut local_guard, dependencies).await {
                     let err_string = "Failed to trigger successor mapped dependencies".to_string();
                     InternalNode::handle_error(&mut sub, &err_string, &mut local_guard).await?;
                     sub.end_trace();
-                    context.push_sub_context(sub);
+                    context.push_sub_context(&mut sub);
                     return Err(InternalNodeError::ExecutionFailed(node.id.clone()));
                 }
 
@@ -1162,12 +1187,12 @@ impl InternalNode {
                         .set_pin_value("auto_handle_error_string", json!(err_string))
                         .await;
                     sub.end_trace();
-                    context.push_sub_context(sub);
+                    context.push_sub_context(&mut sub);
                     return Err(InternalNodeError::ExecutionFailed(node.id.clone()));
                 }
 
                 // Enqueue its successors (DFS)
-                match next.get_connected_exec(true).await {
+                match next.node.get_connected_exec(true).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);
@@ -1177,13 +1202,13 @@ impl InternalNode {
                         let err_string = format!("{:?}", err);
                         InternalNode::handle_error(&mut sub, &err_string, &mut local_guard).await?;
                         sub.end_trace();
-                        context.push_sub_context(sub);
+                        context.push_sub_context(&mut sub);
                         return Err(InternalNodeError::ExecutionFailed(node.id.clone()));
                     }
                 }
 
                 sub.end_trace();
-                context.push_sub_context(sub);
+                context.push_sub_context(&mut sub);
             }
         }
 
