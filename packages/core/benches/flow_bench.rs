@@ -15,10 +15,10 @@ use flow_like_storage::{
 use flow_like_types::{sync::Mutex, tokio};
 use std::{path::PathBuf, sync::Arc};
 
-const BOARD_1: &str = "dkfxopaxr8863bo22zg1brhc";
-const BOARD_2: &str = "qhrbdzfs80934gg4exask8nu";
-const START_1: &str = "f05f0kh6vxbd79zjc7li5wcy";
-const START_2: &str = "o0c7fpijhsnbrh8gg3a13irx";
+const BOARD_1: &str = "o4wqrpzkx1cp4svxe91yordw";
+const BOARD_2: &str = "o4wqrpzkx1cp4svxe91yordw";
+const START_1: &str = "ek4tee4s3nufw3drfnwd20hw";
+const START_2: &str = "ek4tee4s3nufw3drfnwd20hw";
 
 async fn default_state() -> Arc<Mutex<FlowLikeState>> {
     let mut config: FlowLikeConfig = FlowLikeConfig::new();
