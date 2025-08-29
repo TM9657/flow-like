@@ -31,3 +31,20 @@ tract-tflite = { git = "https://github.com/TM9657/tract", rev = "ed3b020" }
 linfa = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
 linfa-datasets = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["generate"]}
 ndarray.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }
+
+[[bench]]
+name = "flow_bench"
+harness = false
+
+[[bench]]
+name = "throughput_bench"
+harness = false
+
+[profile.bench]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = false

@@ -30,7 +30,19 @@ async fn default_state() -> Arc<Mutex<FlowLikeState>> {
     config.register_app_meta_store(store);
     let (http_client, _refetch_rx) = HTTPClient::new();
     let state = FlowLikeState::new(config, http_client);
-    Arc::new(Mutex::new(state))
+    let state_ref = Arc::new(Mutex::new(state));
+    let weak_ref = Arc::downgrade(&state_ref);
+    let catalog = flow_like_catalog::get_catalog().await;
+
+    {
+        let state = state_ref.lock().await;
+        let registry_guard = state.node_registry.clone();
+        drop(state);
+        let mut registry = registry_guard.write().await;
+        registry.initialize(weak_ref);
+        registry.push_nodes(catalog).await.unwrap();
+    }
+    state_ref
 }
 
 fn construct_profile() -> Profile {

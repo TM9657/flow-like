@@ -46,13 +46,6 @@ chacha20poly1305 = {version="0.10.1", features=["stream", "std"]}
 argon2 = "0.5.3"
 zeroize = "1.8.1"
 
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
-
-[[bench]]
-name = "flow_bench"
-harness = false
-
 [features]
 tauri = ["flow-like-storage/tauri"]
 schema-gen = []
