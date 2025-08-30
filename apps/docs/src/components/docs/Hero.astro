@@ -1,9 +1,6 @@
 ---
 import { Image } from "astro:assets";
-import artDefault from "../../assets/design-overview.png";
 
-const art = artDefault;
-const artAlt = "Flow‑Like — design overview";
 const title = "Design. Compose. Ship.";
 const subtitle =
     "Build powerful flows — fast. Visual design meets portable, composable processes.";
@@ -20,6 +17,17 @@ const links = {
     aria-labelledby="hero-title"
 >
     <div aria-hidden="true" class="bg">
+        <video
+            class="bg-video"
+            autoplay
+            muted
+            loop
+            playsinline
+            preload="auto"
+        >
+            <source src="/rapid-prototyping.webm" type="video/webm">
+        </video>
+        <div class="bg-video-overlay"></div>
         <div class="bg-mask">
             <div class="bg-fills"></div>
             <div class="bg-particles"></div>
@@ -140,13 +148,6 @@ const links = {
                 </a>
             </nav>
         </div>
-
-        <figure class="art">
-            <div class="frame">
-                <div class="frame-glow"></div>
-                <Image src={art} alt={artAlt} />
-            </div>
-        </figure>
     </div>
 </section>
 
@@ -227,24 +228,13 @@ const links = {
         max-width: 1200px;
         width: 100%;
         padding: 0 clamp(1rem, 4vw, 2rem);
-        display: grid;
-        gap: clamp(2rem, 4vw, 3rem);
+        display: flex;
+        flex-direction: column;
         align-items: center;
-        grid-template-columns: 1.1fr 0.9fr;
+        justify-content: center;
+        text-align: center;
         position: relative;
         z-index: 2;
-    }
-
-    @media (max-width: 1000px) {
-        .inner {
-            grid-template-columns: 1fr;
-            gap: 3rem;
-            padding: 0 1rem;
-        }
-        .art {
-            order: -1;
-            justify-self: center;
-        }
     }
 
     @media (max-width: 640px) {
@@ -268,6 +258,40 @@ const links = {
         overflow: hidden;
     }
 
+    .bg-video {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        min-width: 100%;
+        min-height: 100%;
+        width: auto;
+        height: auto;
+        transform: translate(-50%, -50%);
+        z-index: -3;
+        opacity: 0.15;
+        filter: blur(1px) saturate(120%);
+    }
+
+    .bg-video-overlay {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+                circle at 50% 40%,
+                transparent 0%,
+                color-mix(in oklab, var(--flx-bg) 70%, transparent) 40%,
+                color-mix(in oklab, var(--flx-bg) 85%, transparent) 70%,
+                var(--flx-bg) 100%
+            ),
+            linear-gradient(
+                180deg,
+                color-mix(in oklab, var(--flx-bg) 20%, transparent) 0%,
+                transparent 30%,
+                transparent 70%,
+                var(--flx-bg) 100%
+            );
+        z-index: -2;
+    }
+
     .bg-mask {
         position: absolute;
         inset: 0;
@@ -286,7 +310,7 @@ const links = {
                 60vw 50vh at 20% 30%,
                 var(
                     --c1,
-                    color-mix(in oklab, var(--flx-amber-flows) 18%, transparent)
+                    color-mix(in oklab, var(--flx-amber-flows) 12%, transparent)
                 ),
                 transparent 70%
             ),
@@ -294,7 +318,7 @@ const links = {
                 70vw 60vh at 80% 20%,
                 var(
                     --c2,
-                    color-mix(in oklab, var(--flx-orange-flows) 15%, transparent)
+                    color-mix(in oklab, var(--flx-orange-flows) 10%, transparent)
                 ),
                 transparent 70%
             ),
@@ -302,7 +326,7 @@ const links = {
                 50vw 70vh at 50% 90%,
                 var(
                     --c3,
-                    color-mix(in oklab, var(--flx-purple) 12%, transparent)
+                    color-mix(in oklab, var(--flx-purple) 8%, transparent)
                 ),
                 transparent 65%
             );
@@ -328,7 +352,7 @@ const links = {
             18vw 18vh,
             20vw 20vh,
             14vw 14vh;
-        opacity: 0.25;
+        opacity: 0.15;
         animation: twinkle 12s linear infinite;
     }
 
@@ -337,15 +361,15 @@ const links = {
         inset: 0;
         background-image: linear-gradient(
                 90deg,
-                color-mix(in oklab, var(--flx-border) 15%, transparent) 1px,
+                color-mix(in oklab, var(--flx-border) 10%, transparent) 1px,
                 transparent 1px
             ),
             linear-gradient(
-                color-mix(in oklab, var(--flx-border) 15%, transparent) 1px,
+                color-mix(in oklab, var(--flx-border) 10%, transparent) 1px,
                 transparent 1px
             );
         background-size: clamp(60px, 8vw, 80px) clamp(60px, 8vw, 80px);
-        opacity: 0.3;
+        opacity: 0.2;
         -webkit-mask-image: radial-gradient(
             50% 50% at 50% 50%,
             black,
@@ -359,20 +383,20 @@ const links = {
         inset: 0;
         background: linear-gradient(
                 90deg,
-                color-mix(in oklab, var(--flx-amber-flows) 8%, transparent),
+                color-mix(in oklab, var(--flx-amber-flows) 6%, transparent),
                 transparent 15%,
                 transparent 85%,
-                color-mix(in oklab, var(--flx-orange-flows) 8%, transparent)
+                color-mix(in oklab, var(--flx-orange-flows) 6%, transparent)
             ),
             linear-gradient(
                 180deg,
-                color-mix(in oklab, var(--flx-purple) 6%, transparent),
+                color-mix(in oklab, var(--flx-purple) 4%, transparent),
                 transparent 20%,
                 transparent 80%,
-                color-mix(in oklab, var(--flx-amber-flows) 6%, transparent)
+                color-mix(in oklab, var(--flx-amber-flows) 4%, transparent)
             );
         filter: blur(40px);
-        opacity: 0.6;
+        opacity: 0.4;
     }
 
     @keyframes float {
@@ -394,11 +418,16 @@ const links = {
     @keyframes twinkle {
         0%,
         100% {
-            opacity: 0.25;
+            opacity: 0.15;
         }
         50% {
-            opacity: 0.5;
+            opacity: 0.3;
         }
+    }
+
+    .copy {
+        max-width: 900px;
+        width: 100%;
     }
 
     .badge {
@@ -467,8 +496,8 @@ const links = {
     }
 
     .title {
-        font-size: clamp(2.8rem, 5.5vw, 4.2rem);
-        line-height: 1.1;
+        font-size: clamp(3.2rem, 6vw, 5rem);
+        line-height: 1.05;
         font-weight: 800;
         margin: 0;
         display: flex;
@@ -501,6 +530,7 @@ const links = {
         color: transparent;
         animation: shimmer 3s ease-in-out infinite;
         animation-delay: calc(var(--word-index, 0) * 0.2s);
+        text-shadow: 0 0 40px color-mix(in oklab, var(--flx-amber-flows) 30%, transparent);
     }
 
     .title-word:nth-child(1) {
@@ -524,20 +554,24 @@ const links = {
     }
 
     .subtitle {
-        margin-top: 1.2rem;
+        margin-top: 1.5rem;
         color: var(--sl-color-white, #fff);
-        opacity: 0.85;
-        max-width: 62ch;
-        font-size: clamp(1.1rem, 1.4vw, 1.2rem);
-        line-height: 1.65;
+        opacity: 0.9;
+        max-width: 65ch;
+        margin-left: auto;
+        margin-right: auto;
+        font-size: clamp(1.1rem, 1.5vw, 1.3rem);
+        line-height: 1.6;
         font-weight: 400;
+        text-shadow: 0 2px 20px rgba(0, 0, 0, 0.8);
     }
 
     .cta {
-        margin-top: 2rem;
+        margin-top: 2.5rem;
         display: flex;
         gap: 1.5rem;
         align-items: center;
+        justify-content: center;
         flex-wrap: wrap;
     }
 
@@ -645,8 +679,8 @@ const links = {
         color: var(--sl-color-text);
         border: 1px solid
             color-mix(in oklab, var(--flx-border) 80%, transparent);
-        background: color-mix(in oklab, var(--flx-bg) 40%, transparent);
-        backdrop-filter: blur(8px);
+        background: color-mix(in oklab, var(--flx-bg) 60%, transparent);
+        backdrop-filter: blur(12px);
     }
 
     .btn.secondary:hover {
@@ -679,7 +713,8 @@ const links = {
         display: flex;
         gap: 0.6rem;
         flex-wrap: wrap;
-        margin-top: 2rem;
+        justify-content: center;
+        margin-top: 2.5rem;
     }
 
     .pill {
@@ -693,8 +728,8 @@ const links = {
         color: var(--sl-color-text);
         border: 1px solid
             color-mix(in oklab, var(--flx-border) 50%, transparent);
-        background: color-mix(in oklab, var(--flx-amber-flows) 6%, transparent);
-        backdrop-filter: blur(4px);
+        background: color-mix(in oklab, var(--flx-amber-flows) 8%, color-mix(in oklab, var(--flx-bg) 40%, transparent));
+        backdrop-filter: blur(8px);
         transition: all 0.2s ease;
         white-space: nowrap;
     }
@@ -710,71 +745,6 @@ const links = {
         transform: translateY(-1px);
     }
 
-    .art {
-        justify-self: end;
-        filter: drop-shadow(0 20px 80px rgba(0, 0, 0, 0.6));
-        transform: perspective(1000px) rotateY(-2deg) rotateX(1deg);
-        max-width: 100%;
-    }
-
-    .frame {
-        position: relative;
-        border-radius: 20px;
-        padding: 12px;
-        background: color-mix(in oklab, var(--flx-bg) 20%, transparent);
-        border: 1px solid
-            color-mix(in oklab, var(--flx-border) 60%, transparent);
-        backdrop-filter: blur(12px);
-    }
-
-    .frame-glow {
-        position: absolute;
-        inset: -10%;
-        background: radial-gradient(
-                40% 40% at 30% 30%,
-                color-mix(in oklab, var(--flx-amber-flows) 25%, transparent),
-                transparent 70%
-            ),
-            radial-gradient(
-                50% 50% at 70% 20%,
-                color-mix(in oklab, var(--flx-orange-flows) 20%, transparent),
-                transparent 70%
-            ),
-            radial-gradient(
-                60% 60% at 50% 70%,
-                color-mix(in oklab, var(--flx-purple) 15%, transparent),
-                transparent 70%
-            );
-        filter: blur(30px);
-        z-index: -1;
-        animation: glow-pulse 4s ease-in-out infinite;
-    }
-
-    @keyframes glow-pulse {
-        0%,
-        100% {
-            opacity: 0.6;
-            transform: scale(1);
-        }
-        50% {
-            opacity: 0.8;
-            transform: scale(1.05);
-        }
-    }
-
-    .art img {
-        display: block;
-        width: min(580px, 100%);
-        height: auto;
-        border-radius: 16px;
-        transition: transform 0.3s ease;
-        max-width: 100%;
-    }
-
-    .art:hover img {
-        transform: scale(1.02);
-    }
-
     .btn:focus-visible,
     .pill:focus-visible,
     .website-link:focus-visible {
@@ -787,38 +757,28 @@ const links = {
         .title-word,
         .bg-fills,
         .bg-particles,
-        .frame-glow,
         .pulse-ring,
         .dot {
             animation: none;
         }
-        .art {
-            transform: none;
+        .bg-video {
+            display: none;
         }
     }
 
     @media (max-width: 768px) {
         .cta {
             flex-direction: column;
-            align-items: stretch;
+            align-items: center;
             gap: 1.2rem;
-        }
-
-        .btn.primary {
-            align-self: center;
         }
 
         .divider {
             order: 2;
-            justify-content: center;
         }
 
         .secondary-actions {
             order: 3;
-            justify-content: center;
-        }
-
-        .pills {
             justify-content: center;
         }
     }
