@@ -146,8 +146,7 @@ impl NodeLogic for FitSVMMultiClassNode {
         let svm_models: Vec<(usize, Svm<f64, Pr>)> = ds
             .one_vs_all()?
             .into_iter()
-            .enumerate()
-            .map(|(i, (_, x))| (i, params.fit(&x).unwrap()))
+            .map(|(l, x)| (l, params.fit(&x).unwrap()))
             .collect();
         let elapsed = t0.elapsed();
         context.log_message(&format!("Fit model: {elapsed:?}"), LogLevel::Debug);
