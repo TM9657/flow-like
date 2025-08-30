@@ -36,3 +36,20 @@ linfa-linear = { git = "https://github.com/TM9657/linfa", rev = "071fb43", featu
 linfa-reduction = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
 linfa-svm = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
 ndarray.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }
+
+[[bench]]
+name = "flow_bench"
+harness = false
+
+[[bench]]
+name = "throughput_bench"
+harness = false
+
+[profile.bench]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = false
