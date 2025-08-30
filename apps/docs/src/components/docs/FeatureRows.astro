@@ -1,0 +1,326 @@
+---
+interface Item {
+    icon: string;
+    title: string;
+    text: string;
+    href?: string;
+}
+interface Props {
+    items: Item[];
+}
+const { items } = Astro.props as Props;
+---
+
+<section
+    id="features"
+    data-c1="hsl(35 96% 55% / .10)"
+    data-c2="hsl(18 94% 52% / .10)"
+    class="features-section"
+>
+    <!-- background accents (mirrors website header) -->
+    <div aria-hidden="true" class="bg">
+        <div class="bg-mask">
+            <div class="bg-fills"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="intro">
+            <div class="badge"><span class="dot"></span> Feature overview</div>
+            <h2 class="heading">
+                Everything you need to build <span class="grad"
+                    >typed workflows</span>
+            </h2>
+            <p class="sub">
+                Portable graphs, strong types, and production‑ready ergonomics.
+            </p>
+        </div>
+
+        <ul class="grid" role="list">
+            {
+                items.map((f) => (
+                    <li class="card">
+                        <div
+                            class="icon"
+                            aria-hidden="true"
+                            set:html={f.icon}
+                        />
+                        <div class="body">
+                            <h3 class="title">{f.title}</h3>
+                            <p class="text">{f.text}</p>
+                        </div>
+                        {f.href && (
+                            <a
+                                href={f.href}
+                                class="link"
+                                aria-label={`Learn more about ${f.title}`}
+                            >
+                                Learn more
+                            </a>
+                        )}
+                    </li>
+                ))
+            }
+        </ul>
+    </div>
+</section>
+
+<style>
+    :root {
+        --flx-border: var(--sl-color-gray-5, rgba(255, 255, 255, 0.14));
+        --flx-text: var(--sl-color-text, #e6e6e6);
+    }
+    .features-section {
+        position: relative;
+        isolation: isolate;
+        overflow: clip;
+        padding: clamp(1.5rem, 3vw, 2.25rem) 1rem clamp(2.5rem, 6vw, 4rem);
+    }
+    .container {
+        margin: 0 auto;
+        max-width: 1100px;
+    }
+
+    /* BG accents */
+    .bg {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: -1;
+    }
+    .bg-mask {
+        position: absolute;
+        inset: 0;
+        -webkit-mask-image: radial-gradient(
+            60% 60% at 50% 30%,
+            black,
+            transparent
+        );
+        mask-image: radial-gradient(60% 60% at 50% 30%, black, transparent);
+    }
+    .bg-fills {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+                520px 320px at 12% 10%,
+                var(--c1, var(--flx-amber-flows) / 0.1),
+                transparent
+            ),
+            radial-gradient(
+                640px 420px at 85% 25%,
+                var(--c2, var(--flx-orange-flows) / 0.1),
+                transparent
+            );
+        filter: saturate(110%);
+    }
+
+    /* Header */
+    .intro {
+        text-align: center;
+        margin-bottom: clamp(1.2rem, 3vw, 1.8rem);
+    }
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border: 1px solid
+            color-mix(in oklab, var(--flx-border) 55%, transparent);
+        background: color-mix(
+            in oklab,
+            var(--flx-amber-flows) 10%,
+            transparent
+        );
+        color: color-mix(in oklab, var(--flx-amber-flows) 65%, var(--flx-text));
+        padding: 0.42rem 0.8rem;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        backdrop-filter: blur(4px);
+        margin-bottom: 0.65rem;
+    }
+    .dot {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 999px;
+        background: color-mix(
+            in oklab,
+            var(--flx-amber-flows) 80%,
+            var(--flx-orange-flows)
+        );
+        animation: pulse 1.8s infinite ease-in-out;
+    }
+    @keyframes pulse {
+        0%,
+        100% {
+            transform: scale(0.9);
+            opacity: 0.75;
+        }
+        50% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+    .heading {
+        font-size: clamp(1.6rem, 3.2vw, 2.1rem);
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        margin: 0;
+    }
+    .grad {
+        background: linear-gradient(
+            90deg,
+            var(--sl-color-text),
+            color-mix(
+                in oklab,
+                var(--flx-amber-flows) 65%,
+                var(--sl-color-text)
+            ),
+            color-mix(
+                in oklab,
+                var(--flx-orange-flows) 65%,
+                var(--sl-color-text)
+            )
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+    .sub {
+        margin: 0.45rem auto 0;
+        max-width: 60ch;
+        color: color-mix(in oklab, var(--flx-text) 86%, transparent);
+    }
+
+    /* Grid */
+    .grid {
+        list-style: none;
+        padding: 0;
+        margin: clamp(1.1rem, 2.5vw, 1.6rem) 0 0;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: clamp(0.9rem, 2vw, 1.15rem);
+    }
+    @media (max-width: 1000px) {
+        .grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    @media (max-width: 680px) {
+        .grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Card */
+    .card {
+        position: relative;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.9rem;
+        align-items: start;
+        padding: 0.95rem;
+        border-radius: 16px;
+        background: color-mix(in oklab, var(--sl-color-bg) 8%, transparent);
+        border: 1px solid
+            color-mix(in oklab, var(--flx-border) 78%, transparent);
+        overflow: hidden;
+        transition:
+            transform 0.18s ease,
+            border-color 0.18s ease,
+            background 0.18s ease;
+    }
+    .card::before {
+        /* gradient halo ring */
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border-radius: 18px;
+        padding: 1px;
+        background: linear-gradient(
+            120deg,
+            color-mix(in oklab, var(--flx-amber-flows) 40%, transparent),
+            transparent 25%,
+            color-mix(in oklab, var(--flx-orange-flows) 40%, transparent)
+        );
+        -webkit-mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        pointer-events: none;
+        opacity: 0.35;
+        transition: opacity 0.2s ease;
+    }
+    .card:hover {
+        transform: translateY(-1px);
+        border-color: color-mix(
+            in oklab,
+            var(--flx-border) 45%,
+            var(--flx-orange-flows)
+        );
+    }
+    .card:hover::before {
+        opacity: 0.6;
+    }
+
+    .icon {
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: linear-gradient(
+            160deg,
+            color-mix(in oklab, var(--flx-amber-flows) 22%, transparent),
+            color-mix(in oklab, var(--flx-orange-flows) 18%, transparent)
+        );
+        border: 1px solid
+            color-mix(in oklab, var(--flx-border) 65%, transparent);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+    .icon :where(svg) {
+        width: 22px;
+        height: 22px;
+    }
+
+    .body .title {
+        margin: 0 0 0.2rem;
+        font-size: 1rem;
+        font-weight: 700;
+    }
+    .body .text {
+        margin: 0;
+        color: color-mix(in oklab, var(--flx-text) 90%, transparent);
+        line-height: 1.6;
+    }
+
+    .link {
+        position: absolute;
+        inset: auto 10px 10px auto;
+        font-size: 0.78rem;
+        text-decoration: none;
+        color: color-mix(in oklab, var(--flx-amber-flows) 70%, var(--flx-text));
+        border: 1px solid
+            color-mix(in oklab, var(--flx-amber-flows) 35%, transparent);
+        border-radius: 999px;
+        padding: 0.3rem 0.55rem;
+        background: color-mix(in oklab, var(--flx-amber-flows) 8%, transparent);
+        opacity: 0;
+        transform: translateY(2px);
+        transition:
+            opacity 0.15s ease,
+            transform 0.15s ease;
+    }
+    .card:hover .link {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    /* Motion safety */
+    @media (prefers-reduced-motion: reduce) {
+        .card,
+        .card::before {
+            transition: none;
+        }
+    }
+</style>

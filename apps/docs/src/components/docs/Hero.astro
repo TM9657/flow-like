@@ -1,0 +1,837 @@
+---
+import { Image } from "astro:assets";
+import artDefault from "../../assets/design-overview.png";
+
+const art = artDefault;
+const artAlt = "Flow‑Like — design overview";
+const title = "Design. Compose. Ship.";
+const subtitle =
+    "Build powerful flows — fast. Visual design meets portable, composable processes.";
+const links = {
+    primary: { href: "/guides/getting-started/", label: "Get started" },
+    download: { href: "https://flow-like.com/download", label: "Download" },
+    website: { href: "https://flow-like.com", label: "flow-like.com" },
+};
+---
+
+<section
+    id="docs-hero"
+    class="hero static left-0 right-0"
+    aria-labelledby="hero-title"
+>
+    <div aria-hidden="true" class="bg">
+        <div class="bg-mask">
+            <div class="bg-fills"></div>
+            <div class="bg-particles"></div>
+        </div>
+        <div class="bg-grid"></div>
+        <div class="bg-edge-blur"></div>
+    </div>
+
+    <div class="inner">
+        <div class="copy">
+            <div class="badge">
+                <div class="pulse-ring" aria-hidden="true"></div>
+                <div class="dot" aria-hidden="true"></div>
+                Flow‑Like Documentation
+            </div>
+            <a
+                href={links.website.href}
+                target="_blank"
+                rel="noopener"
+                class="website-link"
+                aria-label={`Visit ${links.website.label} (opens in new tab)`}
+            >
+                <svg
+                    class="website-icon"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                >
+                    <path
+                        fill="currentColor"
+                        d="M16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2m-5.15 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95a8.03 8.03 0 0 1-4.33 3.56M14.34 14H9.66c-.1-.66-.16-1.32-.16-2 0-.68.06-1.35.16-2h4.68c.09.65.16 1.32.16 2 0 .68-.07 1.34-.16 2M12 19.96c-.83-1.2-1.5-2.53-1.91-3.96h3.82c-.41 1.43-1.08 2.76-1.91 3.96M8 8H5.08A7.923 7.923 0 0 1 9.4 4.44C8.8 5.55 8.35 6.75 8 8m-2.92 8H8c.35 1.25.8 2.45 1.4 3.56A8.008 8.008 0 0 1 5.08 16m-.82-2C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2M12 4.03c.83 1.2 1.5 2.54 1.91 3.97h-3.82c.41-1.43 1.08-2.77 1.91-3.97M18.92 8h-2.95a15.65 15.65 0 0 0-1.38-3.56c1.84.63 3.37 1.9 4.33 3.56M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2z"
+                    ></path>
+                </svg>
+                <span class="website-text">{links.website.label}</span>
+                <svg
+                    class="external-icon"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                >
+                    <path
+                        fill="currentColor"
+                        d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7Z"
+                    ></path>
+                </svg>
+            </a>
+
+            <h1 id="hero-title" class="title">
+                <span class="title-word">Design.</span>
+                <span class="title-word">Compose.</span>
+                <span class="title-word">Ship.</span>
+            </h1>
+            <p class="subtitle">{subtitle}</p>
+
+            <div class="cta">
+                <a class="btn primary" href={links.primary.href}>
+                    <span class="btn__label">{links.primary.label}</span>
+                    <svg
+                        class="btn__icon"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                    >
+                        <path
+                            fill="currentColor"
+                            d="m12 4-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"
+                        ></path>
+                    </svg>
+                </a>
+
+                <div class="divider">
+                    <span class="divider-text">or</span>
+                </div>
+
+                <div class="secondary-actions">
+                    <a
+                        class="btn secondary"
+                        href={links.download.href}
+                        target="_blank"
+                        rel="noopener"
+                        aria-label={`${links.download.label} (opens in new tab)`}
+                    >
+                        <svg
+                            class="btn__icon"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                        >
+                            <path
+                                fill="currentColor"
+                                d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"
+                            ></path>
+                        </svg>
+                        <span class="btn__label">{links.download.label}</span>
+                    </a>
+                </div>
+            </div>
+
+            <nav class="pills" aria-label="Docs sections">
+                <a href="#zero-to-prod" class="pill">
+                    <span class="pill-icon">⚡</span>Zero‑to‑Prod
+                </a>
+                <a href="#visual-design" class="pill">
+                    <span class="pill-icon">🎨</span>Design visually
+                </a>
+                <a href="#composable" class="pill">
+                    <span class="pill-icon">🔧</span>Composable
+                </a>
+                <a href="#performance" class="pill">
+                    <span class="pill-icon">🚀</span>Performance
+                </a>
+                <a href="#portability" class="pill">
+                    <span class="pill-icon">📦</span>Portability
+                </a>
+            </nav>
+        </div>
+
+        <figure class="art">
+            <div class="frame">
+                <div class="frame-glow"></div>
+                <Image src={art} alt={artAlt} />
+            </div>
+        </figure>
+    </div>
+</section>
+
+<style>
+    :root {
+        --flx-purple: oklch(65% 0.25 280);
+        --flx-text: var(--sl-color-text, #e6e6e6);
+        --flx-muted: color-mix(in oklab, var(--flx-text) 80%, transparent);
+        --flx-border: var(--sl-color-gray-5, rgba(255, 255, 255, 0.14));
+        --flx-bg: var(--sl-color-bg, #0f0f0f);
+    }
+
+    .hero {
+        padding: clamp(4rem, 6vw, 6rem) 0 clamp(3rem, 5vw, 4rem);
+        min-height: 85vh;
+        display: flex;
+        align-items: center;
+        width: 100%;
+    }
+
+    .hero::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 100px;
+        background: linear-gradient(transparent, var(--flx-bg));
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    .website-link {
+        position: absolute;
+        top: clamp(1.5rem, 3vw, 2rem);
+        right: clamp(1rem, 4vw, 2rem);
+        z-index: 10;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 0.9rem;
+        border-radius: 999px;
+        color: color-mix(in oklab, var(--flx-text) 85%, transparent);
+        text-decoration: none;
+        font-size: 0.85rem;
+        font-weight: 500;
+        border: 1px solid
+            color-mix(in oklab, var(--flx-border) 60%, transparent);
+        background: color-mix(in oklab, var(--flx-bg) 40%, transparent);
+        backdrop-filter: blur(12px);
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .website-link:hover {
+        color: var(--flx-text);
+        border-color: color-mix(in oklab, var(--flx-amber-flows) 50%, transparent);
+        background: color-mix(in oklab, var(--flx-amber-flows) 10%, transparent);
+        transform: translateY(-1px);
+    }
+
+    .website-icon,
+    .external-icon {
+        flex-shrink: 0;
+        opacity: 0.8;
+        transition: transform 0.2s ease;
+    }
+
+    .website-link:hover .external-icon {
+        transform: translate(1px, -1px);
+    }
+
+    .website-text {
+        white-space: nowrap;
+    }
+
+    .inner {
+        margin: 0 auto;
+        max-width: 1200px;
+        width: 100%;
+        padding: 0 clamp(1rem, 4vw, 2rem);
+        display: grid;
+        gap: clamp(2rem, 4vw, 3rem);
+        align-items: center;
+        grid-template-columns: 1.1fr 0.9fr;
+        position: relative;
+        z-index: 2;
+    }
+
+    @media (max-width: 1000px) {
+        .inner {
+            grid-template-columns: 1fr;
+            gap: 3rem;
+            padding: 0 1rem;
+        }
+        .art {
+            order: -1;
+            justify-self: center;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .website-link {
+            right: 1rem;
+            top: 1rem;
+            padding: 0.5rem 0.7rem;
+            font-size: 0.8rem;
+        }
+
+        .website-text {
+            display: none;
+        }
+    }
+
+    .bg {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: -1;
+        overflow: hidden;
+    }
+
+    .bg-mask {
+        position: absolute;
+        inset: 0;
+        -webkit-mask-image: radial-gradient(
+            70% 70% at 50% 40%,
+            black,
+            transparent 80%
+        );
+        mask-image: radial-gradient(70% 70% at 50% 40%, black, transparent 80%);
+    }
+
+    .bg-fills {
+        position: absolute;
+        inset: -20%;
+        background: radial-gradient(
+                60vw 50vh at 20% 30%,
+                var(
+                    --c1,
+                    color-mix(in oklab, var(--flx-amber-flows) 18%, transparent)
+                ),
+                transparent 70%
+            ),
+            radial-gradient(
+                70vw 60vh at 80% 20%,
+                var(
+                    --c2,
+                    color-mix(in oklab, var(--flx-orange-flows) 15%, transparent)
+                ),
+                transparent 70%
+            ),
+            radial-gradient(
+                50vw 70vh at 50% 90%,
+                var(
+                    --c3,
+                    color-mix(in oklab, var(--flx-purple) 12%, transparent)
+                ),
+                transparent 65%
+            );
+        filter: saturate(120%) blur(2px);
+        animation: float 25s ease-in-out infinite;
+    }
+
+    .bg-particles {
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(
+                1px 1px at 20% 30%,
+                white,
+                transparent
+            ),
+            radial-gradient(1px 1px at 40% 70%, white, transparent),
+            radial-gradient(1px 1px at 90% 40%, white, transparent),
+            radial-gradient(1px 1px at 10% 90%, white, transparent),
+            radial-gradient(1px 1px at 70% 20%, white, transparent);
+        background-size:
+            15vw 15vh,
+            12vw 12vh,
+            18vw 18vh,
+            20vw 20vh,
+            14vw 14vh;
+        opacity: 0.25;
+        animation: twinkle 12s linear infinite;
+    }
+
+    .bg-grid {
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(
+                90deg,
+                color-mix(in oklab, var(--flx-border) 15%, transparent) 1px,
+                transparent 1px
+            ),
+            linear-gradient(
+                color-mix(in oklab, var(--flx-border) 15%, transparent) 1px,
+                transparent 1px
+            );
+        background-size: clamp(60px, 8vw, 80px) clamp(60px, 8vw, 80px);
+        opacity: 0.3;
+        -webkit-mask-image: radial-gradient(
+            50% 50% at 50% 50%,
+            black,
+            transparent 70%
+        );
+        mask-image: radial-gradient(50% 50% at 50% 50%, black, transparent 70%);
+    }
+
+    .bg-edge-blur {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+                90deg,
+                color-mix(in oklab, var(--flx-amber-flows) 8%, transparent),
+                transparent 15%,
+                transparent 85%,
+                color-mix(in oklab, var(--flx-orange-flows) 8%, transparent)
+            ),
+            linear-gradient(
+                180deg,
+                color-mix(in oklab, var(--flx-purple) 6%, transparent),
+                transparent 20%,
+                transparent 80%,
+                color-mix(in oklab, var(--flx-amber-flows) 6%, transparent)
+            );
+        filter: blur(40px);
+        opacity: 0.6;
+    }
+
+    @keyframes float {
+        0%,
+        100% {
+            transform: translate(0, 0) rotate(0deg) scale(1);
+        }
+        25% {
+            transform: translate(15px, -10px) rotate(1deg) scale(1.02);
+        }
+        50% {
+            transform: translate(-10px, 8px) rotate(-0.5deg) scale(0.98);
+        }
+        75% {
+            transform: translate(8px, -15px) rotate(0.8deg) scale(1.01);
+        }
+    }
+
+    @keyframes twinkle {
+        0%,
+        100% {
+            opacity: 0.25;
+        }
+        50% {
+            opacity: 0.5;
+        }
+    }
+
+    .badge {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        border: 1px solid color-mix(in oklab, var(--flx-amber-flows) 30%, transparent);
+        background: color-mix(
+            in oklab,
+            var(--flx-amber-flows) 8%,
+            color-mix(in oklab, var(--flx-bg) 60%, transparent)
+        );
+        color: color-mix(in oklab, var(--flx-amber-flows) 85%, var(--flx-text));
+        padding: 0.6rem 1rem;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        backdrop-filter: blur(8px);
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 20px
+            color-mix(in oklab, var(--flx-amber-flows) 20%, transparent);
+    }
+
+    .pulse-ring {
+        position: absolute;
+        left: 1rem;
+        width: 0.7rem;
+        height: 0.7rem;
+        border-radius: 999px;
+        border: 1px solid color-mix(in oklab, var(--flx-amber-flows) 60%, transparent);
+        animation: pulse-ring 2s infinite ease-out;
+    }
+
+    .dot {
+        width: 0.6rem;
+        height: 0.6rem;
+        border-radius: 999px;
+        background: linear-gradient(45deg, var(--flx-amber-flows), var(--flx-accent));
+        animation: pulse-dot 2s infinite ease-in-out;
+        box-shadow: 0 0 8px
+            color-mix(in oklab, var(--flx-amber-flows) 40%, transparent);
+    }
+
+    @keyframes pulse-ring {
+        0% {
+            transform: scale(0.8);
+            opacity: 1;
+        }
+        100% {
+            transform: scale(2);
+            opacity: 0;
+        }
+    }
+
+    @keyframes pulse-dot {
+        0%,
+        100% {
+            transform: scale(0.9);
+            opacity: 0.8;
+        }
+        50% {
+            transform: scale(1.1);
+            opacity: 1;
+        }
+    }
+
+    .title {
+        font-size: clamp(2.8rem, 5.5vw, 4.2rem);
+        line-height: 1.1;
+        font-weight: 800;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.1em;
+    }
+
+    .title-word {
+        background: linear-gradient(
+            120deg,
+            var(--sl-color-text, #fff),
+            color-mix(
+                in oklab,
+                var(--flx-amber-flows) 70%,
+                var(--sl-color-text, #fff)
+            ),
+            color-mix(
+                in oklab,
+                var(--flx-orange-flows) 75%,
+                var(--sl-color-text, #fff)
+            ),
+            color-mix(
+                in oklab,
+                var(--flx-purple) 60%,
+                var(--sl-color-text, #fff)
+            )
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: shimmer 3s ease-in-out infinite;
+        animation-delay: calc(var(--word-index, 0) * 0.2s);
+    }
+
+    .title-word:nth-child(1) {
+        --word-index: 0;
+    }
+    .title-word:nth-child(2) {
+        --word-index: 1;
+    }
+    .title-word:nth-child(3) {
+        --word-index: 2;
+    }
+
+    @keyframes shimmer {
+        0%,
+        100% {
+            filter: brightness(1);
+        }
+        50% {
+            filter: brightness(1.2);
+        }
+    }
+
+    .subtitle {
+        margin-top: 1.2rem;
+        color: var(--sl-color-white, #fff);
+        opacity: 0.85;
+        max-width: 62ch;
+        font-size: clamp(1.1rem, 1.4vw, 1.2rem);
+        line-height: 1.65;
+        font-weight: 400;
+    }
+
+    .cta {
+        margin-top: 2rem;
+        display: flex;
+        gap: 1.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .divider {
+        display: flex;
+        align-items: center;
+        color: color-mix(in oklab, var(--flx-text) 50%, transparent);
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .divider-text {
+        padding: 0 0.5rem;
+        position: relative;
+    }
+
+    .divider-text::before,
+    .divider-text::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        width: 20px;
+        height: 1px;
+        background: color-mix(in oklab, var(--flx-border) 40%, transparent);
+    }
+
+    .divider-text::before {
+        left: -24px;
+    }
+    .divider-text::after {
+        right: -24px;
+    }
+
+    .secondary-actions {
+        display: flex;
+        gap: 0.8rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .btn {
+        --pad-x: 1.3rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.9rem var(--pad-x);
+        border-radius: 1rem;
+        font-weight: 650;
+        text-decoration: none;
+        line-height: 1;
+        border: 1px solid transparent;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+        font-size: 0.95rem;
+        white-space: nowrap;
+        min-width: fit-content;
+    }
+
+    .btn__icon {
+        flex: 0 0 auto;
+        transition: transform 0.2s ease;
+    }
+
+    .btn.primary {
+        color: #fff;
+        background: linear-gradient(
+            135deg,
+            color-mix(in oklab, var(--flx-amber-flows) 80%, var(--flx-accent)),
+            color-mix(in oklab, var(--flx-orange-flows) 75%, var(--flx-accent))
+        );
+        box-shadow: 0 8px 32px
+            color-mix(in oklab, var(--flx-accent) 30%, transparent);
+        border: 1px solid color-mix(in oklab, var(--flx-amber-flows) 40%, transparent);
+    }
+
+    .btn.primary::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+            135deg,
+            transparent,
+            color-mix(in oklab, white 20%, transparent),
+            transparent
+        );
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+
+    .btn.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 40px
+            color-mix(in oklab, var(--flx-accent) 40%, transparent);
+    }
+
+    .btn.primary:hover::before {
+        opacity: 1;
+    }
+    .btn.primary:hover .btn__icon {
+        transform: translateX(2px);
+    }
+
+    .btn.secondary {
+        color: var(--sl-color-text);
+        border: 1px solid
+            color-mix(in oklab, var(--flx-border) 80%, transparent);
+        background: color-mix(in oklab, var(--flx-bg) 40%, transparent);
+        backdrop-filter: blur(8px);
+    }
+
+    .btn.secondary:hover {
+        border-color: color-mix(in oklab, var(--flx-amber-flows) 60%, transparent);
+        background: color-mix(in oklab, var(--flx-amber-flows) 12%, transparent);
+        transform: translateY(-1px);
+    }
+
+    .btn.ghost {
+        color: color-mix(in oklab, var(--sl-color-text) 75%, transparent);
+        border: 1px solid
+            color-mix(in oklab, var(--flx-border) 40%, transparent);
+        background: color-mix(in oklab, var(--flx-bg) 20%, transparent);
+        backdrop-filter: blur(4px);
+        font-size: 0.9rem;
+        --pad-x: 1rem;
+    }
+
+    .btn.ghost:hover {
+        color: var(--sl-color-text);
+        border-color: color-mix(in oklab, var(--flx-border) 60%, transparent);
+        background: color-mix(in oklab, var(--flx-bg) 40%, transparent);
+    }
+
+    .btn.ghost:hover .btn__icon {
+        transform: translate(1px, -1px);
+    }
+
+    .pills {
+        display: flex;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        margin-top: 2rem;
+    }
+
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.8rem;
+        font-size: 0.8rem;
+        border-radius: 999px;
+        text-decoration: none;
+        color: var(--sl-color-text);
+        border: 1px solid
+            color-mix(in oklab, var(--flx-border) 50%, transparent);
+        background: color-mix(in oklab, var(--flx-amber-flows) 6%, transparent);
+        backdrop-filter: blur(4px);
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+
+    .pill-icon {
+        font-size: 0.7rem;
+        opacity: 0.8;
+    }
+
+    .pill:hover {
+        border-color: color-mix(in oklab, var(--flx-amber-flows) 40%, transparent);
+        background: color-mix(in oklab, var(--flx-amber-flows) 15%, transparent);
+        transform: translateY(-1px);
+    }
+
+    .art {
+        justify-self: end;
+        filter: drop-shadow(0 20px 80px rgba(0, 0, 0, 0.6));
+        transform: perspective(1000px) rotateY(-2deg) rotateX(1deg);
+        max-width: 100%;
+    }
+
+    .frame {
+        position: relative;
+        border-radius: 20px;
+        padding: 12px;
+        background: color-mix(in oklab, var(--flx-bg) 20%, transparent);
+        border: 1px solid
+            color-mix(in oklab, var(--flx-border) 60%, transparent);
+        backdrop-filter: blur(12px);
+    }
+
+    .frame-glow {
+        position: absolute;
+        inset: -10%;
+        background: radial-gradient(
+                40% 40% at 30% 30%,
+                color-mix(in oklab, var(--flx-amber-flows) 25%, transparent),
+                transparent 70%
+            ),
+            radial-gradient(
+                50% 50% at 70% 20%,
+                color-mix(in oklab, var(--flx-orange-flows) 20%, transparent),
+                transparent 70%
+            ),
+            radial-gradient(
+                60% 60% at 50% 70%,
+                color-mix(in oklab, var(--flx-purple) 15%, transparent),
+                transparent 70%
+            );
+        filter: blur(30px);
+        z-index: -1;
+        animation: glow-pulse 4s ease-in-out infinite;
+    }
+
+    @keyframes glow-pulse {
+        0%,
+        100% {
+            opacity: 0.6;
+            transform: scale(1);
+        }
+        50% {
+            opacity: 0.8;
+            transform: scale(1.05);
+        }
+    }
+
+    .art img {
+        display: block;
+        width: min(580px, 100%);
+        height: auto;
+        border-radius: 16px;
+        transition: transform 0.3s ease;
+        max-width: 100%;
+    }
+
+    .art:hover img {
+        transform: scale(1.02);
+    }
+
+    .btn:focus-visible,
+    .pill:focus-visible,
+    .website-link:focus-visible {
+        outline: 0;
+        box-shadow: 0 0 0 3px
+            color-mix(in oklab, var(--flx-amber-flows) 40%, transparent);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .title-word,
+        .bg-fills,
+        .bg-particles,
+        .frame-glow,
+        .pulse-ring,
+        .dot {
+            animation: none;
+        }
+        .art {
+            transform: none;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .cta {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 1.2rem;
+        }
+
+        .btn.primary {
+            align-self: center;
+        }
+
+        .divider {
+            order: 2;
+            justify-content: center;
+        }
+
+        .secondary-actions {
+            order: 3;
+            justify-content: center;
+        }
+
+        .pills {
+            justify-content: center;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .secondary-actions {
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .btn.ghost {
+            align-self: center;
+            width: fit-content;
+        }
+    }
+</style>
