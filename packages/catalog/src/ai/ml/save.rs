@@ -1,8 +1,12 @@
+//! Node for Serializing Trained MLModels as JSONs
+//!
+//! Serializes MLModels as JSONs and writes to a specified path.
+
 use crate::ai::ml::{MLModel, NodeMLModel};
 use crate::storage::path::FlowPath;
 use flow_like::{
     flow::{
-        execution::{LogLevel, context::ExecutionContext},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         pin::PinOptions,
         variable::VariableType,
@@ -73,7 +77,7 @@ impl NodeLogic for SaveMLModelNode {
                 MLModel::KMeans(model) => json::to_vec(&model)?,
                 MLModel::SVMMultiClass(models) => json::to_vec(&models)?,
                 MLModel::LinearRegression(model) => json::to_vec(&model)?,
-                _ => return Err(anyhow!("Unknown Model!")),
+                _ => return Err(anyhow!("Unknown Machine Learning Model!")),
             }
         };
 

@@ -1,5 +1,11 @@
-/// # Machine Learning Nodes
-use flow_like::flow::{execution::context::ExecutionContext, node::{NodeLogic, Node}};
+//! Sub-Catalog for Machine Learning
+//!
+//! This module contains various machine learning algorithms and dataset utilities based on the `[linfa]` crate.
+
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+};
 use flow_like_types::{
     Cacheable, Error, Result, Value, anyhow, create_id, json::json, sync::Mutex,
 };
@@ -17,11 +23,11 @@ use std::fmt;
 use std::sync::Arc;
 pub mod classification;
 pub mod clustering;
-pub mod regression;
 pub mod dataset;
 pub mod load;
 pub mod prediction;
 pub mod reduction;
+pub mod regression;
 pub mod save;
 
 /// Max number of records for train/prediction
@@ -53,6 +59,7 @@ pub enum MLModel {
     PCA(Pca<f64>),
 }
 
+/// # Unified Type for Machine Learning Datasets from Linfa Crate
 pub enum MLDataset {
     Unlabeled(
         DatasetBase<
@@ -76,7 +83,7 @@ pub enum MLDataset {
 
 pub enum MLTargetType {
     Numerical,
-    Categorical
+    Categorical,
 }
 
 impl fmt::Display for MLModel {
@@ -141,29 +148,33 @@ impl NodeMLModel {
     }
 }
 
-/// Utility: Load LanceDB records (column of vectors) as ndarray
-pub fn values_to_array(values: &[Value], col: &str) -> Result<Array2<f64>, Error> {
+// -----------------------------------
+// Utility fns to map Lance Vec<Values> to ndarrays
+// TODO: can we merge these using generic types to avoid code duplication for identical behavior?
+// -----------------------------------
+
+/// For a column `attr` in Vec<Values> attempt to load all rows as Array2<f64> assuming that `attr` is a FixedSizeList of Vec<f64>
+pub fn values_to_array2_f64(values: &[Value], attr: &str) -> Result<Array2<f64>, Error> {
     // Determine dimensions
     let rows = values.len();
     let cols = values
         .get(0)
-        .and_then(|obj| obj.get(col))
+        .and_then(|value| value.get(attr))
         .and_then(|v| v.as_array())
         .map(|arr| arr.len())
-        .ok_or_else(|| anyhow!("Missing or invalid 'vector' in first element"))?;
+        .ok_or_else(|| anyhow!("Row 0: expected object with key `{attr}`"))?;
 
     // Preallocate flat storage
     let mut flat = Vec::with_capacity(rows * cols);
 
-    for (i, obj) in values.iter().enumerate() {
-        let arr = obj
-            .get(col)
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| anyhow!("Row {i} missing 'vector'"))?;
+    for (i, value) in values.iter().enumerate() {
+        let arr = value.get(attr).and_then(|v| v.as_array()).ok_or_else(|| {
+            anyhow!("Row {i}: expected object with key `{attr}`, got `{value:?}`")
+        })?;
 
         if arr.len() != cols {
             return Err(anyhow!(
-                "Row {i} has inconsistent length (expected {cols}, got {})",
+                "Row {i}: inconsistent length (expected {cols}, got {})",
                 arr.len()
             ));
         }
@@ -171,12 +182,42 @@ pub fn values_to_array(values: &[Value], col: &str) -> Result<Array2<f64>, Error
         for (j, x) in arr.iter().enumerate() {
             flat.push(
                 x.as_f64()
-                    .ok_or_else(|| anyhow!("Invalid f64 at row {i}, col {j}"))?,
+                    .ok_or_else(|| anyhow!("Row {i}, col {j}: failed to load as f64"))?,
             );
         }
     }
-
     Ok(Array2::from_shape_vec((rows, cols), flat)?)
+}
+
+/// For a column `attr` in Vec<Values> attempt to load all rows as Array1<f64>
+pub fn values_to_array1_f64(values: &[Value], attr: &str) -> Result<Array1<f64>> {
+    let mut flat = Vec::with_capacity(values.len());
+    for (i, value) in values.iter().enumerate() {
+        let v = value.get(attr).ok_or_else(|| {
+            anyhow!("Row {i}: expected object with key `{attr}`, got `{value:?}`")
+        })?;
+        flat.push(
+            v.as_f64()
+                .ok_or_else(|| anyhow!("Row {i}: failed to load as f64"))?,
+        );
+    }
+    Ok(Array1::from(flat))
+}
+
+/// For a column `attr` in Vec<Values> attempt to load all rows as Array1<usize>
+pub fn values_to_array1_usize(values: &[Value], attr: &str) -> Result<Array1<usize>> {
+    let mut flat = Vec::with_capacity(values.len());
+    for (i, value) in values.iter().enumerate() {
+        let v = value.get(attr).ok_or_else(|| {
+            anyhow!("Row {i}: expected object with key `{attr}`, got `{value:?}`")
+        })?;
+        flat.push(
+            v.as_u64()
+                .and_then(|n| usize::try_from(n).ok()) // u64 → usize safely
+                .ok_or_else(|| anyhow!("Row {i}: failed to load as usize"))?,
+        );
+    }
+    Ok(Array1::from(flat))
 }
 
 /// Utility: Load LanceDB records (column of vectors) as Linfa Database
@@ -187,18 +228,21 @@ pub fn values_to_dataset(
     target_col: Option<&str>,
     target_format: Option<MLTargetType>,
 ) -> Result<MLDataset, Error> {
-    let train_array = values_to_array(values, train_col)?;
+    let train_array = values_to_array2_f64(values, train_col)?;
     if let Some(target_col) = target_col {
         let target_format = target_format.ok_or(anyhow!("Target Format Not Set!"))?;
-        let target_array = values_to_array(values, target_col)?;
         match target_format {
             MLTargetType::Categorical => {
-                let target_array = target_array.column(0).to_owned().mapv(|x| x as usize);
-                Ok(MLDataset::Classification(DatasetBase::from(train_array).with_targets(target_array)))
-            },
+                let target_array = values_to_array1_usize(values, target_col)?;
+                Ok(MLDataset::Classification(
+                    DatasetBase::from(train_array).with_targets(target_array),
+                ))
+            }
             MLTargetType::Numerical => {
-                let target_array = target_array.column(0).to_owned();
-                Ok(MLDataset::Regression(DatasetBase::from(train_array).with_targets(target_array)))
+                let target_array = values_to_array1_f64(values, target_col)?;
+                Ok(MLDataset::Regression(
+                    DatasetBase::from(train_array).with_targets(target_array),
+                ))
             }
         }
     } else {
@@ -219,12 +263,12 @@ fn update_records_with_predictions<T>(
     mut records: Vec<Value>,
     predictions: Array1<T>,
     attr_name: &str,
-) -> Result<Vec<Value>, Error> 
+) -> Result<Vec<Value>, Error>
 where
-    T: Copy + Serialize
+    T: Copy + Serialize,
 {
     if records.len() != predictions.len() {
-        return Err(anyhow!("records and predictions have different lengths!"));
+        return Err(anyhow!("Records and predictions have different lengths!"));
     }
     for (record, pred) in records.iter_mut().zip(predictions.iter()) {
         if let Value::Object(map) = record {

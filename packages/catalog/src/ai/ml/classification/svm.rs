@@ -1,4 +1,9 @@
-use crate::ai::ml::{MLDataset, MLModel, MLTargetType, NodeMLModel, remove_pin, values_to_dataset};
+//! Node for Fitting Support Vector Machines (SVM) for Multi-Class Classification
+//!
+//! This node loads a dataset (currently from a Database), transforms it into a classification dataset,
+//! and fits multiple SVM-models using the [`linfa`] crate.
+
+use crate::ai::ml::{remove_pin, values_to_dataset, MLDataset, MLModel, MLTargetType, NodeMLModel, MAX_RECORDS};
 use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
 use flow_like::{
     flow::{
@@ -14,6 +19,7 @@ use flow_like_storage::databases::vector::VectorStore;
 use flow_like_types::{Value, anyhow, async_trait, json::json};
 use linfa::{prelude::Pr, traits::Fit};
 use linfa_svm::Svm;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 const GAUSSIAN_KERNEL_EPS: f64 = 30.0;
@@ -32,7 +38,7 @@ impl NodeLogic for FitSVMMultiClassNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
             "fit_svm_multi_class",
-            "Train Classification (SVM)",
+            "Train Classifier (SVM)",
             "Fit/Train Support Vector Machines (SVM) for Multi-Class Classification ",
             "AI/ML/Classification",
         );
@@ -48,7 +54,7 @@ impl NodeLogic for FitSVMMultiClassNode {
         )
         .set_options(
             PinOptions::new()
-                .set_valid_values(vec!["Database".to_string(), "CSV".to_string()])
+                .set_valid_values(vec!["Database".to_string()]) // , "CSV".to_string()
                 .build(),
         )
         .set_default_value(Some(json!("Database")));
@@ -93,8 +99,23 @@ impl NodeLogic for FitSVMMultiClassNode {
                         .db
                         .clone();
                     let database = database.read().await;
+                    let schema = database.schema().await?;
+                    let existing_cols: HashSet<String> =
+                        schema.fields.iter().map(|f| f.name().clone()).collect();
+                    if !existing_cols.contains(&records_col) {
+                        return Err(anyhow!(format!(
+                            "Database doesn't contain train col `{}`!",
+                            records_col
+                        )));
+                    }
+                    if !existing_cols.contains(&targets_col) {
+                        return Err(anyhow!(format!(
+                            "Database doesn't contain target col `{}`!",
+                            targets_col
+                        )));
+                    }
                     database
-                        .filter("true", Some(vec![records_col.to_string()]), 100, 0)
+                        .filter("true", Some(vec![records_col.to_string(), targets_col.to_string()]), MAX_RECORDS, 0)
                         .await?
                 }; // drop db
                 context.log_message(
@@ -117,7 +138,7 @@ impl NodeLogic for FitSVMMultiClassNode {
             _ => return Err(anyhow!("Invalid Dataset Format")),
         };
         let elapsed = t0.elapsed();
-        println!("Preprocess data: {elapsed:?}");
+        context.log_message(&format!("Preprocess data: {elapsed:?}"), LogLevel::Debug);
 
         // train model
         let t0 = std::time::Instant::now();
@@ -129,7 +150,7 @@ impl NodeLogic for FitSVMMultiClassNode {
             .map(|(i, (_, x))| (i, params.fit(&x).unwrap()))
             .collect();
         let elapsed = t0.elapsed();
-        println!("Fit model: {elapsed:?}");
+        context.log_message(&format!("Fit model: {elapsed:?}"), LogLevel::Debug);
 
         // set outputs
         let model = MLModel::SVMMultiClass(svm_models);
@@ -173,8 +194,7 @@ impl NodeLogic for FitSVMMultiClassNode {
                     "Target Col",
                     "Column containing targets to fit the classifier on",
                     VariableType::String,
-                )
-                .set_default_value(Some(json!("vector")));
+                );
             }
             // if node.get_pin_by_name("update").is_none() {
             //     node.add_input_pin(

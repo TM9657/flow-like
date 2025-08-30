@@ -1,3 +1,10 @@
+//! Node for Making Predictions with MLModels
+//!
+//! This node loads a dataset (currently from a Database), transforms it into a prediction dataset,
+//! and uses the trained model to make predictions.
+//!
+//! Adds / upserts predictions back into the Database.
+
 use crate::ai::ml::{
     MAX_RECORDS, MLDataset, MLModel, NodeMLModel, update_records_with_predictions,
     values_to_dataset,
@@ -60,7 +67,7 @@ impl NodeLogic for MLPredictNode {
         )
         .set_options(
             PinOptions::new()
-                .set_valid_values(vec!["Database".to_string(), "CSV".to_string()])
+                .set_valid_values(vec!["Database".to_string()]) // , "CSV".to_string()
                 .build(),
         )
         .set_default_value(Some(json!("Database")));
@@ -98,18 +105,28 @@ impl NodeLogic for MLPredictNode {
 
                 // fetch records
                 let t0 = std::time::Instant::now();
-                let records = {
+                let (records, existing_cols) = {
                     let database = database.read().await;
-                    database
+                    let schema = database.schema().await?;
+                    let existing_cols: HashSet<String> =
+                        schema.fields.iter().map(|f| f.name().clone()).collect();
+                    if !existing_cols.contains(&records_col) {
+                        return Err(anyhow!(format!(
+                            "Database doesn't contain input column `{}`!",
+                            records_col
+                        )));
+                    }
+                    let records = database
                         .filter("true", Some(vec![records_col.to_string()]), MAX_RECORDS, 0)
-                        .await?
+                        .await?;
+                    (records, existing_cols)
                 }; // drop read guard
-                let existing_cols: HashSet<&String> = match records.first() {
-                    Some(Value::Object(map)) => map.keys().collect(),
-                    _ => HashSet::new(),
-                };
                 context.log_message(
-                    &format!("Loaded {} records from database with columns {:?}", records.len(), &existing_cols),
+                    &format!(
+                        "Loaded {} records from database with columns {:?}",
+                        records.len(),
+                        &existing_cols
+                    ),
                     LogLevel::Debug,
                 );
                 let elapsed = t0.elapsed();
@@ -157,16 +174,23 @@ impl NodeLogic for MLPredictNode {
                 {
                     let mut database = database.write().await;
                     if !existing_cols.contains(&predictions_col) {
+                        context.log_message(
+                            &format!("Adding {} as new column", predictions_col),
+                            LogLevel::Debug,
+                        );
                         // add new column for predictions
-                        let new_col = vec![(predictions_col.to_string(), "CAST(NULL AS DOUBLE)".to_string())];
+                        let new_col = vec![(
+                            predictions_col.to_string(),
+                            "CAST(NULL AS DOUBLE)".to_string(),
+                        )];
                         database
                             .add_columns(NewColumnTransform::SqlExpressions(new_col), None)
                             .await?;
-                        context.log_message(&format!("Added {} as new column", predictions_col), LogLevel::Debug);
                     }
                     // update records
                     let t0 = std::time::Instant::now();
-                    let records = update_records_with_predictions(records, predictions, &predictions_col)?;
+                    let records =
+                        update_records_with_predictions(records, predictions, &predictions_col)?;
                     let elapsed = t0.elapsed();
                     context.log_message(&format!("Update records: {elapsed:?}"), LogLevel::Debug);
 
@@ -223,8 +247,7 @@ impl NodeLogic for MLPredictNode {
                     "Output Col",
                     "Column that should be added for predictions",
                     VariableType::String,
-                )
-                .set_default_value(Some(json!("prediction")));
+                );
             }
             if node.get_pin_by_name("database_out").is_none() {
                 node.add_output_pin(

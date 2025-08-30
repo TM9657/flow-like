@@ -1,3 +1,8 @@
+//! Node for Deserializing a MLModel from JSON path
+//!
+//! Deserializes a previously trained and saved MLModel JSON file as the matching MLModel variant.
+//! Wraps the MLModel in a cached NodeMLModel.
+
 use crate::ai::ml::{MLModel, NodeMLModel};
 use crate::storage::path::FlowPath;
 use flow_like::{
@@ -9,7 +14,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{Result, Value, anyhow, async_trait, json};
+use flow_like_types::{Result, async_trait, json};
 
 #[derive(Default)]
 pub struct LoadMLModelNode {}
@@ -64,7 +69,10 @@ impl NodeLogic for LoadMLModelNode {
         // deserialize model
         let bytes = path.get(context, false).await?;
         let ml_model: MLModel = json::from_slice(&bytes)?;
-        context.log_message(&format!("Loaded Machine Learning Model: {}", &ml_model), LogLevel::Debug);
+        context.log_message(
+            &format!("Loaded Machine Learning Model: {}", &ml_model),
+            LogLevel::Debug,
+        );
 
         // wrap model + set outputs
         let node_model = NodeMLModel::new(context, ml_model).await;

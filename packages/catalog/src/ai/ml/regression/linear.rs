@@ -1,4 +1,9 @@
-use crate::ai::ml::{MLDataset, MLModel, MLTargetType, NodeMLModel, remove_pin, values_to_dataset};
+//! Node for Fitting a **Linear Regression Model**.
+//!
+//! This node loads a dataset (currently from a database source), transforms it into
+//! a regression dataset, and fits a linear regression model using the [`linfa`] crate.
+
+use crate::ai::ml::{remove_pin, values_to_dataset, MLDataset, MLModel, MLTargetType, NodeMLModel, MAX_RECORDS};
 use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
 use flow_like::{
     flow::{
@@ -14,6 +19,7 @@ use flow_like_storage::databases::vector::VectorStore;
 use flow_like_types::{Value, anyhow, async_trait, json::json};
 use linfa::traits::Fit;
 use linfa_linear::{FittedLinearRegression, LinearRegression};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -46,7 +52,7 @@ impl NodeLogic for FitLinearRegressionNode {
         )
         .set_options(
             PinOptions::new()
-                .set_valid_values(vec!["Database".to_string(), "CSV".to_string()])
+                .set_valid_values(vec!["Database".to_string()]) // , "CSV".to_string()
                 .build(),
         )
         .set_default_value(Some(json!("Database")));
@@ -91,8 +97,23 @@ impl NodeLogic for FitLinearRegressionNode {
                         .db
                         .clone();
                     let database = database.read().await;
+                    let schema = database.schema().await?;
+                    let existing_cols: HashSet<String> =
+                        schema.fields.iter().map(|f| f.name().clone()).collect();
+                    if !existing_cols.contains(&records_col) {
+                        return Err(anyhow!(format!(
+                            "Database doesn't contain train col `{}`!",
+                            records_col
+                        )));
+                    }
+                    if !existing_cols.contains(&targets_col) {
+                        return Err(anyhow!(format!(
+                            "Database doesn't contain target col `{}`!",
+                            targets_col
+                        )));
+                    }
                     database
-                        .filter("true", Some(vec![records_col.to_string()]), 100, 0)
+                        .filter("true", Some(vec![records_col.to_string(), targets_col.to_string()]), MAX_RECORDS, 0)
                         .await?
                 }; // drop db
                 context.log_message(
@@ -115,13 +136,13 @@ impl NodeLogic for FitLinearRegressionNode {
             _ => return Err(anyhow!("Invalid Dataset Format")),
         };
         let elapsed = t0.elapsed();
-        println!("Preprocess data: {elapsed:?}");
+        context.log_message(&format!("Preprocess data: {elapsed:?}"), LogLevel::Debug);
 
         // train model
         let t0 = std::time::Instant::now();
         let linear_model: FittedLinearRegression<f64> = LinearRegression::default().fit(&ds)?;
         let elapsed = t0.elapsed();
-        println!("Fit model: {elapsed:?}");
+        context.log_message(&format!("Fit model: {elapsed:?}"), LogLevel::Debug);
 
         // set outputs
         let model = MLModel::LinearRegression(linear_model);
@@ -165,8 +186,7 @@ impl NodeLogic for FitLinearRegressionNode {
                     "Target Col",
                     "Column containing targets to fit the classifier on",
                     VariableType::String,
-                )
-                .set_default_value(Some(json!("vector")));
+                );
             }
             // if node.get_pin_by_name("update").is_none() {
             //     node.add_input_pin(

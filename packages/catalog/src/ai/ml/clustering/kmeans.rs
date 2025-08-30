@@ -1,3 +1,8 @@
+//! Node for Fitting a **KMeans Clustering Model**
+//!
+//! This node loads a dataset (currently from a database source), transforms it into
+//! a clustering dataset, and fits a a KMeans clustering model using the [`linfa`] crate.
+
 use crate::ai::ml::{MAX_RECORDS, MLDataset, MLModel, NodeMLModel, remove_pin, values_to_dataset};
 use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
 use flow_like::{
@@ -15,6 +20,7 @@ use flow_like_types::{Result, Value, anyhow, async_trait, json::json};
 use linfa::traits::Fit;
 use linfa_clustering::KMeans;
 use linfa_nn::distance::L2Dist;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -56,7 +62,7 @@ impl NodeLogic for FitKMeansNode {
         )
         .set_options(
             PinOptions::new()
-                .set_valid_values(vec!["Database".to_string(), "CSV".to_string()])
+                .set_valid_values(vec!["Database".to_string()]) // , "CSV".to_string()
                 .build(),
         )
         .set_default_value(Some(json!("Database")));
@@ -101,7 +107,6 @@ impl NodeLogic for FitKMeansNode {
                 let t0 = std::time::Instant::now();
                 let database: NodeDBConnection = context.evaluate_pin("database").await?;
                 let records_col: String = context.evaluate_pin("records").await?;
-                //let should_update: bool = context.evaluate_pin("update").await?;
 
                 // fetch records
                 let records = {
@@ -111,6 +116,15 @@ impl NodeLogic for FitKMeansNode {
                         .db
                         .clone();
                     let database = database.read().await;
+                    let schema = database.schema().await?;
+                    let existing_cols: HashSet<String> =
+                        schema.fields.iter().map(|f| f.name().clone()).collect();
+                    if !existing_cols.contains(&records_col) {
+                        return Err(anyhow!(format!(
+                            "Database doesn't contain train col `{}`!",
+                            records_col
+                        )));
+                    }
                     database
                         .filter("true", Some(vec![records_col.to_string()]), MAX_RECORDS, 0)
                         .await?
