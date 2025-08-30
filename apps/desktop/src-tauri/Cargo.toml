@@ -36,7 +36,7 @@ tauri-plugin-deep-link = "2.4.1"
 sentry-tracing = "0.42.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = { version = "0.1.41", features = ["async-await", "attributes"] }
-dirs-next = "2.0.0"
+dirs-next.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json.workspace = true

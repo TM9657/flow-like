@@ -268,7 +268,16 @@ pub async fn start_docling_server(context: &mut ExecutionContext) -> flow_like_t
         };
 
         let port = port.to_string();
-        let args = vec!["localhost", &port, "./docling_cache"];
+        let dir = dirs_next::data_dir()
+            .unwrap_or_default()
+            .join("flow-like")
+            .join("bits")
+            .join("docling_cache");
+        let dir = dir
+            .to_str()
+            .unwrap_or_default();
+
+        let args = vec!["localhost", &port, dir];
         println!("Starting Docling Server with args: {:?}", args);
 
         let mut child = sidecar

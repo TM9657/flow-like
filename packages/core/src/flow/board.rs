@@ -203,7 +203,7 @@ impl Board {
             nodes: HashMap::new(),
             variables: HashMap::new(),
             comments: HashMap::new(),
-            log_level: LogLevel::Debug,
+            log_level: LogLevel::Info,
             stage: ExecutionStage::Dev,
             viewport: (0.0, 0.0, 0.0),
             version: (0, 0, 1),

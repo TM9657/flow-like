@@ -31,6 +31,7 @@ tract-tflite = { git = "https://github.com/TM9657/tract", rev = "ed3b020" }
 linfa = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
 linfa-datasets = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["generate"]}
 ndarray.workspace = true
+dirs-next.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }
