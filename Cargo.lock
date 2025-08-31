@@ -4837,6 +4837,7 @@ dependencies = [
  "chrono",
  "criterion",
  "csv-async",
+ "dirs-next",
  "fasteval",
  "flow-like",
  "flow-like-model-provider",

@@ -36,6 +36,7 @@ linfa-linear = { git = "https://github.com/TM9657/linfa", rev = "071fb43", featu
 linfa-reduction = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
 linfa-svm = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
 ndarray.workspace = true
+dirs-next.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }
