@@ -20,11 +20,41 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_storage::arrow_schema::{DataType, Field, Schema};
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_storage::lancedb::table::NewColumnTransform;
 use flow_like_types::{Result, Value, anyhow, async_trait, json::json};
 use std::collections::HashSet;
 use std::sync::Arc;
+
+/// Make new Arrow field based on first prediction attribute in updated records
+fn new_field(records: &[Value], predictions_col: &str) -> Result<Field> {
+    if let Some(probe) = records.first() {
+        if let Some(value) = probe.get(predictions_col) {
+            match value {
+                Value::Number(n) if n.is_f64() => Ok(
+                    Field::new(predictions_col, DataType::Float64, true)
+                ),
+                Value::Number(n) if n.is_u64() => Ok(
+                    Field::new(predictions_col, DataType::UInt64, true)
+                ),
+                Value::Number(n) if n.is_i64() => Ok(
+                    Field::new(predictions_col, DataType::Int64, true)
+                ),
+                Value::String(_) => Ok(
+                    Field::new(predictions_col, DataType::LargeUtf8, true)
+                ),
+                other => {
+                    Err(anyhow!("Unknown type for prediction col `{}`: {:?}", predictions_col, other))
+                }
+            }
+        } else {
+            Err(anyhow!("Prediction col `{}` missing in first record", predictions_col))
+        }
+    } else {
+        Err(anyhow!("Got no records"))
+    }
+}
 
 #[derive(Default)]
 pub struct MLPredictNode {}
@@ -146,12 +176,10 @@ impl NodeLogic for MLPredictNode {
                     let mut database = database.write().await;
                     if !existing_cols.contains(&predictions_col) {
                         // add new column for predictions
-                        let new_col = vec![(
-                            predictions_col.to_string(),
-                            "CAST(NULL AS DOUBLE)".to_string(),
-                        )];
+                        let new_field = new_field(&records, &predictions_col)?;
+                        let schema = Schema::new(vec![new_field]);
                         database
-                            .add_columns(NewColumnTransform::SqlExpressions(new_col), None)
+                            .add_columns(NewColumnTransform::AllNulls(schema.into()), None)
                             .await?;
                         context.log_message(
                             &format!("Added {} as new column", predictions_col),
