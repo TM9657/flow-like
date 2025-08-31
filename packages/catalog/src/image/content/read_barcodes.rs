@@ -3,7 +3,7 @@ use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, remove_pin},
         pin::Pin,
         pin::PinOptions,
         variable::VariableType,
@@ -219,11 +219,5 @@ impl NodeLogic for ReadBarcodesNode {
         } else {
             remove_pin(node, format_pin);
         }
-    }
-}
-
-fn remove_pin(node: &mut Node, pin: Option<Pin>) {
-    if let Some(pin) = pin {
-        node.pins.remove(&pin.id);
     }
 }

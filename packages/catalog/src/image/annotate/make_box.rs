@@ -4,7 +4,7 @@ use flow_like::{
     flow::{
         board::Board,
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, remove_pin},
         pin::{Pin, PinOptions},
         variable::VariableType,
     },
@@ -169,11 +169,5 @@ impl NodeLogic for MakeBoxNode {
             }
             _ => {}
         }
-    }
-}
-
-fn remove_pin(node: &mut Node, pin: Option<Pin>) {
-    if let Some(pin) = pin {
-        node.pins.remove(&pin.id);
     }
 }
