@@ -15,7 +15,7 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 	id="whitelabel"
 	data-c1="hsl(262 83% 66% / .10)"
 	data-c2="hsl(292 84% 65% / .10)"
-	class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+	class="relative mx-auto max-w-7xl px-4 py-24 sm:py-28 lg:px-8 mb-6 overflow-x-clip"
 >
 	<!-- decorative bg -->
 	<div aria-hidden="true" class="pointer-events-none absolute inset-0">
@@ -40,8 +40,9 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 	</div>
 
 	<div class="relative z-10">
+		<!-- ensure nothing exceeds viewport on mobile -->
 		<div
-			class="relative rounded-3xl p-6 sm:p-10 lg:p-14 border border-border/40 bg-card/50 backdrop-blur-md overflow-hidden"
+			class="relative rounded-3xl p-5 sm:p-8 lg:p-14 border border-border/40 bg-card/50 backdrop-blur-md overflow-visible sm:overflow-hidden max-w-[min(100%,100vw-2rem)] sm:max-w-none mx-auto"
 		>
 			<div
 				aria-hidden="true"
@@ -49,9 +50,10 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 			>
 			</div>
 
-			<div class="grid gap-12 lg:grid-cols-2">
+			<!-- RESPONSIVE GRID -->
+			<div class="grid gap-10 sm:gap-12 lg:grid-cols-2">
 				<!-- LEFT -->
-				<div class="space-y-8">
+				<div class="space-y-8 min-w-0">
 					<div>
 						<div
 							class="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 backdrop-blur px-4 py-1.5 text-sm font-medium text-violet-600 dark:text-violet-400 mb-5"
@@ -59,32 +61,31 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 							<span
 								class="w-2 h-2 bg-violet-500 rounded-full animate-pulse"
 							></span>
-							White-label Ready
+							Under your brand
 						</div>
 
 						<h2
-							class="text-4xl font-bold sm:text-5xl leading-tight"
+							class="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight break-words"
 						>
 							<span
 								class="bg-gradient-to-r from-foreground via-violet-500 to-purple-500 bg-clip-text text-transparent"
-								>Embed, theme, and ship</span
-							>
-							under <span class="text-violet-500">your brand</span
+								>Add the editor or just the engine</span
 							>
 						</h2>
 
-						<p class="mt-5 text-lg text-muted-foreground">
-							Integrate the editor into your product or run the
-							engine headless. Apply your design tokens and logo
-							for a seamless white-label experience — governance
-							and observability stay intact.
+						<p
+							class="mt-4 sm:mt-5 text-base sm:text-lg text-muted-foreground"
+						>
+							Drop the visual editor into your app, run the engine
+							behind the scenes, or combine both. Your logo, your
+							colors — with the same visibility and audit trail.
 						</p>
 					</div>
 
 					<!-- MODE SWITCHER -->
 					<div id="wl-mode" class="space-y-4" data-mode="embed">
 						<div
-							class="inline-flex rounded-2xl border border-border/60 bg-muted/40 p-1 shadow-sm"
+							class="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-2xl border border-border/60 bg-muted/40 p-1 shadow-sm"
 						>
 							<label class="group relative">
 								<input
@@ -95,9 +96,10 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 									checked
 								/>
 								<span
-									class="cursor-pointer select-none rounded-xl px-3.5 py-2.5 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
-									>Embed UI</span
+									class="block w-full text-center cursor-pointer select-none rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
 								>
+									Drop-in editor
+								</span>
 							</label>
 							<label class="group relative">
 								<input
@@ -107,9 +109,10 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 									class="peer sr-only"
 								/>
 								<span
-									class="cursor-pointer select-none rounded-xl px-3.5 py-2.5 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
-									>Headless Engine</span
+									class="block w-full text-center cursor-pointer select-none rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
 								>
+									Run behind the scenes
+								</span>
 							</label>
 							<label class="group relative">
 								<input
@@ -119,9 +122,10 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 									class="peer sr-only"
 								/>
 								<span
-									class="cursor-pointer select-none rounded-xl px-3.5 py-2.5 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
-									>Hybrid</span
+									class="block w-full text-center cursor-pointer select-none rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
 								>
+									Edit here, run there
+								</span>
 							</label>
 						</div>
 
@@ -137,13 +141,13 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 										className="w-4 h-4 text-white"
 									/>
 								</div>
-								<div>
+								<div class="min-w-0">
 									<div class="font-medium">
-										Drop-in widget
+										Drop-in editor
 									</div>
 									<p class="text-sm text-muted-foreground">
-										Mount the visual editor in any route;
-										theme via CSS variables or tokens.
+										Mount the visual editor in any route and
+										theme it with your tokens.
 									</p>
 								</div>
 							</div>
@@ -157,13 +161,13 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 								>
 									<LuCodeXml className="w-4 h-4 text-white" />
 								</div>
-								<div>
+								<div class="min-w-0">
 									<div class="font-medium">
-										API-first runtime
+										Run behind the scenes
 									</div>
 									<p class="text-sm text-muted-foreground">
-										Call the engine server-side (or edge);
-										control via SDKs & webhooks.
+										Call the engine from your backend;
+										control with SDKs or webhooks.
 									</p>
 								</div>
 							</div>
@@ -179,13 +183,13 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 										className="w-4 h-4 text-white"
 									/>
 								</div>
-								<div>
+								<div class="min-w-0">
 									<div class="font-medium">
-										Local UI + remote compute
+										Edit here, run there
 									</div>
 									<p class="text-sm text-muted-foreground">
-										Edit locally, execute in your cluster
-										with usage metering & tenancy.
+										Edit locally, execute in your cluster —
+										with usage and tenancy.
 									</p>
 								</div>
 							</div>
@@ -210,8 +214,7 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 								</div>
 							</div>
 							<p class="mt-2 text-sm text-muted-foreground">
-								Map your brand palette; instant dark/light
-								support.
+								Map your palette; instant dark/light support.
 							</p>
 						</div>
 
@@ -227,7 +230,7 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 								<div class="font-medium">SSO & secrets</div>
 							</div>
 							<p class="mt-2 text-sm text-muted-foreground">
-								OIDC, JWT, and scoped secrets per tenant/app.
+								OIDC/JWT and scoped secrets per tenant or app.
 							</p>
 						</div>
 
@@ -261,60 +264,59 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 								<div class="font-medium">SDKs & webhooks</div>
 							</div>
 							<p class="mt-2 text-sm text-muted-foreground">
-								Control flows via SDKs and REST API.
+								Control flows via SDKs and a simple REST API.
 							</p>
 						</div>
 					</div>
 				</div>
 
 				<!-- RIGHT -->
-				<div class="relative">
-					<!-- COMPARISON: shared var lives on this root -->
+				<div class="relative min-w-0">
+					<!-- clamp to viewport width on mobile -->
 					<div
 						id="wl-compare-root"
-						class="relative rounded-2xl border border-border/40 overflow-hidden bg-background/60 backdrop-blur-md shadow-lg select-none touch-none"
+						class="relative rounded-2xl border border-border/40 overflow-hidden bg-background/60 backdrop-blur-md shadow-lg select-none touch-none w-full max-w-[min(100%,100vw-2rem)] sm:max-w-none mx-auto"
 						style="--clip: 50%;"
 					>
-						<!-- bottom (dark) -->
-						<Image
-							src={designBubblegum}
-							alt="Dark theme"
-							class="w-full h-auto block"
-							loading="lazy"
-						/>
-						<!-- top (light), clipped via shared var -->
-						<div
-							class="pointer-events-none absolute inset-0"
-							style="clip-path: inset(0 calc(100% - var(--clip)) 0 0);"
-						>
+						<div class="relative w-full aspect-[16/10]">
+							<!-- bottom (dark) -->
 							<Image
-								src={designBubblegumLight}
-								alt="Light theme"
-								class="w-full h-auto block"
+								src={designBubblegum}
+								alt="Dark theme"
+								class="absolute inset-0 w-full h-full object-contain"
 								loading="lazy"
 							/>
-						</div>
-
-						<!-- draggable handle (uses same var) -->
-						<div
-							id="wl-compare-handle"
-							class="absolute inset-y-0"
-							style="left: var(--clip); transform: translateX(-50%);"
-						>
-							<div class="h-full w-px bg-border"></div>
+							<!-- top (light) -->
 							<div
-								class="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 rounded-full border border-border bg-background px-2 py-1 text-xs shadow"
+								class="pointer-events-none absolute inset-0"
+								style="clip-path: inset(0 calc(100% - var(--clip)) 0 0);"
 							>
-								Drag
+								<Image
+									src={designBubblegumLight}
+									alt="Light theme"
+									class="w-full h-full object-contain"
+									loading="lazy"
+								/>
 							</div>
+							<!-- draggable handle (clamped) -->
+							<div
+								id="wl-compare-handle"
+								class="absolute inset-y-0"
+								style="left: clamp(12px, var(--clip), calc(100% - 12px)); transform: translateX(-50%);"
+							>
+								<div class="h-full w-px bg-border"></div>
+								<div
+									class="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 rounded-full border border-border bg-background px-2 py-1 text-xs shadow"
+								>
+									Drag
+								</div>
+							</div>
+							<button
+								id="wl-compare-drag"
+								type="button"
+								class="absolute inset-0 cursor-col-resize bg-transparent"
+								aria-label="Drag to compare themes"></button>
 						</div>
-
-						<!-- invisible drag layer -->
-						<button
-							id="wl-compare-drag"
-							type="button"
-							class="absolute inset-0 cursor-col-resize bg-transparent"
-							aria-label="Drag to compare themes"></button>
 
 						<div
 							class="p-3 sm:p-4 border-t border-border/60 bg-card/60 backdrop-blur"
@@ -348,7 +350,9 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 								id="wl-gallery"
 								class="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 							>
-								<figure class="snap-start shrink-0 w-56">
+								<figure
+									class="snap-start shrink-0 w-48 sm:w-56"
+								>
 									<Image
 										src={designCatppuccin}
 										alt="Catppuccin"
@@ -361,7 +365,9 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 										Catppuccin
 									</figcaption>
 								</figure>
-								<figure class="snap-start shrink-0 w-56">
+								<figure
+									class="snap-start shrink-0 w-48 sm:w-56"
+								>
 									<Image
 										src={designCosmicNight}
 										alt="Cosmic Night"
@@ -374,7 +380,9 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 										Cosmic Night
 									</figcaption>
 								</figure>
-								<figure class="snap-start shrink-0 w-56">
+								<figure
+									class="snap-start shrink-0 w-48 sm:w-56"
+								>
 									<Image
 										src={designNeoBrutalism}
 										alt="Neo-Brutalism"
@@ -387,7 +395,9 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 										Neo-Brutalism
 									</figcaption>
 								</figure>
-								<figure class="snap-start shrink-0 w-56">
+								<figure
+									class="snap-start shrink-0 w-48 sm:w-56"
+								>
 									<Image
 										src={designSoftPop}
 										alt="Soft Pop"
@@ -400,7 +410,9 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 										Soft Pop
 									</figcaption>
 								</figure>
-								<figure class="snap-start shrink-0 w-56">
+								<figure
+									class="snap-start shrink-0 w-48 sm:w-56"
+								>
 									<Image
 										src={designDoom}
 										alt="Doom"
@@ -435,41 +447,38 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 									target="_blank"
 									rel="noopener noreferrer"
 									class="underline font-black">tweakcn</a
-								> — copy the tokens and paste to apply instantly.
+								> — paste tokens to apply instantly.
 							</div>
 						</div>
 					</div>
 				</div>
 			</div>
+			<!-- /grid -->
 		</div>
 	</div>
 </section>
 
-<script>
+<script type="module">
+	// compare slider (clamped + resize safe)
 	(function () {
 		const root = document.getElementById("wl-compare-root");
 		const range = document.getElementById("wl-compare-range");
 		const drag = document.getElementById("wl-compare-drag");
 		if (!root || !range || !drag) return;
 
-		const clamp = (n: number, min: number, max: number) =>
-			Math.max(min, Math.min(max, n));
-		const setClip = (pct: number) => {
+		const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+		const setClip = (pct) => {
 			const v = clamp(Math.round(pct), 0, 100);
 			root.style.setProperty("--clip", v + "%");
-			if ((range as HTMLInputElement).value !== String(v))
-				(range as HTMLInputElement).value = String(v);
+			if (range.value !== String(v)) range.value = String(v);
 		};
 
-		// slider -> mask (FIXED)
-		range.addEventListener("input", (e) => {
-			const t = e.target;
-			if (t && "value" in t) setClip(parseFloat(t.value as string));
-		});
+		range.addEventListener("input", (e) =>
+			setClip(parseFloat(e.target.value)),
+		);
 
-		// drag on the image
 		let dragging = false;
-		const pctFromEvent = (ev: any) => {
+		const pctFromEvent = (ev) => {
 			const rect = root.getBoundingClientRect();
 			const cx =
 				("touches" in ev && ev.touches?.length
@@ -477,12 +486,12 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 					: ev.clientX) - rect.left;
 			return (cx / rect.width) * 100;
 		};
-		const start = (ev: { preventDefault: () => void }) => {
+		const start = (ev) => {
 			dragging = true;
 			setClip(pctFromEvent(ev));
 			ev.preventDefault?.();
 		};
-		const move = (ev: any) => {
+		const move = (ev) => {
 			if (dragging) setClip(pctFromEvent(ev));
 		};
 		const end = () => {
@@ -497,17 +506,19 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 		window.addEventListener("touchmove", move, { passive: false });
 		window.addEventListener("touchend", end);
 
-		// init
-		setClip(parseFloat((range as HTMLInputElement).value || "50"));
+		window.addEventListener("resize", () =>
+			setClip(parseFloat(range.value || "50")),
+		);
+		setClip(parseFloat(range.value || "50"));
 	})();
 
-	// Mode switcher (unchanged)
+	// mode switcher
 	(function () {
 		const root = document.getElementById("wl-mode");
 		if (!root) return;
 		const slots = Array.from(root.querySelectorAll("[data-slot]"));
 		root.addEventListener("change", (e) => {
-			const t = e.target as HTMLInputElement;
+			const t = e.target;
 			if (!t || t.name !== "wl-mode") return;
 			const val = t.value;
 			root.dataset.mode = val;
@@ -519,28 +530,26 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 		});
 	})();
 
-	// Auto-scroll the theme gallery
+	// gallery auto-scroll (pauses on touch/hover)
 	(function () {
 		const scroller = document.getElementById("wl-gallery");
 		if (!scroller) return;
+		let timer = null,
+			userHold = false,
+			resumeTimeout = null;
 
 		const items = () => Array.from(scroller.querySelectorAll("figure"));
 		const positions = () => items().map((el) => el.offsetLeft);
-		let i = 0,
-			timer: string | number | NodeJS.Timeout | null | undefined = null,
-			userHold = false,
-			resumeTimeout: any = null;
+		let i = 0;
 
 		const next = () => {
 			const pos = positions();
-			if (pos.length === 0) return;
+			if (!pos.length) return;
 			i = (i + 1) % pos.length;
 			scroller.scrollTo({ left: pos[i], behavior: "smooth" });
 		};
-
 		const start = () => {
-			if (timer || userHold) return;
-			timer = setInterval(next, 3000);
+			if (!timer && !userHold) timer = setInterval(next, 3000);
 		};
 		const stop = () => {
 			if (timer) {
@@ -548,7 +557,6 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 				timer = null;
 			}
 		};
-
 		const pauseFor = (ms = 4000) => {
 			stop();
 			clearTimeout(resumeTimeout);
@@ -557,7 +565,6 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 			}, ms);
 		};
 
-		// pause on hover/focus/drag; resume on leave
 		scroller.addEventListener("mouseenter", () => {
 			userHold = true;
 			stop();
@@ -586,19 +593,9 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 			userHold = false;
 			pauseFor(2000);
 		});
+		scroller.addEventListener("scroll", () => pauseFor(3000));
 
-		// if user scrolls manually, pause briefly then resume
-		let lastScroll = 0;
-		scroller.addEventListener("scroll", () => {
-			const now = Date.now();
-			if (now - lastScroll > 100) pauseFor(3000);
-			lastScroll = now;
-		});
-
-		// recalc on resize (images can change widths)
 		window.addEventListener("resize", () => pauseFor(1000));
-
-		// kick off a moment after images likely in DOM
 		setTimeout(start, 600);
 	})();
 </script>

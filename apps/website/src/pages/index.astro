@@ -15,6 +15,7 @@ import Extensibility from "../sections/extensibility.astro";
 import Theming from "../sections/theming.astro";
 import ProcessCombination from "../sections/process-combination.astro";
 import Storage from "../sections/storage.astro";
+import ProblemSolution from "../sections/problem-solution.astro";
 import Reading from "../sections/reading.astro";
 import { BlogFooter } from "../components/blog-footer";
 
@@ -188,8 +189,12 @@ const ldWebPage = {
 	  <BlogHeader client:load />
 	  <Hero />
 	  <AmbientGlow />
+    <div class="cv"><DesignWorkflowsVisually /></div>
       <div class="cv"><ZeroToProd /></div>
-      <div class="cv"><DesignWorkflowsVisually /></div>
+
+      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+
+      <ProblemSolution />
 
       <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
 
