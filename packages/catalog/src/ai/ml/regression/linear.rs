@@ -3,13 +3,13 @@
 //! This node loads a dataset (currently from a database source), transforms it into
 //! a regression dataset, and fits a linear regression model using the [`linfa`] crate.
 
-use crate::ai::ml::{remove_pin, values_to_dataset, MLDataset, MLModel, MLTargetType, NodeMLModel, MAX_RECORDS};
+use crate::ai::ml::{values_to_array1_f64, values_to_array2_f64, MLModel, ModelWithMeta, NodeMLModel, MAX_RECORDS};
 use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
 use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, remove_pin_by_name},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -18,6 +18,7 @@ use flow_like::{
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_types::{Value, anyhow, async_trait, json::json};
 use linfa::traits::Fit;
+use linfa::DatasetBase;
 use linfa_linear::{FittedLinearRegression, LinearRegression};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -121,31 +122,23 @@ impl NodeLogic for FitLinearRegressionNode {
                     LogLevel::Debug,
                 );
 
-                // make dataset
-                values_to_dataset(
-                    &records,
-                    &records_col,
-                    Some(&targets_col),
-                    Some(MLTargetType::Numerical),
-                )?
+                let train_array = values_to_array2_f64(&records, &records_col)?;
+                let target_array = values_to_array1_f64(&records, &targets_col)?;
+                DatasetBase::from(train_array).with_targets(target_array)
             }
             _ => return Err(anyhow!("Datasource Not Implemented!")),
-        };
-        let ds = match ds {
-            MLDataset::Regression(ds) => ds,
-            _ => return Err(anyhow!("Invalid Dataset Format")),
         };
         let elapsed = t0.elapsed();
         context.log_message(&format!("Preprocess data: {elapsed:?}"), LogLevel::Debug);
 
         // train model
         let t0 = std::time::Instant::now();
-        let linear_model: FittedLinearRegression<f64> = LinearRegression::default().fit(&ds)?;
+        let model: FittedLinearRegression<f64> = LinearRegression::default().fit(&ds)?;
         let elapsed = t0.elapsed();
         context.log_message(&format!("Fit model: {elapsed:?}"), LogLevel::Debug);
 
         // set outputs
-        let model = MLModel::LinearRegression(linear_model);
+        let model = MLModel::LinearRegression( ModelWithMeta { model, classes: None } );
         let node_model = NodeMLModel::new(context, model).await;
         context.set_pin_value("model", json!(node_model)).await?;
         context.activate_exec_pin("exec_out").await?;
@@ -207,18 +200,18 @@ impl NodeLogic for FitLinearRegressionNode {
             //     .set_schema::<NodeDBConnection>()
             //     .set_options(PinOptions::new().set_enforce_schema(true).build());
             // }
-            remove_pin(node, "csv");
+            remove_pin_by_name(node, "csv");
         } else {
             if node.get_pin_by_name("csv").is_none() {
                 node.add_input_pin("csv", "CSV", "CSV Path", VariableType::Struct)
                     .set_schema::<FlowPath>()
                     .set_options(PinOptions::new().set_enforce_schema(true).build());
             }
-            remove_pin(node, "database");
-            remove_pin(node, "records");
-            remove_pin(node, "targets")
-            //remove_pin(node, "update");
-            //remove_pin(node, "database_out");
+            remove_pin_by_name(node, "database");
+            remove_pin_by_name(node, "records");
+            remove_pin_by_name(node, "targets")
+            //remove_pin_by_name(node, "update");
+            //remove_pin_by_name(node, "database_out");
         }
     }
 }

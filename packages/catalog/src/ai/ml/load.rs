@@ -3,7 +3,7 @@
 //! Deserializes a previously trained and saved MLModel JSON file as the matching MLModel variant.
 //! Wraps the MLModel in a cached NodeMLModel.
 
-use crate::ai::ml::{MLModel, NodeMLModel};
+use crate::ai::ml::{MLModel, ModelWithMeta, NodeMLModel};
 use crate::storage::path::FlowPath;
 use flow_like::{
     flow::{

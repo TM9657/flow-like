@@ -4,23 +4,25 @@
 
 use flow_like::flow::{
     execution::context::ExecutionContext,
-    node::{Node, NodeLogic},
+    node::NodeLogic,
 };
+use flow_like_types::json;
 use flow_like_types::{
-    Cacheable, Error, Result, Value, anyhow, create_id, json::json, sync::Mutex,
+    anyhow, create_id, json::json, sync::Mutex, Cacheable, Error, Ok, Result, Value
 };
-use linfa::DatasetBase;
+use linfa::{traits::Predict, DatasetBase};
 use linfa::prelude::Pr;
 use linfa_clustering::KMeans;
 use linfa_linear::FittedLinearRegression;
 use linfa_nn::distance::L2Dist;
-use linfa_reduction::Pca;
 use linfa_svm::Svm;
-use ndarray::{Array1, Array2, ArrayBase, Dim, OwnedRepr};
+use ndarray::{Array1, Array2};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
+use std::collections::HashMap;
+use linfa::composing::MultiClassModel;
 pub mod classification;
 pub mod clustering;
 pub mod dataset;
@@ -47,43 +49,76 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     nodes
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Serialize, Deserialize)]
+struct ClassEntry {
+    id: usize,
+    name: String,
+}
+
+/// Helper-Module to serialize HashMap as Vec and deserialize Vec as HashMap for the class mappings.
+/// For some reason, a pure HashMap<usize, _> attribute is not properly deserialized as usize keys are recognzed as strings only.
+/// This causes the Load Model Node to fail (in a playground project it works, but here it doesn't).
+/// A HashMap uize -> String is still useful though, as we can easily map class predictions to class names with this.
+/// So that's why we are taking the detour writing our own serializer/deserializer for the classes attribute.
+/// In the long run, we could consider writing our own dumper/loader logic to account for further customizations, 
+/// e.g. serializing only strictly necessary information to reproduce a model to reduce checkpoint sizes.
+mod vec_as_map {
+    use super::ClassEntry;
+    use serde::{Deserialize, Deserializer, Serializer};
+    use serde::ser::SerializeSeq;
+    use std::collections::HashMap;
+
+    pub fn serialize<S>(
+        map_opt: &Option<HashMap<usize, String>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match map_opt {
+            Some(map) => {
+                let mut seq = serializer.serialize_seq(Some(map.len()))?;
+                for (id, name) in map {
+                    let entry = ClassEntry { id: *id, name: name.clone() };
+                    seq.serialize_element(&entry)?;
+                }
+                seq.end()
+            }
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<Option<HashMap<usize, String>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt_vec: Option<Vec<ClassEntry>> = Option::deserialize(deserializer)?;
+        Ok(opt_vec.map(|v| v.into_iter().map(|e| (e.id, e.name)).collect()))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+/// # Linfa models attached with additional metadata
+pub struct ModelWithMeta<M> {
+    pub model: M,
+    /// Optional mapping from class index → class name
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "vec_as_map")]
+    pub classes: Option<HashMap<usize, String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
 /// # Unified Type for Machine Learning Models from Linfa Crate
-/// Untagged feature flag allows to auto-deserialize as the correct variant
 pub enum MLModel {
-    KMeans(KMeans<f64, L2Dist>),
-    SVMClass(Svm<f64, Pr>),
-    SVMMultiClass(Vec<(usize, Svm<f64, Pr>)>),
-    LinearRegression(FittedLinearRegression<f64>),
-    PCA(Pca<f64>),
-}
-
-/// # Unified Type for Machine Learning Datasets from Linfa Crate
-pub enum MLDataset {
-    Unlabeled(
-        DatasetBase<
-            ArrayBase<OwnedRepr<f64>, Dim<[usize; 2]>>,
-            ArrayBase<OwnedRepr<()>, Dim<[usize; 1]>>,
-        >,
-    ),
-    Classification(
-        DatasetBase<
-            ArrayBase<OwnedRepr<f64>, Dim<[usize; 2]>>,
-            ArrayBase<OwnedRepr<usize>, Dim<[usize; 1]>>,
-        >,
-    ),
-    Regression(
-        DatasetBase<
-            ArrayBase<OwnedRepr<f64>, Dim<[usize; 2]>>,
-            ArrayBase<OwnedRepr<f64>, Dim<[usize; 1]>>,
-        >,
-    ),
-}
-
-pub enum MLTargetType {
-    Numerical,
-    Categorical,
+    KMeans(ModelWithMeta<KMeans<f64, L2Dist>>),
+    SVMMultiClass(ModelWithMeta<Vec<(usize, Svm<f64, Pr>)>>),
+    LinearRegression(ModelWithMeta<FittedLinearRegression<f64>>),
+    //SVMClass(ModelWithMeta<Svm<f64, Pr>>),
+    //PCA(ModelWithMeta<Pca<f64>>),
 }
 
 impl fmt::Display for MLModel {
@@ -91,11 +126,106 @@ impl fmt::Display for MLModel {
         match self {
             MLModel::KMeans(_) => write!(f, "KMeans Clustering"),
             MLModel::LinearRegression(_) => write!(f, "Linear Regression"),
-            MLModel::SVMClass(_) => write!(f, "SVM Classification (Single Class)"),
             MLModel::SVMMultiClass(_) => write!(f, "SVM Classification (Multiple Classes)"),
-            MLModel::PCA(_) => write!(f, "PCA"),
+            //MLModel::SVMClass(_) => write!(f, "SVM Classification (Single Class)"),
+            //MLModel::PCA(_) => write!(f, "PCA"),
         }
     }
+}
+
+impl MLModel {
+    
+    fn to_json_vec(&self) -> Result<Vec<u8>> {
+        Ok(json::to_vec(&self)?)
+    }
+    
+    fn predict_on_values(&self, values: &mut Vec<Value>, record_col: &str, target_col: &str) -> Result<()> {
+        match self {
+            MLModel::KMeans(model) => {
+                let array = values_to_array2_f64(values, record_col)?;
+                let dataset = DatasetBase::from(array);
+                let predictions = model.model.predict(&dataset);
+                for (value, pred) in values.iter_mut().zip(predictions.iter()) {
+                    if let Value::Object(map) = value {
+                        map.insert(target_col.to_string(), json!(pred));
+                    }
+                }
+                Ok(())
+            },
+            MLModel::LinearRegression(model) => {
+                let array = values_to_array2_f64(values, record_col)?;
+                let dataset = DatasetBase::from(array);
+                let predictions = model.model.predict(&dataset);
+                for (value, pred) in values.iter_mut().zip(predictions.iter()) {
+                    if let Value::Object(map) = value {
+                        map.insert(target_col.to_string(), json!(pred));
+                    }
+                }
+                Ok(())
+            },
+            MLModel::SVMMultiClass(model) => {
+                let array = values_to_array2_f64(values, record_col)?;
+                let dataset = DatasetBase::from(array);
+                let mult_class = MultiClassModel::from_iter(model.model.clone());
+                let predictions = mult_class.predict(&dataset);
+                for (value, pred) in values.iter_mut().zip(predictions.iter()) {
+                    if let Value::Object(map) = value {
+                        if let Some(classes) = &model.classes {
+                            let class = classes.get(pred).ok_or_else(|| anyhow!(format!("Couldn't map prediction {} to any of these classes {:?}", pred, classes)))?;
+                            map.insert(target_col.to_string(), json!(class))
+                        } else {
+                            map.insert(target_col.to_string(), json!(pred))
+                        };
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn predict_on_vector(&self, vector: Vec<f64>) -> Result<MLPrediction> {
+        match self {
+            MLModel::KMeans(model) => {
+                let array = Array2::from_shape_vec((1, vector.len()), vector)?;
+                let dataset = DatasetBase::from(array);
+                let predictions = model.model.predict(&dataset);
+                let score = *predictions
+                    .first()
+                    .ok_or_else(|| anyhow!("Got an empty prediction"))?;
+                Ok(MLPrediction { score: score as f64, class: None } )
+            },
+            MLModel::LinearRegression(model) => {
+                let array = Array2::from_shape_vec((1, vector.len()), vector)?;
+                let dataset = DatasetBase::from(array);
+                let predictions = model.model.predict(&dataset);
+                let score = *predictions
+                    .first()
+                    .ok_or_else(|| anyhow!("Got an empty prediction"))?;
+                Ok(MLPrediction { score, class: None } )
+            },
+            MLModel::SVMMultiClass(model) => {
+                let array = Array2::from_shape_vec((1, vector.len()), vector)?;
+                let dataset = DatasetBase::from(array);
+                let mult_class = MultiClassModel::from_iter(model.model.clone());
+                let predictions = mult_class.predict(&dataset);
+                let score = *predictions
+                    .first()
+                    .ok_or_else(|| anyhow!("Got an empty prediction"))?;
+                let class = if let Some(classes) = &model.classes {
+                    Some(classes.get(&score).ok_or_else(|| anyhow!(format!("Couldn't map prediction {} to any of these classes {:?}", score, classes)))?)
+                } else {
+                    None
+                };
+                Ok(MLPrediction { score: score as f64, class: class.cloned() } )
+            }
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+pub struct MLPrediction {
+    pub score: f64,
+    pub class: Option<String>
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -192,95 +322,43 @@ pub fn values_to_array2_f64(values: &[Value], attr: &str) -> Result<Array2<f64>,
 /// For a column `attr` in Vec<Values> attempt to load all rows as Array1<f64>
 pub fn values_to_array1_f64(values: &[Value], attr: &str) -> Result<Array1<f64>> {
     let mut flat = Vec::with_capacity(values.len());
-    for (i, value) in values.iter().enumerate() {
+    for (r, value) in values.iter().enumerate() {
         let v = value.get(attr).ok_or_else(|| {
-            anyhow!("Row {i}: expected object with key `{attr}`, got `{value:?}`")
+            anyhow!("Row {r}: expected object with key `{attr}`, got `{value:?}`")
         })?;
         flat.push(
             v.as_f64()
-                .ok_or_else(|| anyhow!("Row {i}: failed to load as f64"))?,
+                .ok_or_else(|| anyhow!("Row {r}: failed to load as f64"))?,
         );
     }
     Ok(Array1::from(flat))
 }
 
 /// For a column `attr` in Vec<Values> attempt to load all rows as Array1<usize>
-pub fn values_to_array1_usize(values: &[Value], attr: &str) -> Result<Array1<usize>> {
+/// We are assuming that the col contains Strings which we map to unique ids
+pub fn values_to_array1_usize(values: &[Value], attr: &str) -> Result<(Array1<usize>, HashMap<usize, String>)> {
     let mut flat = Vec::with_capacity(values.len());
-    for (i, value) in values.iter().enumerate() {
+    let mut name_to_id: HashMap<String, usize> = HashMap::new();
+    let mut id_to_name: HashMap<usize, String> = HashMap::new();
+    let mut next_id = 0;
+
+    for (r, value) in values.iter().enumerate() {
         let v = value.get(attr).ok_or_else(|| {
-            anyhow!("Row {i}: expected object with key `{attr}`, got `{value:?}`")
+            anyhow!("Row {r}: expected object with key `{attr}`, got `{value:?}`")
         })?;
-        flat.push(
-            v.as_u64()
-                .and_then(|n| usize::try_from(n).ok()) // u64 → usize safely
-                .ok_or_else(|| anyhow!("Row {i}: failed to load as usize"))?,
-        );
-    }
-    Ok(Array1::from(flat))
-}
+        let s = v.as_str().ok_or_else(|| {
+            anyhow!("Row {r}: failed to load `{attr}` as string, got `{v:?}`")
+        })?;
 
-/// Utility: Load LanceDB records (column of vectors) as Linfa Database
-/// Optional target col for supervised training
-pub fn values_to_dataset(
-    values: &[Value],
-    train_col: &str,
-    target_col: Option<&str>,
-    target_format: Option<MLTargetType>,
-) -> Result<MLDataset, Error> {
-    let train_array = values_to_array2_f64(values, train_col)?;
-    if let Some(target_col) = target_col {
-        let target_format = target_format.ok_or(anyhow!("Target Format Not Set!"))?;
-        match target_format {
-            MLTargetType::Categorical => {
-                let target_array = values_to_array1_usize(values, target_col)?;
-                Ok(MLDataset::Classification(
-                    DatasetBase::from(train_array).with_targets(target_array),
-                ))
-            }
-            MLTargetType::Numerical => {
-                let target_array = values_to_array1_f64(values, target_col)?;
-                Ok(MLDataset::Regression(
-                    DatasetBase::from(train_array).with_targets(target_array),
-                ))
-            }
-        }
-    } else {
-        Ok(MLDataset::Unlabeled(DatasetBase::from(train_array)))
-    }
-}
+        // assing new class id or reuse existing
+        let id = *name_to_id.entry(s.to_string()).or_insert_with(|| {
+            let id = next_id;
+            next_id += 1;
+            id_to_name.insert(id, s.to_string());
+            id
+        });
 
-/// Updates records with predictions by adding a new field.
-///
-/// # Arguments
-/// * `records` - a vector of JSON records
-/// * `predictions` - a 1D ndarray of `usize` predictions
-/// * `attr_name` - the name of the new attribute to insert
-///
-/// # Returns
-/// Updated vector of records with the new attribute.
-fn update_records_with_predictions<T>(
-    mut records: Vec<Value>,
-    predictions: Array1<T>,
-    attr_name: &str,
-) -> Result<Vec<Value>, Error>
-where
-    T: Copy + Serialize,
-{
-    if records.len() != predictions.len() {
-        return Err(anyhow!("Records and predictions have different lengths!"));
+        flat.push(id);
     }
-    for (record, pred) in records.iter_mut().zip(predictions.iter()) {
-        if let Value::Object(map) = record {
-            map.insert(attr_name.to_string(), json!(pred));
-        }
-    }
-    Ok(records)
-}
-
-/// Utility: Remove pin on update
-fn remove_pin(node: &mut Node, name: &str) {
-    if let Some(pin) = node.get_pin_by_name(name) {
-        node.pins.remove(&pin.id.clone());
-    }
+    Ok((Array1::from(flat), id_to_name))
 }

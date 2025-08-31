@@ -6,15 +6,15 @@
 //! Adds / upserts predictions back into the Database.
 
 use crate::ai::ml::{
-    MAX_RECORDS, MLDataset, MLModel, NodeMLModel, update_records_with_predictions,
-    values_to_dataset,
+    MAX_RECORDS, MLPrediction, NodeMLModel
 };
-use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
+use crate::storage::db::vector::NodeDBConnection;
+use flow_like::flow::pin::ValueType;
 use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, remove_pin_by_name},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -23,8 +23,6 @@ use flow_like::{
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_storage::lancedb::table::NewColumnTransform;
 use flow_like_types::{Result, Value, anyhow, async_trait, json::json};
-use linfa::composing::MultiClassModel;
-use linfa::traits::Predict;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -62,12 +60,12 @@ impl NodeLogic for MLPredictNode {
         node.add_input_pin(
             "source",
             "Data Source",
-            "Data Source (DB or CSV)",
+            "Data Source (DB, Vector, CSV, ...)",
             VariableType::String,
         )
         .set_options(
             PinOptions::new()
-                .set_valid_values(vec!["Database".to_string()]) // , "CSV".to_string()
+                .set_valid_values(vec!["Database".to_string(), "Vector".to_string()]) // , "CSV".to_string()
                 .build(),
         )
         .set_default_value(Some(json!("Database")));
@@ -94,7 +92,7 @@ impl NodeLogic for MLPredictNode {
                 // fetch additional inputs
                 let node_database: NodeDBConnection = context.evaluate_pin("database").await?;
                 let records_col: String = context.evaluate_pin("records").await?;
-                let predictions_col: String = context.evaluate_pin("predictions").await?;
+                let predictions_col: String = context.evaluate_pin("predictions_col").await?;
 
                 // fetch database
                 let database = node_database
@@ -105,7 +103,7 @@ impl NodeLogic for MLPredictNode {
 
                 // fetch records
                 let t0 = std::time::Instant::now();
-                let (records, existing_cols) = {
+                let (mut records, existing_cols) = {
                     let database = database.read().await;
                     let schema = database.schema().await?;
                     let existing_cols: HashSet<String> =
@@ -132,52 +130,21 @@ impl NodeLogic for MLPredictNode {
                 let elapsed = t0.elapsed();
                 context.log_message(&format!("Fetch records (db): {elapsed:?}"), LogLevel::Debug);
 
-                // make dataset -> load as unlabeld dataset as we want to predict the labels
-                let t0 = std::time::Instant::now();
-                let ds = match values_to_dataset(&records, &records_col, None, None)? {
-                    MLDataset::Unlabeled(ds) => ds,
-                    _ => return Err(anyhow!("Invalid Dataset Format!")),
-                };
-                let elapsed = t0.elapsed();
-                context.log_message(
-                    &format!("Preprocess data (ds): {elapsed:?}"),
-                    LogLevel::Debug,
-                );
-
                 // predict
                 let t0 = std::time::Instant::now();
-                let predictions: ndarray::ArrayBase<
-                    ndarray::OwnedRepr<_>,
-                    ndarray::Dim<[usize; 1]>,
-                > = {
+                {
                     let model = node_model.get_model(context).await?;
                     let model_guard = model.lock().await;
-                    match &*model_guard {
-                        MLModel::KMeans(model) => model.predict(&ds).mapv(|x| x as f64),
-                        MLModel::LinearRegression(model) => model.predict(&ds),
-                        MLModel::SVMMultiClass(models) => {
-                            let model = MultiClassModel::from_iter(models.clone());
-                            model.predict(&ds).mapv(|x| x as f64)
-                        }
-                        _ => return Err(anyhow!("Unknown Machine Learning Model!")),
-                    }
-                };
+                    model_guard.predict_on_values(&mut records, &records_col, &predictions_col)?;
+                };  // drop model
                 let elapsed = t0.elapsed();
                 context.log_message(&format!("Predict: {elapsed:?}"), LogLevel::Debug);
-                context.log_message(
-                    &format!("Output Array Dims: {}", predictions.dim()),
-                    LogLevel::Debug,
-                );
-
+                
                 // upsert
                 let t0 = std::time::Instant::now();
                 {
                     let mut database = database.write().await;
                     if !existing_cols.contains(&predictions_col) {
-                        context.log_message(
-                            &format!("Adding {} as new column", predictions_col),
-                            LogLevel::Debug,
-                        );
                         // add new column for predictions
                         let new_col = vec![(
                             predictions_col.to_string(),
@@ -186,14 +153,12 @@ impl NodeLogic for MLPredictNode {
                         database
                             .add_columns(NewColumnTransform::SqlExpressions(new_col), None)
                             .await?;
+                        context.log_message(
+                            &format!("Added {} as new column", predictions_col),
+                            LogLevel::Debug,
+                        );
                     }
-                    // update records
-                    let t0 = std::time::Instant::now();
-                    let records =
-                        update_records_with_predictions(records, predictions, &predictions_col)?;
-                    let elapsed = t0.elapsed();
-                    context.log_message(&format!("Update records: {elapsed:?}"), LogLevel::Debug);
-
+                    // upsert records with predictions
                     database.upsert(records, records_col).await?;
                 } // drop database read/write guard
                 let elapsed = t0.elapsed();
@@ -204,6 +169,22 @@ impl NodeLogic for MLPredictNode {
                 context
                     .set_pin_value("database_out", database_value)
                     .await?;
+            }
+            "Vector" => {
+                // load vector as dataset
+                let vector: Vec<f64> = context.evaluate_pin("vector").await?;
+                
+                let t0 = std::time::Instant::now();
+                let prediction = {
+                    let model = node_model.get_model(context).await?;
+                    let model_guard = model.lock().await;
+                    model_guard.predict_on_vector(vector)?
+                }; // drop model
+                let elapsed = t0.elapsed();
+                context.log_message(&format!("Predict: {elapsed:?}"), LogLevel::Debug);
+
+                // set outputs
+                context.set_pin_value("prediction", json!(prediction)).await?;
             }
             _ => return Err(anyhow!("Datasource not implemented")),
         };
@@ -241,9 +222,9 @@ impl NodeLogic for MLPredictNode {
                 )
                 .set_default_value(Some(json!("vector")));
             }
-            if node.get_pin_by_name("predictions").is_none() {
+            if node.get_pin_by_name("predictions_col").is_none() {
                 node.add_input_pin(
-                    "predictions",
+                    "predictions_col",
                     "Output Col",
                     "Column that should be added for predictions",
                     VariableType::String,
@@ -259,23 +240,27 @@ impl NodeLogic for MLPredictNode {
                 .set_schema::<NodeDBConnection>()
                 .set_options(PinOptions::new().set_enforce_schema(true).build());
             }
-            remove_pin(node, "csv");
-        } else {
-            if node.get_pin_by_name("csv").is_none() {
-                node.add_input_pin("csv", "CSV", "CSV Path", VariableType::Struct)
-                    .set_schema::<FlowPath>()
-                    .set_options(PinOptions::new().set_enforce_schema(true).build());
+            remove_pin_by_name(node, "vector");
+            remove_pin_by_name(node, "prediction");
+        } else if source_pin == *"Vector" {
+            if node.get_pin_by_name("vector").is_none() {
+                node.add_input_pin("vector", "Vector", "Vector (1d Array)", VariableType::Float)
+                    .set_value_type(ValueType::Array);
             }
-            remove_pin(node, "database");
-            remove_pin(node, "records");
-            remove_pin(node, "predictions");
-            remove_pin(node, "database_out");
+            if node.get_pin_by_name("prediction").is_none() {
+                node.add_output_pin(
+                    "prediction",
+                    "Prediction",
+                    "Model Prediction",
+                    VariableType::Struct,
+                )
+                .set_schema::<MLPrediction>();
+            }
+            remove_pin_by_name(node, "database");
+            remove_pin_by_name(node, "records");
+            remove_pin_by_name(node, "predictions_col");
+            remove_pin_by_name(node, "database_out");
+        } else {
         }
-    }
-}
-
-fn remove_pin(node: &mut Node, name: &str) {
-    if let Some(pin) = node.get_pin_by_name(name) {
-        node.pins.remove(&pin.id.clone());
     }
 }

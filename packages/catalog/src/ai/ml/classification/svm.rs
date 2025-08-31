@@ -3,13 +3,13 @@
 //! This node loads a dataset (currently from a Database), transforms it into a classification dataset,
 //! and fits multiple SVM-models using the [`linfa`] crate.
 
-use crate::ai::ml::{remove_pin, values_to_dataset, MLDataset, MLModel, MLTargetType, NodeMLModel, MAX_RECORDS};
+use crate::ai::ml::{values_to_array1_usize, values_to_array2_f64, MLModel, ModelWithMeta, NodeMLModel, MAX_RECORDS};
 use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
 use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, remove_pin_by_name},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -17,6 +17,7 @@ use flow_like::{
 };
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_types::{Value, anyhow, async_trait, json::json};
+use linfa::DatasetBase;
 use linfa::{prelude::Pr, traits::Fit};
 use linfa_svm::Svm;
 use std::collections::HashSet;
@@ -85,7 +86,7 @@ impl NodeLogic for FitSVMMultiClassNode {
 
         // load dataset
         let t0 = std::time::Instant::now();
-        let ds = match source.as_str() {
+        let (ds, classes) = match source.as_str() {
             "Database" => {
                 let database: NodeDBConnection = context.evaluate_pin("database").await?;
                 let records_col: String = context.evaluate_pin("records").await?;
@@ -123,19 +124,11 @@ impl NodeLogic for FitSVMMultiClassNode {
                     LogLevel::Debug,
                 );
 
-                // make dataset
-                values_to_dataset(
-                    &records,
-                    &records_col,
-                    Some(&targets_col),
-                    Some(MLTargetType::Categorical),
-                )?
+                let train_array = values_to_array2_f64(&records, &records_col)?;
+                let (target_array, classes) = values_to_array1_usize(&records, &targets_col)?;
+                (DatasetBase::from(train_array).with_targets(target_array), classes)
             }
             _ => return Err(anyhow!("Datasource Not Implemented!")),
-        };
-        let ds = match ds {
-            MLDataset::Classification(ds) => ds,
-            _ => return Err(anyhow!("Invalid Dataset Format")),
         };
         let elapsed = t0.elapsed();
         context.log_message(&format!("Preprocess data: {elapsed:?}"), LogLevel::Debug);
@@ -152,7 +145,7 @@ impl NodeLogic for FitSVMMultiClassNode {
         context.log_message(&format!("Fit model: {elapsed:?}"), LogLevel::Debug);
 
         // set outputs
-        let model = MLModel::SVMMultiClass(svm_models);
+        let model = MLModel::SVMMultiClass( ModelWithMeta { model: svm_models, classes: Some(classes) } );
         let node_model = NodeMLModel::new(context, model).await;
         context.set_pin_value("model", json!(node_model)).await?;
         context.activate_exec_pin("exec_out").await?;
@@ -195,37 +188,16 @@ impl NodeLogic for FitSVMMultiClassNode {
                     VariableType::String,
                 );
             }
-            // if node.get_pin_by_name("update").is_none() {
-            //     node.add_input_pin(
-            //         "update",
-            //         "Update DB?",
-            //         "Update database with predictions on training data?",
-            //         VariableType::Boolean,
-            //     )
-            //     .set_default_value(Some(json!(false)));
-            // }
-            // if node.get_pin_by_name("database_out").is_none() {
-            //     node.add_output_pin(
-            //         "database_out",
-            //         "Database",
-            //         "Updated Database Connection",
-            //         VariableType::Struct,
-            //     )
-            //     .set_schema::<NodeDBConnection>()
-            //     .set_options(PinOptions::new().set_enforce_schema(true).build());
-            // }
-            remove_pin(node, "csv");
+            remove_pin_by_name(node, "csv");
         } else {
             if node.get_pin_by_name("csv").is_none() {
                 node.add_input_pin("csv", "CSV", "CSV Path", VariableType::Struct)
                     .set_schema::<FlowPath>()
                     .set_options(PinOptions::new().set_enforce_schema(true).build());
             }
-            remove_pin(node, "database");
-            remove_pin(node, "records");
-            remove_pin(node, "targets");
-            //remove_pin(node, "update");
-            //remove_pin(node, "database_out");
+            remove_pin_by_name(node, "database");
+            remove_pin_by_name(node, "records");
+            remove_pin_by_name(node, "targets");
         }
     }
 }
