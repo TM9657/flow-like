@@ -155,11 +155,8 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
           <p class="text-muted-foreground leading-relaxed">
             Each step records inputs and outputs, so issues are easy to spot as
             traffic grows. Runs stay steady and explainable — no <span
-              class="p-1 px-2 bg-black font-bold text-black rounded-md transition-all group-hover:bg-black/10 group-hover:text-black border-black border-2"
-              >black</span>
-              <span
-              class="p-1 px-2 bg-black font-bold text-black rounded-md transition-all group-hover:bg-black/10 group-hover:text-black border-black border-2"
-              >boxes</span
+              class="p-1 px-2 bg-black font-bold text-black rounded-md transition-all group-hover:bg-black/10 group-hover:text-black border-black border-2 black-box"
+              >black-boxes</span
             >.
           </p>
         </div>
@@ -195,6 +192,33 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
       } else {
         reveals.forEach((el) => el.classList.add("in"));
       }
+
+      // on touch devices simulate group-hover with a tap
+      try {
+        const touchDevice = matchMedia?.("(hover: none) and (pointer: coarse)")?.matches || 'ontouchstart' in window;
+        if (touchDevice) {
+          const groups = document.querySelectorAll("#typed .group");
+          groups.forEach((group) => {
+            group.addEventListener("click", (e) => {
+              // avoid toggling when clicking interactive elements inside the card
+              if (e.target.closest("a,button,input,textarea,select")) return;
+              group.classList.toggle("tapped");
+            });
+          });
+          // tap outside to clear any tapped states
+          document.addEventListener(
+            "click",
+            (e) => {
+              if (!e.target.closest("#typed .group")) {
+                document.querySelectorAll("#typed .group.tapped").forEach((g) => g.classList.remove("tapped"));
+              }
+            },
+            true,
+          );
+        }
+      } catch (err) {
+        // fail silently on older browsers
+      }
     })();
   </script>
 
@@ -227,6 +251,17 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
     }
     .animate-flow {
       animation: flow 2.2s linear infinite;
+    }
+
+    /* make taps behave like group-hover on touch devices */
+    #typed .group .black-box {
+      transition: background-color .2s, color .2s;
+    }
+    #typed .group:hover .black-box,
+    #typed .group.tapped .black-box {
+      /* mirror group-hover:bg-black/10 and group-hover:text-black */
+      background-color: rgba(0,0,0,0.10);
+      color: #000;
     }
   </style>
 </section>
