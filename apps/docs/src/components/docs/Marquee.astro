@@ -1,0 +1,45 @@
+---
+interface Props { items: string[] }
+const { items } = Astro.props as Props;
+---
+<div class="marquee relative mt-5 " aria-hidden="true">
+  <div class="track">
+    {Array.from({ length: 2 }).map(() => (
+      <ul class="row">
+        {items.map((t) => <li class="item">{t}</li>)}
+      </ul>
+    ))}
+  </div>
+</div>
+
+<style>
+.marquee {
+  --speed: 28s;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  mask-image: linear-gradient(90deg, transparent, black 10%, black 90%, transparent);
+  overflow: hidden;
+  z-index: 1000;
+  background: var(--sl-color-bg-nav, rgba(255,255,255,.04));
+}
+.track {
+  display: flex;
+  width: max-content;
+  animation: scroll var(--speed) linear infinite;
+  z-index: 1000;
+
+}
+.row {
+  display: flex; gap: 2rem; padding: 0.9rem 2rem; margin: 0;
+  list-style: none; white-space: nowrap;
+  z-index: 1000;
+}
+.item {
+  color: color-mix(in oklab, var(--sl-color-text) 85%, transparent);
+  font-weight: 600; letter-spacing: 0.01em;
+  z-index: 1000;
+}
+@keyframes scroll {
+  to { transform: translateX(-50%); }
+}
+</style>

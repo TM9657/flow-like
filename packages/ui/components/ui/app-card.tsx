@@ -1,6 +1,7 @@
 import { HeartFilledIcon } from "@radix-ui/react-icons";
 import { motion } from "framer-motion";
 import {
+	Check,
 	CircleUserIcon,
 	FlaskConicalIcon,
 	GlobeLockIcon,
@@ -20,6 +21,7 @@ interface AppCardProps {
 	metadata?: IMetadata;
 	variant: "extended" | "small";
 	onClick?: () => void;
+	multiSelected?: boolean;
 	className?: string;
 }
 
@@ -29,6 +31,7 @@ export function AppCard({
 	metadata,
 	variant = "extended",
 	onClick,
+	multiSelected,
 	className = "",
 }: Readonly<AppCardProps>) {
 	if (variant === "small") {
@@ -39,6 +42,7 @@ export function AppCard({
 				metadata={metadata}
 				onClick={onClick}
 				className={className}
+				multiSelected={multiSelected}
 			/>
 		);
 	}
@@ -50,6 +54,7 @@ export function AppCard({
 			metadata={metadata}
 			onClick={onClick}
 			className={className}
+			multiSelected={multiSelected}
 		/>
 	);
 }
@@ -175,8 +180,12 @@ function SmallAppCard({
 	metadata,
 	onClick,
 	className,
+	multiSelected,
 }: Readonly<
-	Pick<AppCardProps, "app" | "apps" | "metadata" | "onClick" | "className">
+	Pick<
+		AppCardProps,
+		"app" | "apps" | "metadata" | "onClick" | "className" | "multiSelected"
+	>
 >) {
 	const formatPrice = (price: number) => `€${(price / 100).toFixed(2)}`;
 
@@ -198,6 +207,14 @@ function SmallAppCard({
 				onClick={onClick}
 				className={`group cursor-pointer relative flex items-center gap-3 p-3 transition-all duration-200 rounded-xl border border-border/50 bg-card  w-full overflow-hidden ${className}`}
 			>
+				{typeof multiSelected !== "undefined" && onClick && (
+					<div className="relative shrink-0 z-10">
+						<Checkbox
+							checked={multiSelected ?? false}
+							onCheckedChange={onClick}
+						/>
+					</div>
+				)}
 				<div className="absolute left-0 top-0 bottom-0 w-32 opacity-20 group-hover:opacity-50 transition-all duration-300 overflow-hidden">
 					<img
 						src={metadata?.thumbnail ?? "/placeholder-thumbnail-small.jpg"}
@@ -289,8 +306,12 @@ function ExtendedAppCard({
 	metadata,
 	onClick,
 	className,
+	multiSelected,
 }: Readonly<
-	Pick<AppCardProps, "app" | "apps" | "metadata" | "onClick" | "className">
+	Pick<
+		AppCardProps,
+		"app" | "apps" | "metadata" | "onClick" | "className" | "multiSelected"
+	>
 >) {
 	const formatPrice = (price: number) => `€${(price / 100).toFixed(2)}`;
 	const appName = metadata?.name ?? app.id;
@@ -315,6 +336,14 @@ function ExtendedAppCard({
 				onClick={onClick}
 				className={`group cursor-pointer relative flex flex-col transition-all duration-300 rounded-xl border border-border/40 bg-card shadow-sm hover:bg-card/95 w-72 h-[375px] overflow-hidden ${className}`}
 			>
+				{typeof multiSelected !== "undefined" && onClick && (
+					<div className="relative shrink-0 z-10">
+						<Checkbox
+							checked={multiSelected ?? false}
+							onCheckedChange={onClick}
+						/>
+					</div>
+				)}
 				<div className="relative w-full h-40 overflow-hidden">
 					<motion.img
 						className="absolute inset-0 w-full h-full object-cover "
@@ -417,5 +446,41 @@ function ExtendedAppCard({
 				</div>
 			</button>
 		</motion.div>
+	);
+}
+
+function Checkbox({
+	checked,
+	onCheckedChange,
+}: { checked: boolean; onCheckedChange: () => void }) {
+	return (
+		<div
+			className="relative cursor-pointer"
+			onClick={(e) => {
+				e.stopPropagation();
+				onCheckedChange();
+			}}
+		>
+			<motion.div
+				className={`w-5 h-5 rounded border-2 transition-all duration-200 ${
+					checked
+						? "bg-primary border-primary"
+						: "bg-background border-border hover:border-primary/50"
+				}`}
+				whileTap={{ scale: 0.9 }}
+			>
+				<motion.div
+					initial={{ scale: 0, opacity: 0 }}
+					animate={{
+						scale: checked ? 1 : 0,
+						opacity: checked ? 1 : 0,
+					}}
+					transition={{ type: "spring", stiffness: 300, damping: 20 }}
+					className="flex items-center justify-center h-full"
+				>
+					<Check className="w-3 h-3 text-primary-foreground" />
+				</motion.div>
+			</motion.div>
+		</div>
 	);
 }

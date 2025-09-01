@@ -273,9 +273,7 @@ pub async fn start_docling_server(context: &mut ExecutionContext) -> flow_like_t
             .join("flow-like")
             .join("bits")
             .join("docling_cache");
-        let dir = dir
-            .to_str()
-            .unwrap_or_default();
+        let dir = dir.to_str().unwrap_or_default();
 
         let args = vec!["localhost", &port, dir];
         println!("Starting Docling Server with args: {:?}", args);

@@ -14,9 +14,18 @@ import designValidation from "../images/index/design-validation.png";
 >
   <!-- decorative bg -->
   <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
-    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_15%_25%,var(--c1,transparent),transparent)]"></div>
-    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_85%_35%,var(--c2,transparent),transparent)]"></div>
-    <div class="absolute inset-0 [mask-image:radial-gradient(70%_70%_at_50%_40%,black,transparent)] bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"></div>
+    <div
+      class="absolute inset-0 bg-[radial-gradient(60%_60%_at_15%_25%,var(--c1,transparent),transparent)]"
+    >
+    </div>
+    <div
+      class="absolute inset-0 bg-[radial-gradient(60%_60%_at_85%_35%,var(--c2,transparent),transparent)]"
+    >
+    </div>
+    <div
+      class="absolute inset-0 [mask-image:radial-gradient(70%_70%_at_50%_40%,black,transparent)] bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"
+    >
+    </div>
   </div>
 
   <div class="relative z-10 grid items-start gap-10 lg:gap-16 lg:grid-cols-12">
@@ -27,7 +36,7 @@ import designValidation from "../images/index/design-validation.png";
           class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6"
         >
           <div class="w-2 h-2 bg-secondary rounded-full animate-pulse"></div>
-          Visual Design
+          Visual builder
         </div>
 
         <h2
@@ -37,8 +46,10 @@ import designValidation from "../images/index/design-validation.png";
         </h2>
 
         <p class="mt-6 text-lg text-muted-foreground">
-          Drag nodes, wire typed pins, and validate as you go. Inline errors keep graphs
-          shippable. Snapshot inputs to reproduce issues and compare runs.
+          Draw your flow and see your <b>data’s journey</b> as you build: what came
+          in, how it was filtered and transformed, and what went out. Inline feedback
+          keeps things usable, and snapshots let you reproduce issues and compare
+          runs—no guesswork.
         </p>
       </div>
 
@@ -54,8 +65,11 @@ import designValidation from "../images/index/design-validation.png";
               <LuUnplug className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
-              <h3 class="font-semibold text-lg">Typed pins</h3>
-              <p class="text-muted-foreground">Ports know their schema, so refactors are safe.</p>
+              <h3 class="font-semibold text-lg">Connections that fit</h3>
+              <p class="text-muted-foreground">
+                Pins know what they accept, so you wire correctly and refactors
+                don’t break flows.
+              </p>
             </div>
           </div>
         </div>
@@ -70,8 +84,11 @@ import designValidation from "../images/index/design-validation.png";
               <LuLock className="w-6 h-6 text-secondary-foreground" />
             </div>
             <div>
-              <h3 class="font-semibold text-lg">Inline validation</h3>
-              <p class="text-muted-foreground">Miswired edges surface immediately.</p>
+              <h3 class="font-semibold text-lg">Instant feedback</h3>
+              <p class="text-muted-foreground">
+                Miswired edges surface immediately. Fix mistakes as you
+                go—before they ship.
+              </p>
             </div>
           </div>
         </div>
@@ -86,8 +103,11 @@ import designValidation from "../images/index/design-validation.png";
               <LuSearch className="w-6 h-6 text-tertiary-foreground" />
             </div>
             <div>
-              <h3 class="font-semibold text-lg">Observability</h3>
-              <p class="text-muted-foreground">Inspect payloads and timings at every edge.</p>
+              <h3 class="font-semibold text-lg">See every input & output</h3>
+              <p class="text-muted-foreground">
+                Inspect payloads and timings at each step. Trace changes and
+                explain results with confidence.
+              </p>
             </div>
           </div>
         </div>
@@ -97,7 +117,11 @@ import designValidation from "../images/index/design-validation.png";
     <!-- RIGHT: parallax mosaic + video, with lightbox -->
     <div class="relative w-full lg:col-span-7">
       <!-- subtle spotlight -->
-      <div aria-hidden="true" class="absolute -top-8 -left-6 w-40 h-40 rounded-full bg-secondary/20 blur-3xl"></div>
+      <div
+        aria-hidden="true"
+        class="absolute -top-8 -left-6 w-40 h-40 rounded-full bg-secondary/20 blur-3xl"
+      >
+      </div>
 
       <div class="relative grid grid-cols-12 gap-6">
         <!-- Tall validation shot -->
@@ -108,7 +132,7 @@ import designValidation from "../images/index/design-validation.png";
         >
           <Image
             src={designValidation}
-            alt="Inline validation"
+            alt="Inline feedback while wiring a flow"
             class="w-full h-full object-cover select-none transition-transform duration-700 ease-out group-hover:scale-[1.02]"
             loading="lazy"
             decoding="async"
@@ -116,8 +140,10 @@ import designValidation from "../images/index/design-validation.png";
             sizes="(min-width:1024px) 36rem, 92vw"
             format="webp"
           />
-          <figcaption class="absolute left-3 bottom-3 rounded-md border border-border/50 bg-background/70 backdrop-blur px-2.5 py-1 text-xs">
-            Inline validation
+          <figcaption
+            class="absolute left-3 bottom-3 rounded-md border border-border/50 bg-background/70 backdrop-blur px-2.5 py-1 text-xs"
+          >
+            Inline feedback
           </figcaption>
         </figure>
 
@@ -129,7 +155,7 @@ import designValidation from "../images/index/design-validation.png";
         >
           <Image
             src={designOverview}
-            alt="Node inspector & overview"
+            alt="Workflow overview with inspector showing inputs and outputs"
             class="w-full h-full object-cover select-none transition-transform duration-700 ease-out group-hover:scale-[1.02]"
             loading="lazy"
             decoding="async"
@@ -137,7 +163,9 @@ import designValidation from "../images/index/design-validation.png";
             sizes="(min-width:1024px) 36rem, 92vw"
             format="webp"
           />
-          <figcaption class="absolute right-3 bottom-3 rounded-md border border-border/50 bg-background/70 backdrop-blur px-2.5 py-1 text-xs">
+          <figcaption
+            class="absolute right-3 bottom-3 rounded-md border border-border/50 bg-background/70 backdrop-blur px-2.5 py-1 text-xs"
+          >
             Overview & inspector
           </figcaption>
         </figure>
@@ -162,7 +190,9 @@ import designValidation from "../images/index/design-validation.png";
             loop
             class="w-full h-[320px] sm:h-[380px] lg:h-[420px] object-cover"
           ></video>
-          <figcaption class="absolute left-3 bottom-3 rounded-md border border-border/50 bg-background/70 backdrop-blur px-2.5 py-1 text-xs">
+          <figcaption
+            class="absolute left-3 bottom-3 rounded-md border border-border/50 bg-background/70 backdrop-blur px-2.5 py-1 text-xs"
+          >
             Rapid prototyping (live)
           </figcaption>
         </figure>
@@ -170,7 +200,7 @@ import designValidation from "../images/index/design-validation.png";
     </div>
   </div>
 
-  <!-- lightbox dialog (images + video) -->
+  <!-- lightbox dialog + helpers unchanged -->
   <dialog
     data-lightbox
     class="backdrop:bg-black/70 rounded-2xl open:fixed open:inset-0 open:m-0 open:min-h-[100dvh] open:flex open:items-center open:justify-center p-0 max-w-[98vw] w-[98vw] m-0"
@@ -185,34 +215,36 @@ import designValidation from "../images/index/design-validation.png";
         Close
       </button>
       <div class="rounded-xl ring-1 ring-border/50 overflow-hidden shadow-2xl">
-        <!-- container for injected media -->
         <div data-lightbox-body></div>
       </div>
     </div>
   </dialog>
 
-  <!-- helpers: reveal, parallax, lightbox -->
   <script is:inline>
+    /* your helpers unchanged */
     (() => {
       const reduce = matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
       // reveal-on-view
       const reveals = document.querySelectorAll("#builder .reveal");
       if (reveals.length && !reduce) {
-        const io = new IntersectionObserver((entries) => {
-          entries.forEach((e) => {
-            if (e.isIntersecting) {
-              e.target.classList.add("in");
-              io.unobserve(e.target);
-            }
-          });
-        }, { threshold: 0.12 });
+        const io = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((e) => {
+              if (e.isIntersecting) {
+                e.target.classList.add("in");
+                io.unobserve(e.target);
+              }
+            });
+          },
+          { threshold: 0.12 },
+        );
         reveals.forEach((el) => io.observe(el));
       } else {
         reveals.forEach((el) => el.classList.add("in"));
       }
 
-      // parallax (lightweight)
+      // parallax
       const px = document.querySelectorAll("#builder [data-parallax]");
       if (px.length && !reduce) {
         const onScroll = () => {
@@ -229,66 +261,80 @@ import designValidation from "../images/index/design-validation.png";
         window.addEventListener("scroll", onScroll, { passive: true });
       }
 
-      // lightbox for images & video
+      // lightbox
       const dlg = document.querySelector("#builder [data-lightbox]");
       const body = dlg?.querySelector("[data-lightbox-body]");
       const closeBtn = dlg?.querySelector("[data-lightbox-close]");
 
-      // images
-      document.querySelectorAll("#builder [data-zoomable] img").forEach((img) => {
-        img.style.cursor = "zoom-in";
-        img.addEventListener("click", () => {
-          if (!dlg || !body) return;
-          body.innerHTML = "";
-          const el = document.createElement("img");
-          el.src = (img.currentSrc || img.src);
-          el.alt = img.alt || "image";
-          el.className = "w-full h-auto object-contain";
-          body.appendChild(el);
-          dlg.showModal();
+      document
+        .querySelectorAll("#builder [data-zoomable] img")
+        .forEach((img) => {
+          img.style.cursor = "zoom-in";
+          img.addEventListener("click", () => {
+            if (!dlg || !body) return;
+            body.innerHTML = "";
+            const el = document.createElement("img");
+            el.src = img.currentSrc || img.src;
+            el.alt = img.alt || "image";
+            el.className = "w-full h-auto object-contain";
+            body.appendChild(el);
+            dlg.showModal();
+          });
         });
-      });
 
-      // video
-      document.querySelectorAll("#builder [data-lightbox-video]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const src = btn.getAttribute("data-lightbox-video");
-          if (!src || !dlg || !body) return;
-          body.innerHTML = "";
-          const v = document.createElement("video");
-          v.src = src;
-          v.controls = true;
-          v.autoplay = true;
-          v.playsInline = true;
-          v.className = "w-full h-auto";
-          body.appendChild(v);
-          dlg.showModal();
+      document
+        .querySelectorAll("#builder [data-lightbox-video]")
+        .forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const src = btn.getAttribute("data-lightbox-video");
+            if (!src || !dlg || !body) return;
+            body.innerHTML = "";
+            const v = document.createElement("video");
+            v.src = src;
+            v.controls = true;
+            v.autoplay = true;
+            v.playsInline = true;
+            v.className = "w-full h-auto";
+            body.appendChild(v);
+            dlg.showModal();
+          });
         });
-      });
 
       closeBtn?.addEventListener("click", () => dlg?.close());
-      dlg?.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });
+      dlg?.addEventListener("click", (e) => {
+        if (e.target === dlg) dlg.close();
+      });
     })();
   </script>
 
   <style>
-    :where(#builder) { --c1: attr(data-c1); --c2: attr(data-c2); }
-
-    /* ensure dialog has no UA margin and is centered when opened (fallback for browsers/Tailwind variants) */
-    #builder [data-lightbox] { margin: 0; }
+    :where(#builder) {
+      --c1: attr(data-c1);
+      --c2: attr(data-c2);
+    }
+    #builder [data-lightbox] {
+      margin: 0;
+    }
     #builder [data-lightbox][open] {
       position: fixed;
       inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100dvh; /* covers mobile viewport correctly */
+      min-height: 100dvh;
       margin: 0;
       padding: 0;
     }
-
-    /* reveal animation */
-    #builder .reveal { opacity: 0; transform: translateY(12px); transition: opacity .6s ease, transform .6s ease; }
-    #builder .reveal.in { opacity: 1; transform: none; }
+    #builder .reveal {
+      opacity: 0;
+      transform: translateY(12px);
+      transition:
+        opacity 0.6s ease,
+        transform 0.6s ease;
+    }
+    #builder .reveal.in {
+      opacity: 1;
+      transform: none;
+    }
   </style>
 </section>

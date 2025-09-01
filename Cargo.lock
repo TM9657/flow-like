@@ -4893,6 +4893,7 @@ dependencies = [
  "tauri-plugin-window-state",
  "tracing",
  "tracing-subscriber",
+ "urlencoding",
  "webp",
  "window-vibrancy",
 ]
