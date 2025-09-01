@@ -1,7 +1,7 @@
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "astro/config";
 import compressor from "astro-compressor";
+import { defineConfig } from "astro/config";
 
 import mdx from "@astrojs/mdx";
 
@@ -24,7 +24,7 @@ export default defineConfig({
 		}),
 		sitemap(),
 		(await import("@playform/compress")).default(),
-		compressor()
+		compressor(),
 	],
 	vite: {
 		define: {

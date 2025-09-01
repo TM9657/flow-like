@@ -1,0 +1,110 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import Hero from "../components/docs/Hero.astro";
+import FeatureRows from "../components/docs/FeatureRows.astro";
+import Steps from "../components/docs/Steps.astro";
+import Marquee from "../components/docs/Marquee.astro";
+import CTA from "../components/docs/CTA.astro";
+---
+
+<StarlightPage
+    frontmatter={{
+        title: "",
+        template: "splash",
+        description:
+            "Documentation for Flow-Like, the typed workflow automation platform.",
+        hero: {
+            title: "Flow‑Like Documentation",
+        },
+    }}
+>
+    <Marquee
+        items={[
+            "Design workflows visually",
+            "Composable processes",
+            "Performance",
+            "Portability",
+            "Extensibility",
+            "Theming",
+            "Storage & IO",
+            "Reading & Debugging",
+            "Zero‑to‑Prod",
+        ]}
+    />
+
+    <section id="why" style={{ marginTop: "4rem" }}>
+        <FeatureRows
+            items={[
+                {
+                    icon: "🎛️",
+                    title: "Design workflows visually",
+                    text: "Shape ideas fast with a visual model that stays in sync with code.",
+                },
+                {
+                    icon: "🧩",
+                    title: "Composable processes",
+                    text: "Small, focused parts that combine into reliable pipelines.",
+                },
+                {
+                    icon: "⚡",
+                    title: "Performance that scales",
+                    text: "Keep hot paths fast and predictable as graphs grow.",
+                },
+                {
+                    icon: "🌍",
+                    title: "Portable by design",
+                    text: "Run across environments without lock‑in.",
+                },
+                {
+                    icon: "🧱",
+                    title: "Extensible",
+                    text: "Bring your own integrations and custom nodes.",
+                },
+                {
+                    icon: "🎨",
+                    title: "Theming & UX",
+                    text: "Match your brand while keeping accessibility first.",
+                },
+            ]}
+        />
+    </section>
+
+    <section id="start" style={{ marginTop: "4rem" }}>
+        <Steps
+            steps={[
+                {
+                    label: "Install",
+                    detail: "Install the CLI and scaffold your first project.",
+                    cta: {
+                        href: "/guides/getting-started/",
+                        label: "Getting started",
+                    },
+                },
+                {
+                    label: "Compose",
+                    detail: "Combine nodes into readable, testable processes.",
+                    cta: {
+                        href: "/contributing/nodes/best-practices",
+                        label: "Best practices",
+                    },
+                },
+                {
+                    label: "Ship",
+                    detail: "Tune performance, stay portable, deploy with confidence.",
+                    cta: {
+                        href: "/guides/getting-started/",
+                        label: "Zero‑to‑Prod",
+                    },
+                },
+            ]}
+        />
+    </section>
+
+    <CTA
+        kicker="Move fast, stay readable"
+        title="Build flows you can reason about."
+        subtitle="Explore guides, patterns, and examples to take a flow from idea to production."
+        primary={{ href: "/guides/getting-started/", label: "Start building" }}
+        secondary={{ href: "https://flow-like.com#faq", label: "Read the FAQ" }}
+    />
+</StarlightPage>

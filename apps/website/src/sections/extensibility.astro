@@ -17,105 +17,187 @@ import {
 >
   <!-- bg decor -->
   <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-    <div class="absolute inset-0 [mask-image:radial-gradient(60%_60%_at_50%_35%,black,transparent)]">
-      <div class="absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl" style="background: radial-gradient(50% 50% at 50% 50%, var(--c1, hsl(200 90% 60% / .25)) 0%, transparent 60%);" />
-      <div class="absolute -bottom-16 -right-16 h-72 w-72 rounded-full blur-3xl" style="background: radial-gradient(50% 50% at 50% 50%, var(--c2, hsl(150 80% 60% / .25)) 0%, transparent 60%);" />
-      <div class="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.border/10)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.border/10)_1px,transparent_1px)] bg-[size:28px_28px]" />
+    <div
+      class="absolute inset-0 [mask-image:radial-gradient(60%_60%_at_50%_35%,black,transparent)]"
+    >
+      <div
+        class="absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl"
+        style="background: radial-gradient(50% 50% at 50% 50%, var(--c1, hsl(200 90% 60% / .25)) 0%, transparent 60%);"
+      >
+      </div>
+      <div
+        class="absolute -bottom-16 -right-16 h-72 w-72 rounded-full blur-3xl"
+        style="background: radial-gradient(50% 50% at 50% 50%, var(--c2, hsl(150 80% 60% / .25)) 0%, transparent 60%);"
+      >
+      </div>
+      <div
+        class="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.border/10)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.border/10)_1px,transparent_1px)] bg-[size:28px_28px]"
+      >
+      </div>
     </div>
   </div>
 
-  <!-- use a slightly asymmetric grid so the art has room to breathe -->
-  <div class="relative z-10 grid items-start gap-14 lg:[grid-template-columns:1.1fr_1fr]">
+  <div
+    class="relative z-10 grid items-start gap-14 lg:[grid-template-columns:1.1fr_1fr]"
+  >
     <!-- LEFT -->
     <div class="space-y-8">
       <div>
-        <div class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur px-4 py-2 text-sm font-medium text-secondary mb-6">
-          <span class="w-2 h-2 bg-secondary rounded-full animate-pulse" />
-          <span>Extensibility</span>
+        <div
+          class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur px-4 py-2 text-sm font-medium text-secondary mb-6"
+        >
+          <span class="w-2 h-2 bg-secondary rounded-full animate-pulse"></span>
+          <span>Reusable building blocks</span>
         </div>
 
-        <h2 class="text-4xl font-extrabold sm:text-5xl bg-gradient-to-r from-foreground via-secondary to-tertiary bg-clip-text text-transparent leading-tight">
-          Integrate your world with <span class="text-secondary">typed</span> nodes
+        <h2
+          class="text-4xl font-extrabold sm:text-5xl bg-gradient-to-r from-foreground via-secondary to-tertiary bg-clip-text text-transparent leading-tight"
+        >
+          Turn any system into a node you can trust
         </h2>
 
         <p class="mt-6 text-lg text-muted-foreground">
-          Wrap internal APIs, queues, PLCs, computer vision, or spreadsheets.
-          Versioned ports and validation make shared nodes safe to reuse across teams.
+          Connect APIs, databases, devices, or spreadsheets without guesswork.
+          Each node has a clear interface, tests, and versions — so what worked
+          yesterday works tomorrow, for you and your team.
         </p>
 
-        <!-- connector chips -->
+        <!-- connector categories -->
         <div class="mt-6 flex flex-wrap gap-2">
-          <span class="inline-flex items-center rounded-full border border-border/40 bg-muted/30 px-3 py-1 text-xs font-medium text-foreground/80">HTTP/REST</span>
-          <span class="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">gRPC</span>
-          <span class="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-600">Kafka</span>
-          <span class="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600">MQTT</span>
-          <span class="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1 text-xs font-medium text-green-600">S3</span>
-          <span class="inline-flex items-center rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-600">Postgres</span>
-          <span class="inline-flex items-center rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-600">LanceDB</span>
-          <span class="inline-flex items-center rounded-full border border-pink-500/20 bg-pink-500/10 px-3 py-1 text-xs font-medium text-pink-600">OpenCV</span>
-          <span class="inline-flex items-center rounded-full border border-lime-500/20 bg-lime-500/10 px-3 py-1 text-xs font-medium text-lime-600">PLC/Modbus</span>
-          <span class="inline-flex items-center rounded-full border border-slate-500/20 bg-slate-500/10 px-3 py-1 text-xs font-medium text-slate-600">Webhooks</span>
+          <span
+            class="inline-flex items-center rounded-full border border-border/40 bg-muted/30 px-3 py-1 text-xs font-medium text-foreground/80"
+            >APIs & Webhooks</span
+          >
+          <span
+            class="inline-flex items-center rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-700"
+            >Databases</span
+          >
+          <span
+            class="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700"
+            >Files & Storage</span
+          >
+          <span
+            class="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-700"
+            >Messaging & Queues</span
+          >
+          <span
+            class="inline-flex items-center rounded-full border border-lime-500/20 bg-lime-500/10 px-3 py-1 text-xs font-medium text-lime-700"
+            >Devices & Sensors</span
+          >
+          <span
+            class="inline-flex items-center rounded-full border border-pink-500/20 bg-pink-500/10 px-3 py-1 text-xs font-medium text-pink-700"
+            >AI & CV</span
+          >
+          <button
+            type="button"
+            class="inline-flex items-center rounded-full border border-border/40 bg-card/40 px-3 py-1 text-xs font-medium text-foreground/80 hover:bg-card/60 transition"
+            onclick="document.getElementById('all-integrations')?.classList.toggle('hidden')"
+          >
+            View examples
+          </button>
         </div>
       </div>
 
       <!-- feature cards -->
       <div class="space-y-4">
-        <div class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur p-6 hover:border-border/60 transition-colors">
+        <div
+          class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur p-6 hover:border-border/60 transition-colors"
+        >
           <div class="flex items-center gap-3 mb-2">
-            <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-primary to-primary/60">
+            <div
+              class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-primary to-primary/60"
+            >
               <LuPlug2 className="w-4 h-4 text-primary-foreground" />
             </div>
-            <h3 class="text-lg font-semibold">Stable interfaces</h3>
+            <h3 class="text-lg font-semibold">Always compatible</h3>
           </div>
-          <p class="text-muted-foreground">I/O ports are <span class="font-medium">schema-checked</span> and <span class="font-medium">versioned</span>.</p>
+          <p class="text-muted-foreground">
+            Inputs and outputs are checked and versioned, so updates don’t break
+            other flows.
+          </p>
         </div>
 
-        <div class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur p-6 hover:border-border/60 transition-colors">
+        <div
+          class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur p-6 hover:border-border/60 transition-colors"
+        >
           <div class="flex items-center gap-3 mb-2">
-            <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-secondary to-secondary/60">
+            <div
+              class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-secondary to-secondary/60"
+            >
               <LuFlaskConical className="w-4 h-4 text-secondary-foreground" />
             </div>
-            <h3 class="text-lg font-semibold">Testability</h3>
+            <h3 class="text-lg font-semibold">Safe to evolve</h3>
           </div>
-          <p class="text-muted-foreground">Snapshot fixtures &amp; property tests per port keep changes safe.</p>
+          <p class="text-muted-foreground">
+            Nodes ship with fixtures and tests. Change things with confidence —
+            you’ll catch issues early.
+          </p>
         </div>
 
-        <div class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur p-6 hover:border-border/60 transition-colors">
+        <div
+          class="rounded-2xl border border-border/40 bg-card/40 backdrop-blur p-6 hover:border-border/60 transition-colors"
+        >
           <div class="flex items-center gap-3 mb-2">
-            <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-tertiary to-tertiary/60">
+            <div
+              class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-tertiary to-tertiary/60"
+            >
               <LuPackage className="w-4 h-4 text-tertiary-foreground" />
             </div>
-            <h3 class="text-lg font-semibold">Distribution</h3>
+            <h3 class="text-lg font-semibold">Share & reuse</h3>
           </div>
-          <p class="text-muted-foreground">Publish privately or to a marketplace with semantic versioning.</p>
+          <p class="text-muted-foreground">
+            Publish privately or to a catalog with versioning, so teams can
+            reuse and upgrade safely.
+          </p>
         </div>
       </div>
 
-      <a href="https://docs.flow-like.com/contributing/nodes/rust-nodes/" target="_blank" class="group inline-flex items-center gap-2 text-sm font-medium text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 hover:opacity-90 transition">
-        See how to wrap an internal API
-        <LuArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+      <a
+        href="https://docs.flow-like.com/contributing/nodes/rust-nodes/"
+        target="_blank"
+        class="group inline-flex items-center gap-2 text-sm font-medium text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 hover:opacity-90 transition"
+      >
+        See how to turn an internal API into a node
+        <LuArrowRight
+          className="w-4 h-4 transition-transform group-hover:translate-x-0.5"
+        />
       </a>
     </div>
 
-    <!-- RIGHT: enlarged illustration, slightly behind content, with one glass panel -->
+    <!-- RIGHT -->
     <div class="relative -z-[1] lg:z-auto">
       <figure class="relative overflow-visible">
-        <!-- glow behind the frame -->
-        <div class="absolute -inset-10 rounded-[38px] bg-gradient-to-b from-primary/10 via-transparent to-emerald-500/10 blur-2xl" aria-hidden="true" />
-        <!-- the image bleeds a bit to the right and scales up on lg -->
+        <div
+          class="absolute -inset-10 rounded-[38px] bg-gradient-to-b from-primary/10 via-transparent to-emerald-500/10 blur-2xl"
+          aria-hidden="true"
+        >
+        </div>
         <Image
           src={nodeBig}
-          alt="Typed connection between nodes"
+          alt="Reusable node with clear inputs and outputs"
           class="w-[115%] max-w-none lg:translate-x-6 lg:scale-[1.05] rounded-[28px] border border-border/40 bg-card/40 backdrop-blur p-2 object-cover"
           loading="lazy"
           decoding="async"
         />
-        <!-- typed attributes panel (single, glassy) -->
-        <figcaption class="absolute left-6 bottom-6 flex items-center gap-2 rounded-2xl border border-border/40 bg-background/70 backdrop-blur px-3 py-2 text-[11px] font-medium">
-          <span class="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-primary">exec</span>
-          <span class="inline-flex items-center rounded-full border border-secondary/20 bg-secondary/10 px-2 py-0.5 text-secondary">frame: Image</span>
-          <span class="inline-flex items-center rounded-full border border-border/40 bg-muted/40 px-2 py-0.5 text-foreground/80">→ Result: Table</span>
-          <span class="inline-flex items-center rounded-full border border-border/40 bg-muted/40 px-2 py-0.5 text-foreground/80">typed</span>
+        <figcaption
+          class="absolute left-6 bottom-6 flex items-center gap-2 rounded-2xl border border-border/40 bg-background/70 backdrop-blur px-3 py-2 text-[11px] font-medium"
+        >
+          <span
+            class="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-primary"
+            >clear inputs</span
+          >
+          <span
+            class="inline-flex items-center rounded-full border border-secondary/20 bg-secondary/10 px-2 py-0.5 text-secondary"
+            >changes</span
+          >
+          <span
+            class="inline-flex items-center rounded-full border border-border/40 bg-muted/40 px-2 py-0.5 text-foreground/80"
+            >→ result</span
+          >
+          <span
+            class="inline-flex items-center rounded-full border border-border/40 bg-muted/40 px-2 py-0.5 text-foreground/80"
+            >versioned</span
+          >
         </figcaption>
       </figure>
     </div>

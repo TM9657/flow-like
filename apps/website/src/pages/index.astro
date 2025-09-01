@@ -15,6 +15,7 @@ import Extensibility from "../sections/extensibility.astro";
 import Theming from "../sections/theming.astro";
 import ProcessCombination from "../sections/process-combination.astro";
 import Storage from "../sections/storage.astro";
+import ProblemSolution from "../sections/problem-solution.astro";
 import Reading from "../sections/reading.astro";
 import { BlogFooter } from "../components/blog-footer";
 
@@ -155,75 +156,86 @@ const ldWebPage = {
 
     <!-- Performance helpers -->
     <style is:global>
-      /* Only paint off-screen sections when needed */
-      .cv { content-visibility: auto; contain-intrinsic-size: 1000px; }
-      @media (max-width: 1024px) { .cv { contain-intrinsic-size: 1400px; } }
-      @media (prefers-reduced-motion: reduce) { .cv { contain-intrinsic-size: 1200px; } }
-
-      /* Keep seams tiny so they don't claim large intrinsic sizes */
-      .cv--seam { contain-intrinsic-size: 24px; }
-
-      /* Defensive: avoid accidental transform promotions on everything */
-      [data-no-layer] { will-change: auto !important; }
-
-      /* Make the page dot color 20% opaque (mix the theme color with transparent).
-         This overrides the existing tailwind-arbitrary background so the dots become 20% transparent. */
-      body {
-        background-image: radial-gradient(color-mix(in srgb, var(--muted) 20%, transparent) 1px, transparent 1px) !important;
+     body {
+        background-image: radial-gradient(
+          color-mix(in srgb, var(--muted) 20%, transparent) 1px,
+          transparent 1px
+        ) !important;
         background-size: 16px 16px !important;
-        background-attachment: fixed !important;
+        background-attachment: scroll !important;
+      }
+      @media (hover: none) and (pointer: coarse) {
+        /* Never let a viewport overlay catch touches unless explicitly allowed */
+        [data-overlay], [data-visual], .overlay, .backdrop,
+        [class*="fixed"], [class~="fixed"] {
+          pointer-events: none;
+          touch-action: pan-y;
+        }
+
+        /* Disable scroll snapping & smooth scroll on phones */
+        * { scroll-snap-type: none !important; }
+        html { scroll-behavior: auto !important; }
+
+        /* Don’t allow sections to create nested scrollers or crop content */
+        html, body, main, section, [role="region"] {
+          overflow: visible !important;
+        }
+
+        /* Sticky/fixed inside sections can break the scroll chain after style changes */
+        .sticky, [style*="position: sticky"] { position: static !important; }
+      }
+
+      html, body { min-height: 100%; }
+      html, body {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
+      }
+      :root, body, #content {
+        overscroll-behavior: auto;
       }
     </style>
   </head>
 
   <body
     class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground overflow-x-hidden max-w-full
-            bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px] bg-fixed"
+            bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px]"
   >
-    {/* Decorative, no a11y cost */}
+    <main id="content" class="w-full">
+      <AmbientGlow />
+      <BlogHeader client:idle/>
+      <Hero />
+      <DesignWorkflowsVisually />
+      <ZeroToProd />
 
-    {/* Keep header & hero eager for better LCP */}
+      <SoftSeam  />
+      <ProblemSolution  />
 
-    <main id="content" class="contents w-full">
-	  <BlogHeader client:load />
-	  <Hero />
-	  <AmbientGlow />
-      <div class="cv"><ZeroToProd /></div>
-      <div class="cv"><DesignWorkflowsVisually /></div>
+      <SoftSeam  />
+      <Portability  />
 
-      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+      <SoftSeam  />
+      <Performance  />
 
-      <div class="cv"><Portability /></div>
+      <SoftSeam  />
+      <Extensibility  />
 
-      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+      <SoftSeam  />
+      <Theming  />
 
-      <div class="cv"><Performance /></div>
+      <SoftSeam  />
+      <ProcessCombination  />
 
-      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
+      <SoftSeam  />
+      <Storage  />
 
-      <div class="cv"><Extensibility /></div>
+      <SoftSeam  />
+      <Reading  />
 
-      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
-
-      <div class="cv"><Theming /></div>
-
-      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
-
-      <div class="cv"><ProcessCombination /></div>
-
-      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
-
-      <div class="cv"><Storage /></div>
-
-      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
-
-      <div class="cv"><Reading /></div>
-
-      <div class="cv cv--seam" aria-hidden="true"><SoftSeam /></div>
-
-      <div class="cv"><FAQ /></div>
+      <SoftSeam  />
+      <FAQ  />
     </main>
 
-    <BlogFooter />
+    <BlogFooter  />
   </body>
 </html>

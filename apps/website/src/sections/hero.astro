@@ -3,7 +3,6 @@ import { EmptyBackendProvider } from "../components/backend-provider";
 
 const github = "https://github.com/TM9657/flow-like";
 const docs = "https://docs.flow-like.com";
-const download = "https://github.com/TM9657/flow-like/releases";
 ---
 
 <section
@@ -39,8 +38,10 @@ const download = "https://github.com/TM9657/flow-like/releases";
             style="overflow:visible; z-index:1"
             aria-hidden="true"
         >
-            <path id="hero-right-conn" class="pin-conn text-primary pointer-events-none" fill="none"
-            ></path>
+            <path
+                id="hero-right-conn"
+                class="pin-conn text-primary pointer-events-none"
+                fill="none"></path>
             <path
                 id="hero-left-conn"
                 class="pin-conn text-emerald-500 pointer-events-none"
@@ -78,20 +79,19 @@ const download = "https://github.com/TM9657/flow-like/releases";
                 >
                     <span
                         class="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1 text-[11px] font-medium text-muted-foreground"
-                        >Typed • Blazing fast • Robust</span
+                        >Automate • Explain • Trust</span
                     >
                     <h1
                         class="text-4xl font-extrabold tracking-tight sm:text-5xl leading-[1.05]"
                     >
-                        Typed workflows that <span class="text-primary"
-                            >scale</span
-                        >
+                        Automate your work — and see the full data story
                     </h1>
                     <p class="max-w-2xl text-muted-foreground">
-                        Design reliable systems with type-safe graphs,
-                        Rust-level performance, and built-in governance. Start
-                        local for a head start, then move to edge or any cloud —
-                        no rewiring.
+                        Flow-Like is a visual workflow tool. Build with
+                        drag-and-drop blocks, and get a clear record of <b
+                            >where data came from</b
+                        >, <b>what changed</b>, and
+                        <b>why the result looks the way it does</b> — no black boxes.
                     </p>
 
                     <div class="pt-2 flex flex-wrap items-center gap-3">
@@ -120,23 +120,22 @@ const download = "https://github.com/TM9657/flow-like/releases";
                         class="pt-1 flex flex-wrap items-center gap-2.5 text-sm sm:max-w-xl"
                     >
                         <span class="fl-chip fl-chip--ghost" data-tint="primary"
-                            >🧩 <b>Type-safe</b> graph contracts</span
+                            >🧩 Drag-and-drop building blocks</span
                         >
                         <span class="fl-chip fl-chip--ghost" data-tint="emerald"
-                            >🔒 Governance & observability</span
+                            >🔒 Private by default</span
                         >
                         <span class="fl-chip fl-chip--ghost" data-tint="amber"
-                            >⚡ Rust runtime • predictable latency</span
+                            >⚡ Fast & reliable</span
                         >
                         <span class="fl-chip fl-chip--ghost" data-tint="sky"
-                            >☁️ Run local → edge → cloud</span
+                            >☁️ Works on your computer or at team scale</span
                         >
                     </div>
 
                     <p class="text-xs text-muted-foreground/90">
-                        Want AI too? Blend classical ML with GenAI when it helps
-                        — it’s one more set of typed nodes, not a separate
-                        stack.
+                        From renaming files to analyzing data to running AI —
+                        build flows once and run them anywhere.
                     </p>
                 </div>
 
@@ -148,7 +147,7 @@ const download = "https://github.com/TM9657/flow-like/releases";
                         class="absolute inset-0 bg-gradient-to-tr from-transparent via-background/20 to-background/0"
                     >
                     </div>
-                    <EmptyBackendProvider data="/board.json" client:load />
+                    <EmptyBackendProvider data="/board.json" client:idle />
                     <!-- glassy labels overlay (non-blocking) -->
                     <div
                         aria-hidden="true"

@@ -27,43 +27,42 @@ export default function Board({
 	}, []);
 
 	return (
-			<ReactFlow
-				className="absolute top-0 left-0 right-0 bottom-0"
-				suppressHydrationWarning
-				nodesDraggable={false}
-				nodesConnectable={false}
-				colorMode={"dark"}
-				nodes={nodes}
-				nodeTypes={nodeTypes}
-				edges={edges}
-				maxZoom={3}
-				minZoom={0.1}
-				onInit={(instance) => {
-					instance.fitView({
-						nodes: isMobile
-							? [
-									{
-										id: "j7a5erre9fwqhbq1k5f27tma",
-									},
-									{
-										id: "hh8j23jlgf45jwqb2iwxzkt5"
-									}
-								]
-							: [
-									{
-										id: "j7a5erre9fwqhbq1k5f27tma",
-									},
-									{
-										id: "hh8j23jlgf45jwqb2iwxzkt5"
-									}
-								],
-								padding: 0.25,
-
-					});
-				}}
-				proOptions={{ hideAttribution: true }}
-			>
-				<Background variant={BackgroundVariant.Dots} gap={12} size={1} />
-			</ReactFlow>
+		<ReactFlow
+			className="absolute top-0 left-0 right-0 bottom-0"
+			suppressHydrationWarning
+			nodesDraggable={false}
+			nodesConnectable={false}
+			colorMode={"dark"}
+			nodes={nodes}
+			nodeTypes={nodeTypes}
+			edges={edges}
+			maxZoom={3}
+			minZoom={0.1}
+			onInit={(instance) => {
+				instance.fitView({
+					nodes: isMobile
+						? [
+								{
+									id: "j7a5erre9fwqhbq1k5f27tma",
+								},
+								{
+									id: "hh8j23jlgf45jwqb2iwxzkt5",
+								},
+							]
+						: [
+								{
+									id: "j7a5erre9fwqhbq1k5f27tma",
+								},
+								{
+									id: "hh8j23jlgf45jwqb2iwxzkt5",
+								},
+							],
+					padding: 0.25,
+				});
+			}}
+			proOptions={{ hideAttribution: true }}
+		>
+			<Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+		</ReactFlow>
 	);
 }

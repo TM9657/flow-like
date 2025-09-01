@@ -48,6 +48,7 @@ tauri-plugin-clipboard-manager = "2.2.2"
 tauri-plugin-http = "2.5.1"
 tauri-plugin-devtools = "2.0.1"
 tauri-plugin-fs = "2.4.1"
+urlencoding.workspace = true
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2.3.2", features = ["deep-link"] }

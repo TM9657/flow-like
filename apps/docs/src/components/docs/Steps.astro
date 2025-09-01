@@ -1,0 +1,305 @@
+---
+interface Cta {
+    href: string;
+    label: string;
+}
+interface Step {
+    label: string;
+    detail: string;
+    cta?: Cta;
+}
+interface Props {
+    steps: Step[];
+}
+const { steps } = Astro.props as Props;
+---
+
+<section
+    id="steps"
+    data-c1="hsl(35 96% 55% / .10)"
+    data-c2="hsl(18 94% 52% / .10)"
+    class="steps-section"
+>
+    <!-- Background accents aligned with site header -->
+    <div aria-hidden="true" class="bg">
+        <div class="bg-mask"><div class="bg-fills"></div></div>
+    </div>
+
+    <div class="container">
+        <ol class="timeline" role="list">
+            {
+                steps.map((s, i) => (
+                    <li class="row">
+                        <div class="marker" aria-hidden="true"></div>
+                        <div class="panel">
+                            <h3 class="label">{s.label}</h3>
+                            <p class="detail">{s.detail}</p>
+                            {s.cta && (
+                                <a
+                                    class="cta"
+                                    href={s.cta.href}
+                                    aria-label={`Open “${s.cta.label}” for ${s.label}`}
+                                >
+                                    <span>{s.cta.label}</span>
+                                    <svg
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        aria-hidden="true"
+                                    >
+                                        <path
+                                            fill="currentColor"
+                                            d="M14 3h7v7h-2V6.41l-9.3 9.3-1.4-1.41 9.3-9.3H14V3Z"
+                                        />
+                                    </svg>
+                                </a>
+                            )}
+                        </div>
+                    </li>
+                ))
+            }
+        </ol>
+    </div>
+</section>
+
+<style>
+    :root {
+        --flx-border: var(--sl-color-gray-5, rgba(255, 255, 255, 0.14));
+        --flx-text: var(--sl-color-text, #e6e6e6);
+    }
+
+    .steps-section {
+        position: relative;
+        isolation: isolate;
+        overflow: clip;
+        padding: clamp(1.2rem, 3vw, 2rem) 1rem clamp(2.6rem, 6vw, 4rem);
+    }
+    .container {
+        margin: 0 auto;
+        max-width: 1100px;
+    }
+
+    /* Background accents */
+    .bg {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: -1;
+    }
+    .bg-mask {
+        position: absolute;
+        inset: 0;
+        -webkit-mask-image: radial-gradient(
+            60% 60% at 50% 30%,
+            black,
+            transparent
+        );
+        mask-image: radial-gradient(60% 60% at 50% 30%, black, transparent);
+    }
+    .bg-fills {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+                520px 320px at 12% 10%,
+                var(--c1, var(--flx-amber-flows) / 0.1),
+                transparent
+            ),
+            radial-gradient(
+                640px 420px at 85% 25%,
+                var(--c2, var(--flx-orange-flows) / 0.1),
+                transparent
+            );
+        filter: saturate(110%);
+    }
+
+    /* Timeline */
+    .timeline {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 0.9rem;
+    }
+    .row {
+        position: relative;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.9rem;
+        align-items: start;
+    }
+
+    /* vertical connector line */
+    .row::before {
+        content: "";
+        position: absolute;
+        left: 22px;
+        top: 0;
+        bottom: -0.9rem;
+        width: 2px;
+        background: linear-gradient(
+            180deg,
+            color-mix(in oklab, var(--flx-amber-flows) 40%, transparent),
+            color-mix(in oklab, var(--flx-orange-flows) 40%, transparent)
+        );
+        opacity: 0.38;
+    }
+    .row:last-child::before {
+        display: none;
+    }
+
+    /* Marker */
+    .marker {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 44px;
+    }
+    .marker::after {
+        content: "";
+        position: absolute;
+        inset: auto;
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        background: radial-gradient(circle at 30% 30%, #fff6, transparent 60%),
+            linear-gradient(
+                160deg,
+                color-mix(
+                    in oklab,
+                    var(--flx-amber-flows) 70%,
+                    var(--flx-orange-flows)
+                ),
+                var(--flx-orange-flows)
+            );
+        box-shadow: 0 0 0 2px
+            color-mix(in oklab, var(--flx-border) 70%, transparent);
+    }
+    .num {
+        font-variant-numeric: tabular-nums;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        line-height: 1;
+        font-size: 1.05rem;
+        padding-top: 0.15rem;
+        background: linear-gradient(
+            90deg,
+            var(--sl-color-text),
+            color-mix(
+                in oklab,
+                var(--flx-amber-flows) 65%,
+                var(--sl-color-text)
+            ),
+            color-mix(
+                in oklab,
+                var(--flx-orange-flows) 60%,
+                var(--sl-color-text)
+            )
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+
+    /* Panel */
+    .panel {
+        position: relative;
+        padding: 0.95rem;
+        border-radius: 16px;
+        background: color-mix(in oklab, var(--sl-color-bg) 8%, transparent);
+        border: 1px solid
+            color-mix(in oklab, var(--flx-border) 78%, transparent);
+        overflow: hidden;
+        transition:
+            transform 0.18s ease,
+            border-color 0.18s ease,
+            background 0.18s ease;
+    }
+    .panel::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border-radius: 18px;
+        padding: 1px;
+        background: linear-gradient(
+            120deg,
+            color-mix(in oklab, var(--flx-amber-flows) 40%, transparent),
+            transparent 25%,
+            color-mix(in oklab, var(--flx-orange-flows) 40%, transparent)
+        );
+        -webkit-mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        pointer-events: none;
+        opacity: 0.35;
+        transition: opacity 0.2s ease;
+    }
+    .row:hover .panel {
+        transform: translateY(-1px);
+        border-color: color-mix(
+            in oklab,
+            var(--flx-border) 45%,
+            var(--flx-orange-flows)
+        );
+    }
+    .row:hover .panel::before {
+        opacity: 0.6;
+    }
+
+    .label {
+        margin: 0 0 0.2rem;
+        font-size: 1.02rem;
+        font-weight: 700;
+    }
+    .detail {
+        margin: 0 0.2rem 0 0;
+        color: color-mix(in oklab, var(--flx-text) 90%, transparent);
+        line-height: 1.6;
+    }
+
+    /* CTA */
+    .cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-top: 0.5rem;
+        font-weight: 650;
+        text-decoration: none;
+        padding: 0.42rem 0.65rem;
+        border-radius: 0.75rem;
+        border: 1px solid
+            color-mix(in oklab, var(--flx-amber-flows) 35%, transparent);
+        background: color-mix(in oklab, var(--flx-amber-flows) 8%, transparent);
+        color: color-mix(in oklab, var(--flx-amber-flows) 70%, var(--flx-text));
+        transition:
+            background 0.15s ease,
+            transform 0.15s ease;
+    }
+    .cta:hover {
+        background: color-mix(
+            in oklab,
+            var(--flx-amber-flows) 12%,
+            transparent
+        );
+        transform: translateY(-1px);
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+        .row::before {
+            left: 20px;
+        }
+        .marker {
+            width: 40px;
+        }
+    }
+
+    /* Motion safety */
+    @media (prefers-reduced-motion: reduce) {
+        .panel,
+        .panel::before {
+            transition: none;
+        }
+    }
+</style>

@@ -90,7 +90,7 @@ export function EmptyBackendProvider({ data }: Readonly<{ data: string }>) {
 					<LoadingScreen className="absolute top-0 left-0 right-0 bottom-0" />
 				}
 			>
-					<BoardWrapper nodes={nodes} edges={edges} />
+				<BoardWrapper nodes={nodes} edges={edges} />
 			</Suspense>
 		</ThemeProvider>
 	);

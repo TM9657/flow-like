@@ -306,7 +306,8 @@ const TableGrid: React.FC<TableGridProps> = ({
 				<Search className="mx-auto h-10 w-10 text-muted-foreground mb-4" />
 				<h3 className="text-lg font-semibold mb-2">No matches found</h3>
 				<p className="text-sm text-muted-foreground">
-					No tables match &quot;<span className="font-medium">{searchQuery}</span>&quot;.
+					No tables match &quot;
+					<span className="font-medium">{searchQuery}</span>&quot;.
 				</p>
 			</div>
 		);

@@ -92,7 +92,11 @@ impl LanceDBVectorStore {
         Ok(tables)
     }
 
-    pub async fn add_columns(&self, transform: NewColumnTransform, read_columns: Option<Vec<String>>) -> Result<AddColumnsResult> {
+    pub async fn add_columns(
+        &self,
+        transform: NewColumnTransform,
+        read_columns: Option<Vec<String>>,
+    ) -> Result<AddColumnsResult> {
         let table = self
             .table
             .clone()
@@ -112,7 +116,10 @@ impl LanceDBVectorStore {
         Ok(())
     }
 
-    pub async fn alter_column(&self, alteration: &[ColumnAlteration]) -> Result<AlterColumnsResult> {
+    pub async fn alter_column(
+        &self,
+        alteration: &[ColumnAlteration],
+    ) -> Result<AlterColumnsResult> {
         let table = self
             .table
             .clone()
