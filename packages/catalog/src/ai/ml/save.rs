@@ -46,9 +46,14 @@ impl NodeLogic for SaveMLModelNode {
         .set_schema::<NodeMLModel>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("path", "Path", "Path to Save Model", VariableType::Struct)
-            .set_schema::<FlowPath>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "path",
+            "Path JSON",
+            "Path to Save Model to (JSON)",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "exec_out",

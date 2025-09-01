@@ -5,7 +5,7 @@
 //!
 //! Adds / upserts predictions back into the Database.
 
-use crate::ai::ml::{MAX_RECORDS, MLPrediction, NodeMLModel};
+use crate::ai::ml::{MAX_RECORDS, MLPrediction, NodeMLModel, make_new_field};
 use crate::storage::db::vector::NodeDBConnection;
 use flow_like::flow::pin::ValueType;
 use flow_like::{
@@ -18,44 +18,12 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_storage::arrow_schema::{DataType, Field, Schema};
+use flow_like_storage::arrow_schema::Schema;
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_storage::lancedb::table::NewColumnTransform;
 use flow_like_types::{Result, Value, anyhow, async_trait, json::json};
 use std::collections::HashSet;
 use std::sync::Arc;
-
-/// Make new Arrow field based on first prediction attribute in updated records
-fn new_field(records: &[Value], predictions_col: &str) -> Result<Field> {
-    if let Some(probe) = records.first() {
-        if let Some(value) = probe.get(predictions_col) {
-            match value {
-                Value::Number(n) if n.is_f64() => {
-                    Ok(Field::new(predictions_col, DataType::Float64, true))
-                }
-                Value::Number(n) if n.is_u64() => {
-                    Ok(Field::new(predictions_col, DataType::UInt64, true))
-                }
-                Value::Number(n) if n.is_i64() => {
-                    Ok(Field::new(predictions_col, DataType::Int64, true))
-                }
-                Value::String(_) => Ok(Field::new(predictions_col, DataType::LargeUtf8, true)),
-                other => Err(anyhow!(
-                    "Unknown type for prediction col `{}`: {:?}",
-                    predictions_col,
-                    other
-                )),
-            }
-        } else {
-            Err(anyhow!(
-                "Prediction col `{}` missing in first record",
-                predictions_col
-            ))
-        }
-    } else {
-        Err(anyhow!("Got no records"))
-    }
-}
 
 #[derive(Default)]
 pub struct MLPredictNode {}
@@ -177,7 +145,8 @@ impl NodeLogic for MLPredictNode {
                     let mut database = database.write().await;
                     if !existing_cols.contains(&predictions_col) {
                         // add new column for predictions
-                        let new_field = new_field(&records, &predictions_col)?;
+                        let probe = records.first().ok_or_else(|| anyhow!("Got No Records!"))?;
+                        let new_field = make_new_field(probe, &predictions_col)?;
                         let schema = Schema::new(vec![new_field]);
                         database
                             .add_columns(NewColumnTransform::AllNulls(schema.into()), None)
@@ -217,7 +186,7 @@ impl NodeLogic for MLPredictNode {
                     .set_pin_value("prediction", json!(prediction))
                     .await?;
             }
-            _ => return Err(anyhow!("Datasource not implemented")),
+            _ => return Err(anyhow!("Datasource Not Implemented")),
         };
 
         // set outputs
@@ -265,7 +234,7 @@ impl NodeLogic for MLPredictNode {
                 node.add_output_pin(
                     "database_out",
                     "Database",
-                    "Updated Database Connection",
+                    "Database Connection (Updated)",
                     VariableType::Struct,
                 )
                 .set_schema::<NodeDBConnection>()
@@ -282,7 +251,7 @@ impl NodeLogic for MLPredictNode {
                 node.add_output_pin(
                     "prediction",
                     "Prediction",
-                    "Model Prediction",
+                    "Model Prediction as Struct",
                     VariableType::Struct,
                 )
                 .set_schema::<MLPrediction>();
@@ -291,6 +260,9 @@ impl NodeLogic for MLPredictNode {
             remove_pin_by_name(node, "records");
             remove_pin_by_name(node, "predictions_col");
             remove_pin_by_name(node, "database_out");
-        } 
+        } else {
+            node.error = Some("Datasource Not Implemented".to_string());
+            return;
+        }
     }
 }

@@ -4,12 +4,12 @@
 //! a clustering dataset, and fits a a KMeans clustering model using the [`linfa`] crate.
 
 use crate::ai::ml::{MAX_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array2_f64};
-use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
+use crate::storage::db::vector::NodeDBConnection;
 use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic, remove_pin_by_name},
+        node::{Node, NodeLogic},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -129,7 +129,7 @@ impl NodeLogic for FitKMeansNode {
                 let array = values_to_array2_f64(&records, &records_col)?;
                 DatasetBase::from(array)
             }
-            _ => return Err(anyhow!("Datasource not implemented")),
+            _ => return Err(anyhow!("Datasource Not Implemented")),
         };
         let elapsed = t0.elapsed();
         context.log_message(&format!("Preprocess data: {elapsed:?}"), LogLevel::Debug);
@@ -174,41 +174,14 @@ impl NodeLogic for FitKMeansNode {
                 node.add_input_pin(
                     "records",
                     "Train Col",
-                    "Column containing the records to train on",
+                    "Column Containing the Values to Train on",
                     VariableType::String,
                 )
                 .set_default_value(Some(json!("vector")));
             }
-            // if node.get_pin_by_name("update").is_none() {
-            //     node.add_input_pin(
-            //         "update",
-            //         "Update DB?",
-            //         "Update database with predictions on training data?",
-            //         VariableType::Boolean,
-            //     )
-            //     .set_default_value(Some(json!(false)));
-            // }
-            // if node.get_pin_by_name("database_out").is_none() {
-            //     node.add_output_pin(
-            //         "database_out",
-            //         "Database",
-            //         "Updated Database Connection",
-            //         VariableType::Struct,
-            //     )
-            //     .set_schema::<NodeDBConnection>()
-            //     .set_options(PinOptions::new().set_enforce_schema(true).build());
-            // }
-            remove_pin_by_name(node, "csv");
         } else {
-            if node.get_pin_by_name("csv").is_none() {
-                node.add_input_pin("csv", "CSV", "CSV Path", VariableType::Struct)
-                    .set_schema::<FlowPath>()
-                    .set_options(PinOptions::new().set_enforce_schema(true).build());
-            }
-            remove_pin_by_name(node, "database");
-            remove_pin_by_name(node, "records");
-            //remove_pin_by_name(node, "update");
-            //remove_pin_by_name(node, "database_out");
+            node.error = Some("Datasource Not Implemented".to_string());
+            return;
         }
     }
 }

@@ -6,12 +6,12 @@
 use crate::ai::ml::{
     MAX_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array1_usize, values_to_array2_f64,
 };
-use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
+use crate::storage::db::vector::NodeDBConnection;
 use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic, remove_pin_by_name},
+        node::{Node, NodeLogic},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -188,7 +188,7 @@ impl NodeLogic for FitSVMMultiClassNode {
                 node.add_input_pin(
                     "records",
                     "Train Col",
-                    "Column containing records to train on",
+                    "Column Containing the Values to Train on",
                     VariableType::String,
                 )
                 .set_default_value(Some(json!("vector")));
@@ -197,20 +197,13 @@ impl NodeLogic for FitSVMMultiClassNode {
                 node.add_input_pin(
                     "targets",
                     "Target Col",
-                    "Column containing targets to fit the classifier on",
+                    "Column Containing the Target Values to Fit the Classifier on",
                     VariableType::String,
                 );
             }
-            remove_pin_by_name(node, "csv");
         } else {
-            if node.get_pin_by_name("csv").is_none() {
-                node.add_input_pin("csv", "CSV", "CSV Path", VariableType::Struct)
-                    .set_schema::<FlowPath>()
-                    .set_options(PinOptions::new().set_enforce_schema(true).build());
-            }
-            remove_pin_by_name(node, "database");
-            remove_pin_by_name(node, "records");
-            remove_pin_by_name(node, "targets");
+            node.error = Some("Datasource Not Implemented".to_string());
+            return;
         }
     }
 }

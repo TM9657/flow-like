@@ -36,11 +36,16 @@ impl NodeLogic for LoadMLModelNode {
         );
         node.add_icon("/flow/icons/chart-network.svg");
 
-        node.add_input_pin("exec_in", "Input", "Start Saving", VariableType::Execution);
+        node.add_input_pin("exec_in", "Input", "Start Loading", VariableType::Execution);
 
-        node.add_input_pin("path", "Path", "Path to Save Model", VariableType::Struct)
-            .set_schema::<FlowPath>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "path",
+            "Path JSON",
+            "Path to Load the Model from (JSON)",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "exec_out",
@@ -52,7 +57,7 @@ impl NodeLogic for LoadMLModelNode {
         node.add_output_pin(
             "model",
             "Model",
-            "Trained KMeans Clustering Model",
+            "Loaded Machine Learning Model",
             VariableType::Struct,
         )
         .set_schema::<NodeMLModel>()

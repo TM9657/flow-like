@@ -3,6 +3,7 @@
 //! This module contains various machine learning algorithms and dataset utilities based on the `[linfa]` crate.
 
 use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
+use flow_like_storage::arrow_schema::{DataType, Field};
 use flow_like_types::json;
 use flow_like_types::{
     Cacheable, Error, Ok, Result, Value, anyhow, create_id, json::json, sync::Mutex,
@@ -31,7 +32,7 @@ pub mod save;
 
 /// Max number of records for train/prediction
 /// TODO: block-wise processing, at least for predictions
-pub const MAX_RECORDS: usize = 10000;
+pub const MAX_RECORDS: usize = 20000;
 
 /// Add Machine Learning Nodes to Catalog Lib
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
@@ -115,8 +116,6 @@ pub enum MLModel {
     KMeans(ModelWithMeta<KMeans<f64, L2Dist>>),
     SVMMultiClass(ModelWithMeta<Vec<(usize, Svm<f64, Pr>)>>),
     LinearRegression(ModelWithMeta<FittedLinearRegression<f64>>),
-    //SVMClass(ModelWithMeta<Svm<f64, Pr>>),
-    //PCA(ModelWithMeta<Pca<f64>>),
 }
 
 impl fmt::Display for MLModel {
@@ -125,8 +124,6 @@ impl fmt::Display for MLModel {
             MLModel::KMeans(_) => write!(f, "KMeans Clustering"),
             MLModel::LinearRegression(_) => write!(f, "Linear Regression"),
             MLModel::SVMMultiClass(_) => write!(f, "SVM Classification (Multiple Classes)"),
-            //MLModel::SVMClass(_) => write!(f, "SVM Classification (Single Class)"),
-            //MLModel::PCA(_) => write!(f, "PCA"),
         }
     }
 }
@@ -305,7 +302,8 @@ impl NodeMLModel {
 pub fn values_to_array2_f64(values: &[Value], attr: &str) -> Result<Array2<f64>, Error> {
     // Determine dimensions
     let rows = values.len();
-    let cols = values.first()
+    let cols = values
+        .first()
         .and_then(|value| value.get(attr))
         .and_then(|v| v.as_array())
         .map(|arr| arr.len())
@@ -314,14 +312,14 @@ pub fn values_to_array2_f64(values: &[Value], attr: &str) -> Result<Array2<f64>,
     // Preallocate flat storage
     let mut flat = Vec::with_capacity(rows * cols);
 
-    for (i, value) in values.iter().enumerate() {
+    for (r, value) in values.iter().enumerate() {
         let arr = value.get(attr).and_then(|v| v.as_array()).ok_or_else(|| {
-            anyhow!("Row {i}: expected object with key `{attr}`, got `{value:?}`")
+            anyhow!("Row {r}: expected object with key `{attr}`, got `{value:?}`")
         })?;
 
         if arr.len() != cols {
             return Err(anyhow!(
-                "Row {i}: inconsistent length (expected {cols}, got {})",
+                "Row {r}: inconsistent length (expected {cols}, got {})",
                 arr.len()
             ));
         }
@@ -329,7 +327,7 @@ pub fn values_to_array2_f64(values: &[Value], attr: &str) -> Result<Array2<f64>,
         for (j, x) in arr.iter().enumerate() {
             flat.push(
                 x.as_f64()
-                    .ok_or_else(|| anyhow!("Row {i}, col {j}: failed to load as f64"))?,
+                    .ok_or_else(|| anyhow!("Row {r}, col {j}: failed to load as f64"))?,
             );
         }
     }
@@ -381,4 +379,20 @@ pub fn values_to_array1_usize(
         flat.push(id);
     }
     Ok((Array1::from(flat), id_to_name))
+}
+
+/// Infer Schema of New Columns to be added to Lance Tables
+/// We map the JSON type of value.attr to a corresponding Arrow type
+pub fn make_new_field(value: &Value, attr: &str) -> Result<Field> {
+    if let Some(v) = value.get(attr) {
+        match v {
+            Value::Number(n) if n.is_f64() => Ok(Field::new(attr, DataType::Float64, true)),
+            Value::Number(n) if n.is_u64() => Ok(Field::new(attr, DataType::UInt64, true)),
+            Value::Number(n) if n.is_i64() => Ok(Field::new(attr, DataType::Int64, true)),
+            Value::String(_) => Ok(Field::new(attr, DataType::LargeUtf8, true)),
+            other => Err(anyhow!("Unknown type for attr `{}`: {:?}", attr, other)),
+        }
+    } else {
+        Err(anyhow!("Attr `{}` missing in Value", attr))
+    }
 }
