@@ -332,9 +332,11 @@ impl NodeLogic for ImageClassificationNode {
                     crop_pct,
                     apply_softmax,
                 ),
-                _ => return Err(anyhow!(
-                    "Unknown/Incompatible ONNX-Model for Image Classification!"
-                )),
+                _ => {
+                    return Err(anyhow!(
+                        "Unknown/Incompatible ONNX-Model for Image Classification!"
+                    ));
+                }
             }?
         };
 

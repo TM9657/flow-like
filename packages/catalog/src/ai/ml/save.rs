@@ -2,7 +2,7 @@
 //!
 //! Serializes MLModels as JSONs and writes to a specified path.
 
-use crate::ai::ml::{MLModel, NodeMLModel};
+use crate::ai::ml::NodeMLModel;
 use crate::storage::path::FlowPath;
 use flow_like::{
     flow::{
@@ -13,7 +13,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{Result, anyhow, async_trait, json};
+use flow_like_types::{Result, async_trait};
 
 #[derive(Default)]
 pub struct SaveMLModelNode {}

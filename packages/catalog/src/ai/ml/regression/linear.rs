@@ -3,7 +3,9 @@
 //! This node loads a dataset (currently from a database source), transforms it into
 //! a regression dataset, and fits a linear regression model using the [`linfa`] crate.
 
-use crate::ai::ml::{values_to_array1_f64, values_to_array2_f64, MLModel, ModelWithMeta, NodeMLModel, MAX_RECORDS};
+use crate::ai::ml::{
+    MAX_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array1_f64, values_to_array2_f64,
+};
 use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
 use flow_like::{
     flow::{
@@ -17,8 +19,8 @@ use flow_like::{
 };
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_types::{Value, anyhow, async_trait, json::json};
-use linfa::traits::Fit;
 use linfa::DatasetBase;
+use linfa::traits::Fit;
 use linfa_linear::{FittedLinearRegression, LinearRegression};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -114,7 +116,12 @@ impl NodeLogic for FitLinearRegressionNode {
                         )));
                     }
                     database
-                        .filter("true", Some(vec![records_col.to_string(), targets_col.to_string()]), MAX_RECORDS, 0)
+                        .filter(
+                            "true",
+                            Some(vec![records_col.to_string(), targets_col.to_string()]),
+                            MAX_RECORDS,
+                            0,
+                        )
                         .await?
                 }; // drop db
                 context.log_message(
@@ -138,7 +145,10 @@ impl NodeLogic for FitLinearRegressionNode {
         context.log_message(&format!("Fit model: {elapsed:?}"), LogLevel::Debug);
 
         // set outputs
-        let model = MLModel::LinearRegression( ModelWithMeta { model, classes: None } );
+        let model = MLModel::LinearRegression(ModelWithMeta {
+            model,
+            classes: None,
+        });
         let node_model = NodeMLModel::new(context, model).await;
         context.set_pin_value("model", json!(node_model)).await?;
         context.activate_exec_pin("exec_out").await?;

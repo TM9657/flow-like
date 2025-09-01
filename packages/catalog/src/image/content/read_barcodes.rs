@@ -4,7 +4,6 @@ use flow_like::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic, remove_pin},
-        pin::Pin,
         pin::PinOptions,
         variable::VariableType,
     },

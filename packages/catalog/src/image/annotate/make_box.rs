@@ -5,7 +5,7 @@ use flow_like::{
         board::Board,
         execution::context::ExecutionContext,
         node::{Node, NodeLogic, remove_pin},
-        pin::{Pin, PinOptions},
+        pin::PinOptions,
         variable::VariableType,
     },
     state::FlowLikeState,

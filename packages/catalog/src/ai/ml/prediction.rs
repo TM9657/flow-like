@@ -5,9 +5,7 @@
 //!
 //! Adds / upserts predictions back into the Database.
 
-use crate::ai::ml::{
-    MAX_RECORDS, MLPrediction, NodeMLModel
-};
+use crate::ai::ml::{MAX_RECORDS, MLPrediction, NodeMLModel};
 use crate::storage::db::vector::NodeDBConnection;
 use flow_like::flow::pin::ValueType;
 use flow_like::{
@@ -32,24 +30,27 @@ fn new_field(records: &[Value], predictions_col: &str) -> Result<Field> {
     if let Some(probe) = records.first() {
         if let Some(value) = probe.get(predictions_col) {
             match value {
-                Value::Number(n) if n.is_f64() => Ok(
-                    Field::new(predictions_col, DataType::Float64, true)
-                ),
-                Value::Number(n) if n.is_u64() => Ok(
-                    Field::new(predictions_col, DataType::UInt64, true)
-                ),
-                Value::Number(n) if n.is_i64() => Ok(
-                    Field::new(predictions_col, DataType::Int64, true)
-                ),
-                Value::String(_) => Ok(
-                    Field::new(predictions_col, DataType::LargeUtf8, true)
-                ),
-                other => {
-                    Err(anyhow!("Unknown type for prediction col `{}`: {:?}", predictions_col, other))
+                Value::Number(n) if n.is_f64() => {
+                    Ok(Field::new(predictions_col, DataType::Float64, true))
                 }
+                Value::Number(n) if n.is_u64() => {
+                    Ok(Field::new(predictions_col, DataType::UInt64, true))
+                }
+                Value::Number(n) if n.is_i64() => {
+                    Ok(Field::new(predictions_col, DataType::Int64, true))
+                }
+                Value::String(_) => Ok(Field::new(predictions_col, DataType::LargeUtf8, true)),
+                other => Err(anyhow!(
+                    "Unknown type for prediction col `{}`: {:?}",
+                    predictions_col,
+                    other
+                )),
             }
         } else {
-            Err(anyhow!("Prediction col `{}` missing in first record", predictions_col))
+            Err(anyhow!(
+                "Prediction col `{}` missing in first record",
+                predictions_col
+            ))
         }
     } else {
         Err(anyhow!("Got no records"))
@@ -166,10 +167,10 @@ impl NodeLogic for MLPredictNode {
                     let model = node_model.get_model(context).await?;
                     let model_guard = model.lock().await;
                     model_guard.predict_on_values(&mut records, &records_col, &predictions_col)?;
-                };  // drop model
+                }; // drop model
                 let elapsed = t0.elapsed();
                 context.log_message(&format!("Predict: {elapsed:?}"), LogLevel::Debug);
-                
+
                 // upsert
                 let t0 = std::time::Instant::now();
                 {
@@ -201,7 +202,7 @@ impl NodeLogic for MLPredictNode {
             "Vector" => {
                 // load vector as dataset
                 let vector: Vec<f64> = context.evaluate_pin("vector").await?;
-                
+
                 let t0 = std::time::Instant::now();
                 let prediction = {
                     let model = node_model.get_model(context).await?;
@@ -212,7 +213,9 @@ impl NodeLogic for MLPredictNode {
                 context.log_message(&format!("Predict: {elapsed:?}"), LogLevel::Debug);
 
                 // set outputs
-                context.set_pin_value("prediction", json!(prediction)).await?;
+                context
+                    .set_pin_value("prediction", json!(prediction))
+                    .await?;
             }
             _ => return Err(anyhow!("Datasource not implemented")),
         };
@@ -288,7 +291,6 @@ impl NodeLogic for MLPredictNode {
             remove_pin_by_name(node, "records");
             remove_pin_by_name(node, "predictions_col");
             remove_pin_by_name(node, "database_out");
-        } else {
-        }
+        } 
     }
 }

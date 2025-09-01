@@ -3,13 +3,13 @@
 //! This node loads a dataset (currently from a database source), transforms it into
 //! a clustering dataset, and fits a a KMeans clustering model using the [`linfa`] crate.
 
-use crate::ai::ml::{values_to_array2_f64, MLModel, ModelWithMeta, NodeMLModel, MAX_RECORDS};
+use crate::ai::ml::{MAX_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array2_f64};
 use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
 use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, remove_pin_by_name, NodeLogic},
+        node::{Node, NodeLogic, remove_pin_by_name},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -17,8 +17,8 @@ use flow_like::{
 };
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_types::{Result, Value, anyhow, async_trait, json::json};
-use linfa::traits::Fit;
 use linfa::DatasetBase;
+use linfa::traits::Fit;
 use linfa_clustering::KMeans;
 use linfa_nn::distance::L2Dist;
 use std::collections::HashSet;
@@ -132,10 +132,7 @@ impl NodeLogic for FitKMeansNode {
             _ => return Err(anyhow!("Datasource not implemented")),
         };
         let elapsed = t0.elapsed();
-        context.log_message(
-            &format!("Preprocess data: {elapsed:?}"),
-            LogLevel::Debug,
-        );
+        context.log_message(&format!("Preprocess data: {elapsed:?}"), LogLevel::Debug);
 
         // train model
         let t0 = std::time::Instant::now();
@@ -144,7 +141,10 @@ impl NodeLogic for FitKMeansNode {
         context.log_message(&format!("Fit model: {elapsed:?}"), LogLevel::Debug);
 
         // set outputs
-        let model = MLModel::KMeans( ModelWithMeta { model, classes: None } );
+        let model = MLModel::KMeans(ModelWithMeta {
+            model,
+            classes: None,
+        });
         let node_model = NodeMLModel::new(context, model).await;
         context.set_pin_value("model", json!(node_model)).await?;
         context.activate_exec_pin("exec_out").await?;

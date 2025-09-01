@@ -3,7 +3,9 @@
 //! This node loads a dataset (currently from a Database), transforms it into a classification dataset,
 //! and fits multiple SVM-models using the [`linfa`] crate.
 
-use crate::ai::ml::{values_to_array1_usize, values_to_array2_f64, MLModel, ModelWithMeta, NodeMLModel, MAX_RECORDS};
+use crate::ai::ml::{
+    MAX_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array1_usize, values_to_array2_f64,
+};
 use crate::storage::{db::vector::NodeDBConnection, path::FlowPath};
 use flow_like::{
     flow::{
@@ -116,7 +118,12 @@ impl NodeLogic for FitSVMMultiClassNode {
                         )));
                     }
                     database
-                        .filter("true", Some(vec![records_col.to_string(), targets_col.to_string()]), MAX_RECORDS, 0)
+                        .filter(
+                            "true",
+                            Some(vec![records_col.to_string(), targets_col.to_string()]),
+                            MAX_RECORDS,
+                            0,
+                        )
                         .await?
                 }; // drop db
                 context.log_message(
@@ -126,7 +133,10 @@ impl NodeLogic for FitSVMMultiClassNode {
 
                 let train_array = values_to_array2_f64(&records, &records_col)?;
                 let (target_array, classes) = values_to_array1_usize(&records, &targets_col)?;
-                (DatasetBase::from(train_array).with_targets(target_array), classes)
+                (
+                    DatasetBase::from(train_array).with_targets(target_array),
+                    classes,
+                )
             }
             _ => return Err(anyhow!("Datasource Not Implemented!")),
         };
@@ -145,7 +155,10 @@ impl NodeLogic for FitSVMMultiClassNode {
         context.log_message(&format!("Fit model: {elapsed:?}"), LogLevel::Debug);
 
         // set outputs
-        let model = MLModel::SVMMultiClass( ModelWithMeta { model: svm_models, classes: Some(classes) } );
+        let model = MLModel::SVMMultiClass(ModelWithMeta {
+            model: svm_models,
+            classes: Some(classes),
+        });
         let node_model = NodeMLModel::new(context, model).await;
         context.set_pin_value("model", json!(node_model)).await?;
         context.activate_exec_pin("exec_out").await?;
