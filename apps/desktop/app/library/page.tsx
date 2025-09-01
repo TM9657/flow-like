@@ -49,6 +49,11 @@ import { toast } from "sonner";
 
 export default function YoursPage() {
 	const backend = useBackend();
+	const currentProfile = useInvoke(
+		backend.userState.getSettingsProfile,
+		backend.userState,
+		[],
+	);
 	const apps = useInvoke(backend.appState.getApps, backend.appState, []);
 	const router = useRouter();
 	const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -64,12 +69,14 @@ export default function YoursPage() {
 	>("created");
 
 	const allItems = useMemo(() => {
+		if (!currentProfile.data) return [];
+		const currentProfileApps = new Set((currentProfile.data.hub_profile.apps ?? []).map(a => a.app_id));
 		const map = new Map<string, IMetadata & { id: string; app: IApp }>();
 		apps.data?.forEach(([app, meta]) => {
 			if (meta) map.set(app.id, { ...meta, id: app.id, app });
 		});
-		return Array.from(map.values());
-	}, [apps.data]);
+		return Array.from(map.values()).filter(item => currentProfileApps.has(item.id));
+	}, [apps.data, currentProfile.data]);
 
 	const sortItems = useCallback(
 		(items: Array<IMetadata & { id: string; app: IApp }>) => {
@@ -195,6 +202,7 @@ export default function YoursPage() {
 								Manage and create your custom applications
 							</p>
 						</div>
+
 					</div>
 					<div className="flex items-center gap-2">
 						<Button
@@ -313,17 +321,22 @@ export default function YoursPage() {
 
 				{/* Search and Filter Bar */}
 				<div className="flex items-center justify-between space-x-4">
-					<div className="relative flex-1 max-w-md">
-						<SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-foreground h-4 w-4 z-10" />
-						<Input
-							placeholder="Search apps..."
-							value={searchQuery}
-							onChange={(e) => {
-								search(e.target.value);
-								setSearchQuery(e.target.value);
-							}}
-							className="pl-10 bg-background/50 backdrop-blur-sm border-border/50"
-						/>
+					<div className="flex items-center space-x-4 flex-1">
+						<div className="relative flex-1 max-w-md">
+							<SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-foreground h-4 w-4 z-10" />
+							<Input
+								placeholder="Search apps..."
+								value={searchQuery}
+								onChange={(e) => {
+									search(e.target.value);
+									setSearchQuery(e.target.value);
+								}}
+								className="pl-10 bg-background/50 backdrop-blur-sm border-border/50"
+							/>
+						</div>
+						<a href="/library/visibility" className="text-sm text-primary hover:underline">
+							Missing Apps?{" "}
+						</a>
 					</div>
 					<div className="flex items-center space-x-2">
 						<Select
@@ -364,12 +377,20 @@ export default function YoursPage() {
 			<div className="flex-1 overflow-auto">
 				{allItems.length === 0 && (
 					<EmptyState
-						action={{
-							label: "Create Your First App",
-							onClick: () => {
-								router.push("/library/new");
+						action={[
+							{
+								label: "Create Your First App",
+								onClick: () => {
+									router.push("/library/new");
+								},
 							},
-						}}
+							{
+								label: "Missing Apps?",
+								onClick: () => {
+									router.push("/library/visibility");
+								},
+							}
+						]}
 						icons={[Sparkles, LayoutGridIcon, FilesIcon]}
 						className="min-w-full min-h-full flex-grow h-full border-2 border-dashed border-border/50 rounded-xl bg-muted/20"
 						title="Welcome to Your Library"

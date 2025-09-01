@@ -1,4 +1,4 @@
-import type { IProfile } from "../../lib";
+import type { IProfile, IProfileApp } from "../../lib";
 import type { ISettingsProfile } from "../../types";
 import type { INotificationsOverview, IUserLookup } from "./types";
 
@@ -40,5 +40,6 @@ export interface IUserState {
 	getProfile(): Promise<IProfile>;
 	getSettingsProfile(): Promise<ISettingsProfile>;
 	updateUser(data: IUserUpdate, avatar?: File): Promise<void>;
+	updateProfileApp(profile: ISettingsProfile, app: IProfileApp, operation: "Upsert" | "Remove"): Promise<void>;
 	getInfo(): Promise<IUserInfo>;
 }

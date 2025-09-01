@@ -3,9 +3,10 @@ use crate::{
     profile::UserProfile,
     state::{TauriFlowLikeState, TauriSettingsState},
 };
-use flow_like::{bit::Bit, hub::Hub, profile::Profile, utils::{cache::get_cache_dir, hash::hash_file, http::HTTPClient}};
+use flow_like::{bit::Bit, hub::Hub, profile::{Profile, ProfileApp}, utils::{cache::get_cache_dir, hash::hash_file, http::HTTPClient}};
 use flow_like_types::tokio::task::JoinHandle;
 use futures::future::join_all;
+use serde::Deserialize;
 use tauri_plugin_dialog::DialogExt;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tauri::{AppHandle, Url};
@@ -316,5 +317,43 @@ pub async fn change_profile_image(
         }
     }
 
+    Ok(())
+}
+
+#[derive(Clone, Deserialize)]
+pub enum ProfileAppUpdateOperation {
+    Upsert,
+    Remove,
+}
+
+#[instrument(skip_all)]
+#[tauri::command(async)]
+pub async fn profile_update_app(
+    app_handle: AppHandle,
+    profile: UserProfile,
+    app: ProfileApp,
+    operation: ProfileAppUpdateOperation,
+) -> Result<(), TauriFunctionError> {
+    let settings = TauriSettingsState::construct(&app_handle).await?;
+    let mut settings = settings.lock().await;
+    let profile = settings
+        .profiles
+        .get_mut(&profile.hub_profile.id)
+        .ok_or(anyhow::anyhow!("Profile not found"))?;
+    match operation {
+        ProfileAppUpdateOperation::Upsert => {
+            profile.hub_profile.apps.as_mut().map(|apps| {
+                apps.retain(|a| a.app_id != app.app_id);
+            });
+
+            profile.hub_profile.apps.get_or_insert(vec![]).push(app);
+        },
+        ProfileAppUpdateOperation::Remove => {
+            profile.hub_profile.apps.as_mut().map(|apps| {
+                apps.retain(|a| a.app_id != app.app_id);
+            });
+        }
+    }
+    settings.serialize();
     Ok(())
 }

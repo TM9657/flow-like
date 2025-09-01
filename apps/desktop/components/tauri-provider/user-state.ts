@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
 	IProfile,
+	IProfileApp,
 	ISettingsProfile,
 	IUserState,
 } from "@tm9657/flow-like-ui";
@@ -122,5 +123,11 @@ export class UserState implements IUserState {
 		);
 
 		return result;
+	}
+
+	async updateProfileApp(profile: ISettingsProfile, app: IProfileApp, operation: "Upsert" | "Remove"): Promise<void> {
+		await invoke("profile_update_app", {
+			profile, app, operation
+		})
 	}
 }

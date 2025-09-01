@@ -156,12 +156,27 @@ export function CreateAppPage() {
 						selectedTemplate[0],
 						selectedTemplate[1],
 					);
-			await backend.appState.createApp(
+			const app = await backend.appState.createApp(
 				meta,
 				selectedModels,
 				!isOffline,
 				template,
 			);
+
+			try {
+				if(currentProfile.data) await backend.userState.updateProfileApp(
+					currentProfile.data,
+					{
+						app_id: app.id,
+						favorite: false,
+						pinned: false,
+					},
+					"Upsert"
+				)
+			}catch(e) {
+				console.error("Failed to create app:", e);
+			}
+
 			setShowConfetti(true);
 			toast(`${isOffline ? "Offline" : "Online"} app created successfully! 🎉`);
 			await apps.refetch();

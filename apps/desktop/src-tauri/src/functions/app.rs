@@ -7,18 +7,12 @@ use std::{
 use super::TauriFunctionError;
 use crate::state::{TauriFlowLikeState, TauriSettingsState};
 use flow_like::{
-    app::App,
-    bit::Metadata,
-    flow::{
+    app::App, bit::Metadata, flow::{
         board::{Board, ExecutionStage},
         execution::LogLevel,
-    },
-    flow_like_storage::{
-        Path,
-        object_store::{self, ObjectStore},
-    },
-    profile::ProfileApp,
-    utils::compression::from_compressed,
+    }, flow_like_storage::{
+        object_store::{self, ObjectStore}, Path
+    }, profile::ProfileApp, state::FlowLikeState, utils::compression::from_compressed
 };
 use flow_like_types::anyhow;
 use flow_like_types::create_id;
@@ -114,12 +108,20 @@ pub async fn get_apps(
 ) -> Result<Vec<(App, Option<Metadata>)>, TauriFunctionError> {
     let mut app_list: Vec<(App, Option<Metadata>)> = vec![];
 
-    let profile = TauriSettingsState::current_profile(&app_handle).await?;
-
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
 
-    for app in profile.hub_profile.apps.unwrap_or_default().iter() {
-        let app_id = app.app_id.clone();
+    let app_dir = Path::from("apps");
+    let app_store = FlowLikeState::project_meta_store(&flow_like_state)
+            .await?
+            .as_generic();
+
+    let apps = app_store.list_with_delimiter(Some(&app_dir)).await.map_err(|e| {
+        TauriFunctionError::new(&format!("Failed to list apps: {}", e))
+    })?;
+    let apps = apps.common_prefixes;
+
+    for app in apps {
+        let app_id = app.parts().last().unwrap_or_default().as_ref().to_string();
         if let Ok(app) = App::load(app_id.clone(), flow_like_state.clone()).await {
             let app = app;
             let metadata = App::get_meta(

@@ -266,6 +266,7 @@ pub fn run() {
             functions::settings::profiles::remove_bit,
             functions::settings::profiles::get_bits_in_current_profile,
             functions::settings::profiles::change_profile_image,
+            functions::settings::profiles::profile_update_app,
             functions::app::app_configured,
             functions::app::upsert_board,
             functions::app::delete_app_board,
