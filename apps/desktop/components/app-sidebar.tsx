@@ -86,8 +86,8 @@ import { useCallback, useMemo, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 import { fetcher } from "../lib/api";
-import { useTauriInvoke } from "./useInvoke";
 import { CreateProfileDialog } from "./add-profile";
+import { useTauriInvoke } from "./useInvoke";
 
 const data = {
 	navMain: [
@@ -396,13 +396,16 @@ function Profiles() {
 		[],
 	);
 
-	const handleCreateProfile = useCallback(async (profile: ISettingsProfile) => {
-		await invoke("upsert_profile", { profile });
-		await profiles.refetch();
-		await invalidate(backend.userState.getProfile, []);
-		await currentProfile.refetch();
-		if(profile.hub_profile.id) handleProfileChange(profile.hub_profile.id);
-	}, [setCreateProfile]);
+	const handleCreateProfile = useCallback(
+		async (profile: ISettingsProfile) => {
+			await invoke("upsert_profile", { profile });
+			await profiles.refetch();
+			await invalidate(backend.userState.getProfile, []);
+			await currentProfile.refetch();
+			if (profile.hub_profile.id) handleProfileChange(profile.hub_profile.id);
+		},
+		[setCreateProfile],
+	);
 
 	const handleProfileChange = useCallback(async (id: string) => {
 		if (id !== "")
@@ -429,7 +432,7 @@ function Profiles() {
 				},
 			]),
 		]);
-	}, [])
+	}, []);
 
 	return (
 		<SidebarMenu>
@@ -484,7 +487,8 @@ function Profiles() {
 								<DropdownMenuItem
 									key={profile.hub_profile.id}
 									onClick={async () => {
-										if(profile.hub_profile.id) handleProfileChange(profile.hub_profile.id)
+										if (profile.hub_profile.id)
+											handleProfileChange(profile.hub_profile.id);
 									}}
 									className="gap-4 p-2"
 								>
@@ -509,7 +513,10 @@ function Profiles() {
 								</DropdownMenuItem>
 							))}
 						<DropdownMenuSeparator />
-						<DropdownMenuItem className="gap-2 p-2" onClick={() => setCreateProfile(true)}>
+						<DropdownMenuItem
+							className="gap-2 p-2"
+							onClick={() => setCreateProfile(true)}
+						>
 							<div className="flex size-6 items-center justify-center rounded-md border bg-background">
 								<Plus className="size-4" />
 							</div>
@@ -530,7 +537,11 @@ function Profiles() {
 					</DropdownMenuContent>
 				</DropdownMenu>
 			</SidebarMenuItem>
-			<CreateProfileDialog open={createProfile} setOpen={setCreateProfile} onCreate={handleCreateProfile} />
+			<CreateProfileDialog
+				open={createProfile}
+				setOpen={setCreateProfile}
+				onCreate={handleCreateProfile}
+			/>
 		</SidebarMenu>
 	);
 }
@@ -586,9 +597,9 @@ function NavMain({
 											<SidebarMenuButton
 												variant={
 													pathname === item.url ||
-														typeof item.items?.find(
-															(item) => item.url === pathname,
-														) !== "undefined"
+													typeof item.items?.find(
+														(item) => item.url === pathname,
+													) !== "undefined"
 														? "outline"
 														: "default"
 												}
@@ -705,9 +716,9 @@ function NavMain({
 												<SidebarMenuButton
 													variant={
 														pathname === item.url ||
-															typeof item.items?.find(
-																(item) => item.url === pathname,
-															) !== "undefined"
+														typeof item.items?.find(
+															(item) => item.url === pathname,
+														) !== "undefined"
 															? "outline"
 															: "default"
 													}

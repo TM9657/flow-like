@@ -1,22 +1,31 @@
-use criterion::{
-    criterion_group, criterion_main, BenchmarkId, Criterion, Throughput,
-};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use flow_like::{
     flow::{
         board::Board,
         execution::{InternalRun, RunPayload},
-    }, num_cpus, profile::Profile, state::{FlowLikeConfig, FlowLikeState}, utils::http::HTTPClient
+    },
+    num_cpus,
+    profile::Profile,
+    state::{FlowLikeConfig, FlowLikeState},
+    utils::http::HTTPClient,
 };
 use flow_like_storage::{
     Path,
     files::store::{FlowLikeStore, local_store::LocalObjectStore},
 };
 use flow_like_types::{sync::Mutex, tokio};
-use std::{path::PathBuf, sync::Arc, time::{Duration, Instant}};
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 /// -------- CONFIG (override via env) -----------------------------------------
 fn env_or<T: std::str::FromStr>(key: &str, default: T) -> T {
-    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 fn env_or_string(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
@@ -34,15 +43,26 @@ fn concurrency_list() -> Vec<usize> {
     let max = env_or("FL_MAX_CONCURRENCY", num_cpus::get() * 8);
     let mut v = Vec::new();
     let mut n = 1;
-    while n <= max { v.push(n); n <<= 1; }
+    while n <= max {
+        v.push(n);
+        n <<= 1;
+    }
     v
 }
 
 /// -------- Your IDs; override with env if needed -----------------------------
-fn board_id() -> String { env_or_string("FL_BOARD_ID", "o4wqrpzkx1cp4svxe91yordw") }
-fn start_id() -> String { env_or_string("FL_START_ID", "ek4tee4s3nufw3drfnwd20hw") }
-fn app_id() -> String { env_or_string("FL_APP_ID", "q99s8hb4z56mpwz8dscz7qmz") }
-fn tests_dir() -> PathBuf { PathBuf::from(env_or_string("FL_TESTS_DIR", "../../tests")) }
+fn board_id() -> String {
+    env_or_string("FL_BOARD_ID", "o4wqrpzkx1cp4svxe91yordw")
+}
+fn start_id() -> String {
+    env_or_string("FL_START_ID", "ek4tee4s3nufw3drfnwd20hw")
+}
+fn app_id() -> String {
+    env_or_string("FL_APP_ID", "q99s8hb4z56mpwz8dscz7qmz")
+}
+fn tests_dir() -> PathBuf {
+    PathBuf::from(env_or_string("FL_TESTS_DIR", "../../tests"))
+}
 
 /// -------- Engine bootstrap (reused across runs) -----------------------------
 async fn default_state() -> Arc<Mutex<FlowLikeState>> {
@@ -66,18 +86,25 @@ async fn default_state() -> Arc<Mutex<FlowLikeState>> {
         drop(state);
         let mut registry = registry_guard.write().await;
         registry.initialize(weak_ref);
-        registry.push_nodes(catalog).await.expect("register catalog");
+        registry
+            .push_nodes(catalog)
+            .await
+            .expect("register catalog");
     }
     state_ref
 }
 
 fn construct_profile() -> Profile {
-    Profile { ..Default::default() }
+    Profile {
+        ..Default::default()
+    }
 }
 
 async fn open_board(id: &str, state: Arc<Mutex<FlowLikeState>>) -> Board {
     let path = Path::from("flow").child(&*app_id());
-    Board::load(path, id, state, None).await.expect("load board")
+    Board::load(path, id, state, None)
+        .await
+        .expect("load board")
 }
 
 /// Run a single execution (from a Start node) on an already-open board/state.
@@ -87,19 +114,15 @@ async fn run_once(
     profile: &Profile,
     start: &str,
 ) {
-    let payload = RunPayload { id: start.to_string(), payload: None };
+    let payload = RunPayload {
+        id: start.to_string(),
+        payload: None,
+    };
     let mut run = InternalRun::new(
-        "bench",
-        board,
-        None,
-        &state,
-        profile,
-        &payload,
-        None,
-        false,
-        None,
-        None,
-    ).await.expect("InternalRun::new");
+        "bench", board, None, &state, profile, &payload, None, false, None, None,
+    )
+    .await
+    .expect("InternalRun::new");
     run.execute(state).await;
 }
 

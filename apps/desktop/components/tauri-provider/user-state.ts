@@ -125,9 +125,15 @@ export class UserState implements IUserState {
 		return result;
 	}
 
-	async updateProfileApp(profile: ISettingsProfile, app: IProfileApp, operation: "Upsert" | "Remove"): Promise<void> {
+	async updateProfileApp(
+		profile: ISettingsProfile,
+		app: IProfileApp,
+		operation: "Upsert" | "Remove",
+	): Promise<void> {
 		await invoke("profile_update_app", {
-			profile, app, operation
-		})
+			profile,
+			app,
+			operation,
+		});
 	}
 }

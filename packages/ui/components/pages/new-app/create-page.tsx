@@ -164,16 +164,17 @@ export function CreateAppPage() {
 			);
 
 			try {
-				if(currentProfile.data) await backend.userState.updateProfileApp(
-					currentProfile.data,
-					{
-						app_id: app.id,
-						favorite: false,
-						pinned: false,
-					},
-					"Upsert"
-				)
-			}catch(e) {
+				if (currentProfile.data)
+					await backend.userState.updateProfileApp(
+						currentProfile.data,
+						{
+							app_id: app.id,
+							favorite: false,
+							pinned: false,
+						},
+						"Upsert",
+					);
+			} catch (e) {
 				console.error("Failed to create app:", e);
 			}
 

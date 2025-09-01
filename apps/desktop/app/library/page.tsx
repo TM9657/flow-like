@@ -70,12 +70,16 @@ export default function YoursPage() {
 
 	const allItems = useMemo(() => {
 		if (!currentProfile.data) return [];
-		const currentProfileApps = new Set((currentProfile.data.hub_profile.apps ?? []).map(a => a.app_id));
+		const currentProfileApps = new Set(
+			(currentProfile.data.hub_profile.apps ?? []).map((a) => a.app_id),
+		);
 		const map = new Map<string, IMetadata & { id: string; app: IApp }>();
 		apps.data?.forEach(([app, meta]) => {
 			if (meta) map.set(app.id, { ...meta, id: app.id, app });
 		});
-		return Array.from(map.values()).filter(item => currentProfileApps.has(item.id));
+		return Array.from(map.values()).filter((item) =>
+			currentProfileApps.has(item.id),
+		);
 	}, [apps.data, currentProfile.data]);
 
 	const sortItems = useCallback(
@@ -202,7 +206,6 @@ export default function YoursPage() {
 								Manage and create your custom applications
 							</p>
 						</div>
-
 					</div>
 					<div className="flex items-center gap-2">
 						<Button
@@ -334,7 +337,10 @@ export default function YoursPage() {
 								className="pl-10 bg-background/50 backdrop-blur-sm border-border/50"
 							/>
 						</div>
-						<a href="/library/visibility" className="text-sm text-primary hover:underline">
+						<a
+							href="/library/visibility"
+							className="text-sm text-primary hover:underline"
+						>
 							Missing Apps?{" "}
 						</a>
 					</div>
@@ -389,7 +395,7 @@ export default function YoursPage() {
 								onClick: () => {
 									router.push("/library/visibility");
 								},
-							}
+							},
 						]}
 						icons={[Sparkles, LayoutGridIcon, FilesIcon]}
 						className="min-w-full min-h-full flex-grow h-full border-2 border-dashed border-border/50 rounded-xl bg-muted/20"

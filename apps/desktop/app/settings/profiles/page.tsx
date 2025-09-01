@@ -281,12 +281,17 @@ export default function SettingsPage() {
 						<CardContent className="space-y-6">
 							<div className="flex gap-6">
 								<div className="flex-shrink-0">
-									<button className="relative group" onClick={async () => {
-										await invoke("change_profile_image", { profile: localProfile });
-										await profiles.refetch();
-										await invalidate(backend.userState.getProfile, []);
-										await currentProfile.refetch();
-									}}>
+									<button
+										className="relative group"
+										onClick={async () => {
+											await invoke("change_profile_image", {
+												profile: localProfile,
+											});
+											await profiles.refetch();
+											await invalidate(backend.userState.getProfile, []);
+											await currentProfile.refetch();
+										}}
+									>
 										<img
 											title={localProfile.hub_profile.icon ?? ""}
 											className="rounded-lg border-2 border-border hover:border-primary transition-colors"

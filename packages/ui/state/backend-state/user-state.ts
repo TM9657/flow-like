@@ -40,6 +40,10 @@ export interface IUserState {
 	getProfile(): Promise<IProfile>;
 	getSettingsProfile(): Promise<ISettingsProfile>;
 	updateUser(data: IUserUpdate, avatar?: File): Promise<void>;
-	updateProfileApp(profile: ISettingsProfile, app: IProfileApp, operation: "Upsert" | "Remove"): Promise<void>;
+	updateProfileApp(
+		profile: ISettingsProfile,
+		app: IProfileApp,
+		operation: "Upsert" | "Remove",
+	): Promise<void>;
 	getInfo(): Promise<IUserInfo>;
 }

@@ -35,7 +35,11 @@ export class EmptyUserState implements IUserState {
 	getInfo(): Promise<IUserInfo> {
 		throw new Error("Method not implemented.");
 	}
-	updateProfileApp(profile: ISettingsProfile, app: IProfileApp, operation: "Upsert" | "Remove"): Promise<void> {
+	updateProfileApp(
+		profile: ISettingsProfile,
+		app: IProfileApp,
+		operation: "Upsert" | "Remove",
+	): Promise<void> {
 		throw new Error("Method not implemented.");
 	}
 }
