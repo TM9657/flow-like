@@ -416,6 +416,20 @@ pub trait NodeLogic: Send + Sync {
     async fn on_delete(&self, _node: &mut Node, _board: Arc<Board>) {}
 }
 
+/// Utility for .on_update()
+pub fn remove_pin(node: &mut Node, pin: Option<Pin>) {
+    if let Some(pin) = pin {
+        node.pins.remove(&pin.id);
+    }
+}
+
+/// Utility for .on_update()
+pub fn remove_pin_by_name(node: &mut Node, name: &str) {
+    if let Some(pin) = node.get_pin_by_name(name) {
+        node.pins.remove(&pin.id.clone());
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

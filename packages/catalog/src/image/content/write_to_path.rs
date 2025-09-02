@@ -5,8 +5,8 @@ use flow_like::{
     flow::{
         board::Board,
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::{Pin, PinOptions},
+        node::{Node, NodeLogic, remove_pin},
+        pin::PinOptions,
         variable::VariableType,
     },
     state::FlowLikeState,
@@ -360,11 +360,5 @@ impl NodeLogic for WriteImageNode {
                 remove_pin(node, quality_pin);
             }
         }
-    }
-}
-
-fn remove_pin(node: &mut Node, pin: Option<Pin>) {
-    if let Some(pin) = pin {
-        node.pins.remove(&pin.id);
     }
 }

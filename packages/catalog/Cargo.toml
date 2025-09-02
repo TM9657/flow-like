@@ -30,6 +30,11 @@ mail-parser = "0.11.0"
 tract-tflite = { git = "https://github.com/TM9657/tract", rev = "ed3b020" }
 linfa = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
 linfa-datasets = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["generate"]}
+linfa-clustering = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
+linfa-nn = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
+linfa-linear = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
+linfa-reduction = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
+linfa-svm = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
 ndarray.workspace = true
 dirs-next.workspace = true
 

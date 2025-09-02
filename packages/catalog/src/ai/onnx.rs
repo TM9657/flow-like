@@ -8,18 +8,18 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// ONNX Image Classification Nodes
-pub mod classify;
+pub mod classification;
 /// ONNX Image Object Detection Nodes
-pub mod detect;
+pub mod detection;
 /// ONNX Image Feature Extractor Nodes
 pub mod feature;
 /// ONNX Model Loader Nodes
 pub mod load;
 
 pub enum Provider {
-    DfineLike(detect::DfineLike),
-    YoloLike(detect::YoloLike),
-    TimmLike(classify::TimmLike),
+    DfineLike(detection::DfineLike),
+    YoloLike(detection::YoloLike),
+    TimmLike(classification::TimmLike),
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -93,8 +93,8 @@ impl NodeOnnxSession {
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let nodes: Vec<Arc<dyn NodeLogic>> = vec![
         Arc::new(load::LoadOnnxNode::default()),
-        Arc::new(detect::ObjectDetectionNode::default()),
-        Arc::new(classify::ImageClassificationNode::default()),
+        Arc::new(detection::ObjectDetectionNode::default()),
+        Arc::new(classification::ImageClassificationNode::default()),
     ];
     nodes
 }
