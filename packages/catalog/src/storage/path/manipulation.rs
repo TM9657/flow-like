@@ -13,6 +13,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(child::ChildNode::default()),
         Arc::new(extension::ExtensionNode::default()),
         Arc::new(filename::FilenameNode::default()),
+        Arc::new(filename::SetFilenameNode::default()),
         Arc::new(parent::ParentNode::default()),
         Arc::new(raw::RawPathNode::default()),
         Arc::new(set_extension::SetExtensionNode::default()),

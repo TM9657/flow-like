@@ -48,6 +48,10 @@ export interface IDatabaseState {
 		offset?: number,
 		limit?: number,
 	): Promise<any[]>;
+	countItems(
+		appId: string,
+		tableName: string,
+	): Promise<number>;
 	getSchema(appId: string, tableName: string): Promise<any>;
 	getIndices(appId: string, tableName: string): Promise<IIndexConfig[]>;
 	listTables(appId: string): Promise<string[]>;

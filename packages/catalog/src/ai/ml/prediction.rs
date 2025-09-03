@@ -5,7 +5,7 @@
 //!
 //! Adds / upserts predictions back into the Database.
 
-use crate::ai::ml::{MAX_RECORDS, MLPrediction, NodeMLModel, make_new_field};
+use crate::ai::ml::{MAX_ML_PREDICTION_RECORDS, MLPrediction, NodeMLModel, make_new_field};
 use crate::storage::db::vector::NodeDBConnection;
 use flow_like::flow::pin::ValueType;
 use flow_like::{
@@ -95,7 +95,7 @@ impl NodeLogic for MLPredictNode {
 
                 // fetch database
                 let database = node_database
-                    .load(context, &node_database.cache_key)
+                    .load(context)
                     .await?
                     .db
                     .clone();
@@ -114,7 +114,7 @@ impl NodeLogic for MLPredictNode {
                         )));
                     }
                     let records = database
-                        .filter("true", Some(vec![records_col.to_string()]), MAX_RECORDS, 0)
+                        .filter("true", Some(vec![records_col.to_string()]), MAX_ML_PREDICTION_RECORDS, 0)
                         .await?;
                     (records, existing_cols)
                 }; // drop read guard

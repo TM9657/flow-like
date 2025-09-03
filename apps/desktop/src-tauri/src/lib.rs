@@ -290,6 +290,7 @@ pub fn run() {
             functions::app::tables::db_table_names,
             functions::app::tables::db_schema,
             functions::app::tables::db_list,
+            functions::app::tables::db_count,
             functions::app::tables::build_index,
             functions::app::tables::db_add,
             functions::app::tables::db_delete,

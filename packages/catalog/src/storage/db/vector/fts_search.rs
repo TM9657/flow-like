@@ -90,7 +90,7 @@ impl NodeLogic for FTSLocalDatabaseNode {
         let limit: i64 = context.evaluate_pin("limit").await?;
         let offset: i64 = context.evaluate_pin("offset").await?;
         let database = database
-            .load(context, &database.cache_key)
+            .load(context)
             .await?
             .db
             .clone();

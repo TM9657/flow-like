@@ -149,6 +149,14 @@ impl LanceDBVectorStore {
         Ok(adapter)
     }
 
+    pub async fn raw(&self) -> Result<Table> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+        Ok(table)
+    }
+
     pub async fn sql(
         &self,
         table_name: &str,

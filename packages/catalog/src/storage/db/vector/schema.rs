@@ -68,7 +68,7 @@ impl NodeLogic for GetSchemaLocalDatabaseNode {
         context.deactivate_exec_pin("exec_out").await?;
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let database = database
-            .load(context, &database.cache_key)
+            .load(context)
             .await?
             .db
             .clone();

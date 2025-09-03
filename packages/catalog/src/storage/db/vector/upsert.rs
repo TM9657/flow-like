@@ -60,7 +60,7 @@ impl NodeLogic for UpsertLocalDatabaseNode {
 
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let database = database
-            .load(context, &database.cache_key)
+            .load(context)
             .await?
             .db
             .clone();
@@ -125,7 +125,7 @@ impl NodeLogic for BatchUpsertLocalDatabaseNode {
 
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let database = database
-            .load(context, &database.cache_key)
+            .load(context)
             .await?
             .db
             .clone();

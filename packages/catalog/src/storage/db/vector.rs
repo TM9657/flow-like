@@ -52,13 +52,12 @@ impl NodeDBConnection {
     pub async fn load(
         &self,
         context: &mut ExecutionContext,
-        cache_key: &str,
     ) -> flow_like_types::Result<CachedDB> {
         let cached = context
             .cache
             .read()
             .await
-            .get(cache_key)
+            .get(self.cache_key.as_str())
             .cloned()
             .ok_or(flow_like_types::anyhow!("No cache found"))?;
         let db = cached

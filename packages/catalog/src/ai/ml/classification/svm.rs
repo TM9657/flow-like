@@ -4,7 +4,7 @@
 //! and fits multiple SVM-models using the [`linfa`] crate.
 
 use crate::ai::ml::{
-    MAX_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array1_usize, values_to_array2_f64,
+    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array1_usize, values_to_array2_f64,
 };
 use crate::storage::db::vector::NodeDBConnection;
 use flow_like::{
@@ -97,7 +97,7 @@ impl NodeLogic for FitSVMMultiClassNode {
                 // fetch records
                 let records = {
                     let database = database
-                        .load(context, &database.cache_key)
+                        .load(context)
                         .await?
                         .db
                         .clone();
@@ -121,7 +121,7 @@ impl NodeLogic for FitSVMMultiClassNode {
                         .filter(
                             "true",
                             Some(vec![records_col.to_string(), targets_col.to_string()]),
-                            MAX_RECORDS,
+                            MAX_ML_PREDICTION_RECORDS,
                             0,
                         )
                         .await?

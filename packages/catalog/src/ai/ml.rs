@@ -32,7 +32,7 @@ pub mod save;
 
 /// Max number of records for train/prediction
 /// TODO: block-wise processing, at least for predictions
-pub const MAX_RECORDS: usize = 20000;
+pub const MAX_ML_PREDICTION_RECORDS: usize = 20000;
 
 /// Add Machine Learning Nodes to Catalog Lib
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
@@ -43,6 +43,8 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(prediction::MLPredictNode::default()),
         Arc::new(save::SaveMLModelNode::default()),
         Arc::new(load::LoadMLModelNode::default()),
+        Arc::new(load::LoadMLModelNode::default()),
+        Arc::new(dataset::split::SplitDatasetNode::default()),
     ];
     nodes
 }

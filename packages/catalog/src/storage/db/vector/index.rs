@@ -75,7 +75,7 @@ impl NodeLogic for IndexLocalDatabaseNode {
         let index_type: String = context.evaluate_pin("type").await?;
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let database = database
-            .load(context, &database.cache_key)
+            .load(context)
             .await?
             .db
             .clone();

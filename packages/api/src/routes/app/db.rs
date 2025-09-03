@@ -14,6 +14,7 @@ pub mod db_update;
 pub mod get_db_schema;
 pub mod get_indices;
 pub mod list_tables;
+pub mod db_count;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -27,5 +28,6 @@ pub fn routes() -> Router<AppState> {
         .route("/{table}/index", post(build_index::build_index))
         .route("/{table}/query", post(db_query::query_table))
         .route("/{table}/schema", get(get_db_schema::get_db_schema))
+        .route("/{table}/count", get(db_count::db_count))
         .route("/{table}/indices", get(get_indices::get_db_indices))
 }
