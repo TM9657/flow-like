@@ -419,7 +419,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         Ok(())
     }
 
-    async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
+    async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
         let current_tool_exec_pins: Vec<_> = node
             .pins
             .values()
