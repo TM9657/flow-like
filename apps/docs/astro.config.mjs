@@ -68,20 +68,28 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 			lastUpdated: true,
 			sidebar: [
 				{
-					label: "Guides",
-					autogenerate: { directory: "guides" },
+					label: "Getting Started",
+					autogenerate: { directory: "start" },
 				},
 				{
-					label: "Contributing",
-					autogenerate: { directory: "contributing" },
+					label: "Apps",
+					autogenerate: { directory: "apps" },
 				},
 				{
-					label: "Nodes",
+					label: "Studio",
+					autogenerate: { directory: "studio" },
+				},
+				{
+					label: "For Developers",
+					autogenerate: { directory: "dev" },
+				},
+				{
+					label: "For Enterprises",
+					autogenerate: { directory: "enterprise" },
+				},
+				{
+					label: "Node Catalog",
 					autogenerate: { directory: "nodes" },
-				},
-				{
-					label: "Reference",
-					autogenerate: { directory: "reference" },
 				},
 			],
 		}),
