@@ -4,7 +4,7 @@
 //! a clustering dataset, and fits a a KMeans clustering model using the [`linfa`] crate.
 
 use crate::ai::ml::{MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array2_f64};
-use crate::storage::db::vector::NodeDBConnection;
+use crate::data::db::vector::NodeDBConnection;
 use flow_like::{
     flow::{
         board::Board,

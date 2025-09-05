@@ -1,4 +1,4 @@
-use crate::storage::db::vector::NodeDBConnection;
+use crate::data::db::vector::NodeDBConnection;
 use flow_like::{
     flow::{
         execution::{context::ExecutionContext},

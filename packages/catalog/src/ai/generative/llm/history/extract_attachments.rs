@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{events::chat_event::Attachment, storage::path::FlowPath};
+use crate::{events::chat_event::Attachment, data::path::FlowPath};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,

@@ -1,6 +1,6 @@
 use crate::mail::imap::ImapConnection;
 use crate::mail::smtp::send_mail::{build_rfc5322_message_send, generate_message_id};
-use crate::storage::path::FlowPath;
+use crate::data::path::FlowPath;
 use flow_like::{
     flow::{
         execution::{LogLevel, context::ExecutionContext},

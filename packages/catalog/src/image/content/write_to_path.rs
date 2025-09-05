@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{image::NodeImage, storage::path::FlowPath};
+use crate::{image::NodeImage, data::path::FlowPath};
 use flow_like::{
     flow::{
         board::Board,

@@ -1,4 +1,4 @@
-use crate::{image::NodeImage, storage::path::FlowPath};
+use crate::{image::NodeImage, data::path::FlowPath};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,

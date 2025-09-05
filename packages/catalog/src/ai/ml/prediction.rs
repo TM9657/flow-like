@@ -6,7 +6,7 @@
 //! Adds / upserts predictions back into the Database.
 
 use crate::ai::ml::{MAX_ML_PREDICTION_RECORDS, MLPrediction, NodeMLModel, make_new_field};
-use crate::storage::db::vector::NodeDBConnection;
+use crate::data::db::vector::NodeDBConnection;
 use flow_like::flow::pin::ValueType;
 use flow_like::{
     flow::{
