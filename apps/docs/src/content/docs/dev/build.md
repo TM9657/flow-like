@@ -14,7 +14,7 @@ git clone https://github.com/TM9657/flow-like.git
 cd flow-like
 ```
 
-Alternatively, you can fork the repository to your GitHub account and clone it from there.
+Alternatively, you can fork the repository to your GitHub account and clone it from there (especially if you plan to [contribute](/dev/contribute/)).
 
 We're continuously pushing updates to FlowLike. The latest stable versions are available on the `main` and `alpha` branches. These are the branches that contain the source code snapshot for our [latest builds available for download](https://flow-like.com/download). They should compile without issues on your machine.
 

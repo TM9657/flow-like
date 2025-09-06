@@ -7,7 +7,7 @@ sidebar:
 
 Head to the **Library** > **Create App** section of the desktop app to create your first app:
 
-![Create a new FlowLike App](https://cdn.flow-like.com/website/CreateApp.webp)
+![Create a new FlowLike App](../../../assets/CreateApp.webp)
 
 ## App Details
 Choose a name and description for your app. You can always change these details later.

@@ -10,3 +10,5 @@ If you set up a **Chat Event** within your app (see [Events](/apps/events/)), Fl
 Once this is setup, your app will automatically open in a chat interface. 
 
 You can create multiple chat interfaces by defining multiple **Chat Events** within your app.
+
+![Chat UI in FlowLike Apps](../../../assets/ChatUI.webp)

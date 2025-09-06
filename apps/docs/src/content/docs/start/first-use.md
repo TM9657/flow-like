@@ -13,6 +13,6 @@ Next, you can see the landing page of the desktop app. Awesome! You made it!
 
 *Welcome to FlowLike!* 🎉
 
-![Landing Page FlowLike Desktop App](https://cdn.flow-like.com/website/Store.webp)
+![Landing Page FlowLike Desktop App](../../../assets/LandingPage.webp)
 
 There are some further aspects of the desktop app to explore next. Or directly jump ahead and [create your first app](/docs/apps/create/) to build a workflow.
