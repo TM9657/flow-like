@@ -1,6 +1,6 @@
 ---
 title: Sharing and Visibility
-description: xxx
+description: Collaborate and Share Your FlowLike Apps
 sidebar:
   order: 20
 ---

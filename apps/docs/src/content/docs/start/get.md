@@ -1,6 +1,6 @@
 ---
 title: Get FlowLike
-description: xxx
+description: How to Get Started with FlowLike
 sidebar:
   order: 20
 ---

@@ -1,6 +1,6 @@
 ---
 title: Writing Nodes
-description: xxx
+description: Writing Custom Nodes in Rust for FlowLike
 sidebar:
   order: 20
 ---

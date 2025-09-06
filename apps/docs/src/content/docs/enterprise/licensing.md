@@ -1,6 +1,6 @@
 ---
 title: Licensing
-description: xxx
+description: Licensing Information for FlowLike Enterprise
 sidebar:
   order: 10
 ---

@@ -1,6 +1,6 @@
 ---
 title: Login
-description: xxx
+description: Create an Account or Login to FlowLike
 sidebar:
   order: 30
 ---

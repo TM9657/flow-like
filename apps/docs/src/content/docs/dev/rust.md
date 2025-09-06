@@ -1,6 +1,6 @@
 ---
 title: Why Rust?
-description: xxx
+description: Understand Why We Chose Rust for FlowLike
 sidebar:
     order: 25
 ---

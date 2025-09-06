@@ -1,6 +1,6 @@
 ---
 title: What is FlowLike?
-description: xxx
+description: Your Next Generation Workflow OS
 sidebar:
   order: 10
 ---

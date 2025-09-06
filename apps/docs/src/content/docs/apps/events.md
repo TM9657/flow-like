@@ -1,6 +1,6 @@
 ---
 title: Events
-description: xxx
+description: Configure Events to Trigger Flows
 sidebar:
   order: 40
 ---

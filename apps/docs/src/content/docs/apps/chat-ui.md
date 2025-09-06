@@ -1,6 +1,6 @@
 ---
 title: Chat UI Builder
-description: xxx
+description: Customize Chat Interfaces and Link to Flows
 sidebar:
   order: 45
 ---

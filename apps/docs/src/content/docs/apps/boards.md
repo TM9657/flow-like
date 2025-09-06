@@ -1,6 +1,6 @@
 ---
 title: Boards
-description: xxx
+description: Build Flows with Boards
 sidebar:
   order: 25
 ---

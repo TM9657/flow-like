@@ -1,6 +1,6 @@
 ---
 title: Creating Apps
-description: xxx
+description: Create FlowLike Apps
 sidebar:
     order: 06
 ---

@@ -1,6 +1,6 @@
 ---
 title: Offline vs. Online
-description: xxx
+description: Offline and Online Apps Explained
 sidebar:
   order: 10
 ---

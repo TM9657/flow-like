@@ -1,6 +1,6 @@
 ---
 title: White Labeling
-description: xxx
+description: White Labeling Options for FlowLike Enterprise
 sidebar:
   order: 20
 ---

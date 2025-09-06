@@ -1,6 +1,6 @@
 ---
 title: First Use
-description: xxx
+description: Open FlowLike for the First Time
 sidebar:
   order: 25
 ---

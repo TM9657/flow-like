@@ -1,6 +1,6 @@
 ---
 title: Model Catalog
-description: xxx
+description: Browse and Use AI Models in FlowLike
 sidebar:
   order: 50
 ---

@@ -1,6 +1,6 @@
 ---
 title: Customizing UI
-description: xxx
+description: Customize the Look and Feel of FlowLike
 sidebar:
   order: 30
 ---
