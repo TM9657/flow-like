@@ -4,3 +4,9 @@ description: xxx
 sidebar:
   order: 45
 ---
+
+If you set up a **Chat Event** within your app (see [Events](/apps/events/)), FlowLike automatically creates a **Chat UI** for you as part of your app. 
+
+Once this is setup, your app will automatically open in a chat interface. 
+
+You can create multiple chat interfaces by defining multiple **Chat Events** within your app.
