@@ -9,4 +9,4 @@ By default, you are using your FlowLike instance offline. We've pulled some lang
 
 As we've designed FlowLike for offline use, it's no drama if you are temporarily out of internet: you can still execute your flow and talk to your local LLMs.
 
-If you like you *can* login and create an account using your mail, your Google or your Apple account. Being logged in allows you to access your data accross devices or share it with others.
+If you like you *can* login and create an account using your mail, your Google or your Apple account. Being logged in allows you to access your data accross devices or share it with others. We'll sync [online apps](/apps/offline-online/) for you the next time you are online.
