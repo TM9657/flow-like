@@ -16,6 +16,7 @@ use flow_like_types::{sync::Mutex, tokio::time::interval};
 use serde_json::json;
 use settings::Settings;
 use state::TauriFlowLikeState;
+use tauri_plugin_updater::UpdaterExt;
 use std::{sync::Arc, time::Duration};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
@@ -125,6 +126,12 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+
+            #[cfg(desktop)]
+            if let Err(e) = app.handle().plugin(tauri_plugin_updater::Builder::new().build()) {
+                eprintln!("Failed to register updater plugin: {}", e);
+            }
+
             let relay_handle = app.app_handle().clone();
             let gc_handle = relay_handle.clone();
             let refetch_handle = relay_handle.clone();
@@ -383,26 +390,26 @@ fn handle_deep_link(app: &AppHandle, event: OpenUrlEvent) {
 
 #[tauri::command(async)]
 async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
-    // LEADS TO CRASHES (MAIN OVERFLOW) ON WINDOWS
-    // if let Some(update) = app_handle.updater()?.check().await? {
-    //     let mut downloaded = 0;
 
-    //     // alternatively we could also call update.download() and update.install() separately
-    //     update
-    //         .download_and_install(
-    //             |chunk_length, content_length| {
-    //                 downloaded += chunk_length;
-    //                 println!("downloaded {downloaded} from {content_length:?}");
-    //             },
-    //             || {
-    //                 println!("download finished");
-    //             },
-    //         )
-    //         .await?;
+    if let Some(update) = app_handle.updater()?.check().await? {
+        let mut downloaded = 0;
 
-    //     println!("update installed");
-    //     app_handle.restart();
-    // }
+        // alternatively we could also call update.download() and update.install() separately
+        update
+            .download_and_install(
+                |chunk_length, content_length| {
+                    downloaded += chunk_length;
+                    println!("downloaded {downloaded} from {content_length:?}");
+                },
+                || {
+                    println!("download finished");
+                },
+            )
+            .await?;
+
+        println!("update installed");
+        app_handle.restart();
+    }
 
     Ok(())
 }
