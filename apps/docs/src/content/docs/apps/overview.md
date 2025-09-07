@@ -5,16 +5,16 @@ sidebar:
   order: 05
 ---
 
-With FlowLike **Apps** you manage and organize your automations in projects. 
+With **FlowLike Apps**, you can manage and organize your automations within dedicated projects.
 
-Whereas **FlowLike** is the overall platform, the "operating system" (which you get by opening the FlowLike desktop app for example), **FlowLike Apps** are *specific* projects that you create and work in.
+While **FlowLike** refers to the overall platform—the "operating system" you access, for example, by opening the FlowLike desktop app—**FlowLike Apps** are the specific projects you create and work in.
 
-Every **FlowLike App** allows you to:
-- Create [Boards for Flows](/apps/boards/) using our [Studio](/studio/overview/) builder environment,
-- Create custom [user interfaces](/apps/chat-ui/) and link them to your **Flows**,
-- Link **Flows** to the outside world using [Events](/apps/events/),
-- [Upload files and folders](/apps/storage/),
-- Manage and inspect [databases](/apps/storage/),
-- [Share and collaborate](/apps/share/) with team members,
-- Create [releases](/apps/versioning/) of your app,
-- Reuse your ideas and automations using [Templates](/apps/templates/).
+Each **FlowLike App** enables you to:
+- Create [Boards for Flows](/apps/boards/) using our [Studio](/studio/overview/) builder environment,  
+- Build custom [user interfaces](/apps/chat-ui/) and connect them to your **Flows**,  
+- Link **Flows** to the outside world through [Events](/apps/events/),  
+- [Upload files and folders](/apps/storage/),  
+- Manage and inspect [databases](/apps/storage/),  
+- [Share and collaborate](/apps/share/) with your team,  
+- Create [releases](/apps/versioning/) of your app,  
+- Reuse your ideas and automations with [Templates](/apps/templates/).  

@@ -1,12 +1,12 @@
 ---
 title: Login
-description: Create an Account or Login to FlowLike
+description: Create an Account or Log in to FlowLike
 sidebar:
   order: 30
 ---
 
-By default, you are using your FlowLike instance offline. We've pulled some language models for you from the internet, but apart from that, no data is pushed to our servers.
+By default, you are using your FlowLike instance offline. We've pulled some language models from the internet for you, but apart from that, no data is sent to our servers.
 
-As we've designed FlowLike for offline use, it's no drama if you are temporarily out of internet: you can still execute your flow and talk to your local LLMs.
+FlowLike is designed for offline use, so it's no problem if you are temporarily without internet: you can still run your flows and interact with your local LLMs.
 
-If you like you *can* login and create an account using your mail, your Google or your Apple account. Being logged in allows you to access your data accross devices or share it with others. We'll sync [online apps](/apps/offline-online/) for you the next time you are online.
+If you like, you *can* log in and create an account using your email, Google, or Apple account. Being logged in allows you to access your data across devices and share it with others. We'll sync [online apps](/apps/offline-online/) for you the next time you are online.

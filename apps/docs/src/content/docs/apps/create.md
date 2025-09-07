@@ -5,34 +5,36 @@ sidebar:
     order: 06
 ---
 
-Head to the **Library** > **Create App** section of the desktop app to create your first app:
+Go to the **Library** > **Create App** section in the desktop app to create your first app:
 
-![A screenshot of FlowLike Desktop showing the the creation workflow for a new app](../../../assets/CreateApp.webp)
+![A screenshot of FlowLike Desktop showing the creation workflow for a new app](../../../assets/CreateApp.webp)
 
 ## App Details
-Choose a name and description for your app. You can always change these details later.
+Choose a name and description for your app. You can change these details later at any time.
 
 ## Connectivity
-Here's the first decision you have to make: Do you want your app to run **locally** on your machine, or do you want it to be **cloud-enabled**, i.e. be an online app? For getting started, an offline / local app is perfectly fine. 
+Your first decision is whether your app should run **locally** on your machine or be **cloud-enabled** as an online app. For getting started, an offline/local app is perfectly fine.  
 
-If you want to continue with online apps right away, please [login first with your FlowLike account](/start/login/). 
+If you want to start with online apps right away, please [log in with your FlowLike account](/start/login/).  
 
-Further details on online apps and cloud connectivity can be found in the [Offline vs. Online](/apps/offline-online/) section.
+More information about online apps and cloud connectivity is available in the [Offline vs. Online](/apps/offline-online/) section.
 
 ## Template
-You can build apps starting from [templates](/apps/templates/). If you open FlowLike for the first time, you might not see any templates yet. No worries, you can always add templates later. Let's start with a blank app for now.
+You can build apps from [templates](/apps/templates/). If you are opening FlowLike for the first time, you may not see any templates yet. Don’t worry—you can always add templates later. For now, let’s start with a blank app.
 
 ## AI Models
-Another decision that is fixed at app creation time is the selection of AI *embedding* models. You *can* select an *embedding* model if you *think* you might need them later. If you are not sure, selecting one of the recommended defaults is a good choice. If you are missing a specific embedding model, you can download it first in the [Model Catalog](/start/models/) section of the desktop app.
+Another choice you need to make during app creation is selecting AI *embedding* models. You can select an *embedding* model if you think you might need it later. If you are unsure, one of the recommended defaults is a safe choice.  
 
-### What are Embedding Models?
-[Embedding models](https://en.wikipedia.org/wiki/Embedding_(machine_learning)) are aspecific type of AI models that can represent complex data like texts, images, etc. as numerical vectors which we can use for search, recommendation systems, and more.
+If a specific embedding model is missing, you can download it first in the [Model Catalog](/start/models/) section of the desktop app.
+
+### What Are Embedding Models?
+[Embedding models](https://en.wikipedia.org/wiki/Embedding_(machine_learning)) are a specific type of AI model that represent complex data such as text or images as numerical vectors. These vectors can then be used for search, recommendation systems, and more.
 
 ### Why Select Embedding Models Now?
-Every embedding model has characteristics of its own and specific vector dimensions. Selecting embedding models at app creation time ensures that your app and the vectorized data within in remains compatible for you and your users.
+Each embedding model has unique characteristics and specific vector dimensions. Selecting embedding models at app creation ensures that your app and the vectorized data within it remain compatible for you and your users.
 
 ### Does This Affect Chat Models Too?
-No, you can always change and select different *chat models* in your Profile via the Model Catalog. In FlowLike, we have mechanisms in place to ensure that you can transition to new *chat models* seamlessly without breaking your existing workflows.
+No. You can always add or change *chat models* later in your profile via the Model Catalog. In FlowLike, mechanisms are in place to ensure smooth transitions to new *chat models* without disrupting your existing workflows.
 
 ## Review
-Everthing looks good? Then click **Create App**. Your new app is now listed in the **Library** > **Overview** section.
+Everything looks good? Then click **Create App**. Your new app will now appear in the **Library** > **Overview** section.

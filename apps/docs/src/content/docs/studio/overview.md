@@ -5,14 +5,14 @@ sidebar:
   order: 10
 ---
 
-**Flow Like Studio** is the *No-Code* development environment where you build your *Flows* for automations.
+**Flow Like Studio** is a *no-code* development environment where you build your *Flows* for automation.
 
-Important components of the Stuido environemt are:
-- [**Nodes**](/studio/nodes/) which you can select from the [**Node Catalog**](/nodes/overview/),
+Important components of the Studio environment are:
+- [**Nodes**](/studio/nodes/) that you can select from the [**Node Catalog**](/nodes/overview/),
 - [**Edges/Wires**](/studio/connecting/) for **Execution** and **Data** transmission between *nodes*,
-- a **Canvas** where you can put your nodes and *build* your *flows*,
-- [**Layers**](/studio/layers/) allowing you to collapse and define higher-order *nodes*,
-- [**Variables**](/studio/variables/) that live on *Board* level to store and access information at runtime,
+- a **Canvas** where you can place your nodes and *build* your *flows*,
+- [**Layers**](/studio/layers/) that allow you to collapse and define higher-order *nodes*,
+- [**Variables**](/studio/variables/) available at the *Board* level to store and access information at runtime,
 - [**Run History**](/studio/logging/) to inspect previous flow executions,
 - [**Logs**](/studio/logging/) stored for every *run* for inspection and tracing.
 
@@ -20,7 +20,7 @@ A *Flow* represents a *process* and consists of one or more *Nodes*. Nodes are l
 
 ![A screenshot of FlowLike Studio - a no-code environment to create workflow automations](../../../assets/FlowLikeStudio.webp)
 
-Within *Apps*, Flows are managed in [Boards](/apps/boards/). You can put as many *Flows* within one *Board* as you like allowing you a fine-grained control on how to organize your projects:
+Within *Apps*, flows are managed in [Boards](/apps/boards/). You can add as many *Flows* within one *Board* as you like, giving you fine-grained control over how to organize your projects:
 ```text
 Flow Like Desktop
 ├── App1
@@ -34,4 +34,4 @@ Flow Like Desktop
 └── App2
 ```
 
-*Flows* can access and modify [storage and databases](/apps/storage/) of their app. Likewise, [events](/apps/events) can be configured for all *flows* on app level.
+*Flows* can access and modify [storage and databases](/apps/storage/) within their app. Similarily, [events](/apps/events) can be configured for all *Flows* at the app level.

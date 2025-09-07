@@ -1,24 +1,24 @@
 ---
 title: Events
-description: Configure Events to Trigger Flows
+description: Configure events to trigger flows
 sidebar:
   order: 40
 ---
 
-With **Events** you can link your **Flows** to the outside world.
+With **Events**, you can connect your **Flows** to the outside world.
 
-Creating an **Event** requires that you have built at least one **Flow** in your app including an *event node*. You can create *Flows* in the **Flows** section of your app within [Boards](/apps/boards/).
+Creating an **Event** requires at least one existing **Flow** in your app that includes an *event node*. You can create *Flows* in the **Flows** section of your app within [Boards](/apps/boards/).
 
-Each **Event** points to a specific *event node* within a specific *Board* of your app. You can create multiple (but different) *Events* pointing to the same *event node* and differentiate them by their *Event* payloads and configurations.
+Each **Event** targets a specific *event node* within a particular *Board* in your app. You can create multiple distinct *Events* that reference the same *event node*, and differentiate them by their payloads and configurations.
 
-![A screenshot of FlowLike Desktop showing the events section of an app with two events configured](../../../assets/AppEvents.webp)
+![A screenshot of FlowLike Desktop showing the Events section of an app with two events configured](../../../assets/AppEvents.webp)
 
 ## Event Types
 
 ### Quick Action
-This is basically a button to trigger a *Flow* manually. You can define additional variables that pass individual data to the *Flow* triggered.
+A **Quick Action** is essentially a button that manually triggers a *Flow*. You can define additional variables to pass custom data to the triggered *Flow*.
 
-![A screenshot of FlowLike Desktop showing the configuration options of a Quick Action Event](../../../assets/QuickActionEvent.webp)
+![A screenshot of FlowLike Desktop showing the configuration options of a Quick Action event](../../../assets/QuickActionEvent.webp)
 
 ### Chat Event
-Creating a *Chat Event* allows you to invoke a *Flow* via a chat interface ([which you'll automatically get when creating such an event](/apps/chat-ui/)). A *chat event* passes the chat context (e.g. the chat history) as payload to your *chat event node*. You can configure additional payloads such as file attachments, tools and default prompts.
+A **Chat Event** allows you to invoke a *Flow* through a chat interface ([automatically created when you set up such an event](/apps/chat-ui/)). A *Chat Event* passes the chat context (e.g., chat history) as payload to your *event node*. You can also configure additional payloads such as file attachments, tools, and default prompts.

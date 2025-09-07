@@ -5,10 +5,11 @@ sidebar:
   order: 90
 ---
 
-For support, please reach out to us any time by...
-- jumping on our [Discord Server](https://discord.gg/KTWMrS2)
-- creating an issue on [GitHub](https://github.com/TM9657/flow-like)
-- heading to [our FAQs](https://flow-like.com/#faq)
-- discussing with us on [Reddit](https://www.reddit.com/user/tm9657/)
+For support, you can reach out to us at any time by:
 
-We communicate latest releases and major updates in our [Blog Posts](https://flow-like.com/blog/).
+- Joining our [Discord Server](https://discord.gg/KTWMrS2)
+- Creating an issue on [GitHub](https://github.com/TM9657/flow-like)
+- Visiting [our FAQs](https://flow-like.com/#faq)
+- Discussing with us on [Reddit](https://www.reddit.com/user/tm9657/)
+
+We share the latest releases and major updates in our [Blog Posts](https://flow-like.com/blog/).
