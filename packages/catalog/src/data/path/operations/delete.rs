@@ -28,7 +28,7 @@ impl NodeLogic for DeleteNode {
             "storage_delete",
             "Delete",
             "Deletes a file or directory",
-            "Storage/Paths/Operations",
+            "Data/Files/Operations",
         );
         node.add_icon("/flow/icons/path.svg");
 

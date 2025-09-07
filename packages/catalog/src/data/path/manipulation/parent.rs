@@ -27,7 +27,7 @@ impl NodeLogic for ParentNode {
             "parent",
             "Parent",
             "Gets the parent path from a path",
-            "Storage/Paths/Path",
+            "Data/Files/Path",
         );
         node.add_icon("/flow/icons/path.svg");
 

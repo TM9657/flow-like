@@ -1,4 +1,7 @@
-use crate::data::{excel::{parse_col_1_based, parse_row_1_based}, path::FlowPath};
+use crate::data::{
+    excel::{parse_col_1_based, parse_row_1_based},
+    path::FlowPath,
+};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -41,32 +44,27 @@ impl NodeLogic for WriteCellHtmlNode {
 
         node.add_input_pin("file", "File", "Target XLSX file", VariableType::Struct)
             .set_schema::<FlowPath>();
-        node
-            .add_input_pin("sheet", "Sheet", "Worksheet name", VariableType::String)
+        node.add_input_pin("sheet", "Sheet", "Worksheet name", VariableType::String)
             .set_default_value(Some(json!("Sheet1")));
-        node
-            .add_input_pin("row", "Row", "Row number (1-based)", VariableType::String)
+        node.add_input_pin("row", "Row", "Row number (1-based)", VariableType::String)
             .set_default_value(Some(json!("1")));
-        node
-            .add_input_pin(
-                "col",
-                "Column",
-                "Column (letter(s) like A, AA, or 1-based number)",
-                VariableType::String,
-            )
-            .set_default_value(Some(json!("A")));
-        node
-            .add_input_pin(
-                "value",
-                "Value",
-                "Value to write (string)",
-                VariableType::String,
-            )
-            .set_default_value(Some(json!("")));
+        node.add_input_pin(
+            "col",
+            "Column",
+            "Column (letter(s) like A, AA, or 1-based number)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("A")));
+        node.add_input_pin(
+            "value",
+            "Value",
+            "Value to write (string)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
 
         node.add_output_pin("exec_out", "Out", "Trigger", VariableType::Execution);
-        node
-            .add_output_pin("file", "File", "Updated XLSX path", VariableType::Struct)
+        node.add_output_pin("file", "File", "Updated XLSX path", VariableType::Struct)
             .set_schema::<FlowPath>();
 
         node
@@ -84,19 +82,21 @@ impl NodeLogic for WriteCellHtmlNode {
 
         let file_content: Vec<u8> = file.get(ctx, false).await?;
         let file_content_reader = std::io::Cursor::new(&file_content);
-        let mut book = match umya_spreadsheet::reader::xlsx::read_reader(file_content_reader, true) {
-                Ok(b) => b,
-                Err(e) => return Err(flow_like_types::anyhow!("Failed to read workbook: {}", e)),
-            };
+        let mut book = match umya_spreadsheet::reader::xlsx::read_reader(file_content_reader, true)
+        {
+            Ok(b) => b,
+            Err(e) => return Err(flow_like_types::anyhow!("Failed to read workbook: {}", e)),
+        };
 
         let _ = if book.get_sheet_by_name(&sheet).is_some() {
             ()
         } else {
-            book.new_sheet(&sheet).map_err(|e| flow_like_types::anyhow!("Failed to create sheet: {}", e))?;
+            book.new_sheet(&sheet)
+                .map_err(|e| flow_like_types::anyhow!("Failed to create sheet: {}", e))?;
         };
-        let ws = book
-            .get_sheet_by_name_mut(&sheet)
-            .ok_or_else(|| flow_like_types::anyhow!("Failed to access or create sheet: {}", sheet))?;
+        let ws = book.get_sheet_by_name_mut(&sheet).ok_or_else(|| {
+            flow_like_types::anyhow!("Failed to access or create sheet: {}", sheet)
+        })?;
 
         // Parse row & column (both 1-based)
         let row = parse_row_1_based(&row_str)?;
@@ -111,7 +111,10 @@ impl NodeLogic for WriteCellHtmlNode {
 
         let mut out: Vec<u8> = Vec::new();
         if let Err(e) = umya_spreadsheet::writer::xlsx::write_writer(&book, &mut out) {
-            return Err(flow_like_types::anyhow!("Failed to serialize workbook: {}", e));
+            return Err(flow_like_types::anyhow!(
+                "Failed to serialize workbook: {}",
+                e
+            ));
         }
 
         file.put(ctx, out, false).await?;

@@ -1,4 +1,8 @@
-use crate::data::{excel::{parse_col_1_based, parse_row_1_based}, path::FlowPath};
+use crate::data::{
+    excel::{parse_col_1_based, parse_row_1_based},
+    path::FlowPath,
+};
+use calamine::{DataRef, DataType, ReaderRef, open_workbook_auto_from_rs};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -9,7 +13,6 @@ use flow_like::{
 };
 use flow_like_types::{async_trait, json::json};
 use std::io::Cursor;
-use umya_spreadsheet::{self};
 
 /// Read a single cell from an Excel workbook (XLSX) located in object storage via `FlowPath`.
 /// - Does **not** touch the local filesystem; reads from bytes and returns the raw string value.
@@ -19,7 +22,9 @@ use umya_spreadsheet::{self};
 pub struct ReadCellNode {}
 
 impl ReadCellNode {
-    pub fn new() -> Self { Self {} }
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 
 #[async_trait]
@@ -41,14 +46,34 @@ impl NodeLogic for ReadCellNode {
             .set_default_value(Some(json!("Sheet1")));
         node.add_input_pin("row", "Row", "Row number (1-based)", VariableType::String)
             .set_default_value(Some(json!("1")));
-        node.add_input_pin("col", "Column", "Column letters or number (1-based)", VariableType::String)
-            .set_default_value(Some(json!("A")));
+        node.add_input_pin(
+            "col",
+            "Column",
+            "Column letters or number (1-based)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("A")));
 
         node.add_output_pin("exec_out", "Out", "Trigger", VariableType::Execution);
-        node.add_output_pin("file", "File", "Pass-through XLSX path", VariableType::Struct)
-            .set_schema::<FlowPath>();
-        node.add_output_pin("value", "Value", "Cell value (raw string)", VariableType::String);
-        node.add_output_pin("found", "Found", "Cell exists and has a value", VariableType::Boolean);
+        node.add_output_pin(
+            "file",
+            "File",
+            "Pass-through XLSX path",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>();
+        node.add_output_pin(
+            "value",
+            "Value",
+            "Cell value (raw string)",
+            VariableType::String,
+        );
+        node.add_output_pin(
+            "found",
+            "Found",
+            "Cell exists and has a value",
+            VariableType::Boolean,
+        );
 
         node
     }
@@ -64,26 +89,20 @@ impl NodeLogic for ReadCellNode {
         let mut out_value = String::new();
         let mut found = false;
 
-        match file.get(ctx, false).await {
-            Ok(bytes) if !bytes.is_empty() => {
-                let book = match umya_spreadsheet::reader::xlsx::read_reader(Cursor::new(bytes), true) {
-                    Ok(b) => b,
-                    Err(e) => return Err(flow_like_types::anyhow!("Failed to read workbook bytes: {}", e)),
-                };
+        let bytes = file.get(ctx, false).await?;
+        if !bytes.is_empty() {
+            let mut wb = open_workbook_auto_from_rs(Cursor::new(bytes))
+                .map_err(|e| flow_like_types::anyhow!("Calamine open failed: {}", e))?;
 
-                if let Some(ws) = book.get_sheet_by_name(&sheet) {
-                    let row = parse_row_1_based(&row_str)?;
-                    let col = parse_col_1_based(&col_str)?;
+            if let Ok(range) = wb.worksheet_range_ref(&sheet) {
+                let r0 = (parse_row_1_based(&row_str)? - 1) as u32;
+                let c0 = (parse_col_1_based(&col_str)? - 1) as u32;
 
-                    found = ws.get_cell((col, row)).is_some();
-                    if found {
-                        out_value = ws.get_value((col, row)); // raw string
-                    } else {
-                        out_value.clear();
-                    }
-                } else {}
+                if let Some(cell) = range.get_value((r0, c0)) {
+                    found = !matches!(cell, DataRef::Empty);
+                    out_value = cell.as_string().unwrap_or_default();
+                }
             }
-            _ => {}
         }
 
         ctx.set_pin_value("file", json!(file)).await?;

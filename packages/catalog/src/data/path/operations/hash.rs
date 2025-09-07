@@ -26,7 +26,7 @@ impl NodeLogic for HashFileNode {
             "path_hash_file",
             "Hash File",
             "Hashes a file",
-            "Storage/Paths/Operations",
+            "Data/Files/Operations",
         );
         node.add_icon("/flow/icons/path.svg");
 

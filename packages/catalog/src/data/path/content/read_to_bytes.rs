@@ -25,8 +25,8 @@ impl NodeLogic for ReadToBytesNode {
         let mut node = Node::new(
             "read_to_bytes",
             "Read to Bytes",
-            "Reads the content of a file to bytes",
-            "Storage/Paths/Content",
+            "Reads the content of a file Fto bytes",
+            "Data/Files/Content",
         );
         node.add_icon("/flow/icons/path.svg"); // Consider a more appropriate icon
 

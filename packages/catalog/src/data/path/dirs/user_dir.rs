@@ -25,7 +25,7 @@ impl NodeLogic for PathFromUserDirNode {
             "path_from_user_dir",
             "User Dir",
             "Converts the user directory to a Path",
-            "Storage/Paths/Directories",
+            "Data/Files/Directories",
         );
         node.add_icon("/flow/icons/path.svg");
 

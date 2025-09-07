@@ -28,7 +28,7 @@ impl NodeLogic for VectorSearchLocalDatabaseNode {
             "vector_search_local_db",
             "Vector Search",
             "Searches the Database based on a Vector",
-            "Database/Local/Search",
+            "Data/Database/Search",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -83,11 +83,7 @@ impl NodeLogic for VectorSearchLocalDatabaseNode {
         };
         let limit: i64 = context.evaluate_pin("limit").await?;
         let offset: i64 = context.evaluate_pin("offset").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let database = database.read().await;
         let results = database
             .vector_search(vector, filter, None, limit as usize, offset as usize)

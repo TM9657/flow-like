@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
 use flow_like::flow::node::NodeLogic;
-use flow_like_types::{anyhow, bail, Result, Value as JsonValue};
+use flow_like_types::{Result, Value as JsonValue, anyhow, bail};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use flow_like_storage::arrow::array::{
-    ArrayRef, BooleanBuilder, Float64Builder, Int64Builder, LargeStringBuilder, StringBuilder, Date64Builder,
+    ArrayRef, BooleanBuilder, Date64Builder, Float64Builder, Int64Builder, LargeStringBuilder,
+    StringBuilder,
 };
 use flow_like_storage::arrow::datatypes::{DataType, Field, Schema as ArrowSchema};
 use flow_like_storage::arrow::record_batch::RecordBatch;
@@ -17,9 +18,11 @@ use flow_like_storage::datafusion::prelude::SessionContext;
 use crate::data::path::FlowPath;
 
 pub mod copy_worksheet;
+pub mod get_row;
 pub mod get_sheet_names;
 pub mod insert_column;
 pub mod insert_row;
+pub mod loop_rows;
 pub mod new_worksheet;
 pub mod read_cell;
 pub mod remove_column;
@@ -53,8 +56,8 @@ fn merge_kind(cur: ColKind, obs: ColKind) -> ColKind {
         (Bool, Int) | (Int, Bool) => Int,
         (Bool, Float) | (Float, Bool) | (Int, Float) | (Float, Int) => Float,
         // Mixing dates with anything else -> string fallback
-    (Date, Bool | Int | Float) | (Bool | Int | Float, Date) => Utf8,
-    (Date, Unknown) => Date,
+        (Date, Bool | Int | Float) | (Bool | Int | Float, Date) => Utf8,
+        (Date, Unknown) => Date,
         _ => Utf8,
     }
 }
@@ -90,7 +93,9 @@ pub enum Cell {
 fn parse_date_string(s: &str) -> Option<(String, i64)> {
     // Fast pre-checks
     let t = s.trim();
-    if t.is_empty() { return None; }
+    if t.is_empty() {
+        return None;
+    }
 
     // Accept a subset of common patterns. We attempt explicit layouts to avoid false positives.
     // We keep ordering from most to least constrained.
@@ -104,25 +109,40 @@ fn parse_date_string(s: &str) -> Option<(String, i64)> {
 
     // ISO date / datetime variants
     if let Ok(date) = chrono::NaiveDate::parse_from_str(t, "%Y-%m-%d") {
-        return Some((format!("{}T00:00:00", date.format("%Y-%m-%d")), to_ms(date, NaiveTime::from_hms_opt(0,0,0)?)));
+        return Some((
+            format!("{}T00:00:00", date.format("%Y-%m-%d")),
+            to_ms(date, NaiveTime::from_hms_opt(0, 0, 0)?),
+        ));
     }
     if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M:%S") {
-        return Some((dt.format("%Y-%m-%dT%H:%M:%S").to_string(), dt.and_utc().timestamp_millis()));
+        return Some((
+            dt.format("%Y-%m-%dT%H:%M:%S").to_string(),
+            dt.and_utc().timestamp_millis(),
+        ));
     }
     if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%d %H:%M:%S") {
-        return Some((dt.format("%Y-%m-%dT%H:%M:%S").to_string(), dt.and_utc().timestamp_millis()));
+        return Some((
+            dt.format("%Y-%m-%dT%H:%M:%S").to_string(),
+            dt.and_utc().timestamp_millis(),
+        ));
     }
 
     // European style: DD.MM.YYYY
     if t.len() >= 10 && t.chars().nth(2) == Some('.') && t.chars().nth(5) == Some('.') {
         if let Ok(d) = chrono::NaiveDate::parse_from_str(t, "%d.%m.%Y") {
-            return Some((format!("{}T00:00:00", d.format("%Y-%m-%d")), to_ms(d, NaiveTime::from_hms_opt(0,0,0)?)));
+            return Some((
+                format!("{}T00:00:00", d.format("%Y-%m-%d")),
+                to_ms(d, NaiveTime::from_hms_opt(0, 0, 0)?),
+            ));
         }
     }
     // Slash formats: try unambiguous first (YYYY/MM/DD)
     if t.len() >= 10 && t.chars().nth(4) == Some('/') && t.chars().nth(7) == Some('/') {
         if let Ok(d) = chrono::NaiveDate::parse_from_str(t, "%Y/%m/%d") {
-            return Some((format!("{}T00:00:00", d.format("%Y-%m-%d")), to_ms(d, NaiveTime::from_hms_opt(0,0,0)?)));
+            return Some((
+                format!("{}T00:00:00", d.format("%Y-%m-%d")),
+                to_ms(d, NaiveTime::from_hms_opt(0, 0, 0)?),
+            ));
         }
     }
     // MM/DD/YYYY or DD/MM/YYYY: attempt to disambiguate.
@@ -130,17 +150,28 @@ fn parse_date_string(s: &str) -> Option<(String, i64)> {
         let a = &t[0..2];
         let b = &t[3..5];
         let year = &t[6..10];
-        if a.chars().all(|c| c.is_ascii_digit()) && b.chars().all(|c| c.is_ascii_digit()) && year.chars().all(|c| c.is_ascii_digit()) {
+        if a.chars().all(|c| c.is_ascii_digit())
+            && b.chars().all(|c| c.is_ascii_digit())
+            && year.chars().all(|c| c.is_ascii_digit())
+        {
             let ai: u32 = a.parse().ok()?;
             let bi: u32 = b.parse().ok()?;
             // If one component > 12, that must be the day.
-            if ai > 12 && bi <= 12 { // DD/MM/YYYY
+            if ai > 12 && bi <= 12 {
+                // DD/MM/YYYY
                 if let Ok(d) = chrono::NaiveDate::parse_from_str(t, "%d/%m/%Y") {
-                    return Some((format!("{}T00:00:00", d.format("%Y-%m-%d")), to_ms(d, NaiveTime::from_hms_opt(0,0,0)?)));
+                    return Some((
+                        format!("{}T00:00:00", d.format("%Y-%m-%d")),
+                        to_ms(d, NaiveTime::from_hms_opt(0, 0, 0)?),
+                    ));
                 }
-            } else if bi > 12 && ai <= 12 { // MM/DD/YYYY
+            } else if bi > 12 && ai <= 12 {
+                // MM/DD/YYYY
                 if let Ok(d) = chrono::NaiveDate::parse_from_str(t, "%m/%d/%Y") {
-                    return Some((format!("{}T00:00:00", d.format("%Y-%m-%d")), to_ms(d, NaiveTime::from_hms_opt(0,0,0)?)));
+                    return Some((
+                        format!("{}T00:00:00", d.format("%Y-%m-%d")),
+                        to_ms(d, NaiveTime::from_hms_opt(0, 0, 0)?),
+                    ));
                 }
             } else if ai <= 12 && bi <= 12 { // ambiguous -> skip (avoid false positives)
             } else { // both >12 invalid -> skip
@@ -175,7 +206,10 @@ impl From<JsonValue> for Cell {
             }
             String(s) => {
                 if let Some((iso, ms)) = parse_date_string(&s) {
-                    Cell::Date { iso: Arc::<str>::from(iso), ms }
+                    Cell::Date {
+                        iso: Arc::<str>::from(iso),
+                        ms,
+                    }
                 } else {
                     Cell::Str(Arc::<str>::from(s))
                 }
@@ -205,10 +239,19 @@ impl CSVTable {
 
         let rows: Vec<Box<[Cell]>> = rows
             .into_iter()
-            .map(|r| r.into_iter().map(Cell::from).collect::<Vec<_>>().into_boxed_slice())
+            .map(|r| {
+                r.into_iter()
+                    .map(Cell::from)
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice()
+            })
             .collect();
 
-        Self { headers, rows, source }
+        Self {
+            headers,
+            rows,
+            source,
+        }
     }
 
     #[inline]
@@ -222,14 +265,19 @@ impl CSVTable {
     }
 
     /// Infer per-column kind, and collect string byte stats for LargeUtf8 decisions.
-    fn infer_col_kind_and_string_stats(&self, col_idx: usize) -> (ColKind, u64 /*total_bytes*/, u32 /*max_len*/) {
+    fn infer_col_kind_and_string_stats(
+        &self,
+        col_idx: usize,
+    ) -> (ColKind, u64 /*total_bytes*/, u32 /*max_len*/) {
         let mut kind = ColKind::Unknown;
         let mut total_bytes: u64 = 0;
         let mut max_len: u32 = 0;
         let mut coercible = true; // switch to false once a non-coercible string is seen
 
         for row in &self.rows {
-            let Some(cell) = row.get(col_idx) else { continue };
+            let Some(cell) = row.get(col_idx) else {
+                continue;
+            };
             match cell {
                 Cell::Null => {}
                 Cell::Bool(_) => kind = merge_kind(kind, ColKind::Bool),
@@ -342,7 +390,11 @@ impl CSVTable {
                                 if f.is_finite() && f.fract() == 0.0 {
                                     // exact integer in f64’s range
                                     let v = *f as i64;
-                                    if (v as f64) == *f { b.append_value(v) } else { b.append_null() }
+                                    if (v as f64) == *f {
+                                        b.append_value(v)
+                                    } else {
+                                        b.append_null()
+                                    }
                                 } else {
                                     b.append_null()
                                 }
@@ -350,7 +402,11 @@ impl CSVTable {
                             Some(Cell::Bool(bv)) => b.append_value(if *bv { 1 } else { 0 }),
                             Some(Cell::Date { .. }) => b.append_null(),
                             Some(Cell::Str(s)) => {
-                                if let Ok(i) = s.parse::<i64>() { b.append_value(i) } else { b.append_null() }
+                                if let Ok(i) = s.parse::<i64>() {
+                                    b.append_value(i)
+                                } else {
+                                    b.append_null()
+                                }
                             }
                             Some(Cell::Null) | None => b.append_null(),
                         }
@@ -367,9 +423,13 @@ impl CSVTable {
                             Some(Cell::Bool(bv)) => b.append_value(if *bv { 1.0 } else { 0.0 }),
                             Some(Cell::Date { .. }) => b.append_null(),
                             Some(Cell::Str(s)) => {
-                                if let Ok(f) = s.parse::<f64>() { b.append_value(f) }
-                                else if let Some(x) = is_bool_str(s) { b.append_value(if x { 1.0 } else { 0.0 }) }
-                                else { b.append_null() }
+                                if let Ok(f) = s.parse::<f64>() {
+                                    b.append_value(f)
+                                } else if let Some(x) = is_bool_str(s) {
+                                    b.append_value(if x { 1.0 } else { 0.0 })
+                                } else {
+                                    b.append_null()
+                                }
                             }
                             Some(Cell::Null) | None => b.append_null(),
                         }
@@ -383,7 +443,11 @@ impl CSVTable {
                         match row.get(col_idx) {
                             Some(Cell::Date { ms, .. }) => b.append_value(*ms),
                             Some(Cell::Str(s)) => {
-                                if let Some((_, ms)) = parse_date_string(s) { b.append_value(ms) } else { b.append_null() }
+                                if let Some((_, ms)) = parse_date_string(s) {
+                                    b.append_value(ms)
+                                } else {
+                                    b.append_null()
+                                }
                             }
                             _ => b.append_null(),
                         }
@@ -397,7 +461,9 @@ impl CSVTable {
                         match row.get(col_idx) {
                             Some(Cell::Null) | None => b.append_null(),
                             Some(Cell::Str(s)) => b.append_value(s.as_ref()),
-                            Some(Cell::Bool(v)) => b.append_value(if *v { "true" } else { "false" }),
+                            Some(Cell::Bool(v)) => {
+                                b.append_value(if *v { "true" } else { "false" })
+                            }
                             Some(Cell::Int(i)) => b.append_value(i.to_string()),
                             Some(Cell::Float(f)) => b.append_value(f.to_string()),
                             Some(Cell::Date { iso, .. }) => b.append_value(iso.as_ref()),
@@ -412,7 +478,9 @@ impl CSVTable {
                         match row.get(col_idx) {
                             Some(Cell::Null) | None => b.append_null(),
                             Some(Cell::Str(s)) => b.append_value(s.as_ref()),
-                            Some(Cell::Bool(v)) => b.append_value(if *v { "true" } else { "false" }),
+                            Some(Cell::Bool(v)) => {
+                                b.append_value(if *v { "true" } else { "false" })
+                            }
                             Some(Cell::Int(i)) => b.append_value(i.to_string()),
                             Some(Cell::Float(f)) => b.append_value(f.to_string()),
                             Some(Cell::Date { iso, .. }) => b.append_value(iso.as_ref()),
@@ -438,11 +506,7 @@ impl CSVTable {
         Ok(Arc::new(mem))
     }
 
-    pub fn register_with_datafusion(
-        &self,
-        ctx: &SessionContext,
-        table_name: &str,
-    ) -> Result<()> {
+    pub fn register_with_datafusion(&self, ctx: &SessionContext, table_name: &str) -> Result<()> {
         let mem = self.to_memtable()?;
         ctx.register_table(table_name, mem)?;
         Ok(())
@@ -489,7 +553,9 @@ pub fn parse_col_1_based(s: &str) -> flow_like_types::Result<u32> {
         acc = acc
             .checked_mul(26)
             .and_then(|x| x.checked_add(v))
-            .ok_or_else(|| flow_like_types::anyhow!("Column index overflow for '{}': too large", s))?;
+            .ok_or_else(|| {
+                flow_like_types::anyhow!("Column index overflow for '{}': too large", s)
+            })?;
     }
 
     if acc == 0 {
@@ -499,13 +565,21 @@ pub fn parse_col_1_based(s: &str) -> flow_like_types::Result<u32> {
     Ok(acc)
 }
 
-
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     let mut nodes: Vec<Arc<dyn NodeLogic>> = vec![];
     nodes.push(Arc::new(try_extract_tables::ExtractExcelTablesNode::new()));
     nodes.push(Arc::new(read_cell::ReadCellNode::new()));
     nodes.push(Arc::new(write_cell::WriteCellNode::new()));
     nodes.push(Arc::new(write_cell_html::WriteCellHtmlNode::new()));
+    nodes.push(Arc::new(remove_column::RemoveColumnNode::new()));
+    nodes.push(Arc::new(insert_column::InsertColumnNode::new()));
+    nodes.push(Arc::new(remove_row::RemoveRowNode::new()));
+    nodes.push(Arc::new(insert_row::InsertRowNode::new()));
+    nodes.push(Arc::new(new_worksheet::NewWorksheetNode::new()));
+    nodes.push(Arc::new(get_sheet_names::GetSheetNamesNode::new()));
+    nodes.push(Arc::new(copy_worksheet::CopyWorksheetNode::new()));
+    nodes.push(Arc::new(get_row::GetRowByIndexNode::new()));
+    nodes.push(Arc::new(loop_rows::RowLoopNode::new()));
 
     nodes
 }

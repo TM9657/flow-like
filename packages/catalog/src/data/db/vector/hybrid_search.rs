@@ -28,7 +28,7 @@ impl NodeLogic for HybridSearchLocalDatabaseNode {
             "hybrid_search_local_db",
             "Hybrid Search",
             "Searches the Database based on a Vector and Text",
-            "Database/Local/Search",
+            "Data/Database/Search",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -100,11 +100,7 @@ impl NodeLogic for HybridSearchLocalDatabaseNode {
         let limit: i64 = context.evaluate_pin("limit").await?;
         let offset: i64 = context.evaluate_pin("offset").await?;
         let rerank: bool = context.evaluate_pin("rerank").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let database = database.read().await;
         let results = database
             .hybrid_search(

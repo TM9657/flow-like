@@ -94,11 +94,7 @@ impl NodeLogic for MLPredictNode {
                 let predictions_col: String = context.evaluate_pin("predictions_col").await?;
 
                 // fetch database
-                let database = node_database
-                    .load(context)
-                    .await?
-                    .db
-                    .clone();
+                let database = node_database.load(context).await?.db.clone();
 
                 // fetch records
                 let t0 = std::time::Instant::now();
@@ -114,7 +110,12 @@ impl NodeLogic for MLPredictNode {
                         )));
                     }
                     let records = database
-                        .filter("true", Some(vec![records_col.to_string()]), MAX_ML_PREDICTION_RECORDS, 0)
+                        .filter(
+                            "true",
+                            Some(vec![records_col.to_string()]),
+                            MAX_ML_PREDICTION_RECORDS,
+                            0,
+                        )
                         .await?;
                     (records, existing_cols)
                 }; // drop read guard

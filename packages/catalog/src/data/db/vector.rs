@@ -49,10 +49,7 @@ impl Cacheable for CachedDB {
 }
 
 impl NodeDBConnection {
-    pub async fn load(
-        &self,
-        context: &mut ExecutionContext,
-    ) -> flow_like_types::Result<CachedDB> {
+    pub async fn load(&self, context: &mut ExecutionContext) -> flow_like_types::Result<CachedDB> {
         let cached = context
             .cache
             .read()
@@ -84,7 +81,7 @@ impl NodeLogic for CreateLocalDatabaseNode {
             "open_local_db",
             "Open Database",
             "Open a local database",
-            "Database/Local",
+            "Data/Database",
         );
         node.add_icon("/flow/icons/database.svg");
 

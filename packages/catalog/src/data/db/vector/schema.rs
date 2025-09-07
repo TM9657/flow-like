@@ -30,7 +30,7 @@ impl NodeLogic for GetSchemaLocalDatabaseNode {
             "schema_local_db",
             "Get Schema",
             "Get Local Database Schema",
-            "Database/Local/Meta",
+            "Data/Database/Meta",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -67,11 +67,7 @@ impl NodeLogic for GetSchemaLocalDatabaseNode {
         // get inputs
         context.deactivate_exec_pin("exec_out").await?;
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let database = database.read().await;
 
         // get schema

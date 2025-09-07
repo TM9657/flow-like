@@ -26,7 +26,7 @@ impl NodeLogic for PutNode {
             "path_put",
             "Put",
             "Writes bytes to a file",
-            "Storage/Paths/Operations",
+            "Data/Files/Operations",
         );
         node.add_icon("/flow/icons/path.svg");
 

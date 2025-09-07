@@ -26,7 +26,7 @@ impl NodeLogic for WriteStringNode {
             "write_string",
             "Write String",
             "Writes a string to a file",
-            "Storage/Paths/Content",
+            "Data/Files/Content",
         );
         node.add_icon("/flow/icons/path.svg");
 

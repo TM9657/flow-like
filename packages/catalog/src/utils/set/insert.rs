@@ -51,7 +51,6 @@ impl NodeLogic for InsertSetNode {
             VariableType::Boolean,
         );
 
-
         return node;
     }
 

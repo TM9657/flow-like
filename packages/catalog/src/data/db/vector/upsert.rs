@@ -28,7 +28,7 @@ impl NodeLogic for UpsertLocalDatabaseNode {
             "upsert_local_db",
             "Upsert",
             "Inserts if the Item does not exist, Updates if it does",
-            "Database/Local/Insert",
+            "Data/Database/Insert",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -59,11 +59,7 @@ impl NodeLogic for UpsertLocalDatabaseNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let mut database = database.write().await;
         let id_row: String = context.evaluate_pin("id_row").await?;
         let value: Value = context.evaluate_pin("value").await?;
@@ -92,7 +88,7 @@ impl NodeLogic for BatchUpsertLocalDatabaseNode {
             "batch_upsert_local_db",
             "Batch Upsert",
             "Inserts if the Item does not exist, Updates if it does",
-            "Database/Local/Insert",
+            "Data/Database/Insert",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -124,11 +120,7 @@ impl NodeLogic for BatchUpsertLocalDatabaseNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let mut database = database.write().await;
         let value: Vec<Value> = context.evaluate_pin("value").await?;
         let id_row: String = context.evaluate_pin("id_row").await?;

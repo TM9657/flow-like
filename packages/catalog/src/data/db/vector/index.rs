@@ -28,7 +28,7 @@ impl NodeLogic for IndexLocalDatabaseNode {
             "index_local_db",
             "Build Index",
             "Build Index",
-            "Database/Local/Optimization",
+            "Data/Database/Optimization",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -74,11 +74,7 @@ impl NodeLogic for IndexLocalDatabaseNode {
 
         let index_type: String = context.evaluate_pin("type").await?;
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let database = database.read().await;
         let column: String = context.evaluate_pin("column").await?;
         database.index(&column, Some(&index_type)).await?;

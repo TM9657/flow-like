@@ -1,6 +1,6 @@
 pub mod db;
-pub mod path;
 pub mod excel;
+pub mod path;
 
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;
@@ -27,6 +27,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     ];
 
     nodes.extend(path::register_functions().await);
+    nodes.extend(excel::register_functions().await);
 
     nodes
 }

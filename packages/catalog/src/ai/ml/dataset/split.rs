@@ -1,7 +1,7 @@
 use crate::data::db::vector::NodeDBConnection;
 use flow_like::{
     flow::{
-        execution::{context::ExecutionContext},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         pin::PinOptions,
         variable::VariableType,
@@ -14,7 +14,6 @@ use flow_like_storage::lancedb::query::ExecutableQuery;
 use flow_like_types::rand::{self, Rng};
 use flow_like_types::{Result, async_trait, json::json};
 use futures::TryStreamExt;
-
 
 #[derive(Default)]
 pub struct SplitDatasetNode {}
@@ -70,9 +69,14 @@ impl NodeLogic for SplitDatasetNode {
         .set_schema::<NodeDBConnection>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("test", "Test Database", "Testing Data", VariableType::Struct)
-            .set_schema::<NodeDBConnection>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "test",
+            "Test Database",
+            "Testing Data",
+            VariableType::Struct,
+        )
+        .set_schema::<NodeDBConnection>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "exec_out",

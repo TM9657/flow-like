@@ -26,7 +26,7 @@ impl NodeLogic for RawPathNode {
             "raw_path",
             "Raw Path",
             "Gets the raw path string",
-            "Storage/Paths/Path",
+            "Data/Files/Path",
         );
         node.add_icon("/flow/icons/path.svg");
 

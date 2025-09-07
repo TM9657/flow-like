@@ -25,7 +25,7 @@ impl NodeLogic for PathFromStorageDirNode {
             "path_from_storage_dir",
             "Storage Dir",
             "Converts the storage directory to a Path",
-            "Storage/Paths/Directories",
+            "Data/Files/Directories",
         );
         node.add_icon("/flow/icons/path.svg");
 

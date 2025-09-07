@@ -26,7 +26,7 @@ impl NodeLogic for HeadNode {
             "path_head",
             "Head",
             "Gets the metadata of a file",
-            "Storage/Paths/Operations",
+            "Data/Files/Operations",
         );
         node.add_icon("/flow/icons/path.svg");
 

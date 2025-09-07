@@ -26,7 +26,7 @@ impl NodeLogic for PathExistsNode {
             "path_exists",
             "Path Exists?",
             "Checks if a path exists",
-            "Storage/Paths/Operations",
+            "Data/Files/Operations",
         );
         node.add_icon("/flow/icons/path.svg");
 

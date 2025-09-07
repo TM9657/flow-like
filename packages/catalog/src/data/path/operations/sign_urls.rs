@@ -27,7 +27,7 @@ impl NodeLogic for SignUrlsNode {
             "sign_urls",
             "Sign URLs",
             "Generates signed URLs for accessing files",
-            "Storage/Paths/Operations",
+            "Data/Files/Operations",
         );
         node.add_icon("/flow/icons/path.svg");
 

@@ -1,32 +1,59 @@
-use flow_like::flow::node::NodeLogic;
-use flow_like_types::{Context, Result, Error};
-use calamine::{open_workbook_auto, Data, Range, Reader};
-use csv::WriterBuilder;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
-use std::cmp::{max, min};
-use std::path::Path;
-use std::collections::VecDeque;
-use strsim::jaro_winkler;
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Days};
 use crate::data::excel::CSVTable;
 use crate::data::path::FlowPath;
+use calamine::{Data, Range, Reader, open_workbook_auto, open_workbook_auto_from_rs};
+use chrono::{Days, NaiveDate, NaiveDateTime, NaiveTime};
+use flow_like::flow::node::NodeLogic;
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node},
+        node::Node,
         pin::{PinOptions, ValueType},
         variable::VariableType,
     },
     state::FlowLikeState,
 };
-use flow_like_types::{
-    JsonSchema, async_trait,
+use flow_like_types::{Context, Error, Result};
+use flow_like_types::{JsonSchema, async_trait, json::json, tokio};
+use once_cell::sync::Lazy;
+use rayon::prelude::*;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use std::cmp::{max, min};
+use std::collections::VecDeque;
+use std::io::Cursor;
+use std::path::Path;
+use std::sync::Arc;
+use strsim::jaro_winkler;
 
-    json::{json},
-    tokio,
-};
+static TOTALS_RE: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"(?i)^\s*(total|summe|subtotal|gesamt)\b").unwrap());
+
+fn build_occupancy(grid: &Vec<Vec<String>>) -> Vec<Vec<bool>> {
+    grid.iter()
+        .map(|row| row.iter().map(|s| !s.trim().is_empty()).collect())
+        .collect()
+}
+
+#[inline]
+fn normalize(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        if !ch.is_whitespace() {
+            out.push(ch.to_ascii_lowercase());
+        }
+    }
+    out
+}
+
 /// ============================ Config ============================
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub enum OutputMode {
+    /// Keep behavior: build Vec<Table> in memory
+    InMemory,
+    /// Stream tables to CSV files (temp folder) instead of RAM
+    CsvFiles,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ExtractConfig {
@@ -80,6 +107,14 @@ pub struct ExtractConfig {
     pub max_merge_map_cells: usize,
     /// Take (move) strings out of grid when building tables to avoid cloning large data
     pub take_cells_on_extract: bool,
+    /// If height*width exceeds this, switch to "huge mode" (auto-disable heavy features).
+    pub huge_cells_threshold: usize,
+    /// In huge mode, cap how many rows we materialize for the in-memory path (0 = unlimited).
+    pub huge_cap_rows: usize,
+    /// In huge mode, use a smaller sample for schema checks.
+    pub huge_schema_sample_rows: usize,
+    /// Choose output strategy for huge sheets (default stays InMemory).
+    pub output_mode: OutputMode,
 }
 
 impl Default for ExtractConfig {
@@ -110,6 +145,10 @@ impl Default for ExtractConfig {
             enable_merges: true,
             max_merge_map_cells: 2_000_000, // ~2M cells safeguard (~16MB of pointers)
             take_cells_on_extract: true,
+            huge_cells_threshold: 20_000_000, // ~20M grid cells triggers huge-mode
+            huge_cap_rows: 100_000,           // keep memory sane if staying in-memory
+            huge_schema_sample_rows: 6,
+            output_mode: OutputMode::InMemory,
         }
     }
 }
@@ -117,59 +156,74 @@ impl Default for ExtractConfig {
 /// ============================ Public API ============================
 
 /// Extract raw tables (headers + rows of strings) from a sheet.
-pub fn extract_tables<P: AsRef<Path>>(
-    path: P,
+pub fn extract_tables(
+    data: Vec<u8>,
     sheet_name: &str,
-    cfg: &ExtractConfig,
+    cfg_in: &ExtractConfig,
 ) -> Result<Vec<Table>> {
-    // 1) Read values via calamine
-    let (grid_raw, height, width) = read_sheet_grid(&path, sheet_name)?;
+    let cursor = Cursor::new(data);
+    let mut wb = open_workbook_auto_from_rs(cursor.clone())
+        .with_context(|| format!("Opening workbook {:?}", cursor.get_ref()))?;
+    let range: Range<Data> = wb.worksheet_range(sheet_name)?;
 
-    // 2) (Optional) merged cells pass; can be expensive on huge workbooks.
+    let height = range.get_size().0;
+    let width = range.get_size().1;
+    let cell_count = height.saturating_mul(width);
+
+    let huge_mode = cell_count >= cfg_in.huge_cells_threshold;
+
+    let mut cfg = cfg_in.clone();
+    if huge_mode {
+        cfg.enable_merges = false;
+        cfg.stitch_across_spacers = false;
+        cfg.group_similar_headers = false;
+        cfg.allow_internal_blank_rows = 0;
+        cfg.allow_internal_blank_cols = 0;
+        cfg.gap_break_rows = usize::MAX; // disable segmentation
+        cfg.gap_break_cols = usize::MAX;
+        cfg.schema_sample_rows = cfg.huge_schema_sample_rows;
+    }
+
+    let (grid_raw, height, width) = read_sheet_grid_capped(range, cfg.huge_cap_rows, huge_mode)?;
     let cell_count = height.saturating_mul(width);
     let merges = if cfg.enable_merges && cell_count <= cfg.max_merge_map_cells {
-        read_merged_cells(&path, sheet_name)
+        read_merged_cells(cursor, sheet_name)
             .with_context(|| "Reading merged cells with umya-spreadsheet failed")?
-    } else { Vec::new() };
-
-    // Build merge map only if we actually collected merges
+    } else {
+        Vec::new()
+    };
     let merge_map = if !merges.is_empty() {
         build_merge_map(height, width, &merges)
-    } else { Vec::new() };
+    } else {
+        Vec::new()
+    };
 
-    // 3) Apply merges (propagate top-left) for segmentation/heuristics
     let mut grid = apply_merges(grid_raw, &merges);
 
-    // 4) Segment into rectangles via row/col density cuts
-    let rects_coarse = segment_rectangles(&grid, height, width, cfg);
-
-    // 4b) Within each coarse rectangle, split by connectivity to avoid fusing islands.
+    let rects_coarse = segment_rectangles(&grid, height, width, &cfg);
     let mut rects: Vec<Rect> = Vec::new();
     for r in rects_coarse {
-        let parts = split_rect_by_connectivity(&grid, &r, cfg);
+        let parts = split_rect_by_connectivity(&grid, &r, &cfg);
         rects.extend(parts);
     }
 
-    // 5) Build tables per rectangle
+    // Build tables
     let mut built: Vec<TableWithRect> = Vec::new();
     for rect in rects {
         if count_nonempty_in_rect(&grid, &rect) < cfg.min_table_cells {
             continue;
         }
-    let table = build_table_from_rect(&mut grid, &rect, cfg, &merge_map);
+        let table = build_table_from_rect(&mut grid, &rect, &cfg, &merge_map);
         built.push(TableWithRect { rect, table });
     }
 
-    // 6) Stitch across big blank/merged spacer bands if schema didn't change
-    let stitched = stitch_tables(&grid, built, cfg);
-
-    // 6b) Optionally group and merge by similar headers (non-adjacent, same sheet)
+    // Stitch (skipped in huge mode by knobs above)
+    let stitched = stitch_tables(&grid, built, &cfg);
     let grouped = if cfg.group_similar_headers {
-        group_tables_by_header_similarity(stitched, cfg)
+        group_tables_by_header_similarity(stitched, &cfg)
     } else {
         stitched
     };
-
     Ok(grouped.into_iter().map(|t| t.table).collect())
 }
 
@@ -184,27 +238,36 @@ struct Rect {
 }
 
 #[derive(Clone, Debug)]
-struct Table {
+pub struct Table {
     headers: Vec<String>,
     rows: Vec<Vec<String>>,
 }
 
 /// ============================ IO helpers ============================
 
-fn read_sheet_grid<P: AsRef<Path>>(path: P, sheet: &str) -> Result<(Vec<Vec<String>>, usize, usize)> {
-    let mut wb = open_workbook_auto(&path)
-        .with_context(|| format!("Opening workbook {:?}", path.as_ref()))?;
+fn read_sheet_grid_capped(
+    range: calamine::Range<Data>,
+    cap_rows: usize,
+    huge_mode: bool,
+) -> Result<(Vec<Vec<String>>, usize, usize)> {
+    let mut height = range.get_size().0;
+    let width = range.get_size().1;
 
-    let range: Range<Data> = wb
-        .worksheet_range(sheet)?;
+    if huge_mode && cap_rows > 0 {
+        height = height.min(cap_rows);
+    }
 
-    let height = range.get_size().0; // rows
-    let width = range.get_size().1;  // cols
     let mut grid = vec![vec![String::new(); width]; height];
+    // In huge mode, skip ISO conversion (hot).
+    let is_1904 = false;
 
-    for (r, row) in range.rows().enumerate() {
+    for (r, row) in range.rows().take(height).enumerate() {
         for (c, cell) in row.iter().enumerate() {
-            grid[r][c] = data_to_string_iso(cell, false);
+            grid[r][c] = if huge_mode {
+                data_to_string(cell)
+            } else {
+                data_to_string_iso(cell, is_1904)
+            };
         }
     }
     Ok((grid, height, width))
@@ -230,14 +293,16 @@ fn excel_serial_to_iso(serial: f64, is_1904: bool) -> String {
 
     let secs_norm = ((secs % 86_400) + 86_400) % 86_400;
     let time = NaiveTime::from_num_seconds_from_midnight_opt(secs_norm as u32, 0).unwrap();
-    NaiveDateTime::new(date, time).format("%Y-%m-%dT%H:%M:%S").to_string()
+    NaiveDateTime::new(date, time)
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
 }
 
 fn data_to_string_iso(v: &Data, is_1904: bool) -> String {
     match v {
         Data::DateTime(serial) => excel_serial_to_iso(serial.as_f64(), is_1904),
-        Data::DateTimeIso(s)   => s.clone(),
-        Data::DurationIso(s)   => s.clone(),
+        Data::DateTimeIso(s) => s.clone(),
+        Data::DurationIso(s) => s.clone(),
         _ => data_to_string(v),
     }
 }
@@ -247,17 +312,20 @@ fn data_to_string(v: &Data) -> String {
         Data::Empty => String::new(),
         Data::String(s) => s.clone(),
         Data::Float(f) => {
-            if f.fract() == 0.0
-                && *f >= -9_007_199_254_740_992.0
-                && *f <=  9_007_199_254_740_992.0
-            {
+            if f.fract() == 0.0 && *f >= -9_007_199_254_740_992.0 && *f <= 9_007_199_254_740_992.0 {
                 format!("{:.0}", f)
             } else {
                 f.to_string()
             }
         }
         Data::Int(i) => i.to_string(),
-        Data::Bool(b) => if *b { "TRUE".to_string() } else { "FALSE".to_string() },
+        Data::Bool(b) => {
+            if *b {
+                "TRUE".to_string()
+            } else {
+                "FALSE".to_string()
+            }
+        }
         Data::DateTime(serial) => serial.to_string(),
         Data::DateTimeIso(s) => s.clone(),
         Data::DurationIso(s) => s.clone(),
@@ -269,8 +337,10 @@ fn data_to_string(v: &Data) -> String {
 
 #[derive(Clone, Copy, Debug)]
 struct Merge {
-    r0: usize, c0: usize,
-    r1: usize, c1: usize,
+    r0: usize,
+    c0: usize,
+    r1: usize,
+    c1: usize,
 }
 
 // Lightweight merge map for quick lookup.
@@ -278,7 +348,9 @@ type MergeMap = Vec<Vec<Option<Merge>>>;
 
 fn build_merge_map(height: usize, width: usize, merges: &[Merge]) -> MergeMap {
     let mut map = vec![vec![None; width]; height];
-    if height == 0 || width == 0 { return map; }
+    if height == 0 || width == 0 {
+        return map;
+    }
 
     for m in merges {
         // Clamp merge bounds to grid to avoid OOB
@@ -286,7 +358,9 @@ fn build_merge_map(height: usize, width: usize, merges: &[Merge]) -> MergeMap {
         let c0 = m.c0.min(width - 1);
         let r1 = m.r1.min(height - 1);
         let c1 = m.c1.min(width - 1);
-        if r0 >= height || c0 >= width { continue; }
+        if r0 >= height || c0 >= width {
+            continue;
+        }
         for r in r0..=r1 {
             for c in c0..=c1 {
                 map[r][c] = Some(*m);
@@ -298,19 +372,32 @@ fn build_merge_map(height: usize, width: usize, merges: &[Merge]) -> MergeMap {
 
 // Returns true when (r,c) belongs to a horizontally-merged area and is NOT the anchor (top-left).
 fn is_horiz_merged_non_anchor(mm: &MergeMap, r: usize, c: usize) -> bool {
-    if mm.is_empty() { return false; }
-    if r >= mm.len() { return false; }
-    if c >= mm[r].len() { return false; }
-    if let Some(m) = mm[r][c] { (m.c1 > m.c0) && c != m.c0 && r >= m.r0 && r <= m.r1 } else { false }
+    if mm.is_empty() {
+        return false;
+    }
+    if r >= mm.len() {
+        return false;
+    }
+    if c >= mm[r].len() {
+        return false;
+    }
+    if let Some(m) = mm[r][c] {
+        (m.c1 > m.c0) && c != m.c0 && r >= m.r0 && r <= m.r1
+    } else {
+        false
+    }
 }
 
-fn read_merged_cells<P: AsRef<Path>>(path: P, sheet: &str) -> Result<Vec<Merge>> {
-    let book = umya_spreadsheet::reader::xlsx::read(path.as_ref())
+fn read_merged_cells<P: std::io::Read + std::io::Seek + Clone>(
+    data: P,
+    sheet: &str,
+) -> Result<Vec<Merge>> {
+    let book = umya_spreadsheet::reader::xlsx::read_reader(data, true)
         .with_context(|| "umya read failed")?;
 
     let ws = book
         .get_sheet_by_name(sheet)
-    .ok_or_else(|| Error::msg(format!("Sheet not found (umya): {sheet}")))?;
+        .ok_or_else(|| Error::msg(format!("Sheet not found (umya): {sheet}")))?;
 
     let merged = ws.get_merge_cells(); // &[umya_spreadsheet::Range]
     let mut out = Vec::new();
@@ -355,8 +442,7 @@ fn parse_umya_debug_range(s: &str) -> Option<(usize, usize, usize, usize)> {
         return None;
     }
 
-    let (start_col_1b, start_row_1b, end_col_1b, end_row_1b) =
-        (nums[0], nums[1], nums[2], nums[3]);
+    let (start_col_1b, start_row_1b, end_col_1b, end_row_1b) = (nums[0], nums[1], nums[2], nums[3]);
 
     // Convert 1-based (umya) -> 0-based (your grid)
     let c0 = start_col_1b.saturating_sub(1);
@@ -389,7 +475,9 @@ fn parse_a1_cell(a1: &str) -> Option<(usize, usize)> {
     let mut digits = String::new();
     for ch in a1.chars() {
         if ch.is_ascii_alphabetic() {
-            if !digits.is_empty() { return None; }
+            if !digits.is_empty() {
+                return None;
+            }
             letters.push(ch);
         } else if ch.is_ascii_digit() {
             digits.push(ch);
@@ -404,17 +492,23 @@ fn parse_a1_cell(a1: &str) -> Option<(usize, usize)> {
 
 fn parse_a1_range(r: &str) -> Option<(usize, usize, usize, usize)> {
     let parts: Vec<&str> = r.split(':').collect();
-    if parts.len() != 2 { return None; }
-    let (r0,c0) = parse_a1_cell(parts[0])?;
-    let (r1,c1) = parse_a1_cell(parts[1])?;
-    Some((min(r0,r1), min(c0,c1), max(r0,r1), max(c0,c1)))
+    if parts.len() != 2 {
+        return None;
+    }
+    let (r0, c0) = parse_a1_cell(parts[0])?;
+    let (r1, c1) = parse_a1_cell(parts[1])?;
+    Some((min(r0, r1), min(c0, c1), max(r0, r1), max(c0, c1)))
 }
 
 fn apply_merges(mut grid: Vec<Vec<String>>, merges: &[Merge]) -> Vec<Vec<String>> {
     let height = grid.len();
-    if height == 0 { return grid; }
+    if height == 0 {
+        return grid;
+    }
     let width = grid[0].len();
-    if width == 0 { return grid; }
+    if width == 0 {
+        return grid;
+    }
 
     for m in merges {
         // Clamp to grid
@@ -422,10 +516,18 @@ fn apply_merges(mut grid: Vec<Vec<String>>, merges: &[Merge]) -> Vec<Vec<String>
         let c0 = m.c0.min(width - 1);
         let r1 = m.r1.min(height - 1);
         let c1 = m.c1.min(width - 1);
-        if r0 >= height || c0 >= width { continue; }
+        if r0 >= height || c0 >= width {
+            continue;
+        }
 
-        let base = grid.get(r0).and_then(|row| row.get(c0)).cloned().unwrap_or_default();
-        if base.is_empty() { continue; } // nothing to propagate
+        let base = grid
+            .get(r0)
+            .and_then(|row| row.get(c0))
+            .cloned()
+            .unwrap_or_default();
+        if base.is_empty() {
+            continue;
+        } // nothing to propagate
         for r in r0..=r1 {
             for c in c0..=c1 {
                 grid[r][c] = base.clone();
@@ -443,23 +545,45 @@ fn segment_rectangles(
     width: usize,
     cfg: &ExtractConfig,
 ) -> Vec<Rect> {
-    if height == 0 || width == 0 { return vec![]; }
+    if height == 0 || width == 0 {
+        return vec![];
+    }
 
-    let row_nonempty: Vec<usize> = (0..height)
-        .map(|r| grid[r].iter().filter(|s| !s.trim().is_empty()).count())
+    let occ = build_occupancy(grid);
+
+    let row_nonempty: Vec<usize> = occ
+        .par_iter()
+        .map(|row| row.iter().filter(|&&b| b).count())
         .collect();
+
     let col_nonempty: Vec<usize> = (0..width)
-        .map(|c| (0..height).filter(|&r| !grid[r][c].trim().is_empty()).count())
+        .into_par_iter()
+        .map(|c| (0..height).filter(|&r| occ[r][c]).count())
         .collect();
 
-    let row_cuts = find_cuts(&row_nonempty, width, cfg.empty_density_threshold, cfg.gap_break_rows);
-    let col_cuts = find_cuts(&col_nonempty, height, cfg.empty_density_threshold, cfg.gap_break_cols);
+    let row_cuts = find_cuts(
+        &row_nonempty,
+        width,
+        cfg.empty_density_threshold,
+        cfg.gap_break_rows,
+    );
+    let col_cuts = find_cuts(
+        &col_nonempty,
+        height,
+        cfg.empty_density_threshold,
+        cfg.gap_break_cols,
+    );
 
     // Build rectangles as cartesian of row segments × col segments
     let mut rects = Vec::new();
     for (r0, r1) in row_cuts {
         for (c0, c1) in &col_cuts {
-            let rect = Rect { r0, c0: *c0, r1, c1: *c1 };
+            let rect = Rect {
+                r0,
+                c0: *c0,
+                r1,
+                c1: *c1,
+            };
             // skip rectangles that are effectively empty
             if count_nonempty_in_rect(grid, &rect) > 0 {
                 rects.push(rect);
@@ -480,8 +604,12 @@ fn find_cuts(
     let mut i = 0;
     while i < counts.len() {
         // skip empties to next non-empty
-        while i < counts.len() && density(counts[i], denom) <= thresh { i += 1; }
-        if i >= counts.len() { break; }
+        while i < counts.len() && density(counts[i], denom) <= thresh {
+            i += 1;
+        }
+        if i >= counts.len() {
+            break;
+        }
         let start = i;
         // grow until we get >=gap_break consecutive empties
         let mut consec_empty = 0;
@@ -489,7 +617,9 @@ fn find_cuts(
         while i < counts.len() {
             if density(counts[i], denom) <= thresh {
                 consec_empty += 1;
-                if consec_empty >= gap_break { break; }
+                if consec_empty >= gap_break {
+                    break;
+                }
             } else {
                 consec_empty = 0;
                 end = i;
@@ -507,14 +637,20 @@ fn find_cuts(
 
 #[inline]
 fn density(nz: usize, total: usize) -> f32 {
-    if total == 0 { 0.0 } else { (nz as f32) / (total as f32) }
+    if total == 0 {
+        0.0
+    } else {
+        (nz as f32) / (total as f32)
+    }
 }
 
 fn count_nonempty_in_rect(grid: &Vec<Vec<String>>, rect: &Rect) -> usize {
     let mut n = 0;
     for r in rect.r0..=rect.r1 {
         for c in rect.c0..=rect.c1 {
-            if !grid[r][c].trim().is_empty() { n += 1; }
+            if !grid[r][c].trim().is_empty() {
+                n += 1;
+            }
         }
     }
     n
@@ -541,7 +677,7 @@ fn build_table_from_rect(
     let mut rows: Vec<Vec<String>> = Vec::new();
 
     // regex to drop totals
-    let totals_re = Regex::new(r"(?i)^\s*(total|summe|subtotal|gesamt)\b").unwrap();
+    let totals_re = &*TOTALS_RE;
 
     // Unit row: if directly under header looks like unit tokens, merge into header
     if data_r0 <= rect.r1 {
@@ -559,9 +695,15 @@ fn build_table_from_rect(
     for r in data_r0..=rect.r1 {
         let mut row = Vec::new();
         for c in rect.c0..=rect.c1 {
-            let raw = if cfg.take_cells_on_extract { std::mem::take(&mut grid[r][c]) } else { grid[r][c].clone() };
+            let raw = if cfg.take_cells_on_extract {
+                std::mem::take(&mut grid[r][c])
+            } else {
+                grid[r][c].clone()
+            };
             let mut v = raw;
-            if is_horiz_merged_non_anchor(merge_map, r, c) { v.clear(); }
+            if is_horiz_merged_non_anchor(merge_map, r, c) {
+                v.clear();
+            }
             row.push(v);
         }
         // pad/clip to left_cols + data columns
@@ -570,8 +712,11 @@ fn build_table_from_rect(
         let nonempty = row.iter().any(|s| !s.trim().is_empty());
         if !nonempty {
             consec_blank_rows += 1;
-            if consec_blank_rows <= blank_allowed { continue; }
-            else { break; } // assume table ended
+            if consec_blank_rows <= blank_allowed {
+                continue;
+            } else {
+                break;
+            } // assume table ended
         } else {
             consec_blank_rows = 0;
         }
@@ -584,7 +729,9 @@ fn build_table_from_rect(
         // optionally drop totals rows
         if cfg.drop_totals {
             if let Some(first) = row.get(0) {
-                if totals_re.is_match(first) { continue; }
+                if totals_re.is_match(first) {
+                    continue;
+                }
             }
         }
 
@@ -594,7 +741,9 @@ fn build_table_from_rect(
 
     // normalize row widths
     for r in &mut rows {
-        if r.len() < max_width { r.resize(max_width, String::new()); }
+        if r.len() < max_width {
+            r.resize(max_width, String::new());
+        }
     }
 
     let mut table = Table { headers, rows };
@@ -618,52 +767,78 @@ fn detect_unit_row(
     r: usize,
     headers: &Vec<String>,
 ) -> Option<Vec<String>> {
-    if r < rect.r0 || r > rect.r1 { return None; }
+    if r < rect.r0 || r > rect.r1 {
+        return None;
+    }
     let mut vals: Vec<String> = Vec::new();
     let mut tokens = 0usize;
     let mut nonempty = 0usize;
     for (i, c) in (rect.c0..=rect.c1).enumerate() {
-        if i >= headers.len() { break; }
+        if i >= headers.len() {
+            break;
+        }
         let s = grid[r][c].trim();
-        if s.is_empty() { vals.push(String::new()); continue; }
+        if s.is_empty() {
+            vals.push(String::new());
+            continue;
+        }
         nonempty += 1;
         let is_short = s.chars().count() <= 5;
         let has_space = s.contains(char::is_whitespace);
-        let symbolic_units = ["%","‰","€","$","¥","£","kg","g","t","h","m","s","km","cm","mm","pcs","stk","l","ml"];
+        let symbolic_units = [
+            "%", "‰", "€", "$", "¥", "£", "kg", "g", "t", "h", "m", "s", "km", "cm", "mm", "pcs",
+            "stk", "l", "ml",
+        ];
         let is_symbolic = symbolic_units.iter().any(|&u| s.eq_ignore_ascii_case(u));
-        if (is_short && !has_space) || is_symbolic { tokens += 1; }
+        if (is_short && !has_space) || is_symbolic {
+            tokens += 1;
+        }
         vals.push(s.to_string());
     }
-    if nonempty > 0 && tokens * 2 >= nonempty { Some(vals) } else { None }
+    if nonempty > 0 && tokens * 2 >= nonempty {
+        Some(vals)
+    } else {
+        None
+    }
 }
 
 fn merge_unit_into_headers(headers: &mut Vec<String>, unit_row: &Vec<String>) {
     for (h, u) in headers.iter_mut().zip(unit_row) {
-        if u.trim().is_empty() { continue; }
-        if h.trim().is_empty() { *h = u.clone(); }
-        else { *h = format!("{} [{}]", h, u); }
+        if u.trim().is_empty() {
+            continue;
+        }
+        if h.trim().is_empty() {
+            *h = u.clone();
+        } else {
+            *h = format!("{} [{}]", h, u);
+        }
     }
 }
 
 fn drop_totals_column(t: &mut Table) {
-    if t.headers.is_empty() { return; }
-    let re = Regex::new(r"(?i)^\s*(total|summe|subtotal|gesamt)\b").unwrap();
+    if t.headers.is_empty() {
+        return;
+    }
+    let re = &*TOTALS_RE;
     let last = t.headers.len() - 1;
     if re.is_match(t.headers[last].as_str()) {
         t.headers.pop();
-        for row in &mut t.rows { if row.len() > last { row.pop(); } }
+        for row in &mut t.rows {
+            if row.len() > last {
+                row.pop();
+            }
+        }
     }
 }
 
-fn is_banner_row(
-    grid: &Vec<Vec<String>>,
-    rect: &Rect,
-    r: usize,
-    merge_map: &MergeMap,
-) -> bool {
-    if r < rect.r0 || r > rect.r1 { return false; }
+fn is_banner_row(grid: &Vec<Vec<String>>, rect: &Rect, r: usize, merge_map: &MergeMap) -> bool {
+    if r < rect.r0 || r > rect.r1 {
+        return false;
+    }
     let width = rect.c1.saturating_sub(rect.c0) + 1;
-    if width < 3 { return false; }
+    if width < 3 {
+        return false;
+    }
     let min_span = std::cmp::max(2, width / 2); // span at least half the rect
     // If there's no merge map (merges disabled or skipped), skip merged banner logic safely
     if !merge_map.is_empty() {
@@ -671,13 +846,17 @@ fn is_banner_row(
         if r < merge_map.len() {
             // Check for a merged anchor at this row that spans wide columns and has text
             for c in rect.c0..=rect.c1 {
-                if c >= merge_map[r].len() { break; }
+                if c >= merge_map[r].len() {
+                    break;
+                }
                 if let Some(m) = merge_map[r][c] {
                     if m.r0 == r && m.c0 == c {
                         let span = m.c1.saturating_sub(m.c0) + 1;
                         if span >= min_span {
                             let s = grid[r][c].trim();
-                            if !s.is_empty() { return true; }
+                            if !s.is_empty() {
+                                return true;
+                            }
                         }
                     }
                 }
@@ -687,7 +866,11 @@ fn is_banner_row(
 
     // Fallback: entire row has exactly one non-empty cell and others empty
     let mut nonempty_count = 0usize;
-    for c in rect.c0..=rect.c1 { if !grid[r][c].trim().is_empty() { nonempty_count += 1; } }
+    for c in rect.c0..=rect.c1 {
+        if !grid[r][c].trim().is_empty() {
+            nonempty_count += 1;
+        }
+    }
     nonempty_count == 1
 }
 
@@ -697,12 +880,18 @@ fn row_type_stats(row: &Vec<String>, c0: usize, c1: usize) -> (f32, f32, usize) 
     let mut nonempty = 0usize;
     for c in c0..=c1 {
         let s = row[c].trim();
-        if s.is_empty() { continue; }
+        if s.is_empty() {
+            continue;
+        }
         nonempty += 1;
         let has_digit = s.chars().any(|ch| ch.is_ascii_digit());
         let has_alpha = s.chars().any(|ch| ch.is_ascii_alphabetic());
-        if has_alpha { alpha += 1; }
-        if has_digit && !has_alpha { numeric += 1; }
+        if has_alpha {
+            alpha += 1;
+        }
+        if has_digit && !has_alpha {
+            numeric += 1;
+        }
     }
     let w = max(1, (c1 + 1).saturating_sub(c0));
     (alpha as f32 / w as f32, numeric as f32 / w as f32, nonempty)
@@ -716,17 +905,27 @@ fn detect_left_header_cols(
 ) -> usize {
     let mut count = 0usize;
     'cols: for c in rect.c0..=rect.c1 {
-        if count >= cfg.max_left_header_cols { break; }
+        if count >= cfg.max_left_header_cols {
+            break;
+        }
         let mut textish = 0usize;
         let mut nonempty = 0usize;
         let mut repeats = 0usize;
         let mut prev: Option<String> = None;
         for r in (rect.r0 + header_rows.len())..=rect.r1 {
             let s = grid[r][c].trim();
-            if s.is_empty() { continue; }
+            if s.is_empty() {
+                continue;
+            }
             nonempty += 1;
-            if s.chars().any(|ch| ch.is_ascii_alphabetic()) { textish += 1; }
-            if let Some(p) = &prev { if p == s { repeats += 1; } }
+            if s.chars().any(|ch| ch.is_ascii_alphabetic()) {
+                textish += 1;
+            }
+            if let Some(p) = &prev {
+                if p == s {
+                    repeats += 1;
+                }
+            }
             prev = Some(s.to_string());
         }
         // Heuristic: mostly text labels and some repeats (categories)
@@ -752,23 +951,42 @@ fn flatten_headers(
         let mut parts = Vec::new();
         for off in header_rows {
             let r = rect.r0 + *off;
-            let mut s = if cfg.take_cells_on_extract { std::mem::take(&mut grid[r][c]) } else { grid[r][c].clone() };
+            let mut s = if cfg.take_cells_on_extract {
+                std::mem::take(&mut grid[r][c])
+            } else {
+                grid[r][c].clone()
+            };
 
             // Suppress horizontally-merged non-anchor duplicates across header rows
-            if is_horiz_merged_non_anchor(merge_map, r, c) { s.clear(); }
+            if is_horiz_merged_non_anchor(merge_map, r, c) {
+                s.clear();
+            }
 
             if s.contains('\n') {
                 let cleaned = s.replace('\r', "");
                 let mut buf = String::new();
-                for (i, part) in cleaned.split('\n').map(str::trim).filter(|x| !x.is_empty()).enumerate() {
-                    if i > 0 { buf.push_str(&cfg.header_joiner); }
+                for (i, part) in cleaned
+                    .split('\n')
+                    .map(str::trim)
+                    .filter(|x| !x.is_empty())
+                    .enumerate()
+                {
+                    if i > 0 {
+                        buf.push_str(&cfg.header_joiner);
+                    }
                     buf.push_str(part);
                 }
                 s = buf;
             }
-            if !s.trim().is_empty() { parts.push(s.trim().to_string()); }
+            if !s.trim().is_empty() {
+                parts.push(s.trim().to_string());
+            }
         }
-        let name = if parts.is_empty() { String::new() } else { parts.join(&cfg.header_joiner) };
+        let name = if parts.is_empty() {
+            String::new()
+        } else {
+            parts.join(&cfg.header_joiner)
+        };
         headers.push(name);
     }
 
@@ -776,22 +994,33 @@ fn flatten_headers(
     if headers.iter().any(|h| !h.trim().is_empty()) {
         // Otherwise trim only trailing *all-empty* columns.
         let mut last_nonempty = headers.len().saturating_sub(1);
-        while last_nonempty > 0 && headers[last_nonempty].trim().is_empty() { last_nonempty -= 1; }
+        while last_nonempty > 0 && headers[last_nonempty].trim().is_empty() {
+            last_nonempty -= 1;
+        }
         headers.truncate(last_nonempty + 1);
     }
 
     // Ensure left header columns get reasonable names if empty
     for i in 0..left_cols.min(headers.len()) {
-        if headers[i].trim().is_empty() { headers[i] = format!("RowHeader{}", i + 1); }
+        if headers[i].trim().is_empty() {
+            headers[i] = format!("RowHeader{}", i + 1);
+        }
     }
 
     // Dedup duplicate header names
     let mut seen = std::collections::HashMap::<String, usize>::new();
     for h in &mut headers {
         let base = h.trim();
-        if base.is_empty() { *h = "Column".to_string(); continue; }
+        if base.is_empty() {
+            *h = "Column".to_string();
+            continue;
+        }
         let n = seen.entry(base.to_string()).or_insert(0);
-        if *n > 0 { *h = format!("{} ({})", base, *n + 1); } else { *h = base.to_string(); }
+        if *n > 0 {
+            *h = format!("{} ({})", base, *n + 1);
+        } else {
+            *h = base.to_string();
+        }
         *n += 1;
     }
     headers
@@ -807,14 +1036,20 @@ fn project_row_for_headers(
     let end = min(header_len, row.len());
     let mut out = row[0..end].to_vec();
     // Ensure left_cols exist (already in range). Pad if necessary.
-    if out.len() < header_len { out.resize(header_len, String::new()); }
+    if out.len() < header_len {
+        out.resize(header_len, String::new());
+    }
     out
 }
 
 fn row_eq_headers(row: &Vec<String>, headers: &Vec<String>) -> bool {
-    if row.len() != headers.len() { return false; }
+    if row.len() != headers.len() {
+        return false;
+    }
     for (a, b) in row.iter().zip(headers) {
-        if normalize(a) != normalize(b) { return false; }
+        if normalize(a) != normalize(b) {
+            return false;
+        }
     }
     true
 }
@@ -829,12 +1064,20 @@ fn detect_header_rows(
     let mut banner_skip = 0usize;
     for _ in 0..2 {
         let r = rect.r0 + banner_skip;
-        if r <= rect.r1 && is_banner_row(grid, rect, r, merge_map) { banner_skip += 1; } else { break; }
+        if r <= rect.r1 && is_banner_row(grid, rect, r, merge_map) {
+            banner_skip += 1;
+        } else {
+            break;
+        }
     }
 
     // Evaluate candidate header depths h=1..=max_header_rows using a schema-aware score.
-    let max_h = cfg.max_header_rows.min(rect.r1.saturating_sub(rect.r0 + banner_skip) + 1);
-    if max_h == 0 { return vec![]; }
+    let max_h = cfg
+        .max_header_rows
+        .min(rect.r1.saturating_sub(rect.r0 + banner_skip) + 1);
+    if max_h == 0 {
+        return vec![];
+    }
 
     let mut best_h = 1usize;
     let mut best_score = -1.0f32;
@@ -842,14 +1085,18 @@ fn detect_header_rows(
     for h in 1..=max_h {
         let start = rect.r0 + banner_skip;
         let data_start = start + h;
-        if data_start > rect.r1 { break; }
+        if data_start > rect.r1 {
+            break;
+        }
 
         let score = score_schema_fit(grid, rect, data_start, cfg);
         // Light header-ish check on header band itself to avoid picking h=0-like garbage
         let mut headerish = 0.0f32;
         for rr in start..data_start {
             let (alpha, numeric, ne) = row_type_stats(&grid[rr], rect.c0, rect.c1);
-            if ne == 0 { continue; }
+            if ne == 0 {
+                continue;
+            }
             headerish += (alpha - numeric).max(0.0);
         }
         let h_norm = headerish / (h as f32).max(1.0);
@@ -865,16 +1112,24 @@ fn detect_header_rows(
     if best_score < 0.05 {
         // legacy: keep previous method but starting at banner_skip
         let mut out = Vec::new();
-        let max = cfg.max_header_rows.min(rect.r1.saturating_sub(rect.r0 + banner_skip) + 1);
+        let max = cfg
+            .max_header_rows
+            .min(rect.r1.saturating_sub(rect.r0 + banner_skip) + 1);
         for i in 0..max {
             let r = rect.r0 + banner_skip + i;
             let (alpha, numeric, nonempty) = row_type_stats(&grid[r], rect.c0, rect.c1);
-            if nonempty == 0 { break; }
+            if nonempty == 0 {
+                break;
+            }
             let looks_header = alpha >= 0.60 && numeric <= 0.30;
-            if !looks_header { break; }
+            if !looks_header {
+                break;
+            }
             out.push(r - rect.r0);
         }
-        if out.is_empty() { out.push(banner_skip); }
+        if out.is_empty() {
+            out.push(banner_skip);
+        }
         return out;
     }
 
@@ -889,8 +1144,11 @@ fn score_schema_fit(
     data_r0: usize,
     cfg: &ExtractConfig,
 ) -> f32 {
-    if data_r0 > rect.r1 { return 0.0; }
-    let c0 = rect.c0; let c1 = rect.c1;
+    if data_r0 > rect.r1 {
+        return 0.0;
+    }
+    let c0 = rect.c0;
+    let c1 = rect.c1;
     let sample_end = (data_r0 + cfg.schema_sample_rows - 1).min(rect.r1);
     let mut col_kind_counts: Vec<[usize; 5]> = vec![[0; 5]; c1 - c0 + 1]; // Bool, DateTime, Numeric, Text, Empty
 
@@ -902,27 +1160,45 @@ fn score_schema_fit(
             col_kind_counts[i][k] += 1;
         }
     }
-    if rows_seen == 0 { return 0.0; }
+    if rows_seen == 0 {
+        return 0.0;
+    }
 
     // Compute consistency per column as 1 - entropy proxy (majority / non-empty)
     let mut per_col = Vec::with_capacity(col_kind_counts.len());
     for counts in &col_kind_counts {
         let nonempty = counts[0] + counts[1] + counts[2] + counts[3]; // exclude Empty
-        if nonempty == 0 { per_col.push(0.0); continue; }
+        if nonempty == 0 {
+            per_col.push(0.0);
+            continue;
+        }
         let majority = counts[0].max(counts[1]).max(counts[2]).max(counts[3]);
         per_col.push(majority as f32 / nonempty as f32);
     }
 
     // Aggregate: fraction of columns meeting consistency threshold and their mean consistency
-    let mut ok_cols = 0usize; let mut sum_ok = 0.0f32; let mut considered = 0usize;
+    let mut ok_cols = 0usize;
+    let mut sum_ok = 0.0f32;
+    let mut considered = 0usize;
     for &v in &per_col {
-        if v <= 0.0 { continue; }
+        if v <= 0.0 {
+            continue;
+        }
         considered += 1;
-        if v >= cfg.min_body_consistency { ok_cols += 1; sum_ok += v; }
+        if v >= cfg.min_body_consistency {
+            ok_cols += 1;
+            sum_ok += v;
+        }
     }
-    if considered == 0 { return 0.0; }
+    if considered == 0 {
+        return 0.0;
+    }
     let frac_ok = ok_cols as f32 / considered as f32;
-    let avg_ok = if ok_cols == 0 { 0.0 } else { sum_ok / ok_cols as f32 };
+    let avg_ok = if ok_cols == 0 {
+        0.0
+    } else {
+        sum_ok / ok_cols as f32
+    };
 
     0.7 * frac_ok + 0.3 * avg_ok
 }
@@ -939,22 +1215,29 @@ fn detect_kind_idx(s: &str) -> usize {
 }
 /// ============================ Connectivity split ============================
 
-fn is_nonempty(s: &str) -> bool { !s.trim().is_empty() }
+fn is_nonempty(s: &str) -> bool {
+    !s.trim().is_empty()
+}
 
 fn split_rect_by_connectivity(
     grid: &Vec<Vec<String>>,
     rect: &Rect,
     cfg: &ExtractConfig,
 ) -> Vec<Rect> {
-    let mut visited: Vec<Vec<bool>> = vec![vec![false; rect.c1 - rect.c0 + 1]; rect.r1 - rect.r0 + 1];
+    let mut visited: Vec<Vec<bool>> =
+        vec![vec![false; rect.c1 - rect.c0 + 1]; rect.r1 - rect.r0 + 1];
     let mut parts: Vec<Rect> = Vec::new();
 
     for r in rect.r0..=rect.r1 {
         for c in rect.c0..=rect.c1 {
-            if !is_nonempty(&grid[r][c]) { continue; }
+            if !is_nonempty(&grid[r][c]) {
+                continue;
+            }
             let vr = r - rect.r0;
             let vc = c - rect.c0;
-            if visited[vr][vc] { continue; }
+            if visited[vr][vc] {
+                continue;
+            }
 
             let mut q: VecDeque<(usize, usize)> = VecDeque::new();
             q.push_back((r, c));
@@ -979,9 +1262,12 @@ fn split_rect_by_connectivity(
                     (cr, cc + 1, cc < rect.c1),
                 ];
                 for &(nr, nc, ok) in &neigh {
-                    if !ok { continue; }
+                    if !ok {
+                        continue;
+                    }
                     if is_nonempty(&grid[nr][nc]) {
-                        let vr = nr - rect.r0; let vc = nc - rect.c0;
+                        let vr = nr - rect.r0;
+                        let vc = nc - rect.c0;
                         if !visited[vr][vc] {
                             visited[vr][vc] = true;
                             q.push_back((nr, nc));
@@ -993,117 +1279,123 @@ fn split_rect_by_connectivity(
                 let mut gaps = 0usize;
                 let mut x = cc + 1;
                 while x <= rect.c1 && gaps < cfg.allow_internal_blank_cols {
-                    if is_nonempty(&grid[cr][x]) { break; }
-                    gaps += 1; x += 1;
+                    if is_nonempty(&grid[cr][x]) {
+                        break;
+                    }
+                    gaps += 1;
+                    x += 1;
                 }
-                if x <= rect.c1 && gaps > 0 && gaps <= cfg.allow_internal_blank_cols && is_nonempty(&grid[cr][x]) {
-                    let vr = cr - rect.r0; let vc = x - rect.c0;
-                    if !visited[vr][vc] { visited[vr][vc] = true; q.push_back((cr, x)); }
+                if x <= rect.c1
+                    && gaps > 0
+                    && gaps <= cfg.allow_internal_blank_cols
+                    && is_nonempty(&grid[cr][x])
+                {
+                    let vr = cr - rect.r0;
+                    let vc = x - rect.c0;
+                    if !visited[vr][vc] {
+                        visited[vr][vc] = true;
+                        q.push_back((cr, x));
+                    }
                 }
 
                 // Horizontal bridging left
-                gaps = 0; let mut x2 = cc;
+                gaps = 0;
+                let mut x2 = cc;
                 while x2 > rect.c0 {
                     let next = x2 - 1;
-                    if is_nonempty(&grid[cr][next]) { break; }
-                    gaps += 1; x2 = next;
-                    if gaps >= cfg.allow_internal_blank_cols { break; }
+                    if is_nonempty(&grid[cr][next]) {
+                        break;
+                    }
+                    gaps += 1;
+                    x2 = next;
+                    if gaps >= cfg.allow_internal_blank_cols {
+                        break;
+                    }
                 }
                 if x2 > rect.c0.saturating_sub(1) && gaps > 0 {
                     let target = x2 - 1;
                     if target >= rect.c0 && is_nonempty(&grid[cr][target]) {
-                        let vr = cr - rect.r0; let vc = target - rect.c0;
-                        if !visited[vr][vc] { visited[vr][vc] = true; q.push_back((cr, target)); }
+                        let vr = cr - rect.r0;
+                        let vc = target - rect.c0;
+                        if !visited[vr][vc] {
+                            visited[vr][vc] = true;
+                            q.push_back((cr, target));
+                        }
                     }
                 }
 
                 // Vertical bridging down
-                gaps = 0; let mut y = cr + 1;
+                gaps = 0;
+                let mut y = cr + 1;
                 while y <= rect.r1 && gaps < cfg.allow_internal_blank_rows {
-                    if is_nonempty(&grid[y][cc]) { break; }
-                    gaps += 1; y += 1;
+                    if is_nonempty(&grid[y][cc]) {
+                        break;
+                    }
+                    gaps += 1;
+                    y += 1;
                 }
-                if y <= rect.r1 && gaps > 0 && gaps <= cfg.allow_internal_blank_rows && is_nonempty(&grid[y][cc]) {
-                    let vr = y - rect.r0; let vc = cc - rect.c0;
-                    if !visited[vr][vc] { visited[vr][vc] = true; q.push_back((y, cc)); }
+                if y <= rect.r1
+                    && gaps > 0
+                    && gaps <= cfg.allow_internal_blank_rows
+                    && is_nonempty(&grid[y][cc])
+                {
+                    let vr = y - rect.r0;
+                    let vc = cc - rect.c0;
+                    if !visited[vr][vc] {
+                        visited[vr][vc] = true;
+                        q.push_back((y, cc));
+                    }
                 }
 
                 // Vertical bridging up
-                gaps = 0; let mut y2 = cr;
+                gaps = 0;
+                let mut y2 = cr;
                 while y2 > rect.r0 {
                     let next = y2 - 1;
-                    if is_nonempty(&grid[next][cc]) { break; }
-                    gaps += 1; y2 = next;
-                    if gaps >= cfg.allow_internal_blank_rows { break; }
+                    if is_nonempty(&grid[next][cc]) {
+                        break;
+                    }
+                    gaps += 1;
+                    y2 = next;
+                    if gaps >= cfg.allow_internal_blank_rows {
+                        break;
+                    }
                 }
                 if y2 > rect.r0.saturating_sub(1) && gaps > 0 {
                     let target = y2 - 1;
                     if target >= rect.r0 && is_nonempty(&grid[target][cc]) {
-                        let vr = target - rect.r0; let vc = cc - rect.c0;
-                        if !visited[vr][vc] { visited[vr][vc] = true; q.push_back((target, cc)); }
+                        let vr = target - rect.r0;
+                        let vc = cc - rect.c0;
+                        if !visited[vr][vc] {
+                            visited[vr][vc] = true;
+                            q.push_back((target, cc));
+                        }
                     }
                 }
             }
 
-            parts.push(Rect { r0: comp_r0, c0: comp_c0, r1: comp_r1, c1: comp_c1 });
+            parts.push(Rect {
+                r0: comp_r0,
+                c0: comp_c0,
+                r1: comp_r1,
+                c1: comp_c1,
+            });
         }
     }
 
     // Small optimization: if no split happened, return the input rect.
     if parts.len() <= 1 {
-        return vec![Rect { r0: rect.r0, c0: rect.c0, r1: rect.r1, c1: rect.c1 }];
+        return vec![Rect {
+            r0: rect.r0,
+            c0: rect.c0,
+            r1: rect.r1,
+            c1: rect.c1,
+        }];
     }
     parts
 }
 
-fn normalize(s: &str) -> String {
-    s.trim().to_ascii_lowercase().replace(char::is_whitespace, "")
-}
-
 /// ============================ CSV render ============================
-
-fn render_table_to_csv(table: &Table, cfg: &ExtractConfig) -> Result<Option<String>> {
-    if table.rows.is_empty() && table.headers.iter().all(|h| h.trim().is_empty()) {
-        return Ok(None);
-    }
-    let mut buf: Vec<u8> = Vec::new();
-    if cfg.bom {
-        buf.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
-    }
-    let mut wtr = WriterBuilder::new()
-        .delimiter(cfg.delimiter)
-        .terminator(if cfg.crlf {
-            csv::Terminator::CRLF
-        } else {
-            csv::Terminator::Any(b'\n') // use Any(u8) for LF
-        })
-        .from_writer(vec![]);
-
-    let mut header = table.headers.clone();
-    harden_fields(&mut header, cfg.csv_injection_hardening);
-    wtr.write_record(header)?;
-
-    for mut row in table.rows.clone() {
-        harden_fields(&mut row, cfg.csv_injection_hardening);
-        wtr.write_record(row)?;
-    }
-    let mut inner = wtr.into_inner()?;
-    buf.append(&mut inner);
-    let s = String::from_utf8(buf).context("CSV not UTF-8")?;
-    Ok(Some(s))
-}
-
-fn harden_fields(fields: &mut [String], enable: bool) {
-    if !enable { return; }
-    for f in fields {
-        let s = f.trim_start();
-        if let Some(ch) = s.chars().next() {
-            if matches!(ch, '=' | '+' | '-' | '@') {
-                f.insert(0, '\'');
-            }
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 struct TableWithRect {
@@ -1112,20 +1404,33 @@ struct TableWithRect {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Kind { Empty, Bool, DateTime, Numeric, Text, Mixed }
+enum Kind {
+    Empty,
+    Bool,
+    DateTime,
+    Numeric,
+    Text,
+    Mixed,
+}
 
 fn detect_kind(s: &str) -> Kind {
     let t = s.trim();
-    if t.is_empty() { return Kind::Empty; }
+    if t.is_empty() {
+        return Kind::Empty;
+    }
     let tl = t.to_ascii_lowercase();
-    if tl == "true" || tl == "false" { return Kind::Bool; }
+    if tl == "true" || tl == "false" {
+        return Kind::Bool;
+    }
     // very light ISO checks: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS
     if (t.len() >= 10 && t.chars().nth(4) == Some('-') && t.chars().nth(7) == Some('-'))
         || (t.len() >= 19 && t.chars().nth(10) == Some('T'))
     {
         return Kind::DateTime;
     }
-    if t.parse::<i64>().is_ok() || t.parse::<f64>().is_ok() { return Kind::Numeric; }
+    if t.parse::<i64>().is_ok() || t.parse::<f64>().is_ok() {
+        return Kind::Numeric;
+    }
     Kind::Text
 }
 
@@ -1136,8 +1441,14 @@ fn infer_col_kinds(table: &Table, sample: usize) -> Vec<Kind> {
         let mut seen = std::collections::HashSet::<Kind>::new();
         for r in 0..table.rows.len().min(sample) {
             let k = detect_kind(table.rows[r].get(c).map(|s| s.as_str()).unwrap_or(""));
-            if k != Kind::Empty { seen.insert(match k { Kind::Numeric => Kind::Numeric, _ => k }); }
-            if seen.len() > 1 { // early mixed
+            if k != Kind::Empty {
+                seen.insert(match k {
+                    Kind::Numeric => Kind::Numeric,
+                    _ => k,
+                });
+            }
+            if seen.len() > 1 {
+                // early mixed
                 kinds[c] = Kind::Mixed;
                 break;
             }
@@ -1151,46 +1462,66 @@ fn infer_col_kinds(table: &Table, sample: usize) -> Vec<Kind> {
 
 fn kinds_match_ratio(a: &[Kind], b: &[Kind]) -> f32 {
     let w = a.len().min(b.len());
-    if w == 0 { return 1.0; }
+    if w == 0 {
+        return 1.0;
+    }
     let mut considered = 0usize;
     let mut ok = 0usize;
     for i in 0..w {
         let (ka, kb) = (a[i], b[i]);
         // Empty is neutral, ignore unless both are empty
-        if ka == Kind::Empty && kb == Kind::Empty { continue; }
+        if ka == Kind::Empty && kb == Kind::Empty {
+            continue;
+        }
         considered += 1;
         let compat = ka == kb
             || (ka == Kind::Numeric && kb == Kind::Numeric)
             || ka == Kind::Empty
             || kb == Kind::Empty;
-        if compat { ok += 1; }
+        if compat {
+            ok += 1;
+        }
     }
-    if considered == 0 { 1.0 } else { ok as f32 / considered as f32 }
+    if considered == 0 {
+        1.0
+    } else {
+        ok as f32 / considered as f32
+    }
 }
 
 fn col_overlap_ratio(a: &Rect, b: &Rect) -> f32 {
     let inter_c0 = std::cmp::max(a.c0, b.c0);
     let inter_c1 = std::cmp::min(a.c1, b.c1);
-    let inter = if inter_c1 >= inter_c0 { inter_c1 - inter_c0 + 1 } else { 0 };
+    let inter = if inter_c1 >= inter_c0 {
+        inter_c1 - inter_c0 + 1
+    } else {
+        0
+    };
     let uni_c0 = std::cmp::min(a.c0, b.c0);
     let uni_c1 = std::cmp::max(a.c1, b.c1);
-    let uni  = uni_c1 - uni_c0 + 1;
-    if uni == 0 { 0.0 } else { inter as f32 / uni as f32 }
+    let uni = uni_c1 - uni_c0 + 1;
+    if uni == 0 {
+        0.0
+    } else {
+        inter as f32 / uni as f32
+    }
 }
 
-fn gap_has_headerish(
-    grid: &Vec<Vec<String>>,
-    a: &Rect,
-    b: &Rect,
-) -> bool {
-    if b.r0 <= a.r1 + 1 { return false; }
+fn gap_has_headerish(grid: &Vec<Vec<String>>, a: &Rect, b: &Rect) -> bool {
+    if b.r0 <= a.r1 + 1 {
+        return false;
+    }
     let c0 = std::cmp::max(a.c0, b.c0);
     let c1 = std::cmp::min(a.c1, b.c1);
-    if c1 < c0 { return false; }
+    if c1 < c0 {
+        return false;
+    }
     for r in (a.r1 + 1)..b.r0 {
         let (alpha, numeric, nonempty) = row_type_stats(&grid[r], c0, c1);
         let looks_header = (alpha >= 0.5 && numeric <= 0.5) || (nonempty > 0 && alpha >= 0.3);
-        if looks_header { return true; }
+        if looks_header {
+            return true;
+        }
     }
     false
 }
@@ -1198,16 +1529,32 @@ fn gap_has_headerish(
 fn merge_tables(mut a: Table, mut b: Table) -> Table {
     let target_len = a.headers.len().max(b.headers.len());
 
-    if a.headers.len() < target_len { a.headers.resize(target_len, String::new()); }
-    if b.headers.len() < target_len { b.headers.resize(target_len, String::new()); }
+    if a.headers.len() < target_len {
+        a.headers.resize(target_len, String::new());
+    }
+    if b.headers.len() < target_len {
+        b.headers.resize(target_len, String::new());
+    }
 
-    for r in &mut a.rows { if r.len() < target_len { r.resize(target_len, String::new()); } }
-    for r in &mut b.rows { if r.len() < target_len { r.resize(target_len, String::new()); } }
+    for r in &mut a.rows {
+        if r.len() < target_len {
+            r.resize(target_len, String::new());
+        }
+    }
+    for r in &mut b.rows {
+        if r.len() < target_len {
+            r.resize(target_len, String::new());
+        }
+    }
 
     // Prefer non-empty header set; otherwise keep `a`'s.
     let a_has_names = a.headers.iter().any(|h| !h.trim().is_empty());
     let b_has_names = b.headers.iter().any(|h| !h.trim().is_empty());
-    let headers = if a_has_names || !b_has_names { a.headers.clone() } else { b.headers.clone() };
+    let headers = if a_has_names || !b_has_names {
+        a.headers.clone()
+    } else {
+        b.headers.clone()
+    };
 
     let mut rows = a.rows;
     rows.extend(b.rows.into_iter());
@@ -1242,7 +1589,9 @@ fn stitch_tables(
     mut items: Vec<TableWithRect>,
     cfg: &ExtractConfig,
 ) -> Vec<TableWithRect> {
-    if items.is_empty() { return items; }
+    if items.is_empty() {
+        return items;
+    }
     items.sort_by_key(|t| (t.rect.r0, t.rect.c0));
 
     let mut out: Vec<TableWithRect> = Vec::new();
@@ -1272,7 +1621,9 @@ fn stitch_tables(
 /// you could merge them. Hook this in `segment_rectangles` if desired.
 fn headers_similar(a: &[String], b: &[String]) -> bool {
     let w = min(a.len(), b.len());
-    if w == 0 { return false; }
+    if w == 0 {
+        return false;
+    }
     let mut score = 0.0;
     for i in 0..w {
         let sa = a[i].to_ascii_lowercase();
@@ -1285,7 +1636,9 @@ fn headers_similar(a: &[String], b: &[String]) -> bool {
 /// Compute average Jaro-Winkler similarity of aligned headers (by index) between 0.0 and 1.0.
 fn headers_similarity(a: &[String], b: &[String]) -> f64 {
     let w = min(a.len(), b.len());
-    if w == 0 { return 0.0; }
+    if w == 0 {
+        return 0.0;
+    }
     let mut score = 0.0;
     for i in 0..w {
         let sa = a[i].to_ascii_lowercase();
@@ -1300,7 +1653,9 @@ fn group_tables_by_header_similarity(
     mut items: Vec<TableWithRect>,
     cfg: &ExtractConfig,
 ) -> Vec<TableWithRect> {
-    if items.len() <= 1 { return items; }
+    if items.len() <= 1 {
+        return items;
+    }
     // Sort by top-most position to keep stable concatenation order
     items.sort_by_key(|t| (t.rect.r0, t.rect.c0));
 
@@ -1308,25 +1663,35 @@ fn group_tables_by_header_similarity(
     let mut out: Vec<TableWithRect> = Vec::new();
 
     for i in 0..items.len() {
-        if used[i] { continue; }
+        if used[i] {
+            continue;
+        }
         used[i] = true;
         let mut acc = items[i].clone();
         // Collect very similar tables and merge into acc
-        for j in (i+1)..items.len() {
-            if used[j] { continue; }
+        for j in (i + 1)..items.len() {
+            if used[j] {
+                continue;
+            }
             // Quick skip if both headers are empty
             let a_has = acc.table.headers.iter().any(|h| !h.trim().is_empty());
             let b_has = items[j].table.headers.iter().any(|h| !h.trim().is_empty());
-            if !a_has && !b_has { continue; }
+            if !a_has && !b_has {
+                continue;
+            }
 
             // Widths must be close to avoid accidental merges
             let wa = acc.table.headers.len();
             let wb = items[j].table.headers.len();
             let w_min = wa.min(wb) as f64;
             let w_max = wa.max(wb) as f64;
-            if w_min == 0.0 { continue; }
+            if w_min == 0.0 {
+                continue;
+            }
             let width_ratio = w_min / w_max; // 1.0 == same width
-            if width_ratio < 0.9 { continue; }
+            if width_ratio < 0.9 {
+                continue;
+            }
 
             let sim = headers_similarity(&acc.table.headers, &items[j].table.headers);
             if sim >= cfg.header_merge_threshold {
@@ -1351,20 +1716,31 @@ fn group_tables_by_header_similarity(
 /// Drop columns that are identical in data and whose headers only differ by an automatic " (n)" suffix.
 fn dedup_identical_columns(t: &mut Table) {
     let w = t.headers.len();
-    if w <= 1 { return; }
+    if w <= 1 {
+        return;
+    }
+
+    use rayon::prelude::*;
+
+    let sigs: Vec<(usize, String)> = (0..w)
+        .into_par_iter()
+        .map(|c| {
+            let mut sig = strip_header_dup_suffix(&t.headers[c]).to_ascii_lowercase();
+            sig.push('\0');
+            for r in 0..t.rows.len() {
+                if let Some(val) = t.rows[r].get(c) {
+                    sig.push_str(val);
+                }
+                sig.push('\x1f');
+            }
+            (c, sig)
+        })
+        .collect();
 
     let mut keep = vec![true; w];
-    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut seen = std::collections::HashMap::<String, usize>::new();
 
-    for c in 0..w {
-        let mut sig = strip_header_dup_suffix(&t.headers[c]).to_ascii_lowercase();
-        sig.push('\0');
-        for r in 0..t.rows.len() {
-            if let Some(val) = t.rows[r].get(c) {
-                sig.push_str(val);
-            }
-            sig.push('\x1f');
-        }
+    for (c, sig) in sigs {
         if seen.contains_key(&sig) {
             keep[c] = false;
         } else {
@@ -1372,17 +1748,23 @@ fn dedup_identical_columns(t: &mut Table) {
         }
     }
 
-    if keep.iter().all(|&k| k) { return; }
+    if keep.iter().all(|&k| k) {
+        return;
+    }
 
     let mut new_headers = Vec::with_capacity(keep.iter().filter(|k| **k).count());
     for (c, h) in t.headers.iter().enumerate() {
-        if keep[c] { new_headers.push(h.clone()); }
+        if keep[c] {
+            new_headers.push(h.clone());
+        }
     }
     let mut new_rows = Vec::with_capacity(t.rows.len());
     for row in &t.rows {
         let mut nr = Vec::with_capacity(new_headers.len());
         for (c, v) in row.iter().enumerate() {
-            if keep[c] { nr.push(v.clone()); }
+            if keep[c] {
+                nr.push(v.clone());
+            }
         }
         new_rows.push(nr);
     }
@@ -1432,10 +1814,15 @@ impl NodeLogic for ExtractExcelTablesNode {
         node.add_input_pin("sheet", "Sheet", "Worksheet name", VariableType::String)
             .set_default_value(Some(json!("Sheet1")));
 
-        node.add_input_pin("extract_config", "Extract Config", "Extract Config", VariableType::Struct)
-            .set_schema::<ExtractConfig>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build())
-            .set_default_value(Some(json!(ExtractConfig::default())));
+        node.add_input_pin(
+            "extract_config",
+            "Extract Config",
+            "Extract Config",
+            VariableType::Struct,
+        )
+        .set_schema::<ExtractConfig>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build())
+        .set_default_value(Some(json!(ExtractConfig::default())));
 
         node.add_output_pin("exec_out", "Output", "Next", VariableType::Execution);
         node.add_output_pin(
@@ -1443,7 +1830,8 @@ impl NodeLogic for ExtractExcelTablesNode {
             "Tables",
             "Extracted Vec<Table>",
             VariableType::Struct,
-        ).set_schema::<CSVTable>()
+        )
+        .set_schema::<CSVTable>()
         .set_value_type(ValueType::Array);
 
         node
@@ -1456,25 +1844,32 @@ impl NodeLogic for ExtractExcelTablesNode {
         let sheet: String = context.evaluate_pin("sheet").await?;
         let extract_config: ExtractConfig = context.evaluate_pin("extract_config").await?; // keep access so value flows
 
-    let path_string = flow_path.path.clone();
-    let cfg_clone = extract_config.clone();
-    let sheet_clone = sheet.clone();
-    let flow_path_clone = flow_path.clone();
+        let file_buffer = flow_path.get(context, false).await?;
+        let cfg_clone = extract_config.clone();
+        let sheet_clone = sheet.clone();
+        let flow_path_clone = flow_path.clone();
 
-        let csv_tables: Vec<CSVTable> = tokio::task::spawn_blocking(move || -> Result<Vec<CSVTable>> {
-            let tables = extract_tables(&path_string, &sheet_clone, &cfg_clone)
-                .map_err(|e| Error::msg(format!("Extraction failed: {e}")))?;
-            let mut out = Vec::with_capacity(tables.len());
-            for t in tables {
-                let headers = t.headers.clone();
-                let mut rows_json: Vec<Vec<flow_like_types::Value>> = Vec::with_capacity(t.rows.len());
-                for r in t.rows {
-                    rows_json.push(r.into_iter().map(|s| json!(s)).collect());
+        let csv_tables: Vec<CSVTable> =
+            tokio::task::spawn_blocking(move || -> Result<Vec<CSVTable>> {
+                let tables = extract_tables(file_buffer, &sheet_clone, &cfg_clone)
+                    .map_err(|e| Error::msg(format!("Extraction failed: {e}")))?;
+                let mut out = Vec::with_capacity(tables.len());
+                for t in tables {
+                    let headers = t.headers.clone();
+                    let mut rows_json: Vec<Vec<flow_like_types::Value>> =
+                        Vec::with_capacity(t.rows.len());
+                    for r in t.rows {
+                        rows_json.push(r.into_iter().map(|s| json!(s)).collect());
+                    }
+                    out.push(CSVTable::new(
+                        headers,
+                        rows_json,
+                        Some(flow_path_clone.clone()),
+                    ));
                 }
-                out.push(CSVTable::new(headers, rows_json, Some(flow_path_clone.clone())));
-            }
-            Ok(out)
-        }).await??;
+                Ok(out)
+            })
+            .await??;
 
         context.set_pin_value("tables", json!(csv_tables)).await?;
 
@@ -1485,15 +1880,18 @@ impl NodeLogic for ExtractExcelTablesNode {
 
 #[cfg(test)]
 mod tests {
-    use calamine::{open_workbook, Xlsx};
-
     use super::*;
 
     #[test]
     fn merges_out_of_bounds_are_clamped_in_map() {
         let height = 3usize;
         let width = 3usize;
-        let merges = vec![Merge { r0: 1, c0: 1, r1: 10, c1: 10 }];
+        let merges = vec![Merge {
+            r0: 1,
+            c0: 1,
+            r1: 10,
+            c1: 10,
+        }];
         let mm = build_merge_map(height, width, &merges);
         assert_eq!(mm.len(), height);
         assert_eq!(mm[0].len(), width);
@@ -1505,12 +1903,17 @@ mod tests {
 
     #[test]
     fn apply_merges_clamps_and_propagates_value() {
-    let grid = vec![
+        let grid = vec![
             vec!["a".to_string(), "".to_string(), "".to_string()],
             vec!["".to_string(), "b".to_string(), "".to_string()],
             vec!["".to_string(), "".to_string(), "".to_string()],
         ];
-        let merges = vec![Merge { r0: 1, c0: 1, r1: 10, c1: 10 }];
+        let merges = vec![Merge {
+            r0: 1,
+            c0: 1,
+            r1: 10,
+            c1: 10,
+        }];
         let out = apply_merges(grid.clone(), &merges);
         // Value at (1,1) should be propagated to bottom-right within bounds
         assert_eq!(out[2][2], "b");
@@ -1522,17 +1925,23 @@ mod tests {
     #[test]
     fn large_file_optional() {
         let path = std::path::Path::new("../../tests/data/Crimes_-_2001_to_Present_20250906.xlsx");
-        if !path.exists() { return; } // skip silently
+        if !path.exists() {
+            return;
+        } // skip silently
         let mut cfg = ExtractConfig::default();
         cfg.enable_merges = false;
         cfg.max_merge_map_cells = 0;
         cfg.take_cells_on_extract = true;
-        let res = extract_tables(path, &"Data", &cfg);
+        let bytes: Vec<u8> = std::fs::read(path).expect("Failed to read test file");
+        let res = extract_tables(bytes, &"Data", &cfg);
         assert!(res.is_ok(), "large extraction failed: {:?}", res.err());
         let tables = res.unwrap();
         assert!(!tables.is_empty(), "no tables extracted");
         let first_table = &tables[0];
-        assert!(!first_table.headers.is_empty(), "first table has no headers");
+        assert!(
+            !first_table.headers.is_empty(),
+            "first table has no headers"
+        );
         assert!(!first_table.rows.is_empty(), "first table has no rows");
     }
 
@@ -1544,7 +1953,12 @@ mod tests {
             vec!["a".into(), "b".into(), "c".into(), "d".into(), "e".into()],
             vec!["1".into(), "2".into(), "3".into(), "4".into(), "5".into()],
         ];
-        let rect = Rect { r0: 0, c0: 0, r1: 2, c1: 4 };
+        let rect = Rect {
+            r0: 0,
+            c0: 0,
+            r1: 2,
+            c1: 4,
+        };
         let merge_map: MergeMap = Vec::new(); // simulate disabled merges
         // Should run without panic and fallback to single-nonempty detection => banner row true
         assert!(is_banner_row(&grid, &rect, 0, &merge_map));

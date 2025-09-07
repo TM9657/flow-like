@@ -31,7 +31,7 @@ impl NodeLogic for InsertLocalDatabaseNode {
             "insert_local_db",
             "Insert",
             "Faster than Upsert, but might write duplicate items.",
-            "Database/Local/Insert",
+            "Data/Database/Insert",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -60,11 +60,7 @@ impl NodeLogic for InsertLocalDatabaseNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let mut database = database.write().await;
         let value: Value = context.evaluate_pin("value").await?;
         let value = vec![value];
@@ -92,7 +88,7 @@ impl NodeLogic for BatchInsertLocalDatabaseNode {
             "batch_insert_local_db",
             "Batch Insert",
             "Inserts multiple items at once. Faster than Upsert but might produce duplicates.",
-            "Database/Local/Insert",
+            "Data/Database/Insert",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -122,11 +118,7 @@ impl NodeLogic for BatchInsertLocalDatabaseNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let mut database = database.write().await;
         let value: Vec<Value> = context.evaluate_pin("value").await?;
         database.insert(value).await?;
@@ -153,7 +145,7 @@ impl NodeLogic for BatchInsertCSVLocalDatabaseNode {
             "csv_insert_local_db",
             "Batch Insert (CSV)",
             "Inserts multiple items at once. Faster than Upsert but might produce duplicates.",
-            "Database/Local/Insert",
+            "Data/Database/Insert",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -200,11 +192,7 @@ impl NodeLogic for BatchInsertCSVLocalDatabaseNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let mut database = database.write().await;
         let delimiter: String = context.evaluate_pin("delimiter").await?;
         let delimiter = delimiter.as_bytes()[0];

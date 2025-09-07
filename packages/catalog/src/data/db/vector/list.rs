@@ -28,7 +28,7 @@ impl NodeLogic for ListLocalDatabaseNode {
             "list_local_db",
             "List",
             "List Content",
-            "Database/Local/Meta",
+            "Data/Database/Meta",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -67,11 +67,7 @@ impl NodeLogic for ListLocalDatabaseNode {
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let limit: i64 = context.evaluate_pin("limit").await?;
         let offset: i64 = context.evaluate_pin("offset").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let database = database.read().await;
         let results = database.list(None, limit as usize, offset as usize).await?;
         context.set_pin_value("values", json!(results)).await?;

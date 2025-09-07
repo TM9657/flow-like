@@ -18,7 +18,11 @@ use umya_spreadsheet::{self};
 #[derive(Default)]
 pub struct RemoveColumnNode {}
 
-impl RemoveColumnNode { pub fn new() -> Self { Self {} } }
+impl RemoveColumnNode {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 #[async_trait]
 impl NodeLogic for RemoveColumnNode {
@@ -37,10 +41,20 @@ impl NodeLogic for RemoveColumnNode {
             .set_schema::<FlowPath>();
         node.add_input_pin("sheet", "Sheet", "Worksheet name", VariableType::String)
             .set_default_value(Some(json!("Sheet1")));
-        node.add_input_pin("col", "Column", "Column letter(s) or 1-based number", VariableType::String)
-            .set_default_value(Some(json!("B")));
-        node.add_input_pin("count", "Count", "How many columns to remove", VariableType::String)
-            .set_default_value(Some(json!("1")));
+        node.add_input_pin(
+            "col",
+            "Column",
+            "Column letter(s) or 1-based number",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("B")));
+        node.add_input_pin(
+            "count",
+            "Count",
+            "How many columns to remove",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("1")));
 
         node.add_output_pin("exec_out", "Out", "Trigger", VariableType::Execution);
         node.add_output_pin("file", "File", "Updated XLSX path", VariableType::Struct)
@@ -58,16 +72,24 @@ impl NodeLogic for RemoveColumnNode {
         let col_in: String = ctx.evaluate_pin("col").await?;
         let count_in: String = ctx.evaluate_pin("count").await?;
 
-        let count: u32 = count_in.trim().parse().map_err(|e| flow_like_types::anyhow!(
-            "Invalid 'count' value '{}': {}", count_in, e
-        ))?;
-        if count == 0 { return Err(flow_like_types::anyhow!("'count' must be >= 1")); }
+        let count: u32 = count_in
+            .trim()
+            .parse()
+            .map_err(|e| flow_like_types::anyhow!("Invalid 'count' value '{}': {}", count_in, e))?;
+        if count == 0 {
+            return Err(flow_like_types::anyhow!("'count' must be >= 1"));
+        }
 
         let mut book = match file.get(ctx, false).await {
             Ok(bytes) if !bytes.is_empty() => {
                 match umya_spreadsheet::reader::xlsx::read_reader(Cursor::new(bytes), true) {
                     Ok(b) => b,
-                    Err(e) => return Err(flow_like_types::anyhow!("Failed to read workbook bytes: {}", e)),
+                    Err(e) => {
+                        return Err(flow_like_types::anyhow!(
+                            "Failed to read workbook bytes: {}",
+                            e
+                        ));
+                    }
                 }
             }
             _ => umya_spreadsheet::new_file(),
@@ -76,9 +98,9 @@ impl NodeLogic for RemoveColumnNode {
         if book.get_sheet_by_name(&sheet).is_none() {
             let _ = book.new_sheet(&sheet);
         }
-        let ws = book
-            .get_sheet_by_name_mut(&sheet)
-            .ok_or_else(|| flow_like_types::anyhow!("Failed to access or create sheet: {}", sheet))?;
+        let ws = book.get_sheet_by_name_mut(&sheet).ok_or_else(|| {
+            flow_like_types::anyhow!("Failed to access or create sheet: {}", sheet)
+        })?;
 
         let col_letters = normalize_col_letters(&col_in)?;
 
@@ -86,11 +108,17 @@ impl NodeLogic for RemoveColumnNode {
 
         let mut out: Vec<u8> = Vec::new();
         if let Err(e) = umya_spreadsheet::writer::xlsx::write_writer(&book, &mut out) {
-            return Err(flow_like_types::anyhow!("Failed to serialize workbook: {}", e));
+            return Err(flow_like_types::anyhow!(
+                "Failed to serialize workbook: {}",
+                e
+            ));
         }
 
         if let Err(e) = file.put(ctx, out, false).await {
-            return Err(flow_like_types::anyhow!("Failed to store updated workbook: {}", e));
+            return Err(flow_like_types::anyhow!(
+                "Failed to store updated workbook: {}",
+                e
+            ));
         }
 
         ctx.set_pin_value("file", json!(file)).await?;
@@ -104,7 +132,12 @@ fn normalize_col_letters(input: &str) -> flow_like_types::Result<String> {
     let s = input.trim();
     // If it's numeric, convert to letters
     if let Ok(n) = s.parse::<u32>() {
-        if n == 0 { return Err(flow_like_types::anyhow!("Column number must be 1-based (>=1): {}", s)); }
+        if n == 0 {
+            return Err(flow_like_types::anyhow!(
+                "Column number must be 1-based (>=1): {}",
+                s
+            ));
+        }
         return Ok(col_index_to_letters_1_based(n));
     }
     // Otherwise validate letters and uppercase

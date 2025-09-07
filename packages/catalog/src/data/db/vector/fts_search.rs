@@ -28,7 +28,7 @@ impl NodeLogic for FTSLocalDatabaseNode {
             "fts_search_local_db",
             "Full-Text Search",
             "Searches the Database based on a Vector and Text",
-            "Database/Local/Search",
+            "Data/Database/Search",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -89,11 +89,7 @@ impl NodeLogic for FTSLocalDatabaseNode {
         };
         let limit: i64 = context.evaluate_pin("limit").await?;
         let offset: i64 = context.evaluate_pin("offset").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let database = database.read().await;
         let results = database
             .fts_search(&search, filter, None, limit as usize, offset as usize)

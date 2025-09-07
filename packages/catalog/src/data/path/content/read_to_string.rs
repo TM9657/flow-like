@@ -26,7 +26,7 @@ impl NodeLogic for ReadToStringNode {
             "read_to_string",
             "Read to String",
             "Reads the content of a file to a string",
-            "Storage/Paths/Content",
+            "Data/Files/Content",
         );
         node.add_icon("/flow/icons/path.svg");
 

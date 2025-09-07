@@ -26,7 +26,7 @@ impl NodeLogic for SetExtensionNode {
             "set_extension",
             "Set Extension",
             "Sets the file extension of a path",
-            "Storage/Paths/Path",
+            "Data/Files/Path",
         );
         node.add_icon("/flow/icons/path.svg");
 

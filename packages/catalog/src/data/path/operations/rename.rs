@@ -26,7 +26,7 @@ impl NodeLogic for RenameNode {
             "path_rename",
             "Rename",
             "Renames a file",
-            "Storage/Paths/Operations",
+            "Data/Files/Operations",
         );
         node.add_icon("/flow/icons/path.svg");
 

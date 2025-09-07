@@ -2,9 +2,9 @@ pub mod arrow_utils;
 pub mod databases;
 pub mod files;
 
+pub use arrow;
 pub use arrow_array;
 pub use arrow_schema;
-pub use arrow;
 pub use blake3;
 pub use datafusion;
 pub use lancedb;

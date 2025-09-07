@@ -26,7 +26,7 @@ impl NodeLogic for GetNode {
             "path_get",
             "Get",
             "Reads all bytes from a file",
-            "Storage/Paths/Operations",
+            "Data/Files/Operations",
         );
         node.add_icon("/flow/icons/path.svg");
 

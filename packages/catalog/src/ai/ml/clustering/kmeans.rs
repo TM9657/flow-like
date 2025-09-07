@@ -3,7 +3,9 @@
 //! This node loads a dataset (currently from a database source), transforms it into
 //! a clustering dataset, and fits a a KMeans clustering model using the [`linfa`] crate.
 
-use crate::ai::ml::{MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array2_f64};
+use crate::ai::ml::{
+    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array2_f64,
+};
 use crate::data::db::vector::NodeDBConnection;
 use flow_like::{
     flow::{
@@ -102,11 +104,7 @@ impl NodeLogic for FitKMeansNode {
 
                 // fetch records
                 let records = {
-                    let database = database
-                        .load(context)
-                        .await?
-                        .db
-                        .clone();
+                    let database = database.load(context).await?.db.clone();
                     let database = database.read().await;
                     let schema = database.schema().await?;
                     let existing_cols: HashSet<String> =
@@ -118,7 +116,12 @@ impl NodeLogic for FitKMeansNode {
                         )));
                     }
                     database
-                        .filter("true", Some(vec![records_col.to_string()]), MAX_ML_PREDICTION_RECORDS, 0)
+                        .filter(
+                            "true",
+                            Some(vec![records_col.to_string()]),
+                            MAX_ML_PREDICTION_RECORDS,
+                            0,
+                        )
                         .await?
                 }; // drop db
                 context.log_message(

@@ -28,7 +28,7 @@ impl NodeLogic for PurgeLocalDatabaseNode {
             "purge_local_db",
             "Purge",
             "Purge Database",
-            "Database/Local/Delete",
+            "Data/Database/Delete",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -56,11 +56,7 @@ impl NodeLogic for PurgeLocalDatabaseNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let database = database.read().await;
         database.purge().await?;
         context.activate_exec_pin("exec_out").await?;

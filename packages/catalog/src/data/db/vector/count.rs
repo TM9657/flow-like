@@ -28,7 +28,7 @@ impl NodeLogic for CountLocalDatabaseNode {
             "count_local_db",
             "Count",
             "Count Items",
-            "Database/Local/Meta",
+            "Data/Database/Meta",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -66,11 +66,7 @@ impl NodeLogic for CountLocalDatabaseNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let database = database.read().await;
         let filter: String = context.evaluate_pin("filter").await?;
         let filter: Option<String> = if filter.is_empty() {

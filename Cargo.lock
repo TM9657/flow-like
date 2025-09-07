@@ -5006,6 +5006,7 @@ dependencies = [
  "mail-parser",
  "nalgebra 0.34.0",
  "ndarray",
+ "once_cell",
  "rayon",
  "regex",
  "schemars 0.8.22",

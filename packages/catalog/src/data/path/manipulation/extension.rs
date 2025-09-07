@@ -26,7 +26,7 @@ impl NodeLogic for ExtensionNode {
             "extension",
             "Extension",
             "Gets the file extension from a path",
-            "Storage/Paths/Path",
+            "Data/Files/Path",
         );
         node.add_icon("/flow/icons/path.svg");
 

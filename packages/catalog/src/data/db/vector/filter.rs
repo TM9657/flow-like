@@ -28,7 +28,7 @@ impl NodeLogic for FilterLocalDatabaseNode {
             "filter_local_db",
             "(SQL) Filter Database",
             "Filter Database",
-            "Database/Local/Search",
+            "Data/Database/Search",
         );
         node.add_icon("/flow/icons/database.svg");
 
@@ -76,11 +76,7 @@ impl NodeLogic for FilterLocalDatabaseNode {
         let filter: String = context.evaluate_pin("filter").await?;
         let limit: i64 = context.evaluate_pin("limit").await?;
         let offset: i64 = context.evaluate_pin("offset").await?;
-        let database = database
-            .load(context)
-            .await?
-            .db
-            .clone();
+        let database = database.load(context).await?.db.clone();
         let database = database.read().await;
         let results = database
             .filter(&filter, None, limit as usize, offset as usize)

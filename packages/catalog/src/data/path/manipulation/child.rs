@@ -26,7 +26,7 @@ impl NodeLogic for ChildNode {
             "child",
             "Child",
             "Creates a child path from a parent path",
-            "Storage/Paths/Path",
+            "Data/Files/Path",
         );
         node.add_icon("/flow/icons/path.svg");
 

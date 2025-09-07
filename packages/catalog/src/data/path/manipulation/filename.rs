@@ -6,7 +6,7 @@ use flow_like::{
         pin::PinOptions,
         variable::VariableType,
     },
-    state::FlowLikeState
+    state::FlowLikeState,
 };
 use flow_like_types::{async_trait, json::json};
 
@@ -26,7 +26,7 @@ impl NodeLogic for FilenameNode {
             "filename",
             "Filename",
             "Gets the filename from a path",
-            "Storage/Paths/Path",
+            "Data/Files/Path",
         );
         node.add_icon("/flow/icons/path.svg");
 
@@ -34,8 +34,13 @@ impl NodeLogic for FilenameNode {
             .set_schema::<FlowPath>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("remove_extension", "Remove Extension", "Remove Extension from the Path", VariableType::Boolean)
-            .set_default_value(Some(json!(false)));
+        node.add_input_pin(
+            "remove_extension",
+            "Remove Extension",
+            "Remove Extension from the Path",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(false)));
 
         node.add_output_pin("filename", "Filename", "Filename", VariableType::String);
 
@@ -79,7 +84,7 @@ impl NodeLogic for SetFilenameNode {
             "set_filename",
             "Set Filename",
             "Gets the filename from a path",
-            "Storage/Paths/Path",
+            "Data/Files/Path",
         );
         node.add_icon("/flow/icons/path.svg");
 

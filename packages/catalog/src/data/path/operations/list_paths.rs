@@ -27,7 +27,7 @@ impl NodeLogic for ListPathsNode {
             "path_list_paths",
             "List Paths",
             "Lists all paths in a directory",
-            "Storage/Paths/Operations",
+            "Data/Files/Operations",
         );
         node.add_icon("/flow/icons/path.svg");
 

@@ -27,7 +27,7 @@ impl NodeLogic for PathBufToPathNode {
             "pathbuf_to_path",
             "Local Path to Path",
             "Converts a PathBuf to a Path",
-            "Storage/Paths",
+            "Data/Files",
         );
         node.add_icon("/flow/icons/path.svg");
 

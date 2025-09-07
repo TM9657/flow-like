@@ -26,7 +26,7 @@ impl NodeLogic for WriteBytesNode {
             "write_bytes",
             "Write Bytes",
             "Writes bytes to a file",
-            "Storage/Paths/Content",
+            "Data/Files/Content",
         );
         node.add_icon("/flow/icons/path.svg"); // Consider a more appropriate icon
 

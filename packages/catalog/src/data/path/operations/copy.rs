@@ -28,7 +28,7 @@ impl NodeLogic for CopyNode {
             "storage_copy",
             "Copy",
             "Copies a file from one location to another",
-            "Storage/Paths/Operations",
+            "Data/Files/Operations",
         );
         node.add_icon("/flow/icons/path.svg");
 
