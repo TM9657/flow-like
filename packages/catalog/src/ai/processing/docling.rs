@@ -46,10 +46,14 @@ impl Drop for DoclingCacheObject {
     fn drop(&mut self) {
         println!("DROPPING DOCLING THREAD");
         if let Ok(mut guard) = self.handle.lock() {
-            if let Some(child) = guard.as_mut() {
+            if let Some(mut child) = guard.take() {
                 match child.kill() {
                     Ok(_) => println!("Child process was killed successfully."),
                     Err(e) => eprintln!("Failed to kill child process: {}", e),
+                }
+                match child.wait() {
+                    Ok(status) => println!("Child process exited with: {}", status),
+                    Err(e) => eprintln!("Failed to wait on child process: {}", e),
                 }
             } else {
                 eprintln!("No docling child process to kill.");
@@ -59,6 +63,7 @@ impl Drop for DoclingCacheObject {
         }
 
         self.thread_handle.abort();
+        println!("Docling thread aborted.");
     }
 }
 
@@ -278,7 +283,7 @@ pub async fn start_docling_server(context: &mut ExecutionContext) -> flow_like_t
         let args = vec!["localhost", &port, dir];
         println!("Starting Docling Server with args: {:?}", args);
 
-        let mut child = sidecar
+        let mut child: Child = sidecar
             .args(args)
             .stderr(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())

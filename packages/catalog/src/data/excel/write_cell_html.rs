@@ -17,21 +17,21 @@ use umya_spreadsheet::{self};
 /// (e.g. for "B3": col = "B", row = "3").
 /// The updated (same) `FlowPath` is returned so downstream nodes can re-use the file.
 #[derive(Default)]
-pub struct WriteCellNode {}
+pub struct WriteCellHtmlNode {}
 
-impl WriteCellNode {
+impl WriteCellHtmlNode {
     pub fn new() -> Self {
         Self {}
     }
 }
 
 #[async_trait]
-impl NodeLogic for WriteCellNode {
+impl NodeLogic for WriteCellHtmlNode {
     async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
         let mut node = Node::new(
-            "excel_write_cell",
-            "Excel Write Cell",
-            "Write/update a single cell value in an XLSX sheet",
+            "excel_write_cell_html",
+            "Excel Write Cell (HTML)",
+            "Write/update a single cell value in an XLSX sheet (HTML)",
             "Data/Excel",
         );
         node.add_icon("/flow/icons/file-spreadsheet.svg");
@@ -80,6 +80,7 @@ impl NodeLogic for WriteCellNode {
         let row_str: String = ctx.evaluate_pin("row").await?;
         let col_str: String = ctx.evaluate_pin("col").await?;
         let value: String = ctx.evaluate_pin("value").await?;
+        let richtext = umya_spreadsheet::helper::html::html_to_richtext(&value)?;
 
         let file_content: Vec<u8> = file.get(ctx, false).await?;
         let file_content_reader = std::io::Cursor::new(&file_content);
@@ -104,9 +105,9 @@ impl NodeLogic for WriteCellNode {
         // Set cell value
         {
             let cell = ws.get_cell_mut((col, row));
-            cell.set_value(value.clone());
+            cell.set_rich_text(richtext);
+            cell.get_style_mut().get_alignment_mut().set_wrap_text(true);
         }
-
 
         let mut out: Vec<u8> = Vec::new();
         if let Err(e) = umya_spreadsheet::writer::xlsx::write_writer(&book, &mut out) {

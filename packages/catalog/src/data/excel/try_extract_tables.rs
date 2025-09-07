@@ -1,17 +1,34 @@
-use flow_like_types::{anyhow, Context, Result};
+use flow_like::flow::node::NodeLogic;
+use flow_like_types::{Context, Result, Error};
 use calamine::{open_workbook_auto, Data, Range, Reader};
 use csv::WriterBuilder;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::cmp::{max, min};
-use std::path::{Path};
+use std::path::Path;
 use std::collections::VecDeque;
 use strsim::jaro_winkler;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Days};
+use crate::data::excel::CSVTable;
+use crate::data::path::FlowPath;
+use flow_like::{
+    flow::{
+        execution::context::ExecutionContext,
+        node::{Node},
+        pin::{PinOptions, ValueType},
+        variable::VariableType,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::{
+    JsonSchema, async_trait,
 
+    json::{json},
+    tokio,
+};
 /// ============================ Config ============================
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ExtractConfig {
     /// CSV delimiter (`,` or `;` typical)
     pub delimiter: u8,
@@ -53,8 +70,16 @@ pub struct ExtractConfig {
     pub group_similar_headers: bool,
     /// Similarity threshold (0.0..1.0) to merge tables by header
     pub header_merge_threshold: f64,
-    /// Transform every field to a string? -> Tables with changing types
-    pub string_fields: bool,
+    /// How many rows to sample below header when validating schema
+    pub schema_sample_rows: usize,
+    /// Minimum fraction (0.0..1.0) of columns that must keep a consistent kind in body
+    pub min_body_consistency: f32,
+    /// Enable merged cell processing (requires second parse with umya); disable to save memory/time on huge sheets
+    pub enable_merges: bool,
+    /// Skip building merge map if total cells exceed this number (acts as safety valve)
+    pub max_merge_map_cells: usize,
+    /// Take (move) strings out of grid when building tables to avoid cloning large data
+    pub take_cells_on_extract: bool,
 }
 
 impl Default for ExtractConfig {
@@ -80,28 +105,37 @@ impl Default for ExtractConfig {
             stitch_min_col_overlap: 0.70,
             group_similar_headers: true,
             header_merge_threshold: 0.97,
-            string_fields: false,
+            schema_sample_rows: 25,
+            min_body_consistency: 0.6,
+            enable_merges: true,
+            max_merge_map_cells: 2_000_000, // ~2M cells safeguard (~16MB of pointers)
+            take_cells_on_extract: true,
         }
     }
 }
 
 /// ============================ Public API ============================
 
-/// Extract all tables on a given sheet to CSV strings.
-pub fn extract_tables_to_csv<P: AsRef<Path>>(
+/// Extract raw tables (headers + rows of strings) from a sheet.
+pub fn extract_tables<P: AsRef<Path>>(
     path: P,
     sheet_name: &str,
     cfg: &ExtractConfig,
-) -> Result<Vec<String>> {
+) -> Result<Vec<Table>> {
     // 1) Read values via calamine
     let (grid_raw, height, width) = read_sheet_grid(&path, sheet_name)?;
 
-    // 2) Read merges via umya-spreadsheet
-    let merges = read_merged_cells(&path, sheet_name)
-        .with_context(|| "Reading merged cells with umya-spreadsheet failed")?;
+    // 2) (Optional) merged cells pass; can be expensive on huge workbooks.
+    let cell_count = height.saturating_mul(width);
+    let merges = if cfg.enable_merges && cell_count <= cfg.max_merge_map_cells {
+        read_merged_cells(&path, sheet_name)
+            .with_context(|| "Reading merged cells with umya-spreadsheet failed")?
+    } else { Vec::new() };
 
-    // Build a merge map so we can treat merged cells smartly during extraction
-    let merge_map = build_merge_map(height, width, &merges);
+    // Build merge map only if we actually collected merges
+    let merge_map = if !merges.is_empty() {
+        build_merge_map(height, width, &merges)
+    } else { Vec::new() };
 
     // 3) Apply merges (propagate top-left) for segmentation/heuristics
     let mut grid = apply_merges(grid_raw, &merges);
@@ -136,14 +170,7 @@ pub fn extract_tables_to_csv<P: AsRef<Path>>(
         stitched
     };
 
-    // 7) Render CSVs
-    let mut csvs = Vec::new();
-    for twr in grouped {
-        if let Some(csv) = render_table_to_csv(&twr.table, cfg)? {
-            csvs.push(csv);
-        }
-    }
-    Ok(csvs)
+    Ok(grouped.into_iter().map(|t| t.table).collect())
 }
 
 /// ============================ Types ============================
@@ -271,11 +298,10 @@ fn build_merge_map(height: usize, width: usize, merges: &[Merge]) -> MergeMap {
 
 // Returns true when (r,c) belongs to a horizontally-merged area and is NOT the anchor (top-left).
 fn is_horiz_merged_non_anchor(mm: &MergeMap, r: usize, c: usize) -> bool {
-    if let Some(m) = mm[r][c] {
-        (m.c1 > m.c0) && c != m.c0 && r >= m.r0 && r <= m.r1
-    } else {
-        false
-    }
+    if mm.is_empty() { return false; }
+    if r >= mm.len() { return false; }
+    if c >= mm[r].len() { return false; }
+    if let Some(m) = mm[r][c] { (m.c1 > m.c0) && c != m.c0 && r >= m.r0 && r <= m.r1 } else { false }
 }
 
 fn read_merged_cells<P: AsRef<Path>>(path: P, sheet: &str) -> Result<Vec<Merge>> {
@@ -284,7 +310,7 @@ fn read_merged_cells<P: AsRef<Path>>(path: P, sheet: &str) -> Result<Vec<Merge>>
 
     let ws = book
         .get_sheet_by_name(sheet)
-        .ok_or_else(|| anyhow!("Sheet not found (umya): {}", sheet))?;
+    .ok_or_else(|| Error::msg(format!("Sheet not found (umya): {sheet}")))?;
 
     let merged = ws.get_merge_cells(); // &[umya_spreadsheet::Range]
     let mut out = Vec::new();
@@ -533,11 +559,9 @@ fn build_table_from_rect(
     for r in data_r0..=rect.r1 {
         let mut row = Vec::new();
         for c in rect.c0..=rect.c1 {
-            let mut v = grid[r][c].clone();
-            // Suppress horizontally-merged non-anchor duplicates (keep only anchor column)
-            if is_horiz_merged_non_anchor(merge_map, r, c) {
-                v.clear();
-            }
+            let raw = if cfg.take_cells_on_extract { std::mem::take(&mut grid[r][c]) } else { grid[r][c].clone() };
+            let mut v = raw;
+            if is_horiz_merged_non_anchor(merge_map, r, c) { v.clear(); }
             row.push(v);
         }
         // pad/clip to left_cols + data columns
@@ -631,59 +655,6 @@ fn drop_totals_column(t: &mut Table) {
     }
 }
 
-fn detect_header_rows(
-    grid: &Vec<Vec<String>>,
-    rect: &Rect,
-    cfg: &ExtractConfig,
-    merge_map: &MergeMap,
-) -> Vec<usize> {
-    let mut out = Vec::new();
-
-    // banner skip stays as-is
-    let mut start_r = rect.r0;
-    for _ in 0..2 {
-        if is_banner_row(grid, rect, start_r, merge_map) { start_r += 1; } else { break; }
-    }
-
-    let max = cfg.max_header_rows.min(rect.r1.saturating_sub(start_r) + 1);
-    for i in 0..max {
-        let r = start_r + i;
-        let (alpha, numeric, nonempty) = row_type_stats(&grid[r], rect.c0, rect.c1);
-        if nonempty == 0 { break; }
-
-        // Stricter header criterion
-        let looks_header = alpha >= 0.60 && numeric <= 0.30;
-        if !looks_header { break; }
-
-        // Guard: if the NEXT row looks similarly "alpha-ish", it's probably data — stop here.
-        if i > 0 || r + 1 <= rect.r1 {
-            if r + 1 <= rect.r1 {
-                let (alpha_next, numeric_next, ne_next) = row_type_stats(&grid[r + 1], rect.c0, rect.c1);
-                if ne_next > 0 {
-                    // If next row is close in alpha-ness or quite numeric, don't keep stacking headers.
-                    let similar_alpha = (alpha_next - alpha).abs() < 0.20;
-                    if similar_alpha || numeric_next >= 0.34 {
-                        out.push(r - rect.r0);
-                        break;
-                    }
-                }
-            }
-        }
-
-        out.push(r - rect.r0);
-    }
-
-    if out.is_empty() {
-        // fallback: first non-empty row with decent alpha
-        for r in start_r..=rect.r1 {
-            let (alpha, _numeric, ne) = row_type_stats(&grid[r], rect.c0, rect.c1);
-            if ne > 0 && alpha >= 0.60 { out.push(r - rect.r0); }
-            break;
-        }
-    }
-    out
-}
-
 fn is_banner_row(
     grid: &Vec<Vec<String>>,
     rect: &Rect,
@@ -694,15 +665,21 @@ fn is_banner_row(
     let width = rect.c1.saturating_sub(rect.c0) + 1;
     if width < 3 { return false; }
     let min_span = std::cmp::max(2, width / 2); // span at least half the rect
-
-    // Check for a merged anchor at this row that spans wide columns and has text
-    for c in rect.c0..=rect.c1 {
-        if let Some(m) = merge_map[r][c] {
-            if m.r0 == r && m.c0 == c {
-                let span = m.c1.saturating_sub(m.c0) + 1;
-                if span >= min_span {
-                    let s = grid[r][c].trim();
-                    if !s.is_empty() { return true; }
+    // If there's no merge map (merges disabled or skipped), skip merged banner logic safely
+    if !merge_map.is_empty() {
+        // Defensive bounds check: merge_map may be smaller than grid if constructed with clamping.
+        if r < merge_map.len() {
+            // Check for a merged anchor at this row that spans wide columns and has text
+            for c in rect.c0..=rect.c1 {
+                if c >= merge_map[r].len() { break; }
+                if let Some(m) = merge_map[r][c] {
+                    if m.r0 == r && m.c0 == c {
+                        let span = m.c1.saturating_sub(m.c0) + 1;
+                        if span >= min_span {
+                            let s = grid[r][c].trim();
+                            if !s.is_empty() { return true; }
+                        }
+                    }
                 }
             }
         }
@@ -749,9 +726,7 @@ fn detect_left_header_cols(
             if s.is_empty() { continue; }
             nonempty += 1;
             if s.chars().any(|ch| ch.is_ascii_alphabetic()) { textish += 1; }
-            if let Some(p) = &prev {
-                if p == s { repeats += 1; }
-            }
+            if let Some(p) = &prev { if p == s { repeats += 1; } }
             prev = Some(s.to_string());
         }
         // Heuristic: mostly text labels and some repeats (categories)
@@ -765,7 +740,7 @@ fn detect_left_header_cols(
 }
 
 fn flatten_headers(
-    grid: &Vec<Vec<String>>,
+    grid: &mut Vec<Vec<String>>,
     rect: &Rect,
     header_rows: &Vec<usize>,
     left_cols: usize,
@@ -777,12 +752,10 @@ fn flatten_headers(
         let mut parts = Vec::new();
         for off in header_rows {
             let r = rect.r0 + *off;
-            let mut s = grid[r][c].clone();
+            let mut s = if cfg.take_cells_on_extract { std::mem::take(&mut grid[r][c]) } else { grid[r][c].clone() };
 
             // Suppress horizontally-merged non-anchor duplicates across header rows
-            if is_horiz_merged_non_anchor(merge_map, r, c) {
-                s.clear();
-            }
+            if is_horiz_merged_non_anchor(merge_map, r, c) { s.clear(); }
 
             if s.contains('\n') {
                 let cleaned = s.replace('\r', "");
@@ -793,9 +766,7 @@ fn flatten_headers(
                 }
                 s = buf;
             }
-            if !s.trim().is_empty() {
-                parts.push(s.trim().to_string());
-            }
+            if !s.trim().is_empty() { parts.push(s.trim().to_string()); }
         }
         let name = if parts.is_empty() { String::new() } else { parts.join(&cfg.header_joiner) };
         headers.push(name);
@@ -805,33 +776,22 @@ fn flatten_headers(
     if headers.iter().any(|h| !h.trim().is_empty()) {
         // Otherwise trim only trailing *all-empty* columns.
         let mut last_nonempty = headers.len().saturating_sub(1);
-        while last_nonempty > 0 && headers[last_nonempty].trim().is_empty() {
-            last_nonempty -= 1;
-        }
+        while last_nonempty > 0 && headers[last_nonempty].trim().is_empty() { last_nonempty -= 1; }
         headers.truncate(last_nonempty + 1);
     }
 
     // Ensure left header columns get reasonable names if empty
     for i in 0..left_cols.min(headers.len()) {
-        if headers[i].trim().is_empty() {
-            headers[i] = format!("RowHeader{}", i + 1);
-        }
+        if headers[i].trim().is_empty() { headers[i] = format!("RowHeader{}", i + 1); }
     }
 
     // Dedup duplicate header names
     let mut seen = std::collections::HashMap::<String, usize>::new();
     for h in &mut headers {
         let base = h.trim();
-        if base.is_empty() {
-            *h = "Column".to_string();
-            continue;
-        }
+        if base.is_empty() { *h = "Column".to_string(); continue; }
         let n = seen.entry(base.to_string()).or_insert(0);
-        if *n > 0 {
-            *h = format!("{} ({})", base, *n + 1);
-        } else {
-            *h = base.to_string();
-        }
+        if *n > 0 { *h = format!("{} ({})", base, *n + 1); } else { *h = base.to_string(); }
         *n += 1;
     }
     headers
@@ -847,9 +807,7 @@ fn project_row_for_headers(
     let end = min(header_len, row.len());
     let mut out = row[0..end].to_vec();
     // Ensure left_cols exist (already in range). Pad if necessary.
-    if out.len() < header_len {
-        out.resize(header_len, String::new());
-    }
+    if out.len() < header_len { out.resize(header_len, String::new()); }
     out
 }
 
@@ -861,6 +819,124 @@ fn row_eq_headers(row: &Vec<String>, headers: &Vec<String>) -> bool {
     true
 }
 
+fn detect_header_rows(
+    grid: &Vec<Vec<String>>,
+    rect: &Rect,
+    cfg: &ExtractConfig,
+    merge_map: &MergeMap,
+) -> Vec<usize> {
+    // First run legacy/banner logic to determine a starting row
+    let mut banner_skip = 0usize;
+    for _ in 0..2 {
+        let r = rect.r0 + banner_skip;
+        if r <= rect.r1 && is_banner_row(grid, rect, r, merge_map) { banner_skip += 1; } else { break; }
+    }
+
+    // Evaluate candidate header depths h=1..=max_header_rows using a schema-aware score.
+    let max_h = cfg.max_header_rows.min(rect.r1.saturating_sub(rect.r0 + banner_skip) + 1);
+    if max_h == 0 { return vec![]; }
+
+    let mut best_h = 1usize;
+    let mut best_score = -1.0f32;
+
+    for h in 1..=max_h {
+        let start = rect.r0 + banner_skip;
+        let data_start = start + h;
+        if data_start > rect.r1 { break; }
+
+        let score = score_schema_fit(grid, rect, data_start, cfg);
+        // Light header-ish check on header band itself to avoid picking h=0-like garbage
+        let mut headerish = 0.0f32;
+        for rr in start..data_start {
+            let (alpha, numeric, ne) = row_type_stats(&grid[rr], rect.c0, rect.c1);
+            if ne == 0 { continue; }
+            headerish += (alpha - numeric).max(0.0);
+        }
+        let h_norm = headerish / (h as f32).max(1.0);
+        let total = score + 0.15 * h_norm; // prefer header-ish text rows slightly
+
+        if total > best_score {
+            best_score = total;
+            best_h = h;
+        }
+    }
+
+    // If schema confidence is too low, fall back to legacy heuristic selection
+    if best_score < 0.05 {
+        // legacy: keep previous method but starting at banner_skip
+        let mut out = Vec::new();
+        let max = cfg.max_header_rows.min(rect.r1.saturating_sub(rect.r0 + banner_skip) + 1);
+        for i in 0..max {
+            let r = rect.r0 + banner_skip + i;
+            let (alpha, numeric, nonempty) = row_type_stats(&grid[r], rect.c0, rect.c1);
+            if nonempty == 0 { break; }
+            let looks_header = alpha >= 0.60 && numeric <= 0.30;
+            if !looks_header { break; }
+            out.push(r - rect.r0);
+        }
+        if out.is_empty() { out.push(banner_skip); }
+        return out;
+    }
+
+    (0..best_h).map(|i| banner_skip + i).collect()
+}
+
+/// Score how well rows starting from data_r0 maintain per-column kinds.
+/// Higher is better. Returns ~0.0 when weak/no signal.
+fn score_schema_fit(
+    grid: &Vec<Vec<String>>,
+    rect: &Rect,
+    data_r0: usize,
+    cfg: &ExtractConfig,
+) -> f32 {
+    if data_r0 > rect.r1 { return 0.0; }
+    let c0 = rect.c0; let c1 = rect.c1;
+    let sample_end = (data_r0 + cfg.schema_sample_rows - 1).min(rect.r1);
+    let mut col_kind_counts: Vec<[usize; 5]> = vec![[0; 5]; c1 - c0 + 1]; // Bool, DateTime, Numeric, Text, Empty
+
+    let mut rows_seen = 0usize;
+    for r in data_r0..=sample_end {
+        rows_seen += 1;
+        for (i, c) in (c0..=c1).enumerate() {
+            let k = detect_kind_idx(grid[r][c].as_str());
+            col_kind_counts[i][k] += 1;
+        }
+    }
+    if rows_seen == 0 { return 0.0; }
+
+    // Compute consistency per column as 1 - entropy proxy (majority / non-empty)
+    let mut per_col = Vec::with_capacity(col_kind_counts.len());
+    for counts in &col_kind_counts {
+        let nonempty = counts[0] + counts[1] + counts[2] + counts[3]; // exclude Empty
+        if nonempty == 0 { per_col.push(0.0); continue; }
+        let majority = counts[0].max(counts[1]).max(counts[2]).max(counts[3]);
+        per_col.push(majority as f32 / nonempty as f32);
+    }
+
+    // Aggregate: fraction of columns meeting consistency threshold and their mean consistency
+    let mut ok_cols = 0usize; let mut sum_ok = 0.0f32; let mut considered = 0usize;
+    for &v in &per_col {
+        if v <= 0.0 { continue; }
+        considered += 1;
+        if v >= cfg.min_body_consistency { ok_cols += 1; sum_ok += v; }
+    }
+    if considered == 0 { return 0.0; }
+    let frac_ok = ok_cols as f32 / considered as f32;
+    let avg_ok = if ok_cols == 0 { 0.0 } else { sum_ok / ok_cols as f32 };
+
+    0.7 * frac_ok + 0.3 * avg_ok
+}
+
+#[inline]
+fn detect_kind_idx(s: &str) -> usize {
+    match detect_kind(s) {
+        Kind::Bool => 0,
+        Kind::DateTime => 1,
+        Kind::Numeric => 2,
+        Kind::Text => 3,
+        Kind::Empty | Kind::Mixed => 4,
+    }
+}
 /// ============================ Connectivity split ============================
 
 fn is_nonempty(s: &str) -> bool { !s.trim().is_empty() }
@@ -1327,8 +1403,90 @@ fn strip_header_dup_suffix(h: &str) -> String {
     s.to_string()
 }
 
+#[derive(Default)]
+pub struct ExtractExcelTablesNode {}
+
+impl ExtractExcelTablesNode {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for ExtractExcelTablesNode {
+    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+        let mut node = Node::new(
+            "data_excel_extract_tables",
+            "Extract Tables (Excel)",
+            "Extracts tables from an Excel worksheet",
+            "Data/Excel",
+        );
+        node.add_icon("/flow/icons/file-spreadsheet.svg");
+
+        node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
+
+        node.add_input_pin("file", "File", "Excel file", VariableType::Struct)
+            .set_schema::<FlowPath>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin("sheet", "Sheet", "Worksheet name", VariableType::String)
+            .set_default_value(Some(json!("Sheet1")));
+
+        node.add_input_pin("extract_config", "Extract Config", "Extract Config", VariableType::Struct)
+            .set_schema::<ExtractConfig>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build())
+            .set_default_value(Some(json!(ExtractConfig::default())));
+
+        node.add_output_pin("exec_out", "Output", "Next", VariableType::Execution);
+        node.add_output_pin(
+            "tables",
+            "Tables",
+            "Extracted Vec<Table>",
+            VariableType::Struct,
+        ).set_schema::<CSVTable>()
+        .set_value_type(ValueType::Array);
+
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        context.deactivate_exec_pin("exec_out").await?;
+
+        let flow_path: FlowPath = context.evaluate_pin("file").await?;
+        let sheet: String = context.evaluate_pin("sheet").await?;
+        let extract_config: ExtractConfig = context.evaluate_pin("extract_config").await?; // keep access so value flows
+
+    let path_string = flow_path.path.clone();
+    let cfg_clone = extract_config.clone();
+    let sheet_clone = sheet.clone();
+    let flow_path_clone = flow_path.clone();
+
+        let csv_tables: Vec<CSVTable> = tokio::task::spawn_blocking(move || -> Result<Vec<CSVTable>> {
+            let tables = extract_tables(&path_string, &sheet_clone, &cfg_clone)
+                .map_err(|e| Error::msg(format!("Extraction failed: {e}")))?;
+            let mut out = Vec::with_capacity(tables.len());
+            for t in tables {
+                let headers = t.headers.clone();
+                let mut rows_json: Vec<Vec<flow_like_types::Value>> = Vec::with_capacity(t.rows.len());
+                for r in t.rows {
+                    rows_json.push(r.into_iter().map(|s| json!(s)).collect());
+                }
+                out.push(CSVTable::new(headers, rows_json, Some(flow_path_clone.clone())));
+            }
+            Ok(out)
+        }).await??;
+
+        context.set_pin_value("tables", json!(csv_tables)).await?;
+
+        context.activate_exec_pin("exec_out").await?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use calamine::{open_workbook, Xlsx};
+
     use super::*;
 
     #[test]
@@ -1359,5 +1517,36 @@ mod tests {
         // Other cells should remain unchanged outside the merged block
         assert_eq!(out[0][0], "a");
         assert_eq!(out[0][1], "");
+    }
+
+    #[test]
+    fn large_file_optional() {
+        let path = std::path::Path::new("../../tests/data/Crimes_-_2001_to_Present_20250906.xlsx");
+        if !path.exists() { return; } // skip silently
+        let mut cfg = ExtractConfig::default();
+        cfg.enable_merges = false;
+        cfg.max_merge_map_cells = 0;
+        cfg.take_cells_on_extract = true;
+        let res = extract_tables(path, &"Data", &cfg);
+        assert!(res.is_ok(), "large extraction failed: {:?}", res.err());
+        let tables = res.unwrap();
+        assert!(!tables.is_empty(), "no tables extracted");
+        let first_table = &tables[0];
+        assert!(!first_table.headers.is_empty(), "first table has no headers");
+        assert!(!first_table.rows.is_empty(), "first table has no rows");
+    }
+
+    #[test]
+    fn banner_row_does_not_panic_without_merge_map() {
+        // 3x5 grid with a centered text row that should NOT panic when merges disabled
+        let grid = vec![
+            vec!["".into(), "".into(), "Title".into(), "".into(), "".into()],
+            vec!["a".into(), "b".into(), "c".into(), "d".into(), "e".into()],
+            vec!["1".into(), "2".into(), "3".into(), "4".into(), "5".into()],
+        ];
+        let rect = Rect { r0: 0, c0: 0, r1: 2, c1: 4 };
+        let merge_map: MergeMap = Vec::new(); // simulate disabled merges
+        // Should run without panic and fallback to single-nonempty detection => banner row true
+        assert!(is_banner_row(&grid, &rect, 0, &merge_map));
     }
 }
