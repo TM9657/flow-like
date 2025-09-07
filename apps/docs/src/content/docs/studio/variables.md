@@ -14,7 +14,7 @@ All flows within a board can read and write variables through the *Get Variable*
 - To *read* a variable, either search the node catalog for *Get variable_name* or drag and drop the variable from the variables menu onto the canvas.
 - To *write* a variable, either search for *Set variable_name* or drag it from the variables menu.
 
-![A screenshot showing how to manage variables in FlowLike Desktop and integrate them in flows](../../../assets/WorkingWithVariables.webp)
+![A screenshot showing how to manage variables in Flow-Like Desktop and integrate them in flows](../../../assets/WorkingWithVariables.webp)
 
 To specify a variable *type*, open the variables menu, click the variable you want to configure, and select the type from the drop-down list:
 ![A screenshot showing how to set the type of a variable](../../../assets/SetVariableType.webp)

@@ -1,6 +1,6 @@
 ---
-title: FlowLike Architecture
-description: Deep Dive into FlowLike's Architecture
+title: Flow-Like Architecture
+description: Deep Dive into Flow-Like's Architecture
 sidebar:
   order: 11
 ---

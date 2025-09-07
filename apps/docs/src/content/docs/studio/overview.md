@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: Creating Flow in FlowLike
+description: Creating Flow in Flow-Like
 sidebar:
   order: 10
 ---
@@ -18,7 +18,7 @@ Important components of the Studio environment are:
 
 A *Flow* represents a *process* and consists of one or more *Nodes*. Nodes are linked through *Edges* (or *Wires*) for *Execution* and *Data*.
 
-![A screenshot of FlowLike Studio - a no-code environment to create workflow automations](../../../assets/FlowLikeStudio.webp)
+![A screenshot of Flow-Like Studio - a no-code environment to create workflow automations](../../../assets/FlowLikeStudio.webp)
 
 Within *Apps*, flows are managed in [Boards](/apps/boards/). You can add as many *Flows* within one *Board* as you like, giving you fine-grained control over how to organize your projects:
 ```text

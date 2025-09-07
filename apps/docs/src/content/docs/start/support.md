@@ -1,6 +1,6 @@
 ---
 title: Support
-description: How to Get Support for FlowLike
+description: How to Get Support for Flow-Like
 sidebar:
   order: 90
 ---

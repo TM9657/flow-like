@@ -1,6 +1,6 @@
 ---
 title: Building from Source
-description: Building FlowLike from Source Code
+description: Building Flow-Like from Source Code
 sidebar:
   order: 10
 ---
@@ -16,7 +16,7 @@ cd flow-like
 
 Alternatively, you can fork the repository to your GitHub account and clone it from there (especially if you plan to [contribute](/dev/contribute/)).
 
-We're continuously pushing updates to FlowLike. The latest stable versions are available on the `main` and `alpha` branches. These are the branches that contain the source code snapshot for our [latest builds available for download](https://flow-like.com/download). They should compile without issues on your machine.
+We're continuously pushing updates to Flow-Like. The latest stable versions are available on the `main` and `alpha` branches. These are the branches that contain the source code snapshot for our [latest builds available for download](https://flow-like.com/download). They should compile without issues on your machine.
 
 To get the *latest* changes, try the `dev` branch:
 ```bash
@@ -54,7 +54,7 @@ bun install
 ```
 
 ## Build and Run in Dev Mode
-To build and run the FlowLike desktop application in development mode run:
+To build and run the Flow-Like desktop application in development mode run:
 ```bash
 bun run dev:desktop:<os>:<arch>
 ```
@@ -76,7 +76,7 @@ bun run dev:desktop:linux:x64
 Running in dev mode builds the backend without the Rust `cargo build` `--release` flag. Frontend assets are bundled on each change, so you can see your changes live in the app.
 
 ## Productive Builds
-To create a productive build of the FlowLike desktop application, run the following command (no need to specify OS and architecture here):
+To create a productive build of the Flow-Like desktop application, run the following command (no need to specify OS and architecture here):
 ```bash
 bun run build:desktop
 ```

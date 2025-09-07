@@ -11,4 +11,4 @@ Within an app, you can create any number of **Boards**, and each **Board** can c
 
 By default, new apps include an **Initial Board**. Once you open it, you can start building your first **Flow** in our [Studio](/studio/overview/) builder environment. This is where the magic happens!
 
-![A screenshot of FlowLike Desktop showing the Boards section of a FlowLike app with an initial Board](../../../assets/AppBoards.webp)
+![A screenshot of Flow-Like Desktop showing the Boards section of a Flow-Like app with an initial Board](../../../assets/AppBoards.webp)

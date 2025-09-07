@@ -23,5 +23,5 @@ You can browse all currently available *nodes* in the *Node Catalog*. Simply *ri
 ![A screenshot showing how you can right-click into the node catalog, e.g. browsing available nodes for mail operations](../../../assets/NodeCatalog.webp)
 
 :::tip
-The concept and anatomy of nodes in FlowLike are inspired by the [Unreal Engine Node Concept](https://dev.epicgames.com/documentation/en-us/unreal-engine/nodes-in-unreal-engine). You'll find many similarities that may help you understand common patterns, such as the [difference between standard (impure) and pure nodes](https://dev.epicgames.com/documentation/en-us/unreal-engine/functions-in-unreal-engine#purevsimpure).
+The concept and anatomy of nodes in Flow-Like are similar to the [Unreal Engine Node Concept](https://dev.epicgames.com/documentation/en-us/unreal-engine/nodes-in-unreal-engine). You'll find many similarities that may help you understand common patterns, such as the [difference between standard (impure) and pure nodes](https://dev.epicgames.com/documentation/en-us/unreal-engine/functions-in-unreal-engine#purevsimpure).
 :::

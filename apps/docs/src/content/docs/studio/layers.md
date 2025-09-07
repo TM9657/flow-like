@@ -5,7 +5,7 @@ sidebar:
   order: 50
 ---
 
-*Layers* and *Placeholders* are powerful features of FlowLike Studio for abstraction and prototyping in your automations. They refer to the same functionality: creating nested or collapsed flows *within* flows. You can also think of them as a "third dimension" in your boards.
+*Layers* and *Placeholders* are powerful features of Flow-Like Studio for abstraction and prototyping in your automations. They refer to the same functionality: creating nested or collapsed flows *within* flows. You can also think of them as a "third dimension" in your boards.
 
 ## Collapsing Existing Nodes into New Layers
 

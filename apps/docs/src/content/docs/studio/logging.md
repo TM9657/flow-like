@@ -9,4 +9,4 @@ Every board allows you to inspect previous *runs* and, for each *run*, to read t
 
 You can select historic runs and *re-run* them with the same payloads—for example, to debug an error, observe total execution time, or test a change you have made in your flow graph:
 
-![A screenshot of FlowLike Studio showing previous runs and logs of a workflow](../../../assets/RunsAndLogs.webp)
+![A screenshot of Flow-Like Studio showing previous runs and logs of a workflow](../../../assets/RunsAndLogs.webp)
