@@ -1,7 +1,7 @@
 /// # ONNX Model Loader Nodes
 use crate::{
     ai::onnx::{NodeOnnxSession, Provider, SessionWithMeta, classification, detection},
-    storage::path::FlowPath,
+    data::path::FlowPath,
 };
 use flow_like::{
     flow::{

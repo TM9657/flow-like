@@ -834,6 +834,7 @@ impl InternalRun {
         }
 
         self.trigger_completion_callbacks().await;
+        self.drop_nodes().await;
 
         let meta = {
             let mut run = self.run.lock().await;
@@ -907,6 +908,13 @@ impl InternalRun {
             if let Err(err) = callback(self).await {
                 eprintln!("[Error] executing completion callback: {:?}", err);
             }
+        }
+    }
+
+    async fn drop_nodes(&self) {
+        let all_nodes = self.nodes.values();
+        for node in all_nodes {
+            node.logic.on_drop().await;
         }
     }
 

@@ -4,9 +4,10 @@
 //! and fits multiple SVM-models using the [`linfa`] crate.
 
 use crate::ai::ml::{
-    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array1_usize, values_to_array2_f64,
+    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array1_usize,
+    values_to_array2_f64,
 };
-use crate::storage::db::vector::NodeDBConnection;
+use crate::data::db::vector::NodeDBConnection;
 use flow_like::{
     flow::{
         board::Board,
@@ -96,11 +97,7 @@ impl NodeLogic for FitSVMMultiClassNode {
 
                 // fetch records
                 let records = {
-                    let database = database
-                        .load(context)
-                        .await?
-                        .db
-                        .clone();
+                    let database = database.load(context).await?.db.clone();
                     let database = database.read().await;
                     let schema = database.schema().await?;
                     let existing_cols: HashSet<String> =

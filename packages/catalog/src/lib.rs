@@ -5,13 +5,13 @@ use flow_like::flow::node::NodeLogic;
 pub mod ai;
 pub mod bit;
 pub mod control;
+pub mod data;
 pub mod events;
 pub mod http;
 pub mod image;
 pub mod logging;
 pub mod mail;
 pub mod math;
-pub mod storage;
 pub mod structs;
 pub mod utils;
 pub mod variables;
@@ -25,7 +25,7 @@ pub async fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {
         events::register_functions().await,
         utils::register_functions().await,
         structs::register_functions().await,
-        storage::register_functions().await,
+        data::register_functions().await,
         bit::register_functions().await,
         image::register_functions().await,
         variables::register_functions().await,

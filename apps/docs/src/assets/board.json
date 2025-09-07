@@ -643,7 +643,7 @@
 					"friendly_name": "Open Database",
 					"description": "11998930749331024930",
 					"coordinates": [333.5885, 573.4548, 0],
-					"category": "Database/Local",
+					"category": "Data/Database",
 					"scores": null,
 					"pins": {
 						"o6wbav35opo6kz0yen91w4ay": {

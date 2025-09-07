@@ -6,7 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{future::Future, pin::Pin, sync::Arc};
 
-use crate::storage::path::FlowPath;
+use crate::data::path::FlowPath;
 
 pub mod download;
 pub mod fetch;

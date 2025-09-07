@@ -4,7 +4,7 @@
 //! Wraps the MLModel in a cached NodeMLModel.
 
 use crate::ai::ml::{MLModel, NodeMLModel};
-use crate::storage::path::FlowPath;
+use crate::data::path::FlowPath;
 use flow_like::{
     flow::{
         execution::{LogLevel, context::ExecutionContext},

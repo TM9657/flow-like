@@ -29,7 +29,7 @@ pub type Timestamp = prost_types::Timestamp;
 
 use std::any::Any;
 
-pub use anyhow::{Error, Ok, Result, anyhow, bail};
+pub use anyhow::{Context, Error, Ok, Result, anyhow, bail};
 pub use async_trait::async_trait;
 pub use base64;
 pub use cuid2::create_id;

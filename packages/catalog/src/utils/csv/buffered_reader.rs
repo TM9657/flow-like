@@ -14,7 +14,7 @@ use flow_like_types::{
 };
 use futures::StreamExt;
 
-use crate::storage::path::FlowPath;
+use crate::data::path::FlowPath;
 
 #[derive(Default)]
 pub struct BufferedCsvReaderNode {}
