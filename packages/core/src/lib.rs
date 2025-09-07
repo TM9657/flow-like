@@ -23,3 +23,4 @@ pub use flow_like_bits;
 pub use flow_like_model_provider;
 pub use flow_like_storage;
 pub use flow_like_types;
+pub use num_cpus;

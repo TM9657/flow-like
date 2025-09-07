@@ -27,7 +27,7 @@
 		"version": "npm version patch -m \"Increment version to %s\"",
 		"bloat": "cargo bloat --release -n 10",
 		"bench": "cargo bench",
-		"bench:flows": "cargo bench -p flow-like --bench flow_bench",
+		"bench:flows": "cargo bench -p flow-like-catalog --bench flow_bench",
 		"fix": "cargo clippy --fix && cargo fmt && bunx biome check --write",
 		"schema": "bun run ./tools/generate-schema.ts",
 		"license": "cd src-tauri && cargo license -j > ./assets/licenses.json && cd .. && bunx license-report --output=json > src-tauri/assets/licenses-node.json && bun run ./tools/license-bundle.ts"

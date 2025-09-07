@@ -13,8 +13,8 @@ use flow_like_types::{anyhow, async_trait, json::json};
 
 use crate::mail::smtp::SmtpConnection;
 use crate::{
+    data::path::FlowPath,
     mail::{generate_mail_footer_html, generate_mail_footer_plain},
-    storage::path::FlowPath,
 };
 
 #[derive(Default)]

@@ -33,15 +33,15 @@ impl BoardCleanupLogic for FixPinsCleanup {
         for connected_to in pin.connected_to.iter() {
             match pin_lookup.get(connected_to) {
                 Some((target_pin, _)) => {
-                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref() {
-                        if !target_pin.depends_on.contains(&pin.id) {
-                            self.node_pins_connected_to_remove
-                                .entry(owner_parent_id.clone())
-                                .or_default()
-                                .entry(pin.id.clone())
-                                .or_default()
-                                .insert(connected_to.clone());
-                        }
+                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref()
+                        && !target_pin.depends_on.contains(&pin.id)
+                    {
+                        self.node_pins_connected_to_remove
+                            .entry(owner_parent_id.clone())
+                            .or_default()
+                            .entry(pin.id.clone())
+                            .or_default()
+                            .insert(connected_to.clone());
                     }
                 }
                 None => {
@@ -60,15 +60,15 @@ impl BoardCleanupLogic for FixPinsCleanup {
         for depends_on in pin.depends_on.iter() {
             match pin_lookup.get(depends_on) {
                 Some((target_pin, _)) => {
-                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref() {
-                        if !target_pin.connected_to.contains(&pin.id) {
-                            self.node_pins_depends_on_remove
-                                .entry(owner_parent_id.clone())
-                                .or_default()
-                                .entry(pin.id.clone())
-                                .or_default()
-                                .insert(depends_on.clone());
-                        }
+                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref()
+                        && !target_pin.connected_to.contains(&pin.id)
+                    {
+                        self.node_pins_depends_on_remove
+                            .entry(owner_parent_id.clone())
+                            .or_default()
+                            .entry(pin.id.clone())
+                            .or_default()
+                            .insert(depends_on.clone());
                     }
                 }
                 None => {

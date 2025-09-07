@@ -21,6 +21,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(preferences::hint::SetModelHintNode::default()),
         Arc::new(preferences::weight::SetWeightNode::default()),
         Arc::new(history::make::MakeHistoryNode::default()),
+        Arc::new(history::extract_attachments::ExtractAttachments::default()),
         Arc::new(history::from_messages::FromMessagesNode::default()),
         Arc::new(history::message::make::MakeHistoryMessageNode::default()),
         Arc::new(history::message::push_content::PushContentNode::default()),

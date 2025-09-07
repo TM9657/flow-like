@@ -1,3 +1,4 @@
+use ahash::AHashSet;
 use flow_like::{
     flow::{
         execution::{context::ExecutionContext, internal_node::InternalNode},
@@ -74,7 +75,7 @@ impl NodeLogic for SequenceNode {
             order
         };
 
-        let mut recursion_guard = HashSet::new();
+        let mut recursion_guard = AHashSet::new();
         recursion_guard.insert(context.node.node.lock().await.id.clone());
 
         for node in execution_order {
@@ -83,7 +84,7 @@ impl NodeLogic for SequenceNode {
                 InternalNode::trigger(&mut sub_context, &mut Some(recursion_guard.clone()), true)
                     .await;
             sub_context.end_trace();
-            context.push_sub_context(sub_context);
+            context.push_sub_context(&mut sub_context);
         }
 
         let exec_out_pins = context.get_pins_by_name("exec_out").await?;

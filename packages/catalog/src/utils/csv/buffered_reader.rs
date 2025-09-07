@@ -14,7 +14,7 @@ use flow_like_types::{
 };
 use futures::StreamExt;
 
-use crate::storage::path::FlowPath;
+use crate::data::path::FlowPath;
 
 #[derive(Default)]
 pub struct BufferedCsvReaderNode {}
@@ -138,7 +138,7 @@ impl NodeLogic for BufferedCsvReaderNode {
                     let mut sub_context = context.create_sub_context(node).await;
                     let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
                     sub_context.end_trace();
-                    context.push_sub_context(sub_context);
+                    context.push_sub_context(&mut sub_context);
 
                     if run.is_err() {
                         let error = run.err().unwrap();
@@ -154,7 +154,7 @@ impl NodeLogic for BufferedCsvReaderNode {
                 let mut sub_context = context.create_sub_context(node).await;
                 let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
                 sub_context.end_trace();
-                context.push_sub_context(sub_context);
+                context.push_sub_context(&mut sub_context);
 
                 if run.is_err() {
                     let error = run.err().unwrap();

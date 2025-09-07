@@ -9,7 +9,7 @@ use flow_like::{
 };
 use flow_like_types::{async_trait, reqwest};
 
-use crate::storage::path::FlowPath;
+use crate::data::path::FlowPath;
 
 use super::HttpRequest;
 

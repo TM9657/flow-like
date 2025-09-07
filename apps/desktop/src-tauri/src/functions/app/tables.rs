@@ -62,6 +62,18 @@ pub async fn db_table_names(
 }
 
 #[tauri::command(async)]
+pub async fn db_count(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: Option<String>,
+    credentials: Option<Arc<SharedCredentials>>,
+) -> Result<usize, TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, table_name, credentials).await?;
+    let cnt = db.count(None).await?;
+    Ok(cnt)
+}
+
+#[tauri::command(async)]
 pub async fn db_schema(
     app_handle: AppHandle,
     app_id: String,

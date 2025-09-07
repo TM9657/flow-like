@@ -47,4 +47,7 @@ export class EmptyDatabaseState implements IDatabaseState {
 	listTables(appId: string): Promise<string[]> {
 		throw new Error("Method not implemented.");
 	}
+	countItems(appId: string, tableName: string): Promise<number> {
+		return Promise.resolve(0);
+	}
 }

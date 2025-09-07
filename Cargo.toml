@@ -64,6 +64,8 @@ webp = "0.3.0"
 aws-sdk-sts = "1.80.0"
 ahash = "0.8.11"
 base64 = "0.22.1"
+ndarray = "0.16.1"
+dirs-next = "2.0.0"
 
 [profile.dev]
 split-debuginfo = "unpacked"
