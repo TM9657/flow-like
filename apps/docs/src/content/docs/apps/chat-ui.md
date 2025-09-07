@@ -11,4 +11,4 @@ Once this is setup, your app will automatically open in a chat interface.
 
 You can create multiple chat interfaces by defining multiple **Chat Events** within your app.
 
-![Chat UI in FlowLike Apps](../../../assets/ChatUI.webp)
+![A screenshot of FlowLike Desktop showing a customizable chat interface that is linked to a workflow via a chat event](../../../assets/ChatUI.webp)

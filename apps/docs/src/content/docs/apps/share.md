@@ -11,7 +11,7 @@ Sharing and visibility features require that you have [logged in with your FlowL
 
 By default, your online app is set to **private** and therefore only accessible to you on all devices where you are logged in. You can change this in the **General** settings tab of your app (**Visibility Status** section):
 
-![Change App Visibility Status](../../../assets/AppVisibilitySettings.webp)
+![A screenshot of FlowLike Desktop showing how to change the visibility status of an app](../../../assets/AppVisibilitySettings.webp)
 
 The minimum visibility level to share your app with others is **Prototype**. This allows you to share your app with other FlowLike users.
 
@@ -23,10 +23,10 @@ Once your app is set to at least **Prototype** visibility level, you'll find the
 
 Within the **Team** tab, switch to the **Invite & Access** bar where you can invite FlowLike users or create an invite link for your app:
 
-![Invite Team Members to Your FlowLike App](../../../assets/ShareApps.webp)
+![A screenshot of FlowLike Desktop showing how to invite others for apps and manage teams](../../../assets/ShareApps.webp)
 
 ## Rights and Roles
 
 As app **owner** you can assign different **roles** to your app team members. Roles can be defined in the **Roles** tab of your app's settings. You can assign specific **permissions** to each role for fine-grained access control:
 
-![Configure Roles and Permissions in FlowLike Apps](../../../assets/RightsAndRoles.webp)
+![A screenshot of FlowLike Desktop showing how to create custom roles within an app with fine-grained permission attributes](../../../assets/RightsAndRoles.webp)

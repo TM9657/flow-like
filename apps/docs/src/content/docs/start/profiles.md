@@ -7,12 +7,12 @@ sidebar:
 
 In the top left corner you find the *Profile Settings*, You can create multiple *Profiles* within your **Account** and *switch* between them:
 
-![Accessing profiles and switching between them](../../../assets/SwitchAndEditProfiles.webp)
+![A screenshot showing how to switch between different Profiles in FlowLike Desktop](../../../assets/SwitchAndEditProfiles.webp)
 
 
 In FlowLike, a **Profile** bundles configurations for language models, ui themes (*try Bubblegum!*) and some more settings: 
 
-![Profile Settings](../../../assets/ProfileSettings.webp)
+![A screenshot of FlowLike Desktop showing a preview of the Profile Settings page](../../../assets/ProfileSettings.webp)
 
 
 For example, you could create a profile for work and for private use. Or create a profile that contains only *Gemma* language models and another one that contains only reasoning models like *DeepSeek*.
