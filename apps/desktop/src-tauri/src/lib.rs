@@ -18,7 +18,7 @@ use settings::Settings;
 use state::TauriFlowLikeState;
 use tauri_plugin_updater::UpdaterExt;
 use std::{sync::Arc, time::Duration};
-use tauri::{AppHandle, Manager};
+use tauri::{window::{ProgressBarState, ProgressBarStatus}, AppHandle, Manager};
 use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
 
 #[cfg(not(debug_assertions))]
@@ -390,24 +390,52 @@ fn handle_deep_link(app: &AppHandle, event: OpenUrlEvent) {
 
 #[tauri::command(async)]
 async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
-
     if let Some(update) = app_handle.updater()?.check().await? {
-        let mut downloaded = 0;
+        // get the window once
+        if let Some(win) = app_handle.get_webview_window("main") {
+            // initial indeterminate
+            let _ = win.set_progress_bar(ProgressBarState {
+                status: Some(ProgressBarStatus::Indeterminate),
+                progress: None,
+            });
 
-        // alternatively we could also call update.download() and update.install() separately
-        update
-            .download_and_install(
-                |chunk_length, content_length| {
-                    downloaded += chunk_length;
-                    println!("downloaded {downloaded} from {content_length:?}");
-                },
-                || {
-                    println!("download finished");
-                },
-            )
-            .await?;
+            let mut downloaded: u64 = 0;
 
-        println!("update installed");
+            // clone for each closure to avoid "moved value" error
+            let progress_win = win.clone();
+            let done_win = win.clone();
+
+            update
+                .download_and_install(
+                    move |chunk_len, content_len| {
+                        downloaded += chunk_len as u64;
+
+                        if let Some(total) = content_len.map(|v| v as u64) {
+                            let pct = ((downloaded as f64 / total as f64) * 100.0)
+                                .clamp(0.0, 100.0) as u64;
+
+                            let _ = progress_win.set_progress_bar(ProgressBarState {
+                                status: Some(ProgressBarStatus::Normal),
+                                progress: Some(pct), // 0..=100
+                            });
+                        } else {
+                            let _ = progress_win.set_progress_bar(ProgressBarState {
+                                status: Some(ProgressBarStatus::Indeterminate),
+                                progress: None,
+                            });
+                        }
+                    },
+                    move || {
+                        // clear when finished
+                        let _ = done_win.set_progress_bar(ProgressBarState {
+                            status: Some(ProgressBarStatus::None),
+                            progress: None,
+                        });
+                    },
+                )
+                .await?;
+        }
+
         app_handle.restart();
     }
 
