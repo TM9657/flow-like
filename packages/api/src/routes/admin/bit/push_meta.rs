@@ -35,7 +35,7 @@ pub async fn push_meta(
             .long_description
             .or(existing_meta.long_description.clone()));
         updated_meta.docs_url = Set(meta.docs_url.or(existing_meta.docs_url.clone()));
-        updated_meta.age_rating = Set(meta.age_rating.or(existing_meta.age_rating));
+        updated_meta.age_rating = Set(meta.age_rating.or(existing_meta.age_rating.map(|r| r as i32)).map(|r| r as i64));
         updated_meta.icon = Set(meta.icon.or(existing_meta.icon.clone()));
         updated_meta.organization_specific_values = Set(meta
             .organization_specific_values
@@ -63,7 +63,7 @@ pub async fn push_meta(
         name: Set(meta.name),
         long_description: Set(meta.long_description),
         docs_url: Set(meta.docs_url),
-        age_rating: Set(meta.age_rating),
+        age_rating: Set(meta.age_rating.map(|r| r as i64)),
         icon: Set(meta.icon),
         organization_specific_values: Set(meta
             .organization_specific_values

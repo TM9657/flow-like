@@ -65,6 +65,7 @@ pub async fn upsert_profile(
 
         if let Some(apps) = profile_body.apps {
             let apps: Vec<Value> = apps.iter().map(|v| to_value(v).unwrap()).collect();
+            let apps: Value = Value::Array(apps);
             active_model.apps = Set(Some(apps));
         }
 
@@ -96,6 +97,11 @@ pub async fn upsert_profile(
         Some(to_value(&settings)?)
     } else {
         None
+    };
+
+    let apps = match apps {
+        Some(apps) => Some(Value::Array(apps)),
+        None => None,
     };
 
     let new_profile = profile::ActiveModel {

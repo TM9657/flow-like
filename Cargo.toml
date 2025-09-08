@@ -35,7 +35,7 @@ serde_json = "1.0.134"
 schemars = "0.8.22"
 chrono = "0.4.41"
 axum = {version="0.8.4", features=["http2", "multipart"]}
-sea-orm = { version = "1.1.11", features = [ "sqlx-mysql", "sqlx-postgres", "sqlx-sqlite", "runtime-tokio-native-tls", "macros", "with-json", "seaography" ] }
+sea-orm = { version = "1.1.15", features = [ "sqlx-mysql", "sqlx-postgres", "sqlx-sqlite", "runtime-tokio-native-tls", "macros", "with-json", "seaography" ] }
 tower = "0.5.2"
 tracing-subscriber = "0.3.19"
 dotenv = "0.15.0"
@@ -43,14 +43,14 @@ jsonwebtoken = "9.3.0"
 hyper = {version = "1.5.2", features = ["full", "client"]}
 hyper-util = {version = "0.1.10", features = ["full"]}
 tracing = "0.1.41"
-sentry-tracing = "0.40.0"
-sentry = "0.40.0"
+sentry-tracing = "0.42.0"
+sentry = "0.42.0"
 sentry-tower = { version = "0.38.1", features = ["axum", "axum-matched-path"] }
-tower-http = {version="0.6.4", features = ["full"]}
+tower-http = {version="0.6.6", features = ["full"]}
 async-stripe = {version="0.41.0", features = ["runtime-tokio-hyper"]}
 futures-util = "0.3.31"
 moka = { version = "0.12.10", features = ["sync"] }
-bitflags = "2.9.1"
+bitflags = "2.9.4"
 blake3 = "1.8.2"
 lambda_runtime = "0.14.2"
 aws-config = "1.8.3"
@@ -62,7 +62,7 @@ image = "0.25.6"
 imageproc = "0.25.0"
 webp = "0.3.0"
 aws-sdk-sts = "1.80.0"
-ahash = "0.8.11"
+ahash = "0.8.12"
 base64 = "0.22.1"
 ndarray = "0.16.1"
 dirs-next = "2.0.0"

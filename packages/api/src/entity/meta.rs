@@ -36,7 +36,7 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub thumbnail: Option<String>,
     #[sea_orm(column_name = "ageRating")]
-    pub age_rating: Option<i32>,
+    pub age_rating: Option<i64>,
     #[sea_orm(column_name = "docsUrl", column_type = "Text", nullable)]
     pub docs_url: Option<String>,
     #[sea_orm(

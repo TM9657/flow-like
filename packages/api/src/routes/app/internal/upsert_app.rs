@@ -55,6 +55,11 @@ pub async fn upsert_app(
     if let (Some(app), Some(app_updates)) = (&app, &app_body.app) {
         let sub = user.app_permission(&app_id, &state).await?;
         if !sub.has_permission(RolePermissions::Owner) {
+            tracing::warn!(
+                "User {} attempted to update app {} without sufficient permissions",
+                sub.sub()?,
+                app_id
+            );
             return Err(ApiError::Forbidden);
         }
 
@@ -95,16 +100,29 @@ pub async fn upsert_app(
 
     // Somehow the user sent an app body without an app, which is not allowed for existing apps.
     if app.is_some() {
+        tracing::warn!(
+            "User {} attempted to update app {} without providing an app body",
+            sub,
+            app_id
+        );
         return Err(ApiError::Forbidden);
     }
 
     let Some(metadata) = app_body.meta else {
+        tracing::warn!(
+            "User {} attempted to create app {} without providing metadata",
+            sub,
+            app_id
+        );
         return Err(ApiError::InternalError(
             anyhow!("Meta is required for new apps").into(),
         ));
     };
 
     if tier.max_non_visible_projects == 0 {
+        tracing::warn!(
+            "Configuration doesn't allow for the creation of non-visible projects",
+        );
         return Err(ApiError::Forbidden);
     }
 
@@ -119,10 +137,17 @@ pub async fn upsert_app(
             )
             // Owner Permission is 1, so we filter out roles that have Owner permission
             .filter(role::Column::Permissions.eq(1))
+            .filter(membership::Column::UserId.eq(&sub))
             .count(&state.db)
             .await?;
 
         if count >= tier.max_non_visible_projects as u64 {
+            tracing::warn!(
+                "User {} has reached the limit of {} non-visible projects [{}]",
+                sub,
+                tier.max_non_visible_projects,
+                count
+            );
             return Err(ApiError::Forbidden);
         }
     }

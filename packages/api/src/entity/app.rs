@@ -26,7 +26,7 @@ pub struct Model {
     pub rating_count: i64,
     #[sea_orm(column_name = "totalSize")]
     pub total_size: i64,
-    pub price: i32,
+    pub price: i64,
     #[sea_orm(column_type = "Text", nullable)]
     pub version: Option<String>,
     #[sea_orm(column_name = "createdAt")]

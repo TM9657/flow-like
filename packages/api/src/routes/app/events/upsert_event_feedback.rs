@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
 pub struct FeedbackBody {
-    pub rating: i32,
+    pub rating: i64,
     pub context: Option<Value>,
     pub comment: String,
     pub feedback_id: String,
@@ -75,7 +75,7 @@ pub async fn upsert_event_feedback(
         event_id: Some(event_id.clone()),
         context: body.context,
         comment: body.comment,
-        rating: body.rating.clamp(0, 5),
+        rating: body.rating.clamp(0, 5) as i64,
         template_id: None,
         created_at: chrono::Utc::now().naive_utc(),
         updated_at: chrono::Utc::now().naive_utc(),

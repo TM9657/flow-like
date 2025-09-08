@@ -28,12 +28,13 @@ pub struct Model {
     pub theme: Option<Json>,
     #[sea_orm(column_name = "userId", column_type = "Text")]
     pub user_id: String,
-    pub apps: Option<Vec<Json>>,
     pub hubs: Option<Vec<String>>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub settings: Option<Json>,
     #[sea_orm(column_type = "Text")]
     pub hub: String,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub apps: Option<Json>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -130,7 +130,7 @@ impl From<Model> for Metadata {
             icon: model.icon,
             thumbnail: model.thumbnail,
             preview_media: model.preview_media.unwrap_or_default(),
-            age_rating: model.age_rating,
+            age_rating: model.age_rating.map(|r| r as i32),
             website: model.website,
             support_url: model.support_url,
             docs_url: model.docs_url,
@@ -169,7 +169,7 @@ impl From<Metadata> for Model {
             } else {
                 Some(metadata.preview_media)
             },
-            age_rating: metadata.age_rating,
+            age_rating: metadata.age_rating.map(|r| r as i64),
             website: metadata.website,
             support_url: metadata.support_url,
             docs_url: metadata.docs_url,

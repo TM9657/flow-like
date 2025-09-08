@@ -12,7 +12,7 @@ pub struct Model {
     pub user_id: Option<String>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub context: Option<Json>,
-    pub rating: i32,
+    pub rating: i64,
     #[sea_orm(column_name = "createdAt")]
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]
