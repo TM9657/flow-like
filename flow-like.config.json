@@ -83,7 +83,7 @@
 			"llm_tiers": ["PRO", "PREMIUM", "ENTERPRISE"]
 		}
 	},
-	"environment": "Development",
+	"environment": "Staging",
 	"lookup": {
 		"email": false,
 		"username": false,

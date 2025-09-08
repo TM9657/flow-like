@@ -53,9 +53,13 @@ pub async fn upsert_app(
     let now = chrono::Utc::now().naive_utc();
 
     if let (Some(app), Some(app_updates)) = (&app, &app_body.app) {
-        println!("App exists, updating");
         let sub = user.app_permission(&app_id, &state).await?;
         if !sub.has_permission(RolePermissions::Owner) {
+            tracing::warn!(
+                "User {} attempted to update app {} without sufficient permissions",
+                sub.sub()?,
+                app_id
+            );
             return Err(ApiError::Forbidden);
         }
 
@@ -96,19 +100,29 @@ pub async fn upsert_app(
 
     // Somehow the user sent an app body without an app, which is not allowed for existing apps.
     if app.is_some() {
-        println!("App exists, but no app body was provided");
+        tracing::warn!(
+            "User {} attempted to update app {} without providing an app body",
+            sub,
+            app_id
+        );
         return Err(ApiError::Forbidden);
     }
 
     let Some(metadata) = app_body.meta else {
-        println!("No meta provided for new app");
+        tracing::warn!(
+            "User {} attempted to create app {} without providing metadata",
+            sub,
+            app_id
+        );
         return Err(ApiError::InternalError(
             anyhow!("Meta is required for new apps").into(),
         ));
     };
 
     if tier.max_non_visible_projects == 0 {
-        println!("Tier does not allow creating new apps");
+        tracing::warn!(
+            "Configuration doesn't allow for the creation of non-visible projects",
+        );
         return Err(ApiError::Forbidden);
     }
 
@@ -127,9 +141,13 @@ pub async fn upsert_app(
             .count(&state.db)
             .await?;
 
-        println!("User is fine creating project, user ({}) has {} and max is {}", sub, count, tier.max_non_visible_projects);
         if count >= tier.max_non_visible_projects as u64 {
-            println!("Tier does not allow creating more non-visible apps, user ({}) has {} and max is {}", sub, count, tier.max_non_visible_projects);
+            tracing::warn!(
+                "User {} has reached the limit of {} non-visible projects [{}]",
+                sub,
+                tier.max_non_visible_projects,
+                count
+            );
             return Err(ApiError::Forbidden);
         }
     }
@@ -155,7 +173,6 @@ pub async fn upsert_app(
         new_app
     };
 
-    println!("Created new app with id {}", new_id);
     let _app = state
         .db
         .transaction::<_, app::Model, DbErr>(|txn| {
