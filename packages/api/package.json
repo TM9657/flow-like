@@ -4,7 +4,7 @@
 	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
-		"postinstall": "cargo install sea-orm-cli@1.1.11",
+		"postinstall": "cargo install sea-orm-cli@1.1.15",
 		"db:push:sync": "bun run db:push && bun run db:sync",
 		"db:sync": "sea-orm-cli generate entity -o src/entity --max-connections 10 --with-serde both",
 		"db:push": "bunx prisma db push --schema prisma/schema",

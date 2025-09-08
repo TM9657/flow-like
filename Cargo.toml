@@ -66,6 +66,7 @@ ahash = "0.8.12"
 base64 = "0.22.1"
 ndarray = "0.16.1"
 dirs-next = "2.0.0"
+regex = "1.11.2"
 
 [profile.dev]
 split-debuginfo = "unpacked"
