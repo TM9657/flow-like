@@ -64,7 +64,7 @@ impl State {
         let client: Client<HttpConnector, Body> =
             hyper_util::client::legacy::Client::<(), ()>::builder(TokioExecutor::new())
                 .build(HttpConnector::new());
-        opt.max_connections(100)
+        opt.max_connections(10)
             .min_connections(1)
             .connect_timeout(Duration::from_secs(8))
             .sqlx_logging(platform_config.environment == Environment::Development);
