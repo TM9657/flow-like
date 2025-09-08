@@ -10,6 +10,8 @@
 		"dev:desktop:win:arm": "bun run --cwd ./apps/desktop dev:win:arm",
 		"dev:desktop:win:x64": "bun run --cwd ./apps/desktop dev:win:x64",
 		"dev:desktop:linux:x64": "bun run --cwd ./apps/desktop dev:linux:x64",
+		"db:view": "bun run --cwd packages/api db:view",
+		"db:push:sync": "bun run --cwd packages/api db:push:sync",
 		"dev:api": "bun run --cwd ./apps/backend/local/api dev",
 		"dev:embedded": "bun run --cwd ./apps/embedded dev",
 		"dev:website": "bun run --cwd ./apps/website dev",
