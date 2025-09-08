@@ -17,9 +17,9 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub changelog: Option<String>,
     #[sea_orm(column_name = "ratingCount")]
-    pub rating_count: i32,
+    pub rating_count: i64,
     #[sea_orm(column_name = "ratingSum")]
-    pub rating_sum: i32,
+    pub rating_sum: i64,
     #[sea_orm(column_type = "Text", nullable)]
     pub version: Option<String>,
 }

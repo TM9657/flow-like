@@ -2,13 +2,13 @@ model InviteLink {
     id String @id
 
     name String?
-    maxUses Int @default(-1) // -1 means unlimited uses
+    maxUses BigInt @default(-1) // -1 means unlimited uses
 
     token String @unique
     app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
     appId String
 
-    countJoined Int @default(0)
+    countJoined BigInt @default(0)
 
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt

@@ -11,7 +11,7 @@ pub struct Model {
     #[sea_orm(column_type = "Text", unique)]
     pub token: String,
     #[sea_orm(column_name = "countJoined")]
-    pub count_joined: i32,
+    pub count_joined: i64,
     #[sea_orm(column_name = "createdAt")]
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]
@@ -21,7 +21,7 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub name: Option<String>,
     #[sea_orm(column_name = "maxUses")]
-    pub max_uses: i32,
+    pub max_uses: i64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

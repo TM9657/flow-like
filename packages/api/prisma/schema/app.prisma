@@ -84,7 +84,7 @@ model App {
 
   totalSize BigInt @default(0)
 
-  price Int @default(0)
+  price BigInt @default(0)
   version String?
 
   technicalUsers TechnicalUser[]
@@ -139,7 +139,7 @@ model Feedback {
   eventId String?
   context Json?
   comment String
-  rating Int
+  rating BigInt
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -155,7 +155,7 @@ model Comment {
   id String @id
 
   text String
-  rating Int
+  rating BigInt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String
@@ -184,8 +184,8 @@ model Template {
 
   feedback Feedback[]
 
-  ratingSum   Int   @default(0)
-  ratingCount Int   @default(0)
+  ratingSum   BigInt   @default(0)
+  ratingCount BigInt   @default(0)
 
   app App @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String
