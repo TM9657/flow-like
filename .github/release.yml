@@ -1,4 +1,3 @@
-# .github/release.yml
 changelog:
   exclude:
     labels:
@@ -9,40 +8,22 @@ changelog:
 
   categories:
     - title: "🚨 Breaking Changes"
-      labels:
-        - breaking
-        - breaking-change
-        - breaking changes
+      labels: [breaking, breaking-change, "breaking changes"]
 
     - title: "✨ Features"
-      labels:
-        - feature
-        - enhancement
+      labels: [feature, enhancement]
 
     - title: "🐛 Fixes"
-      labels:
-        - fix
-        - bug
-        - bugfix
+      labels: [fix, bug, bugfix]
 
     - title: "🧰 Smaller Changes"
-      labels:
-        - task
-        - chore
-        - refactor
-        - maintenance
+      labels: [task, chore, refactor, maintenance]
 
     - title: "📦 Dependencies"
-      labels:
-        - dependencies
+      labels: [dependencies]
 
-template: |
-  ## 🚀 Flow-Like $RESOLVED_VERSION
+    - title: "📝 Nodes"
+      labels: [nodes, node]
 
-  > Tagged: $TAG_NAME — Compare: $FULL_CHANGELOG
-
-  ### What’s changed
-  $CHANGES
-
-  ### Contributors
-  $CONTRIBUTORS
+    - title: "👑 Epic"
+      labels: [epic]

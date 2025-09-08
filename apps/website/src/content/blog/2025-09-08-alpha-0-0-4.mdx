@@ -1,5 +1,5 @@
 ---
-title: "Flow-Like Alpha v0.0.4 — Excel Extraction, ML Nodes, Themes & Smoother Editing ✨"
+title: "Flow-Like Alpha v0.0.4 — Excel Extraction, ML Nodes, Themes & Smoother Editing"
 description: "Alpha v0.0.4 ships intelligent Excel table extraction, powerful new Machine Learning nodes, profile themes, desktop auto-updates, and big performance/stability wins."
 date: 2025-09-08
 tags: ["release", "alpha", "alpha-0.0.4", "excel", "ml", "agents"]
@@ -11,27 +11,27 @@ Alpha **v0.0.4** doubles down on *real-world spreadsheets* and *practical ML*. E
 
 ## Highlights
 
-- 🧠 **Machine Learning Nodes (major)** — Train **K-Means**, **SVM Classifier**, **Linear Regression**; **Predict**; **Save/Load** models — designed for tabular flows ([PR #257](https://github.com/TM9657/flow-like/pull/257)).
-- ⚡ **Excel Table Extraction (XLSX)** — Detects headers/regions and emits **typed rows** ready for downstream nodes. No preview; straight to data.
-- 📄 **Excel Node Toolkit** — Read/write cells, add/copy sheets, insert/remove rows & columns, list sheet names, and more (full list below).
-- 🎛️ **Profiles & Themes** — Per-profile app visibility and theme selection.
-- 🔁 **Desktop Auto-Updates** — In-app updates via the Tauri updater (macOS/Windows/Linux).
-- 🏎️ **Performance & Stability** — Faster big graphs; better long-run reliability.
-- 🧭 **Default Logging = `info`** — New flows start calmer (enable `debug` when needed).
-- 🍎 **Apple Login fixed**.
-- 📚 **Docs refresh** — clearer *Getting Started* and expanded node pages.
+- **Machine Learning Nodes (Major)** — Train **K-Means**, **SVM Classifier**, **Linear Regression**; **Predict**; **Save/Load** models — designed for tabular flows ([PR #257](https://github.com/TM9657/flow-like/pull/257)).
+- **Excel Table Extraction (XLSX)** — Detects headers/regions and emits **typed rows** ready for downstream nodes. No preview; straight to data.
+- **Excel Node Toolkit** — Read/write cells, add/copy sheets, insert/remove rows & columns, list sheet names, and more (full list below).
+- **Profiles & Themes** — Per-profile app visibility and theme selection.
+- **Desktop Auto-Updates** — In-app updates via the Tauri updater (macOS/Windows/Linux).
+- **Performance & Stability** — Faster big graphs; better long-run reliability.
+- **Default Logging = `info`** — New flows start calmer (enable `debug` when needed).
+- **Apple Login Fixed**.
+- **Docs Refresh** — Clearer *Getting Started* and expanded node pages.
 
 ---
 
-## Excel, done right
+## Excel, Done Right
 
-### 🚀 Intelligent Excel table extraction
+### Intelligent Excel Table Extraction
 Drop in an `.xlsx` → get **typed rows**. The extractor finds well-formed tabular regions, detects headers, and handles empty margins and messy edges. Perfect for piping into database/vector/search nodes or straight into ML.
 
 **Node:**
 - **Try Extract Tables (Excel)** — Detect and emit `Array<Struct>` records from a worksheet.
 
-### 🧰 Excel nodes in v0.0.4
+### Excel Nodes in v0.0.4
 A compact, consistent set that covers common spreadsheet automations:
 
 - **Read Cell** — A1 or (row, col) addressing; returns string/number/bool when possible
@@ -47,11 +47,11 @@ A compact, consistent set that covers common spreadsheet automations:
 
 ---
 
-## Machine Learning (second big focus)
+## Machine Learning
 
-We’re shipping a practical ML set tailored to **typed, tabular workflows** — efficient locally, easy to wire into production flows.
+We are shipping a practical ML set tailored to **typed, tabular workflows** — efficient locally, easy to wire into production flows.
 
-### 📦 Included in v0.0.4
+### Included in v0.0.4
 
 **Training**
 - **K-Means (Train)** — Unsupervised clustering for numeric features
@@ -62,61 +62,60 @@ We’re shipping a practical ML set tailored to **typed, tabular workflows** —
 - **Predict (Model, Rows)** — Run predictions over arrays of structs/vectors; emits typed outputs (class/label, score, or numeric)
 - **Save Model** / **Load Model** — Portable model checkpoints (JSON-backed) for repeatable deploys and A/Bs
 
-**Design goals**
+**Design Goals**
 - **Typed pins** end-to-end (features, labels, predictions)
 - **Composable** with Database, Embeddings, and String/Math utilities
-- **Local-first** behavior that’s predictable and debuggable
+- **Local-first** behavior that is predictable and debuggable
 
-**Example flow (sketch)**
+**Example Flow (Sketch)**
 
-`Read/Extract (Excel)` -> `Feature Map (Types)` -> `Train (SVM)` -> `Save Model`
--> `Load Model` -> `Predict` -> `Upsert to DB / Export CSV`
-
----
-
-## Builder quality of life
-
-**Default: `info` logging** for new flows — keep noise low; switch to `debug` when investigating. If you still have old Flows in Debug, check if Info is sufficient. Logging comes with a cost.
+`Read/Extract (Excel)` → `Feature Map (Types)` → `Train (SVM)` → `Save Model`
+→ `Load Model` → `Predict` → `Upsert to DB / Export CSV`
 
 ---
 
-## Themes, Profiles & App visibility
+## Builder Quality of Life
 
-Create **profiles** to separate personal/team work, pick which **apps are visible** per profile, and apply **different themes** or create your own!
+**Default: `info` logging** for new flows — keep noise low; switch to `debug` when investigating. If you still have old flows in `debug`, check if `info` is sufficient. Logging comes with a cost.
 
 ---
 
-## Desktop auto-updates
+## Themes, Profiles & App Visibility
+
+Create **profiles** to separate personal/team work, pick which **apps are visible** per profile, and apply **different themes** or create your own.
+
+---
+
+## Desktop Auto-Updates
 
 This will be the last update you have to download manually. Flow-Like now supports **in-app updates** via the [Tauri Updater](https://v2.tauri.app/plugin/updater/) (macOS/Windows/Linux).
 
 ---
 
-## Performance & stability
+## Performance & Stability
 
-* **Large graphs**: faster execution paths, fewer allocations, improved back-pressure in I/O
-* **Long-running flows**: better memory behavior and logging resilience
+- **Large Graphs**: faster execution paths, fewer allocations, improved back-pressure in I/O
+- **Long-Running Flows**: better memory behavior and logging resilience
 
 ---
 
-## Fixes & smaller improvements
+## Fixes & Smaller Improvements
 
-* ✅ **Apple login** stability fix
-* 🧭 **Default logging** now **`info`** for new flows
-* 📚 Docs additions across **Getting Started**, **Local Database** search nodes, and utilities
+- **Apple Login** stability fix
+- **Default Logging** now **`info`** for new flows
+- **Docs Additions** across *Getting Started*, *Local Database* search nodes, and utilities
 
 ---
 
 ## Community
 
-A big thank you to everyone who contributed issues, feedback, and ideas for this release! Special thanks to the r/selfhosted Reddit community for over 100 stars on Github and phenomenal feedback. We are taking that [feedback](https://www.reddit.com/r/selfhosted/comments/1n41uu6/ive_spent_5000_hours_building_a_typed_workflow/) seriously and
-have reworked our website.
+A big thank you to everyone who contributed issues, feedback, and ideas for this release! Special thanks to the r/selfhosted Reddit community for over 100 stars on Github and phenomenal feedback. We are taking that [feedback](https://www.reddit.com/r/selfhosted/comments/1n41uu6/ive_spent_5000_hours_building_a_typed_workflow/) seriously and have reworked our website.
 
 ---
 
 ## Links
 
-* **Docs home:** [https://docs.flow-like.com](https://docs.flow-like.com)
-* **Getting Started:** [https://docs.flow-like.com/start/first-use/](https://docs.flow-like.com/start/first-use/)
-* **ML nodes PR:** [https://github.com/TM9657/flow-like/pull/257](https://github.com/TM9657/flow-like/pull/257)
-* **Excel nodes epic:** [https://github.com/TM9657/flow-like/issues/262](https://github.com/TM9657/flow-like/issues/262)
+- **Docs Home:** [https://docs.flow-like.com](https://docs.flow-like.com)
+- **Getting Started:** [https://docs.flow-like.com/start/first-use/](https://docs.flow-like.com/start/first-use/)
+- **ML Nodes PR:** [https://github.com/TM9657/flow-like/pull/257](https://github.com/TM9657/flow-like/pull/257)
+- **Excel Nodes Epic:** [https://github.com/TM9657/flow-like/issues/262](https://github.com/TM9657/flow-like/issues/262)
