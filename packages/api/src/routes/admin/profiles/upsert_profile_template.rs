@@ -34,6 +34,10 @@ pub async fn upsert_profile_template(
     let settings = to_value(profile_data.settings)?;
 
     if let Some(existing_profile) = profile {
+        let apps = match apps {
+            Some(apps) => Some(Value::Array(apps)),
+            None => existing_profile.apps.clone(),
+        };
         let mut updated_profile: template_profile::ActiveModel = existing_profile.into();
         updated_profile.name = Set(profile_data.name.clone());
         updated_profile.description = Set(profile_data.description.clone());
@@ -52,6 +56,7 @@ pub async fn upsert_profile_template(
         return Ok(Json(Profile::from(updated_profile)));
     }
 
+    let apps = apps.map(|apps| Value::Array(apps));
     let new_profile = template_profile::ActiveModel {
         id: Set(create_id()),
         name: Set(profile_data.name),

@@ -39,7 +39,7 @@ model Swimlane {
 
   // these are used to find items for the swimlane that are not fixed
   tags String[]
-  index Int
+  index BigInt
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -51,7 +51,7 @@ model SwimlaneItem {
   swimlane Swimlane @relation(fields: [swimlaneId], references: [id], onDelete: Cascade)
   swimlaneId String
 
-  order Int
+  order BigInt
 
   // This could be a link to a different page / article / ... depending on the Type of Swimlane
   content Json?

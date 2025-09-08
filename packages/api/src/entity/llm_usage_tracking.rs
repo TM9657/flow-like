@@ -11,9 +11,9 @@ pub struct Model {
     #[sea_orm(column_name = "modelId", column_type = "Text")]
     pub model_id: String,
     #[sea_orm(column_name = "tokenIn")]
-    pub token_in: i32,
+    pub token_in: i64,
     #[sea_orm(column_name = "tokenOut")]
-    pub token_out: i32,
+    pub token_out: i64,
     #[sea_orm(column_type = "Double", nullable)]
     pub latency: Option<f64>,
     #[sea_orm(column_name = "userId", column_type = "Text", nullable)]

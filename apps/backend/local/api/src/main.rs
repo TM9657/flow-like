@@ -89,7 +89,6 @@ fn create_listener<A: ToSocketAddrs>(
     };
 
     listener.set_nonblocking(true)?;
-    listener.set_nodelay(true)?;
     listener.set_reuse_address(true)?;
     listener.set_linger(Some(Duration::from_secs(0)))?;
     listener.bind(&addr.into())?;

@@ -65,7 +65,7 @@ model Profile {
     settings Json?
 
     // JSON with the apps that are part of the profile. Contains the app ID, if it is favorite, pinned and position of the two
-    apps   Json[]
+    apps   Json?
     bitIds String[]
     hub    String
     hubs   String[]
@@ -112,8 +112,8 @@ model LLMUsageTracking {
     id String @id
 
     modelId  String
-    tokenIn  Int
-    tokenOut Int
+    tokenIn  BigInt
+    tokenOut BigInt
 
     latency Float?
 

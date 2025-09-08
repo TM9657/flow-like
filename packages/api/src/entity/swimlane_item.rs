@@ -10,7 +10,7 @@ pub struct Model {
     pub id: String,
     #[sea_orm(column_name = "swimlaneId", column_type = "Text")]
     pub swimlane_id: String,
-    pub order: i32,
+    pub order: i64,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub content: Option<Json>,
     #[sea_orm(column_name = "bitId", column_type = "Text", nullable)]

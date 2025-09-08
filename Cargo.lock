@@ -8028,7 +8028,7 @@ dependencies = [
  "oasgen",
  "sentry",
  "sentry-tracing",
- "socket2 0.5.10",
+ "socket2 0.6.0",
  "tracing",
  "tracing-subscriber",
 ]

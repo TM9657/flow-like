@@ -53,6 +53,7 @@ pub async fn upsert_app(
     let now = chrono::Utc::now().naive_utc();
 
     if let (Some(app), Some(app_updates)) = (&app, &app_body.app) {
+        println!("App exists, updating");
         let sub = user.app_permission(&app_id, &state).await?;
         if !sub.has_permission(RolePermissions::Owner) {
             return Err(ApiError::Forbidden);
@@ -95,16 +96,19 @@ pub async fn upsert_app(
 
     // Somehow the user sent an app body without an app, which is not allowed for existing apps.
     if app.is_some() {
+        println!("App exists, but no app body was provided");
         return Err(ApiError::Forbidden);
     }
 
     let Some(metadata) = app_body.meta else {
+        println!("No meta provided for new app");
         return Err(ApiError::InternalError(
             anyhow!("Meta is required for new apps").into(),
         ));
     };
 
     if tier.max_non_visible_projects == 0 {
+        println!("Tier does not allow creating new apps");
         return Err(ApiError::Forbidden);
     }
 
@@ -119,10 +123,13 @@ pub async fn upsert_app(
             )
             // Owner Permission is 1, so we filter out roles that have Owner permission
             .filter(role::Column::Permissions.eq(1))
+            .filter(membership::Column::UserId.eq(&sub))
             .count(&state.db)
             .await?;
 
+        println!("User is fine creating project, user ({}) has {} and max is {}", sub, count, tier.max_non_visible_projects);
         if count >= tier.max_non_visible_projects as u64 {
+            println!("Tier does not allow creating more non-visible apps, user ({}) has {} and max is {}", sub, count, tier.max_non_visible_projects);
             return Err(ApiError::Forbidden);
         }
     }
@@ -148,6 +155,7 @@ pub async fn upsert_app(
         new_app
     };
 
+    println!("Created new app with id {}", new_id);
     let _app = state
         .db
         .transaction::<_, app::Model, DbErr>(|txn| {

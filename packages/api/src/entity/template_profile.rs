@@ -22,7 +22,6 @@ pub struct Model {
     pub theme: Option<Json>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub settings: Option<Json>,
-    pub apps: Option<Vec<Json>>,
     #[sea_orm(column_name = "bitIds")]
     pub bit_ids: Option<Vec<String>>,
     #[sea_orm(column_type = "Text")]
@@ -32,6 +31,8 @@ pub struct Model {
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]
     pub updated_at: DateTime,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub apps: Option<Json>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
