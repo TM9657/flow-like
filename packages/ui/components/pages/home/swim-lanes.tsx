@@ -57,16 +57,19 @@ function useSwimlanes() {
 	return useQuery<ISwimlane[]>({
 		queryKey: ["swimlanes"],
 		queryFn: async () => {
-			const res = await fetch(swimlanesUrl);
+			const res = await fetch(swimlanesUrl, {
+				cache: "no-cache"
+			});
 			if (!res.ok) throw new Error("Failed to fetch swimlanes");
 			return res.json();
 		},
 		retry: 1,
-		refetchOnWindowFocus: false,
+		refetchOnWindowFocus: true,
 		refetchOnReconnect: true,
-		staleTime: 5 * 60 * 1000,
-		gcTime: Number.POSITIVE_INFINITY,
-		placeholderData: (previousData) => previousData,
+		refetchOnMount: "always",
+		staleTime: 1000 * 60 * 60,
+		gcTime: 1000 * 60 * 60 * 24 * 7,
+		placeholderData: (prev) => prev,
 		networkMode: "offlineFirst",
 	});
 }
