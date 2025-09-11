@@ -202,6 +202,68 @@
 	--pin-generic: var(--pin-generic);
 	--pin-date: var(--pin-date);
 	--pin-pathbuf: var(--pin-pathbuf);
+
+	--shadow-floating: rgba(16, 16, 16, 0.06) 0px 0px 0px 1px,
+    rgba(16, 16, 16, 0.11) 0px 3px 7px, rgba(16, 16, 16, 0.21) 0px 9px 25px;
+  --shadow-toolbar: rgba(0, 0, 0, 0.08) 0px 16px 24px 0px,
+    rgba(0, 0, 0, 0.1) 0px 2px 6px 0px, rgba(0, 0, 0, 0.1) 0px 0px 1px 0px;
+
+  --animate-ai-bounce: ai-bounce 0.4s infinite;
+  --animate-popover: popover 100ms ease-in;
+  --animate-pulse: pulse var(--duration) ease-out infinite;
+  --animate-shimmer: shimmer 1s linear infinite;
+  --animate-zoom: zoom 100ms ease-in;
+
+  @keyframes ai-bounce {
+    0%,
+    100% {
+      animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+      transform: translateY(20%);
+    }
+    50% {
+      animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+      transform: translateY(-20%);
+    }
+  }
+
+  @keyframes popover {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 var(--pulse-color);
+    }
+    50% {
+      box-shadow: 0 0 0 8px var(--pulse-color);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-150%);
+    }
+    100% {
+      transform: translateX(150%);
+    }
+  }
+
+  @keyframes zoom {
+    0% {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
 }
 
 @layer base {
@@ -397,6 +459,146 @@
 	p {
 		line-height: 1.75rem;
 	}
+
+	/* ===========================
+   highlight.js theme (scoped)
+   =========================== */
+.codeblock code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 0;          /* pre has the padding */
+  background: transparent;
+  color: inherit;
+  line-height: normal;
+}
+
+/* Insertions / deletions (diff) */
+.codeblock .hljs-inserted {
+  background: #f0fff4;
+  color: #22863a;
+}
+.codeblock .hljs-deletion {
+  background: #ffeef0;
+  color: #b31d28;
+}
+
+/* Comments / meta-ish */
+.codeblock .hljs-comment,
+.codeblock .hljs-code,
+.codeblock .hljs-formula {
+  color: #6a737d;
+}
+
+/* Numbers / operators / attrs / ids / variables */
+.codeblock .hljs-attr,
+.codeblock .hljs-attribute,
+.codeblock .hljs-literal,
+.codeblock .hljs-meta,
+.codeblock .hljs-number,
+.codeblock .hljs-operator,
+.codeblock .hljs-selector-attr,
+.codeblock .hljs-selector-class,
+.codeblock .hljs-selector-id,
+.codeblock .hljs-variable {
+  color: #005cc5;
+}
+
+/* Builtins / symbols */
+.codeblock .hljs-built_in,
+.codeblock .hljs-symbol {
+  color: #e36209;
+}
+
+/* Bullets */
+.codeblock .hljs-bullet {
+  color: #735c0f;
+}
+
+/* Keywords / types / doctags / template vars */
+.codeblock .hljs-keyword,
+.codeblock .hljs-doctag,
+.codeblock .hljs-type,
+.codeblock .hljs-template-tag,
+.codeblock .hljs-template-variable,
+.codeblock .hljs-variable.language_ {
+  color: #d73a49;
+}
+
+/* Tags / names / pseudos */
+.codeblock .hljs-name,
+.codeblock .hljs-quote,
+.codeblock .hljs-selector-tag,
+.codeblock .hljs-selector-pseudo {
+  color: #22863a;
+}
+
+/* Strings / regex / meta strings */
+.codeblock .hljs-string,
+.codeblock .hljs-regexp,
+.codeblock .hljs-meta .hljs-string {
+  color: #032f62;
+}
+
+/* Sections / headings */
+.codeblock .hljs-section {
+  font-weight: 700;
+  color: #005cc5;
+}
+
+/* Titles / functions / classes */
+.codeblock .hljs-title,
+.codeblock .hljs-title.class_,
+.codeblock .hljs-title.class_.inherited__,
+.codeblock .hljs-title.function_ {
+  color: #6f42c1;
+}
+
+/* Strong / emphasis */
+.codeblock .hljs-strong { font-weight: 700; }
+.codeblock .hljs-emphasis { font-style: italic; }
+
+/* =========
+   Dark mode
+   ========= */
+.dark .codeblock .hljs-inserted { background: #3c5743; color: #ceead5; }
+.dark .codeblock .hljs-deletion  { background: #473235; color: #e7c7cb; }
+
+.dark .codeblock .hljs-attr,
+.dark .codeblock .hljs-attribute,
+.dark .codeblock .hljs-literal,
+.dark .codeblock .hljs-meta,
+.dark .codeblock .hljs-number,
+.dark .codeblock .hljs-operator,
+.dark .codeblock .hljs-selector-attr,
+.dark .codeblock .hljs-selector-class,
+.dark .codeblock .hljs-selector-id,
+.dark .codeblock .hljs-variable { color: #6596cf; }
+
+.dark .codeblock .hljs-built_in,
+.dark .codeblock .hljs-symbol { color: #c3854e; }
+
+.dark .codeblock .hljs-keyword,
+.dark .codeblock .hljs-doctag,
+.dark .codeblock .hljs-type,
+.dark .codeblock .hljs-template-tag,
+.dark .codeblock .hljs-template-variable,
+.dark .codeblock .hljs-variable.language_ { color: #ee6960; }
+
+.dark .codeblock .hljs-name,
+.dark .codeblock .hljs-quote,
+.dark .codeblock .hljs-selector-tag,
+.dark .codeblock .hljs-selector-pseudo { color: #36a84f; }
+
+.dark .codeblock .hljs-string,
+.dark .codeblock .hljs-regexp,
+.dark .codeblock .hljs-meta .hljs-string { color: #3593ff; }
+
+.dark .codeblock .hljs-section { color: #61a5f2; }
+.dark .codeblock .hljs-title,
+.dark .codeblock .hljs-title.class_,
+.dark .codeblock .hljs-title.class_.inherited__,
+.dark .codeblock .hljs-title.function_ { color: #a77bfa; }
+
 }
 
 .react-flow__nodesselection-rect {
@@ -474,3 +676,4 @@
 		}
 	}
 }
+
