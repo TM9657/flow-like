@@ -243,6 +243,7 @@ impl NodeLogic for SimpleAgentNode {
                             tool_call_id: None,
                             tool_calls: None,
                             name: None,
+                            annotations: None,
                         };
                         internal_history.messages.push(message);
                     }
@@ -392,6 +393,7 @@ impl NodeLogic for SimpleAgentNode {
                 name: None,
                 tool_call_id: None,
                 tool_calls: Some(tool_calls),
+                annotations: None,
             };
             internal_history.messages.push(ai_message);
         }

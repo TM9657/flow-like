@@ -215,7 +215,9 @@ impl OpenAIClient {
 
         let mut request = client
             .request(method, url)
-            .header("Authorization", format!("Bearer {}", self.api_key));
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("HTTP-Referer", "flow-like.com")
+            .header("X-Title", "Flow-Like");
 
         if let Some(organization) = &self.organization {
             request = request.header("openai-organization", organization);
@@ -413,7 +415,7 @@ impl OpenAIClient {
                 let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
                     Ok(chunk) => chunk,
                     Err(e) => {
-                        eprintln!("Failed to parse chunk: {}", e);
+                        eprintln!("Failed to parse chunk: {}, data: {}", e, data);
                         continue;
                     }
                 };

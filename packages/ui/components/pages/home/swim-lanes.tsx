@@ -1,8 +1,8 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { ArrowRight, ExternalLink } from "lucide-react";
 import { useInvoke } from "../../../hooks";
-import type { IApp, IAppCategory } from "../../../lib";
+import { IAppVisibility, type IApp, type IAppCategory, type IMetadata } from "../../../lib";
 import type { IAppSearchSort } from "../../../lib/schema/app/app-search-query";
 import { type IBackendState, useBackend } from "../../../state/backend-state";
 import {
@@ -14,6 +14,11 @@ import {
 	Skeleton,
 } from "../../ui";
 import { AppCard } from "../../ui/app-card";
+import { useRouter } from "next/navigation";
+import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { toast } from "sonner";
+
+type IAppQuery = UseQueryResult<[IApp, IMetadata | undefined][], Error>
 
 export interface ISwimlaneItem {
 	id: string;
@@ -77,6 +82,7 @@ function useSwimlanes() {
 export function HomeSwimlanes() {
 	const backend = useBackend();
 	const apps = useInvoke(backend.appState.getApps, backend.appState, []);
+	const router = useRouter()
 	const { data, error } = useSwimlanes();
 
 	if (error) {
@@ -131,7 +137,8 @@ export function HomeSwimlanes() {
 					<SwimlaneSection
 						key={swimlane.id}
 						swimlane={swimlane}
-						apps={apps.data?.map((i) => i[0]) ?? []}
+						apps={apps}
+						router={router}
 					/>
 				))}
 			</div>
@@ -142,7 +149,8 @@ export function HomeSwimlanes() {
 function SwimlaneSection({
 	swimlane,
 	apps,
-}: Readonly<{ swimlane: ISwimlane; apps: IApp[] }>) {
+	router
+}: Readonly<{ swimlane: ISwimlane; apps: IAppQuery; router: AppRouterInstance }>) {
 	const getGridCols = () => {
 		switch (swimlane.size) {
 			case "large":
@@ -175,6 +183,7 @@ function SwimlaneSection({
 						size={swimlane.size}
 						variant={getItemSize()}
 						apps={apps}
+						router={router}
 					/>
 				))}
 			</div>
@@ -187,11 +196,13 @@ function SwimlaneSlot({
 	size,
 	variant,
 	apps,
+	router
 }: Readonly<{
 	items: (ISwimlaneItem | ISearchQuery)[];
 	size: "large" | "medium" | "small";
 	variant: "extended" | "small";
-	apps: IApp[];
+	apps: IAppQuery;
+	router: AppRouterInstance;
 }>) {
 	if (items.length === 1) {
 		return (
@@ -200,6 +211,7 @@ function SwimlaneSlot({
 				size={size}
 				variant={variant}
 				apps={apps}
+				router={router}
 			/>
 		);
 	}
@@ -218,6 +230,7 @@ function SwimlaneSlot({
 						size={size}
 						variant={variant}
 						apps={apps}
+						router={router}
 					/>
 				</div>
 			))}
@@ -230,11 +243,13 @@ function SwimlaneItemOrSearch({
 	size,
 	variant,
 	apps,
+	router
 }: Readonly<{
 	item: ISwimlaneItem | ISearchQuery;
 	size: "large" | "medium" | "small";
 	variant: "extended" | "small";
-	apps: IApp[];
+	apps: IAppQuery;
+	router: AppRouterInstance;
 }>) {
 	if (item.type === "search") {
 		return (
@@ -243,11 +258,12 @@ function SwimlaneItemOrSearch({
 				size={size}
 				variant={variant}
 				apps={apps}
+				router={router}
 			/>
 		);
 	}
 
-	return <SwimlaneItem item={item} size={size} variant={variant} apps={apps} />;
+	return <SwimlaneItem item={item} size={size} variant={variant} apps={apps} router={router} />;
 }
 
 function SearchResults({
@@ -255,11 +271,13 @@ function SearchResults({
 	size,
 	variant,
 	apps,
+	router
 }: Readonly<{
 	searchQuery: ISearchQuery;
 	size: "large" | "medium" | "small";
 	variant: "extended" | "small";
-	apps: IApp[];
+	apps: IAppQuery;
+	router: AppRouterInstance;
 }>) {
 	const backend = useBackend();
 	const searchResults = useInvoke(
@@ -314,7 +332,7 @@ function SearchResults({
 		<div className={scrollClass}>
 			{searchItems.map((item) => (
 				<div key={item.id} className={isHorizontal ? "grow w-full" : ""}>
-					<SwimlaneItem item={item} size={size} variant={variant} apps={apps} />
+					<SwimlaneItem item={item} size={size} variant={variant} apps={apps} router={router} />
 				</div>
 			))}
 		</div>
@@ -324,7 +342,7 @@ function SearchResults({
 function SwimlaneHeader({
 	swimlane,
 	apps,
-}: Readonly<{ swimlane: ISwimlane; apps: IApp[] }>) {
+}: Readonly<{ swimlane: ISwimlane; apps: IAppQuery }>) {
 	return (
 		<div className="flex items-center justify-between">
 			<div className="space-y-1">
@@ -353,11 +371,13 @@ function SwimlaneItem({
 	size,
 	variant,
 	apps,
+	router
 }: Readonly<{
 	item: ISwimlaneItem;
 	size: "large" | "medium" | "small";
 	variant: "extended" | "small";
-	apps: IApp[];
+	apps: IAppQuery;
+	router: AppRouterInstance;
 }>) {
 	const backend = useBackend();
 
@@ -368,6 +388,7 @@ function SwimlaneItem({
 				variant={variant}
 				backend={backend}
 				apps={apps}
+				router={router}
 			/>
 		);
 	}
@@ -479,11 +500,13 @@ function AppCardLoading({
 	variant,
 	backend,
 	apps,
+	router
 }: Readonly<{
 	appId: string;
 	backend: IBackendState;
 	variant: "small" | "extended";
-	apps: IApp[];
+	apps: UseQueryResult<[IApp, IMetadata | undefined][], Error>;
+	router: AppRouterInstance;
 }>) {
 	const app = useInvoke(backend.appState.searchApps, backend.appState, [appId]);
 
@@ -500,11 +523,16 @@ function AppCardLoading({
 
 	return (
 		<AppCard
-			apps={apps}
+			apps={apps.data?.map((i) => i[0]) ?? []}
 			app={data}
 			metadata={meta}
 			variant={variant}
 			className={"w-full max-w-full h-full flex grow"}
+			onClick={async () => {
+				const hasAccess = apps.data?.find((a) => a[0].id === data.id)
+				if(hasAccess) return router.push(`/use?id=${data.id}`)
+				return router.push(`/store?id=${data.id}`)
+			}}
 		/>
 	);
 }

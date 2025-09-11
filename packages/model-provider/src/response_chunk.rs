@@ -1,4 +1,4 @@
-use super::response::{FunctionCall, LogProbs, Usage};
+use super::response::{LogProbs, Usage};
 use flow_like_types::JsonSchema;
 use flow_like_types::serde::{Deserialize, Serialize};
 
@@ -46,7 +46,27 @@ pub struct Delta {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<FunctionCall>>,
+    pub tool_calls: Option<Vec<DeltaFunctionCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refusal: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct DeltaFunctionCall {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(rename = "type")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_type: Option<String>,
+    pub function: DeltaResponseFunction,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct DeltaResponseFunction {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<String>,
 }

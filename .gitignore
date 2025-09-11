@@ -63,3 +63,4 @@ next-env.d.ts
 .env
 .VSCodeCounter
 .cargo/config.toml
+.codacy/codacy.yaml

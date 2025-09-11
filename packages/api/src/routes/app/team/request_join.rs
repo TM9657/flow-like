@@ -53,7 +53,7 @@ pub async fn request_join(
         .clone()
         .ok_or_else(|| ApiError::NotFound)?;
 
-    if app.visibility == Visibility::Public {
+    if app.visibility == Visibility::Public && app.price <= 0 {
         let membership = membership::ActiveModel {
             id: Set(create_id()),
             user_id: Set(sub.clone()),
@@ -69,7 +69,7 @@ pub async fn request_join(
         return Ok(Json(()));
     }
 
-    if app.visibility != Visibility::PublicRequestAccess {
+    if !matches!(app.visibility, Visibility::PublicRequestAccess | Visibility::Public) {
         tracing::warn!(
             "User {} is trying to join app {} but the app is not public",
             sub,
