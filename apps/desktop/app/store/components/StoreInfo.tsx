@@ -16,7 +16,7 @@ export function InfoGrid({ app, meta }: Readonly<{ app: IApp; meta: IMetadata }>
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {rows.map((r) => (
-                <div key={r.label} className="flex items-center justify-between rounded-lg border bg-card px-4 py-3">
+                <div key={r.label} className="flex items-center justify-between rounded-lg border bg-background/50 px-4 py-3">
                     <span className="text-sm text-muted-foreground">{r.label}</span>
                     <span className="text-sm font-medium truncate max-w-[60%] text-right">{r.value as any}</span>
                 </div>
