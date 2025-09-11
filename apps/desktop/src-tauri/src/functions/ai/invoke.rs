@@ -65,6 +65,7 @@ pub async fn predict(
         name: None,
         tool_call_id: None,
         tool_calls: None,
+        annotations: None,
     });
 
     history.set_stream(true);

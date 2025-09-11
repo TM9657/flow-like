@@ -548,4 +548,20 @@ export class AppState implements IAppState {
 			);
 		}
 	}
+
+	async requestJoinApp(appId: string, comment?: string): Promise<void> {
+		if (this.backend.profile && this.backend.auth && this.backend.queryClient) {
+			await fetcher<IApp>(
+				this.backend.profile,
+				`apps/${appId}/team/queue`,
+				{
+					method: "PUT",
+					body: JSON.stringify({
+						comment: comment,
+					}),
+				},
+				this.backend.auth,
+			);
+		}
+	}
 }
