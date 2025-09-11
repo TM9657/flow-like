@@ -531,34 +531,7 @@ function AppCardLoading({
 			onClick={async () => {
 				const hasAccess = apps.data?.find((a) => a[0].id === data.id)
 				if(hasAccess) return router.push(`/use?id=${data.id}`)
-
-				try {
-					if(data.price && data.price > 0) {
-						await backend.appState.requestJoinApp(data.id, "Interested in trying out your app!")
-						toast.success("Request to join app sent! The author will review your request.")
-						await apps.refetch()
-						return;
-					}
-
-					if(data.visibility === IAppVisibility.PublicRequestAccess) {
-						await backend.appState.requestJoinApp(data.id, "Interested in trying out your app!")
-						toast.success("Request to join app sent! The author will review your request.")
-						await apps.refetch()
-						return;
-					}
-
-					if(data.visibility !== IAppVisibility.Public) {
-						toast.error("You don't have access to this app. Please request access from the author.")
-						return;
-					}
-
-					await backend.appState.requestJoinApp(data.id, "Interested in trying out your app!")
-					toast.success("Joined app! You can now access it.")
-					await apps.refetch()
-					await router.push(`/use?id=${data.id}`)
-				} catch(e) {
-					toast.error("Failed to request to join app. Please try again later.")
-				}
+				return router.push(`/store?id=${data.id}`)
 			}}
 		/>
 	);

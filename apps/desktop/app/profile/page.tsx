@@ -30,7 +30,7 @@ import {
 	Sparkles,
 	User,
 } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 
 const ProfileSkeleton = () => (
@@ -98,6 +98,7 @@ const ProfileContent = ({
 	isAppsLoading: boolean;
 	appsError: Error | null;
 }) => {
+	const router = useRouter()
 	const displayName =
 		user.name || user.preferred_username || user.username || "Unknown User";
 	const username = user.preferred_username || user.username;
@@ -297,6 +298,7 @@ const ProfileContent = ({
 													variant="extended"
 													metadata={metadata}
 													className="w-full"
+													onClick={() => router.push(`/store?id=${app.id}`)}
 												/>
 											))}
 										</div>
