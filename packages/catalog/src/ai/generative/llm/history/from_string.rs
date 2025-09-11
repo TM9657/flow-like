@@ -73,6 +73,7 @@ impl NodeLogic for HistoryFromStringNode {
                 name: None,
                 tool_call_id: None,
                 tool_calls: None,
+                annotations: None,
             }],
         );
 

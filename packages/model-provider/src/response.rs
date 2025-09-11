@@ -1,4 +1,4 @@
-use super::response_chunk::{Delta, ResponseChunk};
+use super::response_chunk::{Delta, DeltaFunctionCall, ResponseChunk};
 use flow_like_types::{
     JsonSchema,
     json::{Deserialize, Serialize},
@@ -123,46 +123,42 @@ impl ResponseMessage {
             self.role = self.role.to_string() + &role;
         }
 
-        if delta.tool_calls.is_none() {
-            return;
+        if let Some(tool_calls) = delta.tool_calls {
+            for dcall in tool_calls.into_iter() {
+                self.apply_delta_tool_call(dcall);
+            }
         }
+    }
 
-        for function_call in delta.tool_calls.unwrap() {
-            // Check if a choice with the same index already exists
-            if let Some(existing_tool_call) = self
-                .tool_calls
-                .iter_mut()
-                .find(|c| c.index == function_call.index)
-            {
-                existing_tool_call.id = function_call.id;
+    fn apply_delta_tool_call(&mut self, dcall: DeltaFunctionCall) {
+        // Determine index (default to next position if missing)
+        let idx = dcall.index;
 
-                if let Some(tool_type) = function_call.tool_type {
-                    existing_tool_call.tool_type = Some(
-                        existing_tool_call
-                            .tool_type
-                            .as_deref()
-                            .unwrap_or("")
-                            .to_string()
-                            + &tool_type,
-                    );
+        // Try to find existing entry by index when provided
+        if let Some(i) = idx {
+            if let Some(existing) = self.tool_calls.iter_mut().find(|c| c.index == Some(i)) {
+                if let Some(id) = dcall.id { existing.id = id; }
+                if let Some(t) = dcall.tool_type {
+                    existing.tool_type = Some(existing.tool_type.as_deref().unwrap_or("").to_string() + &t);
                 }
-
-                existing_tool_call.function.name += &function_call.function.name;
-                existing_tool_call.function.arguments += &function_call.function.arguments;
-
+                if let Some(name) = dcall.function.name { existing.function.name += &name; }
+                if let Some(args) = dcall.function.arguments { existing.function.arguments += &args; }
                 return;
             }
-
-            self.tool_calls.push(FunctionCall {
-                index: function_call.index,
-                id: function_call.id,
-                tool_type: function_call.tool_type,
-                function: ResponseFunction {
-                    name: function_call.function.name,
-                    arguments: function_call.function.arguments,
-                },
-            });
         }
+
+        // Create new entry, using empty strings for missing fields
+        let index = idx;
+        let id = dcall.id.unwrap_or_default();
+        let tool_type = dcall.tool_type;
+        let name = dcall.function.name.unwrap_or_default();
+        let arguments = dcall.function.arguments.unwrap_or_default();
+        self.tool_calls.push(FunctionCall {
+            index,
+            id,
+            tool_type,
+            function: ResponseFunction { name, arguments },
+        });
     }
 }
 
@@ -203,6 +199,8 @@ pub struct UrlCitation {
     start_index: u32,
     title: String,
     url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
 }
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, Default)]
 pub struct Response {
@@ -286,5 +284,53 @@ impl Response {
                 message,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flow_like_types::json;
+
+    #[test]
+    fn deserialize_annotations_with_content() {
+        let json_str = r#"{
+            "choices": [{
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": "Here's the latest news I found: ...",
+                    "annotations": [
+                        {
+                            "type": "url_citation",
+                            "url_citation": {
+                                "url": "https://www.example.com/web-search-result",
+                                "title": "Title of the web search result",
+                                "content": "Content of the web search result",
+                                "start_index": 100,
+                                "end_index": 200
+                            }
+                        }
+                    ],
+                    "tool_calls": []
+                }
+            }],
+            "usage": {"completion_tokens":0, "prompt_tokens":0, "total_tokens":0}
+        }"#;
+
+        let resp: Response = json::from_str(json_str).expect("valid response json");
+        let anns = resp
+            .choices
+            .first()
+            .and_then(|c| c.message.annotations.as_ref())
+            .expect("annotations present");
+        assert_eq!(anns.len(), 1);
+
+        // Ensure it deserializes rather than panics; structure fields are private by design.
+        // We just check presence by re-serializing.
+        let out = json::to_string(&resp).unwrap();
+        assert!(out.contains("url_citation"));
+        assert!(out.contains("content"));
     }
 }

@@ -415,7 +415,7 @@ impl OpenAIClient {
                 let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
                     Ok(chunk) => chunk,
                     Err(e) => {
-                        eprintln!("Failed to parse chunk: {}", e);
+                        eprintln!("Failed to parse chunk: {}, data: {}", e, data);
                         continue;
                     }
                 };
