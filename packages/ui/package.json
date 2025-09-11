@@ -116,6 +116,7 @@
 		"react-day-picker": "8.10.1",
 		"react-dnd": "^16.0.1",
 		"react-dnd-html5-backend": "^16.0.1",
+		"react-dnd-touch-backend": "^16.0.1",
 		"react-dom": "^19.0.0",
 		"react-element-to-jsx-string": "^15.0.0",
 		"react-i18next": "^15.4.0",
