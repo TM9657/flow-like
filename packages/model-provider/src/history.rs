@@ -200,6 +200,8 @@ pub struct History {
     pub model: String,
     pub messages: Vec<HistoryMessage>,
 
+    pub preset: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
 
@@ -248,6 +250,7 @@ impl History {
         Self {
             model,
             messages,
+            preset: None,
             stream: Some(true),
             stream_options: None,
             max_completion_tokens: None,

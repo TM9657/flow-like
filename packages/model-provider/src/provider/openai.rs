@@ -215,7 +215,9 @@ impl OpenAIClient {
 
         let mut request = client
             .request(method, url)
-            .header("Authorization", format!("Bearer {}", self.api_key));
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("HTTP-Referer", "flow-like.com")
+            .header("X-Title", "Flow-Like");
 
         if let Some(organization) = &self.organization {
             request = request.header("openai-organization", organization);
