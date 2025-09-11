@@ -21,7 +21,7 @@ flow-like-model-provider.workspace = true
 flow-like-storage.workspace = true
 rayon = "1.11.0"
 portpicker = "0.1.1"
-dirs-next = "2.0.0"
+dirs-next.workspace = true
 sysinfo = "0.37.0"
 mime_guess = "2.0.5"
 image = "0.25.6"
@@ -45,13 +45,6 @@ flate2 = { version = "1.1.2", default-features = false, features = ["rust_backen
 chacha20poly1305 = {version="0.10.1", features=["stream", "std"]}
 argon2 = "0.5.3"
 zeroize = "1.8.1"
-
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
-
-[[bench]]
-name = "flow_bench"
-harness = false
 
 [features]
 tauri = ["flow-like-storage/tauri"]

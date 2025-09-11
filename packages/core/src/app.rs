@@ -228,12 +228,12 @@ impl App {
             .await?
             .as_generic();
 
-        let vault: flow_like_types::proto::App =
+        let app: flow_like_types::proto::App =
             from_compressed(store, storage_root.child("manifest.app")).await?;
-        let mut vault = App::from_proto(vault);
-        vault.app_state = Some(app_state.clone());
+        let mut app = App::from_proto(app);
+        app.app_state = Some(app_state.clone());
 
-        Ok(vault)
+        Ok(app)
     }
 
     pub fn calculate_relevance_score(&mut self) -> f64 {

@@ -69,6 +69,9 @@ article > :last-child,
 	list-style-position: outside;
 	list-style-type: disc;
 }
+:where(article, .prose) ol {
+	list-style-type: decimal;
+}
 :where(article, .prose) li {
 	margin-block: 0.35em;
 }
@@ -188,4 +191,11 @@ article > :last-child,
 /* Anchor target offset for fixed headers */
 :where(article, .prose) :is(h1, h2, h3, h4, h5, h6, [id]) {
 	scroll-margin-top: 6rem;
+}
+
+:where(article, .prose) :is(code) {
+	background-color: var(--muted);
+	color: var(--muted-foreground);
+	border: 1px solid var(--border);
+	border-radius: 0.25rem;
 }

@@ -16,8 +16,9 @@ use flow_like_types::{sync::Mutex, tokio::time::interval};
 use serde_json::json;
 use settings::Settings;
 use state::TauriFlowLikeState;
+use tauri_plugin_updater::UpdaterExt;
 use std::{sync::Arc, time::Duration};
-use tauri::{AppHandle, Manager};
+use tauri::{window::{ProgressBarState, ProgressBarStatus}, AppHandle, Manager};
 use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
 
 #[cfg(not(debug_assertions))]
@@ -125,6 +126,12 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+
+            #[cfg(desktop)]
+            if let Err(e) = app.handle().plugin(tauri_plugin_updater::Builder::new().build()) {
+                eprintln!("Failed to register updater plugin: {}", e);
+            }
+
             let relay_handle = app.app_handle().clone();
             let gc_handle = relay_handle.clone();
             let refetch_handle = relay_handle.clone();
@@ -265,6 +272,8 @@ pub fn run() {
             functions::settings::profiles::add_bit,
             functions::settings::profiles::remove_bit,
             functions::settings::profiles::get_bits_in_current_profile,
+            functions::settings::profiles::change_profile_image,
+            functions::settings::profiles::profile_update_app,
             functions::app::app_configured,
             functions::app::upsert_board,
             functions::app::delete_app_board,
@@ -288,6 +297,7 @@ pub fn run() {
             functions::app::tables::db_table_names,
             functions::app::tables::db_schema,
             functions::app::tables::db_list,
+            functions::app::tables::db_count,
             functions::app::tables::build_index,
             functions::app::tables::db_add,
             functions::app::tables::db_delete,
@@ -349,8 +359,12 @@ pub fn run() {
         builder = builder.plugin(tauri_plugin_devtools::init());
     }
 
+    let context: tauri::Context<_> = std::thread::spawn(|| tauri::generate_context!())
+        .join()
+        .expect("context thread");
+
     builder
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 
@@ -376,26 +390,54 @@ fn handle_deep_link(app: &AppHandle, event: OpenUrlEvent) {
 
 #[tauri::command(async)]
 async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
-    // LEADS TO CRASHES (MAIN OVERFLOW) ON WINDOWS
-    // if let Some(update) = app_handle.updater()?.check().await? {
-    //     let mut downloaded = 0;
+    if let Some(update) = app_handle.updater()?.check().await? {
+        // get the window once
+        if let Some(win) = app_handle.get_webview_window("main") {
+            // initial indeterminate
+            let _ = win.set_progress_bar(ProgressBarState {
+                status: Some(ProgressBarStatus::Indeterminate),
+                progress: None,
+            });
 
-    //     // alternatively we could also call update.download() and update.install() separately
-    //     update
-    //         .download_and_install(
-    //             |chunk_length, content_length| {
-    //                 downloaded += chunk_length;
-    //                 println!("downloaded {downloaded} from {content_length:?}");
-    //             },
-    //             || {
-    //                 println!("download finished");
-    //             },
-    //         )
-    //         .await?;
+            let mut downloaded: u64 = 0;
 
-    //     println!("update installed");
-    //     app_handle.restart();
-    // }
+            // clone for each closure to avoid "moved value" error
+            let progress_win = win.clone();
+            let done_win = win.clone();
+
+            update
+                .download_and_install(
+                    move |chunk_len, content_len| {
+                        downloaded += chunk_len as u64;
+
+                        if let Some(total) = content_len.map(|v| v as u64) {
+                            let pct = ((downloaded as f64 / total as f64) * 100.0)
+                                .clamp(0.0, 100.0) as u64;
+
+                            let _ = progress_win.set_progress_bar(ProgressBarState {
+                                status: Some(ProgressBarStatus::Normal),
+                                progress: Some(pct), // 0..=100
+                            });
+                        } else {
+                            let _ = progress_win.set_progress_bar(ProgressBarState {
+                                status: Some(ProgressBarStatus::Indeterminate),
+                                progress: None,
+                            });
+                        }
+                    },
+                    move || {
+                        // clear when finished
+                        let _ = done_win.set_progress_bar(ProgressBarState {
+                            status: Some(ProgressBarStatus::None),
+                            progress: None,
+                        });
+                    },
+                )
+                .await?;
+        }
+
+        app_handle.restart();
+    }
 
     Ok(())
 }

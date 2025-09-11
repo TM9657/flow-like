@@ -98,7 +98,7 @@ model TemplateProfile {
   settings Json?
 
   // JSON with the apps that are part of the profile. Contains the app ID, if it is favorite, pinned and position of the two
-  apps Json[]
+  apps Json?
   bitIds String[]
   hub String
   hubs String[]

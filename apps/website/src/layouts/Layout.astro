@@ -2,6 +2,7 @@
 import "@tm9657/flow-like-ui/global.css";
 import { Header } from "../components/header";
 import { Footer } from "../components/footer";
+import PostHog from "../components/posthog.astro";
 
 const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
 const canonical = new URL(Astro.url.pathname, site).toString();
@@ -47,6 +48,7 @@ const cover = "/og.png";
 
 		<!-- Extra -->
 		<meta name="keywords" content="workflow automation, enterprise automation, orchestration, flow-like, AI automation" />
+		<PostHog />
 	</head>
 	<body>
 		<Header/>

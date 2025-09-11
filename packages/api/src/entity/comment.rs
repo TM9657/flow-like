@@ -10,7 +10,7 @@ pub struct Model {
     pub id: String,
     #[sea_orm(column_type = "Text")]
     pub text: String,
-    pub rating: i32,
+    pub rating: i64,
     #[sea_orm(column_name = "userId", column_type = "Text")]
     pub user_id: String,
     #[sea_orm(column_name = "createdAt")]

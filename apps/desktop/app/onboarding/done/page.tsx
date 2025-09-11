@@ -12,13 +12,13 @@ export default function DonePage() {
 		<main>
 			<Crossfire autorun={{ speed: 1 }} />
 			<Card>
-				<CardContent className="w-full max-w-screen-md min-w-fit">
+				<CardContent className="w-full max-w-screen-md min-w-lg">
 					<CardHeader>
 						<h1>🎉 Congratulations!</h1>
 						<p>You have successfully completed the onboarding process.</p>
 					</CardHeader>
 					<Button
-						className="gap-2 w-full"
+						className="gap-2 w-full mt-6"
 						onClick={() => {
 							localStorage.setItem("onboarding-done", "true");
 							router.push("/");

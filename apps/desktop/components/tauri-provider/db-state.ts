@@ -201,4 +201,24 @@ export class DatabaseState implements IDatabaseState {
 
 		return await invoke("db_table_names", { appId });
 	}
+
+	async countItems(
+		appId: string,
+		tableName: string,
+	): Promise<number> {
+		const isOffline = await this.backend.isOffline(appId);
+
+		if (!isOffline) {
+			return await fetcher(
+				this.backend.profile!,
+				`apps/${appId}/db/${parseTableName(tableName)}/count`,
+				{
+					method: "GET",
+				},
+				this.backend.auth,
+			);
+		}
+
+		return await invoke("db_count", { appId, tableName });
+	}
 }

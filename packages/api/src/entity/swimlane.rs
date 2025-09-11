@@ -21,7 +21,7 @@ pub struct Model {
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]
     pub updated_at: DateTime,
-    pub index: i32,
+    pub index: i64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

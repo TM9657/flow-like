@@ -8,7 +8,7 @@ flow-like-api = {workspace = true, features = ["aws"]}
 flow-like-types.workspace = true
 flow-like-storage.workspace = true
 flow-like-catalog.workspace = true
-socket2 = "0.5.9"
+socket2 = "0.6.0"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 dotenv.workspace = true

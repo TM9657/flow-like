@@ -39,6 +39,8 @@ impl NodeLogic for InsertSetNode {
 
         node.add_input_pin("value", "Value", "Value to push", VariableType::Generic);
 
+        node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
+
         node.add_output_pin("set_out", "Set", "Adjusted Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
 
@@ -48,8 +50,6 @@ impl NodeLogic for InsertSetNode {
             "Was the element there before?",
             VariableType::Boolean,
         );
-
-        node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
 
         return node;
     }

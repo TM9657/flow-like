@@ -15,7 +15,7 @@ model Meta {
   thumbnail    String?
   previewMedia String[]
 
-  ageRating Int?
+  ageRating BigInt?
 
   website                    String?
   supportUrl                 String?

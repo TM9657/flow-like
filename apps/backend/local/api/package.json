@@ -4,7 +4,8 @@
 	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
-		"dev": "RUSTFLAGS='-Z threads=8' cargo +nightly watch -x run",
+		"dev": "cargo watch -x run",
+		"dev:nightly": "RUSTFLAGS='-Z threads=8' cargo +nightly watch -x run",
 		"dev:zero-downtime": "systemfd --no-pid -s http::3000 -- cargo watch -x run",
 		"build": "bun run --cwd ./apps/desktop build",
 		"build:docker": "cd ../.. && docker build -f apps/backend/docker/api/Dockerfile -t flow-like-backend ."

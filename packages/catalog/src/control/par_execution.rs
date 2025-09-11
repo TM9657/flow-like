@@ -5,17 +5,20 @@ use flow_like::{
         pin::PinOptions,
         variable::VariableType,
     },
+    num_cpus,
     state::FlowLikeState,
 };
 use flow_like_types::{async_trait, json::json, tokio};
-use futures::future::join_all;
+use futures::{FutureExt, StreamExt, future::BoxFuture, stream::FuturesUnordered};
+use std::sync::Arc;
+use tokio::sync::Semaphore;
 
 #[derive(Default)]
-pub struct ParallelExecutionNode {}
+pub struct ParallelExecutionNode;
 
 impl ParallelExecutionNode {
     pub fn new() -> Self {
-        ParallelExecutionNode {}
+        Self
     }
 }
 
@@ -35,7 +38,7 @@ impl NodeLogic for ParallelExecutionNode {
             .set_default_value(Some(json!("tasks")))
             .set_options(
                 PinOptions::new()
-                    .set_valid_values(vec!["tasks".to_string(), "threads".to_string()])
+                    .set_valid_values(vec!["tasks".into(), "threads".into()])
                     .build(),
             );
 
@@ -51,86 +54,112 @@ impl NodeLogic for ParallelExecutionNode {
             "Parallel Task Pin",
             VariableType::Execution,
         );
-
         node.add_output_pin("exec_done", "Done", "Done Pin", VariableType::Execution);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_done").await?;
+
+        let mode: String = context.evaluate_pin("thread_model").await?;
+        let use_threads = matches!(mode.as_str(), "threads");
+
         let exec_out_pins = context.get_pins_by_name("exec_out").await?;
-        let use_threads: String = context.evaluate_pin("thread_model").await?;
-        let use_threads = match use_threads.as_str() {
-            "tasks" => false,
-            "threads" => true,
-            _ => false,
-        };
-
-        let mut parallel_items = vec![];
-
-        for pin in exec_out_pins {
+        let mut to_run = Vec::new();
+        for pin in &exec_out_pins {
+            context.activate_exec_pin_ref(pin).await?;
             let nodes = pin.lock().await.get_connected_nodes().await;
             for node in nodes {
-                let context = context.create_sub_context(&node).await;
-                parallel_items.push(context);
+                let sub = context.create_sub_context(&node).await;
+                to_run.push(sub);
             }
         }
+        if to_run.is_empty() {
+            context.activate_exec_pin("exec_done").await?;
+            return Ok(());
+        }
+
+        // cap concurrency to keep stacks / memory in check
+        let max_concurrency = std::cmp::max(1, num_cpus::get());
+        let sem = Arc::new(Semaphore::new(max_concurrency));
+
+        enum TaskOutcome {
+            Ok(ExecutionContext),
+            JoinErr(String),
+        }
+
+        let mut tasks: FuturesUnordered<BoxFuture<'static, TaskOutcome>> = FuturesUnordered::new();
 
         if !use_threads {
-            let results = join_all(
-                parallel_items
-                    .into_iter()
-                    .map(|mut par_context| async move {
-                        let run = InternalNode::trigger(&mut par_context, &mut None, true).await;
-                        if let Err(err) = run {
-                            par_context.log_message(
-                                &format!("Error running node: {:?}", err),
+            // async tasks mode
+            for mut sub in to_run {
+                let sem = sem.clone();
+                tasks.push(
+                    async move {
+                        let _permit = sem.acquire().await.expect("semaphore closed");
+                        if let Err(err) = InternalNode::trigger(&mut sub, &mut None, true).await {
+                            sub.log_message(
+                                &format!("Error running node: {err:?}"),
                                 LogLevel::Error,
                             );
                         }
-                        par_context.end_trace();
-                        par_context
-                    }),
-            )
-            .await;
+                        sub.end_trace();
 
-            for completed_context in results {
-                context.push_sub_context(completed_context);
+                        TaskOutcome::Ok(sub)
+                    }
+                    .boxed(),
+                );
             }
         } else {
-            let rt_handle = tokio::runtime::Handle::current();
+            // CPU threads mode (bounded); beware small default stacks on macOS
+            let rt = tokio::runtime::Handle::current();
+            for mut sub in to_run {
+                let sem = sem.clone();
+                let h = rt.clone(); // <-- clone per iteration
 
-            let handles = parallel_items
-                .into_iter()
-                .map(|mut par_context| {
-                    let h = rt_handle.clone();
-                    tokio::task::spawn_blocking(move || {
-                        h.block_on(async move {
-                            let run =
-                                InternalNode::trigger(&mut par_context, &mut None, true).await;
-                            if let Err(err) = run {
-                                par_context.log_message(
-                                    &format!("Error running node: {:?}", err),
-                                    LogLevel::Error,
-                                );
-                            }
-                            par_context.end_trace();
-                            par_context
+                tasks.push(
+                    async move {
+                        let _permit = sem.acquire().await.expect("semaphore closed");
+
+                        match tokio::task::spawn_blocking(move || {
+                            // use the per-iter clone
+                            h.block_on(async {
+                                if let Err(err) =
+                                    InternalNode::trigger(&mut sub, &mut None, true).await
+                                {
+                                    sub.log_message(
+                                        &format!("Error running node (threads): {err:?}"),
+                                        LogLevel::Error,
+                                    );
+                                }
+                                sub.end_trace();
+                                sub
+                            })
                         })
-                    })
-                })
-                .collect::<Vec<_>>();
+                        .await
+                        {
+                            Ok(sub) => TaskOutcome::Ok(sub),
+                            Err(join_err) => TaskOutcome::JoinErr(format!("{join_err:?}")),
+                        }
+                    }
+                    .boxed(),
+                );
+            }
+        }
 
-            let results = join_all(handles).await;
-
-            for res in results {
-                match res {
-                    Ok(completed_context) => context.push_sub_context(completed_context),
-                    Err(err) => context
-                        .log_message(&format!("Thread join error: {:?}", err), LogLevel::Error),
+        // collect and push into parent; log failures on the parent
+        while let Some(outcome) = tasks.next().await {
+            match outcome {
+                TaskOutcome::Ok(mut sub) => context.push_sub_context(&mut sub),
+                TaskOutcome::JoinErr(msg) => {
+                    context.log_message(&format!("Thread join error: {msg}"), LogLevel::Error)
                 }
             }
+        }
+
+        for pin in &exec_out_pins {
+            context.deactivate_exec_pin_ref(pin).await?;
         }
 
         context.activate_exec_pin("exec_done").await?;

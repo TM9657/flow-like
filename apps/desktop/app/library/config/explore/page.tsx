@@ -75,6 +75,10 @@ function TableView({
 		appId,
 		table,
 	]);
+	const count = useInvoke(backend.dbState.countItems, backend.dbState, [
+		appId,
+		table,
+	]);
 	const [offset, setOffset] = useState(0);
 	const [limit, setLimit] = useState(25);
 	const list = useInvoke(backend.dbState.listItems, backend.dbState, [
@@ -88,6 +92,7 @@ function TableView({
 		<div className="flex flex-col h-full flex-grow max-h-full overflow-hidden">
 			{schema.data && list.data && (
 				<LanceDBExplorer
+					total={count.data}
 					tableName={table}
 					arrowSchema={schema.data}
 					rows={list.data}
@@ -205,6 +210,7 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 			<SearchInput value={query} onChange={setQuery} onClear={clearSearch} />
 
 			<TableGrid
+				appId={appId}
 				tables={filteredAndSortedTables}
 				onSelectTable={navigateToTable}
 				searchQuery={query}
@@ -290,12 +296,14 @@ const SearchInput: React.FC<SearchInputProps> = ({
 );
 
 interface TableGridProps {
+	appId: string;
 	tables: Table[];
 	onSelectTable: (tableName: string) => void;
 	searchQuery: string;
 }
 
 const TableGrid: React.FC<TableGridProps> = ({
+	appId,
 	tables,
 	onSelectTable,
 	searchQuery,
@@ -306,7 +314,8 @@ const TableGrid: React.FC<TableGridProps> = ({
 				<Search className="mx-auto h-10 w-10 text-muted-foreground mb-4" />
 				<h3 className="text-lg font-semibold mb-2">No matches found</h3>
 				<p className="text-sm text-muted-foreground">
-					No tables match &quot;<span className="font-medium">{searchQuery}</span>&quot;.
+					No tables match &quot;
+					<span className="font-medium">{searchQuery}</span>&quot;.
 				</p>
 			</div>
 		);
@@ -317,6 +326,7 @@ const TableGrid: React.FC<TableGridProps> = ({
 			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pr-2 py-1">
 				{tables.map((table) => (
 					<TableCard
+						appId={appId}
 						key={table.name}
 						table={table}
 						onSelect={() => onSelectTable(table.name)}
@@ -328,33 +338,49 @@ const TableGrid: React.FC<TableGridProps> = ({
 };
 
 interface TableCardProps {
+	appId: string;
 	table: Table;
 	onSelect: () => void;
 }
 
-const TableCard: React.FC<TableCardProps> = ({ table, onSelect }) => (
-	<Card className="group cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:bg-primary/50">
-		<button
-			onClick={onSelect}
-			className="w-full h-auto p-0 rounded-lg"
-			title={`Open table: ${table.name}`}
-		>
-			<CardHeader className="w-full">
-				<div className="flex items-center justify-between gap-3 w-full">
-					<div className="flex items-center gap-3 min-w-0 flex-1">
-						<div className="rounded-md bg-muted p-2 transition-colors group-hover:bg-primary/10">
-							<Columns className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-primary" />
-						</div>
-						<CardTitle className="text-base text-left truncate flex-1">
-							{table.name}
-						</CardTitle>
-					</div>
-					<ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-				</div>
-			</CardHeader>
-		</button>
-	</Card>
-);
+const TableCard: React.FC<TableCardProps> = ({ appId, table, onSelect }) => {
+    const backend = useBackend();
+    const count = useInvoke(backend.dbState.countItems, backend.dbState, [
+        appId,
+        table.name
+    ]);
+
+    return (
+        <Card className="group cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 hover:bg-accent/50 border">
+            <button
+                onClick={onSelect}
+                className="w-full h-full p-0 text-left"
+                title={`Open table: ${table.name}`}
+            >
+                <CardHeader className="py-2 px-6">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                        <div className="flex-shrink-0 rounded-xl bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
+                            <Columns className="h-5 w-5 text-primary" />
+                        </div>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground transition-all group-hover:translate-x-1 group-hover:text-primary flex-shrink-0 mt-0.5" />
+                    </div>
+
+                    <div className="space-y-2">
+                        <CardTitle className="text-base font-semibold leading-tight">
+                            {table.name}
+                        </CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                            {count.data !== undefined
+                                ? `${count.data.toLocaleString()} items`
+                                : "Loading..."
+                            }
+                        </p>
+                    </div>
+                </CardHeader>
+            </button>
+        </Card>
+    );
+};
 
 const LoadingState: React.FC = () => (
 	<div className="p-6">

@@ -87,7 +87,7 @@ jobs:
         run: "npm install -g bun"
 
       - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.89.0
         with:
           targets: ${{ (matrix.platform == 'macos-latest' || matrix.platform == 'macos-13') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 

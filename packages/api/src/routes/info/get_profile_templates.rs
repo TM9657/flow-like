@@ -49,7 +49,7 @@ impl From<Profile> for template_profile::Model {
             name: profile.name,
             description: profile.description,
             icon: profile.icon,
-            apps: Some(vec![]),
+            apps: None,
             bit_ids: Some(profile.bits),
             hub: profile.hub,
             hubs: Some(profile.hubs),

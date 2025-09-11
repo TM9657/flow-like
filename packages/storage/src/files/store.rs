@@ -1,6 +1,6 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use flow_like_types::{
-    Cacheable, JsonSchema, Result, bail, mime_guess,
+    Cacheable, JsonSchema, Result, anyhow, bail, mime_guess,
     reqwest::{self, Url},
     utils::data_url::pathbuf_to_data_url,
 };
@@ -10,6 +10,7 @@ use object_store::{ObjectMeta, ObjectStore, path::Path, signer::Signer};
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
 use urlencoding::encode;
+mod helper;
 pub mod local_store;
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
@@ -158,5 +159,15 @@ impl FlowLikeStore {
         let finalized = hash.finalize();
         let finalized = finalized.to_hex().to_lowercase().to_string();
         Ok(finalized)
+    }
+
+    pub async fn put_from_url(&self, url: &str) -> Result<(Path, usize)> {
+        let parsed = Url::parse(url)?;
+        let store = self.as_generic();
+        match parsed.scheme() {
+            "http" | "https" => helper::put_http(parsed, store).await,
+            "data" => helper::put_data_url(url, store).await,
+            scheme => Err(anyhow!("Unsupported scheme: {scheme}")),
+        }
     }
 }

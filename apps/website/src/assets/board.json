@@ -73,7 +73,7 @@
 					"friendly_name": "Build Index",
 					"description": "7375120577937975323",
 					"coordinates": [1358.1329, 788.8106, 0],
-					"category": "Database/Local/Optimization",
+					"category": "Data/Database/Optimization",
 					"scores": null,
 					"pins": {
 						"z3sk3tp3x54zoojpw3h13c57": {
@@ -293,7 +293,7 @@
 					"friendly_name": "Batch Insert (CSV)",
 					"description": "384797826074374550",
 					"coordinates": [1156.5157, 788.8106, 0],
-					"category": "Database/Local/Insert",
+					"category": "Data/Database/Insert",
 					"scores": null,
 					"pins": {
 						"jjpibqy8525pnjathmwbqizd": {

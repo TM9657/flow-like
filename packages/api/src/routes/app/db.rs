@@ -7,6 +7,7 @@ use crate::state::AppState;
 
 pub mod build_index;
 pub mod db_add;
+pub mod db_count;
 pub mod db_delete;
 pub mod db_list;
 pub mod db_query;
@@ -27,5 +28,6 @@ pub fn routes() -> Router<AppState> {
         .route("/{table}/index", post(build_index::build_index))
         .route("/{table}/query", post(db_query::query_table))
         .route("/{table}/schema", get(get_db_schema::get_db_schema))
+        .route("/{table}/count", get(db_count::db_count))
         .route("/{table}/indices", get(get_indices::get_db_indices))
 }

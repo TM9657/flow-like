@@ -281,13 +281,24 @@ export default function SettingsPage() {
 						<CardContent className="space-y-6">
 							<div className="flex gap-6">
 								<div className="flex-shrink-0">
-									<div className="relative group">
+									<button
+										className="relative group"
+										onClick={async () => {
+											await invoke("change_profile_image", {
+												profile: localProfile,
+											});
+											await profiles.refetch();
+											await invalidate(backend.userState.getProfile, []);
+											await currentProfile.refetch();
+										}}
+									>
 										<img
+											title={localProfile.hub_profile.icon ?? ""}
 											className="rounded-lg border-2 border-border hover:border-primary transition-colors"
-											width={160}
-											height={160}
+											width={224}
+											height={224}
 											src={
-												localProfile.hub_profile.thumbnail ??
+												localProfile.hub_profile.icon ??
 												"/placeholder-thumbnail.webp"
 											}
 											alt="Profile thumbnail"
@@ -295,7 +306,7 @@ export default function SettingsPage() {
 										<div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
 											<Camera className="h-8 w-8 text-white" />
 										</div>
-									</div>
+									</button>
 								</div>
 								<div className="flex-1 space-y-4">
 									<div className="space-y-2">

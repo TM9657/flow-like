@@ -1,20 +1,48 @@
 # .github/release.yml
-
 changelog:
   exclude:
     labels:
-      - ignore-for-release
+      - skip-changelog
     authors:
-      - octocat
+      - github-actions[bot]
+      - dependabot[bot]
+
   categories:
-    - title: Breaking Changes 🛠
+    - title: "🚨 Breaking Changes"
       labels:
-        - Semver-Major
+        - breaking
         - breaking-change
-    - title: Exciting New Features 🎉
+        - breaking changes
+
+    - title: "✨ Features"
       labels:
-        - Semver-Minor
+        - feature
         - enhancement
-    - title: Other Changes
+
+    - title: "🐛 Fixes"
       labels:
-        - "*"
+        - fix
+        - bug
+        - bugfix
+
+    - title: "🧰 Smaller Changes"
+      labels:
+        - task
+        - chore
+        - refactor
+        - maintenance
+
+    - title: "📦 Dependencies"
+      labels:
+        - dependencies
+
+template: |
+  ## 🚀 Flow-Like $RESOLVED_VERSION
+
+  > Tagged: $TAG_NAME — Compare: $FULL_CHANGELOG
+
+  ### What’s changed
+  $CHANGES
+
+  ### Contributors
+  $CONTRIBUTORS

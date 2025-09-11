@@ -1,4 +1,5 @@
 pub mod clear;
+pub mod extract_attachments;
 pub mod from_messages;
 pub mod from_string;
 pub mod get_system;
