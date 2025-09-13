@@ -27,6 +27,9 @@
 		],
 		"security": {
 			"csp": null,
+			"capabilities": [
+				"desktop"
+			],
 			"assetProtocol": {
 				"enable": true,
 				"scope": [
@@ -77,6 +80,10 @@
 					"type": "none"
 				}
 			}
+		},
+		"iOS": {
+			"minimumSystemVersion": "13.0",
+			"developmentTeam": "VVT9DYMA6M"
 		},
 		"homepage": "https://flow-like.com",
 		"publisher": "TM9657 GmbH",

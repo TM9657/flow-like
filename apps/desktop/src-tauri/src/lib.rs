@@ -16,9 +16,10 @@ use flow_like_types::{sync::Mutex, tokio::time::interval};
 use serde_json::json;
 use settings::Settings;
 use state::TauriFlowLikeState;
+#[cfg(desktop)]
 use tauri_plugin_updater::UpdaterExt;
 use std::{sync::Arc, time::Duration};
-use tauri::{window::{ProgressBarState, ProgressBarStatus}, AppHandle, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
 
 #[cfg(not(debug_assertions))]
@@ -289,7 +290,6 @@ pub fn run() {
             functions::app::get_apps,
             functions::app::get_app_size,
             functions::app::create_app,
-            functions::app::import_app,
             functions::app::update_app,
             functions::app::delete_app,
             functions::app::sharing::export_app_to_file,
@@ -369,10 +369,13 @@ pub fn run() {
 }
 
 fn handle_instance(app: &AppHandle, args: Vec<String>, _cwd: String) {
-    let _ = app
-        .get_webview_window("main")
-        .expect("no main window")
-        .set_focus();
+    #[cfg(desktop)]
+    {
+        let _ = app
+            .get_webview_window("main")
+            .expect("no main window")
+            .set_focus();
+    }
 
     println!(
         "a new app instance was opened with {args:?} and the deep link event was already triggered"
@@ -380,28 +383,29 @@ fn handle_instance(app: &AppHandle, args: Vec<String>, _cwd: String) {
 }
 
 fn handle_deep_link(app: &AppHandle, event: OpenUrlEvent) {
-    let _ = app
-        .get_webview_window("main")
-        .expect("no main window")
-        .set_focus();
+    #[cfg(desktop)]
+    {
+        let _ = app
+            .get_webview_window("main")
+            .expect("no main window")
+            .set_focus();
+    }
 
     println!("deep link URLs: {:?}", event.urls());
 }
 
+#[cfg(desktop)]
 #[tauri::command(async)]
 async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
+use tauri::window::{ProgressBarState, ProgressBarStatus};
     if let Some(update) = app_handle.updater()?.check().await? {
-        // get the window once
         if let Some(win) = app_handle.get_webview_window("main") {
-            // initial indeterminate
             let _ = win.set_progress_bar(ProgressBarState {
                 status: Some(ProgressBarStatus::Indeterminate),
                 progress: None,
             });
 
             let mut downloaded: u64 = 0;
-
-            // clone for each closure to avoid "moved value" error
             let progress_win = win.clone();
             let done_win = win.clone();
 
@@ -416,7 +420,7 @@ async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
 
                             let _ = progress_win.set_progress_bar(ProgressBarState {
                                 status: Some(ProgressBarStatus::Normal),
-                                progress: Some(pct), // 0..=100
+                                progress: Some(pct),
                             });
                         } else {
                             let _ = progress_win.set_progress_bar(ProgressBarState {
@@ -426,7 +430,6 @@ async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
                         }
                     },
                     move || {
-                        // clear when finished
                         let _ = done_win.set_progress_bar(ProgressBarState {
                             status: Some(ProgressBarStatus::None),
                             progress: None,
@@ -439,5 +442,12 @@ async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
         app_handle.restart();
     }
 
+    Ok(())
+}
+
+#[cfg(not(desktop))]
+#[tauri::command(async)]
+async fn update(_app_handle: AppHandle) -> Result<(), String> {
+    // No-op on non-desktop targets (e.g., iOS)
     Ok(())
 }

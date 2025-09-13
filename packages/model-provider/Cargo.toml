@@ -10,13 +10,19 @@ tokenizers = {version="0.21.4", default-features = false, features = ["onig"]}
 schemars.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
-fastembed = {version="4.9.1", default-features = false, features = ["ort-download-binaries"] }
 openai-api-rs = "6.0.3"
 tiktoken-rs = "0.7.0"
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-bedrockruntime = "1.101.0"
-ort = {version="=2.0.0-rc.9", features = ["download-binaries"]}
 ndarray.workspace = true
+
+[target.'cfg(not(any(target_os = "ios", target_os = "tvos")))'.dependencies]
+ort = { version = "=2.0.0-rc.9", features = ["download-binaries", "copy-dylibs"] }
+fastembed = { version = "4.9.1", default-features = false, features = ["ort-download-binaries"] }
+
+[target.'cfg(any(target_os = "ios", target_os = "tvos"))'.dependencies]
+ort = { version = "=2.0.0-rc.9", default-features = false, features=["load-dynamic"] }
+fastembed = { version = "4.9.1", default-features = false, features = ["ort-load-dynamic"]}
 
 [dev-dependencies]
 dotenv = "0.15.0"

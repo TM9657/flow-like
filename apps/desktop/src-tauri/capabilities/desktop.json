@@ -1,6 +1,6 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "default",
+  "identifier": "desktop",
   "description": "Capability for the main window",
   "windows": [
     "main"
@@ -90,5 +90,6 @@
       "identifier": "fs:scope",
       "allow": [{ "path": "*" }, { "path": "**/*"} ]
     }
-  ]
+  ],
+  "platforms": ["macOS", "windows", "linux"]
 }

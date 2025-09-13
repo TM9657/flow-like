@@ -139,6 +139,7 @@ impl From<History> for ChatCompletionRequest {
             tools,
             parallel_tool_calls: None,
             tool_choice,
+            transforms: None,
         }
     }
 }

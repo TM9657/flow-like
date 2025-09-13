@@ -1,0 +1,35 @@
+{
+	"identifier": "com.flow-like.app",
+	"mainBinaryName": "app",
+    "app": {
+		"macOSPrivateApi": true,
+		"windows": [
+			{
+				"label": "main",
+				"fullscreen": false,
+				"resizable": true,
+				"title": "Flow Like",
+				"width": 1920,
+				"height": 1080,
+				"transparent": false,
+				"skipTaskbar": false,
+				"decorations": true,
+				"maximized": false,
+				"dragDropEnabled": true
+			}
+		],
+		"security": {
+			"csp": null,
+			"capabilities": [
+				"mobile"
+			],
+			"assetProtocol": {
+				"enable": true,
+				"scope": [
+					"**/*",
+					"*/**"
+				]
+			}
+		}
+	}
+}

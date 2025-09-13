@@ -13,26 +13,20 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "flow_like_desktop_lib"
-crate-type = ["lib", "cdylib"]
+name = "app"
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.3.1", features = [] }
+tauri-build = { version = "2.4.1", features = [] }
 
 [dependencies]
 flow-like = {workspace = true, features = ["tauri"] }
 flow-like-catalog.workspace = true
 flow-like-types.workspace = true
-tauri = { version = "2.7.0", features = [ "protocol-asset", "macos-private-api", "devtools"] }
-tauri-plugin-shell = "2.3.0"
-tauri-plugin-log = "2.6.0"
-tauri-plugin-notification = "2.3.0"
+tauri = { version = "2.8.5", features = [ "protocol-asset", "macos-private-api"] }
 window-vibrancy = "0.6.0"
 anyhow = "1.0.95"
 sentry = { version = "0.42.0", features = ["anyhow"] }
-tauri-plugin-dialog = "2.3.2"
-tauri-plugin-updater = "2.9.0"
-tauri-plugin-deep-link = "2.4.1"
 sentry-tracing = "0.42.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = { version = "0.1.41", features = ["async-await", "attributes"] }
@@ -43,16 +37,22 @@ serde_json.workspace = true
 image.workspace = true
 imageproc.workspace = true
 webp.workspace = true
-tauri-plugin = "2.3.1"
-tauri-plugin-clipboard-manager = "2.2.2"
-tauri-plugin-http = "2.5.1"
+tauri-plugin = "2.4.0"
+tauri-plugin-shell = "2.3.1"
+tauri-plugin-log = "2.7.0"
+tauri-plugin-notification = "2.3.1"
+tauri-plugin-dialog = "2.4.0"
+tauri-plugin-deep-link = "2.4.3"
+tauri-plugin-clipboard-manager = "2.3.0"
+tauri-plugin-http = "2.5.2"
 tauri-plugin-devtools = "2.0.1"
-tauri-plugin-fs = "2.4.1"
+tauri-plugin-fs = "2.4.2"
 urlencoding.workspace = true
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
-tauri-plugin-single-instance = { version = "2.3.2", features = ["deep-link"] }
+tauri-plugin-single-instance = { version = "2.3.4", features = ["deep-link"] }
 tauri-plugin-window-state = "2.4.0"
+tauri-plugin-updater = "2.9.0"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 cocoa = "0.26"

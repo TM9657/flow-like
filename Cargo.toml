@@ -70,3 +70,4 @@ regex = "1.11.2"
 
 [profile.dev]
 split-debuginfo = "unpacked"
+

@@ -5,11 +5,13 @@
 	"type": "module",
 	"scripts": {
 		"dev:desktop": "bun run --cwd ./apps/desktop dev:auto",
+		"dev:ios": "bun run --cwd ./apps/desktop dev:ios",
 		"dev:desktop:mac:arm": "bun run --cwd ./apps/desktop dev:mac:arm",
 		"dev:desktop:mac:intel": "bun run --cwd ./apps/desktop dev:mac:intel",
 		"dev:desktop:win:arm": "bun run --cwd ./apps/desktop dev:win:arm",
 		"dev:desktop:win:x64": "bun run --cwd ./apps/desktop dev:win:x64",
 		"dev:desktop:linux:x64": "bun run --cwd ./apps/desktop dev:linux:x64",
+		"xcode:desktop": "bun run --cwd ./apps/desktop xcode",
 		"db:view": "bun run --cwd packages/api db:view",
 		"db:push:sync": "bun run --cwd packages/api db:push:sync",
 		"dev:api": "bun run --cwd ./apps/backend/local/api dev",
