@@ -193,25 +193,25 @@ export default function YoursPage() {
 		<main className="min-h-dvh max-h-dvh flex flex-col w-full p-6 bg-gradient-to-br from-background to-muted/20">
 			{/* Header Section */}
 			<div className="flex flex-col space-y-6 mb-8">
-				<div className="flex items-center justify-between">
+				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 					<div className="flex items-center space-x-3">
-						<div className="p-2 rounded-xl bg-primary/10 text-primary">
-							<LibraryIcon className="h-8 w-8" />
+						<div className="p-1.5 sm:p-2 rounded-xl bg-primary/10 text-primary">
+							<LibraryIcon className="h-6 w-6 sm:h-8 sm:w-8" />
 						</div>
 						<div>
-							<h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+							<h1 className="text-2xl sm:text-4xl leading-tight font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
 								Library
 							</h1>
-							<p className="text-muted-foreground mt-1">
+							<p className="text-muted-foreground mt-1 text-sm sm:text-base">
 								Manage and create your custom applications
 							</p>
 						</div>
 					</div>
-					<div className="flex items-center gap-2">
+					<div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
 						<Button
 							size="lg"
 							variant="outline"
-							className="shadow-lg hover:shadow-xl transition-all duration-200"
+							className="w-full sm:w-auto h-9 px-3 text-sm sm:h-11 sm:px-5 sm:text-base shadow-lg hover:shadow-xl transition-all duration-200"
 							onClick={async () => {
 								const file = await open({
 									multiple: false,
@@ -249,7 +249,7 @@ export default function YoursPage() {
 						<Button
 							size="lg"
 							variant="outline"
-							className="shadow-lg hover:shadow-xl transition-all duration-200"
+							className="w-full sm:w-auto h-9 px-3 text-sm sm:h-11 sm:px-5 sm:text-base shadow-lg hover:shadow-xl transition-all duration-200"
 							onClick={() => setJoinDialogOpen(true)}
 						>
 							<Link2 className="mr-2 h-4 w-4" />
@@ -258,7 +258,7 @@ export default function YoursPage() {
 						<Button
 							size="lg"
 							variant="outline"
-							className="shadow-lg hover:shadow-xl transition-all duration-200"
+							className="w-full sm:w-auto h-9 px-3 text-sm sm:h-11 sm:px-5 sm:text-base shadow-lg hover:shadow-xl transition-all duration-200"
 							asChild
 						>
 							<Link href="/library/new">
@@ -323,9 +323,9 @@ export default function YoursPage() {
 				/>
 
 				{/* Search and Filter Bar */}
-				<div className="flex items-center justify-between space-x-4">
-					<div className="flex items-center space-x-4 flex-1">
-						<div className="relative flex-1 max-w-md">
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:space-x-4">
+					<div className="flex items-center gap-3 sm:gap-4 flex-1 w-full">
+						<div className="relative w-full sm:flex-1 sm:max-w-md">
 							<SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-foreground h-4 w-4 z-10" />
 							<Input
 								placeholder="Search apps..."
@@ -344,12 +344,12 @@ export default function YoursPage() {
 							Missing Apps?{" "}
 						</a>
 					</div>
-					<div className="flex items-center space-x-2">
+					<div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
 						<Select
 							value={sortBy}
 							onValueChange={(value: typeof sortBy) => setSortBy(value)}
 						>
-							<SelectTrigger className="w-[140px]">
+							<SelectTrigger className="w-full sm:w-[140px]">
 								<ArrowUpDown className="h-4 w-4 mr-2" />
 								<SelectValue />
 							</SelectTrigger>

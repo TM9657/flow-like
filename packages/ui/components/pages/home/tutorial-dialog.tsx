@@ -11,7 +11,7 @@ import {
 	X,
 	Zap,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type WelcomeStep = "welcome" | "docs" | "discord" | "github";
 
@@ -32,10 +32,39 @@ interface AnimatedBackgroundProps {
 export function TutorialDialog() {
 	const [showTutorial, setShowTutorial] = useState(false);
 	const [currentStep, setCurrentStep] = useState<WelcomeStep>("welcome");
+	const [supportsBackdrop, setSupportsBackdrop] = useState<boolean>(true);
 
 	useEffect(() => {
 		const hasFinishedTutorial = localStorage.getItem("tutorial-finished");
 		setShowTutorial(hasFinishedTutorial !== "true");
+	}, []);
+
+	// Lock background scroll while tutorial is shown
+	useEffect(() => {
+		if (showTutorial) {
+			const prev = document.body.style.overflow;
+			document.body.style.overflow = "hidden";
+			return () => {
+				document.body.style.overflow = prev;
+			};
+		}
+	}, [showTutorial]);
+
+	// Detect backdrop-filter support and provide a Linux WebKit fallback.
+	useEffect(() => {
+		try {
+			const ua = navigator.userAgent.toLowerCase();
+			const isLinux = ua.includes("linux");
+			const hasBackdrop =
+				(CSS && (CSS as any).supports && (CSS as any).supports("backdrop-filter", "blur(4px)")) ||
+				(CSS && (CSS as any).supports && (CSS as any).supports("-webkit-backdrop-filter", "blur(4px)"));
+			// Some Linux WebKit builds lie about supports; prefer hard fallback on Linux + WebKit.
+			const isWebKit = /applewebkit\//.test(ua) && !/chrome\//.test(ua) ? true : /webkit/.test(ua);
+			const forceFallback = isLinux && isWebKit;
+			setSupportsBackdrop(Boolean(hasBackdrop) && !forceFallback);
+		} catch {
+			setSupportsBackdrop(false);
+		}
 	}, []);
 
 	const handleSkip = () => {
@@ -94,44 +123,42 @@ export function TutorialDialog() {
 		children,
 		variant = "welcome",
 	}: AnimatedBackgroundProps) => (
-		<div className="relative min-h-screen flex items-center justify-center p-6">
+		<div className="relative min-h-screen flex items-center justify-center p-3 sm:p-6">
 			<div className={`absolute inset-0 ${getBackgroundGradient(variant)}`} />
+			{/* Tone down pulses on small screens */}
 			<div
-				className="absolute inset-0 bg-linear-to-tr from-accent/10 via-transparent to-primary/10 animate-pulse"
+				className="absolute inset-0 bg-linear-to-tr from-accent/10 via-transparent to-primary/10 animate-pulse opacity-40 sm:opacity-100"
 				style={{ animationDuration: "8s" }}
 			/>
 			<div
-				className="absolute inset-0 bg-linear-to-bl from-secondary/8 via-transparent to-accent/8 animate-pulse"
+				className="absolute inset-0 bg-linear-to-bl from-secondary/8 via-transparent to-accent/8 animate-pulse opacity-40 sm:opacity-100"
 				style={{ animationDuration: "12s", animationDelay: "4s" }}
 			/>
 
-			<FloatingIcon icon={Star} className="top-20 left-[10%]" delay={0} />
-			<FloatingIcon
-				icon={Sparkles}
-				className="top-32 right-[15%]"
-				delay={1.5}
-			/>
-			<FloatingIcon icon={Code2} className="bottom-40 left-[8%]" delay={3} />
-			<FloatingIcon
-				icon={Heart}
-				className="bottom-24 right-[20%]"
-				delay={4.5}
-			/>
-			<FloatingIcon icon={Rocket} className="top-48 left-[25%]" delay={2} />
-			<FloatingIcon icon={Zap} className="bottom-52 right-[12%]" delay={3.5} />
-			<FloatingIcon icon={Sparkles} className="top-64 right-[8%]" delay={1} />
-			<FloatingIcon icon={Star} className="bottom-32 left-[18%]" delay={4} />
+			{/* Hide most floating icons on very small screens to reduce clutter */}
+			<div className="hidden sm:block">
+				<FloatingIcon icon={Star} className="top-20 left-[10%]" delay={0} />
+				<FloatingIcon icon={Sparkles} className="top-32 right-[15%]" delay={1.5} />
+				<FloatingIcon icon={Code2} className="bottom-40 left-[8%]" delay={3} />
+				<FloatingIcon icon={Heart} className="bottom-24 right-[20%]" delay={4.5} />
+				<FloatingIcon icon={Rocket} className="top-48 left-[25%]" delay={2} />
+				<FloatingIcon icon={Zap} className="bottom-52 right-[12%]" delay={3.5} />
+				<FloatingIcon icon={Sparkles} className="top-64 right-[8%]" delay={1} />
+				<FloatingIcon icon={Star} className="bottom-32 left-[18%]" delay={4} />
+			</div>
 
 			<div
-				className="absolute top-[20%] left-[5%] w-32 h-32 bg-primary/8 rounded-full blur-2xl animate-pulse"
+				className="absolute top-[20%] left-[5%] w-32 h-32 bg-primary/8 rounded-full blur-2xl animate-pulse max-sm:opacity-40"
 				style={{ animationDuration: "6s" }}
 			/>
 			<div
-				className="absolute bottom-[25%] right-[8%] w-24 h-24 bg-secondary/8 rounded-full blur-2xl animate-pulse"
+				className="absolute bottom-[25%] right-[8%] w-24 h-24 bg-secondary/8 rounded-full blur-2xl animate-pulse max-sm:opacity-40"
 				style={{ animationDuration: "8s", animationDelay: "2s" }}
 			/>
 
-			<div className="relative z-10">{children}</div>
+			<div className="relative z-10 w-full h-full flex items-stretch justify-center">
+				{children}
+			</div>
 		</div>
 	);
 
@@ -164,7 +191,13 @@ export function TutorialDialog() {
 		text: string;
 		color?: string;
 	}) => (
-		<div className="flex items-center gap-3 p-3 rounded-xl bg-background/30 backdrop-blur-md border border-border/40 shadow-lg">
+		<div
+			className={
+				supportsBackdrop
+					? "flex items-center gap-3 p-3 rounded-xl bg-background/30 backdrop-blur-md border border-border/40 shadow-lg"
+					: "flex items-center gap-3 p-3 rounded-xl bg-card border border-border/60 shadow-md"
+			}
+		>
 			<Icon className={`w-5 h-5 text-${color}`} />
 			<span className="text-sm font-medium">{text}</span>
 		</div>
@@ -181,7 +214,7 @@ export function TutorialDialog() {
 	);
 
 	const WelcomeStep = () => (
-		<div className="grid grid-cols-2 gap-8 h-full p-8">
+		<div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 h-full p-6 sm:p-8">
 			<div className="flex flex-col justify-center">
 				<div className="relative mb-6">
 					<img
@@ -207,9 +240,15 @@ export function TutorialDialog() {
 	);
 
 	const DocsStep = () => (
-		<div className="grid grid-cols-2 gap-8 h-full p-8">
+		<div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 h-full p-6 sm:p-8">
 			<div className="flex flex-col justify-center items-center">
-				<div className="w-28 h-28 bg-primary/20 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 border border-primary/30 shadow-lg">
+				<div
+					className={
+						supportsBackdrop
+							? "w-28 h-28 bg-primary/20 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 border border-primary/30 shadow-lg"
+							: "w-28 h-28 bg-primary/15 rounded-3xl flex items-center justify-center mb-6 border border-primary/30 shadow-lg"
+					}
+				>
 					<Book className="w-14 h-14 text-primary" />
 				</div>
 			</div>
@@ -222,7 +261,11 @@ export function TutorialDialog() {
 					<BulletPoint text="Advanced Features" />
 				</div>
 				<Button
-					className="gap-2 w-fit bg-primary/90 backdrop-blur-xs hover:bg-primary"
+					className={
+						supportsBackdrop
+							? "gap-2 w-fit bg-primary/90 backdrop-blur-xs hover:bg-primary"
+							: "gap-2 w-fit bg-primary hover:bg-primary/90"
+					}
 					onClick={() => window.open("https://docs.flow-like.com", "_blank")}
 				>
 					<Book className="w-4 h-4" />
@@ -233,9 +276,15 @@ export function TutorialDialog() {
 	);
 
 	const DiscordStep = () => (
-		<div className="grid grid-cols-2 gap-8 h-full p-8">
+		<div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 h-full p-6 sm:p-8">
 			<div className="flex flex-col justify-center items-center">
-				<div className="w-28 h-28 bg-[#5865F2]/20 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 border border-[#5865F2]/30 shadow-lg">
+				<div
+					className={
+						supportsBackdrop
+							? "w-28 h-28 bg-[#5865F2]/20 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 border border-[#5865F2]/30 shadow-lg"
+							: "w-28 h-28 bg-[#5865F2]/15 rounded-3xl flex items-center justify-center mb-6 border border-[#5865F2]/30 shadow-lg"
+					}
+				>
 					<MessageCircle className="w-14 h-14 text-[#5865F2]" />
 				</div>
 			</div>
@@ -248,7 +297,11 @@ export function TutorialDialog() {
 					<BulletPoint text="Connect with Developers" color="[#5865F2]" />
 				</div>
 				<Button
-					className="gap-2 w-fit bg-[#5865F2]/90 backdrop-blur-xs hover:bg-[#5865F2] text-white"
+					className={
+						supportsBackdrop
+							? "gap-2 w-fit bg-[#5865F2]/90 backdrop-blur-xs hover:bg-[#5865F2] text-white"
+							: "gap-2 w-fit bg-[#5865F2] hover:bg-[#5865F2]/90 text-white"
+					}
 					onClick={() => window.open("https://discord.gg/mdBA9kMjFJ", "_blank")}
 				>
 					<MessageCircle className="w-4 h-4" />
@@ -259,9 +312,15 @@ export function TutorialDialog() {
 	);
 
 	const GithubStep = () => (
-		<div className="grid grid-cols-2 gap-8 h-full p-8">
+		<div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 h-full p-6 sm:p-8">
 			<div className="flex flex-col justify-center items-center">
-				<div className="w-28 h-28 bg-foreground/20 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 border border-foreground/30 shadow-lg">
+				<div
+					className={
+						supportsBackdrop
+							? "w-28 h-28 bg-foreground/20 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 border border-foreground/30 shadow-lg"
+							: "w-28 h-28 bg-foreground/15 rounded-3xl flex items-center justify-center mb-6 border border-foreground/30 shadow-lg"
+					}
+				>
 					<GitHubLogoIcon className="w-14 h-14 text-foreground" />
 				</div>
 			</div>
@@ -275,7 +334,11 @@ export function TutorialDialog() {
 				</div>
 				<Button
 					variant="outline"
-					className="gap-2 w-fit border-foreground/40 hover:bg-foreground/10 bg-background/30 backdrop-blur-xs"
+					className={
+						supportsBackdrop
+							? "gap-2 w-fit border-foreground/40 hover:bg-foreground/10 bg-background/30 backdrop-blur-xs"
+							: "gap-2 w-fit border-foreground/40 hover:bg-foreground/10 bg-card"
+					}
 					onClick={() =>
 						window.open("https://github.com/TM9657/flow-like", "_blank")
 					}
@@ -301,8 +364,23 @@ export function TutorialDialog() {
 	return (
 		<div className="fixed inset-0 z-50">
 			<AnimatedBackground variant={currentStep}>
-				<div className="w-[750px] max-w-[90vw] bg-background/25 backdrop-blur-2xl border border-border/40 rounded-3xl shadow-2xl overflow-hidden">
-					<div className="p-8 border-b border-border/30 bg-background/15 backdrop-blur-xl">
+				{/* Container: mobile full-screen, desktop card */}
+				<div
+					className={
+						`w-full sm:w-[750px] max-w-[100vw] sm:max-w-[90vw] h-[100dvh] sm:h-auto ${
+							supportsBackdrop
+								? "bg-background/25 backdrop-blur-2xl border"
+								: "bg-card border"
+						} border-border/40 sm:rounded-3xl sm:shadow-2xl overflow-hidden flex flex-col`
+					}
+				>
+					<div
+						className={
+							supportsBackdrop
+								? "p-6 sm:p-8 border-b border-border/30 bg-background/15 backdrop-blur-xl"
+								: "p-6 sm:p-8 border-b border-border/30 bg-card"
+						}
+					>
 						<div className="flex items-center justify-between">
 							<div className="text-center flex-1">
 								<h1 className="text-3xl font-bold">
@@ -315,7 +393,7 @@ export function TutorialDialog() {
 							<Button
 								variant="ghost"
 								size="sm"
-								className="ml-6 hover:bg-background/40 backdrop-blur-xs rounded-xl"
+								className={supportsBackdrop ? "ml-6 hover:bg-background/40 backdrop-blur-xs rounded-xl" : "ml-6 hover:bg-muted/60 rounded-xl"}
 								onClick={() => setShowTutorial(false)}
 							>
 								<X className="w-5 h-5" />
@@ -323,11 +401,17 @@ export function TutorialDialog() {
 						</div>
 					</div>
 
-					<div className="h-[450px] bg-background/10 backdrop-blur-lg">
+					{/* Body */}
+					<div
+						className={supportsBackdrop ? "flex-1 min-h-0 h-[calc(100dvh-200px)] sm:h-[450px] bg-background/10 backdrop-blur-lg" : "flex-1 min-h-0 h-[calc(100dvh-200px)] sm:h-[450px] bg-card"}
+					>
 						<CurrentStepComponent />
 					</div>
 
-					<div className="p-8 bg-background/15 backdrop-blur-xl border-t border-border/30">
+					{/* Footer */}
+					<div
+						className={supportsBackdrop ? "p-6 sm:p-8 bg-background/15 backdrop-blur-xl border-t border-border/30" : "p-6 sm:p-8 bg-card border-t border-border/30"}
+					>
 						<div className="flex justify-center gap-3 mb-8">
 							{STEPS.map((step) => (
 								<div
@@ -347,7 +431,11 @@ export function TutorialDialog() {
 									<Button
 										variant="outline"
 										onClick={handlePrevious}
-										className="bg-background/40 backdrop-blur-md border-border/50 hover:bg-background/60 rounded-xl"
+										className={
+											supportsBackdrop
+												? "bg-background/40 backdrop-blur-md border-border/50 hover:bg-background/60 rounded-xl"
+												: "bg-muted/60 border-border/50 hover:bg-muted rounded-xl"
+										}
 									>
 										Previous
 									</Button>
@@ -357,13 +445,13 @@ export function TutorialDialog() {
 								<Button
 									variant="ghost"
 									onClick={handleSkip}
-									className="hover:bg-background/40 backdrop-blur-xs rounded-xl"
+									className={supportsBackdrop ? "hover:bg-background/40 backdrop-blur-xs rounded-xl" : "hover:bg-muted rounded-xl"}
 								>
 									Skip Tour
 								</Button>
 								<Button
 									onClick={handleNext}
-									className="bg-primary/90 backdrop-blur-xs hover:bg-primary rounded-xl"
+									className={supportsBackdrop ? "bg-primary/90 backdrop-blur-xs hover:bg-primary rounded-xl" : "bg-primary hover:bg-primary/90 rounded-xl"}
 								>
 									{currentStep === "github" ? "Get Started" : "Next"}
 								</Button>

@@ -46,6 +46,7 @@ import {
 	SidebarMenuSubItem,
 	SidebarProvider,
 	SidebarRail,
+	SidebarTrigger,
 	Textarea,
 	useBackend,
 	useInvalidateInvoke,
@@ -210,12 +211,20 @@ interface IUser {
 export function AppSidebar({
 	children,
 }: Readonly<{ children: React.ReactNode }>) {
-	const defaultOpen = localStorage.getItem("sidebar_state") === "true";
+	// Guard localStorage usage for SSR and provide a sensible default.
+	const defaultOpen =
+		typeof window !== "undefined"
+			? localStorage.getItem("sidebar_state") === "true"
+			: true;
 
 	return (
 		<SidebarProvider defaultOpen={defaultOpen}>
 			<InnerSidebar />
 			<main className="w-full h-full">
+				{/* Mobile sidebar trigger (Sheet opener) */}
+				<div className="md:hidden fixed bottom-4 left-4 z-50">
+					<SidebarTrigger className="size-10 rounded-full shadow border bg-background" aria-label="Open Menu" />
+				</div>
 				<SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20">
 					{children}
 				</SidebarInset>
