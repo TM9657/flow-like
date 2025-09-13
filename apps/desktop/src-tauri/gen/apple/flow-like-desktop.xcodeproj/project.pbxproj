@@ -15,7 +15,7 @@
 		9D3CC2A8FC9EE8D73A28C132 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6C578A692AD05CABF96675D4 /* Metal.framework */; };
 		BD999E1D015351A22CC3CFE6 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B8D6074E6775B2FD3D0199A8 /* UIKit.framework */; };
 		C3C6EB3F74C498D2FE8F7661 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = FFF51C4D6D9AD2D1364150A6 /* assets */; };
-		C3F04A6B8D5F73078895B50C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7C7DED7A844F7A9C9C191B02 /* Assets.xcassets */; };
+		DC3181AD2E75CEDB000C3F5C /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DC3181AC2E75CEDB000C3F5C /* icon.icon */; };
 		E083E5A09A5613BE75ECDE6C /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 9765DE5BE922A06C0CA8BA5F /* LaunchScreen.storyboard */; };
 		F439207FAC54CA183A9531D5 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA58C22D1BB3716CAD06FD10 /* MetalKit.framework */; };
 		FA0CC56A2E28AAAE51733B8B /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F2764F91BCC1150304FB91AC /* CoreGraphics.framework */; };
@@ -23,7 +23,7 @@
 
 /* Begin PBXFileReference section */
 		126ECE883F9B6CFCF97E5091 /* run.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = run.rs; sourceTree = "<group>"; };
-		194092FA8C7BD83859D3D7A1 /* flow-like-desktop_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; name = "flow-like-desktop_iOS.app"; path = "Flow Like.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		194092FA8C7BD83859D3D7A1 /* Flow Like.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Flow Like.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A3149ABC578B5319B6AE7BD /* flow-like-desktop_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "flow-like-desktop_iOS.entitlements"; sourceTree = "<group>"; };
 		2DC2BD7DCECA149C913C9DA7 /* init.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = init.rs; sourceTree = "<group>"; };
 		351CF710F444B50A57BC6375 /* lib.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = lib.rs; sourceTree = "<group>"; };
@@ -42,7 +42,6 @@
 		72A4D58469E08182F44E66F3 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		77962E4059BACBDB96D6BDF3 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		79B308C6B28E642F68F1B8B6 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
-		7C7DED7A844F7A9C9C191B02 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7D685BD1CD447858983F1221 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		8665FE56C5FA8A8780BB9438 /* profiles.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = profiles.rs; sourceTree = "<group>"; };
 		86B082A69FFC739D5FE3C620 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -58,6 +57,7 @@
 		CA58C22D1BB3716CAD06FD10 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		D2EB56FFB6E36FC9B47C6810 /* settings.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = settings.rs; sourceTree = "<group>"; };
 		D555BD5F5EF13E82EB52F947 /* tables.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = tables.rs; sourceTree = "<group>"; };
+		DC3181AC2E75CEDB000C3F5C /* icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = icon.icon; sourceTree = "<group>"; };
 		DF38CBDD0FEF44AD730DA6C5 /* functions.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = functions.rs; sourceTree = "<group>"; };
 		F2764F91BCC1150304FB91AC /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		F662587278F1EFF589CA19D6 /* settings.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = settings.rs; sourceTree = "<group>"; };
@@ -115,7 +115,7 @@
 		6A68EDA8DC2D514C157984C2 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				194092FA8C7BD83859D3D7A1 /* flow-like-desktop_iOS.app */,
+				194092FA8C7BD83859D3D7A1 /* Flow Like.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -145,7 +145,6 @@
 			isa = PBXGroup;
 			children = (
 				FFF51C4D6D9AD2D1364150A6 /* assets */,
-				7C7DED7A844F7A9C9C191B02 /* Assets.xcassets */,
 				9765DE5BE922A06C0CA8BA5F /* LaunchScreen.storyboard */,
 				EE8DD0EC5D0696E7C1104A7F /* Externals */,
 				40AA70AD37042439F8E94267 /* flow-like-desktop_iOS */,
@@ -153,6 +152,7 @@
 				C645D2495A81C529ACD9E813 /* src */,
 				9B8660A0F20E816C12F3C7DC /* Frameworks */,
 				6A68EDA8DC2D514C157984C2 /* Products */,
+				DC3181AC2E75CEDB000C3F5C /* icon.icon */,
 			);
 			sourceTree = "<group>";
 		};
@@ -268,7 +268,7 @@
 			packageProductDependencies = (
 			);
 			productName = "flow-like-desktop_iOS";
-			productReference = 194092FA8C7BD83859D3D7A1 /* flow-like-desktop_iOS.app */;
+			productReference = 194092FA8C7BD83859D3D7A1 /* Flow Like.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -303,9 +303,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C3F04A6B8D5F73078895B50C /* Assets.xcassets in Resources */,
 				E083E5A09A5613BE75ECDE6C /* LaunchScreen.storyboard in Resources */,
 				C3C6EB3F74C498D2FE8F7661 /* assets in Resources */,
+				DC3181AD2E75CEDB000C3F5C /* icon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -331,7 +331,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "# ---- Build Rust Code (Xcode Run Script) ----\nset -euo pipefail\n\n# Tools in PATH (Bun, Homebrew, Cargo)\nexport PATH=\"$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.cargo/bin:$PATH\"\n\n# Required by Xcode\nPLATFORM_DISPLAY_NAME=\"${PLATFORM_DISPLAY_NAME:?}\"\nSDKROOT=\"${SDKROOT:?}\"\nCONFIGURATION=\"${CONFIGURATION:?}\"\nCURRENT_ARCH=\"${CURRENT_ARCH:-arm64}\"\n\n# Build for iOS Simulator explicitly (avoid darwin artifacts)\nexport CARGO_BUILD_TARGET=\"aarch64-apple-ios-sim\"\n\n# Make optional envs safe under `set -u`\nexport FORCE_COLOR=\"${FORCE_COLOR:-1}\"             # or \"\" if you don't want color\nFRAMEWORK_SEARCH_PATHS=\"${FRAMEWORK_SEARCH_PATHS:-}\"\nHEADER_SEARCH_PATHS=\"${HEADER_SEARCH_PATHS:-}\"\nGCC_PREPROCESSOR_DEFINITIONS=\"${GCC_PREPROCESSOR_DEFINITIONS:-}\"\nARCHS=\"${ARCHS:-${CURRENT_ARCH:-}}\"\n\n# Required envs (fail early if Xcode didn't set them)\nPLATFORM_DISPLAY_NAME=\"${PLATFORM_DISPLAY_NAME:?}\"\nSDKROOT=\"${SDKROOT:?}\"\nCONFIGURATION=\"${CONFIGURATION:?}\"\n\n# Sanity logs\necho \"bun: $(which bun)\"; bun --version || true\necho \"cargo: $(which cargo)\"; cargo --version || true\n\n# Call tauri helper with safe quoting\nbun tauri ios xcode-script -v \\\n  --platform \"$PLATFORM_DISPLAY_NAME\" \\\n  --sdk-root \"$SDKROOT\" \\\n  --framework-search-paths \"$FRAMEWORK_SEARCH_PATHS\" \\\n  --header-search-paths \"$HEADER_SEARCH_PATHS\" \\\n  --gcc-preprocessor-definitions \"$GCC_PREPROCESSOR_DEFINITIONS\" \\\n  --configuration ${CONFIGURATION:?} \\\n  ${ARCHS:?}\n";
+			shellScript = "# ---- Build Rust Code (Xcode Run Script) ----\nset -euo pipefail\n\n# Tools in PATH (Bun, Homebrew, Cargo)\nexport PATH=\"$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.nvm/versions/node/v22.11.0/bin:$HOME/.cargo/bin:$PATH\"\n\n# Required by Xcode\nPLATFORM_DISPLAY_NAME=\"${PLATFORM_DISPLAY_NAME:?}\"\nSDKROOT=\"${SDKROOT:?}\"\nCONFIGURATION=\"${CONFIGURATION:?}\"\nCURRENT_ARCH=\"${CURRENT_ARCH:-arm64}\"\n\n# Build for iOS Simulator explicitly (avoid darwin artifacts)\nexport CARGO_BUILD_TARGET=\"aarch64-apple-ios-sim\"\n\n# Make optional envs safe under `set -u`\nexport FORCE_COLOR=\"${FORCE_COLOR:-1}\"             # or \"\" if you don't want color\nFRAMEWORK_SEARCH_PATHS=\"${FRAMEWORK_SEARCH_PATHS:-}\"\nHEADER_SEARCH_PATHS=\"${HEADER_SEARCH_PATHS:-}\"\nGCC_PREPROCESSOR_DEFINITIONS=\"${GCC_PREPROCESSOR_DEFINITIONS:-}\"\nARCHS=\"${ARCHS:-${CURRENT_ARCH:-}}\"\n\n# Required envs (fail early if Xcode didn't set them)\nPLATFORM_DISPLAY_NAME=\"${PLATFORM_DISPLAY_NAME:?}\"\nSDKROOT=\"${SDKROOT:?}\"\nCONFIGURATION=\"${CONFIGURATION:?}\"\n\n# Sanity logs\necho \"bun: $(which bun)\"; bun --version || true\necho \"cargo: $(which cargo)\"; cargo --version || true\n\n# Call tauri helper with safe quoting\nbun tauri ios xcode-script -v \\\n  --platform \"$PLATFORM_DISPLAY_NAME\" \\\n  --sdk-root \"$SDKROOT\" \\\n  --framework-search-paths \"$FRAMEWORK_SEARCH_PATHS\" \\\n  --header-search-paths \"$HEADER_SEARCH_PATHS\" \\\n  --gcc-preprocessor-definitions \"$GCC_PREPROCESSOR_DEFINITIONS\" \\\n  --configuration ${CONFIGURATION:?} \\\n  ${ARCHS:?}\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -352,17 +352,20 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ARCHS = arm64;
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = icon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = "flow-like-desktop_iOS/flow-like-desktop_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = "VVT9DYMA6M";
+				DEVELOPMENT_TEAM = VVT9DYMA6M;
 				ENABLE_BITCODE = NO;
-				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				EXCLUDED_ARCHS = "";
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"\".\"",
 				);
 				INFOPLIST_FILE = "flow-like-desktop_iOS/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Flow-Like";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -381,7 +384,8 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.flow-like.app;
+				MARKETING_VERSION = 0.0.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.flow-like.app";
 				PRODUCT_NAME = "Flow Like";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -394,10 +398,11 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ARCHS = arm64;
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = icon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = "flow-like-desktop_iOS/flow-like-desktop_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = "VVT9DYMA6M";
+				DEVELOPMENT_TEAM = VVT9DYMA6M;
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -405,6 +410,8 @@
 					"\".\"",
 				);
 				INFOPLIST_FILE = "flow-like-desktop_iOS/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Flow-Like";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -423,7 +430,8 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.flow-like.app;
+				MARKETING_VERSION = 0.0.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.flow-like.app";
 				PRODUCT_NAME = "Flow Like";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

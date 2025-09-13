@@ -4,6 +4,7 @@ import { defineConfig } from "vite";
 
 // @ts-expect-error process is a nodejs global
 const mobile = !!/android|ios/.exec(process.env.TAURI_ENV_PLATFORM);
+const host = process.env.TAURI_DEV_HOST;
 
 // @ts-ignore
 export default defineConfig(async () => ({
@@ -29,11 +30,11 @@ export default defineConfig(async () => ({
 	server: {
 		port: 1420,
 		strictPort: true,
-		host: mobile ? "0.0.0.0" : false,
+		host: host || false,
 		hmr: mobile
 			? {
 					protocol: "ws",
-					host: await internalIpV4(),
+					host,
 					port: 1421,
 				}
 			: undefined,
