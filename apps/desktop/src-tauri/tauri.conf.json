@@ -4,7 +4,7 @@
 	"identifier": "com.flow-like.app",
 	"build": {
 		"beforeDevCommand": "bun run dev",
-		"devUrl": "http://0.0.0.0:3000",
+		"devUrl": "http://localhost:3000",
 		"beforeBuildCommand": "bun run build",
 		"frontendDist": "../out"
 	},
