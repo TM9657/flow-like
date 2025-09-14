@@ -220,16 +220,16 @@ export function AppSidebar({
 
 	return (
 		<SidebarProvider defaultOpen={defaultOpen}>
-			<InnerSidebar />
-			<main className="w-full h-[100dvh] flex flex-col overflow-hidden">
-				<MobileHeaderProvider>
-					<MobileHeader />
-					<SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20 flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-						{children}
-					</SidebarInset>
-				</MobileHeaderProvider>
-			</main>
-		</SidebarProvider>
+            <InnerSidebar />
+            <main className="w-full h-dvh flex flex-col overflow-hidden">
+                <MobileHeaderProvider>
+                    <MobileHeader />
+                    <SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20 flex flex-col flex-1 min-h-0 h-full overflow-hidden">
+                        {children}
+                    </SidebarInset>
+                </MobileHeaderProvider>
+            </main>
+        </SidebarProvider>
 	);
 }
 
