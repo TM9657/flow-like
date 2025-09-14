@@ -27,6 +27,7 @@
         {
           "url": "http://localhost:*"
         },
+        { "url": "http://127.0.0.1:*" },
         {
           "url": "https://huggingface.co"
         },
@@ -72,6 +73,7 @@
     "clipboard-manager:allow-write-image",
     "clipboard-manager:allow-write-text",
     "log:default",
+    "fs:default",
     "fs:allow-create",
     "fs:allow-exists",
     "fs:allow-fstat",
@@ -83,6 +85,7 @@
     "fs:write-files",
     "fs:write-all",
     "fs:read-all",
+    "opener:default",
     {
       "identifier": "fs:scope",
       "allow": [{ "path": "*" }, { "path": "**/*"} ]

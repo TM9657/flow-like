@@ -343,6 +343,8 @@ function SwimlaneHeader({
 	swimlane,
 	apps,
 }: Readonly<{ swimlane: ISwimlane; apps: IAppQuery }>) {
+	const isExternal = (href?: string) =>
+		typeof href === "string" && /^(https?:|mailto:|tel:)/.test(href);
 	return (
 		<div className="flex items-center justify-between">
 			<div className="space-y-1">
@@ -352,7 +354,12 @@ function SwimlaneHeader({
 				)}
 			</div>
 			{swimlane.viewAllLink && (
-				<a href={swimlane.viewAllLink}>
+				<a
+					href={swimlane.viewAllLink}
+					target={isExternal(swimlane.viewAllLink) ? "_blank" : undefined}
+					rel={isExternal(swimlane.viewAllLink) ? "noopener noreferrer external" : undefined}
+					data-open-external={isExternal(swimlane.viewAllLink) ? "true" : undefined}
+				>
 					<button
 						type="button"
 						className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
@@ -415,12 +422,14 @@ function StaticCard({
 }>) {
 	const isLarge = size === "large";
 	const cardHeight = isLarge ? "h-[375px]" : "min-h-[200px]";
+	const isExternal = typeof item.link === "string" && /^(https?:|mailto:|tel:)/.test(item.link);
 
 	return (
 		<a
-			type="button"
 			href={item.link}
-			target={item.link?.startsWith("http") ? "_blank" : "_self"}
+			target={isExternal ? "_blank" : "_self"}
+			rel={isExternal ? "noopener noreferrer external" : undefined}
+			data-open-external={isExternal ? "true" : undefined}
 			className={`group relative overflow-hidden rounded-xl border border-border/40 bg-card shadow-sm hover:shadow-xl hover:border-primary/30 transition-all duration-300 ${cardHeight} w-full`}
 		>
 			<div className="absolute inset-0">

@@ -2,7 +2,7 @@ use crate::profile::UserProfile;
 use flow_like::{state::FlowLikeConfig, utils::cache::get_cache_dir};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::SystemTime};
-use tauri::AppHandle;
+use tauri::{fs, AppHandle};
 
 fn default_logs_dir() -> PathBuf {
     dirs_next::data_dir()
@@ -18,6 +18,28 @@ fn default_temporary_dir() -> PathBuf {
         .join("tmp")
 }
 
+
+    fn ensure_dir(p: &PathBuf) -> std::io::Result<()> {
+        if !p.exists() {
+            std::fs::create_dir_all(p)?;
+        }
+        Ok(())
+    }
+
+    pub fn ensure_app_dirs() -> std::io::Result<()> {
+        let bit_dir = dirs_next::data_dir()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "data_dir() is None"))?
+            .join("flow-like/bits");
+        let project_dir = dirs_next::data_dir().unwrap().join("flow-like/projects");
+        let cache_dir = dirs_next::cache_dir()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "cache_dir() is None"))?
+            .join("flow-like");
+
+        ensure_dir(&bit_dir)?;
+        ensure_dir(&project_dir)?;
+        ensure_dir(&cache_dir)?;
+        Ok(())
+    }
 #[derive(Serialize, Deserialize)]
 pub struct Settings {
     loaded: bool,
@@ -59,6 +81,8 @@ impl Settings {
                 );
             }
         }
+
+        ensure_app_dirs().ok();
 
         Self {
             loaded: false,

@@ -284,6 +284,9 @@
 		text-rendering: optimizeLegibility;
 	}
 
+	html, body { height: 100%; }
+	body { overflow: hidden; }
+
 	@supports (font: -apple-system-body) and (-webkit-appearance: none) {
 		[data-wrapper] {
 			@apply min-[1800px]:border-t;

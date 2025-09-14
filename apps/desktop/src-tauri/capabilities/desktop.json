@@ -85,6 +85,7 @@
     "fs:write-files",
     "fs:write-all",
     "fs:read-all",
+    "opener:default",
     "updater:default",
     {
       "identifier": "fs:scope",

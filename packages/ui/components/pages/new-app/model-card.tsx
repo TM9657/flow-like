@@ -94,14 +94,14 @@ export function ModelCard({
 
 	return (
 		<Card
-			className={`cursor-pointer transition-all duration-300 hover:shadow-md ${
+			className={`group cursor-pointer transition-all duration-300 hover:shadow-md ${
 				selected
 					? "ring-2 ring-primary shadow-md shadow-primary/10 bg-linear-to-br from-primary/5 to-transparent"
 					: "hover:border-primary/20"
 			}`}
 			onClick={() => onToggle(bitId)}
 		>
-			<CardContent className="p-4">
+			<CardContent className="p-3 sm:p-4">
 				<div className="flex items-center gap-3 mb-3">
 					<Avatar className="h-10 w-10 border border-border">
 						<AvatarImage src={bitData.data.icon} />
@@ -131,12 +131,12 @@ export function ModelCard({
 					</div>
 					<div className="flex items-center gap-2">
 						{selected ? (
-							<div className="p-1.5 bg-primary rounded-full">
-								<Check className="h-3 w-3 text-primary-foreground" />
+							<div className="p-1.5 rounded-full bg-primary text-primary-foreground border border-primary">
+								<Check className="h-3 w-3" />
 							</div>
 						) : (
-							<div className="p-1.5 border-2 border-muted rounded-full">
-								<Plus className="h-3 w-3 text-muted-foreground" />
+							<div className="p-1.5 rounded-full bg-muted text-muted-foreground border border-border group-hover:bg-muted/80">
+								<Plus className="h-3 w-3" />
 							</div>
 						)}
 					</div>

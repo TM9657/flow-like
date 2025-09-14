@@ -43,7 +43,7 @@ export default function Onboarding() {
 				if (countedBits.has(bit.id)) return false;
 				countedBits.add(bit.id);
 				return true;
-			}).map((bit) => backend.bitState.getBitSize(bit)),
+			}).map((bit) => backend.bitState.getBitSize(bit.toObject())),
 		);
 		setTotalSize(sizes.reduce((acc, size) => acc + size, 0));
 	}, [activeProfiles, profiles, backend]);
@@ -70,25 +70,25 @@ export default function Onboarding() {
 	}, [defaultProfiles.data]);
 
 	return (
-		<div className="flex flex-col items-center justify-center h-full">
-			<div className="text-center mb-12 space-y-4 max-w-2xl">
+		<div className="flex flex-col items-center justify-start w-full min-h-0 p-2 sm:p-4">
+			<div className="text-center mb-8 sm:mb-12 space-y-4 max-w-2xl px-2">
 				<div className="space-y-2">
-					<h1 className="text-5xl font-bold text-foreground tracking-tight">
+					<h1 className="text-3xl sm:text-5xl font-bold text-foreground tracking-tight">
 						Welcome to <span className="highlight">Flow-Like</span>
 					</h1>
 					<div className="w-24 h-1 bg-gradient-to-r from-primary to-primary/70 mx-auto rounded-full" />
 				</div>
-				<h2 className="text-2xl text-muted-foreground font-medium mt-6">
+				<h2 className="text-xl sm:text-2xl text-muted-foreground font-medium mt-4 sm:mt-6">
 					Select your starting profile
 				</h2>
-				<p className="text-base text-muted-foreground/80 max-w-lg mx-auto leading-relaxed">
+				<p className="text-sm sm:text-base text-muted-foreground/80 max-w-lg mx-auto leading-relaxed">
 					Choose one or more profiles that match your interests. You can always
 					add, change or remove profiles later.
 				</p>
 			</div>
 
 			<div className="w-full max-w-6xl px-2">
-				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 justify-items-center">
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 justify-items-center">
 					{profiles.map(([profile, bits], index) => (
 						<PreviewCard
 							key={profile.hub_profile.name}
@@ -106,8 +106,7 @@ export default function Onboarding() {
 					))}
 				</div>
 			</div>
-
-			<div className="flex flex-row items-center gap-4 w-full max-w-md mt-12">
+			<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 w-full max-w-md mt-8 sm:mt-12 pb-6">
 				<div className="bg-card/70 backdrop-blur-sm border rounded-lg p-3 px-4 text-center shadow-lg flex flex-col items-center text-nowrap">
 					<p className="font-semibold text-foreground text-lg">
 						{humanFileSize(totalSize)}
@@ -141,7 +140,7 @@ function PreviewCard({
 		<button
 			type="button"
 			onClick={onClick}
-			className={`group relative flex flex-col w-64 transition-all duration-500 rounded-2xl z-50 border-2 hover:shadow-2xl transform hover:-translate-y-1 ${
+			className={`group relative flex flex-col w-full max-w-64 sm:w-64 transition-all duration-500 rounded-2xl z-20 border-2 hover:shadow-2xl transform hover:-translate-y-1 ${
 				active
 					? "border-primary bg-primary/5 shadow-lg shadow-primary/20 scale-105"
 					: "border-border bg-card/50 backdrop-blur-sm hover:border-primary/50 hover:bg-card/80"
@@ -189,10 +188,10 @@ function PreviewCard({
 				</p>
 
 				{/* Bits Preview */}
-				<div className="flex flex-row flex-wrap gap-2 pt-2 z-50">
+				<div className="flex flex-row flex-wrap gap-2 pt-2">
 					{bits.slice(0, 6).map((bit) => (
 						<BitHover bit={bit} key={bit.id}>
-							<Avatar className="border bg-background w-6 h-6 transition-transform duration-200 hover:scale-110 z-50">
+							<Avatar className="border bg-background w-6 h-6 transition-transform duration-200 hover:scale-110">
 								<AvatarImage
 									className="p-0.5"
 									src={bit.meta?.en?.icon ?? "/app-logo.webp"}

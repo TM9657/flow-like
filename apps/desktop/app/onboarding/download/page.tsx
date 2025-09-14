@@ -101,7 +101,7 @@ export default function ProfileCreation() {
 		setBits(Array.from(foundBits.values()));
 		setFilter(filter);
 		addProfiles(filteredProfiles.map(([profile]) => profile));
-	}, [defaultProfiles.data, searchParams]);
+	}, [defaultProfiles.data, searchParams, router]);
 
 	useEffect(() => {
 		calculateStats();
@@ -120,7 +120,7 @@ export default function ProfileCreation() {
 			router.push("/onboarding/done");
 		}
 		if (doneCounter >= 5 && bits.length > 0) finalize();
-	}, [doneCounter, bits]);
+	}, [doneCounter, bits, router]);
 
 	const calculateStats = useCallback(async () => {
 		const measurement = await manager.getSpeed(filter);
@@ -162,12 +162,12 @@ export default function ProfileCreation() {
 	}, [doneCounter, filter, manager]);
 
 	return (
-		<div className="p-4 max-w-screen-lg w-full">
-			<div className="flex flex-row items-center">
+		<div className="p-3 sm:p-4 max-w-screen-lg w-full">
+			<div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
 				<div className="w-full">
 					<h1>🚀 Great Selection!</h1>
 					<h2>
-						Let´s download your models{" "}
+						Let&apos;s download your models{" "}
 						<b className="highlight">
 							{(stats[stats.length - 1]?.progress || 0).toFixed(2)}%
 						</b>{" "}
@@ -175,8 +175,8 @@ export default function ProfileCreation() {
 					</h2>
 				</div>
 			</div>
-			<div className="mt-4">
-				<ChartContainer className="h-[300px] w-full z-20" config={chartConfig}>
+			<div className="mt-3 sm:mt-4">
+				<ChartContainer className="h-[240px] sm:h-[300px] w-full z-20" config={chartConfig}>
 					<LineChart
 						accessibilityLayer
 						data={stats}
@@ -207,8 +207,8 @@ export default function ProfileCreation() {
 					</LineChart>
 				</ChartContainer>
 			</div>
-			<div className="flex flex-row justify-between items-start mt-4">
-				<div className="flex flex-row items-center justify-end flex-nowrap gap-2">
+			<div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mt-4 pb-6">
+				<div className="flex flex-row items-center justify-start flex-wrap gap-2 max-w-full">
 					{bits.map((bit) => (
 						<BitDownload key={bit.id} bit={bit} />
 					))}
