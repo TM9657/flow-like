@@ -1457,7 +1457,7 @@ export function FlowBoard({
 	);
 
 	return (
-		<div className="w-full flex-1 grow flex-col min-h-0">
+		<div className="w-full flex-1 grow flex-col min-h-0 pt-[var(--mobile-header-height,56px)] md:pt-0">
 			<div className="flex items-center justify-center absolute translate-x-[-50%] mt-5 left-[50dvw] z-40">
 				{board.data && editBoard && (
 					<BoardMeta
@@ -1536,7 +1536,7 @@ export function FlowBoard({
 			</div>
 			<ResizablePanelGroup
 				direction="horizontal"
-				className="flex grow min-h-dvh h-dvh"
+				className="flex grow min-h-[calc(100dvh-var(--mobile-header-height,56px))] h-[calc(100dvh-var(--mobile-header-height,56px))] md:min-h-dvh md:h-dvh"
 			>
 				<ResizablePanel
 					className="z-50 bg-background"

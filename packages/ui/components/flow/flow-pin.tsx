@@ -117,7 +117,7 @@ function FlowPinInnerComponent({
   const iconStyle = useMemo(
     () => ({
       color: typeToColor(pin.data_type),
-	  marginLeft: pin.pin_type === IPinType.Input ? "0.15rem" : "0.15rem",
+	  marginLeft: pin.pin_type === IPinType.Input ? "0.4rem" : "0.4rem",
       backgroundColor:
         "var(--xy-node-background-color, var(--xy-node-background-color-default))",
     }),
@@ -206,7 +206,7 @@ function FlowPinInnerComponent({
             url="/flow/pin.svg"
             className={`w-2 h-2 absolute left-0 right-0 -translate-x-[50%] pointer-events-none bg-foreground`}
 			style={{
-				marginLeft: pin.pin_type === IPinType.Input ? "0.1rem" : "0.2rem",
+				marginLeft: pin.pin_type === IPinType.Input ? "0.4rem" : "0.4rem",
 				height: 9,
 				width: 9,
 			}}
