@@ -2,31 +2,215 @@ import { GitHubLogoIcon } from "@radix-ui/react-icons";
 import { Button } from "@tm9657/flow-like-ui";
 import {
 	Book,
-	Code2,
 	Heart,
 	MessageCircle,
 	Rocket,
-	Sparkles,
-	Star,
 	X,
 	Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 
 type WelcomeStep = "welcome" | "docs" | "discord" | "github";
 
 const STEPS: WelcomeStep[] = ["welcome", "docs", "discord", "github"];
 
-interface FloatingIconProps {
-	icon: React.ComponentType<{ className?: string }>;
-	className?: string;
-	delay?: number;
-	duration?: number;
-}
-
 interface AnimatedBackgroundProps {
 	children: React.ReactNode;
 	variant?: WelcomeStep;
+}
+
+// A11y: honor reduced motion preference
+function usePrefersReducedMotion() {
+	const [reduced, setReduced] = useState(false);
+	useEffect(() => {
+		const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+		const onChange = () => setReduced(mql.matches);
+		onChange();
+		mql.addEventListener?.("change", onChange);
+		return () => mql.removeEventListener?.("change", onChange);
+	}, []);
+	return reduced;
+}
+
+// Spectacular animated starfield background with parallax and comets
+function UniverseBackground({ variant = "welcome" }: { variant?: WelcomeStep }) {
+	const canvasRef = useRef<HTMLCanvasElement | null>(null);
+	const rafRef = useRef<number | null>(null);
+	const starsRef = useRef<Array<{
+		x: number;
+		y: number;
+		z: number; // depth 0..1
+		size: number;
+		baseAlpha: number;
+		twinkle: number;
+		hue: number;
+	}>>([]);
+	const cometsRef = useRef<Array<{
+		x: number;
+		y: number;
+		vx: number;
+		vy: number;
+		life: number;
+		maxLife: number;
+	}>>([]);
+	const pointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+	const reducedMotion = usePrefersReducedMotion();
+
+	const palette = useMemo(() => {
+		switch (variant) {
+			case "discord":
+				return { hueMin: 230, hueMax: 260 };
+			case "docs":
+				return { hueMin: 200, hueMax: 220 };
+			case "github":
+				return { hueMin: 0, hueMax: 0 };
+			default:
+				return { hueMin: 250, hueMax: 300 };
+		}
+	}, [variant]);
+
+	const resizeCanvas = useCallback((canvas: HTMLCanvasElement) => {
+		const dpr = Math.min(window.devicePixelRatio || 1, 2);
+		const { clientWidth, clientHeight } = canvas;
+		canvas.width = Math.floor(clientWidth * dpr);
+		canvas.height = Math.floor(clientHeight * dpr);
+		const ctx = canvas.getContext("2d");
+		if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+	}, []);
+
+	const seedStars = useCallback((canvas: HTMLCanvasElement) => {
+		const area = canvas.clientWidth * canvas.clientHeight;
+		const density = reducedMotion ? 0.00015 : 0.00035; // stars per px
+		const count = Math.max(80, Math.min(900, Math.floor(area * density)));
+		const arr: typeof starsRef.current = [];
+		for (let i = 0; i < count; i++) {
+			const z = Math.random();
+			const size = 0.7 + Math.pow(z, 2) * 1.8;
+			const baseAlpha = 0.25 + Math.random() * 0.55;
+			const twinkle = 0.5 + Math.random() * 1.5;
+			const hue = palette.hueMin + Math.random() * (palette.hueMax - palette.hueMin);
+			arr.push({
+				x: Math.random() * canvas.clientWidth,
+				y: Math.random() * canvas.clientHeight,
+				z,
+				size,
+				baseAlpha,
+				twinkle,
+				hue,
+			});
+		}
+		starsRef.current = arr;
+	}, [palette, reducedMotion]);
+
+	useEffect(() => {
+		const canvas = canvasRef.current;
+		if (!canvas) return;
+		resizeCanvas(canvas);
+		seedStars(canvas);
+
+		let last = performance.now();
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return;
+
+		const draw = (now: number) => {
+			const dt = Math.min(0.05, (now - last) / 1000);
+			last = now;
+			ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+			const centerX = canvas.clientWidth / 2;
+			const centerY = canvas.clientHeight / 2;
+			const parallaxX = (pointerRef.current.x - centerX) / centerX;
+			const parallaxY = (pointerRef.current.y - centerY) / centerY;
+
+			// Stars
+			for (let i = 0; i < starsRef.current.length; i++) {
+				const s = starsRef.current[i];
+				const depth = 0.3 + s.z * 0.7;
+				const px = s.x + parallaxX * (1 - depth) * 12;
+				const py = s.y + parallaxY * (1 - depth) * 12;
+				const alpha = s.baseAlpha * (reducedMotion ? 1 : 0.5 + 0.5 * Math.sin(now * 0.002 * s.twinkle + i));
+
+				ctx.beginPath();
+				ctx.fillStyle = `hsla(${s.hue}, 80%, ${variant === "github" ? 88 : 74}%, ${alpha})`;
+				ctx.shadowBlur = 8 * depth;
+				ctx.shadowColor = `hsla(${s.hue}, 100%, 70%, ${alpha})`;
+				ctx.arc(px, py, s.size * depth, 0, Math.PI * 2);
+				ctx.fill();
+			}
+
+			// Comets
+			if (!reducedMotion && Math.random() < 0.012) {
+				const fromTop = Math.random() < 0.5;
+				const x = fromTop ? Math.random() * canvas.clientWidth : -40;
+				const y = fromTop ? -40 : Math.random() * canvas.clientHeight * 0.4;
+				const angle = (fromTop ? 1 : 0.7) + Math.random() * 0.3;
+				const speed = 280 + Math.random() * 140;
+				cometsRef.current.push({ x, y, vx: speed * angle, vy: speed * 0.45, life: 0, maxLife: 1.8 + Math.random() * 0.8 });
+			}
+
+			ctx.globalCompositeOperation = "lighter";
+			for (let i = cometsRef.current.length - 1; i >= 0; i--) {
+				const c = cometsRef.current[i];
+				c.life += dt;
+				c.x += c.vx * dt;
+				c.y += c.vy * dt;
+				const t = 1 - c.life / c.maxLife;
+				if (t <= 0) {
+					cometsRef.current.splice(i, 1);
+					continue;
+				}
+				const grad = ctx.createLinearGradient(c.x, c.y, c.x - 120, c.y - 60);
+				grad.addColorStop(0, `hsla(${palette.hueMax}, 100%, 80%, ${0.7 * t})`);
+				grad.addColorStop(1, `hsla(${palette.hueMin}, 100%, 60%, 0)`);
+				ctx.strokeStyle = grad;
+				ctx.lineWidth = 2;
+				ctx.beginPath();
+				ctx.moveTo(c.x, c.y);
+				ctx.lineTo(c.x - 120, c.y - 60);
+				ctx.stroke();
+				ctx.beginPath();
+				ctx.fillStyle = `hsla(${palette.hueMax}, 100%, 90%, ${0.9 * t})`;
+				ctx.arc(c.x, c.y, 1.8 + 2.2 * t, 0, Math.PI * 2);
+				ctx.fill();
+			}
+			ctx.globalCompositeOperation = "source-over";
+
+			if (!reducedMotion) rafRef.current = requestAnimationFrame(draw);
+		};
+
+		if (reducedMotion) {
+			draw(performance.now());
+			return; // draw once, no animation
+		}
+
+		rafRef.current = requestAnimationFrame(draw);
+
+		const onResize = () => {
+			resizeCanvas(canvas);
+			seedStars(canvas);
+		};
+		const onPointerMove = (e: PointerEvent) => {
+			pointerRef.current.x = e.clientX;
+			pointerRef.current.y = e.clientY;
+		};
+		window.addEventListener("resize", onResize);
+		window.addEventListener("pointermove", onPointerMove, { passive: true });
+		return () => {
+			if (rafRef.current) cancelAnimationFrame(rafRef.current);
+			window.removeEventListener("resize", onResize);
+			window.removeEventListener("pointermove", onPointerMove as any);
+		};
+	}, [palette, reducedMotion, resizeCanvas, seedStars, variant]);
+
+	return (
+		<div className="absolute inset-0 pointer-events-none">
+			{/* Soft nebulas using theme colors to avoid hard-coded color tokens */}
+			<div className="absolute -top-24 -left-24 w-[40vw] h-[40vw] max-w-[680px] max-h-[680px] rounded-full bg-primary/15 blur-3xl" />
+			<div className="absolute -bottom-24 -right-24 w-[35vw] h-[35vw] max-w-[560px] max-h-[560px] rounded-full bg-secondary/15 blur-3xl" />
+			<div className="absolute top-1/4 left-[10%] w-72 h-72 rounded-full bg-accent/10 blur-2xl" />
+			<canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+		</div>
+	);
 }
 
 export function TutorialDialog() {
@@ -101,59 +285,22 @@ export function TutorialDialog() {
 		}
 	};
 
-	const FloatingIcon = ({
-		icon: Icon,
-		className = "",
-		delay = 0,
-		duration = 4,
-	}: FloatingIconProps) => (
-		<div
-			className={`absolute animate-bounce ${className}`}
-			style={{
-				animationDelay: `${delay}s`,
-				animationDuration: `${duration}s`,
-				animationIterationCount: "infinite",
-			}}
-		>
-			<Icon className="w-4 h-4 text-muted-foreground/30" />
-		</div>
-	);
-
 	const AnimatedBackground = ({
 		children,
 		variant = "welcome",
 	}: AnimatedBackgroundProps) => (
-		<div className="relative min-h-screen flex items-center justify-center p-3 sm:p-6">
+		<div className="relative min-h-screen flex items-center justify-center p-2 sm:p-6 bg-background/90 backdrop-blur-sm">
 			<div className={`absolute inset-0 ${getBackgroundGradient(variant)}`} />
-			{/* Tone down pulses on small screens */}
+			{/* Enhanced cosmic spectacle */}
+			<UniverseBackground variant={variant} />
+			{/* Soft pulses toned down to let the universe shine */}
 			<div
-				className="absolute inset-0 bg-linear-to-tr from-accent/10 via-transparent to-primary/10 animate-pulse opacity-40 sm:opacity-100"
-				style={{ animationDuration: "8s" }}
+				className="absolute inset-0 bg-linear-to-tr from-accent/10 via-transparent to-primary/10 animate-pulse opacity-30 sm:opacity-80"
+				style={{ animationDuration: "10s" }}
 			/>
 			<div
-				className="absolute inset-0 bg-linear-to-bl from-secondary/8 via-transparent to-accent/8 animate-pulse opacity-40 sm:opacity-100"
-				style={{ animationDuration: "12s", animationDelay: "4s" }}
-			/>
-
-			{/* Hide most floating icons on very small screens to reduce clutter */}
-			<div className="hidden sm:block">
-				<FloatingIcon icon={Star} className="top-20 left-[10%]" delay={0} />
-				<FloatingIcon icon={Sparkles} className="top-32 right-[15%]" delay={1.5} />
-				<FloatingIcon icon={Code2} className="bottom-40 left-[8%]" delay={3} />
-				<FloatingIcon icon={Heart} className="bottom-24 right-[20%]" delay={4.5} />
-				<FloatingIcon icon={Rocket} className="top-48 left-[25%]" delay={2} />
-				<FloatingIcon icon={Zap} className="bottom-52 right-[12%]" delay={3.5} />
-				<FloatingIcon icon={Sparkles} className="top-64 right-[8%]" delay={1} />
-				<FloatingIcon icon={Star} className="bottom-32 left-[18%]" delay={4} />
-			</div>
-
-			<div
-				className="absolute top-[20%] left-[5%] w-32 h-32 bg-primary/8 rounded-full blur-2xl animate-pulse max-sm:opacity-40"
-				style={{ animationDuration: "6s" }}
-			/>
-			<div
-				className="absolute bottom-[25%] right-[8%] w-24 h-24 bg-secondary/8 rounded-full blur-2xl animate-pulse max-sm:opacity-40"
-				style={{ animationDuration: "8s", animationDelay: "2s" }}
+				className="absolute inset-0 bg-linear-to-bl from-secondary/8 via-transparent to-accent/8 animate-pulse opacity-30 sm:opacity-80"
+				style={{ animationDuration: "14s", animationDelay: "5s" }}
 			/>
 
 			<div className="relative z-10 w-full h-full flex items-stretch justify-center">
@@ -214,22 +361,22 @@ export function TutorialDialog() {
 	);
 
 	const WelcomeStep = () => (
-		<div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 h-full p-6 sm:p-8">
+		<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 h-full p-4 sm:p-8">
 			<div className="flex flex-col justify-center">
 				<div className="relative mb-6">
 					<img
 						src="/app-logo.webp"
 						alt="Flow Like Logo"
-						className="w-28 h-28 mx-auto"
+						className="w-24 h-24 sm:w-28 sm:h-28 mx-auto"
 					/>
 				</div>
-				<h2 className="text-4xl font-bold text-center mb-4">
+				<h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">
 					<span className="text-primary">Flow</span> Like
 				</h2>
 				<div className="w-20 h-0.5 bg-primary mx-auto" />
 			</div>
 
-			<div className="flex flex-col justify-center space-y-6">
+			<div className="flex flex-col justify-center space-y-4 sm:space-y-6">
 				<div className="space-y-3">
 					<FeatureItem icon={Rocket} text="Scalable Development" />
 					<FeatureItem icon={Zap} text="Lightning Fast Performance" />
@@ -240,20 +387,20 @@ export function TutorialDialog() {
 	);
 
 	const DocsStep = () => (
-		<div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 h-full p-6 sm:p-8">
+		<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 h-full p-4 sm:p-8">
 			<div className="flex flex-col justify-center items-center">
 				<div
 					className={
 						supportsBackdrop
-							? "w-28 h-28 bg-primary/20 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 border border-primary/30 shadow-lg"
-							: "w-28 h-28 bg-primary/15 rounded-3xl flex items-center justify-center mb-6 border border-primary/30 shadow-lg"
+							? "w-14 h-14 sm:w-28 sm:h-28 rounded-md sm:rounded-xl bg-primary/20 backdrop-blur-md flex items-center justify-center mb-6 border border-primary/30 shadow-lg"
+							: "w-14 h-14 sm:w-28 sm:h-28 rounded-md sm:rounded-xl bg-primary/15 flex items-center justify-center mb-6 border border-primary/30 shadow-lg"
 					}
 				>
-					<Book className="w-14 h-14 text-primary" />
+					<Book className="w-7 h-7 sm:w-14 sm:h-14 text-primary" />
 				</div>
 			</div>
 
-			<div className="flex flex-col justify-center space-y-6">
+			<div className="flex flex-col justify-center items-center sm:items-start pb-4 sm:pb-0 space-y-4 sm:space-y-6">
 				<div className="space-y-3">
 					<BulletPoint text="Quick Start Guide" />
 					<BulletPoint text="API Reference" />
@@ -276,20 +423,20 @@ export function TutorialDialog() {
 	);
 
 	const DiscordStep = () => (
-		<div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 h-full p-6 sm:p-8">
+		<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 h-full p-4 sm:p-8">
 			<div className="flex flex-col justify-center items-center">
 				<div
 					className={
 						supportsBackdrop
-							? "w-28 h-28 bg-[#5865F2]/20 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 border border-[#5865F2]/30 shadow-lg"
-							: "w-28 h-28 bg-[#5865F2]/15 rounded-3xl flex items-center justify-center mb-6 border border-[#5865F2]/30 shadow-lg"
+							? "w-14 h-14 sm:w-28 sm:h-28 rounded-md sm:rounded-xl bg-[#5865F2]/20 backdrop-blur-md flex items-center justify-center mb-6 border border-[#5865F2]/30 shadow-lg"
+							: "w-14 h-14 sm:w-28 sm:h-28 rounded-md sm:rounded-xl bg-[#5865F2]/15 flex items-center justify-center mb-6 border border-[#5865F2]/30 shadow-lg"
 					}
 				>
-					<MessageCircle className="w-14 h-14 text-[#5865F2]" />
+					<MessageCircle className="w-7 h-7 sm:w-14 sm:h-14 text-[#5865F2]" />
 				</div>
 			</div>
 
-			<div className="flex flex-col justify-center space-y-6">
+			<div className="flex flex-col justify-center space-y-4 sm:space-y-6 items-center sm:items-start pb-4 sm:pb-0">
 				<div className="space-y-3">
 					<BulletPoint text="Get Help & Support" color="[#5865F2]" />
 					<BulletPoint text="Share Your Projects" color="[#5865F2]" />
@@ -312,20 +459,20 @@ export function TutorialDialog() {
 	);
 
 	const GithubStep = () => (
-		<div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 h-full p-6 sm:p-8">
+		<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 h-full p-4 sm:p-8">
 			<div className="flex flex-col justify-center items-center">
 				<div
 					className={
 						supportsBackdrop
-							? "w-28 h-28 bg-foreground/20 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 border border-foreground/30 shadow-lg"
-							: "w-28 h-28 bg-foreground/15 rounded-3xl flex items-center justify-center mb-6 border border-foreground/30 shadow-lg"
+							? "w-14 h-14 sm:w-28 sm:h-28 rounded-md sm:rounded-xl bg-foreground/20 backdrop-blur-md flex items-center justify-center mb-6 border border-foreground/30 shadow-lg"
+							: "w-14 h-14 sm:w-28 sm:h-28 rounded-md sm:rounded-xl bg-foreground/15 flex items-center justify-center mb-6 border border-foreground/30 shadow-lg"
 					}
 				>
-					<GitHubLogoIcon className="w-14 h-14 text-foreground" />
+					<GitHubLogoIcon className="w-7 h-7 sm:w-14 sm:h-14 text-foreground" />
 				</div>
 			</div>
 
-			<div className="flex flex-col justify-center space-y-6">
+			<div className="flex flex-col justify-center space-y-4 sm:space-y-6 items-center sm:items-start pb-4 sm:pb-0">
 				<div className="space-y-3">
 					<BulletPoint text="Explore Source Code" color="foreground" />
 					<BulletPoint text="Report Issues" color="foreground" />
@@ -359,60 +506,54 @@ export function TutorialDialog() {
 
 	const CurrentStepComponent = stepComponents[currentStep];
 
-	if (!showTutorial) return null;
+	if (showTutorial) return null;
 
 	return (
 		<div className="fixed inset-0 z-50">
 			<AnimatedBackground variant={currentStep}>
-				{/* Container: mobile full-screen, desktop card */}
+				{/* Container: mobile centered card, desktop card */}
 				<div
 					className={
-						`w-full sm:w-[750px] max-w-[100vw] sm:max-w-[90vw] h-[100dvh] sm:h-auto ${
+						`w-full max-w-[420px] mx-2 sm:mx-0 sm:w-[750px] sm:max-w-[90vw] h-auto max-h-[85dvh] sm:h-auto ${
 							supportsBackdrop
 								? "bg-background/25 backdrop-blur-2xl border"
 								: "bg-card border"
-						} border-border/40 sm:rounded-3xl sm:shadow-2xl overflow-hidden flex flex-col`
+						}
+						border-border/40 rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl overflow-hidden flex flex-col`
 					}
 				>
 					<div
 						className={
 							supportsBackdrop
-								? "p-6 sm:p-8 border-b border-border/30 bg-background/15 backdrop-blur-xl"
-								: "p-6 sm:p-8 border-b border-border/30 bg-card"
+								? "p-4 sm:p-8 border-b border-border/30 bg-background/15 backdrop-blur-xl"
+								: "p-4 sm:p-8 border-b border-border/30 bg-card"
 						}
 					>
-						<div className="flex items-center justify-between">
-							<div className="text-center flex-1">
-								<h1 className="text-3xl font-bold">
+						<div className="relative">
+							<div className="text-center px-6 sm:px-8">
+								<h1 className="text-2xl sm:text-3xl font-bold">
 									{stepData[currentStep].title}
 								</h1>
-								<p className="text-muted-foreground mt-2 text-lg">
+								<p className="text-muted-foreground mt-2 text-base sm:text-lg">
 									{stepData[currentStep].description}
 								</p>
 							</div>
-							<Button
-								variant="ghost"
-								size="sm"
-								className={supportsBackdrop ? "ml-6 hover:bg-background/40 backdrop-blur-xs rounded-xl" : "ml-6 hover:bg-muted/60 rounded-xl"}
-								onClick={() => setShowTutorial(false)}
-							>
-								<X className="w-5 h-5" />
-							</Button>
 						</div>
 					</div>
 
 					{/* Body */}
 					<div
-						className={supportsBackdrop ? "flex-1 min-h-0 h-[calc(100dvh-200px)] sm:h-[450px] bg-background/10 backdrop-blur-lg" : "flex-1 min-h-0 h-[calc(100dvh-200px)] sm:h-[450px] bg-card"}
+						className={supportsBackdrop ? "flex-1 min-h-0 overflow-y-auto bg-background/10 backdrop-blur-lg sm:h-[450px]" : "flex-1 min-h-0 overflow-y-auto bg-card sm:h-[450px]"}
 					>
 						<CurrentStepComponent />
 					</div>
 
 					{/* Footer */}
 					<div
-						className={supportsBackdrop ? "p-6 sm:p-8 bg-background/15 backdrop-blur-xl border-t border-border/30" : "p-6 sm:p-8 bg-card border-t border-border/30"}
+						className={supportsBackdrop ? "p-4 sm:p-8 bg-background/15 backdrop-blur-xl border-t border-border/30" : "p-4 sm:p-8 bg-card border-t border-border/30"}
+						style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}
 					>
-						<div className="flex justify-center gap-3 mb-8">
+						<div className="flex justify-center gap-3 mb-4 sm:mb-8">
 							{STEPS.map((step) => (
 								<div
 									key={step}
@@ -425,7 +566,38 @@ export function TutorialDialog() {
 							))}
 						</div>
 
-						<div className="flex justify-between">
+						{/* Mobile controls */}
+						<div className="sm:hidden flex flex-col gap-3">
+							<Button
+								onClick={handleNext}
+								className={supportsBackdrop ? "w-full bg-primary/90 backdrop-blur-xs hover:bg-primary rounded-xl" : "w-full bg-primary hover:bg-primary/90 rounded-xl"}
+							>
+								{currentStep === "github" ? "Get Started" : "Next"}
+							</Button>
+							<div className="flex items-center justify-between pb-2">
+								{currentStep !== "welcome" ? (
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={handlePrevious}
+										className={supportsBackdrop ? "hover:bg-background/40 backdrop-blur-xs rounded-xl" : "hover:bg-muted rounded-xl"}
+									>
+										Previous
+										</Button>
+								) : <div />}
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={handleSkip}
+									className={supportsBackdrop ? "hover:bg-background/40 backdrop-blur-xs rounded-xl" : "hover:bg-muted rounded-xl"}
+								>
+									Skip Tour
+								</Button>
+							</div>
+						</div>
+
+						{/* Desktop controls */}
+						<div className="hidden sm:flex items-center justify-between pb-4">
 							<div>
 								{currentStep !== "welcome" && (
 									<Button
@@ -438,7 +610,7 @@ export function TutorialDialog() {
 										}
 									>
 										Previous
-									</Button>
+										</Button>
 								)}
 							</div>
 							<div className="flex gap-4">

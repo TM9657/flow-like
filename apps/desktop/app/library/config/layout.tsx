@@ -158,27 +158,31 @@ export default function Id({ children }: Readonly<{ children: React.ReactNode }>
 
 	const events = useInvoke(backend.eventState.getEvents, backend.eventState, [id ?? ""], (id ?? "") !== "");
 
-	const {update} = useMobileHeader({
+	const { update } = useMobileHeader({
 		title: metadata.data?.name ?? (metadata.isFetching ? <Skeleton className="h-4 w-24" /> : "Unknown App"),
-		right: <Button variant="outline" size="sm" className="md:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
-									<MenuIcon className="w-4 h-4" />
-								</Button>,
+		right: <Button key={"open-menu"} variant="outline" size="sm" className="md:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
+			<MenuIcon className="w-4 h-4" />
+		</Button>,
 	}, [events.data])
 
 	useEffect(() => {
 		update({
 			title: metadata.data?.name ?? (metadata.isFetching ? <Skeleton className="h-4 w-24" /> : "Unknown App"),
-									right: [<Button variant="outline" size="sm" className="md:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
-										<MenuIcon className="w-4 h-4" />
-									</Button>, <Link
-										href={`/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`}
-										className="md:hidden"
-									>
-										<Button variant="default" size="sm" aria-label="Use App">
-											<SparklesIcon className="w-4 h-4" />
-											Use App
-										</Button>
-									</Link>],
+			right: [
+				<Button key={"open-menu"} variant="outline" size="sm" className="md:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
+					<MenuIcon className="w-4 h-4" />
+				</Button>,
+				<Link
+					key={"use-app"}
+					href={`/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`}
+					className="md:hidden"
+				>
+					<Button variant="default" size="sm" aria-label="Use App">
+						<SparklesIcon className="w-4 h-4" />
+						Use App
+					</Button>
+				</Link>
+			],
 		})
 	}, [events.data])
 

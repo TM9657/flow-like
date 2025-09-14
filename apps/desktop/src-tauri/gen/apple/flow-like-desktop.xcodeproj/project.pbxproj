@@ -356,7 +356,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = "flow-like-desktop_iOS/flow-like-desktop_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = VVT9DYMA6M;
+				DEVELOPMENT_TEAM = "VVT9DYMA6M";
 				ENABLE_BITCODE = NO;
 				EXCLUDED_ARCHS = "";
 				FRAMEWORK_SEARCH_PATHS = (
@@ -385,7 +385,7 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
 				MARKETING_VERSION = 0.0.5;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.flow-like.app";
+				PRODUCT_BUNDLE_IDENTIFIER = com.flow-like.app;
 				PRODUCT_NAME = "Flow Like";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -402,7 +402,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = "flow-like-desktop_iOS/flow-like-desktop_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = VVT9DYMA6M;
+				DEVELOPMENT_TEAM = "VVT9DYMA6M";
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -431,7 +431,7 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
 				MARKETING_VERSION = 0.0.5;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.flow-like.app";
+				PRODUCT_BUNDLE_IDENTIFIER = com.flow-like.app;
 				PRODUCT_NAME = "Flow Like";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

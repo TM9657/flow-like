@@ -25,6 +25,7 @@ export default function Onboarding() {
 
 	const calculateSize = useCallback(async () => {
 		const bits = new Map<string, Bit>();
+		const countedBits = new Set<string>();
 		activeProfiles.forEach((profileId) => {
 			const profile = profiles.find(
 				([profile]) => profile.hub_profile.id === profileId,
@@ -38,7 +39,11 @@ export default function Onboarding() {
 		});
 
 		const sizes = await Promise.all(
-			Array.from(bits.values()).map((bit) => bit.fetchSize()),
+			Array.from(bits.values()).filter(bit => {
+				if (countedBits.has(bit.id)) return false;
+				countedBits.add(bit.id);
+				return true;
+			}).map((bit) => backend.bitState.getBitSize(bit)),
 		);
 		setTotalSize(sizes.reduce((acc, size) => acc + size, 0));
 	}, [activeProfiles, profiles, backend]);

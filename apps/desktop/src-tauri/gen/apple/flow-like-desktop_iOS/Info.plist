@@ -19,7 +19,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.4</string>
+	<string>0.0.5</string>
 	<key>CFBundleVersion</key>
 	<string>0.0.4</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -51,15 +51,26 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSPrivacyAccessedAPITypes</key>
-    <array>
-      <dict>
-        <key>NSPrivacyAccessedAPIType</key>
-        <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
-        <key>NSPrivacyAccessedAPITypeReasons</key>
-        <array>
-          <string>C617.1</string>
-        </array>
-      </dict>
-    </array>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>flow-like</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>flow-like</string>
+		</dict>
+	</array>
 </dict>
 </plist>
