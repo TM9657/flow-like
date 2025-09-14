@@ -42,6 +42,7 @@ import {
 	toastError,
 	useBackend,
 	useInvoke,
+	useMobileHeader,
 } from "@tm9657/flow-like-ui";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
@@ -124,6 +125,24 @@ export default function Id({ children }: Readonly<{ children: React.ReactNode }>
 	const [exporting, setExporting] = useState(false);
 	const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+	// Lock page scroll on desktop (md+) so only the right card scrolls
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const apply = () => {
+			const isDesktop = window.matchMedia("(min-width: 768px)").matches;
+			// Only lock on desktop; keep mobile natural scrolling
+			document.body.style.overflowY = isDesktop ? "hidden" : "";
+			document.documentElement.style.overflowY = isDesktop ? "hidden" : "";
+		};
+		apply();
+		window.addEventListener("resize", apply);
+		return () => {
+			window.removeEventListener("resize", apply);
+			document.body.style.overflowY = "";
+			document.documentElement.style.overflowY = "";
+		};
+	}, []);
+
 	useEffect(() => {
 		const saved = typeof window !== "undefined" ? localStorage.getItem("exportEncrypted") : null;
 		if (saved != null) setEncrypt(saved === "true");
@@ -136,6 +155,32 @@ export default function Id({ children }: Readonly<{ children: React.ReactNode }>
 			setConfirmPassword("");
 		}
 	}, [encrypt]);
+
+	const events = useInvoke(backend.eventState.getEvents, backend.eventState, [id ?? ""], (id ?? "") !== "");
+
+	const {update} = useMobileHeader({
+		title: metadata.data?.name ?? (metadata.isFetching ? <Skeleton className="h-4 w-24" /> : "Unknown App"),
+		right: <Button variant="outline" size="sm" className="md:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
+									<MenuIcon className="w-4 h-4" />
+								</Button>,
+	}, [events.data])
+
+	useEffect(() => {
+		update({
+			title: metadata.data?.name ?? (metadata.isFetching ? <Skeleton className="h-4 w-24" /> : "Unknown App"),
+									right: [<Button variant="outline" size="sm" className="md:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
+										<MenuIcon className="w-4 h-4" />
+									</Button>, <Link
+										href={`/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`}
+										className="md:hidden"
+									>
+										<Button variant="default" size="sm" aria-label="Use App">
+											<SparklesIcon className="w-4 h-4" />
+											Use App
+										</Button>
+									</Link>],
+		})
+	}, [events.data])
 
 	const strength = useMemo(() => {
 		if (!encrypt) return 0;
@@ -167,7 +212,6 @@ export default function Id({ children }: Readonly<{ children: React.ReactNode }>
 		}
 	}, [id, encrypt, password]);
 
-	const events = useInvoke(backend.eventState.getEvents, backend.eventState, [id ?? ""], (id ?? "") !== "");
 
 	const usableEvents = useMemo(() => {
 		const set = new Set<string>();
@@ -197,9 +241,9 @@ export default function Id({ children }: Readonly<{ children: React.ReactNode }>
 
 	return (
 		<TooltipProvider>
-			<main className="flex overflow-hidden flex-col w-full p-4 sm:p-6 gap-4 sm:gap-6 flex-1 min-h-0">
+			<main className="flex overflow-hidden flex-col w-full p-4 sm:p-6 gap-4 sm:gap-6 flex-1 min-h-0 h-full">
 				{!isMaximized && (
-					<Card className="border-0 shadow-sm bg-gradient-to-r from-background to-muted/20 h-fit max-h-fit py-3 sm:py-4">
+					<Card className="border-0 shadow-sm bg-gradient-to-r from-background to-muted/20 h-fit py-3 sm:py-4 hidden md:flex">
 						<CardContent className="p-4 py-0 flex flex-row items-center justify-between">
 							<Breadcrumb>
 								<BreadcrumbList>
@@ -361,7 +405,7 @@ export default function Id({ children }: Readonly<{ children: React.ReactNode }>
 					</DialogContent>
 				</Dialog>
 
-				<div className={`grid w-full items-start gap-6 flex-grow overflow-hidden max-h-full transition-all duration-300 ${isMaximized ? "grid-cols-1" : "md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]"}`}>
+				<div className={`grid w-full items-stretch gap-6 flex-1 overflow-hidden min-h-0 transition-all duration-300 ${isMaximized ? "grid-cols-1" : "md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]"}`}>
 					{!isMaximized && (
 						<Card className="h-full max-h-full overflow-hidden py-2 hidden md:flex md:flex-col md:flex-grow order-2 md:order-1">
 							<CardHeader className="pb-2 pt-2 border-b relative h-fit">
@@ -501,7 +545,7 @@ export default function Id({ children }: Readonly<{ children: React.ReactNode }>
 						</Card>
 					)}
 
-					<Card className={`h-full flex-col flex-grow overflow-hidden transition-all duration-300 bg-transparent hidden md:flex ${isMaximized ? "shadow-2xl" : ""} order-1 md:order-2`}>
+					<Card className={`h-full max-h-full flex-col flex-grow overflow-hidden min-h-0 transition-all duration-300 bg-transparent hidden md:flex ${isMaximized ? "shadow-2xl" : ""} order-1 md:order-2`}>
 						<CardHeader className="pb-0 pt-4 px-4 hidden md:block">
 							<div className="flex items-center justify-between">
 								<div className="flex-1" />
@@ -515,14 +559,18 @@ export default function Id({ children }: Readonly<{ children: React.ReactNode }>
 								</Tooltip>
 							</div>
 						</CardHeader>
-						<CardContent className="flex-1 p-6 pb-0 pt-0 overflow-hidden">
-							<Suspense fallback={<div className="space-y-4"><Skeleton className="h-8 w-full" /><Skeleton className="h-32 w-full" /><Skeleton className="h-24 w-full" /></div>}>
-								{children}
-							</Suspense>
+						<CardContent className="flex-1 p-0 overflow-hidden min-h-0">
+							<ScrollArea className="h-full">
+								<div className="p-6 pb-0 pt-0">
+									<Suspense fallback={<div className="space-y-4"><Skeleton className="h-8 w-full" /><Skeleton className="h-32 w-full" /><Skeleton className="h-24 w-full" /></div>}>
+										{children}
+									</Suspense>
+								</div>
+							</ScrollArea>
 						</CardContent>
 					</Card>
 
-					<div className="flex flex-col max-h-full md:hidden overflow-hidden ">
+					<div className="flex flex-col max-h-full md:hidden overflow-auto ">
 						<Suspense fallback={<div className="space-y-4"><Skeleton className="h-8 w-full" /><Skeleton className="h-32 w-full" /><Skeleton className="h-24 w-full" /></div>}>
 							{children}
 						</Suspense>

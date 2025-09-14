@@ -390,7 +390,7 @@ export default function Id() {
 	}
 
 	return (
-		<div className="w-full max-w-6xl mx-auto p-2 md:p-6 pt-0 space-y-6 flex flex-col flex-grow max-h-full overflow-auto">
+		<div className="w-full max-w-6xl mx-auto p-2 md:p-6 pt-0 space-y-6 flex flex-col flex-grow max-h-full min-h-0 overflow-auto md:overflow-visible">
 			{/* Header with Save Button - Made Sticky */}
 			{hasChanges && canEdit && (
 				<div className="sticky top-0 z-10 mb-6">

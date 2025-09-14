@@ -31,6 +31,8 @@ import {
 	IBitTypes,
 	Input,
 	Label,
+	MobileHeader,
+	MobileHeaderProvider,
 	Sidebar,
 	SidebarContent,
 	SidebarFooter,
@@ -46,7 +48,6 @@ import {
 	SidebarMenuSubItem,
 	SidebarProvider,
 	SidebarRail,
-	SidebarTrigger,
 	Textarea,
 	useBackend,
 	useInvalidateInvoke,
@@ -220,20 +221,13 @@ export function AppSidebar({
 	return (
 		<SidebarProvider defaultOpen={defaultOpen}>
 			<InnerSidebar />
-			<main className="w-full h-[100svh] flex flex-col overflow-hidden">
-				{/* Mobile top bar with sidebar trigger (no overlap with chat composer) */}
-				<div className="md:hidden sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-					<div className="flex items-center gap-2 p-2">
-						<SidebarTrigger
-							className="size-9 rounded-lg border"
-							aria-label="Open Menu"
-						/>
-						<span className="text-sm font-medium">Menu</span>
-					</div>
-				</div>
-				<SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20 flex flex-col flex-1 min-h-0 overflow-hidden">
-					{children}
-				</SidebarInset>
+			<main className="w-full h-[100dvh] flex flex-col overflow-hidden">
+				<MobileHeaderProvider>
+					<MobileHeader />
+					<SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20 flex flex-col flex-1 min-h-0 h-full overflow-hidden">
+						{children}
+					</SidebarInset>
+				</MobileHeaderProvider>
 			</main>
 		</SidebarProvider>
 	);

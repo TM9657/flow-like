@@ -71,9 +71,9 @@ export function DetailsCard({
         <Card>
             <CardHeader>
                 {isMember ? (
-                    <div className="flex flex-1 items-center gap-3">
-                        <Button variant="outline" onClick={onSettings} className="flex-1 md:flex-none md:min-w-[160px]"><SettingsIcon className="h-4 w-4 mr-2" /> Settings</Button>
-                        <Button onClick={onUse} className="flex-1 md:flex-none md:min-w-[180px]"> <Play className="h-4 w-4 mr-2" /> Use App</Button>
+                    <div className="flex flex-row flex-wrap flex-1 items-center gap-3 w-full">
+                        <Button variant="outline" onClick={onSettings} className="flex-grow"><SettingsIcon className="h-4 w-4 mr-2" /> Settings</Button>
+                        <Button onClick={onUse} className="flex-grow"> <Play className="h-4 w-4 mr-2" /> Use App</Button>
                     </div>
                 ) : (
                     <div className="flex flex-1 items-center gap-3">

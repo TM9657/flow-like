@@ -49,44 +49,46 @@ export default function Page() {
     }
 
     return (
-        <div className="container mx-auto px-4 py-8 flex flex-col gap-8 flex-1 min-h-0">
-            <StoreHero
-                coverUrl={coverUrl}
-                iconUrl={iconUrl}
-                appName={appName}
-                priceLabel={priceLabel}
-                category={app.data.primary_category ?? "Other"}
-                ageRating={(meta.data.age_rating ?? 0) + "+"}
-                isMember={isMember}
-                ratingCount={app.data.rating_count}
-                avgRating={app.data.avg_rating ?? 0}
-                visibility={app.data.visibility}
-                authors={app.data.authors}
-            />
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-fit">
-                <AboutSection app={app.data} meta={meta.data} />
-                <DetailsCard
-                    app={app.data}
-                    meta={meta.data}
-                    isMember={isMember}
-                    price={app.data.price ?? 0}
-                    visibility={app.data.visibility}
+        <main className="flex-col flex flex-grow max-h-full p-6 overflow-auto md:overflow-auto min-h-0  w-full">
+            <div className="mx-auto w-full max-w-7xl flex-col flex space-y-8">
+                <StoreHero
+                    coverUrl={coverUrl}
+                    iconUrl={iconUrl}
+                    appName={appName}
                     priceLabel={priceLabel}
-                    onUse={onUse}
-                    onSettings={onSettings}
-                    onJoinOrRequest={onJoinOrRequest}
-                    onBuy={onBuy} />
-            </div>
-
-            {meta.data.long_description && <div className="leading-relaxed mx-2">
-                <TextEditor
-                    initialContent={meta.data.long_description ?? "No description available."}
-                    isMarkdown
+                    category={app.data.primary_category ?? "Other"}
+                    ageRating={(meta.data.age_rating ?? 0) + "+"}
+                    isMember={isMember}
+                    ratingCount={app.data.rating_count}
+                    avgRating={app.data.avg_rating ?? 0}
+                    visibility={app.data.visibility}
+                    authors={app.data.authors}
                 />
-            </div>}
 
-            <StoreRecommendations />
-        </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-fit">
+                    <AboutSection app={app.data} meta={meta.data} />
+                    <DetailsCard
+                        app={app.data}
+                        meta={meta.data}
+                        isMember={isMember}
+                        price={app.data.price ?? 0}
+                        visibility={app.data.visibility}
+                        priceLabel={priceLabel}
+                        onUse={onUse}
+                        onSettings={onSettings}
+                        onJoinOrRequest={onJoinOrRequest}
+                        onBuy={onBuy} />
+                </div>
+
+                {meta.data.long_description && <div className="leading-relaxed mx-2">
+                    <TextEditor
+                        initialContent={meta.data.long_description ?? "No description available."}
+                        isMarkdown
+                    />
+                </div>}
+
+                <StoreRecommendations />
+            </div>
+        </main>
     );
 }

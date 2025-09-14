@@ -105,10 +105,8 @@
 		"deep-link": {
 			"mobile": [
 				{
-					"host": "mobile.flow-like.com",
-					"pathPrefix": [
-						"/"
-					]
+					"scheme": ["flow-like"],
+					"appLink": false
 				}
 			],
 			"desktop": {
