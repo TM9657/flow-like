@@ -5,10 +5,15 @@ import {
 	Heart,
 	MessageCircle,
 	Rocket,
-	X,
 	Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import {
+	useEffect,
+	useMemo,
+	useState,
+	useRef,
+	useCallback,
+} from "react";
 
 type WelcomeStep = "welcome" | "docs" | "discord" | "github";
 
@@ -112,7 +117,7 @@ function UniverseBackground({ variant = "welcome" }: { variant?: WelcomeStep }) 
 		const ctx = canvas.getContext("2d");
 		if (!ctx) return;
 
-		const draw = (now: number) => {
+	const draw = (now: number) => {
 			const dt = Math.min(0.05, (now - last) / 1000);
 			last = now;
 			ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
@@ -175,6 +180,37 @@ function UniverseBackground({ variant = "welcome" }: { variant?: WelcomeStep }) 
 			}
 			ctx.globalCompositeOperation = "source-over";
 
+			// Aurora waves (subtle flowing ribbons)
+			if (!reducedMotion) {
+				const baseHueA = palette.hueMin;
+				const baseHueB = palette.hueMax || palette.hueMin + 20;
+				const w = canvas.clientWidth;
+				const h = canvas.clientHeight;
+
+				const drawAurora = (offset: number, amp: number, thickness: number, speed: number) => {
+					ctx.save();
+					ctx.globalCompositeOperation = "lighter";
+					ctx.globalAlpha = 0.08;
+					ctx.lineWidth = thickness;
+					const grad = ctx.createLinearGradient(0, h * 0.25 + offset, w, h * 0.75 + offset);
+					grad.addColorStop(0, `hsla(${baseHueA}, 100%, 70%, 0.6)`);
+					grad.addColorStop(0.5, `hsla(${baseHueB}, 100%, 60%, 0.35)`);
+					grad.addColorStop(1, `hsla(${baseHueA}, 100%, 75%, 0.5)`);
+					ctx.strokeStyle = grad;
+					ctx.beginPath();
+					const k = (now * 0.001 * speed);
+					for (let x = -50; x <= w + 50; x += 6) {
+						const y = h * 0.5 + Math.sin(x * 0.008 + k + offset) * amp + Math.cos(x * 0.015 - k * 0.6) * (amp * 0.4);
+						if (x === -50) ctx.moveTo(x, y);
+						else ctx.lineTo(x, y);
+					}
+					ctx.stroke();
+					ctx.restore();
+				};
+				drawAurora(-60, 32, 20, 1);
+				drawAurora(40, 22, 14, 1.4);
+			}
+
 			if (!reducedMotion) rafRef.current = requestAnimationFrame(draw);
 		};
 
@@ -217,6 +253,11 @@ export function TutorialDialog() {
 	const [showTutorial, setShowTutorial] = useState(false);
 	const [currentStep, setCurrentStep] = useState<WelcomeStep>("welcome");
 	const [supportsBackdrop, setSupportsBackdrop] = useState<boolean>(true);
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	const confettiCanvasRef = useRef<HTMLCanvasElement | null>(null);
+	const touchStartXRef = useRef<number | null>(null);
+	const lastPointerMoveTs = useRef<number>(0);
+	const reducedMotion = usePrefersReducedMotion();
 
 	useEffect(() => {
 		const hasFinishedTutorial = localStorage.getItem("tutorial-finished");
@@ -251,9 +292,29 @@ export function TutorialDialog() {
 		}
 	}, []);
 
-	const handleSkip = () => {
+	// Keyboard navigation and quick-exit
+	useEffect(() => {
+		if (!showTutorial) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				handleSkip(true);
+			} else if (e.key === "ArrowRight") {
+				handleNext();
+			} else if (e.key === "ArrowLeft") {
+				handlePrevious();
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [showTutorial, currentStep]);
+
+	const handleSkip = (celebrate = false) => {
 		localStorage.setItem("tutorial-finished", "true");
-		setShowTutorial(false);
+		if (celebrate && !reducedMotion) {
+			setTimeout(() => setShowTutorial(false), 500);
+		} else {
+			setShowTutorial(false);
+		}
 	};
 
 	const handleNext = () => {
@@ -261,7 +322,7 @@ export function TutorialDialog() {
 		if (currentIndex < STEPS.length - 1) {
 			setCurrentStep(STEPS[currentIndex + 1]);
 		} else {
-			handleSkip();
+			handleSkip(true);
 		}
 	};
 
@@ -302,6 +363,9 @@ export function TutorialDialog() {
 				className="absolute inset-0 bg-linear-to-bl from-secondary/8 via-transparent to-accent/8 animate-pulse opacity-30 sm:opacity-80"
 				style={{ animationDuration: "14s", animationDelay: "5s" }}
 			/>
+
+			{/* Confetti overlay */}
+			<canvas ref={confettiCanvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-[11]" />
 
 			<div className="relative z-10 w-full h-full flex items-stretch justify-center">
 				{children}
@@ -506,10 +570,10 @@ export function TutorialDialog() {
 
 	const CurrentStepComponent = stepComponents[currentStep];
 
-	if (showTutorial) return null;
+	if (!showTutorial) return null;
 
 	return (
-		<div className="fixed inset-0 z-50">
+		<div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Welcome tour">
 			<AnimatedBackground variant={currentStep}>
 				{/* Container: mobile centered card, desktop card */}
 				<div
@@ -521,6 +585,21 @@ export function TutorialDialog() {
 						}
 						border-border/40 rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl overflow-hidden flex flex-col`
 					}
+					ref={containerRef}
+					onTouchStart={(e) => {
+						touchStartXRef.current = e.touches[0]?.clientX ?? null;
+					}}
+					onTouchEnd={(e) => {
+						if (touchStartXRef.current == null) return;
+						const endX = e.changedTouches[0]?.clientX ?? touchStartXRef.current;
+						const delta = endX - touchStartXRef.current;
+						touchStartXRef.current = null;
+						if (Math.abs(delta) > 48) {
+							if (delta < 0) handleNext();
+							else handlePrevious();
+						}
+					}}
+					style={{}}
 				>
 					<div
 						className={
@@ -530,6 +609,12 @@ export function TutorialDialog() {
 						}
 					>
 						<div className="relative">
+							{/* Animated border gleam */}
+							<div className="pointer-events-none absolute inset-[-1px] rounded-2xl sm:rounded-3xl overflow-hidden">
+								<div className="absolute -inset-[1px] opacity-60">
+									<div className="absolute inset-0 bg-[conic-gradient(var(--tw-gradient-stops))] from-primary via-accent to-secondary blur-[10px]" />
+								</div>
+							</div>
 							<div className="text-center px-6 sm:px-8">
 								<h1 className="text-2xl sm:text-3xl font-bold">
 									{stepData[currentStep].title}
@@ -545,7 +630,10 @@ export function TutorialDialog() {
 					<div
 						className={supportsBackdrop ? "flex-1 min-h-0 overflow-y-auto bg-background/10 backdrop-blur-lg sm:h-[450px]" : "flex-1 min-h-0 overflow-y-auto bg-card sm:h-[450px]"}
 					>
-						<CurrentStepComponent />
+						{/* Step transition wrapper */}
+						<div key={currentStep} className={reducedMotion ? "" : "transition-all duration-500 ease-out transform"}>
+							<CurrentStepComponent />
+						</div>
 					</div>
 
 					{/* Footer */}
@@ -553,6 +641,8 @@ export function TutorialDialog() {
 						className={supportsBackdrop ? "p-4 sm:p-8 bg-background/15 backdrop-blur-xl border-t border-border/30" : "p-4 sm:p-8 bg-card border-t border-border/30"}
 						style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}
 					>
+						{/* Dots are enough; progress bar removed per feedback */}
+
 						<div className="flex justify-center gap-3 mb-4 sm:mb-8">
 							{STEPS.map((step) => (
 								<div
@@ -570,7 +660,7 @@ export function TutorialDialog() {
 						<div className="sm:hidden flex flex-col gap-3">
 							<Button
 								onClick={handleNext}
-								className={supportsBackdrop ? "w-full bg-primary/90 backdrop-blur-xs hover:bg-primary rounded-xl" : "w-full bg-primary hover:bg-primary/90 rounded-xl"}
+								className={supportsBackdrop ? "w-full bg-primary/90 backdrop-blur-xs hover:bg-primary rounded-xl shadow-lg hover:shadow-xl transition-shadow" : "w-full bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-shadow"}
 							>
 								{currentStep === "github" ? "Get Started" : "Next"}
 							</Button>
@@ -588,7 +678,7 @@ export function TutorialDialog() {
 								<Button
 									variant="ghost"
 									size="sm"
-									onClick={handleSkip}
+									onClick={() => handleSkip(true)}
 									className={supportsBackdrop ? "hover:bg-background/40 backdrop-blur-xs rounded-xl" : "hover:bg-muted rounded-xl"}
 								>
 									Skip Tour
@@ -616,14 +706,14 @@ export function TutorialDialog() {
 							<div className="flex gap-4">
 								<Button
 									variant="ghost"
-									onClick={handleSkip}
+									onClick={() => handleSkip(true)}
 									className={supportsBackdrop ? "hover:bg-background/40 backdrop-blur-xs rounded-xl" : "hover:bg-muted rounded-xl"}
 								>
 									Skip Tour
 								</Button>
 								<Button
 									onClick={handleNext}
-									className={supportsBackdrop ? "bg-primary/90 backdrop-blur-xs hover:bg-primary rounded-xl" : "bg-primary hover:bg-primary/90 rounded-xl"}
+									className={supportsBackdrop ? "bg-primary/90 backdrop-blur-xs hover:bg-primary rounded-xl shadow-lg hover:shadow-xl transition-shadow" : "bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-shadow"}
 								>
 									{currentStep === "github" ? "Get Started" : "Next"}
 								</Button>
