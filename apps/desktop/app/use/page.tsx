@@ -191,7 +191,7 @@ export default function Page() {
 	}
 
 	return (
-		<main className="flex flex-col h-full min-h-dvh max-h-dvh overflow-hidden">
+		<main className="flex flex-col h-full overflow-hidden flex-1 min-h-0">
 			<Container ref={sidebarRef}>
 				<div className="flex flex-col flex-grow h-full w-full max-h-full overflow-hidden">
 					<Header

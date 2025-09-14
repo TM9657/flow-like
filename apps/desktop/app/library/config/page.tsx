@@ -1051,7 +1051,7 @@ export default function Id() {
 			{/* Fullscreen Markdown Editor Overlay */}
 			<Dialog open={isLongDescEditorOpen} onOpenChange={setLongDescEditorOpen}>
 				<DialogContent
-					className="w-dvw min-w-dvw max-w-dvw h-screen flex flex-col"
+					className="w-dvw min-w-dvw max-w-dvw min-h-[100svh] max-h-[100svh] flex flex-col"
 					onEscapeKeyDown={(e) => {
 						const target = e.target as Node | null;
 						if (target && editorAreaRef.current?.contains(target)) {

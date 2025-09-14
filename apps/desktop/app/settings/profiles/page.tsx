@@ -233,14 +233,14 @@ export default function SettingsPage() {
 
 	if (!localProfile) {
 		return (
-			<main className="flex min-h-dvh flex-col items-center justify-center w-full">
+			<main className="flex flex-col items-center justify-center w-full flex-1 min-h-0 py-12">
 				<div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
 			</main>
 		);
 	}
 
 	return (
-		<main className="min-h-dvh bg-gradient-to-br from-background via-background to-muted/20 p-6 max-h-dvh overflow-y-auto pb-10">
+		<main className="bg-gradient-to-br from-background via-background to-muted/20 p-6 flex-1 min-h-0 overflow-y-auto pb-10">
 			<div className="mx-auto max-w-6xl space-y-6">
 				{/* Header */}
 				<div className="flex items-center justify-between">

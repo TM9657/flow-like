@@ -183,7 +183,7 @@ export default function Home() {
 	}
 
 	return (
-		<main className="flex min-h-screen flex-col items-center w-full max-h-dvh overflow-auto dark:bg-dot-destructive/[0.2] bg-dot-destructive/[0.2] p-4">
+		<main className="flex flex-col items-center w-full overflow-auto dark:bg-dot-destructive/[0.2] bg-dot-destructive/[0.2] p-4 flex-1 min-h-0">
 			{dlProgress.downloaded < dlProgress.max && (
 				<div className="flex flex-row items-center w-full relative">
 					<Progress

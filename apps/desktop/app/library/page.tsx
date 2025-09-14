@@ -190,7 +190,7 @@ export default function YoursPage() {
 	};
 
 	return (
-		<main className="min-h-dvh max-h-dvh flex flex-col w-full p-6 bg-gradient-to-br from-background to-muted/20">
+		<main className="flex flex-col w-full p-6 bg-gradient-to-br from-background to-muted/20 flex-1 min-h-0">
 			{/* Header Section */}
 			<div className="flex flex-col space-y-6 mb-8">
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

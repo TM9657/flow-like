@@ -34,7 +34,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 
 const ProfileSkeleton = () => (
-	<div className="min-h-screen bg-gradient-to-br from-background via-background/50 to-primary/5">
+	<div className="bg-gradient-to-br from-background via-background/50 to-primary/5 flex-1 min-h-0 overflow-auto">
 		<div className="container mx-auto px-4 py-12">
 			<motion.div
 				initial={{ opacity: 0, y: 20 }}
@@ -65,7 +65,7 @@ const ProfileSkeleton = () => (
 );
 
 const ProfileError = ({ error }: { error: string }) => (
-	<div className="min-h-screen bg-gradient-to-br from-background via-background/50 to-destructive/5 flex items-center justify-center">
+	<div className="bg-gradient-to-br from-background via-background/50 to-destructive/5 flex items-center justify-center flex-1 min-h-0 overflow-auto">
 		<motion.div
 			initial={{ opacity: 0, scale: 0.95 }}
 			animate={{ opacity: 1, scale: 1 }}
@@ -131,7 +131,7 @@ const ProfileContent = ({
 	};
 
 	return (
-		<div className="min-h-screen relative overflow-hidden">
+		<div className="relative overflow-auto flex-1 min-h-0">
 			<div className="container mx-auto px-4 py-12 relative z-10">
 				<motion.div
 					variants={containerVariants}

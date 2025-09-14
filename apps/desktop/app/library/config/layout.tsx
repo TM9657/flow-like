@@ -197,7 +197,7 @@ export default function Id({ children }: Readonly<{ children: React.ReactNode }>
 
 	return (
 		<TooltipProvider>
-			<main className="flex min-h-screen max-h-screen overflow-hidden flex-col w-full p-4 sm:p-6 gap-4 sm:gap-6">
+			<main className="flex overflow-hidden flex-col w-full p-4 sm:p-6 gap-4 sm:gap-6 flex-1 min-h-0">
 				{!isMaximized && (
 					<Card className="border-0 shadow-sm bg-gradient-to-r from-background to-muted/20 h-fit max-h-fit py-3 sm:py-4">
 						<CardContent className="p-4 py-0 flex flex-row items-center justify-between">

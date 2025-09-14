@@ -65,7 +65,7 @@ export default function Onboarding() {
 	}, [defaultProfiles.data]);
 
 	return (
-		<div className="flex flex-col items-center justify-center h-full max-h-dvh">
+		<div className="flex flex-col items-center justify-center h-full">
 			<div className="text-center mb-12 space-y-4 max-w-2xl">
 				<div className="space-y-2">
 					<h1 className="text-5xl font-bold text-foreground tracking-tight">

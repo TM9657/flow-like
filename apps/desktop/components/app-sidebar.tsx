@@ -220,12 +220,18 @@ export function AppSidebar({
 	return (
 		<SidebarProvider defaultOpen={defaultOpen}>
 			<InnerSidebar />
-			<main className="w-full h-full">
-				{/* Mobile sidebar trigger (Sheet opener) */}
-				<div className="md:hidden fixed bottom-4 left-4 z-50">
-					<SidebarTrigger className="size-10 rounded-full shadow border bg-background" aria-label="Open Menu" />
+			<main className="w-full h-[100svh] flex flex-col overflow-hidden">
+				{/* Mobile top bar with sidebar trigger (no overlap with chat composer) */}
+				<div className="md:hidden sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+					<div className="flex items-center gap-2 p-2">
+						<SidebarTrigger
+							className="size-9 rounded-lg border"
+							aria-label="Open Menu"
+						/>
+						<span className="text-sm font-medium">Menu</span>
+					</div>
 				</div>
-				<SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20">
+				<SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20 flex flex-col flex-1 min-h-0 overflow-hidden">
 					{children}
 				</SidebarInset>
 			</main>
@@ -606,9 +612,9 @@ function NavMain({
 											<SidebarMenuButton
 												variant={
 													pathname === item.url ||
-													typeof item.items?.find(
-														(item) => item.url === pathname,
-													) !== "undefined"
+														typeof item.items?.find(
+															(item) => item.url === pathname,
+														) !== "undefined"
 														? "outline"
 														: "default"
 												}
@@ -725,9 +731,9 @@ function NavMain({
 												<SidebarMenuButton
 													variant={
 														pathname === item.url ||
-														typeof item.items?.find(
-															(item) => item.url === pathname,
-														) !== "undefined"
+															typeof item.items?.find(
+																(item) => item.url === pathname,
+															) !== "undefined"
 															? "outline"
 															: "default"
 													}

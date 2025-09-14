@@ -11,7 +11,7 @@ export default function SettingsPage() {
 	);
 
 	return (
-		<main className="justify-start flex min-h-dvh flex-col items-center w-full pr-4">
+		<main className="justify-start flex flex-col items-center w-full pr-4 flex-1 min-h-0">
 			<div className="flex flex-row items-center justify-between w-full max-w-screen-2xl">
 				<h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
 					System Info
