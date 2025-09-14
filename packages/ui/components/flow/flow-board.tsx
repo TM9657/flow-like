@@ -41,9 +41,9 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { useLogAggregation, viewportDb, viewportKey } from "../..";
+import { Button, useLogAggregation, useMobileHeader, viewportDb, viewportKey } from "../..";
 import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
@@ -182,6 +182,74 @@ export function FlowBoard({
 		() => (resolvedTheme === "dark" ? "dark" : "light"),
 		[resolvedTheme],
 	);
+
+	const { update: updateHeader } = useMobileHeader();
+
+	useEffect(() => {
+		const left: ReactElement[] = []
+		const right: ReactElement[] = []
+
+		if (typeof parentRegister.boardParents[boardId] === "string" && !currentLayer) {
+			left.push(
+				<Button variant={"default"} size={"icon"}  onClick={async () => {
+					const urlWithQuery = parentRegister.boardParents[boardId];
+					router.push(urlWithQuery);
+				}}>
+					<ArrowBigLeftDashIcon />
+				</Button>
+			)
+		}
+
+		right.push(
+			...[
+				<Button variant={"outline"} size={"icon"}  onClick={async () => {
+					toggleVars();
+				}}>
+					<VariableIcon />
+				</Button>,
+				<Button variant={"outline"} size={"icon"}  onClick={async () => {
+					setEditBoard(true);
+				}}>
+					<NotebookPenIcon />
+				</Button>,
+				<Button variant={"outline"} size={"icon"}  onClick={async () => {
+					toggleRunHistory();
+				}}>
+					<HistoryIcon />
+				</Button>
+			]
+		)
+
+		if(currentMetadata) {
+			right.push(
+				<Button variant={"outline"} size={"icon"}  onClick={async () => {
+					setCurrentMetadata(currentMetadata);
+				}}>
+					<ScrollIcon />
+				</Button>
+			)
+		}
+
+		if(currentLayer) {
+			left.push(
+				<Button variant={"default"} size={"icon"}  onClick={async () => {
+					popLayer();
+				}}>
+					<SquareChevronUpIcon />
+				</Button>
+			)
+		}
+
+		updateHeader({
+			left,
+			right
+		})
+	}, [
+		currentMetadata,
+		currentLayer,
+		parentRegister.boardParents,
+		boardId,
+	])
 
 	const pinToNode = useCallback(
 		(pinId: string) => {
@@ -1389,7 +1457,7 @@ export function FlowBoard({
 	);
 
 	return (
-		<div className="min-h-dvh h-dvh max-h-dvh w-full flex-1 grow flex-col">
+		<div className="w-full flex-1 grow flex-col min-h-0">
 			<div className="flex items-center justify-center absolute translate-x-[-50%] mt-5 left-[50dvw] z-40">
 				{board.data && editBoard && (
 					<BoardMeta
@@ -1402,19 +1470,20 @@ export function FlowBoard({
 					/>
 				)}
 				<FlowDock
+					mobileClassName="hidden"
 					items={[
 						...(typeof parentRegister.boardParents[boardId] === "string" &&
-						!currentLayer
+							!currentLayer
 							? [
-									{
-										icon: <ArrowBigLeftDashIcon />,
-										title: "Back",
-										onClick: async () => {
-											const urlWithQuery = parentRegister.boardParents[boardId];
-											router.push(urlWithQuery);
-										},
+								{
+									icon: <ArrowBigLeftDashIcon />,
+									title: "Back",
+									onClick: async () => {
+										const urlWithQuery = parentRegister.boardParents[boardId];
+										router.push(urlWithQuery);
 									},
-								]
+								},
+							]
 							: []),
 						{
 							icon: <VariableIcon />,
@@ -1440,27 +1509,27 @@ export function FlowBoard({
 						},
 						...(currentMetadata
 							? [
-									{
-										icon: <ScrollIcon />,
-										title: "Logs",
-										onClick: async () => {
-											toggleLogs();
-										},
+								{
+									icon: <ScrollIcon />,
+									title: "Logs",
+									onClick: async () => {
+										toggleLogs();
 									},
-								]
+								},
+							]
 							: ([] as any)),
 						...(currentLayer
 							? [
-									{
-										icon: <SquareChevronUpIcon />,
-										title: "Layer Up",
-										separator: "left",
-										highlight: true,
-										onClick: async () => {
-											popLayer();
-										},
+								{
+									icon: <SquareChevronUpIcon />,
+									title: "Layer Up",
+									separator: "left",
+									highlight: true,
+									onClick: async () => {
+										popLayer();
 									},
-								]
+								},
+							]
 							: []),
 					]}
 				/>
@@ -1615,8 +1684,8 @@ export function FlowBoard({
 											<Variable
 												variable={active?.data?.current as IVariable}
 												preview
-												onVariableChange={() => {}}
-												onVariableDeleted={() => {}}
+												onVariableChange={() => { }}
+												onVariableDeleted={() => { }}
 											/>
 										)}
 									</DragOverlay>
