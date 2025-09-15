@@ -162,7 +162,7 @@ export default function ProfileCreation() {
 	}, [doneCounter, filter, manager]);
 
 	return (
-		<div className="p-3 sm:p-4 max-w-screen-lg w-full">
+		<div className="p-3 sm:p-4 max-w-screen-lg w-full z-10">
 			<div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
 				<div className="w-full">
 					<h1>🚀 Great Selection!</h1>

@@ -52,7 +52,7 @@
       </Testables>
    </TestAction>
    <LaunchAction
-      buildConfiguration = "debug"
+      buildConfiguration = "release"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       launchStyle = "0"
@@ -117,7 +117,7 @@
       buildConfiguration = "debug">
    </AnalyzeAction>
    <ArchiveAction
-      buildConfiguration = "release"
+      buildConfiguration = "debug"
       revealArchiveInOrganizer = "YES">
    </ArchiveAction>
 </Scheme>

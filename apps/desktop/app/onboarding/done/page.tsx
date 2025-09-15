@@ -29,7 +29,7 @@ export default function DonePage() {
 	}, [router]);
 
 	return (
-		<main className="relative min-h-dvh w-full overflow-hidden">
+		<main className="relative min-h-dvh w-full overflow-hidden z-10">
 			<div className="relative z-10 flex min-h-dvh flex-col items-center justify-center py-8 sm:py-12">
 				<Crossfire autorun={{ speed: 1 }} />
 				<Card className="w-full max-w-md sm:max-w-lg md:max-w-2xl">

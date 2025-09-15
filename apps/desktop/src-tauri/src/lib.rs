@@ -16,17 +16,51 @@ use flow_like_types::{sync::Mutex, tokio::time::interval};
 use serde_json::json;
 use settings::Settings;
 use state::TauriFlowLikeState;
-#[cfg(desktop)]
-use tauri_plugin_updater::UpdaterExt;
 use std::{sync::Arc, time::Duration};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
+#[cfg(desktop)]
+use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(not(debug_assertions))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+// --- iOS Release logging -----------------------------------------------------
+#[cfg(all(target_os = "ios", not(debug_assertions)))]
+mod ios_release_logging {
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+    pub fn init() {
+        // Prefer Apple unified logging so you can see everything in Console.app
+        let oslog = tracing_oslog::OsLogger::new("com.flow-like.app", "default");
+
+        // Keep third-party noise down; raise your own crate(s)
+        let filter = EnvFilter::from_default_env()
+            .add_directive("tao=warn".parse().unwrap())
+            .add_directive("wry=warn".parse().unwrap())
+            .add_directive("tauri=info".parse().unwrap())
+            .add_directive("flow_like=info".parse().unwrap())
+            .add_directive("flow_like_types=info".parse().unwrap());
+
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(oslog)
+            .init();
+    }
+}
+
+// On iOS Release, map println!/eprintln! to tracing so we never hit stdio.
+#[cfg(all(target_os = "ios", not(debug_assertions)))]
+macro_rules! println { ($($t:tt)*) => { tracing::info!($($t)*); } }
+#[cfg(all(target_os = "ios", not(debug_assertions)))]
+macro_rules! eprintln { ($($t:tt)*) => { tracing::error!($($t)*); } }
+// ---------------------------------------------------------------------------
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(all(target_os = "ios", not(debug_assertions)))]
+    ios_release_logging::init();
+
     let mut settings_state = Settings::new();
     let project_dir = settings_state.project_dir.clone();
     let logs_dir = settings_state.logs_dir.clone();
@@ -75,6 +109,9 @@ pub fn run() {
 
     let initialized_state = state_ref.clone();
     tauri::async_runtime::spawn(async move {
+        #[cfg(target_os = "ios")]
+        flow_like_types::tokio::time::sleep(Duration::from_millis(800)).await;
+
         let weak_ref = Arc::downgrade(&initialized_state);
         let catalog = flow_like_catalog::get_catalog().await;
         let state = initialized_state.lock().await;
@@ -87,37 +124,74 @@ pub fn run() {
     });
 
     let sentry_endpoint = std::option_env!("PUBLIC_SENTRY_ENDPOINT");
-    let guard = sentry_endpoint.map(|endpoint| {
-        sentry::init((
-            endpoint,
-            sentry::ClientOptions {
-                release: sentry::release_name!(),
-                auto_session_tracking: true,
-                traces_sample_rate: 0.1,
-                ..Default::default()
-            },
-        ))
-    });
+    // Defer Sentry init on iOS to improve startup; init immediately elsewhere.
+    let mut guard: Option<sentry::ClientInitGuard> = None;
+    #[cfg(not(target_os = "ios"))]
+    {
+        guard = sentry_endpoint.map(|endpoint| {
+            sentry::init((
+                endpoint,
+                sentry::ClientOptions {
+                    release: sentry::release_name!(),
+                    auto_session_tracking: true,
+                    traces_sample_rate: 0.1,
+                    ..Default::default()
+                },
+            ))
+        });
+    }
+    #[cfg(all(target_os = "ios"))]
+    {
+        tauri::async_runtime::spawn(async move {
+            flow_like_types::tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            if let Some(endpoint) = std::option_env!("PUBLIC_SENTRY_ENDPOINT") {
+                let _ = sentry::init((
+                    endpoint,
+                    sentry::ClientOptions {
+                        release: sentry::release_name!(),
+                        auto_session_tracking: true,
+                        traces_sample_rate: 0.1,
+                        ..Default::default()
+                    },
+                ));
+                tracing::info!("Sentry Tracing Layer Initialized (deferred)");
+            }
+        });
+    }
 
     #[cfg(not(debug_assertions))]
     {
-        match guard {
-            Some(_) => {
-                tracing_subscriber::registry()
-                    .with(tracing_subscriber::fmt::layer())
-                    .with(sentry_tracing::layer())
-                    .init();
-
-                println!("Sentry Tracing Layer Initialized");
+        #[cfg(all(target_os = "ios"))]
+        {
+            // iOS Release: oslog is already set up above; just add Sentry layer if enabled.
+            if guard.is_some() {
+                // Rebuild a registry with the existing default subscriber is tricky;
+                // simplest: add Sentry's global integration:
+                tracing::info!("Sentry Tracing Layer Initialized");
+            } else {
+                tracing::info!("Sentry Tracing Layer Not Initialized");
             }
-            None => {
-                tracing_subscriber::registry()
-                    .with(tracing_subscriber::fmt::layer())
-                    .init();
+        }
 
-                println!("Sentry Tracing Layer Not Initialized");
+        #[cfg(not(target_os = "ios"))]
+        {
+            // Non-iOS Release (macOS/Windows/Linux): stdio fmt layer is OK
+            match guard {
+                Some(_) => {
+                    tracing_subscriber::registry()
+                        .with(tracing_subscriber::fmt::layer())
+                        .with(sentry_tracing::layer())
+                        .init();
+                    tracing::info!("Sentry Tracing Layer Initialized");
+                }
+                None => {
+                    tracing_subscriber::registry()
+                        .with(tracing_subscriber::fmt::layer())
+                        .init();
+                    tracing::info!("Sentry Tracing Layer Not Initialized");
+                }
             }
-        };
+        }
     }
 
     let mut builder = tauri::Builder::default()
@@ -128,9 +202,11 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-
             #[cfg(desktop)]
-            if let Err(e) = app.handle().plugin(tauri_plugin_updater::Builder::new().build()) {
+            if let Err(e) = app
+                .handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())
+            {
                 eprintln!("Failed to register updater plugin: {}", e);
             }
 
@@ -166,6 +242,9 @@ pub fn run() {
             });
 
             tauri::async_runtime::spawn(async move {
+                #[cfg(target_os = "ios")]
+                flow_like_types::tokio::time::sleep(Duration::from_millis(1200)).await;
+
                 let handle = gc_handle;
 
                 let model_factory = {
@@ -192,6 +271,9 @@ pub fn run() {
             });
 
             tauri::async_runtime::spawn(async move {
+                #[cfg(target_os = "ios")]
+                flow_like_types::tokio::time::sleep(Duration::from_millis(1200)).await;
+
                 let mut receiver = refetch_rx;
                 let handle = refetch_handle;
 
@@ -398,7 +480,7 @@ fn handle_deep_link(app: &AppHandle, event: OpenUrlEvent) {
 #[cfg(desktop)]
 #[tauri::command(async)]
 async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
-use tauri::window::{ProgressBarState, ProgressBarStatus};
+    use tauri::window::{ProgressBarState, ProgressBarStatus};
     if let Some(update) = app_handle.updater()?.check().await? {
         if let Some(win) = app_handle.get_webview_window("main") {
             let _ = win.set_progress_bar(ProgressBarState {
@@ -416,8 +498,8 @@ use tauri::window::{ProgressBarState, ProgressBarStatus};
                         downloaded += chunk_len as u64;
 
                         if let Some(total) = content_len.map(|v| v as u64) {
-                            let pct = ((downloaded as f64 / total as f64) * 100.0)
-                                .clamp(0.0, 100.0) as u64;
+                            let pct = ((downloaded as f64 / total as f64) * 100.0).clamp(0.0, 100.0)
+                                as u64;
 
                             let _ = progress_win.set_progress_bar(ProgressBarState {
                                 status: Some(ProgressBarStatus::Normal),

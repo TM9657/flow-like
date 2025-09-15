@@ -68,6 +68,14 @@ const GlobalAnchorHandler = () => {
 		title?: string;
 	} | null>(null);
 
+	// Track touch/pointer start for iOS to differentiate scroll from tap
+	const touchMetaRef = useRef<{ x: number; y: number; time: number; active: boolean }>({
+		x: 0,
+		y: 0,
+		time: 0,
+		active: false,
+	});
+
 	const IOS = useMemo(isIosLike, []);
 	const TAURI = useMemo(isTauri, []);
 
@@ -102,6 +110,22 @@ const GlobalAnchorHandler = () => {
 				el = el.parentElement;
 			}
 			return null;
+		};
+
+		// Thresholds to avoid accidental activations while scrolling
+		const MOVE_THRESHOLD = 10; // px
+		const TIME_THRESHOLD = 800; // ms (long press treated as non-tap here)
+
+		const recordStart = (x: number, y: number) => {
+			touchMetaRef.current = { x, y, time: Date.now(), active: true };
+		};
+
+		const isValidTap = (x: number, y: number) => {
+			if (!touchMetaRef.current.active) return false;
+			const dx = Math.abs(x - touchMetaRef.current.x);
+			const dy = Math.abs(y - touchMetaRef.current.y);
+			const dt = Date.now() - touchMetaRef.current.time;
+			return dx < MOVE_THRESHOLD && dy < MOVE_THRESHOLD && dt < TIME_THRESHOLD;
 		};
 
 		// Unified external open handler
@@ -175,8 +199,26 @@ const GlobalAnchorHandler = () => {
 			}
 		};
 
-			const handleTouchEnd = async (event: TouchEvent) => {
+		const handleTouchStart = (event: TouchEvent) => {
 			if (!IOS) return;
+			const t = event.touches[0];
+			if (!t) return;
+			recordStart(t.clientX, t.clientY);
+		};
+
+		const handlePointerDown = (event: PointerEvent) => {
+			if (!IOS) return;
+			if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+			recordStart(event.clientX, event.clientY);
+		};
+
+		const handleTouchEnd = async (event: TouchEvent) => {
+			if (!IOS) return;
+			const t = event.changedTouches[0];
+			if (!t) return;
+			const validTap = isValidTap(t.clientX, t.clientY);
+			touchMetaRef.current.active = false;
+			if (!validTap) return; // treat as scroll/drag
 			const anchor = findAnchorElement(event.target as HTMLElement);
 			if (!anchor?.href) return;
 			const href = anchor.href;
@@ -186,29 +228,30 @@ const GlobalAnchorHandler = () => {
 			if (externalIntent || !same) {
 				event.preventDefault();
 				event.stopPropagation();
-				// Call opener without await to keep gesture context
 				void openInBrowser(href);
 				lastTouchHandledAt.value = Date.now();
 			}
 		};
 
-			const handlePointerUp = async (event: PointerEvent) => {
-				if (!IOS) return;
-				// Only react to touch-like pointers
-				if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
-				const anchor = findAnchorElement(event.target as HTMLElement);
-				if (!anchor?.href) return;
-				const href = anchor.href;
-				if (!isHttpish(href)) return;
-				const externalIntent = wantsExternal(anchor);
-				const same = sameOrigin(href);
-				if (externalIntent || !same) {
-					event.preventDefault();
-					event.stopPropagation();
-					void openInBrowser(href);
-					lastTouchHandledAt.value = Date.now();
-				}
-			};
+		const handlePointerUp = async (event: PointerEvent) => {
+			if (!IOS) return;
+			if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+			const validTap = isValidTap(event.clientX, event.clientY);
+			touchMetaRef.current.active = false;
+			if (!validTap) return; // scrolling
+			const anchor = findAnchorElement(event.target as HTMLElement);
+			if (!anchor?.href) return;
+			const href = anchor.href;
+			if (!isHttpish(href)) return;
+			const externalIntent = wantsExternal(anchor);
+			const same = sameOrigin(href);
+			if (externalIntent || !same) {
+				event.preventDefault();
+				event.stopPropagation();
+				void openInBrowser(href);
+				lastTouchHandledAt.value = Date.now();
+			}
+		};
 
 		const handleClick = async (event: MouseEvent) => {
 			// If a touch handler just ran, ignore the synthetic click
@@ -275,6 +318,8 @@ const GlobalAnchorHandler = () => {
 
 		document.addEventListener("mousedown", handleMouseDown, true);
 		document.addEventListener("auxclick", handleAuxClick, true);
+		document.addEventListener("touchstart", handleTouchStart, { passive: true, capture: true });
+		document.addEventListener("pointerdown", handlePointerDown as any, true);
 		document.addEventListener("touchend", handleTouchEnd, true);
 		document.addEventListener("pointerup", handlePointerUp as any, true);
 		document.addEventListener("click", handleClick, true);
@@ -283,6 +328,8 @@ const GlobalAnchorHandler = () => {
 		return () => {
 			document.removeEventListener("mousedown", handleMouseDown, true);
 			document.removeEventListener("auxclick", handleAuxClick, true);
+			document.removeEventListener("touchstart", handleTouchStart, true);
+			document.removeEventListener("pointerdown", handlePointerDown as any, true);
 			document.removeEventListener("touchend", handleTouchEnd, true);
 			document.removeEventListener("pointerup", handlePointerUp as any, true);
 			document.removeEventListener("click", handleClick, true);

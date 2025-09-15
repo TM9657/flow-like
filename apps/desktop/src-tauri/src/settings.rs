@@ -4,6 +4,38 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::SystemTime};
 use tauri::{fs, AppHandle};
 
+// iOS-only centralized, sandbox-safe roots.
+#[cfg(target_os = "ios")]
+fn app_data_root() -> PathBuf {
+    if let Some(dir) = dirs_next::data_dir() {
+        dir.join("flow-like")
+    } else if let Some(dir) = dirs_next::cache_dir() {
+        dir.join("flow-like")
+    } else {
+    // Relative fallback inside sandboxed working directory
+    PathBuf::from("flow-like")
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn app_cache_root() -> PathBuf {
+    if let Some(dir) = dirs_next::cache_dir() {
+        dir.join("flow-like")
+    } else if let Some(dir) = dirs_next::data_dir() {
+        dir.join("flow-like").join("cache")
+    } else {
+    // Relative fallback inside sandboxed working directory
+    PathBuf::from("flow-like").join("cache")
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn default_logs_dir() -> PathBuf {
+    // Use cache for logs so the OS can purge if needed (iOS safe)
+    app_cache_root().join("logs")
+}
+
+#[cfg(not(target_os = "ios"))]
 fn default_logs_dir() -> PathBuf {
     dirs_next::data_dir()
         .unwrap_or_default()
@@ -11,6 +43,13 @@ fn default_logs_dir() -> PathBuf {
         .join("logs")
 }
 
+#[cfg(target_os = "ios")]
+fn default_temporary_dir() -> PathBuf {
+    // On iOS: use cache for temporary files (purgeable by OS)
+    app_cache_root().join("tmp")
+}
+
+#[cfg(not(target_os = "ios"))]
 fn default_temporary_dir() -> PathBuf {
     dirs_next::data_dir()
         .unwrap_or_default()
@@ -26,6 +65,20 @@ fn default_temporary_dir() -> PathBuf {
         Ok(())
     }
 
+    #[cfg(target_os = "ios")]
+    pub fn ensure_app_dirs() -> std::io::Result<()> {
+        let data_root = app_data_root();
+        let bit_dir = data_root.join("bits");
+        let project_dir = data_root.join("projects");
+        let cache_dir = app_cache_root();
+
+        ensure_dir(&bit_dir)?;
+        ensure_dir(&project_dir)?;
+        ensure_dir(&cache_dir)?;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "ios"))]
     pub fn ensure_app_dirs() -> std::io::Result<()> {
         let bit_dir = dirs_next::data_dir()
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "data_dir() is None"))?
@@ -84,22 +137,39 @@ impl Settings {
 
         ensure_app_dirs().ok();
 
+        // Preserve existing locations on non-iOS, use sandbox-safe on iOS.
+        #[allow(unused_mut)]
+        let mut bit_dir = dirs_next::data_dir()
+            .unwrap_or_default()
+            .join("flow-like")
+            .join("bits");
+        #[allow(unused_mut)]
+        let mut project_dir = dirs_next::data_dir()
+            .unwrap_or_default()
+            .join("flow-like")
+            .join("projects");
+        #[allow(unused_mut)]
+        let mut user_dir = dirs_next::cache_dir().unwrap_or_default().join("flow-like");
+
+        if cfg!(target_os = "ios") {
+            #[cfg(target_os = "ios")]
+            {
+                bit_dir = app_data_root().join("bits");
+                project_dir = app_data_root().join("projects");
+                user_dir = app_cache_root();
+            }
+        }
+
         Self {
             loaded: false,
             dev_mode: false,
             default_hub: String::from("api.alpha.flow-like.com"),
             current_profile: String::from("default"),
-            bit_dir: dirs_next::data_dir()
-                .unwrap_or_default()
-                .join("flow-like")
-                .join("bits"),
-            project_dir: dirs_next::data_dir()
-                .unwrap_or_default()
-                .join("flow-like")
-                .join("projects"),
+            bit_dir,
+            project_dir,
             logs_dir: default_logs_dir(),
             temporary_dir: default_temporary_dir(),
-            user_dir: dirs_next::cache_dir().unwrap_or_default().join("flow-like"),
+            user_dir,
             profiles: HashMap::new(),
             created: SystemTime::now(),
             updated: SystemTime::now(),

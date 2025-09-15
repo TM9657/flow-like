@@ -90,5 +90,9 @@
       "identifier": "fs:scope",
       "allow": [{ "path": "*" }, { "path": "**/*"} ]
     }
+  ],
+  "platforms": [
+    "iOS",
+    "android"
   ]
 }

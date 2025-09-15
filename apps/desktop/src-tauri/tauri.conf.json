@@ -28,7 +28,8 @@
 		"security": {
 			"csp": null,
 			"capabilities": [
-				"desktop"
+				"desktop",
+				"mobile"
 			],
 			"assetProtocol": {
 				"enable": true,

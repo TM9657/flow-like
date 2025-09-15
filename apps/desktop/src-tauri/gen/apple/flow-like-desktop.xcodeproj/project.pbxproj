@@ -16,6 +16,7 @@
 		BD999E1D015351A22CC3CFE6 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B8D6074E6775B2FD3D0199A8 /* UIKit.framework */; };
 		C3C6EB3F74C498D2FE8F7661 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = FFF51C4D6D9AD2D1364150A6 /* assets */; };
 		DC3181AD2E75CEDB000C3F5C /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DC3181AC2E75CEDB000C3F5C /* icon.icon */; };
+		DC3BF2A02E78AE330048A30D /* splash.png in Resources */ = {isa = PBXBuildFile; fileRef = DC3BF29F2E78AE330048A30D /* splash.png */; };
 		E083E5A09A5613BE75ECDE6C /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 9765DE5BE922A06C0CA8BA5F /* LaunchScreen.storyboard */; };
 		F439207FAC54CA183A9531D5 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA58C22D1BB3716CAD06FD10 /* MetalKit.framework */; };
 		FA0CC56A2E28AAAE51733B8B /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F2764F91BCC1150304FB91AC /* CoreGraphics.framework */; };
@@ -58,6 +59,7 @@
 		D2EB56FFB6E36FC9B47C6810 /* settings.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = settings.rs; sourceTree = "<group>"; };
 		D555BD5F5EF13E82EB52F947 /* tables.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = tables.rs; sourceTree = "<group>"; };
 		DC3181AC2E75CEDB000C3F5C /* icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = icon.icon; sourceTree = "<group>"; };
+		DC3BF29F2E78AE330048A30D /* splash.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = splash.png; sourceTree = "<group>"; };
 		DF38CBDD0FEF44AD730DA6C5 /* functions.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = functions.rs; sourceTree = "<group>"; };
 		F2764F91BCC1150304FB91AC /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		F662587278F1EFF589CA19D6 /* settings.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = settings.rs; sourceTree = "<group>"; };
@@ -153,6 +155,7 @@
 				9B8660A0F20E816C12F3C7DC /* Frameworks */,
 				6A68EDA8DC2D514C157984C2 /* Products */,
 				DC3181AC2E75CEDB000C3F5C /* icon.icon */,
+				DC3BF29F2E78AE330048A30D /* splash.png */,
 			);
 			sourceTree = "<group>";
 		};
@@ -304,6 +307,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E083E5A09A5613BE75ECDE6C /* LaunchScreen.storyboard in Resources */,
+				DC3BF2A02E78AE330048A30D /* splash.png in Resources */,
 				C3C6EB3F74C498D2FE8F7661 /* assets in Resources */,
 				DC3181AD2E75CEDB000C3F5C /* icon.icon in Resources */,
 			);
@@ -331,7 +335,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "# ---- Build Rust Code (Xcode Run Script) ----\nset -euo pipefail\n\n# Tools in PATH (Bun, Homebrew, Cargo)\nexport PATH=\"$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.nvm/versions/node/v22.11.0/bin:$HOME/.cargo/bin:$PATH\"\n\n# Required by Xcode\nPLATFORM_DISPLAY_NAME=\"${PLATFORM_DISPLAY_NAME:?}\"\nSDKROOT=\"${SDKROOT:?}\"\nCONFIGURATION=\"${CONFIGURATION:?}\"\nCURRENT_ARCH=\"${CURRENT_ARCH:-arm64}\"\n\n# Build for iOS Simulator explicitly (avoid darwin artifacts)\nexport CARGO_BUILD_TARGET=\"aarch64-apple-ios-sim\"\n\n# Make optional envs safe under `set -u`\nexport FORCE_COLOR=\"${FORCE_COLOR:-1}\"             # or \"\" if you don't want color\nFRAMEWORK_SEARCH_PATHS=\"${FRAMEWORK_SEARCH_PATHS:-}\"\nHEADER_SEARCH_PATHS=\"${HEADER_SEARCH_PATHS:-}\"\nGCC_PREPROCESSOR_DEFINITIONS=\"${GCC_PREPROCESSOR_DEFINITIONS:-}\"\nARCHS=\"${ARCHS:-${CURRENT_ARCH:-}}\"\n\n# Required envs (fail early if Xcode didn't set them)\nPLATFORM_DISPLAY_NAME=\"${PLATFORM_DISPLAY_NAME:?}\"\nSDKROOT=\"${SDKROOT:?}\"\nCONFIGURATION=\"${CONFIGURATION:?}\"\n\n# Sanity logs\necho \"bun: $(which bun)\"; bun --version || true\necho \"cargo: $(which cargo)\"; cargo --version || true\n\n# Call tauri helper with safe quoting\nbun tauri ios xcode-script -v \\\n  --platform \"$PLATFORM_DISPLAY_NAME\" \\\n  --sdk-root \"$SDKROOT\" \\\n  --framework-search-paths \"$FRAMEWORK_SEARCH_PATHS\" \\\n  --header-search-paths \"$HEADER_SEARCH_PATHS\" \\\n  --gcc-preprocessor-definitions \"$GCC_PREPROCESSOR_DEFINITIONS\" \\\n  --configuration ${CONFIGURATION:?} \\\n  ${ARCHS:?}\n";
+			shellScript = "# ---- Build Rust Code (Xcode Run Script) ----\nset -euo pipefail\n\n# Tools in PATH (Bun, Homebrew, Cargo)\nexport PATH=\"$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.nvm/versions/node/v22.11.0/bin:$HOME/.cargo/bin:$PATH\"\n\n# Required by Xcode\nPLATFORM_DISPLAY_NAME=\"${PLATFORM_DISPLAY_NAME:?}\"\nSDKROOT=\"${SDKROOT:?}\"\nCONFIGURATION=\"${CONFIGURATION:?}\"\nCURRENT_ARCH=\"${CURRENT_ARCH:-arm64}\"\n\n# Build for iOS Simulator explicitly (avoid darwin artifacts)\ncase \"$PLATFORM_DISPLAY_NAME\" in\n  *Simulator*|*simulator*)\n    export CARGO_BUILD_TARGET=\"aarch64-apple-ios-sim\"\n    ;;\n  *)\n    export CARGO_BUILD_TARGET=\"aarch64-apple-ios\"\n    ;;\nesac\n\n# Make optional envs safe under `set -u`\nexport FORCE_COLOR=\"${FORCE_COLOR:-1}\"             # or \"\" if you don't want color\nFRAMEWORK_SEARCH_PATHS=\"${FRAMEWORK_SEARCH_PATHS:-}\"\nHEADER_SEARCH_PATHS=\"${HEADER_SEARCH_PATHS:-}\"\nGCC_PREPROCESSOR_DEFINITIONS=\"${GCC_PREPROCESSOR_DEFINITIONS:-}\"\nARCHS=\"${ARCHS:-${CURRENT_ARCH:-}}\"\n\n# Required envs (fail early if Xcode didn't set them)\nPLATFORM_DISPLAY_NAME=\"${PLATFORM_DISPLAY_NAME:?}\"\nSDKROOT=\"${SDKROOT:?}\"\nCONFIGURATION=\"${CONFIGURATION:?}\"\n\nif [[ \"${CONFIGURATION}\" =~ ^[Dd]ebug ]]; then\n  export RUSTFLAGS=\"${RUSTFLAGS:+$RUSTFLAGS } -C debug-assertions=yes\"\nelse\n  export RUSTFLAGS=\"${RUSTFLAGS:+$RUSTFLAGS } -C debug-assertions=no -C opt-level=z -C panic=abort -C strip=symbols -C debuginfo=0\"\n  export PUBLIC_SENTRY_ENDPOINT=\"https://4ae66e24333e69b96aac37c6a08dddbe@o4507505692901376.ingest.de.sentry.io/4507508600209488\"\nfi\n\n# Sanity logs\necho \"bun: $(which bun)\"; bun --version || true\necho \"cargo: $(which cargo)\"; cargo --version || true\necho \"target: ${CARGO_BUILD_TARGET}\";\n\n# Call tauri helper with safe quoting\nbun tauri ios xcode-script -v \\\n  --platform \"$PLATFORM_DISPLAY_NAME\" \\\n  --sdk-root \"$SDKROOT\" \\\n  --framework-search-paths \"$FRAMEWORK_SEARCH_PATHS\" \\\n  --header-search-paths \"$HEADER_SEARCH_PATHS\" \\\n  --gcc-preprocessor-definitions \"$GCC_PREPROCESSOR_DEFINITIONS\" \\\n  --configuration ${CONFIGURATION:?} \\\n  ${ARCHS:?}\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -356,7 +360,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = "flow-like-desktop_iOS/flow-like-desktop_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = "VVT9DYMA6M";
+				DEVELOPMENT_TEAM = VVT9DYMA6M;
 				ENABLE_BITCODE = NO;
 				EXCLUDED_ARCHS = "";
 				FRAMEWORK_SEARCH_PATHS = (
@@ -385,7 +389,7 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
 				MARKETING_VERSION = 0.0.6;
-				PRODUCT_BUNDLE_IDENTIFIER = com.flow-like.app;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.flow-like.app";
 				PRODUCT_NAME = "Flow Like";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -402,7 +406,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = "flow-like-desktop_iOS/flow-like-desktop_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = "VVT9DYMA6M";
+				DEVELOPMENT_TEAM = VVT9DYMA6M;
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -431,7 +435,7 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
 				MARKETING_VERSION = 0.0.6;
-				PRODUCT_BUNDLE_IDENTIFIER = com.flow-like.app;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.flow-like.app";
 				PRODUCT_NAME = "Flow Like";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
