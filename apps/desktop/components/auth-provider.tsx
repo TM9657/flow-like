@@ -21,6 +21,7 @@ import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "react-oidc-context";
 import { get } from "../lib/api";
 import { TauriBackend } from "./tauri-provider";
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 export class OIDCTokenProvider implements TokenProvider {
 	constructor(private readonly userManager: UserManager) {}
@@ -43,34 +44,17 @@ export class OIDCTokenProvider implements TokenProvider {
 }
 
 class TauriWindow implements IWindow {
-	private windowRef: WebviewWindow | undefined;
 	private abort: ((reason: Error) => void) | undefined;
 	close() {
 		return;
 	}
 	async navigate(params: NavigateParams): Promise<never> {
-		if (this.windowRef) this.windowRef.close();
-		const webview = new WebviewWindow("oidcFlow", {
-			url: params.url,
-			title: "Login",
-			alwaysOnBottom: true,
-			backgroundColor: "#000000",
-			focus: true,
-			maximized: true,
-			contentProtected: true,
-		});
+		openUrl(params.url);
+
 		const promise = new Promise((resolve, reject) => {
 			this.abort = reject;
 		});
-		this.windowRef = webview;
 
-		webview.onCloseRequested(() => {
-			this.abort?.(new Error("User closed the window"));
-			this.abort = undefined;
-		});
-
-		await webview.show();
-		await webview.setFocus();
 		return promise as Promise<never>;
 	}
 }
@@ -143,9 +127,31 @@ export function DesktopAuthProvider({
 		if (!openIdAuthConfig) return;
 
 		const unlisten = listen<{ url: string }>("oidc/url", async (event) => {
-			const url = event.payload.url;
-			if (url.startsWith(openIdAuthConfig.redirect_uri)) {
-				await userManager?.signinRedirectCallback(event.payload.url);
+			const rawUrl = event.payload.url;
+
+			const normalizeTo = (target: string) => {
+				try {
+					const targetUrl = new URL(target);
+					const sourceUrl = new URL(rawUrl);
+					targetUrl.search = sourceUrl.search;
+					targetUrl.hash = sourceUrl.hash;
+					return targetUrl.toString();
+				} catch {
+					return rawUrl;
+				}
+			};
+
+			const isDeepLink = rawUrl.startsWith("flow-like://");
+			const signinUrl = isDeepLink
+				? normalizeTo(openIdAuthConfig.redirect_uri)
+				: rawUrl;
+			const logoutUrl =
+				isDeepLink && openIdAuthConfig.post_logout_redirect_uri
+					? normalizeTo(openIdAuthConfig.post_logout_redirect_uri)
+					: rawUrl;
+
+			if (signinUrl.startsWith(openIdAuthConfig.redirect_uri)) {
+				await userManager?.signinRedirectCallback(signinUrl);
 				const windows = await getAllWindows();
 				for (const window of windows) {
 					if (window.label === "oidcFlow") {
@@ -156,7 +162,7 @@ export function DesktopAuthProvider({
 
 			if (
 				openIdAuthConfig.post_logout_redirect_uri &&
-				url.startsWith(openIdAuthConfig.post_logout_redirect_uri)
+				logoutUrl.startsWith(openIdAuthConfig.post_logout_redirect_uri)
 			) {
 				const windows = await getAllWindows();
 				for (const window of windows) {
@@ -166,7 +172,7 @@ export function DesktopAuthProvider({
 				}
 			}
 
-			if (url.includes("/login?id_token_hint=")) {
+			if (signinUrl.includes("/login?id_token_hint=")) {
 				const windows = await getAllWindows();
 				for (const window of windows) {
 					if (window.label === "oidcFlow") {

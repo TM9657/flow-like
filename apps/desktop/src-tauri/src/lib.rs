@@ -2,6 +2,7 @@ mod functions;
 mod profile;
 mod settings;
 mod state;
+mod deeplink;
 pub mod utils;
 use flow_like::{
     flow_like_storage::{
@@ -24,6 +25,8 @@ use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(not(debug_assertions))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+use crate::deeplink::handle_deep_link;
 
 // --- iOS Release logging -----------------------------------------------------
 #[cfg(all(target_os = "ios", not(debug_assertions)))]
@@ -236,9 +239,15 @@ pub fn run() {
                 app.deep_link().register_all()?;
             }
 
+            let start_urls = app.deep_link().get_current()?;
+            if let Some(urls) = start_urls {
+                tracing::info!("deep link URLs for start: {:?}", urls);
+                handle_deep_link(&deep_link_handle, &urls);
+            }
+
             app.deep_link().on_open_url(move |event| {
                 let deep_link_handle = deep_link_handle.clone();
-                handle_deep_link(&deep_link_handle, event);
+                handle_deep_link(&deep_link_handle, &event.urls());
             });
 
             tauri::async_runtime::spawn(async move {
@@ -463,18 +472,6 @@ fn handle_instance(app: &AppHandle, args: Vec<String>, _cwd: String) {
     println!(
         "a new app instance was opened with {args:?} and the deep link event was already triggered"
     );
-}
-
-fn handle_deep_link(app: &AppHandle, event: OpenUrlEvent) {
-    #[cfg(desktop)]
-    {
-        let _ = app
-            .get_webview_window("main")
-            .expect("no main window")
-            .set_focus();
-    }
-
-    println!("deep link URLs: {:?}", event.urls());
 }
 
 #[cfg(desktop)]
