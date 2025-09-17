@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev:xcode": "bun tauri ios dev --open --host",
 		"build:xcode": "bun tauri ios build --open ",
-		"dev": "next dev -H 0.0.0.0",
+		"dev": "next dev --turbopack -H 0.0.0.0",
 		"dev:all": "bun run tauri dev & bun run --watch ./scripts/translation-server.ts",
 		"dev:ios": "bun run tauri ios dev 'iPhone 16' ",
 		"dev:ios:host": "bun run tauri ios dev  --host --force-ip-prompt",
