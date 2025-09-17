@@ -330,22 +330,6 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(state::TauriSettingsState(settings_state))
         .manage(state::TauriFlowLikeState(state_ref))
-        .on_page_load(|view, payload| {
-            let label = view.label().to_string();
-            let app_handle = view.app_handle().clone();
-
-            if label == "oidcFlow" {
-                crate::utils::emit_throttled(
-                    &app_handle,
-                    crate::utils::UiEmitTarget::All,
-                    "oidc/url",
-                    json!({ "url": payload.url() }),
-                    std::time::Duration::from_millis(200),
-                );
-            }
-
-            println!("{} loaded: {}", label, payload.url());
-        })
         .invoke_handler(tauri::generate_handler![
             update,
             functions::file::get_path_meta,

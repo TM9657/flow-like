@@ -18,7 +18,7 @@ use std::{any::Any, sync::Arc};
 #[derive(Clone)]
 pub struct LocalImageEmbeddingModel {
     pub bit: Arc<Bit>,
-    image_embedding_model: Arc<fastembed::ImageEmbedding>,
+    image_embedding_model: Arc<Mutex<fastembed::ImageEmbedding>>,
     text_model: Arc<dyn EmbeddingModelLogic>,
 }
 
@@ -83,7 +83,7 @@ impl LocalImageEmbeddingModel {
 
         let default_return_model = LocalImageEmbeddingModel {
             bit,
-            image_embedding_model: Arc::new(loaded_model),
+            image_embedding_model: Arc::new(Mutex::new(loaded_model)),
             text_model,
         };
 
@@ -110,7 +110,7 @@ impl ImageEmbeddingModelLogic for LocalImageEmbeddingModel {
     }
 
     async fn image_embed(&self, images: Vec<DynamicImage>) -> Result<Vec<Vec<f32>>> {
-        let embeddings = match self.image_embedding_model.embed_images(images) {
+        let embeddings = match self.image_embedding_model.lock().await.embed_images(images) {
             Ok(embeddings) => embeddings,
             Err(e) => {
                 println!("Error embedding image: {}", e);

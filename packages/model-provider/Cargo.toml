@@ -17,12 +17,12 @@ aws-sdk-bedrockruntime = "1.101.0"
 ndarray.workspace = true
 
 [target.'cfg(not(any(target_os = "ios", target_os = "tvos")))'.dependencies]
-ort = { version = "=2.0.0-rc.9", features = ["download-binaries", "copy-dylibs"] }
-fastembed = { version = "4.9.1", default-features = false, features = ["ort-download-binaries"] }
+ort = { version = "=2.0.0-rc.10", features = ["download-binaries", "copy-dylibs", "ndarray"] }
+fastembed = { version = "5.2.0", default-features = false, features = ["ort-download-binaries"] }
 
 [target.'cfg(any(target_os = "ios", target_os = "tvos"))'.dependencies]
-ort = { version = "=2.0.0-rc.9", default-features = false, features=["load-dynamic"] }
-fastembed = { version = "4.9.1", default-features = false, features = ["ort-load-dynamic"]}
+ort = { version = "=2.0.0-rc.10", default-features = false, features=["coreml"] }
+fastembed = { version = "5.2.0", default-features = false, features = []}
 
 [dev-dependencies]
 dotenv = "0.15.0"

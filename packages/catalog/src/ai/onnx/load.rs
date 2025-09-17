@@ -65,13 +65,13 @@ pub fn determine_provider(session: &Session) -> Result<Provider, Error> {
 
 pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32, u32), Error> {
     for input in &session.inputs {
-        if input.name == input_name
-            && let Some(dims) = input.input_type.tensor_dimensions()
-        {
-            let d = dims.len();
-            if d > 1 {
-                let (w, h) = (dims[d - 2], dims[d - 1]);
-                return Ok((w as u32, h as u32));
+        if input.name == input_name {
+            if let Some(dims) = input.input_type.tensor_shape() {
+                let d = dims.len();
+                if d > 1 {
+                    let (w, h) = (dims[d - 2], dims[d - 1]);
+                    return Ok((w as u32, h as u32));
+                }
             }
         }
     }

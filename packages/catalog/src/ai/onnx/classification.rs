@@ -18,10 +18,9 @@ use flow_like_types::{
 };
 
 use flow_like_model_provider::ml::ort::session::{Session, SessionInputValue, SessionOutputs};
-use flow_like_model_provider::ml::{
-    ndarray::{Array1, Array3, Array4, ArrayView1, Axis, s},
-    ort::inputs,
-};
+use flow_like_model_provider::ml::ort::value::Value;
+use flow_like_model_provider::ml::ndarray::{Array3, Array4, Axis, s};
+use ndarray::{Array1, ArrayView1};
 use std::borrow::Cow;
 
 #[derive(Default, Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -40,13 +39,13 @@ pub trait Classification {
         crop_pct: f32,
     ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error>;
     fn make_results(
-        &self,
-        outputs: SessionOutputs<'_, '_>,
+    &self,
+    outputs: SessionOutputs<'_>,
         apply_softmax: bool,
     ) -> Result<Vec<ClassPrediction>, Error>;
     fn run(
-        &self,
-        session: &Session,
+    &self,
+    session: &mut Session,
         img: &DynamicImage,
         mean_rgb: &[f32; 3],
         std_rgb: &[f32; 3],
@@ -77,18 +76,20 @@ impl Classification for TimmLike {
             mean_rgb,
             std_rgb,
         )?;
-        let session_inputs = inputs! {
-            "input0" => images.view(),
-        }?;
+    let val = Value::from_array(images)?;
+        let session_inputs: Vec<(Cow<'_, str>, SessionInputValue<'_>)> = vec![(
+            Cow::from("input0"),
+            val.into(),
+        )];
         Ok(session_inputs)
     }
 
     fn make_results(
         &self,
-        outputs: SessionOutputs<'_, '_>,
+        outputs: SessionOutputs<'_>,
         apply_softmax: bool,
     ) -> Result<Vec<ClassPrediction>, Error> {
-        let output = outputs["output0"].try_extract_tensor::<f32>()?;
+         let output = outputs["output0"].try_extract_array::<f32>()?;
         let output = output.reversed_axes();
         let output = output.slice(s![.., 0]);
         let output = if apply_softmax {
@@ -114,7 +115,7 @@ impl Classification for TimmLike {
 
     fn run(
         &self,
-        session: &Session,
+        session: &mut Session,
         img: &DynamicImage,
         mean_rgb: &[f32; 3],
         std_rgb: &[f32; 3],
@@ -321,23 +322,21 @@ impl NodeLogic for ImageClassificationNode {
             let img = node_img.get_image(context).await?;
             let img_guard = img.lock().await;
             let session = node_session.get_session(context).await?;
-            let session_guard = session.lock().await;
-            let provider = &session_guard.provider;
-            match provider {
-                Provider::TimmLike(model) => model.run(
-                    &session_guard.session,
-                    &img_guard,
-                    mean_rgb,
-                    std_rgb,
-                    crop_pct,
-                    apply_softmax,
-                ),
-                _ => {
-                    return Err(anyhow!(
-                        "Unknown/Incompatible ONNX-Model for Image Classification!"
-                    ));
-                }
-            }?
+            let mut session_guard = session.lock().await;
+            // Copy provider params to avoid overlapping borrows
+            let timm = if let Provider::TimmLike(m) = &session_guard.provider {
+                super::classification::TimmLike { input_width: m.input_width, input_height: m.input_height }
+            } else {
+                return Err(anyhow!("Unknown/Incompatible ONNX-Model for Image Classification!"));
+            };
+            timm.run(
+                &mut session_guard.session,
+                &img_guard,
+                mean_rgb,
+                std_rgb,
+                crop_pct,
+                apply_softmax,
+            )?
         };
 
         // set outputs
