@@ -1,7 +1,3 @@
-use std::{
-    collections::VecDeque,
-    sync::{Arc, Mutex},
-};
 
 use flow_like_types::json;
 use tauri::{AppHandle, Url};
@@ -26,8 +22,27 @@ pub fn handle_deep_link(app_handle: &AppHandle, urls: &Vec<Url>) {
 
     for url in urls {
         println!("Deep link URL: {}", url);
-        let url = url.as_str();
-        let command = url.trim_start_matches("flow-like://");
+
+        // Handle file URLs first (iOS 'Open in...' / AirDrop of documents)
+        if url.scheme() == "file" {
+            // Convert to local path and notify UI to import
+            if let Ok(path) = url.to_file_path() {
+                let path_str = path.to_string_lossy().to_string();
+                println!("Received file URL to import: {}", path_str);
+                crate::utils::emit_throttled(
+                    &app_handle,
+                    crate::utils::UiEmitTarget::All,
+                    "import/file",
+                    json::json!({ "path": path_str }),
+                    std::time::Duration::from_millis(200),
+                );
+                continue;
+            }
+        }
+
+        // Fallback: custom scheme deep links (e.g., flow-like://auth?...)
+        let url_str = url.as_str();
+        let command = url_str.trim_start_matches("flow-like://");
 
         let mut parts = command.splitn(2, '/');
         // we also need to split off any potential query parameters
@@ -36,7 +51,7 @@ pub fn handle_deep_link(app_handle: &AppHandle, urls: &Vec<Url>) {
 
         match parts.next() {
             Some("auth") => {
-                handle_auth(&app_handle, url);
+                handle_auth(&app_handle, url_str);
             }
             _ => {}
         }

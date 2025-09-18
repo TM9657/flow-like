@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
 	AppCard,
@@ -216,6 +217,32 @@ export default function YoursPage() {
 			</Link>
 		</Button>
 	]
+
+	// Listen for import/file events (e.g., from iOS when a file is opened with the app)
+	useEffect(() => {
+		const unlistenPromise = listen<{ path: string }>("import/file", async (event) => {
+			const path = event.payload.path;
+			if (!path) return;
+			if (path.toLowerCase().endsWith(".enc.flow-app")) {
+				setEncryptedImportPath(path);
+				setImportDialogOpen(true);
+				return;
+			}
+			const toastId = toast.loading("Importing app...", { description: "Please wait." });
+			try {
+				await invoke("import_app_from_file", { path });
+				toast.success("App imported successfully!", { id: toastId });
+				await apps.refetch();
+			} catch (err) {
+				console.error(err);
+				toast.error("Failed to import app", { id: toastId });
+			}
+		});
+
+		return () => {
+			unlistenPromise.then((unsub) => unsub()).catch(() => void 0);
+		};
+	}, [apps]);
 
 	useMobileHeader({
 		right: menuActions,
