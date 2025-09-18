@@ -14,12 +14,12 @@ use flow_like::{
     utils::http::HTTPClient,
 };
 use flow_like_types::{sync::Mutex, tokio::time::interval};
-use serde_json::json;
+// use serde_json::json; // unused
 use settings::Settings;
 use state::TauriFlowLikeState;
 use std::{sync::Arc, time::Duration};
 use tauri::{AppHandle, Manager};
-use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
+use tauri_plugin_deep_link::DeepLinkExt;
 #[cfg(desktop)]
 use tauri_plugin_updater::UpdaterExt;
 
@@ -31,7 +31,12 @@ use crate::deeplink::handle_deep_link;
 // --- iOS Release logging -----------------------------------------------------
 #[cfg(all(target_os = "ios", not(debug_assertions)))]
 mod ios_release_logging {
-    use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+    use tracing_subscriber::{
+        filter::LevelFilter,
+        layer::SubscriberExt,
+        util::SubscriberInitExt,
+        EnvFilter,
+    };
 
    pub fn init() {
         use std::sync::OnceLock;
@@ -46,15 +51,20 @@ mod ios_release_logging {
         // Prefer Apple unified logging so you can see everything in Console.app
         let oslog = tracing_oslog::OsLogger::new("com.flow-like.app", "default");
 
-        // Keep third-party noise down; raise your own crate(s)
-        let filter = EnvFilter::builder()
-            .with_default_directive("info".parse().unwrap())
-            .from_env_lossy()
-            .add_directive("tao=warn".parse().unwrap())
-            .add_directive("wry=warn".parse().unwrap())
-            .add_directive("tauri=info".parse().unwrap())
-            .add_directive("flow_like=info".parse().unwrap())
-            .add_directive("flow_like_types=info".parse().unwrap());
+        // Keep third-party noise down; raise your own crate(s). Never panic on parse errors.
+        let builder = EnvFilter::builder().with_default_directive(LevelFilter::INFO.into());
+        let mut filter = builder.from_env_lossy();
+        for d in [
+            "tao=warn",
+            "wry=warn",
+            "tauri=info",
+            "flow_like=info",
+            "flow_like_types=info",
+        ] {
+            if let Ok(dir) = d.parse() {
+                filter = filter.add_directive(dir);
+            }
+        }
 
         // Don't panic if a global subscriber is already installed.
         let _ = tracing_subscriber::registry()
@@ -72,7 +82,26 @@ macro_rules! eprintln { ($($t:tt)*) => { tracing::error!($($t)*); } }
 // ---------------------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 pub fn run() {
+    // Ensure panics are logged with backtraces in release too.
+    std::panic::set_hook(Box::new(|info| {
+        if let Some(location) = info.location() {
+            tracing::error!(
+                target: "panic",
+                message = %info,
+                file = location.file(),
+                line = location.line(),
+                "Application panic"
+            );
+        } else {
+            tracing::error!(target: "panic", message = %info, "Application panic (no location)");
+        }
+        #[allow(unused_must_use)]
+        {
+            let _ = sentry::capture_message(&format!("panic: {info}"), sentry::Level::Fatal);
+        }
+    }));
     #[cfg(all(target_os = "ios", not(debug_assertions)))]
     ios_release_logging::init();
 
@@ -82,38 +111,55 @@ pub fn run() {
     let temporary_dir = settings_state.temporary_dir.clone();
 
     let mut config: FlowLikeConfig = FlowLikeConfig::new();
-    config.register_bits_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(settings_state.bit_dir.clone()).unwrap(),
-    )));
 
-    config.register_user_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(settings_state.user_dir.clone()).unwrap(),
-    )));
+    // Helper to build a store with a safe fallback to in-memory on failure (prevents startup crashes on iOS)
+    let build_store = |path: std::path::PathBuf| -> FlowLikeStore {
+        match LocalObjectStore::new(path.clone()) {
+            Ok(store) => FlowLikeStore::Local(Arc::new(store)),
+            Err(e) => {
+                eprintln!(
+                    "Failed to init LocalObjectStore at {:?}: {:?}. Attempting to create dir...",
+                    path, e
+                );
+                let _ = std::fs::create_dir_all(&path);
+                match LocalObjectStore::new(path.clone()) {
+                    Ok(store) => FlowLikeStore::Local(Arc::new(store)),
+                    Err(err) => {
+                        eprintln!(
+                            "Re-initialization failed for {:?}: {:?}. Falling back to in-memory store.",
+                            path, err
+                        );
+                        FlowLikeStore::Memory(Arc::new(
+                            flow_like::flow_like_storage::object_store::memory::InMemory::new(),
+                        ))
+                    }
+                }
+            }
+        }
+    };
 
-    config.register_app_storage_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(project_dir.clone()).unwrap(),
-    )));
+    config.register_bits_store(build_store(settings_state.bit_dir.clone()));
 
-    config.register_app_meta_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(project_dir.clone()).unwrap(),
-    )));
+    config.register_user_store(build_store(settings_state.user_dir.clone()));
 
-    config.register_log_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(logs_dir.clone()).unwrap(),
-    )));
+    config.register_app_storage_store(build_store(project_dir.clone()));
 
-    config.register_temporary_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(temporary_dir.clone()).unwrap(),
-    )));
+    config.register_app_meta_store(build_store(project_dir.clone()));
+
+    config.register_log_store(build_store(logs_dir.clone()));
+
+    config.register_temporary_store(build_store(temporary_dir.clone()));
 
     config.register_build_project_database(Arc::new(move |path: Path| {
         let directory = project_dir.join(path.to_string());
-        lancedb::connect(directory.to_str().unwrap())
+        let _ = std::fs::create_dir_all(&directory);
+        lancedb::connect(directory.to_string_lossy().as_ref())
     }));
 
     config.register_build_logs_database(Arc::new(move |path: Path| {
         let directory = logs_dir.join(path.to_string());
-        lancedb::connect(directory.to_str().unwrap())
+        let _ = std::fs::create_dir_all(&directory);
+        lancedb::connect(directory.to_string_lossy().as_ref())
     }));
 
     settings_state.set_config(&config);
@@ -134,16 +180,18 @@ pub fn run() {
         drop(state);
         let mut registry = registry_guard.write().await;
         registry.initialize(weak_ref);
-        registry.push_nodes(catalog).await.unwrap();
+        if let Err(e) = registry.push_nodes(catalog).await {
+            eprintln!("Failed to push catalog nodes: {:?}", e);
+        }
         println!("Catalog Initialized");
     });
 
     let sentry_endpoint = std::option_env!("PUBLIC_SENTRY_ENDPOINT");
     // Defer Sentry init on iOS to improve startup; init immediately elsewhere.
-    let mut guard: Option<sentry::ClientInitGuard> = None;
+    let mut _sentry_guard: Option<sentry::ClientInitGuard> = None;
     #[cfg(not(target_os = "ios"))]
     {
-        guard = sentry_endpoint.map(|endpoint| {
+        _sentry_guard = sentry_endpoint.map(|endpoint| {
             sentry::init((
                 endpoint,
                 sentry::ClientOptions {
@@ -177,21 +225,12 @@ pub fn run() {
     #[cfg(not(debug_assertions))]
     {
         #[cfg(all(target_os = "ios"))]
-        {
-            // iOS Release: oslog is already set up above; just add Sentry layer if enabled.
-            if guard.is_some() {
-                // Rebuild a registry with the existing default subscriber is tricky;
-                // simplest: add Sentry's global integration:
-                tracing::info!("Sentry Tracing Layer Initialized");
-            } else {
-                tracing::info!("Sentry Tracing Layer Not Initialized");
-            }
-        }
+        { /* iOS Release: oslog is already set up above; Sentry init is deferred. */ }
 
         #[cfg(not(target_os = "ios"))]
         {
             // Non-iOS Release (macOS/Windows/Linux): stdio fmt layer is OK
-            match guard {
+            match _sentry_guard {
                 Some(_) => {
                     tracing_subscriber::registry()
                         .with(tracing_subscriber::fmt::layer())
@@ -270,7 +309,13 @@ pub fn run() {
 
                 let model_factory = {
                     println!("Starting GC");
-                    let flow_like_state = TauriFlowLikeState::construct(&handle).await.unwrap();
+                    let flow_like_state = match TauriFlowLikeState::construct(&handle).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("GC init failed: {:?}", e);
+                            return;
+                        }
+                    };
                     let flow_like_state = flow_like_state.lock().await;
 
                     flow_like_state.model_factory.clone()
@@ -300,7 +345,13 @@ pub fn run() {
 
                 let http_client = {
                     println!("Starting Refetch Handler");
-                    let flow_like_state = TauriFlowLikeState::construct(&handle).await.unwrap();
+                    let flow_like_state = match TauriFlowLikeState::construct(&handle).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("Refetch handler init failed: {:?}", e);
+                            return;
+                        }
+                    };
                     let flow_like_state = flow_like_state.lock().await;
                     flow_like_state.http_client.clone()
                 };
