@@ -33,22 +33,34 @@ use crate::deeplink::handle_deep_link;
 mod ios_release_logging {
     use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-    pub fn init() {
+   pub fn init() {
+        use std::sync::OnceLock;
+        use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+        static INIT_GUARD: OnceLock<()> = OnceLock::new();
+
+        // If we've already run (or someone else set a global subscriber), bail quietly.
+        if INIT_GUARD.set(()).is_err() {
+            return;
+        }
+
         // Prefer Apple unified logging so you can see everything in Console.app
         let oslog = tracing_oslog::OsLogger::new("com.flow-like.app", "default");
 
         // Keep third-party noise down; raise your own crate(s)
-        let filter = EnvFilter::from_default_env()
+        let filter = EnvFilter::builder()
+            .with_default_directive("info".parse().unwrap())
+            .from_env_lossy()
             .add_directive("tao=warn".parse().unwrap())
             .add_directive("wry=warn".parse().unwrap())
             .add_directive("tauri=info".parse().unwrap())
             .add_directive("flow_like=info".parse().unwrap())
             .add_directive("flow_like_types=info".parse().unwrap());
 
-        tracing_subscriber::registry()
+        // Don't panic if a global subscriber is already installed.
+        let _ = tracing_subscriber::registry()
             .with(filter)
             .with(oslog)
-            .init();
+            .try_init(); // <- returns Err if someone else initialized first; we ignore it.
     }
 }
 
@@ -239,8 +251,8 @@ pub fn run() {
                 app.deep_link().register_all()?;
             }
 
-            let start_urls = app.deep_link().get_current()?;
-            if let Some(urls) = start_urls {
+            let start_urls = app.deep_link().get_current();
+            if let Ok(Some(urls)) = start_urls {
                 tracing::info!("deep link URLs for start: {:?}", urls);
                 handle_deep_link(&deep_link_handle, &urls);
             }
