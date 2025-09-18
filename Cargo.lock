@@ -4774,8 +4774,7 @@ checksum = "9afc2bd4d5a73106dd53d10d73d3401c2f32730ba2c0b93ddb888a8983680471"
 [[package]]
 name = "fastembed"
 version = "5.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2e9bf3ea201e5d338450555088e02cff23b00be92bead3eff7ed341c68f5ac6"
+source = "git+https://github.com/TM9657/fastembed-rs.git?rev=8cddfc6#8cddfc653df04589ff81a0f632575f37169a5ee7"
 dependencies = [
  "anyhow",
  "image",
@@ -6103,6 +6102,12 @@ checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
 dependencies = [
  "digest",
 ]
+
+[[package]]
+name = "hmac-sha256"
+version = "1.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad6880c8d4a9ebf39c6e8b77007ce223f646a4d21ce29d99f70cb16420545425"
 
 [[package]]
 name = "home"
@@ -9799,25 +9804,22 @@ dependencies = [
 [[package]]
 name = "ort"
 version = "2.0.0-rc.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fa7e49bd669d32d7bc2a15ec540a527e7764aec722a45467814005725bcd721"
+source = "git+https://github.com/TM9657/ort.git?rev=1d64032#1d64032f1b86f6d53ce7cfd7b8c771840a277cd2"
 dependencies = [
  "ndarray",
  "ort-sys",
  "smallvec 2.0.0-alpha.10",
  "tracing",
+ "ureq",
 ]
 
 [[package]]
 name = "ort-sys"
 version = "2.0.0-rc.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2aba9f5c7c479925205799216e7e5d07cc1d4fa76ea8058c60a9a30f6a4e890"
+source = "git+https://github.com/TM9657/ort.git?rev=1d64032#1d64032f1b86f6d53ce7cfd7b8c771840a277cd2"
 dependencies = [
  "flate2",
- "pkg-config",
- "sha2",
- "tar",
+ "hmac-sha256",
  "ureq",
 ]
 
