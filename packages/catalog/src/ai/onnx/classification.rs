@@ -17,9 +17,9 @@ use flow_like_types::{
     json::{Deserialize, Serialize, json},
 };
 
+use flow_like_model_provider::ml::{ndarray::{s, Array3, Array4, Axis}, ort::{inputs, value::TensorRef}};
 use flow_like_model_provider::ml::ort::session::{Session, SessionInputValue, SessionOutputs};
 use flow_like_model_provider::ml::ort::value::Value;
-use flow_like_model_provider::ml::ndarray::{Array3, Array4, Axis, s};
 use ndarray::{Array1, ArrayView1};
 use std::borrow::Cow;
 
@@ -39,13 +39,13 @@ pub trait Classification {
         crop_pct: f32,
     ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error>;
     fn make_results(
-    &self,
-    outputs: SessionOutputs<'_>,
+        &self,
+        outputs: SessionOutputs<'_>,
         apply_softmax: bool,
     ) -> Result<Vec<ClassPrediction>, Error>;
     fn run(
-    &self,
-    session: &mut Session,
+        &self,
+        session: &mut Session,
         img: &DynamicImage,
         mean_rgb: &[f32; 3],
         std_rgb: &[f32; 3],
@@ -76,11 +76,11 @@ impl Classification for TimmLike {
             mean_rgb,
             std_rgb,
         )?;
-    let val = Value::from_array(images)?;
-        let session_inputs: Vec<(Cow<'_, str>, SessionInputValue<'_>)> = vec![(
-            Cow::from("input0"),
-            val.into(),
-        )];
+        let value = Value::from_array(images)?; // own the tensor data
+        let session_inputs = inputs![
+            "input0" => value
+        ];
+
         Ok(session_inputs)
     }
 
@@ -89,7 +89,7 @@ impl Classification for TimmLike {
         outputs: SessionOutputs<'_>,
         apply_softmax: bool,
     ) -> Result<Vec<ClassPrediction>, Error> {
-         let output = outputs["output0"].try_extract_array::<f32>()?;
+        let output = outputs["output0"].try_extract_array::<f32>()?;
         let output = output.reversed_axes();
         let output = output.slice(s![.., 0]);
         let output = if apply_softmax {
@@ -325,9 +325,14 @@ impl NodeLogic for ImageClassificationNode {
             let mut session_guard = session.lock().await;
             // Copy provider params to avoid overlapping borrows
             let timm = if let Provider::TimmLike(m) = &session_guard.provider {
-                super::classification::TimmLike { input_width: m.input_width, input_height: m.input_height }
+                super::classification::TimmLike {
+                    input_width: m.input_width,
+                    input_height: m.input_height,
+                }
             } else {
-                return Err(anyhow!("Unknown/Incompatible ONNX-Model for Image Classification!"));
+                return Err(anyhow!(
+                    "Unknown/Incompatible ONNX-Model for Image Classification!"
+                ));
             };
             timm.run(
                 &mut session_guard.session,

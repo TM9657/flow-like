@@ -1,4 +1,7 @@
-use std::{collections::VecDeque, sync::{Arc, Mutex}};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
 
 use flow_like_types::json;
 use tauri::{AppHandle, Url};
@@ -33,7 +36,7 @@ pub fn handle_deep_link(app_handle: &AppHandle, urls: &Vec<Url>) {
 
         match parts.next() {
             Some("auth") => {
-               handle_auth(&app_handle, url);
+                handle_auth(&app_handle, url);
             }
             _ => {}
         }

@@ -21,7 +21,7 @@ ort = { version = "=2.0.0-rc.10", features = ["download-binaries", "copy-dylibs"
 fastembed = { version = "5.2.0", default-features = false, features = ["ort-download-binaries"] }
 
 [target.'cfg(any(target_os = "ios", target_os = "tvos"))'.dependencies]
-ort = { version = "=2.0.0-rc.10", default-features = false, features=["coreml"] }
+ort = { version = "=2.0.0-rc.10", default-features = false, features=["ndarray"] }
 fastembed = { version = "5.2.0", default-features = false, features = []}
 
 [dev-dependencies]

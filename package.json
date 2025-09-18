@@ -13,7 +13,7 @@
 		"dev:desktop:win:x64": "bun run --cwd ./apps/desktop dev:win:x64",
 		"dev:desktop:linux:x64": "bun run --cwd ./apps/desktop dev:linux:x64",
 		"dev:xcode": "bun run --cwd ./apps/desktop dev:xcode",
-		"build:xcode": "bun run --cwd ./apps/desktop build:xcode",
+		"build:xcode": "ORT_IOS_XCFWK_LOCATION=\"/Users/felix/Git/flow-like/apps/desktop/src-tauri/gen/apple/thirdparty/onnxruntime.xcframework\" bun run --cwd ./apps/desktop build:xcode",
 		"db:view": "bun run --cwd packages/api db:view",
 		"db:push:sync": "bun run --cwd packages/api db:push:sync",
 		"dev:api": "bun run --cwd ./apps/backend/local/api dev",

@@ -18,9 +18,9 @@ use flow_like_types::{
     json::{Deserialize, Serialize, json},
 };
 
+use flow_like_model_provider::ml::{ndarray::{s, Array2, Array3, Array4, ArrayView1, Axis}, ort::inputs};
 use flow_like_model_provider::ml::ort::session::{Session, SessionInputValue, SessionOutputs};
 use flow_like_model_provider::ml::ort::value::Value;
-use flow_like_model_provider::ml::ndarray::{Array2, Array3, Array4, ArrayView1, Axis, s};
 use std::borrow::Cow;
 use std::cmp::Ordering;
 
@@ -34,15 +34,15 @@ pub trait ObjectDetection {
     // Postprocessing
     fn make_results(
         &self,
-    outputs: SessionOutputs<'_>,
+        outputs: SessionOutputs<'_>,
         conf_thres: f32,
         iou_thres: f32,
         max_detect: usize,
     ) -> Result<Vec<BoundingBox>, Error>;
     // End-to-End Inference
     fn run(
-    &self,
-    session: &mut Session,
+        &self,
+        session: &mut Session,
         img: &DynamicImage,
         conf_thres: f32,
         iou_thres: f32,
@@ -61,15 +61,14 @@ impl ObjectDetection for DfineLike {
         &self,
         img: &DynamicImage,
     ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error> {
-    let (img_width, img_height) = (img.width() as i64, img.height() as i64);
+        let (img_width, img_height) = (img.width() as i64, img.height() as i64);
         let images = img_to_arr(img, self.input_width, self.input_height)?;
-    // Most DETR-like models expect (height, width)
-    let orig_target_size = Array2::from_shape_vec((1, 2), vec![img_height, img_width])?;
-    let images_val = Value::from_array(images)?;
-    let sizes_val = Value::from_array(orig_target_size)?;
-        let session_inputs: Vec<(Cow<'_, str>, SessionInputValue<'_>)> = vec![
-            (Cow::from("images"), images_val.into()),
-            (Cow::from("orig_target_sizes"), sizes_val.into()),
+        let orig_target_size = Array2::from_shape_vec((1, 2), vec![img_width, img_height])?;
+        let images_data = Value::from_array(images)?;
+        let orig_target_size_data = Value::from_array(orig_target_size)?;
+        let session_inputs = inputs![
+            "images" => images_data,
+            "orig_target_sizes" => orig_target_size_data
         ];
         Ok(session_inputs)
     }
@@ -114,8 +113,8 @@ impl ObjectDetection for DfineLike {
     }
 
     fn run(
-    &self,
-    session: &mut Session,
+        &self,
+        session: &mut Session,
         img: &DynamicImage,
         conf_thres: f32,
         iou_thres: f32,
@@ -140,9 +139,10 @@ impl ObjectDetection for YoloLike {
         img: &DynamicImage,
     ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error> {
         let images = img_to_arr(img, self.input_width, self.input_height)?;
-        let images_val = Value::from_array(images)?;
-        let session_inputs: Vec<(Cow<'_, str>, SessionInputValue<'_>)> =
-            vec![(Cow::from("images"), images_val.into())];
+        let images_data = Value::from_array(images)?;
+        let session_inputs = inputs! [
+            "images" => images_data,
+        ];
         Ok(session_inputs)
     }
 
@@ -176,8 +176,8 @@ impl ObjectDetection for YoloLike {
     }
 
     fn run(
-    &self,
-    session: &mut Session,
+        &self,
+        session: &mut Session,
         img: &DynamicImage,
         conf_thres: f32,
         iou_thres: f32,
@@ -485,12 +485,30 @@ impl NodeLogic for ObjectDetectionNode {
             // Copy provider params to avoid overlapping borrows
             match &session_guard.provider {
                 Provider::DfineLike(m) => {
-                    let prov = super::detection::DfineLike { input_width: m.input_width, input_height: m.input_height };
-                    prov.run(&mut session_guard.session, &img_guard, conf_thres, iou_thres, max_detect)
+                    let prov = super::detection::DfineLike {
+                        input_width: m.input_width,
+                        input_height: m.input_height,
+                    };
+                    prov.run(
+                        &mut session_guard.session,
+                        &img_guard,
+                        conf_thres,
+                        iou_thres,
+                        max_detect,
+                    )
                 }
                 Provider::YoloLike(m) => {
-                    let prov = super::detection::YoloLike { input_width: m.input_width, input_height: m.input_height };
-                    prov.run(&mut session_guard.session, &img_guard, conf_thres, iou_thres, max_detect)
+                    let prov = super::detection::YoloLike {
+                        input_width: m.input_width,
+                        input_height: m.input_height,
+                    };
+                    prov.run(
+                        &mut session_guard.session,
+                        &img_guard,
+                        conf_thres,
+                        iou_thres,
+                        max_detect,
+                    )
                 }
                 _ => Err(anyhow!(
                     "Unknown/Incompatible ONNX-Model for Object Detection!"

@@ -1,6 +1,8 @@
 use crate::{
     response::{Choice, Response, ResponseMessage, Usage},
-    response_chunk::{Delta, DeltaFunctionCall, DeltaResponseFunction, ResponseChunk, ResponseChunkChoice},
+    response_chunk::{
+        Delta, DeltaFunctionCall, DeltaResponseFunction, ResponseChunk, ResponseChunkChoice,
+    },
 };
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
 use aws_sdk_bedrockruntime::types::ConverseStreamOutput as ConverseStreamOutputType;

@@ -2,7 +2,7 @@ use crate::profile::UserProfile;
 use flow_like::{state::FlowLikeConfig, utils::cache::get_cache_dir};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::SystemTime};
-use tauri::{fs, AppHandle};
+use tauri::{AppHandle, fs};
 
 // iOS-only centralized, sandbox-safe roots.
 #[cfg(target_os = "ios")]
@@ -12,8 +12,8 @@ fn app_data_root() -> PathBuf {
     } else if let Some(dir) = dirs_next::cache_dir() {
         dir.join("flow-like")
     } else {
-    // Relative fallback inside sandboxed working directory
-    PathBuf::from("flow-like")
+        // Relative fallback inside sandboxed working directory
+        PathBuf::from("flow-like")
     }
 }
 
@@ -24,8 +24,8 @@ fn app_cache_root() -> PathBuf {
     } else if let Some(dir) = dirs_next::data_dir() {
         dir.join("flow-like").join("cache")
     } else {
-    // Relative fallback inside sandboxed working directory
-    PathBuf::from("flow-like").join("cache")
+        // Relative fallback inside sandboxed working directory
+        PathBuf::from("flow-like").join("cache")
     }
 }
 
@@ -57,42 +57,41 @@ fn default_temporary_dir() -> PathBuf {
         .join("tmp")
 }
 
-
-    fn ensure_dir(p: &PathBuf) -> std::io::Result<()> {
-        if !p.exists() {
-            std::fs::create_dir_all(p)?;
-        }
-        Ok(())
+fn ensure_dir(p: &PathBuf) -> std::io::Result<()> {
+    if !p.exists() {
+        std::fs::create_dir_all(p)?;
     }
+    Ok(())
+}
 
-    #[cfg(target_os = "ios")]
-    pub fn ensure_app_dirs() -> std::io::Result<()> {
-        let data_root = app_data_root();
-        let bit_dir = data_root.join("bits");
-        let project_dir = data_root.join("projects");
-        let cache_dir = app_cache_root();
+#[cfg(target_os = "ios")]
+pub fn ensure_app_dirs() -> std::io::Result<()> {
+    let data_root = app_data_root();
+    let bit_dir = data_root.join("bits");
+    let project_dir = data_root.join("projects");
+    let cache_dir = app_cache_root();
 
-        ensure_dir(&bit_dir)?;
-        ensure_dir(&project_dir)?;
-        ensure_dir(&cache_dir)?;
-        Ok(())
-    }
+    ensure_dir(&bit_dir)?;
+    ensure_dir(&project_dir)?;
+    ensure_dir(&cache_dir)?;
+    Ok(())
+}
 
-    #[cfg(not(target_os = "ios"))]
-    pub fn ensure_app_dirs() -> std::io::Result<()> {
-        let bit_dir = dirs_next::data_dir()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "data_dir() is None"))?
-            .join("flow-like/bits");
-        let project_dir = dirs_next::data_dir().unwrap().join("flow-like/projects");
-        let cache_dir = dirs_next::cache_dir()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "cache_dir() is None"))?
-            .join("flow-like");
+#[cfg(not(target_os = "ios"))]
+pub fn ensure_app_dirs() -> std::io::Result<()> {
+    let bit_dir = dirs_next::data_dir()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "data_dir() is None"))?
+        .join("flow-like/bits");
+    let project_dir = dirs_next::data_dir().unwrap().join("flow-like/projects");
+    let cache_dir = dirs_next::cache_dir()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "cache_dir() is None"))?
+        .join("flow-like");
 
-        ensure_dir(&bit_dir)?;
-        ensure_dir(&project_dir)?;
-        ensure_dir(&cache_dir)?;
-        Ok(())
-    }
+    ensure_dir(&bit_dir)?;
+    ensure_dir(&project_dir)?;
+    ensure_dir(&cache_dir)?;
+    Ok(())
+}
 #[derive(Serialize, Deserialize)]
 pub struct Settings {
     loaded: bool,

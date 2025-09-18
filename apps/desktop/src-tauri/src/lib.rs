@@ -1,8 +1,8 @@
+mod deeplink;
 mod functions;
 mod profile;
 mod settings;
 mod state;
-mod deeplink;
 pub mod utils;
 use flow_like::{
     flow_like_storage::{
@@ -31,7 +31,7 @@ use crate::deeplink::handle_deep_link;
 // --- iOS Release logging -----------------------------------------------------
 #[cfg(all(target_os = "ios", not(debug_assertions)))]
 mod ios_release_logging {
-    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
     pub fn init() {
         // Prefer Apple unified logging so you can see everything in Console.app

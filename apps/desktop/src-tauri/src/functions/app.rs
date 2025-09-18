@@ -53,7 +53,6 @@ async fn presign_meta(
     Ok(())
 }
 
-
 #[tauri::command(async)]
 pub async fn get_apps(
     app_handle: AppHandle,

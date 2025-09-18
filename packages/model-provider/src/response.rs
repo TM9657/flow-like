@@ -137,12 +137,19 @@ impl ResponseMessage {
         // Try to find existing entry by index when provided
         if let Some(i) = idx {
             if let Some(existing) = self.tool_calls.iter_mut().find(|c| c.index == Some(i)) {
-                if let Some(id) = dcall.id { existing.id = id; }
-                if let Some(t) = dcall.tool_type {
-                    existing.tool_type = Some(existing.tool_type.as_deref().unwrap_or("").to_string() + &t);
+                if let Some(id) = dcall.id {
+                    existing.id = id;
                 }
-                if let Some(name) = dcall.function.name { existing.function.name += &name; }
-                if let Some(args) = dcall.function.arguments { existing.function.arguments += &args; }
+                if let Some(t) = dcall.tool_type {
+                    existing.tool_type =
+                        Some(existing.tool_type.as_deref().unwrap_or("").to_string() + &t);
+                }
+                if let Some(name) = dcall.function.name {
+                    existing.function.name += &name;
+                }
+                if let Some(args) = dcall.function.arguments {
+                    existing.function.arguments += &args;
+                }
                 return;
             }
         }

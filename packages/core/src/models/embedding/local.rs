@@ -125,7 +125,12 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .map(|text| format!("{}{}", params.prefix.query, text))
             .collect::<Vec<String>>();
 
-        let embeddings = match self.embedding_model.lock().await.embed(prefixed_array.to_vec(), None) {
+        let embeddings = match self
+            .embedding_model
+            .lock()
+            .await
+            .embed(prefixed_array.to_vec(), None)
+        {
             Ok(embeddings) => embeddings,
             Err(e) => {
                 println!("Error embedding text: {}", e);
@@ -148,7 +153,12 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .iter()
             .map(|text| format!("{}{}", params.prefix.paragraph, text))
             .collect::<Vec<String>>();
-        let embeddings = match self.embedding_model.lock().await.embed(prefixed_array, None) {
+        let embeddings = match self
+            .embedding_model
+            .lock()
+            .await
+            .embed(prefixed_array, None)
+        {
             Ok(embeddings) => embeddings,
             Err(e) => {
                 println!("Error embedding text: {}", e);
