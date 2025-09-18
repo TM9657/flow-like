@@ -2,7 +2,7 @@ use crate::profile::UserProfile;
 use flow_like::{state::FlowLikeConfig, utils::cache::get_cache_dir};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::SystemTime};
-use tauri::{AppHandle, fs};
+use tauri::AppHandle;
 
 // iOS-only centralized, sandbox-safe roots.
 #[cfg(target_os = "ios")]
@@ -29,10 +29,17 @@ fn app_cache_root() -> PathBuf {
     }
 }
 
+// Single source of truth for iOS storage root. We pick cache root based on runtime observations
+// (cache survived updates more reliably in your environment). All app data is placed under this.
+#[cfg(target_os = "ios")]
+fn ios_storage_root() -> PathBuf {
+    app_data_root()
+}
+
 #[cfg(target_os = "ios")]
 fn default_logs_dir() -> PathBuf {
-    // Use cache for logs so the OS can purge if needed (iOS safe)
-    app_cache_root().join("logs")
+    // Keep logs under the chosen iOS storage root (cache)
+    ios_storage_root().join("logs")
 }
 
 #[cfg(not(target_os = "ios"))]
@@ -45,8 +52,8 @@ fn default_logs_dir() -> PathBuf {
 
 #[cfg(target_os = "ios")]
 fn default_temporary_dir() -> PathBuf {
-    // On iOS: use cache for temporary files (purgeable by OS)
-    app_cache_root().join("tmp")
+    // Keep tmp under the chosen iOS storage root (cache)
+    ios_storage_root().join("tmp")
 }
 
 #[cfg(not(target_os = "ios"))]
@@ -66,14 +73,16 @@ fn ensure_dir(p: &PathBuf) -> std::io::Result<()> {
 
 #[cfg(target_os = "ios")]
 pub fn ensure_app_dirs() -> std::io::Result<()> {
-    let data_root = app_data_root();
-    let bit_dir = data_root.join("bits");
-    let project_dir = data_root.join("projects");
-    let cache_dir = app_cache_root();
+    let root = ios_storage_root();
+    let bit_dir = root.join("bits");
+    let project_dir = root.join("projects");
+    let cache_dir = root.clone();
 
     ensure_dir(&bit_dir)?;
     ensure_dir(&project_dir)?;
     ensure_dir(&cache_dir)?;
+    ensure_dir(&default_logs_dir())?;
+    ensure_dir(&default_temporary_dir())?;
     Ok(())
 }
 
@@ -115,15 +124,26 @@ pub struct Settings {
 
 impl Settings {
     pub fn new() -> Self {
-        let dir = get_cache_dir();
-        let dir = dir.join("global-settings.json");
-        if dir.exists() {
-            let settings = std::fs::read(&dir);
+        // Prefer new stable settings path; fallback to legacy cache path for one-time backward compatibility.
+    let new_settings_path = settings_store_path();
+    let legacy_settings_path = get_cache_dir().join("global-settings.json");
+
+        if new_settings_path.exists() || legacy_settings_path.exists() {
+            let path = if new_settings_path.exists() { &new_settings_path } else { &legacy_settings_path };
+            let settings = std::fs::read(path);
             if let Ok(settings) = settings {
                 let settings = serde_json::from_slice::<Settings>(&settings);
                 if let Ok(mut settings) = settings {
                     settings.loaded = false;
-                    println!("Loaded settings from cache: {:?}", dir);
+                    // Normalize platform paths (on iOS: always derive from current container roots)
+                    settings.normalize_platform_paths();
+                    // Make sure required directories exist after normalization.
+                    let _ = ensure_app_dirs();
+                    let _ = ensure_dir(&settings.logs_dir);
+                    let _ = ensure_dir(&settings.temporary_dir);
+                    // Persist any normalization so subsequent boots are clean.
+                    Settings::serialize(&mut settings);
+                    println!("Loaded settings from: {:?}", path);
                     return settings;
                 }
 
@@ -153,9 +173,10 @@ impl Settings {
         if cfg!(target_os = "ios") {
             #[cfg(target_os = "ios")]
             {
-                bit_dir = app_data_root().join("bits");
-                project_dir = app_data_root().join("projects");
-                user_dir = app_cache_root();
+                let root = ios_storage_root();
+                bit_dir = root.join("bits");
+                project_dir = root.join("projects");
+                user_dir = root.clone();
             }
         }
 
@@ -216,8 +237,8 @@ impl Settings {
     }
 
     pub fn serialize(&mut self) {
-        let dir = get_cache_dir();
-        let dir = dir.join("global-settings.json");
+        let dir = settings_store_path();
+        if let Some(parent) = dir.parent() { let _ = std::fs::create_dir_all(parent); }
         let settings = serde_json::to_vec(&self);
         if let Ok(settings) = settings {
             let _res = std::fs::write(dir, settings);
@@ -228,5 +249,39 @@ impl Settings {
 impl Drop for Settings {
     fn drop(&mut self) {
         self.serialize();
+    }
+}
+
+impl Settings {
+    #[allow(unused_variables)]
+    fn normalize_platform_paths(&mut self) {
+        #[cfg(target_os = "ios")]
+        {
+            let root = ios_storage_root();
+            // Compute desired paths under the unified iOS storage root (cache-based).
+            let new_bit = root.join("bits");
+            let new_project = root.join("projects");
+            let new_user = root.clone();
+            let new_logs = default_logs_dir();
+            let new_tmp = default_temporary_dir();
+            // Always rebase to the current container's data root on iOS.
+            self.bit_dir = new_bit;
+            self.project_dir = new_project;
+            self.user_dir = new_user;
+            self.logs_dir = new_logs;
+            self.temporary_dir = new_tmp;
+        }
+    }
+}
+
+// Compute the path to persist global settings. On iOS, prefer data_dir for durability.
+fn settings_store_path() -> std::path::PathBuf {
+    #[cfg(target_os = "ios")]
+    {
+        return ios_storage_root().join("global-settings.json");
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        return get_cache_dir().join("global-settings.json");
     }
 }

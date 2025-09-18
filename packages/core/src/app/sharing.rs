@@ -764,7 +764,7 @@ impl App {
                     &secondary_ct,
                 );
                 if expected != binding_tag {
-                    bail!("Archive authentication failed (binding tag mismatch)");
+                    bail!("Archive authentication failed (binding tag mismatch), {:?}, {:?}", expected, binding_tag);
                 }
                 // Decrypt manifest only (cheap)
                 let manifest_zip_bytes = task::spawn_blocking({
