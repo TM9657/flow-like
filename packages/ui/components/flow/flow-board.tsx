@@ -43,7 +43,7 @@ import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { Button, useLogAggregation, useMobileHeader, viewportDb, viewportKey } from "../..";
+import { Button, Sheet, SheetContent, SheetHeader, SheetTitle, useLogAggregation, useMobileHeader, viewportDb, viewportKey } from "../..";
 import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
@@ -220,15 +220,14 @@ export function FlowBoard({
 			]
 		)
 
-		if(currentMetadata) {
-			right.push(
-				<Button variant={"outline"} size={"icon"}  onClick={async () => {
-					setCurrentMetadata(currentMetadata);
-				}}>
-					<ScrollIcon />
-				</Button>
-			)
-		}
+		// Always expose Logs button; it opens the logs sheet (shows empty state when no run is selected)
+		right.push(
+			<Button variant={"outline"} size={"icon"} aria-label="Open logs" onClick={async () => {
+				toggleLogs();
+			}}>
+				<ScrollIcon />
+			</Button>
+		)
 
 		if(currentLayer) {
 			left.push(
@@ -389,10 +388,11 @@ export function FlowBoard({
 
 	useEffect(() => {
 		if (!logPanelRef.current) return;
-
+		// Avoid auto-expanding logs on mobile to prevent layout jump
+		const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+		if (isMobile) return;
 		logPanelRef.current.expand();
 		const size = logPanelRef.current.getSize();
-
 		if (size < 10) logPanelRef.current.resize(45);
 	}, [logPanelRef.current]);
 
@@ -414,7 +414,16 @@ export function FlowBoard({
 		[nodeId, initialized],
 	);
 
+	const [varsOpen, setVarsOpen] = useState(false);
+	const [runsOpen, setRunsOpen] = useState(false);
+	const [logsOpen, setLogsOpen] = useState(false);
+
 	function toggleVars() {
+		// On mobile use sheet instead of resizable panel
+		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+			setVarsOpen((v) => !v);
+			return;
+		}
 		if (!varPanelRef.current) return;
 		const isCollapsed = varPanelRef.current.isCollapsed();
 		isCollapsed ? varPanelRef.current.expand() : varPanelRef.current.collapse();
@@ -428,6 +437,10 @@ export function FlowBoard({
 	}
 
 	function toggleRunHistory() {
+		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+			setRunsOpen((v) => !v);
+			return;
+		}
 		if (!runsPanelRef.current) return;
 		const isCollapsed = runsPanelRef.current.isCollapsed();
 		isCollapsed
@@ -443,6 +456,10 @@ export function FlowBoard({
 	}
 
 	function toggleLogs() {
+		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+			setLogsOpen((v) => !v);
+			return;
+		}
 		if (!logPanelRef.current) return;
 		const isCollapsed = logPanelRef.current.isCollapsed();
 		isCollapsed ? logPanelRef.current.expand() : logPanelRef.current.collapse();
@@ -1457,7 +1474,7 @@ export function FlowBoard({
 	);
 
 	return (
-		<div className="w-full flex-1 grow flex-col min-h-0 pt-[var(--mobile-header-height,56px)] md:pt-0">
+		<div className="w-full flex-1 grow flex-col min-h-0">
 			<div className="flex items-center justify-center absolute translate-x-[-50%] mt-5 left-[50dvw] z-40">
 				{board.data && editBoard && (
 					<BoardMeta
@@ -1536,10 +1553,12 @@ export function FlowBoard({
 			</div>
 			<ResizablePanelGroup
 				direction="horizontal"
-				className="flex grow min-h-[calc(100dvh-var(--mobile-header-height,56px))] h-[calc(100dvh-var(--mobile-header-height,56px))] md:min-h-dvh md:h-dvh"
+				className="flex grow min-h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] md:min-h-dvh md:h-dvh overscroll-contain"
+				style={{ touchAction: "manipulation", WebkitOverflowScrolling: "touch", overflow: "hidden" }}
 			>
+				{/* Desktop/Tablet side panels */}
 				<ResizablePanel
-					className="z-50 bg-background"
+					className="z-50 bg-background hidden md:block"
 					autoSave="flow-variables"
 					defaultSize={0}
 					collapsible={true}
@@ -1573,8 +1592,37 @@ export function FlowBoard({
 								}}
 							>
 								<div
-									className={`w-full h-full relative ${isOver && "border-green-400 border-2 z-10"}`}
+									className={`w-full h-full relative select-none touch-none ${isOver && "border-green-400 border-2 z-10"}`}
 									ref={setNodeRef}
+									style={{ WebkitUserSelect: "none", WebkitTouchCallout: "none", touchAction: "none" }}
+									onTouchStart={(e) => {
+										const t = e.touches[0];
+										if (!t) return;
+										const target = e.currentTarget;
+										const startX = t.clientX;
+										const startY = t.clientY;
+										let moved = false;
+										const onMove = (me: TouchEvent) => {
+											const tt = me.touches[0];
+											if (!tt) return;
+											if (Math.hypot(tt.clientX - startX, tt.clientY - startY) > 10) moved = true;
+										};
+										const timer = setTimeout(() => {
+											if (moved) return;
+											// Synthesize a contextmenu-like event for long-press
+											const evt = new MouseEvent("contextmenu", { clientX: startX, clientY: startY, bubbles: true, cancelable: true });
+											target.dispatchEvent(evt);
+										}, 450);
+										const onEnd = () => {
+											clearTimeout(timer);
+											document.removeEventListener("touchmove", onMove, { capture: true } as any);
+											document.removeEventListener("touchend", onEnd, { capture: true } as any);
+											document.removeEventListener("touchcancel", onEnd, { capture: true } as any);
+										};
+										document.addEventListener("touchmove", onMove, { passive: true, capture: true } as any);
+										document.addEventListener("touchend", onEnd, { passive: true, capture: true } as any);
+										document.addEventListener("touchcancel", onEnd, { passive: true, capture: true } as any);
+									}}
 								>
 									{currentLayer && (
 										<h2 className="absolute bottom-0 left-0 z-10 ml-16 mb-10 text-muted pointer-events-none select-none">
@@ -1694,7 +1742,7 @@ export function FlowBoard({
 						</ResizablePanel>
 						<ResizableHandle withHandle />
 						<ResizablePanel
-							className="z-50"
+							className="z-50 hidden md:block"
 							hidden={!currentMetadata}
 							ref={logPanelRef}
 							defaultSize={0}
@@ -1717,7 +1765,7 @@ export function FlowBoard({
 				</ResizablePanel>
 				<ResizableHandle withHandle />
 				<ResizablePanel
-					className="z-50"
+					className="z-50 hidden md:block"
 					autoSave="flow-runs"
 					defaultSize={0}
 					collapsible={true}
@@ -1735,6 +1783,62 @@ export function FlowBoard({
 						/>
 					)}
 				</ResizablePanel>
+				{/* Mobile sheets */}
+				<Sheet open={varsOpen} onOpenChange={setVarsOpen}>
+					<SheetContent side="bottom" className="h-[60dvh] w-full">
+						<SheetHeader>
+							<SheetTitle>Variables</SheetTitle>
+						</SheetHeader>
+						{board.data && (
+							<div className="h-[calc(60dvh-3.5rem)] overflow-y-auto overscroll-contain">
+								<VariablesMenu board={board.data} executeCommand={executeCommand} />
+							</div>
+						)}
+					</SheetContent>
+				</Sheet>
+				<Sheet open={runsOpen} onOpenChange={setRunsOpen}>
+					<SheetContent side="bottom" className="h-[80dvh] w-full">
+						<SheetHeader>
+							<SheetTitle>Runs</SheetTitle>
+						</SheetHeader>
+						{board.data && (
+							<div className="h-[calc(80dvh-3.5rem)] overflow-y-auto overscroll-contain">
+								<FlowRuns
+									executeBoard={executeBoard}
+									nodes={board.data.nodes}
+									appId={appId}
+									boardId={boardId}
+									version={board.data.version as [number, number, number]}
+									onVersionChange={setVersion}
+								/>
+							</div>
+						)}
+					</SheetContent>
+				</Sheet>
+				<Sheet open={logsOpen} onOpenChange={setLogsOpen}>
+					<SheetContent side="bottom" className="h-[80dvh] w-full">
+						<SheetHeader>
+							<SheetTitle>Logs</SheetTitle>
+						</SheetHeader>
+						{board.data && currentMetadata && (
+							<div className="h-[calc(80dvh-3.5rem)] w-full">
+								<Traces
+									appId={appId}
+									boardId={boardId}
+									board={boardRef}
+									onFocusNode={(nodeId: string) => {
+										focusNode(nodeId);
+									}}
+								/>
+							</div>
+						)}
+						{(!currentMetadata || !board.data) && (
+							<div className="h-[calc(80dvh-3.5rem)] w-full flex items-center justify-center text-sm text-muted-foreground p-6">
+								No run selected yet. Start a run to view logs here.
+							</div>
+						)}
+					</SheetContent>
+				</Sheet>
 			</ResizablePanelGroup>
 			<PinEditModal appId={appId} boardId={boardId} />
 		</div>

@@ -118,6 +118,20 @@ export function useMobileHeader(controls?: MobileHeaderControls, deps: React.Dep
 export const MobileHeader: React.FC = () => {
   const ctx = useContext(MobileHeaderContext);
   const active = ctx?.active ?? null;
+  const ref = React.useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const setVar = () => {
+      const h = el.offsetHeight || 56;
+      document.documentElement.style.setProperty("--mobile-header-height", `${h}px`);
+    };
+    setVar();
+    const ro = new ResizeObserver(setVar);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const left = useMemo(() => {
     if (!active?.left) return null;
@@ -130,7 +144,7 @@ export const MobileHeader: React.FC = () => {
   }, [active?.right]);
 
   return (
-    <div className="md:hidden sticky top-0 z-40 px-2 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div ref={ref} className="md:hidden sticky top-0 z-40 px-2 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-card/80 shadow-2xl">
         <div className="flex items-center gap-2 min-w-0">
           <SidebarTrigger className="size-9 rounded-lg border" aria-label="Open Menu" />
