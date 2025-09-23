@@ -7,6 +7,7 @@ pub mod invoke_with_tools;
 pub mod make_schema;
 pub mod preferences;
 pub mod response;
+pub mod build_openai;
 pub mod with_structured_output;
 
 use flow_like::flow::node::NodeLogic;
@@ -47,6 +48,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(with_structured_output::LLMWithStructuredOutput::default()),
         Arc::new(invoke_with_tools::InvokeLLMWithToolsNode::default()),
         Arc::new(make_schema::LLMMakeSchema::default()),
+        Arc::new(build_openai::BuildOpenAiNode::default()),
     ];
 
     // Add response nodes

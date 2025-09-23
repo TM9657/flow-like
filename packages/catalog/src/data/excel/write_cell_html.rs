@@ -64,7 +64,7 @@ impl NodeLogic for WriteCellHtmlNode {
         .set_default_value(Some(json!("")));
 
         node.add_output_pin("exec_out", "Out", "Trigger", VariableType::Execution);
-        node.add_output_pin("file", "File", "Updated XLSX path", VariableType::Struct)
+        node.add_output_pin("file_out", "File", "Updated XLSX path", VariableType::Struct)
             .set_schema::<FlowPath>();
 
         node
@@ -119,7 +119,7 @@ impl NodeLogic for WriteCellHtmlNode {
 
         file.put(ctx, out, false).await?;
 
-        ctx.set_pin_value("file", json!(file)).await?;
+        ctx.set_pin_value("file_out", json!(file)).await?;
         ctx.activate_exec_pin("exec_out").await?;
         Ok(())
     }

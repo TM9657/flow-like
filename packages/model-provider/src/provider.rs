@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use aws_config::SdkConfig;
 use flow_like_types::{
     json::{Deserialize, Serialize},
-    rand::{self, Rng},
+    rand::{self, Rng}, Value,
 };
 use schemars::JsonSchema;
 
@@ -12,6 +14,7 @@ pub struct ModelProvider {
     pub provider_name: String,
     pub model_id: Option<String>,
     pub version: Option<String>,
+    pub params: Option<HashMap<String, Value>>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]

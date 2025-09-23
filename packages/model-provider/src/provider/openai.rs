@@ -36,6 +36,7 @@ use serde::Serialize;
 
 use crate::llm::LLMCallback;
 use crate::response_chunk::ResponseChunk;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, create_dir_all};
 use std::io::Read;
@@ -177,6 +178,55 @@ impl OpenAIClient {
 
         if let Some(proxy) = &openai_config.proxy {
             client = client.with_proxy(proxy.clone());
+        }
+
+        let client = client
+            .build()
+            .map_err(|e| flow_like_types::anyhow!("Failed to create OpenAI client: {}", e))?;
+
+        Ok(client)
+    }
+
+    pub async fn from_params(
+        params: HashMap<String, Value>
+    ) -> flow_like_types::Result<OpenAIClient> {
+        let mut client = OpenAIClient::builder();
+
+        if let Some(api_key) = params.get("api_key").and_then(|v| v.as_str()) {
+            client = client.with_api_key(api_key);
+        }
+
+        if let Some(organization_id) = params.get("organization").and_then(|v| v.as_str()) {
+            client = client.with_organization(organization_id);
+        }
+
+        if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
+            client = client.with_endpoint(endpoint);
+
+            if let Some(_is_azure) = params.get("is_azure").and_then(|v| v.as_bool()) {
+                let model_id = params.get("model_id").and_then(|v| v.as_str()).ok_or_else(|| {
+                    flow_like_types::anyhow!("ModelID Required for Azure Deployments")
+                })?;
+                let api_key = params.get("api_key").and_then(|v| v.as_str()).ok_or_else(|| {
+                    flow_like_types::anyhow!("API key required for Azure Deployments")
+                })?;
+                let version = params.get("version").and_then(|v| v.as_str()).ok_or_else(|| {
+                    flow_like_types::anyhow!("Version required for Azure Deployments")
+                })?;
+                let endpoint = if endpoint.ends_with('/') {
+                    endpoint.to_string()
+                } else {
+                    format!("{}/", endpoint)
+                };
+                let endpoint = format!("{}openai/deployments/{}", endpoint, model_id);
+                client = client.with_endpoint(endpoint);
+                client = client.with_version(version);
+                client = client.with_header("api-key", api_key);
+            }
+        }
+
+        if let Some(proxy) =  params.get("proxy").and_then(|v| v.as_str()) {
+            client = client.with_proxy(proxy);
         }
 
         let client = client

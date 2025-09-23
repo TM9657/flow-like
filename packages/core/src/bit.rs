@@ -41,6 +41,29 @@ pub struct Metadata {
     pub updated_at: SystemTime,
 }
 
+impl Default for Metadata {
+    fn default() -> Self {
+        Self {
+            name: "Unknown".to_string(),
+            description: "No description".to_string(),
+            long_description: None,
+            release_notes: None,
+            tags: vec![],
+            use_case: None,
+            icon: None,
+            thumbnail: None,
+            preview_media: vec![],
+            age_rating: None,
+            website: None,
+            support_url: None,
+            docs_url: None,
+            organization_specific_values: None,
+            created_at: SystemTime::now(),
+            updated_at: SystemTime::now(),
+        }
+    }
+}
+
 impl Metadata {
     pub async fn presign(&mut self, prefix: Path, store: &FlowLikeStore) {
         if let Some(icon) = &self.icon {
@@ -117,6 +140,13 @@ pub enum BitTypes {
     Other,
     ObjectDetection,
 }
+
+impl Default for BitTypes {
+    fn default() -> Self {
+        BitTypes::Other
+    }
+}
+
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct BitModelPreference {
     pub multimodal: Option<bool>,
@@ -189,7 +219,7 @@ impl BitModelPreference {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct BitModelClassification {
     cost: f32,
     speed: f32,
@@ -303,7 +333,7 @@ impl BitModelClassification {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct Bit {
     pub id: String,
     #[serde(rename = "type")]

@@ -106,6 +106,19 @@ impl ModelFactory {
             return Ok(model);
         }
 
+        if provider == "custom:openai" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = OpenAIModel::from_params(&model_provider).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
         Err(flow_like_types::anyhow!("Model type not supported"))
     }
 

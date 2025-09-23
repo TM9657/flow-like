@@ -2,7 +2,7 @@ use crate::data::{
     excel::{parse_col_1_based, parse_row_1_based},
     path::FlowPath,
 };
-use calamine::{DataRef, DataType, ReaderRef, open_workbook_auto_from_rs};
+use calamine::{open_workbook_auto_from_rs, Data, DataRef, DataType, Reader, ReaderRef};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -56,7 +56,7 @@ impl NodeLogic for ReadCellNode {
 
         node.add_output_pin("exec_out", "Out", "Trigger", VariableType::Execution);
         node.add_output_pin(
-            "file",
+            "file_out",
             "File",
             "Pass-through XLSX path",
             VariableType::Struct,
@@ -94,18 +94,18 @@ impl NodeLogic for ReadCellNode {
             let mut wb = open_workbook_auto_from_rs(Cursor::new(bytes))
                 .map_err(|e| flow_like_types::anyhow!("Calamine open failed: {}", e))?;
 
-            if let Ok(range) = wb.worksheet_range_ref(&sheet) {
+            if let Ok(range) = wb.worksheet_range(&sheet) {
                 let r0 = (parse_row_1_based(&row_str)? - 1) as u32;
                 let c0 = (parse_col_1_based(&col_str)? - 1) as u32;
 
                 if let Some(cell) = range.get_value((r0, c0)) {
-                    found = !matches!(cell, DataRef::Empty);
+                    found = !matches!(cell, Data::Empty);
                     out_value = cell.as_string().unwrap_or_default();
                 }
             }
         }
 
-        ctx.set_pin_value("file", json!(file)).await?;
+        ctx.set_pin_value("file_out", json!(file)).await?;
         ctx.set_pin_value("value", json!(out_value)).await?;
         ctx.set_pin_value("found", json!(found)).await?;
 

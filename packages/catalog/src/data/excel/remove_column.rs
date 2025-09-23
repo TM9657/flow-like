@@ -57,7 +57,7 @@ impl NodeLogic for RemoveColumnNode {
         .set_default_value(Some(json!("1")));
 
         node.add_output_pin("exec_out", "Out", "Trigger", VariableType::Execution);
-        node.add_output_pin("file", "File", "Updated XLSX path", VariableType::Struct)
+        node.add_output_pin("file_out", "File", "Updated XLSX path", VariableType::Struct)
             .set_schema::<FlowPath>();
         node.add_output_pin("ok", "OK", "Operation success", VariableType::Boolean);
 
@@ -121,7 +121,7 @@ impl NodeLogic for RemoveColumnNode {
             ));
         }
 
-        ctx.set_pin_value("file", json!(file)).await?;
+        ctx.set_pin_value("file_out", json!(file)).await?;
         ctx.set_pin_value("ok", json!(true)).await?;
         ctx.activate_exec_pin("exec_out").await?;
         Ok(())

@@ -50,13 +50,13 @@ const SmallDotHandle = memo(function SmallDotHandle({
       <span
         className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
         style={{
-			width: size,
-			height: size,
-			background: isTransparent ? "transparent" : dotColor,
-			border: "none",
-			boxShadow: isTransparent ? "none" : "0 0 0 1px rgba(0,0,0,0.08)",
+          width: size,
+          height: size,
+          background: isTransparent ? "transparent" : dotColor,
+          border: "none",
+          boxShadow: isTransparent ? "none" : "0 0 0 1px rgba(0,0,0,0.08)",
         }}
-		/>
+      />
       {children}
     </Handle>
   );
@@ -117,7 +117,7 @@ function FlowPinInnerComponent({
   const iconStyle = useMemo(
     () => ({
       color: typeToColor(pin.data_type),
-	  marginLeft: pin.pin_type === IPinType.Input ? "0.4rem" : "0.4rem",
+      marginLeft: pin.pin_type === IPinType.Input ? "0.4rem" : "0.4rem",
       backgroundColor:
         "var(--xy-node-background-color, var(--xy-node-background-color-default))",
     }),
@@ -134,8 +134,7 @@ function FlowPinInnerComponent({
 
   const pinEditContainerClassName = useMemo(
     () =>
-      `flex flex-row items-center gap-1 max-w-1/2 ${
-        pin.pin_type === "Input" ? "ml-2" : "translate-x-[calc(-100%-0.25rem)]"
+      `flex flex-row items-center gap-1 max-w-1/2 ${pin.pin_type === "Input" ? "ml-2" : "translate-x-[calc(-100%-0.25rem)]"
       }`,
     [pin.pin_type]
   );
@@ -146,7 +145,7 @@ function FlowPinInnerComponent({
     invalidate(backend.boardState.getBoard, [appId, boardId]);
   }, [appId, boardId, invalidate]);
 
-  const updateNode = useCallback(async () => {
+  const updateNode = useCallback(async (value: any) => {
     if (node.nodes) return;
     const currentNode = getNode(node.id);
     if (!currentNode) return;
@@ -155,9 +154,9 @@ function FlowPinInnerComponent({
       toast.error("Node not found");
       return;
     }
-    if (defaultValue === undefined) return;
-    if (defaultValue === null) return;
-    if (defaultValue === pin.default_value) return;
+    if (value === undefined) return;
+    if (value === null) return;
+    if (value === pin.default_value) return;
     const backend = useBackendStore.getState().backend;
     if (!backend) return;
     const command = updateNodeCommand({
@@ -167,7 +166,7 @@ function FlowPinInnerComponent({
         coordinates: [currentNode.position.x, currentNode.position.y, 0],
         pins: {
           ...translatedNode.pins,
-          [pin.id]: { ...pin, default_value: defaultValue },
+          [pin.id]: { ...pin, default_value: value },
         },
       },
     });
@@ -179,11 +178,7 @@ function FlowPinInnerComponent({
     );
     await pushCommand(result, false);
     await refetchBoard();
-  }, [pin.id, defaultValue, refetchBoard, boardId, pushCommand, getNode, node, pin]);
-
-  useEffect(() => {
-    updateNode();
-  }, [defaultValue, updateNode]);
+  }, [pin.id, refetchBoard, boardId, pushCommand, getNode, node, pin]);
 
   useEffect(() => {
     setDefaultValue(pin.default_value);
@@ -205,11 +200,11 @@ function FlowPinInnerComponent({
           <DynamicImage
             url="/flow/pin.svg"
             className={`w-2 h-2 absolute left-0 right-0 -translate-x-[50%] pointer-events-none bg-foreground`}
-			style={{
-				marginLeft: pin.pin_type === IPinType.Input ? "0.4rem" : "0.4rem",
-				height: 9,
-				width: 9,
-			}}
+            style={{
+              marginLeft: pin.pin_type === IPinType.Input ? "0.4rem" : "0.4rem",
+              height: 9,
+              width: 9,
+            }}
           />
         )}
         {pin.value_type === IValueType.Array && (
@@ -258,6 +253,9 @@ function FlowPinInnerComponent({
             boardId={boardId}
             defaultValue={defaultValue}
             changeDefaultValue={setDefaultValue}
+            saveDefaultValue={async (value) => {
+              await updateNode(value);
+            }}
           />
           {pin.dynamic && onPinRemove && (
             <button
@@ -272,9 +270,8 @@ function FlowPinInnerComponent({
       )}
       {!shouldRenderPinEdit && onPinRemove && pin.dynamic && (
         <button
-          className={`opacity-0 bg-background border p-0.5 rounded-full group-hover:opacity-100 hover:text-primary ${
-            pin.pin_type === IPinType.Input ? "ml-2" : "mr-2 right-0 absolute"
-          }`}
+          className={`opacity-0 bg-background border p-0.5 rounded-full group-hover:opacity-100 hover:text-primary ${pin.pin_type === IPinType.Input ? "ml-2" : "mr-2 right-0 absolute"
+            }`}
           title="Delete Pin"
           onClick={() => onPinRemove(pin)}
         >
