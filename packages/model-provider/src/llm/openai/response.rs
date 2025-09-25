@@ -80,8 +80,10 @@ impl From<ChatCompletionResponse> for Response {
                 prompt_tokens: chat_completion_response.usage.prompt_tokens as u32,
                 completion_tokens: chat_completion_response.usage.completion_tokens as u32,
                 total_tokens: chat_completion_response.usage.total_tokens as u32,
+                cost: None,
                 prompt_tokens_details: None,
                 completion_tokens_details: None,
+                upstream_inference_cost: None,
             },
         }
     }
