@@ -92,6 +92,15 @@ impl AppUser {
         }
     }
 
+    pub async fn tracking_id(&self, state: &AppState) -> Result<Option<String>, AuthorizationError> {
+        let sub = self.sub()?;
+        let user = user::Entity::find_by_id(&sub)
+            .one(&state.db)
+            .await?
+            .ok_or_else(|| AuthorizationError::from(anyhow!("User not found")))?;
+        Ok(user.tracking_id)
+    }
+
     pub async fn tier(&self, state: &AppState) -> Result<UserTier, AuthorizationError> {
         let sub = self.sub()?;
         let user = user::Entity::find_by_id(&sub)

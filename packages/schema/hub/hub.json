@@ -292,7 +292,7 @@
 			"required": [
 				"execution_tier",
 				"llm_tiers",
-				"max_llm_calls",
+				"max_llm_cost",
 				"max_non_visible_projects",
 				"max_remote_executions",
 				"max_total_size"
@@ -313,7 +313,7 @@
 					"type": "integer",
 					"format": "int64"
 				},
-				"max_llm_calls": {
+				"max_llm_cost": {
 					"type": "integer",
 					"format": "int32"
 				},

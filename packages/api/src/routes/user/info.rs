@@ -5,7 +5,7 @@ use crate::{
     state::AppState, user_management::UserManagement,
 };
 use axum::{Extension, Json, extract::State};
-use flow_like_types::anyhow;
+use flow_like_types::{anyhow, create_id};
 use sea_orm::{ActiveModelTrait, EntityTrait, sqlx::types::chrono};
 
 /// Sometimes when the user still has an old jwt, the user info is not updated correctly.
@@ -64,6 +64,14 @@ pub async fn user_info(
             updated_user = Some(tmp_updated_user);
         }
 
+        if user_info.tracking_id.is_none() {
+            let tracking_id = create_id();
+            let mut tmp_updated_user: user::ActiveModel =
+                updated_user.unwrap_or(user_info.clone().into());
+            tmp_updated_user.tracking_id = sea_orm::ActiveValue::Set(Some(tracking_id));
+            updated_user = Some(tmp_updated_user);
+        }
+
         if let Some(preferred_username) = &preferred_username
             && user_info.preferred_username != Some(preferred_username.clone())
             && should_update(
@@ -118,6 +126,7 @@ pub async fn user_info(
 
     let user = user::ActiveModel {
         id: sea_orm::ActiveValue::Set(sub.clone()),
+        tracking_id: sea_orm::ActiveValue::Set(Some(create_id())),
         email: sea_orm::ActiveValue::Set(email),
         stripe_id: sea_orm::ActiveValue::Set(stripe_customer),
         username: sea_orm::ActiveValue::Set(username),

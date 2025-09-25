@@ -174,24 +174,32 @@ pub struct Usage {
     pub completion_tokens: u32,
     pub prompt_tokens: u32,
     pub total_tokens: u32,
+    pub cost: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_tokens_details: Option<PromptTokenDetails>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completion_tokens_details: Option<CompletionTokenDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upstream_inference_cost: Option<CostDetails>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct CostDetails {
+    upstream_inference_cost: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct PromptTokenDetails {
-    cached_tokens: u32,
-    audio_tokens: u32,
+    cached_tokens: Option<u32>,
+    audio_tokens: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct CompletionTokenDetails {
-    accepted_prediction_tokens: u32,
-    audio_tokens: u32,
-    reasoning_tokens: u32,
-    rejected_prediction_tokens: u32,
+    accepted_prediction_tokens: Option<u32>,
+    audio_tokens: Option<u32>,
+    reasoning_tokens: Option<u32>,
+    rejected_prediction_tokens: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]

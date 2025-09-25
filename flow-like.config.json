@@ -55,7 +55,7 @@
 			"max_remote_executions": 25,
 			"execution_tier": "micro",
 			"max_total_size": 100000000,
-			"max_llm_calls": 0,
+			"max_llm_cost": 0,
 			"llm_tiers": []
 		},
 		"PREMIUM": {
@@ -63,7 +63,7 @@
 			"max_remote_executions": 500,
 			"execution_tier": "small",
 			"max_total_size": 1000000000,
-			"max_llm_calls": 200,
+			"max_llm_cost": 300,
 			"llm_tiers": ["PRO"]
 		},
 		"PRO": {
@@ -71,7 +71,7 @@
 			"max_remote_executions": 5000,
 			"execution_tier": "medium",
 			"max_total_size": 10000000000,
-			"max_llm_calls": 1000,
+			"max_llm_cost": 3000,
 			"llm_tiers": ["PRO", "PREMIUM"]
 		},
 		"ENTERPRISE": {
@@ -79,7 +79,7 @@
 			"max_remote_executions": -1,
 			"execution_tier": "max",
 			"max_total_size": -1,
-			"max_llm_calls": -1,
+			"max_llm_cost": -1,
 			"llm_tiers": ["PRO", "PREMIUM", "ENTERPRISE"]
 		}
 	},

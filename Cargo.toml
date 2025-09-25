@@ -35,7 +35,7 @@ serde_json = "1.0.134"
 schemars = "0.8.22"
 chrono = "0.4.41"
 axum = {version="0.8.4", features=["http2", "multipart"]}
-sea-orm = { version = "1.1.15", features = [ "sqlx-mysql", "sqlx-postgres", "sqlx-sqlite", "runtime-tokio-native-tls", "macros", "with-json", "seaography" ] }
+sea-orm = { version = "1.1.16", features = [ "sqlx-mysql", "sqlx-postgres", "sqlx-sqlite", "runtime-tokio-native-tls", "macros", "with-json", "seaography" ] }
 tower = "0.5.2"
 tracing-subscriber = "0.3.19"
 dotenv = "0.15.0"

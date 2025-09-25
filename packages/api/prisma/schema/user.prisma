@@ -15,6 +15,7 @@ model User {
     id String @id
 
     stripeId String? @unique
+    trackingId String? @unique
 
     email       String? @unique
     username    String? @unique
@@ -46,6 +47,8 @@ model User {
     tier   UserTier   @default(FREE)
 
     totalSize BigInt @default(0)
+    totalLLMPrice BigInt @default(0)
+    llmPriceTrackingMonth String?
 
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
@@ -122,6 +125,8 @@ model LLMUsageTracking {
 
     app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
     appId String?
+
+    price BigInt
 
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt

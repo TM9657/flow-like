@@ -104,7 +104,7 @@ export interface ILookup {
 export interface IUserTier {
 	execution_tier: string;
 	llm_tiers: string[];
-	max_llm_calls: number;
+	max_llm_cost: number;
 	max_non_visible_projects: number;
 	max_remote_executions: number;
 	max_total_size: number;
