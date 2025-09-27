@@ -12,6 +12,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+#[cfg(feature = "local-ml")]
 use flow_like_model_provider::ml::ort::session::Session;
 use flow_like_types::{Error, Result, anyhow, async_trait, json::json};
 
@@ -24,6 +25,7 @@ static YOLO_OUTPUTS: [&str; 1] = ["output0"];
 static TIMM_INPUTS: [&str; 1] = ["input0"];
 static TIMM_OUTPUTS: [&str; 1] = ["output0"];
 
+#[cfg(feature = "local-ml")]
 /// Factory Function Matching ONNX Assets to a Provider-Frameworks
 pub fn determine_provider(session: &Session) -> Result<Provider, Error> {
     let input_names: Vec<&str> = session.inputs.iter().map(|i| i.name.as_str()).collect();
@@ -63,6 +65,7 @@ pub fn determine_provider(session: &Session) -> Result<Provider, Error> {
     }
 }
 
+#[cfg(feature = "local-ml")]
 pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32, u32), Error> {
     for input in &session.inputs {
         if input.name == input_name {
@@ -130,24 +133,34 @@ impl NodeLogic for LoadOnnxNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        context.deactivate_exec_pin("exec_out").await?;
+        #[cfg(feature = "local-ml")]
+        {
+            context.deactivate_exec_pin("exec_out").await?;
 
-        // fetch inputs
-        let path: FlowPath = context.evaluate_pin("path").await?;
-        let bytes = path.get(context, false).await?;
+            // fetch inputs
+            let path: FlowPath = context.evaluate_pin("path").await?;
+            let bytes = path.get(context, false).await?;
 
-        // init ONNX session
-        let session = Session::builder()?.commit_from_memory(&bytes)?;
+            // init ONNX session
+            let session = Session::builder()?.commit_from_memory(&bytes)?;
 
-        // wrap ONNX session with provider metadata
-        // we try to determine the here to fail fast in case of incompatible ONNX assets
-        let provider = determine_provider(&session)?;
-        let session_with_meta = SessionWithMeta { session, provider };
-        let node_session = NodeOnnxSession::new(context, session_with_meta).await;
+            // wrap ONNX session with provider metadata
+            // we try to determine the here to fail fast in case of incompatible ONNX assets
+            let provider = determine_provider(&session)?;
+            let session_with_meta = SessionWithMeta { session, provider };
+            let node_session = NodeOnnxSession::new(context, session_with_meta).await;
 
-        // set outputs
-        context.set_pin_value("model", json!(node_session)).await?;
-        context.activate_exec_pin("exec_out").await?;
-        Ok(())
+            // set outputs
+            context.set_pin_value("model", json!(node_session)).await?;
+            context.activate_exec_pin("exec_out").await?;
+            Ok(())
+        }
+
+        #[cfg(not(feature = "local-ml"))]
+        {
+            Err(anyhow!(
+                "Local ONNX models are not supported. Please enable the 'local-ml' feature."
+            ))
+        }
     }
 }

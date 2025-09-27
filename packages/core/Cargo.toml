@@ -48,6 +48,7 @@ zeroize = "1.8.1"
 
 [features]
 tauri = ["flow-like-storage/tauri"]
+local-ml = ["flow-like-model-provider/local-ml"]
 schema-gen = []
 flow-runtime = []
 flow = ["flow-runtime"]

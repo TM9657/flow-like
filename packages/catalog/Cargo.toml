@@ -3,6 +3,10 @@ name = "flow-like-catalog"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+local-ml = ["flow-like-model-provider/local-ml", "flow-like/local-ml"]
+
 [dependencies]
 flow-like.workspace = true
 flow-like-types.workspace = true

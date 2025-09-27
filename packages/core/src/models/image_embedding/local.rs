@@ -1,13 +1,14 @@
+#![cfg(feature = "local-ml")]
 use crate::{
     bit::{Bit, BitTypes},
     models::embedding_factory::EmbeddingFactory,
     state::FlowLikeState,
 };
+use flow_like_model_provider::fastembed::{
+    self, ImageEmbedding, ImageInitOptionsUserDefined, UserDefinedImageEmbeddingModel,
+};
 use flow_like_model_provider::{
     embedding::{EmbeddingModelLogic, GeneralTextSplitter},
-    fastembed::{
-        self, ImageEmbedding, ImageInitOptionsUserDefined, UserDefinedImageEmbeddingModel,
-    },
     image_embedding::ImageEmbeddingModelLogic,
 };
 use flow_like_storage::files::store::FlowLikeStore;

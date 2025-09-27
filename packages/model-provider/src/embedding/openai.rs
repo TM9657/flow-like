@@ -136,7 +136,7 @@ mod tests {
             model_id: Some("text-embedding-3-small".to_string()),
             version: None,
             provider_name: "openai".to_string(),
-            params: None
+            params: None,
         };
         let provider = EmbeddingModelProvider {
             provider,
@@ -191,7 +191,7 @@ mod tests {
             model_id: Some("text-embedding-3-small".to_string()),
             version: None,
             provider_name: "openai".to_string(),
-            params: None
+            params: None,
         };
         let provider = EmbeddingModelProvider {
             provider,
@@ -230,7 +230,7 @@ mod tests {
             model_id: Some("embedding-test".to_string()),
             version: Some("2024-04-01-preview".to_string()),
             provider_name: "azure".to_string(),
-            params: None
+            params: None,
         };
         let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap();
         let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap();

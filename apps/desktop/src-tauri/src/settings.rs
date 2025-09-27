@@ -125,11 +125,15 @@ pub struct Settings {
 impl Settings {
     pub fn new() -> Self {
         // Prefer new stable settings path; fallback to legacy cache path for one-time backward compatibility.
-    let new_settings_path = settings_store_path();
-    let legacy_settings_path = get_cache_dir().join("global-settings.json");
+        let new_settings_path = settings_store_path();
+        let legacy_settings_path = get_cache_dir().join("global-settings.json");
 
         if new_settings_path.exists() || legacy_settings_path.exists() {
-            let path = if new_settings_path.exists() { &new_settings_path } else { &legacy_settings_path };
+            let path = if new_settings_path.exists() {
+                &new_settings_path
+            } else {
+                &legacy_settings_path
+            };
             let settings = std::fs::read(path);
             if let Ok(settings) = settings {
                 let settings = serde_json::from_slice::<Settings>(&settings);
@@ -238,7 +242,9 @@ impl Settings {
 
     pub fn serialize(&mut self) {
         let dir = settings_store_path();
-        if let Some(parent) = dir.parent() { let _ = std::fs::create_dir_all(parent); }
+        if let Some(parent) = dir.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         let settings = serde_json::to_vec(&self);
         if let Ok(settings) = settings {
             let _res = std::fs::write(dir, settings);

@@ -1,3 +1,4 @@
+#![cfg(feature = "local-ml")]
 use crate::{
     bit::{Bit, BitPack, BitTypes},
     state::FlowLikeState,

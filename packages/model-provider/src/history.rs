@@ -205,7 +205,7 @@ pub struct StreamOptions {
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct Usage {
-    pub include: bool
+    pub include: bool,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -258,7 +258,7 @@ pub struct History {
     pub tool_choice: Option<ToolChoice>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<Usage>
+    pub usage: Option<Usage>,
 }
 
 impl History {

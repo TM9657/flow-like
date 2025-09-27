@@ -1,4 +1,5 @@
 pub mod branch;
+pub mod build_openai;
 pub mod find_llm;
 pub mod history;
 pub mod invoke;
@@ -7,7 +8,6 @@ pub mod invoke_with_tools;
 pub mod make_schema;
 pub mod preferences;
 pub mod response;
-pub mod build_openai;
 pub mod with_structured_output;
 
 use flow_like::flow::node::NodeLogic;

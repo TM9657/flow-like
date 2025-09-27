@@ -6,10 +6,10 @@ pub mod auth;
 pub mod bit;
 pub mod health;
 pub mod info;
+pub mod llm;
 pub mod profile;
 pub mod store;
 pub mod user;
-pub mod llm;
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct LanguageParams {

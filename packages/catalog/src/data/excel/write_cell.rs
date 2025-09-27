@@ -64,8 +64,13 @@ impl NodeLogic for WriteCellNode {
         .set_default_value(Some(json!("")));
 
         node.add_output_pin("exec_out", "Out", "Trigger", VariableType::Execution);
-        node.add_output_pin("file_out", "File", "Updated XLSX path", VariableType::Struct)
-            .set_schema::<FlowPath>();
+        node.add_output_pin(
+            "file_out",
+            "File",
+            "Updated XLSX path",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>();
 
         node
     }

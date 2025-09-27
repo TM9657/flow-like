@@ -188,7 +188,7 @@ impl OpenAIClient {
     }
 
     pub async fn from_params(
-        params: HashMap<String, Value>
+        params: HashMap<String, Value>,
     ) -> flow_like_types::Result<OpenAIClient> {
         let mut client = OpenAIClient::builder();
 
@@ -204,15 +204,25 @@ impl OpenAIClient {
             client = client.with_endpoint(endpoint);
 
             if let Some(_is_azure) = params.get("is_azure").and_then(|v| v.as_bool()) {
-                let model_id = params.get("model_id").and_then(|v| v.as_str()).ok_or_else(|| {
-                    flow_like_types::anyhow!("ModelID Required for Azure Deployments")
-                })?;
-                let api_key = params.get("api_key").and_then(|v| v.as_str()).ok_or_else(|| {
-                    flow_like_types::anyhow!("API key required for Azure Deployments")
-                })?;
-                let version = params.get("version").and_then(|v| v.as_str()).ok_or_else(|| {
-                    flow_like_types::anyhow!("Version required for Azure Deployments")
-                })?;
+                let model_id =
+                    params
+                        .get("model_id")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            flow_like_types::anyhow!("ModelID Required for Azure Deployments")
+                        })?;
+                let api_key = params
+                    .get("api_key")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        flow_like_types::anyhow!("API key required for Azure Deployments")
+                    })?;
+                let version = params
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        flow_like_types::anyhow!("Version required for Azure Deployments")
+                    })?;
                 let endpoint = if endpoint.ends_with('/') {
                     endpoint.to_string()
                 } else {
@@ -225,7 +235,7 @@ impl OpenAIClient {
             }
         }
 
-        if let Some(proxy) =  params.get("proxy").and_then(|v| v.as_str()) {
+        if let Some(proxy) = params.get("proxy").and_then(|v| v.as_str()) {
             client = client.with_proxy(proxy);
         }
 

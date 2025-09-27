@@ -6,7 +6,7 @@ use crate::{
     provider::{ModelProvider, ModelProviderConfiguration, openai::OpenAIClient},
     response::Response,
 };
-use flow_like_types::{async_trait, sync::Mutex, Result, Value};
+use flow_like_types::{Result, Value, async_trait, sync::Mutex};
 use openai_api_rs::v1::chat_completion::ChatCompletionRequest;
 mod history;
 mod response;
@@ -84,7 +84,7 @@ mod tests {
             model_id: Some("@preset/prod-free".to_string()),
             version: None,
             provider_name: "openai".to_string(),
-            params: None
+            params: None,
         };
         let endpoint = std::env::var("OPENAI_ENDPOINT").unwrap();
         let api_key = std::env::var("OPENAI_API_KEY").unwrap();
@@ -119,7 +119,7 @@ mod tests {
             model_id: Some("gpt-4o-mini".to_string()),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
-            params: None
+            params: None,
         };
         let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap();
         let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap();
@@ -155,7 +155,7 @@ mod tests {
             model_id: Some("@preset/prod-free".to_string()),
             version: None,
             provider_name: "openai".to_string(),
-            params: None
+            params: None,
         };
         let endpoint = std::env::var("OPENAI_ENDPOINT").unwrap();
         let api_key = std::env::var("OPENAI_API_KEY").unwrap();
@@ -200,7 +200,7 @@ mod tests {
             model_id: Some("gpt-4o-mini".to_string()),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
-            params: None
+            params: None,
         };
         let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap();
         let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap();
@@ -244,7 +244,7 @@ mod tests {
             model_id: Some("gpt-4o-mini".to_string()),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
-            params: None
+            params: None,
         };
         let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap();
         let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap();
@@ -615,7 +615,7 @@ mod tests {
             model_id: Some("@preset/prod-free".to_string()),
             version: None,
             provider_name: "openai".to_string(),
-            params: None
+            params: None,
         };
         let endpoint = std::env::var("OPENAI_ENDPOINT").unwrap();
         let api_key = std::env::var("OPENAI_API_KEY").unwrap();

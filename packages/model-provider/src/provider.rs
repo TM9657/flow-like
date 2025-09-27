@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use aws_config::SdkConfig;
 use flow_like_types::{
+    Value,
     json::{Deserialize, Serialize},
-    rand::{self, Rng}, Value,
+    rand::{self, Rng},
 };
 use schemars::JsonSchema;
 

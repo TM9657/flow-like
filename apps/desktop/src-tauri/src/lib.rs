@@ -32,15 +32,12 @@ use crate::deeplink::handle_deep_link;
 #[cfg(all(target_os = "ios", not(debug_assertions)))]
 mod ios_release_logging {
     use tracing_subscriber::{
-        filter::LevelFilter,
-        layer::SubscriberExt,
-        util::SubscriberInitExt,
-        EnvFilter,
+        EnvFilter, filter::LevelFilter, layer::SubscriberExt, util::SubscriberInitExt,
     };
 
-   pub fn init() {
+    pub fn init() {
         use std::sync::OnceLock;
-        use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+        use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
         static INIT_GUARD: OnceLock<()> = OnceLock::new();
 
         // If we've already run (or someone else set a global subscriber), bail quietly.

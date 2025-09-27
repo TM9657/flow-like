@@ -13,7 +13,7 @@ use flow_like::{
     bit::Bit,
     flow_like_model_provider::{
         history::{History, Usage},
-        llm::{openai::OpenAIModel, LLMCallback, ModelLogic},
+        llm::{LLMCallback, ModelLogic, openai::OpenAIModel},
         response::Response,
         response_chunk::ResponseChunk,
     },
@@ -90,7 +90,10 @@ pub async fn invoke_llm(
     provider.params = Some(params);
 
     let model = OpenAIModel::from_params(&provider).await?;
-    let tracking_id = user.tracking_id(&state).await?.ok_or_else(|| anyhow!("User tracking ID not found"))?;
+    let tracking_id = user
+        .tracking_id(&state)
+        .await?
+        .ok_or_else(|| anyhow!("User tracking ID not found"))?;
     history.user = Some(tracking_id);
     history.usage = Some(Usage { include: true });
 

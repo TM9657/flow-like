@@ -132,8 +132,6 @@ impl LocalModel {
             .iter()
             .find(|b| b.bit_type == BitTypes::Projection);
         let projection_bit = projection_bit.cloned();
-        let mut current_dir = std::env::current_exe().unwrap();
-        current_dir.pop();
 
         let child_handle = Arc::new(Mutex::new(None));
         let child_handle_clone: Arc<Mutex<Option<Child>>> = Arc::clone(&child_handle);

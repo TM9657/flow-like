@@ -12,18 +12,24 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+#[cfg(feature = "local-ml")]
+use flow_like_model_provider::ml::{
+    ndarray::{Array2, Array3, Array4, ArrayView1, Axis, s},
+    ort::{
+        inputs,
+        session::{Session, SessionInputValue, SessionOutputs},
+        value::Value,
+    },
+};
 use flow_like_types::{
     Error, JsonSchema, Result, anyhow, async_trait,
     image::{DynamicImage, GenericImageView, imageops::FilterType},
     json::{Deserialize, Serialize, json},
 };
-
-use flow_like_model_provider::ml::{ndarray::{s, Array2, Array3, Array4, ArrayView1, Axis}, ort::inputs};
-use flow_like_model_provider::ml::ort::session::{Session, SessionInputValue, SessionOutputs};
-use flow_like_model_provider::ml::ort::value::Value;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 
+#[cfg(feature = "local-ml")]
 // ## Object Detection Trait for Common Behavior
 pub trait ObjectDetection {
     // Preprocessing
@@ -56,6 +62,7 @@ pub struct DfineLike {
     pub input_height: u32,
 }
 
+#[cfg(feature = "local-ml")]
 impl ObjectDetection for DfineLike {
     fn make_inputs(
         &self,
@@ -133,6 +140,7 @@ pub struct YoloLike {
     pub input_height: u32,
 }
 
+#[cfg(feature = "local-ml")]
 impl ObjectDetection for YoloLike {
     fn make_inputs(
         &self,
@@ -198,6 +206,7 @@ impl ObjectDetection for YoloLike {
 
 // ## Detection-Related Utilities
 
+#[cfg(feature = "local-ml")]
 /// Load DynamicImage as Array4
 /// Resulting normalized 4-dim array has shape [B, C, W, H] (batch size, channels, width, height)
 /// ONNX detection model requires Array4-shaped, 0..1 normalized input
@@ -291,6 +300,7 @@ impl BoundingBox {
         }
     }
 
+    #[cfg(feature = "local-ml")]
     pub fn from_array(arr: ArrayView1<f32>) -> Self {
         let bbox_xywh = arr.slice(s![..4]).to_vec();
         let confs = arr.slice(s![4..]).to_vec();
@@ -467,58 +477,68 @@ impl NodeLogic for ObjectDetectionNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        context.deactivate_exec_pin("exec_out").await?;
+        #[cfg(feature = "local-ml")]
+        {
+            context.deactivate_exec_pin("exec_out").await?;
 
-        // fetch params
-        let node_session: NodeOnnxSession = context.evaluate_pin("model").await?;
-        let node_img: NodeImage = context.evaluate_pin("image_in").await?;
-        let conf_thres: f32 = context.evaluate_pin("conf").await?;
-        let iou_thres: f32 = context.evaluate_pin("iou").await?;
-        let max_detect: usize = context.evaluate_pin("max").await?;
+            // fetch params
+            let node_session: NodeOnnxSession = context.evaluate_pin("model").await?;
+            let node_img: NodeImage = context.evaluate_pin("image_in").await?;
+            let conf_thres: f32 = context.evaluate_pin("conf").await?;
+            let iou_thres: f32 = context.evaluate_pin("iou").await?;
+            let max_detect: usize = context.evaluate_pin("max").await?;
 
-        // run inference
-        let predictions = {
-            let img = node_img.get_image(context).await?;
-            let img_guard = img.lock().await;
-            let session = node_session.get_session(context).await?;
-            let mut session_guard = session.lock().await;
-            // Copy provider params to avoid overlapping borrows
-            match &session_guard.provider {
-                Provider::DfineLike(m) => {
-                    let prov = super::detection::DfineLike {
-                        input_width: m.input_width,
-                        input_height: m.input_height,
-                    };
-                    prov.run(
-                        &mut session_guard.session,
-                        &img_guard,
-                        conf_thres,
-                        iou_thres,
-                        max_detect,
-                    )
-                }
-                Provider::YoloLike(m) => {
-                    let prov = super::detection::YoloLike {
-                        input_width: m.input_width,
-                        input_height: m.input_height,
-                    };
-                    prov.run(
-                        &mut session_guard.session,
-                        &img_guard,
-                        conf_thres,
-                        iou_thres,
-                        max_detect,
-                    )
-                }
-                _ => Err(anyhow!(
-                    "Unknown/Incompatible ONNX-Model for Object Detection!"
-                )),
-            }?
-        };
+            // run inference
+            let predictions = {
+                let img = node_img.get_image(context).await?;
+                let img_guard = img.lock().await;
+                let session = node_session.get_session(context).await?;
+                let mut session_guard = session.lock().await;
+                // Copy provider params to avoid overlapping borrows
+                match &session_guard.provider {
+                    Provider::DfineLike(m) => {
+                        let prov = super::detection::DfineLike {
+                            input_width: m.input_width,
+                            input_height: m.input_height,
+                        };
+                        prov.run(
+                            &mut session_guard.session,
+                            &img_guard,
+                            conf_thres,
+                            iou_thres,
+                            max_detect,
+                        )
+                    }
+                    Provider::YoloLike(m) => {
+                        let prov = super::detection::YoloLike {
+                            input_width: m.input_width,
+                            input_height: m.input_height,
+                        };
+                        prov.run(
+                            &mut session_guard.session,
+                            &img_guard,
+                            conf_thres,
+                            iou_thres,
+                            max_detect,
+                        )
+                    }
+                    _ => Err(anyhow!(
+                        "Unknown/Incompatible ONNX-Model for Object Detection!"
+                    )),
+                }?
+            };
 
-        // set outputs
-        context.set_pin_value("bboxes", json!(predictions)).await?;
-        context.activate_exec_pin("exec_out").await?;
-        Ok(())
+            // set outputs
+            context.set_pin_value("bboxes", json!(predictions)).await?;
+            context.activate_exec_pin("exec_out").await?;
+            Ok(())
+        }
+
+        #[cfg(not(feature = "local-ml"))]
+        {
+            Err(anyhow!(
+                "Local ONNX models are not supported. Please enable the 'local-ml' feature."
+            ))
+        }
     }
 }

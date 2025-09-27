@@ -43,10 +43,22 @@ impl NodeLogic for ListStructFields {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        let struct_value = context.evaluate_pin::<HashMap<String, flow_like_types::Value>>("struct").await?;
+        let struct_value = context
+            .evaluate_pin::<HashMap<String, flow_like_types::Value>>("struct")
+            .await?;
 
-        context.set_pin_value("field_names", flow_like_types::json::json!(struct_value.keys().cloned().collect::<Vec<_>>())).await?;
-        context.set_pin_value("fields", flow_like_types::json::json!(struct_value.values().cloned().collect::<Vec<_>>())).await?;
+        context
+            .set_pin_value(
+                "field_names",
+                flow_like_types::json::json!(struct_value.keys().cloned().collect::<Vec<_>>()),
+            )
+            .await?;
+        context
+            .set_pin_value(
+                "fields",
+                flow_like_types::json::json!(struct_value.values().cloned().collect::<Vec<_>>()),
+            )
+            .await?;
 
         return Ok(());
     }

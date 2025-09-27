@@ -17,9 +17,15 @@ use flow_like_types::{
     json::{Deserialize, Serialize, json},
 };
 
-use flow_like_model_provider::ml::{ndarray::{s, Array3, Array4, Axis}, ort::{inputs, value::TensorRef}};
-use flow_like_model_provider::ml::ort::session::{Session, SessionInputValue, SessionOutputs};
-use flow_like_model_provider::ml::ort::value::Value;
+#[cfg(feature = "local-ml")]
+use flow_like_model_provider::ml::{
+    ndarray::{Array3, Array4, Axis, s},
+    ort::{
+        inputs,
+        session::{Session, SessionInputValue, SessionOutputs},
+        value::{TensorRef, Value},
+    },
+};
 use ndarray::{Array1, ArrayView1};
 use std::borrow::Cow;
 
@@ -29,6 +35,7 @@ pub struct ClassPrediction {
     pub score: f32,
 }
 
+#[cfg(feature = "local-ml")]
 // ## Image Classification Trait for Common Behavior
 pub trait Classification {
     fn make_inputs(
@@ -60,6 +67,7 @@ pub struct TimmLike {
     pub input_height: u32,
 }
 
+#[cfg(feature = "local-ml")]
 impl Classification for TimmLike {
     fn make_inputs(
         &self,
@@ -128,6 +136,7 @@ impl Classification for TimmLike {
     }
 }
 
+#[cfg(feature = "local-ml")]
 /// # DynamicImage to ONNX Input Tensor
 /// Transforms:
 ///     1. Resize image to Input Size / Crop Percentage
@@ -305,50 +314,60 @@ impl NodeLogic for ImageClassificationNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        context.deactivate_exec_pin("exec_out").await?;
+        #[cfg(feature = "local-ml")]
+        {
+            context.deactivate_exec_pin("exec_out").await?;
 
-        // fetch inputs
-        let node_session: NodeOnnxSession = context.evaluate_pin("model").await?;
-        let node_img: NodeImage = context.evaluate_pin("image_in").await?;
-        let mean_vec: Vec<f32> = context.evaluate_pin("mean").await?;
-        let std_vec: Vec<f32> = context.evaluate_pin("std").await?;
-        let crop_pct: f32 = context.evaluate_pin("crop_pct").await?;
-        let apply_softmax: bool = context.evaluate_pin("softmax").await?;
-        let mean_rgb = <&[f32; 3]>::try_from(mean_vec.as_slice())?;
-        let std_rgb = <&[f32; 3]>::try_from(std_vec.as_slice())?;
+            // fetch inputs
+            let node_session: NodeOnnxSession = context.evaluate_pin("model").await?;
+            let node_img: NodeImage = context.evaluate_pin("image_in").await?;
+            let mean_vec: Vec<f32> = context.evaluate_pin("mean").await?;
+            let std_vec: Vec<f32> = context.evaluate_pin("std").await?;
+            let crop_pct: f32 = context.evaluate_pin("crop_pct").await?;
+            let apply_softmax: bool = context.evaluate_pin("softmax").await?;
+            let mean_rgb = <&[f32; 3]>::try_from(mean_vec.as_slice())?;
+            let std_rgb = <&[f32; 3]>::try_from(std_vec.as_slice())?;
 
-        // run inference
-        let predictions = {
-            let img = node_img.get_image(context).await?;
-            let img_guard = img.lock().await;
-            let session = node_session.get_session(context).await?;
-            let mut session_guard = session.lock().await;
-            // Copy provider params to avoid overlapping borrows
-            let timm = if let Provider::TimmLike(m) = &session_guard.provider {
-                super::classification::TimmLike {
-                    input_width: m.input_width,
-                    input_height: m.input_height,
-                }
-            } else {
-                return Err(anyhow!(
-                    "Unknown/Incompatible ONNX-Model for Image Classification!"
-                ));
+            // run inference
+            let predictions = {
+                let img = node_img.get_image(context).await?;
+                let img_guard = img.lock().await;
+                let session = node_session.get_session(context).await?;
+                let mut session_guard = session.lock().await;
+                // Copy provider params to avoid overlapping borrows
+                let timm = if let Provider::TimmLike(m) = &session_guard.provider {
+                    super::classification::TimmLike {
+                        input_width: m.input_width,
+                        input_height: m.input_height,
+                    }
+                } else {
+                    return Err(anyhow!(
+                        "Unknown/Incompatible ONNX-Model for Image Classification!"
+                    ));
+                };
+                timm.run(
+                    &mut session_guard.session,
+                    &img_guard,
+                    mean_rgb,
+                    std_rgb,
+                    crop_pct,
+                    apply_softmax,
+                )?
             };
-            timm.run(
-                &mut session_guard.session,
-                &img_guard,
-                mean_rgb,
-                std_rgb,
-                crop_pct,
-                apply_softmax,
-            )?
-        };
 
-        // set outputs
-        context
-            .set_pin_value("predictions", json!(predictions))
-            .await?;
-        context.activate_exec_pin("exec_out").await?;
-        Ok(())
+            // set outputs
+            context
+                .set_pin_value("predictions", json!(predictions))
+                .await?;
+            context.activate_exec_pin("exec_out").await?;
+            Ok(())
+        }
+
+        #[cfg(not(feature = "local-ml"))]
+        {
+            Err(anyhow!(
+                "ONNX Image Classification Nodes require the 'local-ml' feature to be enabled."
+            ))
+        }
     }
 }

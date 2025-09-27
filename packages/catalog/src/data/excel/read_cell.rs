@@ -2,7 +2,7 @@ use crate::data::{
     excel::{parse_col_1_based, parse_row_1_based},
     path::FlowPath,
 };
-use calamine::{open_workbook_auto_from_rs, Data, DataRef, DataType, Reader, ReaderRef};
+use calamine::{Data, DataRef, DataType, Reader, ReaderRef, open_workbook_auto_from_rs};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
