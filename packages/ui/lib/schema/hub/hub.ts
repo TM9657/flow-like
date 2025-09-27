@@ -42,6 +42,7 @@ export interface IOpenIDConfig {
 	client_id?: null | string;
 	cognito?: null | ICognitoConfig;
 	discovery_url?: null | string;
+	user_info_url?: null | string;
 	jwks_url: string;
 	post_logout_redirect_uri?: null | string;
 	proxy?: null | IOpenIDProxy;

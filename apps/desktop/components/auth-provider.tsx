@@ -17,14 +17,14 @@ import {
 	type UserManagerSettings,
 	WebStorageStateStore,
 } from "oidc-client-ts";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "react-oidc-context";
 import { get } from "../lib/api";
 import { TauriBackend } from "./tauri-provider";
 import { openUrl } from '@tauri-apps/plugin-opener';
 
 export class OIDCTokenProvider implements TokenProvider {
-	constructor(private readonly userManager: UserManager) {}
+	constructor(private readonly userManager: UserManager) { }
 	async getTokens(options?: {
 		forceRefresh?: boolean;
 	}): Promise<AuthTokens | null> {
@@ -126,6 +126,20 @@ export function DesktopAuthProvider({
 	useEffect(() => {
 		if (!openIdAuthConfig) return;
 
+		async function debugListener(event: Event) {
+			const url = (event as CustomEvent).detail.url;
+			console.log("Debug OIDC URL:", url);
+			await userManager?.signinRedirectCallback(url);
+			const windows = await getAllWindows();
+			for (const window of windows) {
+				if (window.label === "oidcFlow") {
+					window.close();
+				}
+			}
+		}
+
+		const globalListen = window.addEventListener("debug-oidc", debugListener);
+
 		const unlisten = listen<{ url: string }>("oidc/url", async (event) => {
 			const rawUrl = event.payload.url;
 
@@ -184,6 +198,7 @@ export function DesktopAuthProvider({
 
 		return () => {
 			unlisten.then((unsub) => unsub());
+			window.removeEventListener("debug-oidc", debugListener);
 		};
 	}, [userManager, openIdAuthConfig]);
 

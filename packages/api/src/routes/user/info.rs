@@ -40,9 +40,10 @@ pub async fn user_info(
     Extension(user): Extension<AppUser>,
 ) -> Result<Json<user::Model>, ApiError> {
     let sub = user.sub()?;
-    let email = user.email().clone();
-    let username = user.username().clone();
-    let preferred_username = user.preferred_username().clone();
+    let user_info = user.user_info(&state).await?;
+    let email = user_info.email.clone();
+    let username = user_info.username.clone();
+    let preferred_username = user_info.preferred_username.clone();
     let user_info = user::Entity::find_by_id(&sub).one(&state.db).await?;
     if let Some(mut user_info) = user_info {
         let mut updated_user: Option<user::ActiveModel> = None;

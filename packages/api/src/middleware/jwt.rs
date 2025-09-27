@@ -15,6 +15,7 @@ use axum::{
     response::Response,
 };
 use flow_like::hub::UserTier;
+use flow_like_storage::datafusion::common::HashMap;
 use flow_like_types::Result;
 use flow_like_types::anyhow;
 use hyper::header::AUTHORIZATION;
@@ -22,15 +23,37 @@ use sea_orm::{
     ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait,
     sqlx::types::chrono,
 };
+use serde::Deserialize;
 
 use crate::state::AppState;
+
+#[derive(Debug, Deserialize)]
+pub struct UserInfo {
+    pub sub: String,
+
+    // Standard OIDC claims (all optional; presence depends on granted scopes & attributes)
+    pub email: Option<String>,
+    pub email_verified: Option<bool>,
+    pub given_name: Option<String>,
+    pub family_name: Option<String>,
+    pub middle_name: Option<String>,
+    pub preferred_username: Option<String>,
+    pub phone_number: Option<String>,
+    pub phone_number_verified: Option<bool>,
+    pub picture: Option<String>,
+    pub birthdate: Option<String>,
+    pub updated_at: Option<u64>,
+
+    pub username: Option<String>,
+
+    #[serde(flatten)]
+    pub extra: serde_json::Value,
+}
 
 #[derive(Debug, Clone)]
 pub struct OpenIDUser {
     pub sub: String,
-    pub username: String,
-    pub preferred_username: String,
-    pub email: Option<String>,
+    pub access_token: String,
 }
 
 #[derive(Debug, Clone)]
@@ -135,30 +158,44 @@ impl AppUser {
             .ok_or_else(|| AuthorizationError::from(anyhow!("User not found")))
     }
 
-    pub fn email(&self) -> Option<String> {
-        match self {
-            AppUser::OpenID(user) => user.email.clone(),
-            AppUser::PAT(_) => None,
-            AppUser::APIKey(_) => None,
-            AppUser::Unauthorized => None,
-        }
-    }
+    pub async fn user_info(&self, state: &AppState) -> flow_like_types::Result<UserInfo> {
+        let user = match self {
+            AppUser::OpenID(user) => user,
+            AppUser::PAT(_) => return Err(anyhow!("PAT user does not have user info")),
+            AppUser::APIKey(_) => return Err(anyhow!("APIKey user does not have user info")),
+            AppUser::Unauthorized => {
+                return Err(anyhow!("Unauthorized user does not have user info"));
+            }
+        };
 
-    pub fn username(&self) -> Option<String> {
-        match self {
-            AppUser::OpenID(user) => Some(user.username.clone()),
-            AppUser::PAT(_) => None,
-            AppUser::APIKey(_) => None,
-            AppUser::Unauthorized => None,
-        }
-    }
+        let endpoint: &str = state
+            .platform_config
+            .authentication
+            .as_ref()
+            .and_then(|c| c.openid.as_ref())
+            .and_then(|o| o.user_info_url.as_deref())
+            .ok_or_else(|| anyhow!("User info URL not configured"))?;
 
-    pub fn preferred_username(&self) -> Option<String> {
-        match self {
-            AppUser::OpenID(user) => Some(user.preferred_username.clone()),
-            AppUser::PAT(_) => None,
-            AppUser::APIKey(_) => None,
-            AppUser::Unauthorized => None,
+        let client = flow_like_types::reqwest::Client::new();
+        let res = match client
+            .get(endpoint)
+            .bearer_auth(&user.access_token)
+            .send()
+            .await
+        {
+            Ok(res) => res,
+            Err(err) => {
+                tracing::error!("Failed to fetch user info from {}: {}", endpoint, err);
+                return Err(anyhow!("Failed to fetch user info"));
+            }
+        };
+
+        match res.status() {
+            flow_like_types::reqwest::StatusCode::OK => Ok(res.json::<UserInfo>().await?),
+            status => {
+                let body = res.text().await.unwrap_or_default();
+                flow_like_types::bail!("UserInfo error {}: {}", status, body)
+            }
         }
     }
 
@@ -288,31 +325,9 @@ pub async fn jwt_middleware(
         let claims = state.validate_token(token)?;
         let sub = claims.get("sub").ok_or(anyhow!("sub not found"))?;
         let sub = sub.as_str().ok_or(anyhow!("sub not a string"))?;
-        let email = claims
-            .get("email")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-        let username = claims
-            .get("username")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-            .or_else(|| {
-                claims
-                    .get("cognito:username")
-                    .and_then(|v| v.as_str())
-                    .map(String::from)
-            })
-            .unwrap_or_else(|| sub.to_string());
-        let preferred_username = claims
-            .get("preferred_username")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-            .unwrap_or_else(|| username.clone());
         let user = AppUser::OpenID(OpenIDUser {
             sub: sub.to_string(),
-            username,
-            email,
-            preferred_username,
+            access_token: token.to_string(),
         });
         request.extensions_mut().insert::<AppUser>(user);
         return Ok(next.run(request).await);

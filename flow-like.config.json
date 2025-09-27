@@ -11,6 +11,7 @@
 			"response_type": "code",
 			"scope": "phone openid email profile aws.cognito.signin.user.admin",
 			"jwks_url": "https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_0fYxn5Pn7/.well-known/jwks.json",
+			"user_info_url": "https://auth.flow-like.com/oauth2/userInfo",
 			"discovery_url": "https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_0fYxn5Pn7/.well-known/openid-configuration",
 			"cognito": {
 				"user_pool_id": "eu-west-1_0fYxn5Pn7"

@@ -30,14 +30,12 @@ pub async fn upsert_info(
     Json(payload): Json<UpsertInfoBody>,
 ) -> Result<Json<UpsertInfoResponse>, ApiError> {
     let sub = user.sub()?;
-    let username = user.username().clone();
-    let mut response = UpsertInfoResponse { signed_url: None };
-    let user_manager = UserManagement::new(&state).await;
 
-    let email = user_manager.get_attribute(&sub, &username, "email").await?;
-    let preferred_username = user_manager
-        .get_attribute(&sub, &username, "preferred_username")
-        .await?;
+    let mut response = UpsertInfoResponse { signed_url: None };
+    let info = user.user_info(&state).await?;
+
+    let email = info.email.clone();
+    let preferred_username = info.preferred_username.clone();
 
     let current_user = user::Entity::find_by_id(&sub)
         .one(&state.db)

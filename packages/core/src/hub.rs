@@ -118,6 +118,7 @@ pub struct OpenIdConfig {
     pub response_type: Option<String>,
     pub scope: Option<String>,
     pub discovery_url: Option<String>,
+    pub user_info_url: Option<String>,
     pub jwks_url: String,
     pub proxy: Option<OpenIdProxy>,
     pub cognito: Option<CognitoConfig>,
