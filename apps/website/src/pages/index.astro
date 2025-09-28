@@ -165,11 +165,14 @@ const ldWebPage = {
         background-attachment: scroll !important;
       }
       @media (hover: none) and (pointer: coarse) {
-        /* Never let a viewport overlay catch touches unless explicitly allowed */
-        [data-overlay], [data-visual], .overlay, .backdrop,
-        [class*="fixed"], [class~="fixed"] {
+        /* Loosen blanket pointer-event disabling: only target decorative overlays */
+        [data-overlay], [data-visual], .overlay, .backdrop {
           pointer-events: none;
           touch-action: pan-y;
+        }
+        /* Allow header / nav / buttons to remain interactive */
+        header, nav, a, button, input, select, textarea {
+          pointer-events: auto;
         }
 
         /* Disable scroll snapping & smooth scroll on phones */
@@ -182,7 +185,8 @@ const ldWebPage = {
         }
 
         /* Sticky/fixed inside sections can break the scroll chain after style changes */
-        .sticky, [style*="position: sticky"] { position: static !important; }
+        /* Preserve sticky only if explicitly marked with data-allow-sticky */
+        .sticky:not([data-allow-sticky]), [style*="position: sticky"]:not([data-allow-sticky]) { position: static !important; }
       }
 
       html, body { min-height: 100%; }
