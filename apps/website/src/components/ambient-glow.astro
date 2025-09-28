@@ -1,7 +1,7 @@
 <div
 	id="ambient-flow"
 	aria-hidden="true"
-	class="pointer-events-none fixed inset-0 -z-[80 touch-none select-none"
+	class="pointer-events-none fixed inset-0 -z-[80] touch-none select-none"
 	style="
 				--c2: hsl(0 100% 63% / .08);
 				--c1: hsl(161 40% 44% / .08);
@@ -14,6 +14,7 @@
 
 <style>
 	#ambient-flow {
+		max-width: 100vw;
 		transition:
 			--c1 700ms ease,
 			--c2 700ms ease,

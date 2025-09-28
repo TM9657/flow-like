@@ -5,87 +5,295 @@ const github = "https://github.com/TM9657/flow-like";
 const docs = "https://docs.flow-like.com";
 ---
 
-<section class="relative py-12 md:py-20 lg:py-24">
-  <div id="hero-connection-layer" class="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-screen h-full -z-[1] overflow-visible">
-    <svg id="hero-connections" class="hidden md:block absolute inset-0" style="overflow:visible;width:100vw" aria-hidden="true">
-      <path id="hero-right-conn" class="pin-conn text-primary" fill="none"></path>
-      <path id="hero-left-conn" class="pin-conn text-emerald-500" fill="none"></path>
-      <path id="hero-right-conn-top" class="pin-conn-solid text-foreground/70" fill="none"></path>
-      <path id="hero-left-conn-top" class="pin-conn-solid text-foreground/70" fill="none"></path>
-    </svg>
-  </div>
-  <div id="hero-cover" class="mx-auto max-w-7xl px-4 lg:px-8 relative">
-    <!-- pin anchors -->
-  <div id="hero-right-pin" class="hidden md:block size-4 bg-primary absolute top-60 right-2 lg:right-6 rounded-full z-10 shadow-[0_0_0_4px_rgba(255,255,255,.15)] pointer-events-none"></div>
-  <div id="hero-left-pin" class="hidden md:block size-4 bg-emerald-500 absolute top-36 left-2 lg:left-6 rounded-full z-10 shadow-[0_0_0_4px_rgba(255,255,255,.15)] pointer-events-none"></div>
-  <div id="hero-right-pin-top" class="hidden md:block size-4 bg-foreground absolute top-12 right-2 lg:right-6 rounded-full z-10 pointer-events-none"></div>
-  <div id="hero-left-pin-top" class="hidden md:block size-4 bg-foreground absolute top-12 left-2 lg:left-6 rounded-full z-10 pointer-events-none"></div>
-
-    <div class="hero-card relative overflow-hidden rounded-2xl border border-border/80 bg-background/90 backdrop-blur [--ring:theme(colors.primary.DEFAULT/30)]">
-      <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-        <div class="absolute inset-0 bg-gradient-to-tr from-background/70 via-background/30 to-transparent"></div>
-        <div class="absolute -inset-0.5 opacity-0 hero-sheen"></div>
-      </div>
-      <div class="relative grid lg:grid-cols-2">
-        <div class="p-6 sm:p-8 md:p-10 space-y-4 reveal">
-          <span class="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1 text-[11px] font-medium text-muted-foreground">Automate • Explain • Trust</span>
-          <h1 class="text-4xl font-extrabold tracking-tight sm:text-5xl leading-[1.05]">Automate your work — and see the full data story</h1>
-          <p class="max-w-2xl text-muted-foreground">Flow-Like is a visual workflow tool. Build with drag-and-drop blocks, and get a clear record of <b>where data came from</b>, <b>what changed</b>, and <b>why the result looks the way it does</b> — no black boxes.</p>
-          <div class="pt-2 flex flex-wrap items-center gap-3">
-            <a href="/download" class="fl-btn bg-primary text-primary-foreground shadow hover:bg-primary/90">Download</a>
-            <a href={docs} class="fl-btn border border-border bg-muted text-foreground hover:bg-primary hover:text-primary-foreground">Explore docs</a>
-            <a href={github} class="fl-btn border border-primary/30 bg-primary/10 text-primary hover:bg-primary/15">Star on GitHub</a>
-          </div>
-          <div class="pt-1 flex flex-wrap items-center gap-2.5 text-sm sm:max-w-xl">
-            <span class="fl-chip fl-chip--ghost" data-tint="primary">🧩 Drag-and-drop building blocks</span>
-            <span class="fl-chip fl-chip--ghost" data-tint="emerald">🔒 Private by default</span>
-            <span class="fl-chip fl-chip--ghost" data-tint="amber">⚡ Fast & reliable</span>
-            <span class="fl-chip fl-chip--ghost" data-tint="sky">☁️ Works on your computer or at team scale</span>
-          </div>
-          <p class="text-xs text-muted-foreground/90">From renaming files to analyzing data to running AI — build flows once and run them anywhere.</p>
-        </div>
-        <div class="relative min-h-[260px] lg:min-h-[420px] reveal">
-          <div class="absolute inset-0 bg-gradient-to-tr from-transparent via-background/20 to-background/0"></div>
-          <EmptyBackendProvider data="/board.json" client:idle />
-          <div aria-hidden="true" class="pointer-events-none absolute bottom-3 right-3 flex gap-2">
-            <span class="fl-glass-tag">Node Graph</span>
-            <span class="fl-glass-tag">Live</span>
-          </div>
-        </div>
-      </div>
+<section class="relative py-12 md:py-20 lg:py-24 max-w-screen overflow-hidden">
+    <div
+        id="hero-connection-layer"
+        class="pointer-events-none absolute inset-0 w-full h-full -z-[1] overflow-hidden [contain:layout_paint]"
+    >
+        <!-- contain prevents svg path geometry from affecting page scroll size -->
+        <svg
+            id="hero-connections"
+            class="hidden md:block absolute inset-0"
+            style="overflow:visible;width:100%"
+            aria-hidden="true"
+        >
+            <path id="hero-right-conn" class="pin-conn text-primary" fill="none"
+            ></path>
+            <path
+                id="hero-left-conn"
+                class="pin-conn text-emerald-500"
+                fill="none"></path>
+            <path
+                id="hero-right-conn-top"
+                class="pin-conn-solid text-foreground/70"
+                fill="none"></path>
+            <path
+                id="hero-left-conn-top"
+                class="pin-conn-solid text-foreground/70"
+                fill="none"></path>
+        </svg>
     </div>
-  </div>
+    <div id="hero-cover" class="mx-auto max-w-7xl px-4 lg:px-8 relative">
+        <!-- pin anchors -->
+        <div
+            id="hero-right-pin"
+            class="hidden md:block size-4 bg-primary absolute top-60 right-2 lg:right-6 rounded-full z-10 shadow-[0_0_0_4px_rgba(255,255,255,.15)] pointer-events-none"
+        >
+        </div>
+        <div
+            id="hero-left-pin"
+            class="hidden md:block size-4 bg-emerald-500 absolute top-36 left-2 lg:left-6 rounded-full z-10 shadow-[0_0_0_4px_rgba(255,255,255,.15)] pointer-events-none"
+        >
+        </div>
+        <div
+            id="hero-right-pin-top"
+            class="hidden md:block size-4 bg-foreground absolute top-12 right-2 lg:right-6 rounded-full z-10 pointer-events-none"
+        >
+        </div>
+        <div
+            id="hero-left-pin-top"
+            class="hidden md:block size-4 bg-foreground absolute top-12 left-2 lg:left-6 rounded-full z-10 pointer-events-none"
+        >
+        </div>
+
+        <div
+            class="hero-card relative overflow-hidden rounded-2xl border border-border/80 bg-background/90 backdrop-blur [--ring:theme(colors.primary.DEFAULT/30)]"
+        >
+            <div
+                aria-hidden="true"
+                class="pointer-events-none absolute inset-0"
+            >
+                <div
+                    class="absolute inset-0 bg-gradient-to-tr from-background/70 via-background/30 to-transparent"
+                >
+                </div>
+                <div class="absolute -inset-0.5 opacity-0 hero-sheen"></div>
+            </div>
+            <div class="relative grid lg:grid-cols-2">
+                <div class="p-6 sm:p-8 md:p-10 space-y-4 reveal">
+                    <span
+                        class="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1 text-[11px] font-medium text-muted-foreground"
+                        >Automate • Explain • Trust</span
+                    >
+                    <h1
+                        class="text-4xl font-extrabold tracking-tight sm:text-5xl leading-[1.05]"
+                    >
+                        Automate your work — and see the full data story
+                    </h1>
+                    <p class="max-w-2xl text-muted-foreground">
+                        Flow-Like is a visual workflow tool. Build with
+                        drag-and-drop blocks, and get a clear record of <b
+                            >where data came from</b
+                        >, <b>what changed</b>, and <b
+                            >why the result looks the way it does</b
+                        > — no black boxes.
+                    </p>
+                    <div class="pt-2 flex flex-wrap items-center gap-3">
+                        <a
+                            href="/download"
+                            class="fl-btn bg-primary text-primary-foreground shadow hover:bg-primary/90"
+                            >Download</a
+                        >
+                        <a
+                            href={docs}
+                            class="fl-btn border border-border bg-muted text-foreground hover:bg-primary hover:text-primary-foreground"
+                            >Explore docs</a
+                        >
+                        <a
+                            href={github}
+                            class="fl-btn border border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                            >Star on GitHub</a
+                        >
+                    </div>
+                    <div
+                        class="pt-1 flex flex-wrap items-center gap-2.5 text-sm sm:max-w-xl"
+                    >
+                        <span class="fl-chip fl-chip--ghost" data-tint="primary"
+                            >🧩 Drag-and-drop building blocks</span
+                        >
+                        <span class="fl-chip fl-chip--ghost" data-tint="emerald"
+                            >🔒 Private by default</span
+                        >
+                        <span class="fl-chip fl-chip--ghost" data-tint="amber"
+                            >⚡ Fast & reliable</span
+                        >
+                        <span class="fl-chip fl-chip--ghost" data-tint="sky"
+                            >☁️ Works on your computer or at team scale</span
+                        >
+                    </div>
+                    <p class="text-xs text-muted-foreground/90">
+                        From renaming files to analyzing data to running AI —
+                        build flows once and run them anywhere.
+                    </p>
+                </div>
+                <div class="relative min-h-[260px] lg:min-h-[420px] reveal">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-tr from-transparent via-background/20 to-background/0"
+                    >
+                    </div>
+                    <EmptyBackendProvider data="/board.json" client:idle />
+                    <div
+                        aria-hidden="true"
+                        class="pointer-events-none absolute bottom-3 right-3 flex gap-2"
+                    >
+                        <span class="fl-glass-tag">Node Graph</span>
+                        <span class="fl-glass-tag">Live</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </section>
 
 <style>
-  .fl-btn { display:inline-flex; align-items:center; gap:.5rem; border-radius:1rem; padding:.75rem 1.25rem; font-size:.875rem; font-weight:600; transition:transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease; will-change:transform; }
-  .fl-btn--primary { background:hsl(var(--primary)); color:hsl(var(--primary-foreground)); box-shadow:0 10px 18px -12px hsl(var(--primary)/.65); }
-  .fl-btn--primary:hover { transform:translateY(-1px); }
-  .fl-btn--muted { border:1px solid hsl(var(--border)); background:hsl(var(--muted)); }
-  .fl-btn--muted:hover { background:hsl(var(--accent)); color:hsl(var(--accent-foreground)); }
-  .fl-btn--outline { border:1px solid hsl(var(--primary)/.35); background:hsl(var(--primary)/.08); color:hsl(var(--primary)); }
-  .fl-btn--outline:hover { background:hsl(var(--primary)/.15); }
-  .fl-chip { --t:215 16% 47%; display:inline-flex; align-items:center; gap:.5rem; padding:.25rem .6rem; border-radius:9999px; border:1px solid hsl(var(--t)/.22); background:transparent; color:hsl(var(--t)/.86); line-height:1; white-space:nowrap; transition:background .15s ease,border-color .15s ease,transform .15s ease,box-shadow .15s ease; }
-  .fl-chip--ghost:hover { background:hsl(var(--t)/.1); transform:translateY(-1px); box-shadow:0 4px 16px -10px hsl(var(--t)/.45); }
-  .fl-chip[data-tint="primary"]{--t:0 100% 63%;}
-  .fl-chip[data-tint="emerald"]{--t:160 84% 40%;}
-  .fl-chip[data-tint="amber"]{--t:28 96% 54%;}
-  .fl-chip[data-tint="sky"]{--t:199 89% 48%;}
-  .fl-glass-tag { backdrop-filter:blur(6px); background:color-mix(in oklab,transparent,hsl(var(--foreground)/.06) 100%); border:1px solid hsl(var(--border)/.6); color:hsl(var(--muted-foreground)); font-size:.7rem; padding:.2rem .55rem; border-radius:.7rem; }
-  .hero-card:hover .hero-sheen { background:radial-gradient(120px 120px at var(--mx,50%) var(--my,50%), hsl(var(--primary)/.25), transparent 60%); transition:opacity .25s ease; opacity:1; }
-  .pin-conn-solid { stroke:currentColor; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
-  .pin-conn { stroke:currentColor; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; stroke-dasharray:8 10; animation:flow-dots 1.1s linear infinite; }
-  @keyframes flow-dots { to { stroke-dashoffset:-18px; } }
-  .reveal { opacity:0; transform:translateY(6px); }
-  .reveal.is-visible { opacity:1; transform:none; transition:opacity .5s ease, transform .5s ease; }
-  @media (prefers-reduced-motion:reduce){ .fl-btn,.fl-chip,.reveal { transition:none !important; transform:none !important; } .pin-conn { animation:none !important; } }
+    .fl-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: 1rem;
+        padding: 0.75rem 1.25rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        transition:
+            transform 0.18s ease,
+            box-shadow 0.18s ease,
+            background 0.18s ease,
+            border-color 0.18s ease;
+        will-change: transform;
+    }
+    .fl-btn--primary {
+        background: hsl(var(--primary));
+        color: hsl(var(--primary-foreground));
+        box-shadow: 0 10px 18px -12px hsl(var(--primary) / 0.65);
+    }
+    .fl-btn--primary:hover {
+        transform: translateY(-1px);
+    }
+    .fl-btn--muted {
+        border: 1px solid hsl(var(--border));
+        background: hsl(var(--muted));
+    }
+    .fl-btn--muted:hover {
+        background: hsl(var(--accent));
+        color: hsl(var(--accent-foreground));
+    }
+    .fl-btn--outline {
+        border: 1px solid hsl(var(--primary) / 0.35);
+        background: hsl(var(--primary) / 0.08);
+        color: hsl(var(--primary));
+    }
+    .fl-btn--outline:hover {
+        background: hsl(var(--primary) / 0.15);
+    }
+    .fl-chip {
+        --t: 215 16% 47%;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.6rem;
+        border-radius: 9999px;
+        border: 1px solid hsl(var(--t) / 0.22);
+        background: transparent;
+        color: hsl(var(--t) / 0.86);
+        line-height: 1;
+        white-space: nowrap;
+        transition:
+            background 0.15s ease,
+            border-color 0.15s ease,
+            transform 0.15s ease,
+            box-shadow 0.15s ease;
+    }
+    .fl-chip--ghost:hover {
+        background: hsl(var(--t) / 0.1);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 16px -10px hsl(var(--t) / 0.45);
+    }
+    .fl-chip[data-tint="primary"] {
+        --t: 0 100% 63%;
+    }
+    .fl-chip[data-tint="emerald"] {
+        --t: 160 84% 40%;
+    }
+    .fl-chip[data-tint="amber"] {
+        --t: 28 96% 54%;
+    }
+    .fl-chip[data-tint="sky"] {
+        --t: 199 89% 48%;
+    }
+    .fl-glass-tag {
+        backdrop-filter: blur(6px);
+        background: color-mix(
+            in oklab,
+            transparent,
+            hsl(var(--foreground) / 0.06) 100%
+        );
+        border: 1px solid hsl(var(--border) / 0.6);
+        color: hsl(var(--muted-foreground));
+        font-size: 0.7rem;
+        padding: 0.2rem 0.55rem;
+        border-radius: 0.7rem;
+    }
+    .hero-card:hover .hero-sheen {
+        background: radial-gradient(
+            120px 120px at var(--mx, 50%) var(--my, 50%),
+            hsl(var(--primary) / 0.25),
+            transparent 60%
+        );
+        transition: opacity 0.25s ease;
+        opacity: 1;
+    }
+    .pin-conn-solid {
+        stroke: currentColor;
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        vector-effect: non-scaling-stroke;
+    }
+    .pin-conn {
+        stroke: currentColor;
+        stroke-width: 4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        vector-effect: non-scaling-stroke;
+        stroke-dasharray: 8 10;
+        animation: flow-dots 1.1s linear infinite;
+    }
+    @keyframes flow-dots {
+        to {
+            stroke-dashoffset: -18px;
+        }
+    }
+    .reveal {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    .reveal.is-visible {
+        opacity: 1;
+        transform: none;
+        transition:
+            opacity 0.5s ease,
+            transform 0.5s ease;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .fl-btn,
+        .fl-chip,
+        .reveal {
+            transition: none !important;
+            transform: none !important;
+        }
+        .pin-conn {
+            animation: none !important;
+        }
+    }
 </style>
 
 <script>
     const $ = (s: string, r = document) => r.querySelector(s);
 
-  const heroEl = document.getElementById("hero-cover");
-  const sectionEl = document.currentScript?.closest('section') || document.querySelector('section.relative');
+    const heroEl = document.getElementById("hero-cover");
+    const sectionEl =
+        document.currentScript?.closest("section") ||
+        document.querySelector("section.relative");
     const layer = document.getElementById("hero-connection-layer");
     const svg = document.getElementById("hero-connections");
     const rp = document.getElementById("hero-right-pin");
@@ -93,39 +301,40 @@ const docs = "https://docs.flow-like.com";
     const rpt = document.getElementById("hero-right-pin-top");
     const lpt = document.getElementById("hero-left-pin-top");
 
-  // Calibration (tweak if still off):
-  const CAL_LEFT_X = 0;   // positive moves paths right
-  const CAL_RIGHT_X = 0;  // positive moves paths right
-  const setSvgFrame = () => {
-    if (!heroEl || !svg || !layer) return;
-    const hr = heroEl.getBoundingClientRect();
-    const vw = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
-    const h = hr.height;
-    layer.style.height = `${h}px`;
-    layer.style.width = vw + "px"; // lock to computed width (avoids scrollbar / 100vw mismatch)
-    svg.style.width = vw + "px";
-    svg.setAttribute("viewBox", `0 0 ${vw} ${h}`);
-    svg.setAttribute("width", String(vw));
-    svg.setAttribute("height", String(h));
-  };
+    // Calibration (tweak if still off):
+    const CAL_LEFT_X = 0; // positive moves paths right
+    const CAL_RIGHT_X = 0; // positive moves paths right
+    const setSvgFrame = () => {
+        if (!heroEl || !svg || !layer) return;
+        const hr = heroEl.getBoundingClientRect();
+        const secRect = sectionEl?.getBoundingClientRect();
+        const containerWidth = secRect?.width || window.innerWidth;
+        const h = hr.height;
+        layer.style.height = `${h}px`; // width inherited (no manual setting -> prevents 100vw rounding overflow)
+        svg.style.width = "100%"; // responsive to container
+        svg.setAttribute("viewBox", `0 0 ${containerWidth} ${h}`);
+        svg.setAttribute("width", String(containerWidth));
+        svg.setAttribute("height", String(h));
+    };
 
-  const bezier = (pin: HTMLElement, isRight: boolean, yOffset = 60) => {
-    const baseRect = sectionEl?.getBoundingClientRect() || heroEl?.getBoundingClientRect() || {
-            left: 0,
-            top: 0,
-            width: 0,
-            height: 0,
-            right: 0,
-        };
+    const bezier = (pin: HTMLElement, isRight: boolean, yOffset = 60) => {
+        const baseRect = sectionEl?.getBoundingClientRect() ||
+            heroEl?.getBoundingClientRect() || {
+                left: 0,
+                top: 0,
+                width: 0,
+                height: 0,
+                right: 0,
+            };
         const pr = pin.getBoundingClientRect();
-  const layerRect = layer?.getBoundingClientRect();
-  const layerLeft = layerRect ? layerRect.left : 0;
-  let sx = pr.left - layerLeft + pr.width / 2;
-  sx += isRight ? CAL_RIGHT_X : CAL_LEFT_X;
-    const sy = pr.top - baseRect.top + pr.height / 2;
+        const layerRect = layer?.getBoundingClientRect();
+        const layerLeft = layerRect ? layerRect.left : 0;
+        let sx = pr.left - layerLeft + pr.width / 2;
+        sx += isRight ? CAL_RIGHT_X : CAL_LEFT_X;
+        const sy = pr.top - baseRect.top + pr.height / 2;
 
         const isMobile = window.innerWidth < 768;
-        const extra = isMobile ? 50 : 220;
+        const extra = isMobile ? 0 : 220;
         const vw = Math.max(
             document.documentElement.clientWidth,
             window.innerWidth || 0,
@@ -141,23 +350,24 @@ const docs = "https://docs.flow-like.com";
         return `M${sx},${sy} C${cp1x},${sy} ${cp2x},${ey} ${ex},${ey}`;
     };
 
-  const quad = (pin: HTMLElement, isRight: boolean, yOffset = -20) => {
-    const baseRect = sectionEl?.getBoundingClientRect() || heroEl?.getBoundingClientRect() || {
-            left: 0,
-            top: 0,
-            width: 0,
-            height: 0,
-            right: 0,
-        };
+    const quad = (pin: HTMLElement, isRight: boolean, yOffset = -20) => {
+        const baseRect = sectionEl?.getBoundingClientRect() ||
+            heroEl?.getBoundingClientRect() || {
+                left: 0,
+                top: 0,
+                width: 0,
+                height: 0,
+                right: 0,
+            };
         const pr = pin.getBoundingClientRect();
-  const layerRect = layer?.getBoundingClientRect();
-  const layerLeft = layerRect ? layerRect.left : 0;
-  let sx = pr.left - layerLeft + pr.width / 2;
-  sx += isRight ? CAL_RIGHT_X : CAL_LEFT_X;
-    const sy = pr.top - baseRect.top + pr.height / 2;
+        const layerRect = layer?.getBoundingClientRect();
+        const layerLeft = layerRect ? layerRect.left : 0;
+        let sx = pr.left - layerLeft + pr.width / 2;
+        sx += isRight ? CAL_RIGHT_X : CAL_LEFT_X;
+        const sy = pr.top - baseRect.top + pr.height / 2;
 
         const isMobile = window.innerWidth < 768;
-        const extra = isMobile ? 50 : 300;
+        const extra = isMobile ? 0 : 300; // remove overshoot on mobile
         const vw = Math.max(
             document.documentElement.clientWidth,
             window.innerWidth || 0,
@@ -201,8 +411,8 @@ const docs = "https://docs.flow-like.com";
 
     const raf = (fn: FrameRequestCallback) => requestAnimationFrame(fn);
     addEventListener("resize", () => raf(updatePaths));
-  // Include scroll updates so vertical offset stays correct when page is scrolled before images/fonts settle.
-  addEventListener("scroll", () => raf(updatePaths), { passive: true });
+    // Include scroll updates so vertical offset stays correct when page is scrolled before images/fonts settle.
+    addEventListener("scroll", () => raf(updatePaths), { passive: true });
     addEventListener("load", () => raf(updatePaths));
     setTimeout(() => raf(updatePaths), 50);
 
