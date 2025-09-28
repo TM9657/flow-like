@@ -115,13 +115,7 @@ async fn run_once(
     start: &str,
 ) {
     let buffered_sender = Arc::new(BufferedInterComHandler::new(
-        Arc::new(move |_event| {
-            Box::pin({
-                async move {
-                    Ok(())
-                }
-            })
-        }),
+        Arc::new(move |_event| Box::pin({ async move { Ok(()) } })),
         Some(100),
         Some(400),
         Some(true),
@@ -131,7 +125,16 @@ async fn run_once(
         payload: None,
     };
     let mut run = InternalRun::new(
-        "bench", board, None, &state, profile, &payload, false, buffered_sender.clone().into_callback(), None, None,
+        "bench",
+        board,
+        None,
+        &state,
+        profile,
+        &payload,
+        false,
+        buffered_sender.clone().into_callback(),
+        None,
+        None,
     )
     .await
     .expect("InternalRun::new");

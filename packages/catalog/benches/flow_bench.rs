@@ -62,13 +62,7 @@ async fn run_board(id: &str, start_ids: Vec<String>) {
     let profile = construct_profile();
 
     let buffered_sender = Arc::new(BufferedInterComHandler::new(
-        Arc::new(move |_event| {
-            Box::pin({
-                async move {
-                    Ok(())
-                }
-            })
-        }),
+        Arc::new(move |_event| Box::pin({ async move { Ok(()) } })),
         Some(100),
         Some(400),
         Some(true),
@@ -89,7 +83,7 @@ async fn run_board(id: &str, start_ids: Vec<String>) {
             false,
             buffered_sender.clone().into_callback(),
             None,
-            None
+            None,
         )
         .await
         .unwrap();
@@ -104,13 +98,7 @@ async fn run_shared_board(
     start_ids: Vec<String>,
 ) {
     let buffered_sender = Arc::new(BufferedInterComHandler::new(
-        Arc::new(move |_event| {
-            Box::pin({
-                async move {
-                    Ok(())
-                }
-            })
-        }),
+        Arc::new(move |_event| Box::pin({ async move { Ok(()) } })),
         Some(100),
         Some(400),
         Some(true),
@@ -131,7 +119,7 @@ async fn run_shared_board(
             false,
             buffered_sender.clone().into_callback(),
             None,
-            None
+            None,
         )
         .await
         .unwrap();

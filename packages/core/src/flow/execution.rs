@@ -6,8 +6,6 @@ use crate::flow::execution::internal_node::ExecutionTarget;
 use crate::profile::Profile;
 use crate::state::FlowLikeState;
 use ahash::{AHashMap, AHashSet, AHasher};
-use flow_like_types::base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
-use flow_like_types::base64::Engine;
 use context::ExecutionContext;
 use flow_like_storage::arrow_array::{RecordBatch, RecordBatchIterator};
 use flow_like_storage::arrow_schema::FieldRef;
@@ -16,12 +14,14 @@ use flow_like_storage::lancedb::Connection;
 use flow_like_storage::lancedb::index::scalar::BitmapIndexBuilder;
 use flow_like_storage::serde_arrow::schema::{SchemaLike, TracingOptions};
 use flow_like_storage::{Path, serde_arrow};
-use flow_like_types::{Context, Value};
+use flow_like_types::base64::Engine;
+use flow_like_types::base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
 use flow_like_types::intercom::InterComCallback;
 use flow_like_types::json::to_vec;
 use flow_like_types::sync::{Mutex, RwLock};
 use flow_like_types::utils::ptr_key;
 use flow_like_types::{Cacheable, anyhow, create_id};
+use flow_like_types::{Context, Value};
 use futures::StreamExt;
 use futures::future::BoxFuture;
 use internal_node::InternalNode;
@@ -731,7 +731,7 @@ impl InternalRun {
                         &callback,
                         &completion_callbacks,
                         credentials,
-                        token
+                        token,
                     )
                     .await
                 }
@@ -780,7 +780,7 @@ impl InternalRun {
             &self.callback,
             &self.completion_callbacks,
             self.credentials.clone(),
-            self.token.clone()
+            self.token.clone(),
         )
         .await;
 
@@ -1043,7 +1043,7 @@ async fn step_core(
         callback.clone(),
         completion_callbacks.clone(),
         credentials,
-        token
+        token,
     )
     .await;
     context.started_by = if target.through_pins.is_empty() {
@@ -1120,8 +1120,8 @@ pub fn extract_sub_from_jwt(token: &str) -> flow_like_types::Result<String> {
         .context("failed to base64url-decode JWT payload")?;
 
     // Minimal, typed deserialize for clarity/perf
-    let claims: Claims = flow_like_types::json::from_slice(&decoded)
-        .context("invalid JWT JSON payload")?;
+    let claims: Claims =
+        flow_like_types::json::from_slice(&decoded).context("invalid JWT JSON payload")?;
 
     Ok(claims.sub)
 }

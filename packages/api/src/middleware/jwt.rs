@@ -23,8 +23,8 @@ use sea_orm::{
     ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait,
     sqlx::types::chrono,
 };
-use serde::{Deserialize, Deserializer};
 use serde::de::{self, Unexpected};
+use serde::{Deserialize, Deserializer};
 
 use crate::state::AppState;
 
@@ -33,7 +33,9 @@ where
     D: Deserializer<'de>,
 {
     let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
-    let Some(value) = opt else { return Ok(None); };
+    let Some(value) = opt else {
+        return Ok(None);
+    };
     match value {
         serde_json::Value::Bool(b) => Ok(Some(b)),
         serde_json::Value::String(s) => {
@@ -41,7 +43,10 @@ where
             match sl.as_str() {
                 "true" => Ok(Some(true)),
                 "false" => Ok(Some(false)),
-                other => Err(de::Error::invalid_value(Unexpected::Str(other), &"true or false")),
+                other => Err(de::Error::invalid_value(
+                    Unexpected::Str(other),
+                    &"true or false",
+                )),
             }
         }
         serde_json::Value::Number(n) => {
@@ -49,7 +54,10 @@ where
                 match i {
                     0 => Ok(Some(false)),
                     1 => Ok(Some(true)),
-                    other => Err(de::Error::invalid_value(Unexpected::Signed(other), &"0 or 1 for boolean")),
+                    other => Err(de::Error::invalid_value(
+                        Unexpected::Signed(other),
+                        &"0 or 1 for boolean",
+                    )),
                 }
             } else {
                 Err(de::Error::custom("invalid numeric value for boolean"))

@@ -95,7 +95,7 @@ async fn execute_internal(
         stream_state,
         buffered_sender.into_callback(),
         credentials,
-        token
+        token,
     )
     .await?;
     let run_id = internal_run.run.lock().await.id.clone();
