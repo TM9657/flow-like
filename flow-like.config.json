@@ -57,7 +57,7 @@
 			"execution_tier": "micro",
 			"max_total_size": 100000000,
 			"max_llm_cost": 0,
-			"llm_tiers": []
+			"llm_tiers": ["FREE"]
 		},
 		"PREMIUM": {
 			"max_non_visible_projects": 200,
@@ -65,7 +65,7 @@
 			"execution_tier": "small",
 			"max_total_size": 1000000000,
 			"max_llm_cost": 300,
-			"llm_tiers": ["PRO"]
+			"llm_tiers": ["PRO", "FREE"]
 		},
 		"PRO": {
 			"max_non_visible_projects": -1,
