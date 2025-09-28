@@ -30,29 +30,31 @@ export function ModelSection({
 	return (
 		<Card className="border-2 hover:border-primary/20 transition-all duration-300">
 			<CardHeader>
-				<div className="flex items-center gap-3">
-					<div className="p-2 bg-primary/10 rounded-lg">
-						<Brain className="h-5 w-5 text-primary" />
+				<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+					<div className="flex items-start gap-3">
+						<div className="p-2 bg-muted rounded-lg">
+							<Brain className="h-5 w-5 text-primary" />
+						</div>
+						<div className="min-w-0">
+							<CardTitle className="text-base sm:text-lg">Embedding Models</CardTitle>
+							<CardDescription className="text-xs sm:text-sm">
+								Select models for semantic search and AI capabilities
+							</CardDescription>
+						</div>
 					</div>
-					<div className="flex-1">
-						<CardTitle>Embedding Models</CardTitle>
-						<CardDescription>
-							Select models for semantic search and AI capabilities
-						</CardDescription>
-					</div>
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-2 sm:gap-3 flex-wrap w-full sm:w-auto">
 						{!skipModels && (
 							<Button
-								variant="outline"
+								variant="secondary"
 								size="sm"
 								onClick={onShowModal}
-								className="gap-2"
+								className="gap-2 w-full sm:w-auto"
 							>
 								<Grid className="h-4 w-4" />
 								Browse All
 							</Button>
 						)}
-						<div className="flex items-center space-x-2">
+						<div className="flex items-center gap-2 ml-auto sm:ml-0">
 							<Checkbox
 								id="skip-models"
 								checked={skipModels}
@@ -63,7 +65,7 @@ export function ModelSection({
 							/>
 							<Label
 								htmlFor="skip-models"
-								className="text-sm text-muted-foreground cursor-pointer"
+								className="text-xs sm:text-sm text-muted-foreground cursor-pointer"
 							>
 								Skip
 							</Label>
@@ -74,7 +76,7 @@ export function ModelSection({
 			<CardContent>
 				{!skipModels ? (
 					<div className="space-y-4">
-						<div className="grid md:grid-cols-2 gap-4">
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
 							{models.slice(0, 4).map((bit) => (
 								<ModelCard
 									key={bit}

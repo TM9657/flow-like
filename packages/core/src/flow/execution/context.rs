@@ -148,6 +148,7 @@ pub struct ExecutionContext {
     pub execution_cache: Option<ExecutionContextCache>,
     pub completion_callbacks: Arc<RwLock<Vec<EventTrigger>>>,
     pub stream_state: bool,
+    pub token: Option<String>,
     pub credentials: Option<Arc<SharedCredentials>>,
     pub delegated: bool,
     pub context_state: BTreeMap<String, Value>,
@@ -170,6 +171,7 @@ impl ExecutionContext {
         callback: InterComCallback,
         completion_callbacks: Arc<RwLock<Vec<EventTrigger>>>,
         credentials: Option<Arc<SharedCredentials>>,
+        token: Option<String>,
     ) -> Self {
         let (id, execution_cache) = {
             let node_id = node.node.lock().await.id.clone();
@@ -205,6 +207,7 @@ impl ExecutionContext {
             trace,
             profile,
             callback,
+            token,
             execution_cache,
             stream_state,
             state: NodeState::Idle,
@@ -235,6 +238,7 @@ impl ExecutionContext {
             self.callback.clone(),
             self.completion_callbacks.clone(),
             self.credentials.clone(),
+            self.token.clone(),
         )
         .await
     }

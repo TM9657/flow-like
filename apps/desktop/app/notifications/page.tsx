@@ -67,7 +67,7 @@ export default function NotificationsPage() {
 	);
 
 	return (
-		<main className="flex min-h-screen max-h-screen max-w-screen-xl w-full overflow-hidden flex-col p-6 gap-8 mx-auto">
+		<main className="flex max-w-screen-xl w-full overflow-hidden flex-col p-6 gap-8 mx-auto flex-1 min-h-0">
 			{/* Header Section */}
 			<motion.div
 				initial={{ opacity: 0, y: -20 }}

@@ -390,7 +390,7 @@ export default function Id() {
 	}
 
 	return (
-		<div className="w-full max-w-6xl mx-auto p-6 pt-0 space-y-6 flex flex-col flex-grow max-h-full overflow-auto">
+		<div className="w-full max-w-6xl mx-auto p-2 md:p-6 pt-0 space-y-6 flex flex-col flex-grow max-h-full min-h-0 overflow-auto md:overflow-visible">
 			{/* Header with Save Button - Made Sticky */}
 			{hasChanges && canEdit && (
 				<div className="sticky top-0 z-10 mb-6">
@@ -550,8 +550,8 @@ export default function Id() {
 							</div>
 							<div
 								className={`relative group border-2 border-dashed rounded-lg overflow-hidden transition-all duration-200 ${canEdit
-										? "border-gray-300 dark:border-gray-700 hover:border-primary cursor-pointer"
-										: "border-gray-200 dark:border-gray-800 cursor-not-allowed opacity-60"
+									? "border-gray-300 dark:border-gray-700 hover:border-primary cursor-pointer"
+									: "border-gray-200 dark:border-gray-800 cursor-not-allowed opacity-60"
 									}`}
 								style={{ aspectRatio: "2/1" }}
 								onClick={canEdit ? handleThumbnailUpload : undefined}
@@ -604,8 +604,8 @@ export default function Id() {
 							<div className="flex justify-center">
 								<div
 									className={`relative group border-2 border-dashed rounded-lg overflow-hidden transition-all duration-200 w-40 h-40 ${canEdit
-											? "border-gray-300 dark:border-gray-700 hover:border-primary cursor-pointer"
-											: "border-gray-200 dark:border-gray-800 cursor-not-allowed opacity-60"
+										? "border-gray-300 dark:border-gray-700 hover:border-primary cursor-pointer"
+										: "border-gray-200 dark:border-gray-800 cursor-not-allowed opacity-60"
 										}`}
 									onClick={canEdit ? handleIconUpload : undefined}
 								>
@@ -859,10 +859,10 @@ export default function Id() {
 											<div className="flex items-center gap-2">
 												<div
 													className={`w-2 h-2 rounded-full ${status === IAppStatus.Active
-															? "bg-green-500"
-															: status === IAppStatus.Inactive
-																? "bg-yellow-500"
-																: "bg-gray-500"
+														? "bg-green-500"
+														: status === IAppStatus.Inactive
+															? "bg-yellow-500"
+															: "bg-gray-500"
 														}`}
 												/>
 												{status}
@@ -1051,7 +1051,7 @@ export default function Id() {
 			{/* Fullscreen Markdown Editor Overlay */}
 			<Dialog open={isLongDescEditorOpen} onOpenChange={setLongDescEditorOpen}>
 				<DialogContent
-					className="w-dvw min-w-dvw max-w-dvw h-screen flex flex-col"
+					className="w-dvw min-w-dvw max-w-dvw min-h-[100svh] max-h-[100svh] flex flex-col"
 					onEscapeKeyDown={(e) => {
 						const target = e.target as Node | null;
 						if (target && editorAreaRef.current?.contains(target)) {

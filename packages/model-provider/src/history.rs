@@ -204,6 +204,11 @@ pub struct StreamOptions {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct Usage {
+    pub include: bool,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct History {
     pub model: String,
     pub messages: Vec<HistoryMessage>,
@@ -251,6 +256,9 @@ pub struct History {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<Usage>,
 }
 
 impl History {
@@ -273,6 +281,7 @@ impl History {
             n: None,
             tools: None,
             tool_choice: None,
+            usage: None,
         }
     }
 

@@ -34,8 +34,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 
 const ProfileSkeleton = () => (
-	<div className="min-h-screen bg-gradient-to-br from-background via-background/50 to-primary/5">
-		<div className="container mx-auto px-4 py-12">
+	<div className="bg-gradient-to-br from-background via-background/50 to-primary/5 flex-1 min-h-0 overflow-auto">
+		<div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
 			<motion.div
 				initial={{ opacity: 0, y: 20 }}
 				animate={{ opacity: 1, y: 0 }}
@@ -44,9 +44,9 @@ const ProfileSkeleton = () => (
 				<div className="relative">
 					<div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-tertiary/20 to-tertiary/20 rounded-3xl blur-3xl opacity-30 animate-pulse" />
 					<Card className="relative backdrop-blur-xl bg-background/80 border-0 shadow-2xl rounded-3xl overflow-hidden">
-						<CardContent className="p-12">
-							<div className="flex flex-col md:flex-row items-center gap-8">
-								<Skeleton className="w-32 h-32 rounded-full" />
+						<CardContent className="p-6 sm:p-8 lg:p-12">
+							<div className="flex flex-col md:flex-row items-center gap-4 sm:gap-6 lg:gap-8">
+								<Skeleton className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-full" />
 								<div className="flex-1 space-y-4 text-center md:text-left">
 									<Skeleton className="h-8 w-64 mx-auto md:mx-0" />
 									<Skeleton className="h-6 w-48 mx-auto md:mx-0" />
@@ -65,7 +65,7 @@ const ProfileSkeleton = () => (
 );
 
 const ProfileError = ({ error }: { error: string }) => (
-	<div className="min-h-screen bg-gradient-to-br from-background via-background/50 to-destructive/5 flex items-center justify-center">
+	<div className="bg-gradient-to-br from-background via-background/50 to-destructive/5 flex items-center justify-center flex-1 min-h-0 overflow-auto">
 		<motion.div
 			initial={{ opacity: 0, scale: 0.95 }}
 			animate={{ opacity: 1, scale: 1 }}
@@ -131,8 +131,8 @@ const ProfileContent = ({
 	};
 
 	return (
-		<div className="min-h-screen relative overflow-hidden">
-			<div className="container mx-auto px-4 py-12 relative z-10">
+		<div className="relative overflow-auto flex-1 min-h-0">
+			<div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 relative z-10">
 				<motion.div
 					variants={containerVariants}
 					initial="hidden"
@@ -142,15 +142,15 @@ const ProfileContent = ({
 					{/* Main Profile Card */}
 					<motion.div variants={itemVariants} className="relative mb-8">
 						<Card className="relative backdrop-blur-xl bg-background/80 border-0 shadow-2xl rounded-3xl overflow-hidden">
-							<CardContent className="p-12">
-								<div className="flex flex-col lg:flex-row items-center gap-8">
+							<CardContent className="p-6 sm:p-8 lg:p-12">
+								<div className="flex flex-col lg:flex-row items-center gap-4 sm:gap-6 lg:gap-8">
 									<motion.div
 										whileHover={{ scale: 1.05 }}
 										transition={{ type: "spring", stiffness: 300 }}
 										className="relative"
 									>
 										<div className="absolute inset-0 bg-gradient-to-r from-primary to-tertiary rounded-full blur-lg opacity-50 animate-pulse" />
-										<Avatar className="w-32 h-32 relative z-10 border-4 border-background shadow-xl">
+										<Avatar className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 relative z-10 border-2 md:border-4 border-background shadow-xl">
 											<AvatarImage src={user.avatar_url} alt={displayName} />
 											<AvatarFallback className="text-2xl font-bold bg-gradient-to-br from-primary to-tertiary text-white">
 												{initials}
@@ -163,17 +163,17 @@ const ProfileContent = ({
 												repeat: Number.POSITIVE_INFINITY,
 												ease: "linear",
 											}}
-											className="absolute -inset-2 border-2 border-dashed border-primary/30 rounded-full"
+											className="absolute -inset-2 border-2 border-dashed border-primary/30 rounded-full hidden sm:block"
 										/>
 									</motion.div>
 
 									<div className="flex-1 text-center lg:text-left space-y-4">
 										<motion.div variants={itemVariants} className="space-y-2">
-											<h1 className="text-4xl lg:text-5xl font-bold bg-gradient-to-r from-primary via-tertiary to-tertiary bg-clip-text text-transparent">
+											<h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-primary via-tertiary to-tertiary bg-clip-text text-transparent leading-tight break-words">
 												{displayName}
 											</h1>
 											{username && (
-												<p className="text-xl text-muted-foreground">
+												<p className="text-base sm:text-lg md:text-xl text-muted-foreground break-words">
 													@{username}
 												</p>
 											)}
@@ -215,12 +215,12 @@ const ProfileContent = ({
 						<motion.div variants={itemVariants} className="relative mb-8">
 							<div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-tertiary/10 to-tertiary/10 rounded-2xl blur-2xl opacity-50" />
 							<Card className="relative backdrop-blur-xl bg-background/60 border-0 shadow-xl rounded-2xl">
-								<CardContent className="p-8">
-									<h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+								<CardContent className="p-4 sm:p-6 lg:p-8">
+									<h2 className="text-xl sm:text-2xl font-semibold mb-4 flex items-center gap-2">
 										<User className="w-6 h-6 text-primary" />
 										About
 									</h2>
-									<p className="text-lg leading-relaxed text-muted-foreground">
+									<p className="text-base sm:text-lg leading-relaxed text-muted-foreground">
 										{user.description}
 									</p>
 								</CardContent>
@@ -233,12 +233,12 @@ const ProfileContent = ({
 						<motion.div variants={itemVariants} className="relative mb-8">
 							<div className="absolute inset-0 bg-gradient-to-r from-green-500/10 via-tertiary/10 to-tertiary/10 rounded-2xl blur-2xl opacity-50" />
 							<Card className="relative backdrop-blur-xl bg-background/60 border-0 shadow-xl rounded-2xl">
-								<CardContent className="p-8">
-									<h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+								<CardContent className="p-4 sm:p-6 lg:p-8">
+									<h2 className="text-xl sm:text-2xl font-semibold mb-4 flex items-center gap-2">
 										<Sparkles className="w-6 h-6 text-primary" />
 										Additional Information
 									</h2>
-									<p className="text-lg leading-relaxed text-muted-foreground">
+									<p className="text-base sm:text-lg leading-relaxed text-muted-foreground">
 										{user.additional_info}
 									</p>
 								</CardContent>
@@ -250,8 +250,8 @@ const ProfileContent = ({
 					<motion.div variants={itemVariants} className="relative">
 						<div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-tertiary/10 to-tertiary/10 rounded-2xl blur-2xl opacity-50" />
 						<Card className="relative backdrop-blur-xl bg-background/60 border-0 shadow-xl rounded-2xl">
-							<CardContent className="p-8">
-								<h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
+							<CardContent className="p-4 sm:p-6 lg:p-8">
+								<h2 className="text-xl sm:text-2xl font-semibold mb-6 flex items-center gap-2">
 									<Package className="w-6 h-6 text-primary" />
 									Published Apps
 									{apps.length > 0 && (
@@ -274,7 +274,7 @@ const ProfileContent = ({
 									<div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
 										{[...Array(6)].map((_, i) => (
 											<div key={i} className="space-y-3">
-												<Skeleton className="h-48 w-full rounded-lg" />
+												<Skeleton className="h-40 sm:h-48 w-full rounded-lg" />
 												<Skeleton className="h-4 w-3/4" />
 												<Skeleton className="h-4 w-1/2" />
 											</div>

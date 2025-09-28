@@ -33,7 +33,7 @@ const poweredBy: {
 
 export default function PoweredByPage() {
 	return (
-		<main className="justify-start flex min-h-dvh max-h-dvh flex-col items-start w-full pr-4">
+		<main className="justify-start flex flex-col items-start w-full pr-4 flex-1 min-h-0">
 			<h2 className="scroll-m-20 text-3xl font-semibold tracking-tight first:mt-0">
 				Standing on the Shoulders of Giants
 			</h2>

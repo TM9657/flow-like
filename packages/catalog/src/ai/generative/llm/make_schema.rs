@@ -160,7 +160,7 @@ impl NodeLogic for LLMMakeSchema {
             let model = model_factory
                 .lock()
                 .await
-                .build(&model, context.app_state.clone())
+                .build(&model, context.app_state.clone(), context.token.clone())
                 .await?;
             model.invoke(&history, None).await?
         }; // drop model

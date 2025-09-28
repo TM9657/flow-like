@@ -34,7 +34,7 @@ export function BitVariable({
 	);
 
 	return (
-		<div className="flex flex-row items-center justify-start">
+		<div className="flex flex-row items-center justify-start ml-1">
 			<Select
 				defaultValue={parseUint8ArrayToJson(value)}
 				value={parseUint8ArrayToJson(value)}

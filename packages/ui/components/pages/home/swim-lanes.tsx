@@ -87,7 +87,7 @@ export function HomeSwimlanes() {
 
 	if (error) {
 		return (
-			<main className="min-h-screen items-center w-full max-h-dvh overflow-auto p-4 grid grid-cols-6 justify-start gap-2">
+			<div className="flex-1 min-h-0 items-center w-full overflow-auto p-4 grid grid-cols-6 justify-start gap-2">
 				<div className="col-span-6">
 					<Alert variant="destructive">
 						<ExternalLink className="h-4 w-4" />
@@ -114,24 +114,24 @@ export function HomeSwimlanes() {
 				<Skeleton className="col-span-2 h-full" />
 				<Skeleton className="col-span-2 h-full" />
 				<Skeleton className="col-span-2 h-full" />
-			</main>
+			</div>
 		);
 	}
 
 	if (!data)
 		return (
-			<main className="min-h-screen items-center w-full max-h-dvh overflow-auto p-4 grid grid-cols-6 justify-start gap-2">
+			<div className="flex-1 min-h-0 items-center w-full overflow-auto p-4 grid grid-cols-6 justify-start gap-2">
 				<Skeleton className="col-span-6 h-full min-h-[30dvh]" />
 				<Skeleton className="col-span-3 h-full min-h-[20dvh]" />
 				<Skeleton className="col-span-3 h-full" />
 				<Skeleton className="col-span-2 h-full" />
 				<Skeleton className="col-span-2 h-full" />
 				<Skeleton className="col-span-2 h-full" />
-			</main>
+			</div>
 		);
 
 	return (
-		<main className="min-h-screen w-full max-h-dvh overflow-auto bg-background flex flex-col items-center">
+		<div className="flex-1 min-h-0 w-full overflow-auto bg-background flex flex-col items-center">
 			<div className="w-full space-y-8 p-6 max-w-[1800px]">
 				{data?.map((swimlane) => (
 					<SwimlaneSection
@@ -142,7 +142,7 @@ export function HomeSwimlanes() {
 					/>
 				))}
 			</div>
-		</main>
+		</div>
 	);
 }
 
@@ -343,6 +343,8 @@ function SwimlaneHeader({
 	swimlane,
 	apps,
 }: Readonly<{ swimlane: ISwimlane; apps: IAppQuery }>) {
+	const isExternal = (href?: string) =>
+		typeof href === "string" && /^(https?:|mailto:|tel:)/.test(href);
 	return (
 		<div className="flex items-center justify-between">
 			<div className="space-y-1">
@@ -352,7 +354,12 @@ function SwimlaneHeader({
 				)}
 			</div>
 			{swimlane.viewAllLink && (
-				<a href={swimlane.viewAllLink}>
+				<a
+					href={swimlane.viewAllLink}
+					target={isExternal(swimlane.viewAllLink) ? "_blank" : undefined}
+					rel={isExternal(swimlane.viewAllLink) ? "noopener noreferrer external" : undefined}
+					data-open-external={isExternal(swimlane.viewAllLink) ? "true" : undefined}
+				>
 					<button
 						type="button"
 						className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
@@ -415,12 +422,14 @@ function StaticCard({
 }>) {
 	const isLarge = size === "large";
 	const cardHeight = isLarge ? "h-[375px]" : "min-h-[200px]";
+	const isExternal = typeof item.link === "string" && /^(https?:|mailto:|tel:)/.test(item.link);
 
 	return (
 		<a
-			type="button"
 			href={item.link}
-			target={item.link?.startsWith("http") ? "_blank" : "_self"}
+			target={isExternal ? "_blank" : "_self"}
+			rel={isExternal ? "noopener noreferrer external" : undefined}
+			data-open-external={isExternal ? "true" : undefined}
 			className={`group relative overflow-hidden rounded-xl border border-border/40 bg-card shadow-sm hover:shadow-xl hover:border-primary/30 transition-all duration-300 ${cardHeight} w-full`}
 		>
 			<div className="absolute inset-0">

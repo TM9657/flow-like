@@ -55,7 +55,7 @@ export const StoreRecommendations = memo(function StoreRecommendations() {
             {/* Apps Section */}
             <motion.div variants={itemVariants} className="relative">
                 <div className="absolute inset-0" />
-                <Card className="relative bg-transparent border-0">
+                <Card className="relative bg-transparent border-0 shadow-none">
                     <CardContent className="p-4">
                         <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
                             <SparklesIcon className="w-6 h-6 text-primary" />

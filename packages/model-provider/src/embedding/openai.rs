@@ -136,6 +136,7 @@ mod tests {
             model_id: Some("text-embedding-3-small".to_string()),
             version: None,
             provider_name: "openai".to_string(),
+            params: None,
         };
         let provider = EmbeddingModelProvider {
             provider,
@@ -160,11 +161,17 @@ mod tests {
         };
 
         let model = OpenAIEmbeddingModel::new(&provider, &config).await.unwrap();
-        let embedding = match model.text_embed_query(&vec!["Hello, World!".to_string()]).await {
+        let embedding = match model
+            .text_embed_query(&vec!["Hello, World!".to_string()])
+            .await
+        {
             Ok(e) => e,
             Err(e) => {
                 let msg = format!("{e}");
-                if msg.contains("401") || msg.to_lowercase().contains("invalid_api_key") || msg.to_lowercase().contains("incorrect api key") {
+                if msg.contains("401")
+                    || msg.to_lowercase().contains("invalid_api_key")
+                    || msg.to_lowercase().contains("incorrect api key")
+                {
                     eprintln!("Skipping due to invalid API key: {msg}");
                     return;
                 }
@@ -184,6 +191,7 @@ mod tests {
             model_id: Some("text-embedding-3-small".to_string()),
             version: None,
             provider_name: "openai".to_string(),
+            params: None,
         };
         let provider = EmbeddingModelProvider {
             provider,
@@ -207,8 +215,8 @@ mod tests {
             bedrock_config: vec![],
         };
 
-    let model = OpenAIEmbeddingModel::new(&provider, &config).await.unwrap();
-    let (text_splitter, _md_splitter) = model.get_splitter(Some(20), Some(5)).await.unwrap();
+        let model = OpenAIEmbeddingModel::new(&provider, &config).await.unwrap();
+        let (text_splitter, _md_splitter) = model.get_splitter(Some(20), Some(5)).await.unwrap();
         let text = "Hello, World! This is a test. This is a test. This is a test. This is a test. This is a test. This is a test.";
         let text_chunks = text_splitter.chunks(text).unwrap();
         assert_ne!(text_chunks.len(), 0);
@@ -222,6 +230,7 @@ mod tests {
             model_id: Some("embedding-test".to_string()),
             version: Some("2024-04-01-preview".to_string()),
             provider_name: "azure".to_string(),
+            params: None,
         };
         let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap();
         let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap();

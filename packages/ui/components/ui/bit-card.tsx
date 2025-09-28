@@ -117,8 +117,22 @@ export function BitCard({
 		[],
 	);
 
+
+	// A bit is considered "virtual" if it has no download link OR its size resolves to 0.
+	// These represent hosted / proxied models (no local artifact). We immediately treat
+	// a download request as a no-op success so the UI does not show a perpetual "Queued" state.
+	const isVirtualBit = useMemo(
+		() => !bit.download_link || (bitSize.data === 0 && bitSize.isSuccess),
+		[bit.download_link, bitSize.data, bitSize.isSuccess],
+	);
+
 	const downloadBit = useCallback(
 		async (b: IBit) => {
+			// Short‑circuit for virtual bits: no progress overlay, just refresh install state.
+			if (!b.download_link || isVirtualBit) {
+				await isInstalled.refetch();
+				return; // success path
+			}
 			setProgress(0);
 			try {
 				await download(b); // de-duplicated in manager
@@ -127,7 +141,7 @@ export function BitCard({
 				// keep subscription; overlay hides when done/unmounted
 			}
 		},
-		[download, isInstalled],
+		[download, isInstalled, isVirtualBit],
 	);
 
 	const toggleDownload = useCallback(async () => {
@@ -191,7 +205,7 @@ export function BitCard({
         backdrop-blur-xs bg-card/80
       `}
 			>
-				{progress !== undefined && (
+				{progress !== undefined && !isVirtualBit && (
 					<div className="absolute inset-0 bg-background/80 backdrop-blur-xs z-30 flex items-center justify-center">
 						{isQueuedState ? (
 							<div className="text-center space-y-2">
@@ -316,7 +330,7 @@ export function BitCard({
 								{isInProfile && (
 									<SparklesIcon className="h-4 w-4 text-primary animate-pulse" />
 								)}
-								{isQueued(bit.hash) && (
+								{isQueued(bit.hash) && !isVirtualBit && (
 									<Badge variant="outline" className="text-xs">
 										<ClockIcon className="h-3 w-3 mr-1" />
 										Queued
@@ -348,17 +362,19 @@ export function BitCard({
 								<Badge
 									variant={isInstalled.data ? "default" : "outline"}
 									className={`text-xs font-medium transition-all ${
-										isInstalled.data
+										(isInstalled.data || bitSize.data === 0)
 											? "bg-emerald-500 hover:bg-emerald-600 text-white"
 											: "hover:bg-primary/10"
 									}`}
 								>
-									{isInstalled.data ? (
+									{(isInstalled.data || bitSize.data === 0) ? (
 										<PackageCheckIcon className="h-3 w-3 mr-1" />
 									) : (
 										<DownloadCloudIcon className="h-3 w-3 mr-1" />
 									)}
-									{humanFileSize(bitSize.data ?? 0)}
+									{(bitSize.data === 0)
+										? "Hosted"
+										: humanFileSize(bitSize.data ?? 0)}
 								</Badge>
 							</div>
 						</div>

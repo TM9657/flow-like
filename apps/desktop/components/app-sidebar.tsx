@@ -31,6 +31,8 @@ import {
 	IBitTypes,
 	Input,
 	Label,
+	MobileHeader,
+	MobileHeaderProvider,
 	Sidebar,
 	SidebarContent,
 	SidebarFooter,
@@ -210,17 +212,24 @@ interface IUser {
 export function AppSidebar({
 	children,
 }: Readonly<{ children: React.ReactNode }>) {
-	const defaultOpen = localStorage.getItem("sidebar_state") === "true";
+	// Guard localStorage usage for SSR and provide a sensible default.
+	const defaultOpen =
+		typeof window !== "undefined"
+			? localStorage.getItem("sidebar_state") === "true"
+			: true;
 
 	return (
 		<SidebarProvider defaultOpen={defaultOpen}>
-			<InnerSidebar />
-			<main className="w-full h-full">
-				<SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20">
-					{children}
-				</SidebarInset>
-			</main>
-		</SidebarProvider>
+            <InnerSidebar />
+            <main className="w-full h-dvh flex flex-col overflow-hidden">
+                <MobileHeaderProvider>
+                    <MobileHeader />
+                    <SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20 flex flex-col flex-1 min-h-0 h-full overflow-hidden">
+                        {children}
+                    </SidebarInset>
+                </MobileHeaderProvider>
+            </main>
+        </SidebarProvider>
 	);
 }
 
@@ -597,9 +606,9 @@ function NavMain({
 											<SidebarMenuButton
 												variant={
 													pathname === item.url ||
-													typeof item.items?.find(
-														(item) => item.url === pathname,
-													) !== "undefined"
+														typeof item.items?.find(
+															(item) => item.url === pathname,
+														) !== "undefined"
 														? "outline"
 														: "default"
 												}
@@ -716,9 +725,9 @@ function NavMain({
 												<SidebarMenuButton
 													variant={
 														pathname === item.url ||
-														typeof item.items?.find(
-															(item) => item.url === pathname,
-														) !== "undefined"
+															typeof item.items?.find(
+																(item) => item.url === pathname,
+															) !== "undefined"
 															? "outline"
 															: "default"
 													}

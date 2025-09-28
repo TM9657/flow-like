@@ -317,7 +317,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
             let model = model_factory
                 .lock()
                 .await
-                .build(&model_bit, context.app_state.clone())
+                .build(&model_bit, context.app_state.clone(), context.token.clone())
                 .await?;
             model.invoke(&history, None).await?
         }; // drop model
@@ -420,6 +420,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
     }
 
     async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
+        node.error = None;
         let current_tool_exec_pins: Vec<_> = node
             .pins
             .values()

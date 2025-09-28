@@ -69,7 +69,10 @@ pub async fn request_join(
         return Ok(Json(()));
     }
 
-    if !matches!(app.visibility, Visibility::PublicRequestAccess | Visibility::Public) {
+    if !matches!(
+        app.visibility,
+        Visibility::PublicRequestAccess | Visibility::Public
+    ) {
         tracing::warn!(
             "User {} is trying to join app {} but the app is not public",
             sub,

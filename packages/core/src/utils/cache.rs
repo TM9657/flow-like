@@ -8,8 +8,14 @@ use std::{
 const CACHE_KEY: &str = "flow-like";
 
 pub fn get_cache_dir() -> PathBuf {
-    let cache_dir = dirs_next::cache_dir().unwrap();
-    cache_dir.join(CACHE_KEY)
+    if let Some(cache_dir) = dirs_next::cache_dir() {
+        cache_dir.join(CACHE_KEY)
+    } else if let Some(data_dir) = dirs_next::data_dir() {
+        data_dir.join(CACHE_KEY)
+    } else {
+        // Relative fallback inside the current working directory
+        PathBuf::from(CACHE_KEY)
+    }
 }
 
 pub fn get_cache_file_path(name: &str) -> PathBuf {

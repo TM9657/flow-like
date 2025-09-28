@@ -11,6 +11,7 @@
 			"response_type": "code",
 			"scope": "phone openid email profile aws.cognito.signin.user.admin",
 			"jwks_url": "https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_0fYxn5Pn7/.well-known/jwks.json",
+			"user_info_url": "https://auth.flow-like.com/oauth2/userInfo",
 			"discovery_url": "https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_0fYxn5Pn7/.well-known/openid-configuration",
 			"cognito": {
 				"user_pool_id": "eu-west-1_0fYxn5Pn7"
@@ -55,23 +56,23 @@
 			"max_remote_executions": 25,
 			"execution_tier": "micro",
 			"max_total_size": 100000000,
-			"max_llm_calls": 0,
-			"llm_tiers": []
+			"max_llm_cost": 0,
+			"llm_tiers": ["FREE"]
 		},
 		"PREMIUM": {
 			"max_non_visible_projects": 200,
 			"max_remote_executions": 500,
 			"execution_tier": "small",
 			"max_total_size": 1000000000,
-			"max_llm_calls": 200,
-			"llm_tiers": ["PRO"]
+			"max_llm_cost": 300,
+			"llm_tiers": ["PRO", "FREE"]
 		},
 		"PRO": {
 			"max_non_visible_projects": -1,
 			"max_remote_executions": 5000,
 			"execution_tier": "medium",
 			"max_total_size": 10000000000,
-			"max_llm_calls": 1000,
+			"max_llm_cost": 3000,
 			"llm_tiers": ["PRO", "PREMIUM"]
 		},
 		"ENTERPRISE": {
@@ -79,7 +80,7 @@
 			"max_remote_executions": -1,
 			"execution_tier": "max",
 			"max_total_size": -1,
-			"max_llm_calls": -1,
+			"max_llm_cost": -1,
 			"llm_tiers": ["PRO", "PREMIUM", "ENTERPRISE"]
 		}
 	},

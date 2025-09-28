@@ -54,7 +54,7 @@ export default function ConfigurationPage() {
 
 	if (configurableBoards.length === 0) {
 		return (
-			<main className="justify-start flex flex-col items-start w-full flex-1 max-h-full overflow-y-auto flex-grow gap-4">
+			<main className="justify-start flex flex-col items-start w-full flex-1 max-h-full overflow-y-auto md:overflow-visible flex-grow gap-4">
 				<div className="border p-6 rounded-lg bg-card w-full max-w-2xl mx-auto text-center">
 					<div className="w-16 h-16 mx-auto mb-4 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
 						<SettingsIcon className="w-8 h-8 text-green-600 dark:text-green-400" />
@@ -77,7 +77,7 @@ export default function ConfigurationPage() {
 	);
 
 	return (
-		<main className="justify-start flex flex-col items-start w-full flex-1 max-h-full overflow-y-auto flex-grow gap-6">
+		<main className="justify-start flex flex-col items-start w-full flex-1 max-h-full overflow-y-auto md:overflow-visible flex-grow gap-6">
 			<div className="w-full py-4 border-b z-50">
 				<div className="flex items-center justify-between">
 					<div>

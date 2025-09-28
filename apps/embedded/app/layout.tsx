@@ -1,5 +1,6 @@
 "use client";
 import "@tm9657/flow-like-ui/globals.css";
+import type { Viewport } from "next";
 
 import {
 	PersistQueryClientProvider,
@@ -17,6 +18,13 @@ const inter = Inter({ subsets: ["latin"] });
 
 const persister = createIDBPersister();
 const queryClient = new QueryClient();
+
+export const viewport: Viewport = {
+	width: "device-width",
+	initialScale: 1,
+	viewportFit: "cover",
+	interactiveWidget: "overlays-content",
+};
 
 export default function RootLayout({
 	children,

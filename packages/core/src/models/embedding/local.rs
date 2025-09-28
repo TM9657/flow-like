@@ -1,3 +1,4 @@
+#![cfg(feature = "local-ml")]
 use crate::{
     bit::{Bit, BitPack, BitTypes},
     state::FlowLikeState,
@@ -18,7 +19,7 @@ use std::{any::Any, sync::Arc};
 #[derive(Clone)]
 pub struct LocalEmbeddingModel {
     pub bit: Arc<Bit>,
-    pub embedding_model: Arc<fastembed::TextEmbedding>,
+    pub embedding_model: Arc<Mutex<fastembed::TextEmbedding>>,
     pub tokenizer_files: Arc<TokenizerFiles>,
 }
 
@@ -72,7 +73,7 @@ impl LocalEmbeddingModel {
 
         let default_return_model = LocalEmbeddingModel {
             bit,
-            embedding_model: Arc::new(loaded_model),
+            embedding_model: Arc::new(Mutex::new(loaded_model)),
             tokenizer_files: Arc::new(loaded_tokenizer),
         };
 
@@ -125,7 +126,12 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .map(|text| format!("{}{}", params.prefix.query, text))
             .collect::<Vec<String>>();
 
-        let embeddings = match self.embedding_model.embed(prefixed_array.to_vec(), None) {
+        let embeddings = match self
+            .embedding_model
+            .lock()
+            .await
+            .embed(prefixed_array.to_vec(), None)
+        {
             Ok(embeddings) => embeddings,
             Err(e) => {
                 println!("Error embedding text: {}", e);
@@ -148,7 +154,12 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .iter()
             .map(|text| format!("{}{}", params.prefix.paragraph, text))
             .collect::<Vec<String>>();
-        let embeddings = match self.embedding_model.embed(prefixed_array, None) {
+        let embeddings = match self
+            .embedding_model
+            .lock()
+            .await
+            .embed(prefixed_array, None)
+        {
             Ok(embeddings) => embeddings,
             Err(e) => {
                 println!("Error embedding text: {}", e);

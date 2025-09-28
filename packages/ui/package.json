@@ -144,6 +144,8 @@
 		"unified": "^11.0.5",
 		"use-file-picker": "^2.1.4",
 		"vite": "^6.0.7",
+		"y-webrtc": "^10.3.0",
+		"yjs": "^13.6.27",
 		"zod": "^3.24.1",
 		"zod-validation-error": "^3.4.0",
 		"zustand": "^5.0.3"

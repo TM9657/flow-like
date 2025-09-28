@@ -120,9 +120,7 @@ pub async fn upsert_app(
     };
 
     if tier.max_non_visible_projects == 0 {
-        tracing::warn!(
-            "Configuration doesn't allow for the creation of non-visible projects",
-        );
+        tracing::warn!("Configuration doesn't allow for the creation of non-visible projects",);
         return Err(ApiError::Forbidden);
     }
 

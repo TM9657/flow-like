@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use super::{LLMCallback, ModelLogic};
 use crate::{
@@ -6,7 +6,7 @@ use crate::{
     provider::{ModelProvider, ModelProviderConfiguration, openai::OpenAIClient},
     response::Response,
 };
-use flow_like_types::{Result, async_trait, sync::Mutex};
+use flow_like_types::{Result, Value, async_trait, sync::Mutex};
 use openai_api_rs::v1::chat_completion::ChatCompletionRequest;
 mod history;
 mod response;
@@ -28,6 +28,14 @@ impl OpenAIModel {
             provider: provider.clone(),
         })
     }
+
+    pub async fn from_params(provider: &ModelProvider) -> flow_like_types::Result<Self> {
+        let client = OpenAIClient::from_params(provider.params.clone().unwrap_or_default()).await?;
+        Ok(OpenAIModel {
+            client: Arc::new(Mutex::new(client)),
+            provider: provider.clone(),
+        })
+    }
 }
 
 #[async_trait]
@@ -38,8 +46,11 @@ impl ModelLogic for OpenAIModel {
             .model_id
             .clone()
             .ok_or_else(|| flow_like_types::anyhow!("Model ID is missing"))?;
+
         let mut request = ChatCompletionRequest::from(history.clone());
         request.model = model_id;
+
+        println!("OpenAIModel invoking model: {}", request.model);
 
         let completion = {
             let mut client = self.client.lock().await;
@@ -59,11 +70,11 @@ mod tests {
     use super::*;
     use crate::{
         history::{
-            Content, ContentType, HistoryFunction, HistoryFunctionParameters, HistoryJSONSchemaDefine,
-            HistoryJSONSchemaType, HistoryMessage, ImageUrl, MessageContent, Role, Tool,
-            ToolChoice, ToolType,
+            Content, ContentType, HistoryFunction, HistoryFunctionParameters,
+            HistoryJSONSchemaDefine, HistoryJSONSchemaType, HistoryMessage, ImageUrl,
+            MessageContent, Role, Tool, ToolChoice, ToolType,
         },
-    provider::{ModelProviderConfiguration, OpenAIConfig},
+        provider::{ModelProviderConfiguration, OpenAIConfig},
     };
     use dotenv::dotenv;
     use std::collections::HashMap;
@@ -76,6 +87,7 @@ mod tests {
             model_id: Some("@preset/prod-free".to_string()),
             version: None,
             provider_name: "openai".to_string(),
+            params: None,
         };
         let endpoint = std::env::var("OPENAI_ENDPOINT").unwrap();
         let api_key = std::env::var("OPENAI_API_KEY").unwrap();
@@ -110,6 +122,7 @@ mod tests {
             model_id: Some("gpt-4o-mini".to_string()),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
+            params: None,
         };
         let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap();
         let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap();
@@ -145,6 +158,7 @@ mod tests {
             model_id: Some("@preset/prod-free".to_string()),
             version: None,
             provider_name: "openai".to_string(),
+            params: None,
         };
         let endpoint = std::env::var("OPENAI_ENDPOINT").unwrap();
         let api_key = std::env::var("OPENAI_API_KEY").unwrap();
@@ -176,9 +190,9 @@ mod tests {
         });
 
         let response = model.invoke(&history, Some(callback)).await.unwrap();
-    println!("Final response: {:?}", response.last_message());
-    println!("Chunks: {}", counter.load(Ordering::SeqCst));
-    assert!(!response.choices.is_empty());
+        println!("Final response: {:?}", response.last_message());
+        println!("Chunks: {}", counter.load(Ordering::SeqCst));
+        assert!(!response.choices.is_empty());
     }
 
     #[tokio::test]
@@ -189,6 +203,7 @@ mod tests {
             model_id: Some("gpt-4o-mini".to_string()),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
+            params: None,
         };
         let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap();
         let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap();
@@ -220,9 +235,9 @@ mod tests {
         });
 
         let response = model.invoke(&history, Some(callback)).await.unwrap();
-    println!("Final response: {:?}", response.last_message());
-    println!("Chunks: {}", counter.load(Ordering::SeqCst));
-    assert!(!response.choices.is_empty());
+        println!("Final response: {:?}", response.last_message());
+        println!("Chunks: {}", counter.load(Ordering::SeqCst));
+        assert!(!response.choices.is_empty());
     }
 
     // --- Helpers for new tests ---
@@ -232,6 +247,7 @@ mod tests {
             model_id: Some("gpt-4o-mini".to_string()),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
+            params: None,
         };
         let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap();
         let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap();
@@ -324,7 +340,10 @@ mod tests {
             description: Some("Get the forecast for the next N days".to_string()),
             parameters: params,
         };
-        let tool = Tool { tool_type: ToolType::Function, function: func.clone() };
+        let tool = Tool {
+            tool_type: ToolType::Function,
+            function: func.clone(),
+        };
         (tool, func)
     }
 
@@ -403,11 +422,11 @@ mod tests {
         });
         history.set_stream(true);
 
-    let (callback, counter) = new_counter_callback();
+        let (callback, counter) = new_counter_callback();
         let response = model.invoke(&history, Some(callback)).await.unwrap();
         let msg = response.last_message().expect("no last message");
         assert!(!msg.tool_calls.is_empty());
-    let _ = counter.load(Ordering::SeqCst);
+        let _ = counter.load(Ordering::SeqCst);
     }
 
     #[tokio::test]
@@ -433,7 +452,7 @@ mod tests {
         });
         history.temperature = Some(0.0);
         history.set_stream(false);
-    let first = match model.invoke(&history, None).await {
+        let first = match model.invoke(&history, None).await {
             Ok(r) => r,
             Err(e) => {
                 // Gracefully skip if rate limited
@@ -486,7 +505,8 @@ mod tests {
         let (provider, config) = azure_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
 
-        let image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
+        let image_url =
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
         let mut history = History::new(
             "gpt-4o-mini".to_string(),
             vec![
@@ -523,7 +543,9 @@ mod tests {
                     eprintln!("Skipping due to rate limit: {msg}");
                     return;
                 }
-                if msg.contains("No endpoints found that support tool use") || msg.contains("404 Not Found") {
+                if msg.contains("No endpoints found that support tool use")
+                    || msg.contains("404 Not Found")
+                {
                     eprintln!("Skipping: tool use unsupported on route: {msg}");
                     return;
                 }
@@ -540,7 +562,8 @@ mod tests {
         let (provider, config) = azure_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
 
-        let image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
+        let image_url =
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
         let mut history = History::new(
             "gpt-4o-mini".to_string(),
             vec![
@@ -595,11 +618,17 @@ mod tests {
             model_id: Some("@preset/prod-free".to_string()),
             version: None,
             provider_name: "openai".to_string(),
+            params: None,
         };
         let endpoint = std::env::var("OPENAI_ENDPOINT").unwrap();
         let api_key = std::env::var("OPENAI_API_KEY").unwrap();
         let config = ModelProviderConfiguration {
-            openai_config: vec![OpenAIConfig { api_key: Some(api_key), organization: None, endpoint: Some(endpoint), proxy: None }],
+            openai_config: vec![OpenAIConfig {
+                api_key: Some(api_key),
+                organization: None,
+                endpoint: Some(endpoint),
+                proxy: None,
+            }],
             bedrock_config: vec![],
         };
         (provider, config)
@@ -615,11 +644,17 @@ mod tests {
             "@preset/prod-free".to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(Role::User, "Call the tool to get the weather for San Francisco, CA in celsius. Return a tool call only."),
+                HistoryMessage::from_string(
+                    Role::User,
+                    "Call the tool to get the weather for San Francisco, CA in celsius. Return a tool call only.",
+                ),
             ],
         );
         history.tools = Some(vec![tool]);
-        history.tool_choice = Some(ToolChoice::Specific { r#type: ToolType::Function, function: func.clone() });
+        history.tool_choice = Some(ToolChoice::Specific {
+            r#type: ToolType::Function,
+            function: func.clone(),
+        });
         history.temperature = Some(0.0);
         history.set_stream(false);
 
@@ -631,7 +666,9 @@ mod tests {
                     eprintln!("Skipping due to rate limit: {msg}");
                     return;
                 }
-                if msg.contains("No endpoints found that support tool use") || msg.contains("404 Not Found") {
+                if msg.contains("No endpoints found that support tool use")
+                    || msg.contains("404 Not Found")
+                {
                     eprintln!("Skipping: tool use unsupported on route: {msg}");
                     return;
                 }
@@ -658,11 +695,17 @@ mod tests {
             "@preset/prod-free".to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(Role::User, "Please call the tool to get the weather for Berlin in celsius."),
+                HistoryMessage::from_string(
+                    Role::User,
+                    "Please call the tool to get the weather for Berlin in celsius.",
+                ),
             ],
         );
         history.tools = Some(vec![tool]);
-        history.tool_choice = Some(ToolChoice::Specific { r#type: ToolType::Function, function: func });
+        history.tool_choice = Some(ToolChoice::Specific {
+            r#type: ToolType::Function,
+            function: func,
+        });
         history.set_stream(true);
 
         let (callback, counter) = new_counter_callback();
@@ -678,8 +721,8 @@ mod tests {
                 return;
             }
         };
-    let _ = response.last_message();
-    let _ = counter.load(Ordering::SeqCst);
+        let _ = response.last_message();
+        let _ = counter.load(Ordering::SeqCst);
     }
 
     #[tokio::test]
@@ -692,11 +735,17 @@ mod tests {
             "@preset/prod-free".to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(Role::User, "What is the weather in Paris in celsius? Use the tool."),
+                HistoryMessage::from_string(
+                    Role::User,
+                    "What is the weather in Paris in celsius? Use the tool.",
+                ),
             ],
         );
         history.tools = Some(vec![tool]);
-        history.tool_choice = Some(ToolChoice::Specific { r#type: ToolType::Function, function: func });
+        history.tool_choice = Some(ToolChoice::Specific {
+            r#type: ToolType::Function,
+            function: func,
+        });
         history.temperature = Some(0.0);
         history.set_stream(false);
 
@@ -712,13 +761,21 @@ mod tests {
                 return;
             }
         };
-        let msg = match first.last_message() { Some(m) => m, None => return };
-        if msg.tool_calls.is_empty() { return; }
+        let msg = match first.last_message() {
+            Some(m) => m,
+            None => return,
+        };
+        if msg.tool_calls.is_empty() {
+            return;
+        }
         let tool_call = &msg.tool_calls[0];
 
         history.push_message(HistoryMessage {
             role: Role::Tool,
-            content: MessageContent::Contents(vec![Content::Text { content_type: ContentType::Text, text: "{\"temperature\":22,\"unit\":\"celsius\"}".to_string() }]),
+            content: MessageContent::Contents(vec![Content::Text {
+                content_type: ContentType::Text,
+                text: "{\"temperature\":22,\"unit\":\"celsius\"}".to_string(),
+            }]),
             name: Some(tool_call.function.name.clone()),
             tool_call_id: Some(tool_call.id.clone()),
             tool_calls: None,
@@ -747,7 +804,8 @@ mod tests {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
 
-        let image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
+        let image_url =
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
         let mut history = History::new(
             "@preset/prod-free".to_string(),
             vec![
@@ -755,8 +813,17 @@ mod tests {
                 HistoryMessage {
                     role: Role::User,
                     content: MessageContent::Contents(vec![
-                        Content::Text { content_type: ContentType::Text, text: "Describe the image succinctly.".to_string() },
-                        Content::Image { content_type: ContentType::ImageUrl, image_url: ImageUrl { url: image_url.to_string(), detail: None } },
+                        Content::Text {
+                            content_type: ContentType::Text,
+                            text: "Describe the image succinctly.".to_string(),
+                        },
+                        Content::Image {
+                            content_type: ContentType::ImageUrl,
+                            image_url: ImageUrl {
+                                url: image_url.to_string(),
+                                detail: None,
+                            },
+                        },
                     ]),
                     name: None,
                     tool_calls: None,
@@ -789,7 +856,8 @@ mod tests {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
 
-        let image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
+        let image_url =
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
         let mut history = History::new(
             "@preset/prod-free".to_string(),
             vec![
@@ -797,8 +865,17 @@ mod tests {
                 HistoryMessage {
                     role: Role::User,
                     content: MessageContent::Contents(vec![
-                        Content::Text { content_type: ContentType::Text, text: "Describe the image.".to_string() },
-                        Content::Image { content_type: ContentType::ImageUrl, image_url: ImageUrl { url: image_url.to_string(), detail: None } },
+                        Content::Text {
+                            content_type: ContentType::Text,
+                            text: "Describe the image.".to_string(),
+                        },
+                        Content::Image {
+                            content_type: ContentType::ImageUrl,
+                            image_url: ImageUrl {
+                                url: image_url.to_string(),
+                                detail: None,
+                            },
+                        },
                     ]),
                     name: None,
                     tool_calls: None,
@@ -841,7 +918,10 @@ mod tests {
             "gpt-4o-mini".to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(Role::User, "Call both weather and forecast tools for Berlin (3 days), return tool calls only."),
+                HistoryMessage::from_string(
+                    Role::User,
+                    "Call both weather and forecast tools for Berlin (3 days), return tool calls only.",
+                ),
             ],
         );
         history.tools = Some(vec![tool_a, tool_b]);
@@ -853,7 +933,9 @@ mod tests {
             Ok(r) => r,
             Err(e) => {
                 let msg = format!("{e}");
-                if msg.contains("429") || msg.to_lowercase().contains("rate limit") { return; }
+                if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
+                    return;
+                }
                 return;
             }
         };
@@ -874,17 +956,25 @@ mod tests {
             "gpt-4o-mini".to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(Role::User, "Call both weather and forecast tools for Berlin (3 days)."),
+                HistoryMessage::from_string(
+                    Role::User,
+                    "Call both weather and forecast tools for Berlin (3 days).",
+                ),
             ],
         );
         history.tools = Some(vec![tool_a, tool_b]);
         history.tool_choice = Some(ToolChoice::Required);
         history.set_stream(true);
 
-    let (callback, counter) = new_counter_callback();
-    let response = match model.invoke(&history, Some(callback)).await { Ok(r) => r, Err(_) => return };
-    if let Some(msg) = response.last_message() { assert!(msg.tool_calls.len() >= 1); }
-    let _ = counter.load(Ordering::SeqCst);
+        let (callback, counter) = new_counter_callback();
+        let response = match model.invoke(&history, Some(callback)).await {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+        if let Some(msg) = response.last_message() {
+            assert!(msg.tool_calls.len() >= 1);
+        }
+        let _ = counter.load(Ordering::SeqCst);
     }
 
     #[tokio::test]
@@ -898,7 +988,10 @@ mod tests {
             "@preset/prod-free".to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(Role::User, "Call both weather and forecast tools for Berlin (3 days), return tool calls only."),
+                HistoryMessage::from_string(
+                    Role::User,
+                    "Call both weather and forecast tools for Berlin (3 days), return tool calls only.",
+                ),
             ],
         );
         history.tools = Some(vec![tool_a, tool_b]);
@@ -906,8 +999,13 @@ mod tests {
         history.temperature = Some(0.0);
         history.set_stream(false);
 
-        let response = match model.invoke(&history, None).await { Ok(r) => r, Err(_) => return };
-        if let Some(msg) = response.last_message() { assert!(msg.tool_calls.len() >= 1); }
+        let response = match model.invoke(&history, None).await {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+        if let Some(msg) = response.last_message() {
+            assert!(msg.tool_calls.len() >= 1);
+        }
     }
 
     #[tokio::test]
@@ -921,16 +1019,24 @@ mod tests {
             "@preset/prod-free".to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(Role::User, "Call both weather and forecast tools for Berlin (3 days)."),
+                HistoryMessage::from_string(
+                    Role::User,
+                    "Call both weather and forecast tools for Berlin (3 days).",
+                ),
             ],
         );
         history.tools = Some(vec![tool_a, tool_b]);
         history.tool_choice = Some(ToolChoice::Required);
         history.set_stream(true);
 
-    let (callback, counter) = new_counter_callback();
-    let response = match model.invoke(&history, Some(callback)).await { Ok(r) => r, Err(_) => return };
-    if let Some(msg) = response.last_message() { assert!(msg.tool_calls.len() >= 1); }
-    let _ = counter.load(Ordering::SeqCst);
+        let (callback, counter) = new_counter_callback();
+        let response = match model.invoke(&history, Some(callback)).await {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+        if let Some(msg) = response.last_message() {
+            assert!(msg.tool_calls.len() >= 1);
+        }
+        let _ = counter.load(Ordering::SeqCst);
     }
 }

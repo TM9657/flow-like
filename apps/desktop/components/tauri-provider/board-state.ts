@@ -470,6 +470,14 @@ export class BoardState implements IBoardState {
 			if (cb) cb(events);
 		};
 
+		let token = this.backend.auth?.user?.access_token;
+		console.log("Using token:", token);
+
+		console.dir({
+			id: this.backend.auth?.user?.id_token,
+			access: this.backend.auth?.user?.access_token,
+		})
+
 		const metadata: ILogMetadata | undefined = await invoke("execute_board", {
 			appId: appId,
 			boardId: boardId,
@@ -477,6 +485,7 @@ export class BoardState implements IBoardState {
 			events: channel,
 			streamState: streamState,
 			credentials,
+			token
 		});
 
 		closed = true;

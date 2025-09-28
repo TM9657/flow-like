@@ -96,7 +96,7 @@ impl NodeLogic for InvokeLLMSimpleNode {
         let model = model_factory
             .lock()
             .await
-            .build(&model, context.app_state.clone())
+            .build(&model, context.app_state.clone(), context.token.clone())
             .await?;
 
         let mut history = History::new(model_name.clone(), vec![]);

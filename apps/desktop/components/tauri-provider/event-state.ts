@@ -375,6 +375,9 @@ export class EventState implements IEventState {
 			if (cb) cb(events);
 		};
 
+		const token = this.backend.auth?.user?.access_token;
+		console.log("Using token:", token);
+
 		const metadata: ILogMetadata | undefined = await invoke("execute_event", {
 			appId: appId,
 			eventId: eventId,
@@ -382,6 +385,7 @@ export class EventState implements IEventState {
 			events: channel,
 			streamState: streamState,
 			credentials,
+			token
 		});
 
 		closed = true;

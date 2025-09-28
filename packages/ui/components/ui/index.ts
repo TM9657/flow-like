@@ -14,6 +14,7 @@ export * from "./button";
 export * from "./calendar";
 export * from "./card";
 export * from "./carousel";
+export * from "./mobile-header"
 export * from "./chart";
 export * from "./checkbox";
 export * from "./collapsible";

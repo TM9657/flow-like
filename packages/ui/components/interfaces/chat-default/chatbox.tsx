@@ -61,6 +61,7 @@ export interface ChatBoxRef {
 	getActiveTools: () => string[];
 	setActiveTools?: (tools: string[]) => void;
 	focusInput?: () => void;
+	blurInput?: () => void;
 }
 
 export const ChatBox = forwardRef<ChatBoxRef, ChatBoxProps>(
@@ -136,6 +137,11 @@ export const ChatBox = forwardRef<ChatBoxRef, ChatBoxProps>(
 						chatboxRef.current.focus();
 					}
 				},
+				blurInput: () => {
+					try {
+						chatboxRef.current?.blur();
+					} catch {}
+				},
 			}),
 			[],
 		);
@@ -153,6 +159,10 @@ export const ChatBox = forwardRef<ChatBoxRef, ChatBoxProps>(
 				setAttachedFiles([]);
 				setRecordedAudio(null);
 				setRecordingTime(0);
+				// Dismiss the iOS keyboard and revert any zoom
+				try {
+					chatboxRef.current?.blur();
+				} catch {}
 			}
 		};
 
@@ -511,12 +521,18 @@ export const ChatBox = forwardRef<ChatBoxRef, ChatBoxProps>(
 								onKeyDown={handleKeyDown}
 								onPaste={handlePaste}
 								placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
-								className="border-0 focus:ring-0 resize-none bg-transparent! placeholder:text-muted-foreground text-sm leading-relaxed min-h-[48px] max-h-[180px] overflow-y-auto w-full"
+								className="border-0 focus:ring-0 resize-none bg-transparent! placeholder:text-muted-foreground text-[16px] sm:text-sm leading-relaxed min-h-[48px] max-h-[180px] overflow-y-auto w-full"
 								rows={Math.min(5, Math.max(2, input.split("\n").length))}
 								style={{
 									boxShadow: "none",
 									outline: "none",
 								}}
+								// iOS keyboard and input behavior tweaks
+								inputMode="text"
+								enterKeyHint="send"
+								autoCapitalize="sentences"
+								autoCorrect="on"
+								spellCheck
 							/>
 						</div>
 

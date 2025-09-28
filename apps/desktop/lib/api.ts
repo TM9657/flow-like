@@ -41,8 +41,8 @@ export async function streamFetcher<T>(
 	auth?: AuthContextProps,
 	onMessage?: (data: T) => void,
 ): Promise<void> {
-	const authHeader = auth?.user?.id_token
-		? { Authorization: `Bearer ${auth.user.id_token}` }
+	const authHeader = auth?.user?.access_token
+		? { Authorization: `Bearer ${auth.user.access_token}` }
 		: {};
 	const url = constructUrl(profile, path);
 	let finished = false;
@@ -112,8 +112,8 @@ export async function fetcher<T>(
 	auth?: AuthContextProps,
 ): Promise<T> {
 	const headers: HeadersInit = {};
-	if (auth?.user?.id_token) {
-		headers["Authorization"] = `Bearer ${auth?.user?.id_token}`;
+	if (auth?.user?.access_token) {
+		headers["Authorization"] = `Bearer ${auth?.user?.access_token}`;
 	}
 
 	const url = constructUrl(profile, path);

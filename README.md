@@ -11,8 +11,10 @@
 
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/244d2db2a84f4e79b64d984639a2b18f)](https://app.codacy.com/gh/TM9657/flow-like/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 ![Discord](https://img.shields.io/discord/673169081704120334)
-![GitHub package.json version](https://img.shields.io/github/package-json/v/TM9657/flow-like)
 [![FOSSA Status](https://app.fossa.com/api/projects/custom%2B49014%2Fflow-like.svg?type=small)](https://app.fossa.com/projects/custom%2B49014%2Fflow-like?ref=badge_small)
+[![Website](https://img.shields.io/badge/website-flow--like.com-0a7cff?logo=google-chrome&logoColor=white)](https://flow-like.com)
+[![Docs](https://img.shields.io/badge/docs-docs.flow--like.com-0a7cff?logo=readthedocs&logoColor=white)](https://docs.flow-like.com)
+[![Download](https://img.shields.io/badge/download-Desktop%20App-28a745?logo=tauri&logoColor=white)](https://flow-like.com/download)
 
 </div>
 

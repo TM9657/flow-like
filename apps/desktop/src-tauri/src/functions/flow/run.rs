@@ -29,6 +29,7 @@ async fn execute_internal(
     event_id: Option<String>,
     stream_state: bool,
     credentials: Option<SharedCredentials>,
+    token: Option<String>,
 ) -> Result<Option<LogMeta>, TauriFunctionError> {
     let mut event = None;
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
@@ -91,10 +92,10 @@ async fn execute_internal(
         &flow_like_state,
         &profile.hub_profile,
         &payload,
-        None,
         stream_state,
         buffered_sender.into_callback(),
         credentials,
+        token,
     )
     .await?;
     let run_id = internal_run.run.lock().await.id.clone();
@@ -172,6 +173,7 @@ pub async fn execute_board(
     stream_state: Option<bool>,
     events: tauri::ipc::Channel<Vec<InterComEvent>>,
     credentials: Option<SharedCredentials>,
+    token: Option<String>,
 ) -> Result<Option<LogMeta>, TauriFunctionError> {
     let stream_state = stream_state.unwrap_or(true);
     execute_internal(
@@ -183,6 +185,7 @@ pub async fn execute_board(
         None,
         stream_state,
         credentials,
+        token,
     )
     .await
 }
@@ -196,6 +199,7 @@ pub async fn execute_event(
     stream_state: Option<bool>,
     events: tauri::ipc::Channel<Vec<InterComEvent>>,
     credentials: Option<SharedCredentials>,
+    token: Option<String>,
 ) -> Result<Option<LogMeta>, TauriFunctionError> {
     let stream_state = stream_state.unwrap_or(false);
     execute_internal(
@@ -207,6 +211,7 @@ pub async fn execute_event(
         Some(event_id),
         stream_state,
         credentials,
+        token,
     )
     .await
 }

@@ -195,55 +195,65 @@ export function CreateAppPage() {
 	const progressPercentage = ((currentStepIndex + 1) / STEPS.length) * 100;
 
 	return (
-		<main className="relative min-h-screen bg-linear-to-br from-background via-background to-muted/20 p-6">
+		<main className="relative min-h-dvh overflow-y-auto bg-linear-to-br from-background via-background to-muted/20">
 			{showConfetti && (
-				<div className="absolute z-50 pointer-events-none top-0 left-0 right-0 bottom-0">
+				<div className="fixed inset-0 z-50 pointer-events-none">
 					<Crossfire className="" autorun={{ speed: 1 }} />
 				</div>
 			)}
 
-			<div className="max-w-4xl mx-auto space-y-8">
+			<div className="mx-auto max-w-4xl px-4 sm:px-6 py-4 space-y-4 pb-20 sm:pb-24">
 				<PageHeader />
 
-				<StepIndicator
-					steps={STEPS}
-					currentStepIndex={currentStepIndex}
-					onStepClick={setCurrentStepIndex}
-				/>
+				<div className="-mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
+					<StepIndicator
+						steps={STEPS}
+						currentStepIndex={currentStepIndex}
+						onStepClick={setCurrentStepIndex}
+					/>
+				</div>
 
 				<ProgressBar percentage={progressPercentage} />
 
-				<StepContent
-					currentStep={currentStep}
-					meta={meta}
-					setMeta={setMeta}
-					isOffline={isOffline}
-					setIsOffline={setIsOffline}
-					isAuthenticated={auth?.isAuthenticated}
-					templates={templates.data || []}
-					selectedTemplate={selectedTemplate}
-					skipTemplate={skipTemplate}
-					onSelectTemplate={(appId, templateId) => {
-						setSelectedTemplate([appId, templateId]);
-					}}
-					onSkipTemplate={setSkipTemplate}
-					onShowTemplateModal={() => setShowTemplateModal(true)}
-					models={currentProfile.data?.hub_profile.bits || []}
-					selectedModels={selectedModels}
-					skipModels={skipModels}
-					onUpdateModels={setSelectedModels}
-					onSkipModels={setSkipModels}
-					onShowModelModal={() => setShowModelModal(true)}
-				/>
+				<div>
+					<StepContent
+						currentStep={currentStep}
+						meta={meta}
+						setMeta={setMeta}
+						isOffline={isOffline}
+						setIsOffline={setIsOffline}
+						isAuthenticated={auth?.isAuthenticated}
+						templates={templates.data || []}
+						selectedTemplate={selectedTemplate}
+						skipTemplate={skipTemplate}
+						onSelectTemplate={(appId, templateId) => {
+							setSelectedTemplate([appId, templateId]);
+						}}
+						onSkipTemplate={setSkipTemplate}
+						onShowTemplateModal={() => setShowTemplateModal(true)}
+						models={currentProfile.data?.hub_profile.bits || []}
+						selectedModels={selectedModels}
+						skipModels={skipModels}
+						onUpdateModels={setSelectedModels}
+						onSkipModels={setSkipModels}
+						onShowModelModal={() => setShowModelModal(true)}
+					/>
+				</div>
 
-				<StepNavigation
-					isFirstStep={isFirstStep}
-					isLastStep={isLastStep}
-					canProceed={canProceedFromCurrentStep()}
-					isCreating={isCreating || showConfetti}
-					onBack={handleBack}
-					onNext={handleNext}
-				/>
+				<div className="sticky bottom-0 left-0 right-0 -mx-4 sm:mx-0 px-4 sm:px-0 pb-[env(safe-area-inset-bottom)]">
+					<div className="bg-background/80 supports-[backdrop-filter]:bg-background/60 backdrop-blur border-t rounded-t-xl shadow-sm">
+						<div className="p-3 sm:p-4">
+							<StepNavigation
+								isFirstStep={isFirstStep}
+								isLastStep={isLastStep}
+								canProceed={canProceedFromCurrentStep()}
+								isCreating={isCreating || showConfetti}
+								onBack={handleBack}
+								onNext={handleNext}
+							/>
+						</div>
+					</div>
+				</div>
 			</div>
 
 			<TemplateModal
@@ -274,16 +284,16 @@ export function CreateAppPage() {
 
 function PageHeader() {
 	return (
-		<div className="text-center space-y-4">
-			<div className="flex items-center justify-center gap-3 mb-4">
-				<div className="p-3 bg-linear-to-br from-primary to-primary/80 rounded-xl shadow-lg">
-					<Rocket className="h-8 w-8 text-primary-foreground" />
+		<div className="text-center space-y-3 sm:space-y-4">
+			<div className="flex items-center justify-center gap-2 sm:gap-3 mb-2 sm:mb-4">
+				<div className="p-2 sm:p-3 bg-linear-to-br from-primary to-primary/80 rounded-xl shadow-lg">
+					<Rocket className="h-6 w-6 sm:h-8 sm:w-8 text-primary-foreground" />
 				</div>
-				<h1 className="text-4xl font-bold">
+				<h1 className="text-2xl sm:text-4xl font-bold">
 					Create <span className="highlight">New App</span>
 				</h1>
 			</div>
-			<p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+			<p className="text-sm sm:text-lg text-muted-foreground max-w-2xl mx-auto">
 				Build your next AI-powered application with our guided setup wizard.
 			</p>
 		</div>
@@ -314,7 +324,7 @@ function StepContent({
 	onShowModelModal: () => void;
 }>) {
 	return (
-		<Card className="min-h-[400px]">
+		<Card className="min-h-[320px]">
 			<CardHeader>
 				<div className="flex items-center gap-3">
 					<div className="p-2 bg-primary/10 rounded-lg">
@@ -328,7 +338,7 @@ function StepContent({
 					</div>
 				</div>
 			</CardHeader>
-			<CardContent>
+			<CardContent className="overflow-x-hidden">
 				{currentStep.id === "details" && (
 					<AppDetailsStep meta={props.meta} setMeta={props.setMeta} />
 				)}
