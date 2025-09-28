@@ -395,7 +395,6 @@ pub fn run() {
             functions::file::get_path_meta,
             functions::ai::invoke::stream_chat_completion,
             functions::ai::invoke::chat_completion,
-            functions::ai::invoke::predict,
             functions::ai::invoke::find_best_model,
             functions::system::get_system_info,
             functions::download::init::init_downloads,

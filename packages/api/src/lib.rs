@@ -41,7 +41,7 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/bit", routes::bit::routes())
         .nest("/store", routes::store::routes())
         .nest("/auth", routes::auth::routes())
-        .nest("/llm", routes::llm::routes())
+        .nest("/chat", routes::chat::routes())
         .nest("/admin", routes::admin::routes())
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }))

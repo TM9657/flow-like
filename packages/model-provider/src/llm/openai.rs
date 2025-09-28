@@ -46,8 +46,11 @@ impl ModelLogic for OpenAIModel {
             .model_id
             .clone()
             .ok_or_else(|| flow_like_types::anyhow!("Model ID is missing"))?;
+
         let mut request = ChatCompletionRequest::from(history.clone());
         request.model = model_id;
+
+        println!("OpenAIModel invoking model: {}", request.model);
 
         let completion = {
             let mut client = self.client.lock().await;

@@ -308,7 +308,7 @@ async fn handle_non_streaming(
     Ok(response)
 }
 
-#[tracing::instrument(name = "POST /llm", skip(state, user, payload))]
+#[tracing::instrument(name = "POST /chat/completions", skip(state, user, payload))]
 pub async fn invoke_llm(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

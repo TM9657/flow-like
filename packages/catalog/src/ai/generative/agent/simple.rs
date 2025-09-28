@@ -280,7 +280,7 @@ impl NodeLogic for SimpleAgentNode {
                 let model = model_factory
                     .lock()
                     .await
-                    .build(&model_bit, context.app_state.clone())
+                    .build(&model_bit, context.app_state.clone(), context.token.clone())
                     .await?;
                 model.invoke(&internal_history, None).await?
             }; // drop model

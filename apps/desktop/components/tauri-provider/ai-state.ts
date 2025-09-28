@@ -40,9 +40,12 @@ export class AiState implements IAIState {
 			},
 		});
 
+		const token = this.backend.auth?.user?.access_token;
+
 		const request = invoke<IResponse>("stream_chat_completion", {
 			messages: messages,
 			onChunk: channel,
+			token: token,
 		});
 
 		this.backend.backgroundTaskHandler(request);
@@ -51,8 +54,10 @@ export class AiState implements IAIState {
 	}
 
 	async chatComplete(messages: IHistoryMessage[]): Promise<IResponse> {
+		let token = this.backend.auth?.user?.access_token;
 		const response = await invoke<IResponse>("chat_completion", {
 			messages: messages,
+			token: token,
 		});
 
 		return response;
