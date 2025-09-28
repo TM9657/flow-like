@@ -8,6 +8,7 @@ pub mod health;
 pub mod info;
 pub mod chat;
 pub mod profile;
+pub mod tmp;
 pub mod store;
 pub mod user;
 

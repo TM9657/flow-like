@@ -43,6 +43,7 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/auth", routes::auth::routes())
         .nest("/chat", routes::chat::routes())
         .nest("/admin", routes::admin::routes())
+        .nest("/tmp", routes::tmp::routes())
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }))
         .layer(from_fn_with_state(state.clone(), jwt_middleware))

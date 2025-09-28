@@ -166,9 +166,8 @@ const ldWebPage = {
       }
       html, body { overflow-x: clip; }
       @media (hover: none) and (pointer: coarse) {
-        /* Never let a viewport overlay catch touches unless explicitly allowed */
-        [data-overlay], [data-visual], .overlay, .backdrop,
-        [class*="fixed"], [class~="fixed"] {
+        /* Keep decorative overlays passive on touch without disabling legit fixed UI */
+        [data-overlay], [data-visual], .overlay, .backdrop {
           pointer-events: none;
           touch-action: pan-y;
         }
