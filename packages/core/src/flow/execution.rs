@@ -6,6 +6,8 @@ use crate::flow::execution::internal_node::ExecutionTarget;
 use crate::profile::Profile;
 use crate::state::FlowLikeState;
 use ahash::{AHashMap, AHashSet, AHasher};
+use flow_like_types::base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
+use flow_like_types::base64::Engine;
 use context::ExecutionContext;
 use flow_like_storage::arrow_array::{RecordBatch, RecordBatchIterator};
 use flow_like_storage::arrow_schema::FieldRef;
@@ -14,7 +16,7 @@ use flow_like_storage::lancedb::Connection;
 use flow_like_storage::lancedb::index::scalar::BitmapIndexBuilder;
 use flow_like_storage::serde_arrow::schema::{SchemaLike, TracingOptions};
 use flow_like_storage::{Path, serde_arrow};
-use flow_like_types::Value;
+use flow_like_types::{Context, Value};
 use flow_like_types::intercom::InterComCallback;
 use flow_like_types::json::to_vec;
 use flow_like_types::sync::{Mutex, RwLock};
@@ -385,6 +387,7 @@ pub struct InternalRun {
     pub profile: Arc<Profile>,
     pub callback: InterComCallback,
     pub credentials: Option<Arc<SharedCredentials>>,
+    pub token: Option<String>,
 
     stack: Arc<RunStack>,
     concurrency_limit: u64,
@@ -407,10 +410,10 @@ impl InternalRun {
         handler: &Arc<Mutex<FlowLikeState>>,
         profile: &Profile,
         payload: &RunPayload,
-        sub: Option<String>,
         stream_state: bool,
         callback: InterComCallback,
         credentials: Option<SharedCredentials>,
+        token: Option<String>,
     ) -> flow_like_types::Result<Self> {
         let before = Instant::now();
         let run_id = create_id();
@@ -423,6 +426,12 @@ impl InternalRun {
             (log_store, db)
         };
 
+        // derive sub from token (JWT) or default to "local"
+        let sub_value = token
+            .as_ref()
+            .and_then(|t| extract_sub_from_jwt(t).ok())
+            .unwrap_or_else(|| "local".to_string());
+
         let run = Run {
             id: run_id.clone(),
             app_id: app_id.to_string(),
@@ -433,7 +442,7 @@ impl InternalRun {
             log_level: board.log_level,
             board: board.clone(),
             payload: Arc::new(payload.clone()),
-            sub: sub.unwrap_or_else(|| "local".to_string()),
+            sub: sub_value,
             highest_log_level: LogLevel::Debug,
             log_initialized: false,
             logs: 0,
@@ -637,6 +646,7 @@ impl InternalRun {
             cpus: num_cpus::get(),
             callback,
             credentials: credentials.map(Arc::new),
+            token,
             dependencies,
             log_level: board.log_level,
             profile: Arc::new(profile.clone()),
@@ -702,6 +712,7 @@ impl InternalRun {
                 let log_level = log_level;
                 let completion_callbacks = self.completion_callbacks.clone();
                 let credentials = self.credentials.clone();
+                let token = self.token.clone();
                 let nodes = self.nodes.clone();
 
                 async move {
@@ -720,6 +731,7 @@ impl InternalRun {
                         &callback,
                         &completion_callbacks,
                         credentials,
+                        token
                     )
                     .await
                 }
@@ -768,6 +780,7 @@ impl InternalRun {
             &self.callback,
             &self.completion_callbacks,
             self.credentials.clone(),
+            self.token.clone()
         )
         .await;
 
@@ -1006,6 +1019,7 @@ async fn step_core(
     callback: &InterComCallback,
     completion_callbacks: &Arc<RwLock<Vec<EventTrigger>>>,
     credentials: Option<Arc<SharedCredentials>>,
+    token: Option<String>,
 ) -> flow_like_types::Result<Vec<ExecutionTarget>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
     {
@@ -1029,6 +1043,7 @@ async fn step_core(
         callback.clone(),
         completion_callbacks.clone(),
         credentials,
+        token
     )
     .await;
     context.started_by = if target.through_pins.is_empty() {
@@ -1068,4 +1083,45 @@ async fn step_core(
     }
 
     Err(anyhow!("Node failed"))
+}
+
+#[derive(Deserialize)]
+struct Claims {
+    sub: String,
+}
+
+pub fn extract_sub_from_jwt(token: &str) -> flow_like_types::Result<String> {
+    // Accept "Bearer " case-insensitively and trim
+    let raw = token.trim();
+    let raw = raw
+        .strip_prefix("Bearer ")
+        .or_else(|| raw.strip_prefix("bearer "))
+        .unwrap_or(raw);
+
+    // Require exactly 3 segments: header.payload.signature
+    let mut parts = raw.split('.');
+    let _header_b64 = parts
+        .next()
+        .ok_or_else(|| anyhow!("invalid JWT: missing header segment"))?;
+    let payload_b64 = parts
+        .next()
+        .ok_or_else(|| anyhow!("invalid JWT: missing payload segment"))?;
+    let _sig_b64 = parts
+        .next()
+        .ok_or_else(|| anyhow!("invalid JWT: missing signature segment"))?;
+    if parts.next().is_some() {
+        return Err(anyhow!("invalid JWT: too many segments"));
+    }
+
+    // Decode payload (support both unpadded and padded base64url)
+    let decoded = URL_SAFE_NO_PAD
+        .decode(payload_b64.as_bytes())
+        .or_else(|_| URL_SAFE.decode(payload_b64.as_bytes()))
+        .context("failed to base64url-decode JWT payload")?;
+
+    // Minimal, typed deserialize for clarity/perf
+    let claims: Claims = flow_like_types::json::from_slice(&decoded)
+        .context("invalid JWT JSON payload")?;
+
+    Ok(claims.sub)
 }

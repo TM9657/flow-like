@@ -92,10 +92,10 @@ async fn execute_internal(
         &flow_like_state,
         &profile.hub_profile,
         &payload,
-        None,
         stream_state,
         buffered_sender.into_callback(),
         credentials,
+        token
     )
     .await?;
     let run_id = internal_run.run.lock().await.id.clone();

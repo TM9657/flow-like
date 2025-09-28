@@ -13,7 +13,7 @@ use flow_like_storage::{
     Path,
     files::store::{FlowLikeStore, local_store::LocalObjectStore},
 };
-use flow_like_types::{sync::Mutex, tokio};
+use flow_like_types::{intercom::BufferedInterComHandler, sync::Mutex, tokio};
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -114,12 +114,24 @@ async fn run_once(
     profile: &Profile,
     start: &str,
 ) {
+    let buffered_sender = Arc::new(BufferedInterComHandler::new(
+        Arc::new(move |_event| {
+            Box::pin({
+                async move {
+                    Ok(())
+                }
+            })
+        }),
+        Some(100),
+        Some(400),
+        Some(true),
+    ));
     let payload = RunPayload {
         id: start.to_string(),
         payload: None,
     };
     let mut run = InternalRun::new(
-        "bench", board, None, &state, profile, &payload, None, false, None, None,
+        "bench", board, None, &state, profile, &payload, false, buffered_sender.clone().into_callback(), None, None,
     )
     .await
     .expect("InternalRun::new");
