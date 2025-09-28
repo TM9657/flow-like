@@ -13,6 +13,7 @@ reqwest = { version = "0.12.15", features = ["blocking"] }
 axum.workspace = true
 sea-orm.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
+pin-project-lite = "0.2.16"
 tower.workspace = true
 flow-like.workspace = true
 flow-like-types.workspace = true
@@ -53,3 +54,6 @@ full=[
     "gcp",
     "local",
 ]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
