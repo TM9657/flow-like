@@ -51,9 +51,9 @@ pub async fn invoke_llm(
     let mut provider = bit
         .try_to_provider()
         .ok_or_else(|| anyhow!("Bit is not a model provider"))?;
-    if &provider.provider_name != "hosted" {
+    if &provider.provider_name != "Hosted" {
         return Err(ApiError::BadRequest(
-            "Only 'hosted' models are supported via this endpoint".into(),
+            "Only 'Hosted' models are supported via this endpoint".into(),
         ));
     }
 
