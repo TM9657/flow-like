@@ -118,13 +118,22 @@ export function ModelCard({
 								<TypeIcon className="h-3 w-3 mr-1" />
 								{bitData.data.type}
 							</Badge>
-							{isInstalled.data && (
+							{isInstalled.data && bitSize.data !== 0 && (
 								<Badge
 									variant="secondary"
 									className="text-xs bg-emerald-100 text-emerald-700"
 								>
 									<PackageCheck className="h-3 w-3 mr-1" />
 									{humanFileSize(bitSize.data ?? 0)}
+								</Badge>
+							)}
+							{bitSize.data === 0 && (
+								<Badge
+									variant="secondary"
+									className="text-xs bg-emerald-100 text-emerald-700"
+								>
+									<PackageCheck className="h-3 w-3 mr-1" />
+									Bundled
 								</Badge>
 							)}
 						</div>
