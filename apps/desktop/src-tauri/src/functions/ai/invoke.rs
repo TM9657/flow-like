@@ -55,7 +55,10 @@ pub async fn chat_completion(
         let model_factory = flow_like_state.lock().await.model_factory.clone();
         let mut model_factory = model_factory.lock().await;
 
-        match model_factory.build(&best_model, flow_like_state, token).await {
+        match model_factory
+            .build(&best_model, flow_like_state, token)
+            .await
+        {
             Ok(model) => model,
             Err(e) => {
                 return Err(TauriFunctionError::new(&format!(
@@ -98,7 +101,10 @@ pub async fn stream_chat_completion(
         let model_factory = flow_like_state.lock().await.model_factory.clone();
         let mut model_factory = model_factory.lock().await;
 
-        match model_factory.build(&best_model, flow_like_state, token).await {
+        match model_factory
+            .build(&best_model, flow_like_state, token)
+            .await
+        {
             Ok(model) => model,
             Err(e) => {
                 return Err(TauriFunctionError::new(&format!(

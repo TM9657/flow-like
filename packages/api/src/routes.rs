@@ -4,12 +4,12 @@ pub mod admin;
 pub mod app;
 pub mod auth;
 pub mod bit;
+pub mod chat;
 pub mod health;
 pub mod info;
-pub mod chat;
 pub mod profile;
-pub mod tmp;
 pub mod store;
+pub mod tmp;
 pub mod user;
 
 #[derive(Clone, Deserialize, Serialize, Debug)]

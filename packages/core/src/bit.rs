@@ -453,7 +453,9 @@ impl BitPack {
         // If there is nothing to actually download we still return success with the original bits
         // so the frontend can proceed (useful for empty / proxied models)
         if deduplicated_bits.is_empty() {
-            println!("No concrete bits to download; returning success (all bits were proxied or lacked downloadable artifacts)");
+            println!(
+                "No concrete bits to download; returning success (all bits were proxied or lacked downloadable artifacts)"
+            );
             let filtered: Vec<Bit> = self
                 .bits
                 .iter()
@@ -708,22 +710,22 @@ impl Bit {
 mod tests {
     use super::*;
     use crate::state::{FlowLikeConfig, FlowLikeState};
-    use flow_like_storage::files::store::local_store::LocalObjectStore;
     use flow_like_storage::files::store::FlowLikeStore;
-    use flow_like_types::{sync::Mutex, tokio};
+    use flow_like_storage::files::store::local_store::LocalObjectStore;
     use flow_like_types::Value;
+    use flow_like_types::{sync::Mutex, tokio};
 
     #[tokio::test]
     async fn test_download_skips_and_succeeds_without_links() {
         let temp_dir = tempfile::tempdir().unwrap();
         let mut config: FlowLikeConfig = FlowLikeConfig::new();
         let store = LocalObjectStore::new(temp_dir.path().to_path_buf()).unwrap();
-    config.stores.bits_store = Some(FlowLikeStore::Local(store.into()));
-    let (http_client, _rx) = crate::utils::http::HTTPClient::new();
-    let state = FlowLikeState::new(config, http_client);
+        config.stores.bits_store = Some(FlowLikeStore::Local(store.into()));
+        let (http_client, _rx) = crate::utils::http::HTTPClient::new();
+        let state = FlowLikeState::new(config, http_client);
         let state = Arc::new(Mutex::new(state));
 
-    let proxied_bit = Bit {
+        let proxied_bit = Bit {
             id: "proxied".into(),
             bit_type: BitTypes::Other,
             meta: Default::default(),
@@ -743,7 +745,7 @@ mod tests {
             updated: chrono::Utc::now().to_rfc3339(),
         };
 
-    let zero_size_bit = Bit {
+        let zero_size_bit = Bit {
             id: "zero".into(),
             bit_type: BitTypes::Other,
             meta: Default::default(),
@@ -763,7 +765,9 @@ mod tests {
             updated: chrono::Utc::now().to_rfc3339(),
         };
 
-        let pack = BitPack { bits: vec![proxied_bit.clone(), zero_size_bit.clone()] };
+        let pack = BitPack {
+            bits: vec![proxied_bit.clone(), zero_size_bit.clone()],
+        };
         let result = pack.download(state, None).await.unwrap();
         assert!(result.iter().any(|b| b.id == proxied_bit.id));
         assert!(!result.iter().any(|b| b.id == zero_size_bit.id));

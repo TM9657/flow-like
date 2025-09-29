@@ -128,8 +128,14 @@ impl ModelFactory {
 
             let mut model_provider = model_provider.clone();
             let mut params = model_provider.params.clone().unwrap_or_default();
-            params.insert("api_key".into(), flow_like_types::Value::String(access_token.unwrap_or_default()));
-            params.insert("model_id".into(), flow_like_types::Value::String(bit.id.clone()));
+            params.insert(
+                "api_key".into(),
+                flow_like_types::Value::String(access_token.unwrap_or_default()),
+            );
+            params.insert(
+                "model_id".into(),
+                flow_like_types::Value::String(bit.id.clone()),
+            );
             model_provider.params = Some(params);
             model_provider.model_id = Some(bit.id.clone());
             let model = OpenAIModel::from_params(&model_provider).await?;
