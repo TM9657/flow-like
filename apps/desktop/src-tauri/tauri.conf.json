@@ -54,15 +54,6 @@
 			},
 			{
 				"ext": [
-					"enc.flow-app"
-				],
-				"description": "Encrypted Flow-Like App",
-				"mimeType": "application/vnd.flow-like.app+encrypted",
-				"name": "Encrypted Flow-Like App",
-				"role": "Editor"
-			},
-			{
-				"ext": [
 					"flow"
 				],
 				"description": "Flow-Like Flow",

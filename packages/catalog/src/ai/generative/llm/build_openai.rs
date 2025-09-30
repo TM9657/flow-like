@@ -11,6 +11,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_storage::blake3;
 use flow_like_types::{
     Value, async_trait,
     json::{json, to_string, to_value},
@@ -70,47 +71,62 @@ impl NodeLogic for BuildOpenAiNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
+        let mut hasher = blake3::Hasher::new();
+
         let provider: String = context.evaluate_pin("provider").await?;
+
+        hasher.update(provider.as_bytes());
+
+        let api_key = context.evaluate_pin::<String>("api_key").await?;
+        let endpoint = context.evaluate_pin::<String>("endpoint").await?;
 
         let mut params = HashMap::new();
         params.insert(
             "api_key".to_string(),
-            context.evaluate_pin("api_key").await?,
+            json!(api_key),
         );
+        hasher.update(api_key.as_bytes());
         params.insert(
             "endpoint".to_string(),
-            context.evaluate_pin("endpoint").await?,
+            json!(endpoint),
         );
+        hasher.update(endpoint.as_bytes());
 
-        if (provider.to_lowercase() == "azure") {
+        if provider.to_lowercase() == "azure" {
             params.insert("is_azure".to_string(), json!(true));
+            hasher.update(b"azure");
         }
 
         if let Ok(model_id) = context.evaluate_pin::<String>("model_id").await {
             if !model_id.is_empty() {
                 params.insert("model_id".to_string(), json!(model_id));
+                hasher.update(model_id.as_bytes());
             }
         }
 
         if let Ok(version) = context.evaluate_pin::<String>("version").await {
             if !version.is_empty() {
                 params.insert("version".to_string(), json!(version));
+                hasher.update(version.as_bytes());
             }
         }
+
+        let bit_hash = hasher.finalize().to_hex().to_string();
 
         let params = VLMParameters {
             context_length: 20000,
             model_classification: BitModelClassification::default(),
             provider: flow_like_model_provider::provider::ModelProvider {
                 provider_name: "custom:openai".into(),
-                model_id: Some("gpt-5".into()),
-                version: Some("v1".into()),
+                model_id: Some(context.evaluate_pin::<String>("model_id").await.unwrap_or("gpt-5".into())),
+                version: Some(context.evaluate_pin::<String>("version").await.unwrap_or("v1".into())),
                 params: Some(params),
             },
         };
         let params = to_value(&params).unwrap_or_default();
 
         let mut bit = Bit::default();
+        bit.id = bit_hash;
         bit.bit_type = flow_like::bit::BitTypes::Vlm;
         bit.parameters = params;
 
