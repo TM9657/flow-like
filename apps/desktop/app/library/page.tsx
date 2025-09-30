@@ -68,6 +68,100 @@ export default function YoursPage() {
 		"created" | "updated" | "visibility" | "name"
 	>("created");
 
+	const isMobileDevice = useCallback(() => {
+		if (typeof navigator === "undefined") return false;
+		const ua = navigator.userAgent.toLowerCase();
+		if (/android|iphone|ipad|ipod/.test(ua)) return true;
+		if (
+			"userAgentData" in navigator &&
+			typeof (navigator as any).userAgentData?.mobile === "boolean" &&
+			(navigator as any).userAgentData.mobile
+		)
+			return true;
+		const platform = navigator.platform?.toLowerCase() ?? "";
+		const maxTouchPoints =
+			(navigator as Navigator & { maxTouchPoints?: number }).maxTouchPoints ?? 0;
+		return /mac/.test(platform) && maxTouchPoints > 1;
+	}, []);
+
+	const normalizePickerPath = (input: string): string => {
+		if (!input.startsWith("file://")) {
+			return input;
+		}
+
+		try {
+			const url = new URL(input);
+			let pathname = decodeURIComponent(url.pathname);
+			if (/^[A-Za-z]:/.test(pathname.slice(1, 3))) {
+				pathname = pathname.slice(1);
+			}
+			return pathname || input;
+		} catch {
+			const withoutScheme = input.replace(/^file:\/\//, "");
+			if (withoutScheme.startsWith("/")) {
+				return withoutScheme;
+			}
+			return `/${withoutScheme}`;
+		}
+	};
+
+	const resolveSelectedPath = (selected: unknown): string | null => {
+		if (!selected) return null;
+		if (typeof selected === "string") return selected;
+		if (Array.isArray(selected)) return resolveSelectedPath(selected[0]);
+		if (typeof selected === "object") {
+			const candidate = selected as { path?: unknown; uri?: unknown };
+			if (typeof candidate.path === "string") return normalizePickerPath(candidate.path);
+			if (typeof candidate.uri === "string") return normalizePickerPath(candidate.uri);
+		}
+		return null;
+	};
+
+	const importApp = useCallback(
+		async (path: string) => {
+			if (path.toLowerCase().endsWith(".enc.flow-app")) {
+				setEncryptedImportPath(path);
+				setImportDialogOpen(true);
+				return;
+			}
+			const toastId = toast.loading("Importing app...", { description: "Please wait." });
+			try {
+				await invoke("import_app_from_file", { path });
+				toast.success("App imported successfully!", { id: toastId });
+				await apps.refetch();
+			} catch (err) {
+				console.error(err);
+				toast.error("Failed to import app", { id: toastId });
+			}
+		},
+		[apps],
+	);
+
+	const pickImportFile = useCallback(async () => {
+		type Filter = { name: string; extensions: string[] };
+		const isMobile = isMobileDevice();
+		const filtersOption: Filter[] | undefined = isMobile
+			? undefined
+			: [
+				{
+					name: "Flow App",
+					extensions: ["flow-app"],
+				},
+			];
+
+		const selection = await open({
+			multiple: false,
+			directory: false,
+			...(filtersOption ? { filters: filtersOption } : {}),
+		});
+		const path = resolveSelectedPath(selection);
+		if (!path) {
+			toast.error("Unable to open selected file.");
+			return;
+		}
+		await importApp(path);
+	}, [importApp, isMobileDevice]);
+
 	const allItems = useMemo(() => {
 		if (!currentProfile.data) return [];
 		const currentProfileApps = new Set(
@@ -151,98 +245,45 @@ export default function YoursPage() {
 		};
 	}, [allItems]);
 
-	const menuActions = [
-		<Button
-			key={"import"}
-			size="icon"
-			variant="outline"
-			onClick={async () => {
-				type Filter = { name: string; extensions: string[] };
-				let filtersOption: Filter[] | undefined;
-				// Use UA-based detection to avoid plugin availability issues
-				const ua = typeof navigator !== "undefined" ? navigator.userAgent.toLowerCase() : "";
-				const isMobile = /android|iphone|ipad|ipod/.test(ua);
-				filtersOption = isMobile
-					? undefined
-					: [
-						{
-							name: "Flow App",
-							extensions: ["flow-app", "enc.flow-app"],
-						},
-					];
-
-				const file = await open({
-					multiple: false,
-					directory: false,
-					...(filtersOption ? { filters: filtersOption } : {}),
-				});
-				if (!file) return;
-				const path = String(file);
-				if (path.toLowerCase().endsWith(".enc.flow-app")) {
-					setEncryptedImportPath(path);
-					setImportDialogOpen(true);
-					return;
-				}
-				const toastId = toast.loading("Importing app...", {
-					description: "Please wait.",
-				});
-				try {
-					await invoke("import_app_from_file", { path });
-					toast.success("App imported successfully!", { id: toastId });
-					await apps.refetch();
-				} catch (err) {
-					console.error(err);
-					toast.error("Failed to import app", { id: toastId });
-				}
-			}}
-		>
-			<ImportIcon className="h-4 w-4" />
-		</Button>,
-		<Button
-			key={"join"}
-			size="icon"
-			variant="outline"
-			onClick={() => setJoinDialogOpen(true)}
-		>
-			<Link2 className="h-4 w-4" />
-		</Button>,
-		<Button
-			key={"create"}
-			variant="default"
-			asChild
-		>
-			<Link href="/library/new">
-				<Sparkles className="mr-2 h-4 w-4" />
-				Create App
-			</Link>
-		</Button>
-	]
+	const menuActions = useMemo(
+		() => [
+			<Button key="import" size="icon" variant="outline" onClick={pickImportFile}>
+				<ImportIcon className="h-4 w-4" />
+			</Button>,
+			<Button
+				key={"join"}
+				size="icon"
+				variant="outline"
+				onClick={() => setJoinDialogOpen(true)}
+			>
+				<Link2 className="h-4 w-4" />
+			</Button>,
+			<Button
+				key={"create"}
+				variant="default"
+				asChild
+			>
+				<Link href="/library/new">
+					<Sparkles className="mr-2 h-4 w-4" />
+					Create App
+				</Link>
+			</Button>
+		],
+		[pickImportFile, setJoinDialogOpen],
+	);
 
 	// Listen for import/file events (e.g., from iOS when a file is opened with the app)
 	useEffect(() => {
 		const unlistenPromise = listen<{ path: string }>("import/file", async (event) => {
 			const path = event.payload.path;
 			if (!path) return;
-			if (path.toLowerCase().endsWith(".enc.flow-app")) {
-				setEncryptedImportPath(path);
-				setImportDialogOpen(true);
-				return;
-			}
-			const toastId = toast.loading("Importing app...", { description: "Please wait." });
-			try {
-				await invoke("import_app_from_file", { path });
-				toast.success("App imported successfully!", { id: toastId });
-				await apps.refetch();
-			} catch (err) {
-				console.error(err);
-				toast.error("Failed to import app", { id: toastId });
-			}
+			await importApp(path);
 		});
 
 		return () => {
 			unlistenPromise.then((unsub) => unsub()).catch(() => void 0);
 		};
-	}, [apps]);
+	}, [importApp]);
 
 	useMobileHeader({
 		right: menuActions,
@@ -328,7 +369,7 @@ export default function YoursPage() {
 								const file = await open({
 									multiple: false,
 									directory: false,
-									...(filtersOption ? { filters: filtersOption } : {}),
+									...(filtersOption ? { filters: filtersOption } : undefined),
 								});
 								if (!file) return;
 								const path = String(file);

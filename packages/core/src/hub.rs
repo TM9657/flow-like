@@ -17,6 +17,7 @@ pub struct UserTier {
     pub execution_tier: String,
     pub max_total_size: i64,
     pub max_llm_cost: i32,
+    pub max_llm_calls: Option<i32>,
     pub llm_tiers: Vec<String>,
 }
 
