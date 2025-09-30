@@ -2,7 +2,7 @@
 
 import { createId } from "@paralleldrive/cuid2";
 import { useLiveQuery } from "dexie-react-hooks";
-import { SidebarIcon, SidebarOpenIcon, SquarePenIcon } from "lucide-react";
+import { HistoryIcon, SidebarIcon, SquarePenIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
@@ -16,7 +16,7 @@ import {
 import { useSetQueryParams } from "../../lib/set-query-params";
 import { parseUint8ArrayToJson } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
-import { Button, HoverCard, HoverCardContent, HoverCardTrigger } from "../ui";
+import { Button, HoverCard, HoverCardContent, HoverCardTrigger, useMobileHeader } from "../ui";
 import { fileToAttachment } from "./chat-default/attachment";
 import { Chat, type IChatRef } from "./chat-default/chat";
 import {
@@ -109,7 +109,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 						className="hover:bg-accent hover:text-accent-foreground transition-colors"
 						onClick={handleSidebarToggle}
 					>
-						<SidebarIcon className="w-4 h-4" />
+						<HistoryIcon className="w-4 h-4" />
 					</Button>
 				</HoverCardTrigger>
 				<HoverCardContent
@@ -122,7 +122,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					}}
 				>
 					<div className="flex items-center gap-2 text-sm font-medium">
-						<SidebarOpenIcon className="w-3 h-3" />
+						<HistoryIcon className="w-3 h-3" />
 						Chat History
 					</div>
 				</HoverCardContent>

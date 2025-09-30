@@ -12,6 +12,7 @@ import {
 	SearchIcon,
 	SortAscIcon,
 	UploadIcon,
+	XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -49,6 +50,37 @@ export function StorageSystem({
 	updatePrefix: (prefix: string) => void;
 	fileToUrl: (prefix: string) => Promise<string>;
 }>) {
+	// Responsive helper: detect small screens (<= Tailwind 'sm')
+	const useIsSmallScreen = () => {
+		const [isSmall, setIsSmall] = useState(false);
+		useEffect(() => {
+			if (typeof window === "undefined") return;
+			const mql = window.matchMedia("(max-width: 640px)");
+			const onChange = (e: MediaQueryListEvent) => setIsSmall(e.matches);
+			const legacyOnChange = () => setIsSmall(mql.matches);
+			// Set initial
+			setIsSmall(mql.matches);
+			// Subscribe (support older Safari)
+			try {
+				mql.addEventListener("change", onChange);
+			} catch {
+				// Fallback for Safari < 14
+				// @ts-ignore
+				mql.addListener(legacyOnChange);
+			}
+			return () => {
+				try {
+					mql.removeEventListener("change", onChange);
+				} catch {
+					// Fallback for Safari < 14
+					// @ts-ignore
+					mql.removeListener(legacyOnChange);
+				}
+			};
+		}, []);
+		return isSmall;
+	};
+	const isSmallScreen = useIsSmallScreen();
 	const fileReference = useRef<HTMLInputElement>(null);
 	const folderReference = useRef<HTMLInputElement>(null);
 	const backend = useBackend();
@@ -407,10 +439,10 @@ export function StorageSystem({
 
 			{/* Header Section */}
 			<div className="flex flex-col gap-4 px-4 pt-4">
-				<div className="flex flex-row items-center justify-between">
+				<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
 					<h2 className="text-2xl font-semibold tracking-tight">Storage</h2>
-					<div className="flex items-center gap-2">
-						<div className="flex items-center gap-2">
+					<div className="flex items-center gap-2 flex-wrap justify-end">
+						<div className="hidden sm:flex items-center gap-2">
 							<div className="flex items-center gap-1 text-sm text-muted-foreground">
 								<span>Sort by:</span>
 								<span className="font-medium text-foreground capitalize">
@@ -535,7 +567,7 @@ export function StorageSystem({
 									onClick={() => setCreatingFolder((v) => !v)}
 								>
 									<FolderPlusIcon className="h-4 w-4" />
-									New Folder
+									<span className="hidden sm:inline">New Folder</span>
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent>
@@ -551,7 +583,7 @@ export function StorageSystem({
 									onClick={() => fileReference.current?.click()}
 								>
 									<UploadIcon className="h-4 w-4" />
-									Upload Files
+									<span className="hidden sm:inline">Upload Files</span>
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent>Upload files to current folder</TooltipContent>
@@ -565,7 +597,7 @@ export function StorageSystem({
 									onClick={() => folderReference.current?.click()}
 								>
 									<FolderPlusIcon className="h-4 w-4" />
-									Upload Folder
+									<span className="hidden sm:inline">Upload Folder</span>
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent>Upload entire folder</TooltipContent>
@@ -573,18 +605,20 @@ export function StorageSystem({
 					</div>
 				</div>
 
-				<div className="flex items-end gap-2 mt-2 justify-between">
-					<StorageBreadcrumbs
-						appId={appId}
-						prefix={prefix}
-						updatePrefix={(prefix) => updatePrefix(prefix)}
-					/>
+				<div className="flex flex-col sm:flex-row sm:items-end gap-2 mt-2 sm:justify-between">
+					<div className="overflow-x-auto whitespace-nowrap max-w-full">
+						<StorageBreadcrumbs
+							appId={appId}
+							prefix={prefix}
+							updatePrefix={(prefix) => updatePrefix(prefix)}
+						/>
+					</div>
 					{(filesWithVirtual.length ?? 0) > 0 && (
-						<div className="relative">
+						<div className="relative w-full sm:w-auto">
 							<SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
 							<Input
 								placeholder="Search files and folders..."
-								className="pl-10"
+								className="pl-10 w-full"
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
 							/>
@@ -668,7 +702,7 @@ export function StorageSystem({
 				<div className="flex flex-col gap-4 grow max-h-full h-full overflow-y-hidden px-4 pb-4">
 					{preview.url !== "" && (
 						<>
-							{isPreviewMaximized && (
+							{(isSmallScreen || isPreviewMaximized) && (
 								<div className="fixed inset-0 z-50 bg-background">
 									<div className="flex flex-col h-full w-full">
 										<div className="p-4 border-b bg-background flex items-center justify-between">
@@ -678,10 +712,20 @@ export function StorageSystem({
 											<Button
 												variant="ghost"
 												size="sm"
-												onClick={() => setIsPreviewMaximized(false)}
+												onClick={() => {
+												if (isSmallScreen) {
+													setPreview((p) => ({ ...p, url: "", file: "" }));
+												} else {
+													setIsPreviewMaximized(false);
+												}
+											}}
 												className="h-8 w-8 p-0"
 											>
-												<MinimizeIcon className="h-4 w-4" />
+												{isSmallScreen ? (
+													<XIcon className="h-4 w-4" />
+												) : (
+													<MinimizeIcon className="h-4 w-4" />
+												)}
 											</Button>
 										</div>
 										<div className="grow overflow-auto">
@@ -690,7 +734,7 @@ export function StorageSystem({
 									</div>
 								</div>
 							)}
-							{!isPreviewMaximized && (
+							{!isSmallScreen && !isPreviewMaximized && (
 								<ResizablePanelGroup
 									direction="horizontal"
 									autoSaveId={"file_viewer"}
@@ -798,7 +842,7 @@ export function StorageSystem({
 						</>
 					)}
 					{preview.url === "" && (
-						<div className="flex flex-col grow max-h-full h-full overflow-auto gap-2 border rounded-lg p-4 bg-background">
+						<div className="flex flex-col grow max-h-full h-full overflow-auto gap-2 border rounded-lg p-3 sm:p-4 bg-background">
 							<div className="flex items-center gap-2 mb-2">
 								<h3 className="font-medium text-sm text-muted-foreground">
 									Files & Folders

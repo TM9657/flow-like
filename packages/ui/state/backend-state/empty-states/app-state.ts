@@ -67,4 +67,8 @@ export class EmptyAppState implements IAppState {
 	): Promise<void> {
 		throw new Error("Method not implemented.");
 	}
+
+	requestJoinApp(appId: string, comment?: string): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
 }

@@ -42,6 +42,7 @@ export interface IOpenIDConfig {
 	client_id?: null | string;
 	cognito?: null | ICognitoConfig;
 	discovery_url?: null | string;
+	user_info_url?: null | string;
 	jwks_url: string;
 	post_logout_redirect_uri?: null | string;
 	proxy?: null | IOpenIDProxy;
@@ -104,7 +105,8 @@ export interface ILookup {
 export interface IUserTier {
 	execution_tier: string;
 	llm_tiers: string[];
-	max_llm_calls: number;
+	max_llm_cost: number;
+	max_llm_calls?: number;
 	max_non_visible_projects: number;
 	max_remote_executions: number;
 	max_total_size: number;

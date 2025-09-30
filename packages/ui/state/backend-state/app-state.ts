@@ -44,4 +44,5 @@ export interface IAppState {
 		language?: string,
 	): Promise<void>;
 	changeAppVisibility(appId: string, visibility: IAppVisibility): Promise<void>;
+	requestJoinApp(appId: string, comment?: string): Promise<void>;
 }

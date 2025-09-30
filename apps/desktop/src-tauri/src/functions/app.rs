@@ -54,61 +54,6 @@ async fn presign_meta(
 }
 
 #[tauri::command(async)]
-pub async fn import_app(app_handle: AppHandle) -> Result<(), TauriFunctionError> {
-    let dir = app_handle
-        .dialog()
-        .file()
-        .set_title("Select App Directory")
-        .blocking_pick_folder()
-        .ok_or_else(|| TauriFunctionError::new("Failed to select app directory"))?;
-
-    let path = dir
-        .as_path()
-        .ok_or_else(|| TauriFunctionError::new("Invalid directory path"))?;
-
-    let store = object_store::local::LocalFileSystem::new_with_prefix(path)
-        .map_err(|e| anyhow!(format!("Failed to create local file system: {}", e)))?;
-    let store: Arc<dyn ObjectStore> = Arc::new(store);
-    let app: flow_like_types::proto::App =
-        from_compressed(store, Path::from("manifest.app")).await?;
-
-    let app_id = app.id.clone();
-
-    let mut profile = TauriSettingsState::current_profile(&app_handle).await?;
-
-    if profile.hub_profile.apps.is_none() {
-        profile.hub_profile.apps = Some(vec![]);
-    }
-
-    if profile
-        .hub_profile
-        .apps
-        .as_mut()
-        .unwrap()
-        .iter()
-        .any(|a| a.app_id == app_id)
-    {
-        return Err(TauriFunctionError::new("App already exists in profile"));
-    }
-
-    profile
-        .hub_profile
-        .apps
-        .as_mut()
-        .unwrap()
-        .push(ProfileApp::new(app_id.clone()));
-
-    let settings = TauriSettingsState::construct(&app_handle).await?;
-    let mut settings = settings.lock().await;
-    settings
-        .profiles
-        .insert(profile.hub_profile.id.clone(), profile.clone());
-    settings.serialize();
-
-    Ok(())
-}
-
-#[tauri::command(async)]
 pub async fn get_apps(
     app_handle: AppHandle,
     language: Option<String>,

@@ -1,6 +1,6 @@
 {
 	"productName": "Flow Like",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"identifier": "com.flow-like.app",
 	"build": {
 		"beforeDevCommand": "bun run dev",
@@ -27,6 +27,10 @@
 		],
 		"security": {
 			"csp": null,
+			"capabilities": [
+				"desktop",
+				"mobile"
+			],
 			"assetProtocol": {
 				"enable": true,
 				"scope": [
@@ -78,6 +82,10 @@
 				}
 			}
 		},
+		"iOS": {
+			"minimumSystemVersion": "13.0",
+			"developmentTeam": "VVT9DYMA6M"
+		},
 		"homepage": "https://flow-like.com",
 		"publisher": "TM9657 GmbH",
 		"licenseFile": "../../../LICENSE",
@@ -98,10 +106,8 @@
 		"deep-link": {
 			"mobile": [
 				{
-					"host": "mobile.flow-like.com",
-					"pathPrefix": [
-						"/"
-					]
+					"scheme": ["flow-like"],
+					"appLink": false
 				}
 			],
 			"desktop": {

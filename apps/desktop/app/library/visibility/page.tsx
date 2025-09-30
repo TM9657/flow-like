@@ -44,7 +44,7 @@ export default function Page() {
 	}, [currentProfile.data]);
 
 	return (
-		<main className="min-h-dvh max-h-dvh flex flex-col w-full p-6 bg-gradient-to-br from-background to-muted/20">
+		<main className="flex flex-col w-full p-6 bg-gradient-to-br from-background to-muted/20 flex-1 min-h-0">
 			<div className="mb-4 flex items-center justify-between">
 				<div className="flex items-center space-x-3">
 					<div className="p-2 rounded-xl bg-primary/10 text-primary">

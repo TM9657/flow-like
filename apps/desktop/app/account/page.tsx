@@ -220,7 +220,7 @@ const AccountPage: React.FC = () => {
 
 	if (!auth.isAuthenticated) {
 		return (
-			<main className="flex flex-row items-center justify-center h-screen w-full">
+			<main className="flex flex-row items-center justify-center w-full flex-1 min-h-0 py-12">
 				<div className="text-center p-6 border rounded-lg shadow-lg bg-card">
 					<h3>Please log in to view your profile.</h3>
 					<Button onClick={() => auth.signinRedirect()} className="mt-4">

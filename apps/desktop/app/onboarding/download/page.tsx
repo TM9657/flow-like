@@ -101,7 +101,7 @@ export default function ProfileCreation() {
 		setBits(Array.from(foundBits.values()));
 		setFilter(filter);
 		addProfiles(filteredProfiles.map(([profile]) => profile));
-	}, [defaultProfiles.data, searchParams]);
+	}, [defaultProfiles.data, searchParams, router]);
 
 	useEffect(() => {
 		calculateStats();
@@ -120,7 +120,7 @@ export default function ProfileCreation() {
 			router.push("/onboarding/done");
 		}
 		if (doneCounter >= 5 && bits.length > 0) finalize();
-	}, [doneCounter, bits]);
+	}, [doneCounter, bits, router]);
 
 	const calculateStats = useCallback(async () => {
 		const measurement = await manager.getSpeed(filter);
@@ -162,73 +162,75 @@ export default function ProfileCreation() {
 	}, [doneCounter, filter, manager]);
 
 	return (
-		<div className="p-4 max-w-screen-lg w-full">
-			<div className="flex flex-row items-center">
-				<div className="w-full">
-					<h1>🚀 Great Selection!</h1>
-					<h2>
-						Let´s download your models{" "}
-						<b className="highlight">
-							{(stats[stats.length - 1]?.progress || 0).toFixed(2)}%
-						</b>{" "}
-						finished 🤩
-					</h2>
-				</div>
-			</div>
-			<div className="mt-4">
-				<ChartContainer className="h-[300px] w-full z-20" config={chartConfig}>
-					<LineChart
-						accessibilityLayer
-						data={stats}
-						margin={{
-							left: 12,
-							right: 12,
-						}}
-					>
-						<CartesianGrid vertical={false} />
-						<XAxis
-							dataKey="timeString"
-							tickLine={false}
-							axisLine={false}
-							tickMargin={8}
-						/>
-						<ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-						<Line
-							dataKey="speed"
-							type="monotone"
-							allowReorder="yes"
-							animateNewValues={false}
-							animationEasing="ease-in-out"
-							animationDuration={100}
-							stroke="var(--color-downloaded)"
-							strokeWidth={2}
-							dot={false}
-						/>
-					</LineChart>
-				</ChartContainer>
-			</div>
-			<div className="flex flex-row justify-between items-start mt-4">
-				<div className="flex flex-row items-center justify-end flex-nowrap gap-2">
-					{bits.map((bit) => (
-						<BitDownload key={bit.id} bit={bit} />
-					))}
-				</div>
-				<div className="flex flex-row flex-wrap gap-2 justify-end items-center">
-					<div className="border p-2 bg-card text-card-foreground">
-						{humanFileSize(totalSize)} Total
+		<div className="min-h-screen w-full flex items-center justify-center">
+			<div className="p-3 sm:p-4 max-w-screen-lg w-full z-10 mx-auto">
+				<div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+					<div className="w-full">
+						<h1>🚀 Great Selection!</h1>
+						<h2>
+							Let&apos;s download your models{" "}
+							<b className="highlight">
+								{(stats[stats.length - 1]?.progress || 0).toFixed(2)}%
+							</b>{" "}
+							finished 🤩
+						</h2>
 					</div>
-					<div className="border p-2 bg-card text-card-foreground">
-						{humanFileSize(stats[stats.length - 1]?.speed ?? 0)} / s
+				</div>
+				<div className="mt-3 sm:mt-4">
+					<ChartContainer className="h-[240px] sm:h-[300px] w-full z-20" config={chartConfig}>
+						<LineChart
+							accessibilityLayer
+							data={stats}
+							margin={{
+								left: 12,
+								right: 12,
+							}}
+						>
+							<CartesianGrid vertical={false} />
+							<XAxis
+								dataKey="timeString"
+								tickLine={false}
+								axisLine={false}
+								tickMargin={8}
+							/>
+							<ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+							<Line
+								dataKey="speed"
+								type="monotone"
+								allowReorder="yes"
+								animateNewValues={false}
+								animationEasing="ease-in-out"
+								animationDuration={100}
+								stroke="var(--color-downloaded)"
+								strokeWidth={2}
+								dot={false}
+							/>
+						</LineChart>
+					</ChartContainer>
+				</div>
+				<div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mt-4 pb-6">
+					<div className="flex flex-row items-center justify-start flex-wrap gap-2 max-w-full">
+						{bits.map((bit) => (
+							<BitDownload key={bit.id} bit={bit} />
+						))}
 					</div>
-					<button
-						onClick={() => {
-							localStorage.setItem("onboarding-done", "true");
-							router.push("/");
-						}}
-						className="border p-2 bg-primary text-primary-foreground hover:bg-background hover:text-foreground transition-all"
-					>
-						Background Download
-					</button>
+					<div className="flex flex-row flex-wrap gap-2 justify-end items-center">
+						<div className="border p-2 bg-card text-card-foreground">
+							{humanFileSize(totalSize)} Total
+						</div>
+						<div className="border p-2 bg-card text-card-foreground">
+							{humanFileSize(stats[stats.length - 1]?.speed ?? 0)} / s
+						</div>
+						<button
+							onClick={() => {
+								localStorage.setItem("onboarding-done", "true");
+								router.push("/");
+							}}
+							className="border p-2 bg-primary text-primary-foreground hover:bg-background hover:text-foreground transition-all"
+						>
+							Background Download
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>

@@ -18,6 +18,7 @@ import type { IMediaItem } from "@tm9657/flow-like-ui/state/backend-state/app-st
 import { fetcher, put } from "../../lib/api";
 import { appsDB } from "../../lib/apps-db";
 import type { TauriBackend } from "../tauri-provider";
+import { toast } from "sonner";
 
 export class AppState implements IAppState {
 	constructor(private readonly backend: TauriBackend) {}
@@ -547,5 +548,28 @@ export class AppState implements IAppState {
 				this.backend.auth,
 			);
 		}
+	}
+
+	async requestJoinApp(appId: string, comment?: string): Promise<void> {
+		if (this.backend.profile && this.backend.auth && this.backend.queryClient) {
+			await fetcher<IApp>(
+				this.backend.profile,
+				`apps/${appId}/team/queue`,
+				{
+					method: "PUT",
+					body: JSON.stringify({
+						comment: comment,
+					}),
+				},
+				this.backend.auth,
+			);
+			return;
+		}
+
+		if(this.backend.auth) {
+			await this.backend.auth.signinRedirect()
+			return;
+		}
+		toast.error("You must be logged in to request access to an app.");
 	}
 }

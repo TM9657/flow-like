@@ -35,10 +35,16 @@ pub struct Model {
     pub updated_at: DateTime,
     #[sea_orm(column_name = "stripeId", column_type = "Text", nullable, unique)]
     pub stripe_id: Option<String>,
+    #[sea_orm(column_name = "trackingId", column_type = "Text", nullable, unique)]
+    pub tracking_id: Option<String>,
     pub status: UserStatus,
     pub tier: UserTier,
     #[sea_orm(column_name = "totalSize")]
     pub total_size: i64,
+    #[sea_orm(column_name = "totalLLMPrice")]
+    pub total_llm_price: i64,
+    #[sea_orm(column_name = "llmPriceTrackingMonth", column_type = "Text", nullable)]
+    pub llm_price_tracking_month: Option<String>,
     #[sea_orm(
         column_name = "preferredUsername",
         column_type = "Text",

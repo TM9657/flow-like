@@ -97,7 +97,7 @@ export default function Page() {
 	};
 
 	return (
-		<main className="h-full flex flex-col overflow-hidden max-h-full">
+		<main className="h-full flex flex-col max-h-full overflow-auto md:overflow-visible min-h-0">
 			<div className="container mx-auto px-6 pb-4 flex flex-col h-full gap-4">
 				<PageHeader
 					boardCreation={boardCreation}
@@ -244,7 +244,7 @@ function BoardsSection({
 }>) {
 	if (boards.isLoading) {
 		return (
-			<div className="space-y-6 flex flex-1 flex-col flex-grow max-h-full h-full overflow-y-auto overflow-x-hidden">
+			<div className="space-y-6 flex flex-1 flex-col flex-grow max-h-full h-full overflow-y-auto md:overflow-visible overflow-x-hidden">
 				<BoardsSkeleton />
 			</div>
 		);
@@ -252,7 +252,7 @@ function BoardsSection({
 
 	if (boards.data?.length === 0) {
 		return (
-			<div className="space-y-6 flex flex-1 flex-col flex-grow max-h-full h-full overflow-y-auto overflow-x-hidden">
+			<div className="space-y-6 flex flex-1 flex-col flex-grow max-h-full h-full overflow-y-auto md:overflow-visible overflow-x-hidden">
 				<EmptyBoards
 					setBoardCreation={setBoardCreation}
 					boardCreation={boardCreation}
@@ -266,7 +266,7 @@ function BoardsSection({
 	);
 
 	return (
-		<div className="space-y-6 flex flex-1 flex-col flex-grow max-h-full h-full overflow-y-auto overflow-x-hidden">
+		<div className="space-y-6 flex flex-1 flex-col flex-grow max-h-full h-full overflow-y-auto md:overflow-visible overflow-x-hidden">
 			<div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 pb-6">
 				{app &&
 					uniqueBoards.map((board) => (

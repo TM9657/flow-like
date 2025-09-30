@@ -106,7 +106,7 @@ export default function Page() {
 		if (!appId) return;
 		if (sortedEvents.length === 0 && events.data) {
 			console.log("No events found, redirecting to event config");
-			router.replace(`/library/config?id=${appId}`);
+			router.replace(`/store?id=${appId}`);
 			return;
 		}
 
@@ -116,7 +116,7 @@ export default function Page() {
 
 		if (!rerouteEvent && usableEvents.size > 0 && events.data) {
 			console.log("No usable events found, redirecting to event config");
-			router.replace(`/library/config?id=${appId}`);
+			router.replace(`/store?id=${appId}`);
 			return;
 		}
 
@@ -191,7 +191,7 @@ export default function Page() {
 	}
 
 	return (
-		<main className="flex flex-col h-full min-h-dvh max-h-dvh overflow-hidden">
+		<main className="flex flex-col h-full overflow-hidden flex-1 min-h-0">
 			<Container ref={sidebarRef}>
 				<div className="flex flex-col flex-grow h-full w-full max-h-full overflow-hidden">
 					<Header

@@ -12,7 +12,7 @@ use flow_like_storage::{
     Path,
     files::store::{FlowLikeStore, local_store::LocalObjectStore},
 };
-use flow_like_types::{sync::Mutex, tokio};
+use flow_like_types::{intercom::BufferedInterComHandler, sync::Mutex, tokio};
 use std::{path::PathBuf, sync::Arc};
 
 const BOARD_1: &str = "o4wqrpzkx1cp4svxe91yordw";
@@ -61,6 +61,13 @@ async fn run_board(id: &str, start_ids: Vec<String>) {
     let board = Arc::new(open_board(id, state.clone()).await);
     let profile = construct_profile();
 
+    let buffered_sender = Arc::new(BufferedInterComHandler::new(
+        Arc::new(move |_event| Box::pin({ async move { Ok(()) } })),
+        Some(100),
+        Some(400),
+        Some(true),
+    ));
+
     for start_id in &start_ids {
         let payload = RunPayload {
             id: start_id.clone(),
@@ -73,8 +80,8 @@ async fn run_board(id: &str, start_ids: Vec<String>) {
             &state,
             &profile,
             &payload,
-            None,
             false,
+            buffered_sender.clone().into_callback(),
             None,
             None,
         )
@@ -90,6 +97,13 @@ async fn run_shared_board(
     profile: Profile,
     start_ids: Vec<String>,
 ) {
+    let buffered_sender = Arc::new(BufferedInterComHandler::new(
+        Arc::new(move |_event| Box::pin({ async move { Ok(()) } })),
+        Some(100),
+        Some(400),
+        Some(true),
+    ));
+
     for start_id in &start_ids {
         let payload = RunPayload {
             id: start_id.clone(),
@@ -102,8 +116,8 @@ async fn run_shared_board(
             &state,
             &profile,
             &payload,
-            None,
             false,
+            buffered_sender.clone().into_callback(),
             None,
             None,
         )

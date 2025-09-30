@@ -243,6 +243,7 @@ impl NodeLogic for SimpleAgentNode {
                             tool_call_id: None,
                             tool_calls: None,
                             name: None,
+                            annotations: None,
                         };
                         internal_history.messages.push(message);
                     }
@@ -279,7 +280,7 @@ impl NodeLogic for SimpleAgentNode {
                 let model = model_factory
                     .lock()
                     .await
-                    .build(&model_bit, context.app_state.clone())
+                    .build(&model_bit, context.app_state.clone(), context.token.clone())
                     .await?;
                 model.invoke(&internal_history, None).await?
             }; // drop model
@@ -392,6 +393,7 @@ impl NodeLogic for SimpleAgentNode {
                 name: None,
                 tool_call_id: None,
                 tool_calls: Some(tool_calls),
+                annotations: None,
             };
             internal_history.messages.push(ai_message);
         }

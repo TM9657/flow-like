@@ -1,0 +1,105 @@
+---
+title: "n8n vs Flow-Like (2025): Typed, Local-First Automation for Serious Teams"
+description: "A fair, up-to-date comparison of n8n and Flow-Like—covering data model, performance, governance, licensing, and real-world scalability. Flow-Like’s typed, local-first approach wins."
+date: 2025-09-13
+tags: ["comparison", "n8n", "automation", "flow-like", "typed-workflows"]
+cover: "/images/flow-like-vs-n8n-2025.jpg"
+draft: true
+---
+
+# n8n vs Flow-Like (2025): Typed, Local-First Automation for Serious Teams
+
+This is a practical, current comparison. **n8n** is excellent for quick wins—especially **simple agent-style** automations and “connect two APIs” tasks—thanks to lots of connectors and a flexible HTTP node. **Flow-Like** takes a different path: **typed dataflow**, **local-first** execution, and **Rust-fast** streaming built for teams who treat automation like software.
+
+---
+
+## n8n first: where it shines—and where it struggles for engineering teams
+
+### What n8n does really well
+
+* **Lots of integrations** – A broad catalog plus a versatile **HTTP Request** node make it easy to wire common SaaS apps and ad-hoc APIs.
+* **Approachable for simple agents** – Its visual editor and templates let you stand up lightweight, LLM-powered “helper” flows quickly.
+* **Inline transforms when needed** – A Code node (JS/Python) is handy for small data tweaks.
+
+> **Bottom line:** For **very simple agent constructions** and “glue two APIs” jobs, n8n gives you fast time-to-value.
+
+### Where n8n is a poor fit for technical teams and long-lived systems
+
+* **Implicit data contracts** – Nodes pass loosely-typed JSON. That’s flexible at first, but shape changes surface **at runtime**, making refactors and reviews risky.
+* **Inline code sprawl** – Scattered JS/Python snippets fragment logic, hinder co-creation, and complicate testing, reuse, and observability.
+* **External state required to scale** – As datasets grow, teams typically bolt on **external databases/queues/object storage** for durability, indexing, retries, and joins. You end up maintaining a mini-platform around n8n (DB migrations, schema drift, IAM, backups).
+* **Memory pressure on big payloads** – Execution data commonly lives **in memory**; large lists/binaries push RAM and slow the editor, encouraging chunking and workarounds.
+* **Operational overhead** – Productionizing means stitching together logging, metrics, secret management, artifact promotion, and environment isolation. It’s doable—just not first-class.
+* **Partial versioning** – Git for environments helps, but it’s not full VCS for logic. Serious teams move real transforms into separate repos/packages and lose single-place traceability.
+
+---
+
+## The wider landscape (where each option fits)
+
+* **Node-RED** — The event-driven classic for **IoT/edge**. Huge palette, function nodes when you must code. Great for device wiring; light on type guarantees and governance.
+* **Activepieces** — Friendly, Zapier-style builder you can self-host. Strong business-app connectors; ideal for ops teams and non-dev automation.
+* **Windmill** — **Developer-centric**: turn TS/Python/Go into endpoints, flows, and internal apps with CI in mind. Perfect if your team prefers code-first orchestration.
+* **Apache NiFi** — Enterprise dataflow with queues, **back-pressure**, and **provenance**—excellent for regulated, high-volume ingestion. Heavier to run than app-automation tools.
+
+---
+
+## Why Flow-Like wins for serious teams
+
+Flow-Like is built for **predictable, scalable automation**—the kind you keep for years, hand between teams, and promote through environments without fear.
+
+### 1) Typed dataflow (design-time guarantees)
+
+Every connection declares its **shape** (tables, arrays, images, embeddings, etc.). Breaks surface during design—not after a two-hour run. Reviews become straightforward diffs of typed contracts.
+
+### 2) Local-first, offline-capable
+
+Run on macOS/Windows/Linux desktops or servers with no cloud dependency. Edge/offline is a first-class scenario; cloud deploys are **optional**, not assumed.
+
+### 3) Rust-fast streaming with back-pressure
+
+Large files/tables stream end-to-end **without ballooning RAM**. Throughput stays stable under load; retries and error handling don’t require buffering “the world.”
+
+### 4) **Built-in state & storage** (no Frankenstein of side services)
+
+* **SQL & vector databases out of the box** – Store operational tables/config, do joins and aggregations, and run **semantic search**/RAG without bolting on extra infra.
+* **Files are first-class citizens** – Flows ingest, transform, and **write back** files as a core capability (no temp hacks). Uploads are simple; write-backs respect atomicity and metadata.
+* **Unified dataflow** – Mix files, tables, and vectors in a single, typed pipeline. Keep state **inside** the platform unless you explicitly choose external systems.
+
+### 5) Reusable, versioned components (no snippet sprawl)
+
+Logic lives as **typed nodes** with docs, tests, and changelogs. PRs show meaningful, schema-aware diffs. Teams reuse components instead of copy-pasting code.
+
+### 6) Governance & packaging built-in
+
+Role- and team-based access control, EU AI Act–aligned project organization, and real-time multi-user collaboration—plus automatic flow checks for security, performance, and governance.
+
+### 7) AI/ML on your terms
+
+Local models (vision, embeddings, classic ML) alongside cloud APIs—control costs and data exposure. Typed pins keep prompts, embeddings, and results coherent across nodes.
+
+### 8) **Projects & team management** (platform, not just a tool)
+
+Workspaces with **projects**, **teams**, and role-based permissions; **branch-aware environments** (dev/stage/prod) with **approvals**; **run history & audit logs**; comments and co-editing. Manage ownership, reviews, and promotions from one place—so automations grow into **reliable apps** your whole org can run and reuse.
+
+---
+
+## A concrete contrast: data & state architecture
+
+**With n8n at scale**
+
+* You add Postgres/Redis/S3 (or equivalents) for durable state, joins, and binary storage.
+* You manage schemas, migrations, backups, IAM, and observability across **multiple** systems.
+* Inline scripts creep in for one-off transforms; you later extract them into libraries—splitting your logic surface.
+
+**With Flow-Like**
+
+* You start with **SQL + vector storage** available immediately.
+* Files are **first-tier**: ingest Excel/CSV/JSON/parquet, transform, and **write back** to the same store or a new destination as part of the flow.
+* You keep logic inside **typed nodes**—reviewable, testable, and promotable as artifacts—so the platform remains the source of truth.
+
+---
+
+## Choosing pragmatically
+
+* If you want **fast wins** with a big connector catalog and **very simple agents**, **n8n** is a solid bet.
+* Choose Flow-Like if you need: a **platform** for building and operating automations **as products**—typed workflows, **app store** for distribution, project & team management, built-in databases and file pipelines, and environment-aware packaging.

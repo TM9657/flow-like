@@ -16,38 +16,6 @@ import {
 } from "../../..";
 import type { IMetadata } from "../../../lib";
 import { TemplateCard } from "./template-card";
-
-interface AppHeaderProps {
-	appMeta: any;
-	appId: string;
-	onClose: () => void;
-}
-
-const AppHeader = ({ appMeta, appId, onClose }: AppHeaderProps) => (
-	<div className="flex items-center justify-between mb-6">
-		<div className="flex items-center gap-3">
-			<Avatar className="h-10 w-10 border border-border">
-				<AvatarImage src={appMeta.data?.icon ?? ""} />
-				<AvatarFallback className="bg-gradient-to-br from-primary/10 to-secondary/10">
-					<Folder className="h-5 w-5" />
-				</AvatarFallback>
-			</Avatar>
-			<div>
-				<h2 className="font-semibold text-lg">{appMeta.data?.name || appId}</h2>
-				<p className="text-sm text-muted-foreground">
-					Choose a template to get started
-				</p>
-			</div>
-		</div>
-		<button
-			onClick={onClose}
-			className="p-2 hover:bg-muted rounded-lg transition-colors"
-		>
-			<X className="h-4 w-4" />
-		</button>
-	</div>
-);
-
 interface TemplateGridProps {
 	templates: [string, IMetadata][];
 	appId: string;
@@ -61,7 +29,7 @@ const TemplateGrid = ({
 	selectedTemplate,
 	onSelectTemplate,
 }: TemplateGridProps) => (
-	<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-in fade-in-0 zoom-in-95 duration-300">
+	<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-in fade-in-0 zoom-in-95 duration-300 w-full">
 		{templates.map(([templateId, metadata]) => (
 			<TemplateCard
 				key={templateId}
@@ -114,13 +82,13 @@ export function AppTemplateFolder({
 			<button
 				type="button"
 				onClick={() => setIsOpen(true)}
-				className={`group cursor-pointer relative flex flex-col w-full transition-all duration-300 rounded-xl border border-border/40 bg-card shadow-sm hover:bg-card/95 h-[375px] overflow-hidden ${
+				className={`group cursor-pointer relative flex flex-col w-full transition-all duration-300 rounded-xl border border-border/40 bg-card shadow-sm hover:bg-card/95 h-[280px] sm:h-[340px] md:h-[360px] overflow-hidden ${
 					hasSelectedTemplate
 						? "ring-2 ring-primary shadow-lg shadow-primary/20"
 						: "hover:border-primary/20"
 				}`}
 			>
-				<div className="relative w-full h-40 overflow-hidden">
+				<div className="relative w-full h-24 sm:h-32 md:h-36 overflow-hidden">
 					<img
 						className="absolute inset-0 w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
 						src={appThumbnail}
@@ -140,21 +108,21 @@ export function AppTemplateFolder({
 					</div>
 
 					<div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
-						<Avatar className="w-16 h-16 shadow-lg bg-white/10 backdrop-blur-md rounded-xl">
+						<Avatar className="w-8 h-8 md:w-16 md:h-16 shadow-lg bg-white/10 backdrop-blur-md rounded-md md:rounded-xl">
 							<AvatarImage
-								className="scale-100 rounded-xl"
+								className="scale-100 rounded-md md:rounded-xl"
 								src={appIcon}
 								alt={`${appName} icon`}
 							/>
 							<AvatarFallback className="text-lg font-bold bg-white/20 backdrop-blur-md text-foreground border border-white/30 rounded-xl">
-								<Folder className="h-8 w-8" />
+								<Folder className="h-4 w-4 md:h-8 md:w-8" />
 							</AvatarFallback>
 						</Avatar>
 					</div>
 				</div>
 
-				<div className="flex flex-col p-5 flex-1">
-					<h3 className="font-bold text-lg text-foreground text-left leading-tight line-clamp-1 min-h-6 mb-2">
+				<div className="flex flex-col p-4 sm:p-5 flex-1">
+					<h3 className="font-bold text-base sm:text-lg text-foreground text-left leading-tight line-clamp-1 min-h-6 mb-2">
 						{appName}
 					</h3>
 
@@ -199,20 +167,20 @@ export function AppTemplateFolder({
 			</button>
 
 			<Dialog open={isOpen} onOpenChange={setIsOpen}>
-				<DialogContent className="h-[90dvh] min-w-[90dvw] flex flex-col">
+				<DialogContent className="h-[85dvh] sm:h-[90dvh] min-w-[95dvw] sm:w-auto sm:max-w-5xl flex flex-col overflow-hidden">
 					<DialogHeader>
 						<div className="flex items-center gap-3">
-							<Avatar className="h-10 w-10 border border-border">
+							<Avatar className="h-5 w-5 md:h-10 md:w-10 border border-border rounded-md md:rounded-xl">
 								<AvatarImage src={appIcon} />
-								<AvatarFallback className="bg-gradient-to-br from-primary/10 to-secondary/10">
-									<Folder className="h-5 w-5" />
+								<AvatarFallback className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-md md:rounded-xl">
+									<Folder className="h-2 w-2 md:h-5 md:w-5" />
 								</AvatarFallback>
 							</Avatar>
 							<div>
-								<DialogTitle className="font-semibold text-lg">
+								<DialogTitle className="font-semibold text-base sm:text-lg">
 									{appName}
 								</DialogTitle>
-								<p className="text-sm text-muted-foreground">
+								<p className="text-xs sm:text-sm text-muted-foreground">
 									Choose a template to get started
 								</p>
 							</div>

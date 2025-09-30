@@ -52,17 +52,17 @@ export function TemplateModal({
 
 	return (
 		<Dialog open={open} onOpenChange={(open) => !open && onClose()}>
-			<DialogContent className="h-[90dvh] min-w-[90dvw] flex flex-col p-2">
-				<DialogHeader>
+			<DialogContent className="h-[85dvh] sm:h-[90dvh] w-[95vw] sm:w-auto sm:max-w-5xl flex flex-col p-2 sm:p-3 overflow-hidden">
+				<DialogHeader className="sticky top-0 z-10 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-1 sm:px-0">
 					<div className="flex items-center gap-3">
 						<div className="p-2 bg-primary/10 rounded-lg">
 							<Workflow className="h-5 w-5 text-primary" />
 						</div>
 						<div>
-							<DialogTitle className="text-2xl font-bold">
+							<DialogTitle className="text-xl sm:text-2xl font-bold">
 								Choose Template
 							</DialogTitle>
-							<p className="text-muted-foreground">
+							<p className="text-muted-foreground text-sm sm:text-base">
 								Select a template to start building your app
 							</p>
 						</div>
@@ -103,7 +103,7 @@ export function TemplateModal({
 				</div>
 
 				<div className="flex-1 overflow-auto">
-					<div className="space-y-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-2">
+					<div className="space-y-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 p-1 sm:p-2">
 						{templatesByApp.map(([appId, templates]) => (
 							<AppTemplateFolder
 								key={appId}

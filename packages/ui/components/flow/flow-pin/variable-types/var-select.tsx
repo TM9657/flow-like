@@ -34,7 +34,7 @@ export function VarVariable({
 	]);
 
 	return (
-		<div className="flex flex-row items-center justify-start w-fit">
+		<div className="flex flex-row items-center justify-start w-fit ml-1">
 			<Select
 				defaultValue={parseUint8ArrayToJson(value)}
 				value={parseUint8ArrayToJson(value)}

@@ -1,5 +1,5 @@
 import { type StoreApi, type UseBoundStore, create } from "zustand";
-import { Bit, type Download, type IBit } from "../lib";
+import { Bit, Download, type IBit } from "../lib";
 import type { IBackendState } from "./backend-state";
 
 declare global {
@@ -97,6 +97,27 @@ export class DownloadManager {
 		cb?: (dl: Download) => void,
 	): Promise<IBit[]> {
 		const key = bit.hash;
+
+		// Virtual / hosted bit: no real artifact to download -> immediately resolve.
+		if (!bit.download_link || bit.size === 0) {
+			// Clear any leftover queued state just in case.
+			this.cleanupForKey(key);
+			if (cb) {
+				try {
+					// Use a real Download instance so downstream logic relying on class methods stays intact.
+					const virtualDownload = new Download(bit, [bit]);
+					// Mark as instantly complete (1/1) so progress() => 1.
+					virtualDownload.push({
+						hash: bit.hash,
+						max: 1,
+						downloaded: 1,
+						path: bit.file_name ?? bit.hash,
+					});
+					cb(virtualDownload);
+				} catch {}
+			}
+			return [bit];
+		}
 
 		const existing = this.inFlight.get(key);
 		if (existing) {

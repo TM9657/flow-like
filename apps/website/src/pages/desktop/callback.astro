@@ -6,5 +6,23 @@ import Layout from "../../layouts/Layout.astro";
 <Layout>
     <div class="flex flex-col items-center justify-center h-screen">
         <h1>Redirecting...</h1>
+        <p class="mt-2 text-sm text-gray-500">If nothing happens, <a id="deeplink" class="underline" href="#">click here</a>.</p>
     </div>
+    <script>
+        (function () {
+            try {
+                var search = new URLSearchParams(window.location.search);
+                var hash = window.location.hash ? window.location.hash.substring(1) : "";
+                if (hash) {
+                    var hashParams = new URLSearchParams(hash);
+                    hashParams.forEach(function (v, k) { search.set(k, v); });
+                }
+                var qs = search.toString();
+                var deeplink = "flow-like://auth" + (qs ? "?" + qs : "");
+                var link = document.getElementById("deeplink");
+                if (link) link.setAttribute("href", deeplink);
+                window.location.replace(deeplink);
+            } catch (_) { /* noop */ }
+        })();
+    </script>
 </Layout>

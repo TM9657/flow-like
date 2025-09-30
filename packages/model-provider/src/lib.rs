@@ -4,6 +4,7 @@ pub mod image_embedding;
 pub mod llm;
 pub mod response;
 pub mod response_chunk;
+#[cfg(feature = "local-ml")]
 pub use fastembed;
 pub use text_splitter;
 pub use tokenizers;

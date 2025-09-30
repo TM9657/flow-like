@@ -1,6 +1,8 @@
 use crate::{
-    response::{Choice, FunctionCall, Response, ResponseFunction, ResponseMessage, Usage},
-    response_chunk::{Delta, ResponseChunk, ResponseChunkChoice},
+    response::{Choice, Response, ResponseMessage, Usage},
+    response_chunk::{
+        Delta, DeltaFunctionCall, DeltaResponseFunction, ResponseChunk, ResponseChunkChoice,
+    },
 };
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
 use aws_sdk_bedrockruntime::types::ConverseStreamOutput as ConverseStreamOutputType;
@@ -85,12 +87,12 @@ pub fn convert_bedrock_stream_output(
                             content: None,
                             role: None,
                             refusal: None,
-                            tool_calls: Some(vec![FunctionCall {
-                                id: "".to_string(),
+                            tool_calls: Some(vec![DeltaFunctionCall {
+                                id: Some("".to_string()),
                                 index: None,
-                                function: ResponseFunction {
-                                    name: "".to_string(),
-                                    arguments: tool.input.clone(),
+                                function: DeltaResponseFunction {
+                                    name: Some("".to_string()),
+                                    arguments: Some(tool.input.clone()),
                                 },
                                 tool_type: None,
                             }]),
@@ -114,12 +116,12 @@ pub fn convert_bedrock_stream_output(
                         content: None,
                         role: None,
                         refusal: None,
-                        tool_calls: Some(vec![FunctionCall {
-                            id: tool.tool_use_id.clone(),
+                        tool_calls: Some(vec![DeltaFunctionCall {
+                            id: Some(tool.tool_use_id.clone()),
                             index: None,
-                            function: ResponseFunction {
-                                name: tool.name.clone(),
-                                arguments: "".to_string(),
+                            function: DeltaResponseFunction {
+                                name: Some(tool.name.clone()),
+                                arguments: Some("".to_string()),
                             },
                             tool_type: None,
                         }]),

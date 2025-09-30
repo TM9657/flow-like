@@ -62,6 +62,7 @@ impl ModelFactory {
         &mut self,
         bit: &Bit,
         app_state: Arc<Mutex<FlowLikeState>>,
+        access_token: Option<String>,
     ) -> Result<Arc<dyn ModelLogic>> {
         let provider_config = app_state.lock().await.model_provider_config.clone();
         let settings = self.execution_settings.clone();
@@ -100,6 +101,44 @@ impl ModelFactory {
 
             let model = OpenAIModel::new(&model_provider, &provider_config).await?;
 
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "custom:openai" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = OpenAIModel::from_params(&model_provider).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "Hosted" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let mut model_provider = model_provider.clone();
+            let mut params = model_provider.params.clone().unwrap_or_default();
+            params.insert(
+                "api_key".into(),
+                flow_like_types::Value::String(access_token.unwrap_or_default()),
+            );
+            params.insert(
+                "model_id".into(),
+                flow_like_types::Value::String(bit.id.clone()),
+            );
+            model_provider.params = Some(params);
+            model_provider.model_id = Some(bit.id.clone());
+            let model = OpenAIModel::from_params(&model_provider).await?;
             let model = Arc::new(model);
             self.ttl_list.insert(bit.id.clone(), SystemTime::now());
             self.cached_models.insert(bit.id.clone(), model.clone());

@@ -63,3 +63,8 @@ next-env.d.ts
 .env
 .VSCodeCounter
 .cargo/config.toml
+.codacy/codacy.yaml
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

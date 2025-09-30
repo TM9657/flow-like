@@ -8,6 +8,7 @@ use flow_like_types::sync::Mutex;
 
 use crate::{bit::Bit, state::FlowLikeState};
 
+#[cfg(feature = "local-ml")]
 use super::{
     embedding::local::LocalEmbeddingModel, image_embedding::local::LocalImageEmbeddingModel,
 };
@@ -49,17 +50,27 @@ impl EmbeddingFactory {
         let provider_name = provider.provider_name;
 
         if provider_name == "Local" {
-            if let Some(model) = self.cached_text_models.get(&bit.id) {
-                // update last used time
+            #[cfg(feature = "local-ml")]
+            {
+                if let Some(model) = self.cached_text_models.get(&bit.id) {
+                    // update last used time
+                    self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                    return Ok(model.clone());
+                }
+
+                let local_model = LocalEmbeddingModel::new(bit, app_state).await?;
                 self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
+                self.cached_text_models
+                    .insert(bit.id.clone(), local_model.clone());
+                return Ok(local_model);
             }
 
-            let local_model = LocalEmbeddingModel::new(bit, app_state).await?;
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_text_models
-                .insert(bit.id.clone(), local_model.clone());
-            return Ok(local_model);
+            #[cfg(not(feature = "local-ml"))]
+            {
+                return Err(flow_like_types::anyhow!(
+                    "Local models are not supported. Please enable the 'local-ml' feature."
+                ));
+            }
         }
 
         if provider_name == "openai" || provider_name == "azure" {
@@ -85,16 +96,25 @@ impl EmbeddingFactory {
         let provider = provider.provider.provider_name;
 
         if provider == "Local" {
-            if let Some(model) = self.cached_image_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
+            #[cfg(feature = "local-ml")]
+            {
+                if let Some(model) = self.cached_image_models.get(&bit.id) {
+                    self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                    return Ok(model.clone());
+                }
 
-            let local_model = LocalImageEmbeddingModel::new(bit, app_state, self).await?;
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_image_models
-                .insert(bit.id.clone(), local_model.clone());
-            return Ok(local_model);
+                let local_model = LocalImageEmbeddingModel::new(bit, app_state, self).await?;
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                self.cached_image_models
+                    .insert(bit.id.clone(), local_model.clone());
+                return Ok(local_model);
+            }
+            #[cfg(not(feature = "local-ml"))]
+            {
+                return Err(flow_like_types::anyhow!(
+                    "Local models are not supported. Please enable the 'local-ml' feature."
+                ));
+            }
         }
 
         Err(flow_like_types::anyhow!("Model type not supported"))

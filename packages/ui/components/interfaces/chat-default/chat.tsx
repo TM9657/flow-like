@@ -90,7 +90,7 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 			if (!messagesEndRef.current) return;
 			if (!shouldAutoScroll) return;
 			isScrollingProgrammatically.current = true;
-			messagesEndRef.current.scrollIntoView({ behavior: "instant" });
+			messagesEndRef.current.scrollIntoView({ behavior: "instant", block: "end" });
 			// Reset the flag after scroll animation completes
 			setTimeout(() => {
 				isScrollingProgrammatically.current = false;
@@ -152,6 +152,48 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 			[onSendMessage, scrollToBottom],
 		);
 
+		// iOS keyboard/open focus handling to reduce layout jump and zoom
+		useEffect(() => {
+			const onFocusIn = (e: FocusEvent) => {
+				const target = e.target as HTMLElement | null;
+				if (!target) return;
+				// Ensure the input stays visible when keyboard opens
+				if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
+					setTimeout(() => {
+						try {
+							messagesEndRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+						} catch {}
+					}, 100);
+				}
+			};
+			document.addEventListener("focusin", onFocusIn);
+			return () => document.removeEventListener("focusin", onFocusIn);
+		}, []);
+
+		// Dismiss keyboard when tapping outside inputs on iOS
+		useEffect(() => {
+			const onTouchStart = (e: TouchEvent) => {
+				const active = document.activeElement as HTMLElement | null;
+				if (!active) return;
+				const tag = active.tagName;
+				if (tag === "INPUT" || tag === "TEXTAREA") {
+					const target = e.target as Node | null;
+					if (target && active && !active.contains(target)) {
+						setTimeout(() => {
+							try {
+								active.blur();
+							} catch {}
+						}, 50);
+					}
+				}
+			};
+			document.addEventListener("touchstart", onTouchStart, {
+				passive: true,
+				capture: true,
+			} as AddEventListenerOptions);
+			return () => document.removeEventListener("touchstart", onTouchStart, true as any);
+		}, []);
+
 		// Expose methods via ref
 		useImperativeHandle(
 			ref,
@@ -180,13 +222,17 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 		);
 
 		return (
-			<main className="flex flex-col h-full w-full items-center flex-grow bg-background max-h-full overflow-hidden ">
-				<div className="h-full flex-grow flex flex-col bg-background max-h-full w-full overflow-auto">
+			<main
+				className="flex flex-col h-dvh w-full items-center flex-grow bg-background max-h-dvh overflow-hidden"
+				style={{ WebkitOverflowScrolling: "touch", touchAction: "manipulation" }}
+			>
+				<div className="h-full flex-grow flex flex-col bg-background max-h-dvh w-full overflow-hidden">
 					{/* Messages Container */}
 					<div
 						ref={scrollContainerRef}
 						onScroll={handleScroll}
-						className="flex-1 overflow-y-auto p-4 space-y-8  flex flex-col items-center flex-grow max-h-full overflow-hidden"
+						className="flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(theme(spacing.4),env(safe-area-inset-bottom))] space-y-8 flex flex-col items-center flex-grow max-h-full"
+						style={{ WebkitOverflowScrolling: "touch" }}
 					>
 						{localMessages.map((message) => (
 							<div className="w-full max-w-screen-lg px-4" key={message.id}>
@@ -213,7 +259,7 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 					</div>
 
 					{/* ChatBox */}
-					<div className="bg-transparent pb-4 max-w-screen-lg w-full mx-auto">
+					<div className="bg-transparent pb-[max(theme(spacing.4),env(safe-area-inset-bottom))] max-w-screen-lg w-full mx-auto">
 						{defaultActiveTools && (
 							<ChatBox
 								ref={chatBox}

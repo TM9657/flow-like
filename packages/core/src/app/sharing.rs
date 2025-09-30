@@ -614,16 +614,14 @@ impl App {
             path: &Path,
             existing_size: u64,
         ) -> flow_like_types::Result<Option<(String, u64)>> {
-            let size = match obj_exists_with_size(store, path, 0).await? {
-                Some(true) => store.head(path).await?.size as u64,
-                Some(false) => return Ok(None),
-                None => return Ok(None),
-            };
-            if size != existing_size {
-                return Ok(None);
+            if obj_exists_with_size(store, path, existing_size)
+                .await?
+                .unwrap_or(false)
+            {
+                let hash = stream_blake3_of_object(store, path).await?;
+                return Ok(Some((hash, existing_size)));
             }
-            let hash = stream_blake3_of_object(store, path).await?;
-            Ok(Some((hash, size)))
+            Ok(None)
         }
 
         enum Layout {
@@ -764,7 +762,11 @@ impl App {
                     &secondary_ct,
                 );
                 if expected != binding_tag {
-                    bail!("Archive authentication failed (binding tag mismatch)");
+                    bail!(
+                        "Archive authentication failed (binding tag mismatch), {:?}, {:?}",
+                        expected,
+                        binding_tag
+                    );
                 }
                 // Decrypt manifest only (cheap)
                 let manifest_zip_bytes = task::spawn_blocking({
@@ -801,32 +803,40 @@ impl App {
         }
         let mut plan = Plan::default();
 
-        let plan_map = |entries: &HashMap<String, ManifestEntry>,
-                        out: &mut HashMap<String, Vec<String>>|
-         -> flow_like_types::Result<()> {
-            futures::executor::block_on(async {
-                for (rel, e) in entries {
-                    let store = match e.store {
-                        StoreKind::Meta => &meta,
-                        StoreKind::Storage => &storage,
-                    };
-                    let target = join_rel_path(&base, rel);
-                    match load_existing_hash_and_size(store, &target, e.size).await? {
-                        None => out.entry(e.blake3.clone()).or_default().push(rel.clone()),
-                        Some((existing_hash, _)) => {
-                            if existing_hash != e.blake3 {
-                                out.entry(e.blake3.clone()).or_default().push(rel.clone());
-                            }
+        async fn plan_map(
+            entries: &HashMap<String, ManifestEntry>,
+            out: &mut HashMap<String, Vec<String>>,
+            meta: &Arc<dyn ObjectStore>,
+            storage: &Arc<dyn ObjectStore>,
+            base: &Path,
+        ) -> flow_like_types::Result<()> {
+            for (rel, e) in entries {
+                let store = match e.store {
+                    StoreKind::Meta => meta,
+                    StoreKind::Storage => storage,
+                };
+                let target = join_rel_path(base, rel);
+                match load_existing_hash_and_size(store, &target, e.size).await? {
+                    None => out.entry(e.blake3.clone()).or_default().push(rel.clone()),
+                    Some((existing_hash, _)) => {
+                        if existing_hash != e.blake3 {
+                            out.entry(e.blake3.clone()).or_default().push(rel.clone());
                         }
                     }
                 }
-                Ok::<_, flow_like_types::Error>(())
-            })?;
+            }
             Ok(())
-        };
+        }
 
-        plan_map(&manifest.prio, &mut plan.prio)?;
-        plan_map(&manifest.secondary, &mut plan.secondary)?;
+        plan_map(&manifest.prio, &mut plan.prio, &meta, &storage, &base).await?;
+        plan_map(
+            &manifest.secondary,
+            &mut plan.secondary,
+            &meta,
+            &storage,
+            &base,
+        )
+        .await?;
 
         if plan.prio.is_empty() && plan.secondary.is_empty() {
             let mut app = App::load(manifest.app_id.clone(), app_state.clone()).await?;
@@ -970,8 +980,77 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs::File, io::Read};
+    use crate::{
+        app::{AppExecutionMode, AppStatus, AppVisibility},
+        state::FlowLikeConfig,
+        utils::http::HTTPClient,
+    };
+    use flow_like_storage::{
+        files::store::FlowLikeStore,
+        object_store::{ObjectStore, PutPayload, memory::InMemory, path::Path as ObjectPath},
+    };
+    use flow_like_types::tokio;
+    use std::{fs::File, io::Read, sync::Arc, time::SystemTime};
     use tempfile::NamedTempFile;
+
+    fn setup_state() -> (Arc<Mutex<FlowLikeState>>, Arc<InMemory>, Arc<InMemory>) {
+        let mut config = FlowLikeConfig::new();
+        let meta_store = Arc::new(InMemory::new());
+        let storage_store = Arc::new(InMemory::new());
+        config.register_app_meta_store(FlowLikeStore::Memory(meta_store.clone()));
+        config.register_app_storage_store(FlowLikeStore::Memory(storage_store.clone()));
+        let (http_client, _rx) = HTTPClient::new();
+        let state = FlowLikeState::new(config, http_client);
+        (Arc::new(Mutex::new(state)), meta_store, storage_store)
+    }
+
+    fn make_app(id: &str, state: Arc<Mutex<FlowLikeState>>) -> App {
+        App {
+            id: id.to_string(),
+            status: AppStatus::Active,
+            visibility: AppVisibility::Private,
+            authors: vec![],
+            bits: vec![],
+            boards: vec![],
+            events: vec![],
+            templates: vec![],
+            changelog: None,
+            primary_category: None,
+            secondary_category: None,
+            rating_sum: 0,
+            rating_count: 0,
+            download_count: 0,
+            interactions_count: 0,
+            avg_rating: None,
+            relevance_score: None,
+            execution_mode: AppExecutionMode::Any,
+            updated_at: SystemTime::now(),
+            created_at: SystemTime::now(),
+            version: None,
+            frontend: None,
+            price: None,
+            app_state: Some(state),
+        }
+    }
+
+    async fn seed_sample_objects(meta: &Arc<InMemory>, storage: &Arc<InMemory>, app_id: &str) {
+        let meta_path = ObjectPath::from("apps").child(app_id).child("config.meta");
+        meta.put(
+            &meta_path,
+            PutPayload::from_bytes(Bytes::from_static(b"meta config")),
+        )
+        .await
+        .expect("seed meta");
+
+        let storage_path = ObjectPath::from("apps").child(app_id).child("data.bin");
+        storage
+            .put(
+                &storage_path,
+                PutPayload::from_bytes(Bytes::from_static(b"storage data")),
+            )
+            .await
+            .expect("seed blob");
+    }
 
     // ---------- Encryption tests ----------
 
@@ -1237,5 +1316,130 @@ mod tests {
         let mut extracted = Vec::new();
         file.read_to_end(&mut extracted).unwrap();
         assert_eq!(extracted, big_data);
+    }
+
+    #[test]
+    fn export_import_roundtrip_plaintext_archive() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let (state, meta_store, storage_store) = setup_state();
+            let app_id = "app_plain";
+
+            let app = make_app(app_id, state.clone());
+            app.save().await.expect("seed manifest");
+            seed_sample_objects(&meta_store, &storage_store, app_id).await;
+
+            let tempdir = tempfile::tempdir().expect("tmpdir");
+            let export_target = tempdir.path().join("plain_archive");
+
+            let exported_path = app
+                .export_archive(None, export_target)
+                .await
+                .expect("export plain");
+
+            let (import_state, import_meta, import_storage) = setup_state();
+            let imported = App::import_archive(import_state, exported_path.clone(), None)
+                .await
+                .expect("import plain");
+            assert_eq!(imported.id, app_id);
+
+            let manifest_path = ObjectPath::from("apps").child(app_id).child("manifest.app");
+            let manifest_bytes = import_meta
+                .get(&manifest_path)
+                .await
+                .expect("fetch manifest")
+                .bytes()
+                .await
+                .expect("manifest bytes");
+            assert!(!manifest_bytes.is_empty(), "manifest should not be empty");
+
+            let config_path = ObjectPath::from("apps").child(app_id).child("config.meta");
+            let config_bytes = import_meta
+                .get(&config_path)
+                .await
+                .expect("fetch config meta")
+                .bytes()
+                .await
+                .expect("config bytes");
+            assert_eq!(config_bytes, Bytes::from_static(b"meta config"));
+
+            let storage_path = ObjectPath::from("apps").child(app_id).child("data.bin");
+            let blob_bytes = import_storage
+                .get(&storage_path)
+                .await
+                .expect("fetch blob")
+                .bytes()
+                .await
+                .expect("blob bytes");
+            assert_eq!(blob_bytes, Bytes::from_static(b"storage data"));
+        });
+    }
+
+    #[test]
+    fn export_import_roundtrip_encrypted_archive() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let (state, meta_store, storage_store) = setup_state();
+            let app_id = "app_enc";
+
+            let app = make_app(app_id, state.clone());
+            app.save().await.expect("seed manifest");
+            seed_sample_objects(&meta_store, &storage_store, app_id).await;
+
+            let tempdir = tempfile::tempdir().expect("tmpdir");
+            let export_target = tempdir.path().join("encrypted_archive");
+            let password = "s3cret-pass";
+
+            let exported_path = app
+                .export_archive(Some(password.to_string()), export_target)
+                .await
+                .expect("export enc");
+
+            let (import_state, import_meta, import_storage) = setup_state();
+            let imported = App::import_archive(
+                import_state,
+                exported_path.clone(),
+                Some(password.to_string()),
+            )
+            .await
+            .expect("import enc");
+            assert_eq!(imported.id, app_id);
+
+            let manifest_path = ObjectPath::from("apps").child(app_id).child("manifest.app");
+            let manifest_bytes = import_meta
+                .get(&manifest_path)
+                .await
+                .expect("fetch manifest")
+                .bytes()
+                .await
+                .expect("manifest bytes");
+            assert!(!manifest_bytes.is_empty(), "manifest should not be empty");
+
+            let config_path = ObjectPath::from("apps").child(app_id).child("config.meta");
+            let config_bytes = import_meta
+                .get(&config_path)
+                .await
+                .expect("fetch config meta")
+                .bytes()
+                .await
+                .expect("config bytes");
+            assert_eq!(config_bytes, Bytes::from_static(b"meta config"));
+
+            let storage_path = ObjectPath::from("apps").child(app_id).child("data.bin");
+            let blob_bytes = import_storage
+                .get(&storage_path)
+                .await
+                .expect("fetch blob")
+                .bytes()
+                .await
+                .expect("blob bytes");
+            assert_eq!(blob_bytes, Bytes::from_static(b"storage data"));
+        });
     }
 }

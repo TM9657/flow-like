@@ -36,6 +36,7 @@ use serde::Serialize;
 
 use crate::llm::LLMCallback;
 use crate::response_chunk::ResponseChunk;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, create_dir_all};
 use std::io::Read;
@@ -55,6 +56,7 @@ pub struct OpenAIClientBuilder {
     version: Option<String>,
     timeout: Option<u64>,
     headers: Option<HeaderMap>,
+    model: Option<String>,
 }
 
 pub struct OpenAIClient {
@@ -65,6 +67,7 @@ pub struct OpenAIClient {
     timeout: Option<u64>,
     version: Option<String>,
     pub headers: Option<HeaderMap>,
+    pub model: Option<String>,
 }
 
 impl OpenAIClientBuilder {
@@ -89,6 +92,11 @@ impl OpenAIClientBuilder {
 
     pub fn with_organization(mut self, organization: impl Into<String>) -> Self {
         self.organization = Some(organization.into());
+        self
+    }
+
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
         self
     }
 
@@ -125,6 +133,7 @@ impl OpenAIClientBuilder {
             version: self.version,
             timeout: self.timeout,
             headers: self.headers,
+            model: self.model,
         })
     }
 }
@@ -186,6 +195,72 @@ impl OpenAIClient {
         Ok(client)
     }
 
+    pub async fn from_params(
+        params: HashMap<String, Value>,
+    ) -> flow_like_types::Result<OpenAIClient> {
+        let mut client = OpenAIClient::builder();
+
+        if let Some(api_key) = params.get("api_key").and_then(|v| v.as_str()) {
+            client = client.with_api_key(api_key);
+        }
+
+        if let Some(organization_id) = params.get("organization").and_then(|v| v.as_str()) {
+            client = client.with_organization(organization_id);
+        }
+
+        if let Some(model) = params.get("model_id").and_then(|v| v.as_str()) {
+            client = client.with_model(model);
+        }
+
+        if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
+            client = client.with_endpoint(endpoint);
+
+            if let Some(_is_azure) = params.get("is_azure").and_then(|v| v.as_bool()) {
+                let model_id =
+                    params
+                        .get("model_id")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            flow_like_types::anyhow!("ModelID Required for Azure Deployments")
+                        })?;
+
+                client = client.with_model(model_id);
+
+                let api_key = params
+                    .get("api_key")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        flow_like_types::anyhow!("API key required for Azure Deployments")
+                    })?;
+                let version = params
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        flow_like_types::anyhow!("Version required for Azure Deployments")
+                    })?;
+                let endpoint = if endpoint.ends_with('/') {
+                    endpoint.to_string()
+                } else {
+                    format!("{}/", endpoint)
+                };
+                let endpoint = format!("{}openai/deployments/{}", endpoint, model_id);
+                client = client.with_endpoint(endpoint);
+                client = client.with_version(version);
+                client = client.with_header("api-key", api_key);
+            }
+        }
+
+        if let Some(proxy) = params.get("proxy").and_then(|v| v.as_str()) {
+            client = client.with_proxy(proxy);
+        }
+
+        let client = client
+            .build()
+            .map_err(|e| flow_like_types::anyhow!("Failed to create OpenAI client: {}", e))?;
+
+        Ok(client)
+    }
+
     async fn build_request(
         &self,
         method: Method,
@@ -215,7 +290,9 @@ impl OpenAIClient {
 
         let mut request = client
             .request(method, url)
-            .header("Authorization", format!("Bearer {}", self.api_key));
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("HTTP-Referer", "flow-like.com")
+            .header("X-Title", "Flow-Like");
 
         if let Some(organization) = &self.organization {
             request = request.header("openai-organization", organization);
@@ -413,7 +490,7 @@ impl OpenAIClient {
                 let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
                     Ok(chunk) => chunk,
                     Err(e) => {
-                        eprintln!("Failed to parse chunk: {}", e);
+                        eprintln!("Failed to parse chunk: {}, data: {}", e, data);
                         continue;
                     }
                 };

@@ -1,0 +1,121 @@
+---
+title: "Flow-Like Alpha v0.0.4 — Excel Extraction, ML Nodes, Themes & Smoother Editing"
+description: "Alpha v0.0.4 ships intelligent Excel table extraction, powerful new Machine Learning nodes, profile themes, desktop auto-updates, and big performance/stability wins."
+date: 2025-09-08
+tags: ["release", "alpha", "alpha-0.0.4", "excel", "ml", "agents"]
+cover: "/images/alpha-0-0-4.jpg"
+draft: false
+---
+
+Alpha **v0.0.4** doubles down on *real-world spreadsheets* and *practical ML*. Extract clean tables from Excel in one step, automate sheets with a focused Excel toolkit, and train/predict with new Machine Learning nodes — all inside typed, composable flows.
+
+## Highlights
+
+- **Machine Learning Nodes (Major)** — Train **K-Means**, **SVM Classifier**, **Linear Regression**; **Predict**; **Save/Load** models — designed for tabular flows ([PR #257](https://github.com/TM9657/flow-like/pull/257)).
+- **Excel Table Extraction (XLSX)** — Detects headers/regions and emits **typed rows** ready for downstream nodes. No preview; straight to data.
+- **Excel Node Toolkit** — Read/write cells, add/copy sheets, insert/remove rows & columns, list sheet names, and more (full list below).
+- **Profiles & Themes** — Per-profile app visibility and theme selection.
+- **Desktop Auto-Updates** — In-app updates via the Tauri updater (macOS/Windows/Linux).
+- **Performance & Stability** — Faster big graphs; better long-run reliability.
+- **Default Logging = `info`** — New flows start calmer (enable `debug` when needed).
+- **Apple Login Fixed**.
+- **Docs Refresh** — Clearer *Getting Started* and expanded node pages.
+
+---
+
+## Excel, Done Right
+
+### Intelligent Excel Table Extraction
+Drop in an `.xlsx` → get **typed rows**. The extractor finds well-formed tabular regions, detects headers, and handles empty margins and messy edges. Perfect for piping into database/vector/search nodes or straight into ML.
+
+**Node:**
+- **Try Extract Tables (Excel)** — Detect and emit `Array<Struct>` records from a worksheet.
+
+### Excel Nodes in v0.0.4
+A compact, consistent set that covers common spreadsheet automations:
+
+- **Read Cell** — A1 or (row, col) addressing; returns string/number/bool when possible
+- **Write Cell** — Write any typed value to a cell
+- **Insert Row** / **Remove Row** — Structural row edits
+- **Insert Column** / **Remove Column** — Structural column edits
+- **New Worksheet** — Create a new sheet
+- **Copy Worksheet** — Duplicate a worksheet (data + layout)
+- **Get Sheet Names** — Enumerate sheets for routing/UX
+- **Buffered CSV Reader** — Efficient CSV ingestion that fits the same table-first workflow
+
+> Pair with **Local Database** nodes (Full-Text / Vector / Hybrid Search) to blend spreadsheets, search, and embeddings.
+
+---
+
+## Machine Learning
+
+We are shipping a practical ML set tailored to **typed, tabular workflows** — efficient locally, easy to wire into production flows.
+
+### Included in v0.0.4
+
+**Training**
+- **K-Means (Train)** — Unsupervised clustering for numeric features
+- **SVM Classifier (Train)** — Supervised classification
+- **Linear Regression (Train)** — Classic regression for continuous targets
+
+**Inference & Persistence**
+- **Predict (Model, Rows)** — Run predictions over arrays of structs/vectors; emits typed outputs (class/label, score, or numeric)
+- **Save Model** / **Load Model** — Portable model checkpoints (JSON-backed) for repeatable deploys and A/Bs
+
+**Design Goals**
+- **Typed pins** end-to-end (features, labels, predictions)
+- **Composable** with Database, Embeddings, and String/Math utilities
+- **Local-first** behavior that is predictable and debuggable
+
+**Example Flow (Sketch)**
+
+`Read/Extract (Excel)` → `Feature Map (Types)` → `Train (SVM)` → `Save Model`
+→ `Load Model` → `Predict` → `Upsert to DB / Export CSV`
+
+---
+
+## Builder Quality of Life
+
+**Default: `info` logging** for new flows — keep noise low; switch to `debug` when investigating. If you still have old flows in `debug`, check if `info` is sufficient. Logging comes with a cost.
+
+---
+
+## Themes, Profiles & App Visibility
+
+Create **profiles** to separate personal/team work, pick which **apps are visible** per profile, and apply **different themes** or create your own.
+
+---
+
+## Desktop Auto-Updates
+
+This will be the last update you have to download manually. Flow-Like now supports **in-app updates** via the [Tauri Updater](https://v2.tauri.app/plugin/updater/) (macOS/Windows/Linux).
+
+---
+
+## Performance & Stability
+
+- **Large Graphs**: faster execution paths, fewer allocations, improved back-pressure in I/O
+- **Long-Running Flows**: better memory behavior and logging resilience
+
+---
+
+## Fixes & Smaller Improvements
+
+- **Apple Login** stability fix
+- **Default Logging** now **`info`** for new flows
+- **Docs Additions** across *Getting Started*, *Local Database* search nodes, and utilities
+
+---
+
+## Community
+
+A big thank you to everyone who contributed issues, feedback, and ideas for this release! Special thanks to the r/selfhosted Reddit community for over 100 stars on Github and phenomenal feedback. We are taking that [feedback](https://www.reddit.com/r/selfhosted/comments/1n41uu6/ive_spent_5000_hours_building_a_typed_workflow/) seriously and have reworked our website.
+
+---
+
+## Links
+
+- **Docs Home:** [https://docs.flow-like.com](https://docs.flow-like.com)
+- **Getting Started:** [https://docs.flow-like.com/start/first-use/](https://docs.flow-like.com/start/first-use/)
+- **ML Nodes PR:** [https://github.com/TM9657/flow-like/pull/257](https://github.com/TM9657/flow-like/pull/257)
+- **Excel Nodes Epic:** [https://github.com/TM9657/flow-like/issues/262](https://github.com/TM9657/flow-like/issues/262)

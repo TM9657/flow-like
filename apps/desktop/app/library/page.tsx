@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
 	AppCard,
@@ -25,11 +26,10 @@ import {
 	useBackend,
 	useInvoke,
 	useMiniSearch,
+	useMobileHeader,
 } from "@tm9657/flow-like-ui";
 import {
 	ArrowUpDown,
-	EyeIcon,
-	EyeOffIcon,
 	FilesIcon,
 	Grid3X3,
 	ImportIcon,
@@ -37,7 +37,6 @@ import {
 	LibraryIcon,
 	Link2,
 	List,
-	LockIcon,
 	Search,
 	SearchIcon,
 	Sparkles,
@@ -46,6 +45,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import ImportEncryptedDialog from "./components/ImportEncryptedDialog";
 
 export default function YoursPage() {
 	const backend = useBackend();
@@ -67,6 +67,100 @@ export default function YoursPage() {
 	const [sortBy, setSortBy] = useState<
 		"created" | "updated" | "visibility" | "name"
 	>("created");
+
+	const isMobileDevice = useCallback(() => {
+		if (typeof navigator === "undefined") return false;
+		const ua = navigator.userAgent.toLowerCase();
+		if (/android|iphone|ipad|ipod/.test(ua)) return true;
+		if (
+			"userAgentData" in navigator &&
+			typeof (navigator as any).userAgentData?.mobile === "boolean" &&
+			(navigator as any).userAgentData.mobile
+		)
+			return true;
+		const platform = navigator.platform?.toLowerCase() ?? "";
+		const maxTouchPoints =
+			(navigator as Navigator & { maxTouchPoints?: number }).maxTouchPoints ?? 0;
+		return /mac/.test(platform) && maxTouchPoints > 1;
+	}, []);
+
+	const normalizePickerPath = (input: string): string => {
+		if (!input.startsWith("file://")) {
+			return input;
+		}
+
+		try {
+			const url = new URL(input);
+			let pathname = decodeURIComponent(url.pathname);
+			if (/^[A-Za-z]:/.test(pathname.slice(1, 3))) {
+				pathname = pathname.slice(1);
+			}
+			return pathname || input;
+		} catch {
+			const withoutScheme = input.replace(/^file:\/\//, "");
+			if (withoutScheme.startsWith("/")) {
+				return withoutScheme;
+			}
+			return `/${withoutScheme}`;
+		}
+	};
+
+	const resolveSelectedPath = (selected: unknown): string | null => {
+		if (!selected) return null;
+		if (typeof selected === "string") return selected;
+		if (Array.isArray(selected)) return resolveSelectedPath(selected[0]);
+		if (typeof selected === "object") {
+			const candidate = selected as { path?: unknown; uri?: unknown };
+			if (typeof candidate.path === "string") return normalizePickerPath(candidate.path);
+			if (typeof candidate.uri === "string") return normalizePickerPath(candidate.uri);
+		}
+		return null;
+	};
+
+	const importApp = useCallback(
+		async (path: string) => {
+			if (path.toLowerCase().endsWith(".enc.flow-app")) {
+				setEncryptedImportPath(path);
+				setImportDialogOpen(true);
+				return;
+			}
+			const toastId = toast.loading("Importing app...", { description: "Please wait." });
+			try {
+				await invoke("import_app_from_file", { path });
+				toast.success("App imported successfully!", { id: toastId });
+				await apps.refetch();
+			} catch (err) {
+				console.error(err);
+				toast.error("Failed to import app", { id: toastId });
+			}
+		},
+		[apps],
+	);
+
+	const pickImportFile = useCallback(async () => {
+		type Filter = { name: string; extensions: string[] };
+		const isMobile = isMobileDevice();
+		const filtersOption: Filter[] | undefined = isMobile
+			? undefined
+			: [
+				{
+					name: "Flow App",
+					extensions: ["flow-app"],
+				},
+			];
+
+		const selection = await open({
+			multiple: false,
+			directory: false,
+			...(filtersOption ? { filters: filtersOption } : {}),
+		});
+		const path = resolveSelectedPath(selection);
+		if (!path) {
+			toast.error("Unable to open selected file.");
+			return;
+		}
+		await importApp(path);
+	}, [importApp, isMobileDevice]);
 
 	const allItems = useMemo(() => {
 		if (!currentProfile.data) return [];
@@ -151,6 +245,51 @@ export default function YoursPage() {
 		};
 	}, [allItems]);
 
+	const menuActions = useMemo(
+		() => [
+			<Button key="import" size="icon" variant="outline" onClick={pickImportFile}>
+				<ImportIcon className="h-4 w-4" />
+			</Button>,
+			<Button
+				key={"join"}
+				size="icon"
+				variant="outline"
+				onClick={() => setJoinDialogOpen(true)}
+			>
+				<Link2 className="h-4 w-4" />
+			</Button>,
+			<Button
+				key={"create"}
+				variant="default"
+				asChild
+			>
+				<Link href="/library/new">
+					<Sparkles className="mr-2 h-4 w-4" />
+					Create App
+				</Link>
+			</Button>
+		],
+		[pickImportFile, setJoinDialogOpen],
+	);
+
+	// Listen for import/file events (e.g., from iOS when a file is opened with the app)
+	useEffect(() => {
+		const unlistenPromise = listen<{ path: string }>("import/file", async (event) => {
+			const path = event.payload.path;
+			if (!path) return;
+			await importApp(path);
+		});
+
+		return () => {
+			unlistenPromise.then((unsub) => unsub()).catch(() => void 0);
+		};
+	}, [importApp]);
+
+	useMobileHeader({
+		right: menuActions,
+		title: "Library",
+	})
+
 	const renderAppCards = (items: any[]) => {
 		if (viewMode === "grid") {
 			return (
@@ -190,38 +329,47 @@ export default function YoursPage() {
 	};
 
 	return (
-		<main className="min-h-dvh max-h-dvh flex flex-col w-full p-6 bg-gradient-to-br from-background to-muted/20">
+		<main className="flex flex-col w-full p-6 bg-gradient-to-br from-background to-muted/20 flex-1 min-h-0">
 			{/* Header Section */}
 			<div className="flex flex-col space-y-6 mb-8">
-				<div className="flex items-center justify-between">
+				<div className="hidden flex-col gap-4 sm:flex-row sm:items-center sm:justify-between md:flex">
 					<div className="flex items-center space-x-3">
-						<div className="p-2 rounded-xl bg-primary/10 text-primary">
-							<LibraryIcon className="h-8 w-8" />
+						<div className="p-1.5 sm:p-2 rounded-xl bg-primary/10 text-primary">
+							<LibraryIcon className="h-6 w-6 sm:h-8 sm:w-8" />
 						</div>
 						<div>
-							<h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+							<h1 className="text-2xl sm:text-4xl leading-tight font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
 								Library
 							</h1>
-							<p className="text-muted-foreground mt-1">
+							<p className="text-muted-foreground mt-1 text-sm sm:text-base">
 								Manage and create your custom applications
 							</p>
 						</div>
 					</div>
-					<div className="flex items-center gap-2">
+					<div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
 						<Button
 							size="lg"
 							variant="outline"
-							className="shadow-lg hover:shadow-xl transition-all duration-200"
+							className="w-full sm:w-auto h-9 px-3 text-sm sm:h-11 sm:px-5 sm:text-base shadow-lg hover:shadow-xl transition-all duration-200 hidden md:flex"
 							onClick={async () => {
-								const file = await open({
-									multiple: false,
-									directory: false,
-									filters: [
+								type Filter = { name: string; extensions: string[] };
+								let filtersOption: Filter[] | undefined;
+								// Use UA-based detection to avoid plugin availability issues
+								const ua = typeof navigator !== "undefined" ? navigator.userAgent.toLowerCase() : "";
+								const isMobile = /android|iphone|ipad|ipod/.test(ua);
+								filtersOption = isMobile
+									? undefined
+									: [
 										{
 											name: "Flow App",
 											extensions: ["flow-app", "enc.flow-app"],
 										},
-									],
+									];
+
+								const file = await open({
+									multiple: false,
+									directory: false,
+									...(filtersOption ? { filters: filtersOption } : undefined),
 								});
 								if (!file) return;
 								const path = String(file);
@@ -249,7 +397,7 @@ export default function YoursPage() {
 						<Button
 							size="lg"
 							variant="outline"
-							className="shadow-lg hover:shadow-xl transition-all duration-200"
+							className="w-full sm:w-auto h-9 px-3 text-sm sm:h-11 sm:px-5 sm:text-base shadow-lg hover:shadow-xl transition-all duration-200 hidden md:flex"
 							onClick={() => setJoinDialogOpen(true)}
 						>
 							<Link2 className="mr-2 h-4 w-4" />
@@ -258,7 +406,7 @@ export default function YoursPage() {
 						<Button
 							size="lg"
 							variant="outline"
-							className="shadow-lg hover:shadow-xl transition-all duration-200"
+							className="w-full sm:w-auto h-9 px-3 text-sm sm:h-11 sm:px-5 sm:text-base shadow-lg hover:shadow-xl transition-all duration-200 hidden md:flex"
 							asChild
 						>
 							<Link href="/library/new">
@@ -323,9 +471,9 @@ export default function YoursPage() {
 				/>
 
 				{/* Search and Filter Bar */}
-				<div className="flex items-center justify-between space-x-4">
-					<div className="flex items-center space-x-4 flex-1">
-						<div className="relative flex-1 max-w-md">
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:space-x-4">
+					<div className="flex items-center gap-3 sm:gap-4 flex-1 w-full">
+						<div className="relative w-full sm:flex-1 sm:max-w-md">
 							<SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-foreground h-4 w-4 z-10" />
 							<Input
 								placeholder="Search apps..."
@@ -344,12 +492,12 @@ export default function YoursPage() {
 							Missing Apps?{" "}
 						</a>
 					</div>
-					<div className="flex items-center space-x-2">
+					<div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
 						<Select
 							value={sortBy}
 							onValueChange={(value: typeof sortBy) => setSortBy(value)}
 						>
-							<SelectTrigger className="w-[140px]">
+							<SelectTrigger className="w-full sm:w-[140px]">
 								<ArrowUpDown className="h-4 w-4 mr-2" />
 								<SelectValue />
 							</SelectTrigger>
@@ -425,120 +573,3 @@ export default function YoursPage() {
 		</main>
 	);
 }
-
-interface ImportEncryptedDialogProps {
-	open: boolean;
-	onOpenChange: (open: boolean) => void;
-	path: string | null;
-	onImported: () => Promise<void> | void;
-}
-
-const ImportEncryptedDialog: React.FC<ImportEncryptedDialogProps> = ({
-	open,
-	onOpenChange,
-	path,
-	onImported,
-}) => {
-	const [password, setPassword] = useState("");
-	const [show, setShow] = useState(false);
-	const [loading, setLoading] = useState(false);
-
-	useEffect(() => {
-		if (!open) {
-			setPassword("");
-			setShow(false);
-			setLoading(false);
-		}
-	}, [open]);
-
-	const handleImport = useCallback(async () => {
-		if (!path) return;
-		setLoading(true);
-		const toastId = toast.loading("Importing encrypted app...", {
-			description: "Decrypting and importing. Please wait.",
-		});
-		try {
-			await invoke("import_app_from_file", { path, password });
-			toast.success("App imported successfully!", { id: toastId });
-			onOpenChange(false);
-			await onImported();
-		} catch (err) {
-			console.error(err);
-			toast.error("Failed to import app", { id: toastId });
-		} finally {
-			setLoading(false);
-		}
-	}, [path, password, onImported, onOpenChange]);
-
-	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-md animate-in fade-in-0 slide-in-from-top-8 rounded-2xl shadow-2xl border-none bg-background/95 backdrop-blur-lg">
-				<DialogHeader className="space-y-3">
-					<div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-						<LockIcon className="h-6 w-6 text-primary" />
-					</div>
-					<DialogTitle className="text-center text-2xl font-bold">
-						Import Encrypted App
-					</DialogTitle>
-					<DialogDescription className="text-center text-muted-foreground">
-						This file is encrypted. Enter the password to decrypt and import it.
-					</DialogDescription>
-				</DialogHeader>
-
-				<div className="flex flex-col gap-3 py-2">
-					<div className="grid gap-2">
-						<label
-							htmlFor="import-password"
-							className="text-xs text-muted-foreground"
-						>
-							Password
-						</label>
-						<div className="relative">
-							<Input
-								id="import-password"
-								type={show ? "text" : "password"}
-								value={password}
-								onChange={(e) => setPassword(e.target.value)}
-								placeholder="Enter password"
-								autoFocus
-							/>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon"
-								className="absolute right-1 top-1 h-7 w-7"
-								onClick={() => setShow((s) => !s)}
-								aria-label={show ? "Hide password" : "Show password"}
-							>
-								{show ? (
-									<EyeOffIcon className="w-4 h-4" />
-								) : (
-									<EyeIcon className="w-4 h-4" />
-								)}
-							</Button>
-						</div>
-					</div>
-					{path && (
-						<p className="text-[11px] text-muted-foreground truncate">
-							File: {path}
-						</p>
-					)}
-				</div>
-
-				<DialogFooter className="flex flex-row gap-1 justify-center pt-2">
-					<DialogClose asChild>
-						<Button variant="outline" disabled={loading}>
-							Cancel
-						</Button>
-					</DialogClose>
-					<Button
-						onClick={handleImport}
-						disabled={loading || password.trim() === ""}
-					>
-						{loading ? "Importing..." : "Import"}
-					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
-	);
-};

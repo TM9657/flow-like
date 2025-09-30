@@ -5,62 +5,60 @@ const github = "https://github.com/TM9657/flow-like";
 const docs = "https://docs.flow-like.com";
 ---
 
-<section
-    class="mx-auto max-w-7xl px-4 pt-8 md:pt-16 lg:pt-16 lg:px-8 pb-12 mt-0 md:mt-8 lg:mt-16 overflow-x-hidden"
-    data-c2="hsl(0 100% 63% / .10)"
-    data-c1="hsl(161 40% 44% / .10)"
->
-    <div id="hero-cover" class="relative">
+<section class="relative py-12 md:py-20 lg:py-24 max-w-screen overflow-hidden">
+    <div
+        id="hero-connection-layer"
+        class="pointer-events-none absolute inset-0 w-full h-full -z-[1] overflow-hidden [contain:layout_paint]"
+    >
+        <!-- contain prevents svg path geometry from affecting page scroll size -->
+        <svg
+            id="hero-connections"
+            class="hidden md:block absolute inset-0"
+            style="overflow:visible;width:100%"
+            aria-hidden="true"
+        >
+            <path id="hero-right-conn" class="pin-conn text-primary" fill="none"
+            ></path>
+            <path
+                id="hero-left-conn"
+                class="pin-conn text-emerald-500"
+                fill="none"></path>
+            <path
+                id="hero-right-conn-top"
+                class="pin-conn-solid text-foreground/70"
+                fill="none"></path>
+            <path
+                id="hero-left-conn-top"
+                class="pin-conn-solid text-foreground/70"
+                fill="none"></path>
+        </svg>
+    </div>
+    <div id="hero-cover" class="mx-auto max-w-7xl px-4 lg:px-8 relative">
+        <!-- pin anchors -->
         <div
             id="hero-right-pin"
-            class="hidden md:block size-4 bg-primary absolute top-60 -right-1.5 z-10 rounded-full shadow-[0_0_0_4px_rgba(255,255,255,.15)]"
+            class="hidden md:block size-4 bg-primary absolute top-60 right-2 lg:right-6 rounded-full z-10 shadow-[0_0_0_4px_rgba(255,255,255,.15)] pointer-events-none"
         >
         </div>
         <div
             id="hero-left-pin"
-            class="hidden md:block size-4 bg-emerald-500 absolute top-36 -left-1.5 z-10 rounded-full shadow-[0_0_0_4px_rgba(255,255,255,.15)]"
+            class="hidden md:block size-4 bg-emerald-500 absolute top-36 left-2 lg:left-6 rounded-full z-10 shadow-[0_0_0_4px_rgba(255,255,255,.15)] pointer-events-none"
         >
         </div>
         <div
             id="hero-right-pin-top"
-            class="hidden md:block size-4 bg-foreground absolute top-12 -right-1.5 z-10 rounded-full"
+            class="hidden md:block size-4 bg-foreground absolute top-12 right-2 lg:right-6 rounded-full z-10 pointer-events-none"
         >
         </div>
         <div
             id="hero-left-pin-top"
-            class="hidden md:block size-4 bg-foreground absolute top-12 -left-1.5 z-10 rounded-full"
+            class="hidden md:block size-4 bg-foreground absolute top-12 left-2 lg:left-6 rounded-full z-10 pointer-events-none"
         >
         </div>
 
-        <svg
-            id="hero-connections"
-            class="pointer-events-none fixed left-0 top-0 hidden md:block"
-            style="overflow:visible; z-index:1"
-            aria-hidden="true"
-        >
-            <path
-                id="hero-right-conn"
-                class="pin-conn text-primary pointer-events-none"
-                fill="none"></path>
-            <path
-                id="hero-left-conn"
-                class="pin-conn text-emerald-500 pointer-events-none"
-                fill="none"></path>
-            <path
-                id="hero-right-conn-top"
-                class="pin-conn-solid text-foreground/70 pointer-events-none"
-                fill="none"></path>
-            <path
-                id="hero-left-conn-top"
-                class="pin-conn-solid text-foreground/70 pointer-events-none"
-                fill="none"></path>
-        </svg>
-
-        <!-- hero card -->
         <div
-            class="hero-card relative overflow-hidden rounded-2xl border border-border/80 bg-background/90 backdrop-blur [--ring:theme(colors.primary.DEFAULT/30)] motion-safe:transition-transform motion-safe:duration-300"
+            class="hero-card relative overflow-hidden rounded-2xl border border-border/80 bg-background/90 backdrop-blur [--ring:theme(colors.primary.DEFAULT/30)]"
         >
-            <!-- subtle vignette and light sweep -->
             <div
                 aria-hidden="true"
                 class="pointer-events-none absolute inset-0"
@@ -71,12 +69,8 @@ const docs = "https://docs.flow-like.com";
                 </div>
                 <div class="absolute -inset-0.5 opacity-0 hero-sheen"></div>
             </div>
-
-            <div class="relative grid lg:grid-cols-2 overflow-hidden">
-                <!-- copy -->
-                <div
-                    class="p-6 sm:p-8 md:p-10 space-y-4 motion-safe:opacity-0 motion-safe:translate-y-3 will-change-transform reveal"
-                >
+            <div class="relative grid lg:grid-cols-2">
+                <div class="p-6 sm:p-8 md:p-10 space-y-4 reveal">
                     <span
                         class="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1 text-[11px] font-medium text-muted-foreground"
                         >Automate • Explain • Trust</span
@@ -90,32 +84,27 @@ const docs = "https://docs.flow-like.com";
                         Flow-Like is a visual workflow tool. Build with
                         drag-and-drop blocks, and get a clear record of <b
                             >where data came from</b
-                        >, <b>what changed</b>, and
-                        <b>why the result looks the way it does</b> — no black boxes.
+                        >, <b>what changed</b>, and <b
+                            >why the result looks the way it does</b
+                        > — no black boxes.
                     </p>
-
                     <div class="pt-2 flex flex-wrap items-center gap-3">
                         <a
                             href="/download"
                             class="fl-btn bg-primary text-primary-foreground shadow hover:bg-primary/90"
+                            >Download</a
                         >
-                            Download
-                        </a>
                         <a
                             href={docs}
                             class="fl-btn border border-border bg-muted text-foreground hover:bg-primary hover:text-primary-foreground"
+                            >Explore docs</a
                         >
-                            Explore docs
-                        </a>
                         <a
                             href={github}
                             class="fl-btn border border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                            >Star on GitHub</a
                         >
-                            Star on GitHub
-                        </a>
                     </div>
-
-                    <!-- chips -->
                     <div
                         class="pt-1 flex flex-wrap items-center gap-2.5 text-sm sm:max-w-xl"
                     >
@@ -132,23 +121,17 @@ const docs = "https://docs.flow-like.com";
                             >☁️ Works on your computer or at team scale</span
                         >
                     </div>
-
                     <p class="text-xs text-muted-foreground/90">
                         From renaming files to analyzing data to running AI —
                         build flows once and run them anywhere.
                     </p>
                 </div>
-
-                <!-- live board preview -->
-                <div
-                    class="relative min-h-[260px] h-full lg:min-h-[420px] motion-safe:opacity-0 will-change-transform reveal"
-                >
+                <div class="relative min-h-[260px] lg:min-h-[420px] reveal">
                     <div
                         class="absolute inset-0 bg-gradient-to-tr from-transparent via-background/20 to-background/0"
                     >
                     </div>
                     <EmptyBackendProvider data="/board.json" client:idle />
-                    <!-- glassy labels overlay (non-blocking) -->
                     <div
                         aria-hidden="true"
                         class="pointer-events-none absolute bottom-3 right-3 flex gap-2"
@@ -163,7 +146,6 @@ const docs = "https://docs.flow-like.com";
 </section>
 
 <style>
-    /* Buttons */
     .fl-btn {
         display: inline-flex;
         align-items: center;
@@ -190,7 +172,6 @@ const docs = "https://docs.flow-like.com";
     .fl-btn--muted {
         border: 1px solid hsl(var(--border));
         background: hsl(var(--muted));
-        color: inherit;
     }
     .fl-btn--muted:hover {
         background: hsl(var(--accent));
@@ -204,8 +185,6 @@ const docs = "https://docs.flow-like.com";
     .fl-btn--outline:hover {
         background: hsl(var(--primary) / 0.15);
     }
-
-    /* Chips (yours, with hover tuned) */
     .fl-chip {
         --t: 215 16% 47%;
         display: inline-flex;
@@ -224,10 +203,6 @@ const docs = "https://docs.flow-like.com";
             transform 0.15s ease,
             box-shadow 0.15s ease;
     }
-    .fl-chip b {
-        font-weight: 600;
-        color: inherit;
-    }
     .fl-chip--ghost:hover {
         background: hsl(var(--t) / 0.1);
         transform: translateY(-1px);
@@ -245,8 +220,6 @@ const docs = "https://docs.flow-like.com";
     .fl-chip[data-tint="sky"] {
         --t: 199 89% 48%;
     }
-
-    /* Glass tags on preview */
     .fl-glass-tag {
         backdrop-filter: blur(6px);
         background: color-mix(
@@ -260,8 +233,6 @@ const docs = "https://docs.flow-like.com";
         padding: 0.2rem 0.55rem;
         border-radius: 0.7rem;
     }
-
-    /* Card sheen (only when hovering card) */
     .hero-card:hover .hero-sheen {
         background: radial-gradient(
             120px 120px at var(--mx, 50%) var(--my, 50%),
@@ -271,8 +242,6 @@ const docs = "https://docs.flow-like.com";
         transition: opacity 0.25s ease;
         opacity: 1;
     }
-
-    /* SVG connections */
     .pin-conn-solid {
         stroke: currentColor;
         stroke-width: 3;
@@ -294,8 +263,6 @@ const docs = "https://docs.flow-like.com";
             stroke-dashoffset: -18px;
         }
     }
-
-    /* Reveal on enter */
     .reveal {
         opacity: 0;
         transform: translateY(6px);
@@ -307,7 +274,6 @@ const docs = "https://docs.flow-like.com";
             opacity 0.5s ease,
             transform 0.5s ease;
     }
-
     @media (prefers-reduced-motion: reduce) {
         .fl-btn,
         .fl-chip,
@@ -325,52 +291,56 @@ const docs = "https://docs.flow-like.com";
     const $ = (s: string, r = document) => r.querySelector(s);
 
     const heroEl = document.getElementById("hero-cover");
+    const sectionEl =
+        document.currentScript?.closest("section") ||
+        document.querySelector("section.relative");
+    const layer = document.getElementById("hero-connection-layer");
     const svg = document.getElementById("hero-connections");
     const rp = document.getElementById("hero-right-pin");
     const lp = document.getElementById("hero-left-pin");
     const rpt = document.getElementById("hero-right-pin-top");
     const lpt = document.getElementById("hero-left-pin-top");
 
+    // Calibration (tweak if still off):
+    const CAL_LEFT_X = 0; // positive moves paths right
+    const CAL_RIGHT_X = 0; // positive moves paths right
     const setSvgFrame = () => {
-        if (!heroEl || !svg) return;
+        if (!heroEl || !svg || !layer) return;
         const hr = heroEl.getBoundingClientRect();
-        const vw = Math.max(
-            document.documentElement.clientWidth,
-            window.innerWidth || 0,
-        );
-
-        // Fixed overlay spanning the viewport width, aligned to hero's top/height
-        svg.style.left = "0px";
-        svg.style.top = `${hr.top}px`;
-        svg.style.width = `${vw}px`;
-        svg.style.height = `${hr.height}px`;
-        svg.setAttribute("viewBox", `0 0 ${vw} ${hr.height}`);
-        svg.setAttribute("width", String(vw));
-        svg.setAttribute("height", String(hr.height));
+        const secRect = sectionEl?.getBoundingClientRect();
+        const containerWidth = secRect?.width || window.innerWidth;
+        const h = hr.height;
+        layer.style.height = `${h}px`; // width inherited (no manual setting -> prevents 100vw rounding overflow)
+        svg.style.width = "100%"; // responsive to container
+        svg.setAttribute("viewBox", `0 0 ${containerWidth} ${h}`);
+        svg.setAttribute("width", String(containerWidth));
+        svg.setAttribute("height", String(h));
     };
 
     const bezier = (pin: HTMLElement, isRight: boolean, yOffset = 60) => {
-        const hr = heroEl?.getBoundingClientRect() ?? {
-            left: 0,
-            top: 0,
-            width: 0,
-            height: 0,
-            right: 0,
-        };
+        const baseRect = sectionEl?.getBoundingClientRect() ||
+            heroEl?.getBoundingClientRect() || {
+                left: 0,
+                top: 0,
+                width: 0,
+                height: 0,
+                right: 0,
+            };
         const pr = pin.getBoundingClientRect();
-
-        // Start in viewport coords (svg is fixed and left=0, top=hero.top)
-        const sx = pr.left + pr.width / 2;
-        const sy = pr.top - hr.top + pr.height / 2;
+        const layerRect = layer?.getBoundingClientRect();
+        const layerLeft = layerRect ? layerRect.left : 0;
+        let sx = pr.left - layerLeft + pr.width / 2;
+        sx += isRight ? CAL_RIGHT_X : CAL_LEFT_X;
+        const sy = pr.top - baseRect.top + pr.height / 2;
 
         const isMobile = window.innerWidth < 768;
-        const extra = isMobile ? 50 : 220;
+        const extra = isMobile ? 0 : 220;
         const vw = Math.max(
             document.documentElement.clientWidth,
             window.innerWidth || 0,
         );
 
-        // Go to/beyond screen edges
+        // Extend beyond screen edges for pleasant overshoot
         const ex = isRight ? vw + extra : -extra;
         const ey = sy + (isRight ? yOffset : yOffset * 1.35);
 
@@ -381,20 +351,23 @@ const docs = "https://docs.flow-like.com";
     };
 
     const quad = (pin: HTMLElement, isRight: boolean, yOffset = -20) => {
-        const hr = heroEl?.getBoundingClientRect() ?? {
-            left: 0,
-            top: 0,
-            width: 0,
-            height: 0,
-            right: 0,
-        };
+        const baseRect = sectionEl?.getBoundingClientRect() ||
+            heroEl?.getBoundingClientRect() || {
+                left: 0,
+                top: 0,
+                width: 0,
+                height: 0,
+                right: 0,
+            };
         const pr = pin.getBoundingClientRect();
-
-        const sx = pr.left + pr.width / 2;
-        const sy = pr.top - hr.top + pr.height / 2;
+        const layerRect = layer?.getBoundingClientRect();
+        const layerLeft = layerRect ? layerRect.left : 0;
+        let sx = pr.left - layerLeft + pr.width / 2;
+        sx += isRight ? CAL_RIGHT_X : CAL_LEFT_X;
+        const sy = pr.top - baseRect.top + pr.height / 2;
 
         const isMobile = window.innerWidth < 768;
-        const extra = isMobile ? 50 : 300;
+        const extra = isMobile ? 0 : 300; // remove overshoot on mobile
         const vw = Math.max(
             document.documentElement.clientWidth,
             window.innerWidth || 0,
@@ -438,6 +411,7 @@ const docs = "https://docs.flow-like.com";
 
     const raf = (fn: FrameRequestCallback) => requestAnimationFrame(fn);
     addEventListener("resize", () => raf(updatePaths));
+    // Include scroll updates so vertical offset stays correct when page is scrolled before images/fonts settle.
     addEventListener("scroll", () => raf(updatePaths), { passive: true });
     addEventListener("load", () => raf(updatePaths));
     setTimeout(() => raf(updatePaths), 50);

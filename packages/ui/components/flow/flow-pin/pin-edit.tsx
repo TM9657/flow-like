@@ -24,6 +24,7 @@ interface PinEditProps {
 	readonly appId: string;
 	readonly boardId: string;
 	readonly changeDefaultValue: (value: any) => void;
+	readonly saveDefaultValue: (value: any) => Promise<void>;
 }
 
 export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
@@ -33,6 +34,7 @@ export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 	appId,
 	boardId,
 	changeDefaultValue,
+	saveDefaultValue
 }: PinEditProps) {
 	const [cachedDefaultValue, setCachedDefaultValue] = useState(defaultValue);
 
@@ -48,7 +50,10 @@ export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 			<BooleanVariable
 				pin={pin}
 				value={cachedDefaultValue}
-				setValue={setCachedDefaultValue}
+				setValue={async (value) => {
+					setCachedDefaultValue(value);
+					await saveDefaultValue(value);
+				}}
 			/>
 		);
 	if (
@@ -59,7 +64,10 @@ export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 			<EnumVariable
 				pin={pin}
 				value={cachedDefaultValue}
-				setValue={setCachedDefaultValue}
+				setValue={async (value) => {
+					setCachedDefaultValue(value);
+					await saveDefaultValue(value);
+				}}
 			/>
 		);
 
@@ -73,7 +81,10 @@ export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 				pin={pin}
 				value={cachedDefaultValue}
 				appId={appId}
-				setValue={setCachedDefaultValue}
+				setValue={async (value) => {
+					setCachedDefaultValue(value);
+					await saveDefaultValue(value);
+				}}
 			/>
 		);
 	}
@@ -89,7 +100,10 @@ export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 				pin={pin}
 				value={cachedDefaultValue}
 				appId={appId}
-				setValue={setCachedDefaultValue}
+				setValue={async (value) => {
+					setCachedDefaultValue(value);
+					await saveDefaultValue(value);
+				}}
 			/>
 		);
 	}
@@ -105,7 +119,10 @@ export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 				pin={pin}
 				value={cachedDefaultValue}
 				appId={appId}
-				setValue={setCachedDefaultValue}
+				setValue={async (value) => {
+					setCachedDefaultValue(value);
+					await saveDefaultValue(value);
+				}}
 			/>
 		);
 	}

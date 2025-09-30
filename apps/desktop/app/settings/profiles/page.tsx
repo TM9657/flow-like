@@ -233,20 +233,20 @@ export default function SettingsPage() {
 
 	if (!localProfile) {
 		return (
-			<main className="flex min-h-dvh flex-col items-center justify-center w-full">
+			<main className="flex flex-col items-center justify-center w-full flex-1 min-h-0 py-12">
 				<div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
 			</main>
 		);
 	}
 
 	return (
-		<main className="min-h-dvh bg-gradient-to-br from-background via-background to-muted/20 p-6 max-h-dvh overflow-y-auto pb-10">
+		<main className="bg-gradient-to-br from-background via-background to-muted/20 p-4 sm:p-6 flex-1 min-h-0 overflow-y-auto pb-10">
 			<div className="mx-auto max-w-6xl space-y-6">
 				{/* Header */}
-				<div className="flex items-center justify-between">
-					<div className="space-y-1">
-						<h1 className="text-4xl font-bold tracking-tight flex items-center gap-3">
-							<User className="h-8 w-8 text-primary" />
+				<div className="flex items-start sm:items-center justify-between gap-3 flex-wrap">
+					<div className="space-y-1 min-w-0">
+						<h1 className="text-3xl sm:text-4xl font-bold tracking-tight flex items-center gap-3 break-words">
+							<User className="h-8 w-8 text-primary shrink-0" />
 							{localProfile.hub_profile.name || "Profile Settings"}
 							{isCustomTheme && (
 								<Badge variant="secondary" className="ml-2">
@@ -259,16 +259,16 @@ export default function SettingsPage() {
 						</p>
 					</div>
 					{hasChanges && (
-						<div className="flex items-center gap-2 text-sm text-muted-foreground">
+						<div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
 							<Save className="h-4 w-4" />
 							Saving changes...
 						</div>
 					)}
 				</div>
 
-				<div className="grid gap-6 lg:grid-cols-3">
+				<div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
 					{/* Profile Information */}
-					<Card className="lg:col-span-2">
+					<Card className="md:col-span-2">
 						<CardHeader>
 							<CardTitle className="flex items-center gap-2">
 								<User className="h-5 w-5" />
@@ -279,7 +279,7 @@ export default function SettingsPage() {
 							</CardDescription>
 						</CardHeader>
 						<CardContent className="space-y-6">
-							<div className="flex gap-6">
+							<div className="flex flex-col md:flex-row gap-4 md:gap-6">
 								<div className="flex-shrink-0">
 									<button
 										className="relative group"
@@ -294,7 +294,7 @@ export default function SettingsPage() {
 									>
 										<img
 											title={localProfile.hub_profile.icon ?? ""}
-											className="rounded-lg border-2 border-border hover:border-primary transition-colors"
+											className="rounded-lg border-2 border-border hover:border-primary transition-colors w-28 sm:w-40 md:w-56 h-auto aspect-square object-cover"
 											width={224}
 											height={224}
 											src={
@@ -387,7 +387,7 @@ export default function SettingsPage() {
 											<Badge
 												key={index}
 												variant="secondary"
-												className="flex items-center gap-1"
+												className="flex items-center gap-1 max-w-full break-words"
 											>
 												{tag}
 												<X
@@ -443,7 +443,7 @@ export default function SettingsPage() {
 												<Badge
 													key={index}
 													variant="outline"
-													className="flex items-center gap-1"
+													className="flex items-center gap-1 max-w-full break-words"
 												>
 													{interest}
 													<X

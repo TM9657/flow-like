@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::response::Response;
+use crate::response::{Annotation, Response};
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 pub struct ToolCall {
@@ -54,6 +54,8 @@ pub struct HistoryMessage {
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub annotations: Option<Vec<Annotation>>,
 }
 
 impl HistoryMessage {
@@ -67,6 +69,7 @@ impl HistoryMessage {
             name: None,
             tool_call_id: None,
             tool_calls: None,
+            annotations: None,
         }
     }
 
@@ -75,6 +78,10 @@ impl HistoryMessage {
 
         let content = match first_choice {
             Some(choice) => choice.message.content.clone(),
+            None => None,
+        };
+        let annotations = match first_choice {
+            Some(choice) => choice.message.annotations.clone(),
             None => None,
         };
 
@@ -97,6 +104,7 @@ impl HistoryMessage {
             name: None,
             tool_call_id: None,
             tool_calls: None,
+            annotations,
         }
     }
 }
@@ -196,9 +204,16 @@ pub struct StreamOptions {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct Usage {
+    pub include: bool,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct History {
     pub model: String,
     pub messages: Vec<HistoryMessage>,
+
+    pub preset: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
@@ -241,6 +256,9 @@ pub struct History {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<Usage>,
 }
 
 impl History {
@@ -248,6 +266,7 @@ impl History {
         Self {
             model,
             messages,
+            preset: None,
             stream: Some(true),
             stream_options: None,
             max_completion_tokens: None,
@@ -262,6 +281,7 @@ impl History {
             n: None,
             tools: None,
             tool_choice: None,
+            usage: None,
         }
     }
 
@@ -317,6 +337,7 @@ impl History {
                 name: None,
                 tool_call_id: None,
                 tool_calls: None,
+                annotations: None,
             },
         );
     }

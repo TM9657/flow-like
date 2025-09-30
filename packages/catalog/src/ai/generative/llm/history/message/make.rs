@@ -100,6 +100,7 @@ impl NodeLogic for MakeHistoryMessageNode {
             name: None,
             tool_call_id,
             tool_calls: None,
+            annotations: None,
         };
 
         match message_type.as_str() {

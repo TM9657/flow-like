@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
+#[cfg(feature = "local-ml")]
 use fastembed::TokenizerFiles;
 use tokenizers::{AddedToken, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
 
+#[cfg(feature = "local-ml")]
 pub fn load_tokenizer_from_file(
     tokenizer_files: Arc<TokenizerFiles>,
     max_length: usize,

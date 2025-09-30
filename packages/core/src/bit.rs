@@ -41,6 +41,29 @@ pub struct Metadata {
     pub updated_at: SystemTime,
 }
 
+impl Default for Metadata {
+    fn default() -> Self {
+        Self {
+            name: "Unknown".to_string(),
+            description: "No description".to_string(),
+            long_description: None,
+            release_notes: None,
+            tags: vec![],
+            use_case: None,
+            icon: None,
+            thumbnail: None,
+            preview_media: vec![],
+            age_rating: None,
+            website: None,
+            support_url: None,
+            docs_url: None,
+            organization_specific_values: None,
+            created_at: SystemTime::now(),
+            updated_at: SystemTime::now(),
+        }
+    }
+}
+
 impl Metadata {
     pub async fn presign(&mut self, prefix: Path, store: &FlowLikeStore) {
         if let Some(icon) = &self.icon {
@@ -117,6 +140,13 @@ pub enum BitTypes {
     Other,
     ObjectDetection,
 }
+
+impl Default for BitTypes {
+    fn default() -> Self {
+        BitTypes::Other
+    }
+}
+
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct BitModelPreference {
     pub multimodal: Option<bool>,
@@ -189,7 +219,7 @@ impl BitModelPreference {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct BitModelClassification {
     cost: f32,
     speed: f32,
@@ -303,7 +333,7 @@ impl BitModelClassification {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct Bit {
     pub id: String,
     #[serde(rename = "type")]
@@ -392,15 +422,22 @@ impl BitPack {
         let mut deduplicated_bits = vec![];
         let mut deduplication_helper = HashSet::new();
         self.bits.iter().for_each(|bit| {
-            if deduplication_helper.contains(&bit.hash)
-                || bit.download_link.is_none()
-                || bit.size.is_none()
-                || bit.file_name.is_none()
-            {
-                println!(
-                    "Skipping bit {}: already downloaded or missing required fields",
-                    bit.id
-                );
+            // If there is no download link we treat it as a virtual / proxied bit.
+            // These should count as a successful "download" operation from a UX perspective
+            // so we simply don't schedule a download but DO include it in the returned list.
+            if bit.download_link.is_none() {
+                println!("Skipping network download for bit {}: no download link (proxied or empty model)", bit.id);
+                // Do not attempt any download but keep it in the final success vector
+                return;
+            }
+
+            if deduplication_helper.contains(&bit.hash) {
+                println!("Skipping bit {}: duplicate hash already queued", bit.id);
+                return;
+            }
+
+            if bit.size.is_none() || bit.file_name.is_none() {
+                println!("Skipping bit {}: missing size or file_name", bit.id);
                 return;
             }
 
@@ -413,9 +450,19 @@ impl BitPack {
             deduplication_helper.insert(bit.hash.clone());
         });
 
+        // If there is nothing to actually download we still return success with the original bits
+        // so the frontend can proceed (useful for empty / proxied models)
         if deduplicated_bits.is_empty() {
-            println!("No bits to download");
-            return Ok(vec![]);
+            println!(
+                "No concrete bits to download; returning success (all bits were proxied or lacked downloadable artifacts)"
+            );
+            let filtered: Vec<Bit> = self
+                .bits
+                .iter()
+                .filter(|b| b.download_link.is_none() && b.size.unwrap_or(0) > 0)
+                .cloned()
+                .collect();
+            return Ok(filtered);
         }
 
         println!(
@@ -442,7 +489,15 @@ impl BitPack {
             }
         }
 
-        Ok(deduplicated_bits)
+        // Combine successfully queued bits (deduplicated_bits) with any virtual bits (those without download links)
+        let mut result = self
+            .bits
+            .iter()
+            .filter(|b| b.download_link.is_none() && b.size.unwrap_or(0) > 0)
+            .cloned()
+            .collect::<Vec<_>>();
+        result.extend(deduplicated_bits);
+        Ok(result)
     }
 
     pub fn size(&self) -> u64 {
@@ -648,5 +703,73 @@ impl Bit {
         let bit_path = Path::from(self.hash.clone()).child(file_name);
         let path = file_system.path_to_filesystem(&bit_path).ok()?;
         Some(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::{FlowLikeConfig, FlowLikeState};
+    use flow_like_storage::files::store::FlowLikeStore;
+    use flow_like_storage::files::store::local_store::LocalObjectStore;
+    use flow_like_types::Value;
+    use flow_like_types::{sync::Mutex, tokio};
+
+    #[tokio::test]
+    async fn test_download_skips_and_succeeds_without_links() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut config: FlowLikeConfig = FlowLikeConfig::new();
+        let store = LocalObjectStore::new(temp_dir.path().to_path_buf()).unwrap();
+        config.stores.bits_store = Some(FlowLikeStore::Local(store.into()));
+        let (http_client, _rx) = crate::utils::http::HTTPClient::new();
+        let state = FlowLikeState::new(config, http_client);
+        let state = Arc::new(Mutex::new(state));
+
+        let proxied_bit = Bit {
+            id: "proxied".into(),
+            bit_type: BitTypes::Other,
+            meta: Default::default(),
+            authors: vec![],
+            repository: None,
+            download_link: None,
+            file_name: None,
+            hash: "hash_proxied".into(),
+            size: Some(123),
+            hub: "hub".into(),
+            parameters: Value::Null,
+            version: None,
+            license: None,
+            dependencies: vec![],
+            dependency_tree_hash: "hash_proxied".into(),
+            created: chrono::Utc::now().to_rfc3339(),
+            updated: chrono::Utc::now().to_rfc3339(),
+        };
+
+        let zero_size_bit = Bit {
+            id: "zero".into(),
+            bit_type: BitTypes::Other,
+            meta: Default::default(),
+            authors: vec![],
+            repository: None,
+            download_link: Some("http://example.com/file.bin".into()),
+            file_name: Some("file.bin".into()),
+            hash: "hash_zero".into(),
+            size: Some(0),
+            hub: "hub".into(),
+            parameters: Value::Null,
+            version: None,
+            license: None,
+            dependencies: vec![],
+            dependency_tree_hash: "hash_zero".into(),
+            created: chrono::Utc::now().to_rfc3339(),
+            updated: chrono::Utc::now().to_rfc3339(),
+        };
+
+        let pack = BitPack {
+            bits: vec![proxied_bit.clone(), zero_size_bit.clone()],
+        };
+        let result = pack.download(state, None).await.unwrap();
+        assert!(result.iter().any(|b| b.id == proxied_bit.id));
+        assert!(!result.iter().any(|b| b.id == zero_size_bit.id));
     }
 }

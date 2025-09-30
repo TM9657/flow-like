@@ -20,6 +20,8 @@ pub struct Model {
     pub user_id: Option<String>,
     #[sea_orm(column_name = "appId", column_type = "Text", nullable)]
     pub app_id: Option<String>,
+    #[sea_orm(column_name = "price")]
+    pub price: i64,
     #[sea_orm(column_name = "createdAt")]
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]

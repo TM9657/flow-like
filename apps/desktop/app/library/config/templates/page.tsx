@@ -135,7 +135,7 @@ export default function TemplatesPage() {
 		);
 
 	return (
-		<main className="flex-col flex flex-grow max-h-full overflow-hidden p-6 pt-0 space-y-8">
+		<main className="flex-col flex flex-grow max-h-full p-6 pt-0 space-y-8 overflow-auto md:overflow-visible min-h-0">
 			{/* Header Section */}
 			<div className="flex items-center justify-between py-4">
 				<div className="space-y-1">
@@ -320,7 +320,7 @@ export default function TemplatesPage() {
 			</div>
 
 			{/* Templates Grid */}
-			<div className="flex-1 overflow-auto">
+			<div className="flex-1 overflow-auto md:overflow-visible">
 				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 					{filteredTemplates.map(([appId, templateId, meta]) => (
 						<button
