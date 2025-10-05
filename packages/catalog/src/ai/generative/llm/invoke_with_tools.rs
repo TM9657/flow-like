@@ -16,7 +16,7 @@ use flow_like::{
 };
 use flow_like_model_provider::{
     history::{History, Tool, ToolCall, ToolChoice},
-    response::Response,
+    response::{Response, ResponseFunction},
 };
 use flow_like_types::{Error, Value, anyhow, async_trait, json, regex::Regex};
 use std::{
@@ -197,7 +197,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         let mut node = Node::new(
             "invoke_llm_with_tools",
             "Invoke with Tools",
-            "Invoke LLM with Tool Cals",
+            "Invoke LLM with Tool Calls",
             "AI/Generative",
         );
         node.add_icon("/flow/icons/bot-invoke.svg");
@@ -263,7 +263,6 @@ impl NodeLogic for InvokeLLMWithToolsNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_done").await?;
 
-        // fetch inputs
         let model_bit = context.evaluate_pin::<Bit>("model").await?;
         let tools_str: String = context.evaluate_pin("tools").await?;
         let tool_choice: String = context.evaluate_pin("tool_choice").await?;
@@ -273,133 +272,146 @@ impl NodeLogic for InvokeLLMWithToolsNode {
             _ => ToolChoice::Auto,
         };
 
-        // validate tools + deactivate all function exec output pins
-        let tools: Vec<Tool> = match json::from_str(&tools_str) {
-            Ok(value) => value,
-            Err(e) => return Err(anyhow!("Failed to parse tools: {e:?}")),
-        };
+        let tools: Vec<Tool> =
+            json::from_str(&tools_str).map_err(|e| anyhow!("Failed to parse tools: {e:?}"))?;
+
         for tool in &tools {
-            context.deactivate_exec_pin(&tool.function.name).await?
+            let _ = context.deactivate_exec_pin(&tool.function.name).await;
         }
+
+        let provider = model_bit
+            .try_to_provider()
+            .ok_or_else(|| anyhow!("Model Bit does not contain provider information"))?;
+
+        let is_local_provider = provider.provider_name == "Local";
 
         // log model name
         if let Some(meta) = model_bit.meta.get("en") {
             context.log_message(&format!("Loading model {:?}", meta.name), LogLevel::Debug);
         }
 
-        // render system prompt with add-on for tool definitions
-        let system_prompt_tools = if !tools.is_empty() {
-            match tool_choice {
-                ToolChoice::Auto => SP_TEMPLATE_AUTO.replace("TOOLS_STR", &tools_str),
-                ToolChoice::Required => SP_TEMPLATE_REQUIRED.replace("TOOLS_STR", &tools_str),
-                _ => String::from(""),
-            }
-        } else {
-            String::from("")
-        };
         let mut history = context.evaluate_pin::<History>("history").await?;
-        let system_prompt = match history.get_system_prompt() {
-            Some(system_prompt) => {
-                format!("{}\n\n{}", system_prompt, system_prompt_tools) // handle previously set system prompts
-            }
-            None => system_prompt_tools,
-        };
-        history.set_system_prompt(system_prompt.to_string());
-        context.log_message(
-            &format!("system prompt: {}", system_prompt),
-            LogLevel::Debug,
-        );
 
-        // generate response
+        // Only the Local provider needs the <tooluse> prompt hack.
+        if is_local_provider && !tools.is_empty() && !matches!(tool_choice, ToolChoice::None) {
+            let system_prompt_tools = match tool_choice {
+                ToolChoice::Required => SP_TEMPLATE_REQUIRED.replace("TOOLS_STR", &tools_str),
+                _ => SP_TEMPLATE_AUTO.replace("TOOLS_STR", &tools_str),
+            };
+            let system_prompt = match history.get_system_prompt() {
+                Some(sp) => format!("{sp}\n\n{system_prompt_tools}"),
+                None => system_prompt_tools,
+            };
+            history.set_system_prompt(system_prompt.clone());
+            context.log_message(
+                &format!("system prompt (Local): {}", system_prompt),
+                LogLevel::Debug,
+            );
+        } else {
+            if !tools.is_empty() && !matches!(tool_choice, ToolChoice::None) {
+                history.tools = Some(tools.clone());
+                history.tool_choice = Some(tool_choice.clone());
+            }
+        }
+
+        // --- Invoke model
         let response = {
-            // load model
             let model_factory = context.app_state.lock().await.model_factory.clone();
             let model = model_factory
                 .lock()
                 .await
                 .build(&model_bit, context.app_state.clone(), context.token.clone())
                 .await?;
-            model.invoke(&history, None).await?
-        }; // drop model
 
-        // parse response
-        let mut response_string = "".to_string();
-        if let Some(response) = response.last_message() {
-            response_string = response.content.clone().unwrap_or("".to_string());
+            if !is_local_provider && !tools.is_empty() && !matches!(tool_choice, ToolChoice::None) {
+                model.invoke(&history, None).await?
+            } else {
+                model.invoke(&history, None).await?
+            }
+        };
+
+        // --- Parse response
+        let mut response_string = String::new();
+        if let Some(msg) = response.last_message() {
+            response_string = msg.content.clone().unwrap_or_default();
         }
         context.log_message(
-            &format!("llm response: '{}'", &response_string),
+            &format!("llm response: '{}'", response_string),
             LogLevel::Debug,
         );
 
-        // parse tool calls (if any)
-        let tool_calls = if response_string.contains("<tooluse>") {
-            let tool_calls_str = extract_tagged(&response_string, "tooluse")?;
-            let tool_calls: Result<Vec<ToolCall>, Error> = tool_calls_str
-                .iter()
-                .map(|tool_call_str| tool_call_from_str(&tools, tool_call_str))
-                .collect();
-            tool_calls?
-        } else {
-            vec![]
-        };
+        // Prefer native tool calls (non-Local); Local falls back to <tooluse> parsing.
+        let mut tool_calls: Vec<ResponseFunction> = Vec::new();
 
-        // LLM wants to make tool calls -> execute subcontexts
+        if !is_local_provider {
+            if let Some(msg) = response.last_message() {
+                // Expect native tool-calls attached to the message:
+
+                tool_calls = msg
+                    .tool_calls
+                    .iter()
+                    .map(|tc| ResponseFunction {
+                        name: tc.function.name.clone(),
+                        arguments: tc.function.arguments.clone(),
+                    })
+                    .collect();
+            }
+        } else if response_string.contains("<tooluse>") {
+            let tool_calls_strs = extract_tagged(&response_string, "tooluse")?;
+            tool_calls = tool_calls_strs
+                .iter()
+                .map(|s| {
+                    flow_like_types::json::from_str::<ResponseFunction>(s)
+                        .map_err(|e| anyhow!("Failed to parse tool call: {e}"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+        }
+
+        // --- Execute tools if any
         if !tool_calls.is_empty() {
             if let ToolChoice::None = tool_choice {
                 return Err(anyhow!("LLM made tool calls but tool choice is None!"));
-            };
+            }
 
-            //let tool_call_id_pin = context.get_pin_by_name("tool_call_id").await?;
             let tool_call_args_pin = context.get_pin_by_name("tool_call_args").await?;
-            for tool_call in tool_calls.iter() {
-                let tool_call_args: Value = json::from_str(&tool_call.function.arguments)?;
-                context.log_message(
-                    &format!("exec tool {}", &tool_call.function.name),
-                    LogLevel::Debug,
-                );
+            for tc in &tool_calls {
+                let args: Value = json::from_str(&tc.arguments)?;
+                context.log_message(&format!("exec tool {}", &tc.name), LogLevel::Debug);
 
-                // deactivate all tool exec pins
-                for tool in &tools {
-                    context.deactivate_exec_pin(&tool.function.name).await?
+                // Deactivate all tool exec pins (best-effort)
+                for t in &tools {
+                    let _ = context.deactivate_exec_pin(&t.function.name).await;
                 }
 
-                // set tool args + activate tool exec pin
-                tool_call_args_pin
-                    .lock()
-                    .await
-                    .set_value(tool_call_args)
-                    .await;
-                context.activate_exec_pin(&tool_call.function.name).await?;
+                // Set args & activate the specific tool pin
+                tool_call_args_pin.lock().await.set_value(args).await;
+                context.activate_exec_pin(&tc.name).await?;
 
-                // execute tool subcontext
-                let tool_exec_pin = context.get_pin_by_name(&tool_call.function.name).await?;
+                // Run connected subgraph
+                let tool_exec_pin = context.get_pin_by_name(&tc.name).await?;
                 let tool_flow = tool_exec_pin.lock().await.get_connected_nodes().await;
-                for node in &tool_flow {
-                    let mut sub_context = context.create_sub_context(node).await;
-                    let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
 
-                    sub_context.end_trace();
-                    context.push_sub_context(&mut sub_context);
-                    if run.is_err() {
-                        let error = run.err().unwrap();
+                for node in &tool_flow {
+                    let mut sub_ctx = context.create_sub_context(node).await;
+                    let run = InternalNode::trigger(&mut sub_ctx, &mut None, true).await;
+
+                    sub_ctx.end_trace();
+                    context.push_sub_context(&mut sub_ctx);
+                    if let Err(err) = run {
                         context.log_message(
-                            &format!(
-                                "Error executing tool {}: {:?}",
-                                &tool_call.function.name, error
-                            ),
+                            &format!("Error executing tool {}: {:?}", &tc.name, err),
                             LogLevel::Error,
                         );
                     }
                 }
             }
-            // deactivate all tool exec pins
-            for tool in &tools {
-                context.deactivate_exec_pin(&tool.function.name).await?
-            }
 
-        // LLM doesn't want to make any tool calls -> return response as-is
+            // Deactivate all tool exec pins at the end (best-effort)
+            for t in &tools {
+                let _ = context.deactivate_exec_pin(&t.function.name).await;
+            }
         } else {
+            // No tool calls; enforce Required vs return final response
             match tool_choice {
                 ToolChoice::Required => {
                     return Err(anyhow!(
@@ -414,7 +426,6 @@ impl NodeLogic for InvokeLLMWithToolsNode {
             }
         }
 
-        // all done
         context.activate_exec_pin("exec_done").await?;
         Ok(())
     }

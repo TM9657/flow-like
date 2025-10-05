@@ -16,6 +16,7 @@ import {
 	type IBackendState,
 	type IBitState,
 	type IBoardState,
+	type ICapabilities,
 	type IDatabaseState,
 	type IEventState,
 	type IHelperState,
@@ -44,6 +45,15 @@ export class EmptyBackend implements IBackendState {
 	templateState: ITemplateState = new EmptyTemplateState();
 	userState: IUserState = new EmptyUserState();
 	dbState: IDatabaseState = new EmptyDatabaseState();
+
+	capabilities(): ICapabilities {
+		return {
+			needsSignIn: false,
+			canHostLlamaCPP: false,
+			canHostEmbeddings: false,
+			canExecuteLocally: false,
+		};
+	}
 }
 
 export function EmptyBackendProvider({ data }: Readonly<{ data: string }>) {

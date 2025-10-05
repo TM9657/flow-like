@@ -9,6 +9,7 @@ import {
 	type IBit,
 	type IBitState,
 	type IBoardState,
+	ICapabilities,
 	type IDatabaseState,
 	type IEventState,
 	type IGenericCommand,
@@ -86,6 +87,17 @@ export class TauriBackend implements IBackendState {
 		this.userState = new UserState(this);
 		this.aiState = new AiState(this);
 		this.dbState = new DatabaseState(this);
+	}
+
+	capabilities(): ICapabilities {
+		const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+		return {
+			needsSignIn: isIos,
+			canHostLlamaCPP: !isIos,
+			canHostEmbeddings: true,
+			canExecuteLocally: true,
+		};
 	}
 
 	pushProfile(profile: IProfile) {
