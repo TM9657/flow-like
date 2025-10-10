@@ -6,27 +6,29 @@ import {
 	useBackend,
 } from "@tm9657/flow-like-ui";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useTauriInvoke } from "../components/useInvoke";
+import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 
 export default function Home() {
 	const backend = useBackend();
 	const router = useRouter();
-
-	function checkOnboarding() {
-		const hasOnboarded = localStorage.getItem("onboarding-done");
-		if (!hasOnboarded) {
-			router.push("/onboarding");
-			return true;
-		}
-
-		return false;
-	}
+	const [isCheckingProfiles, setIsCheckingProfiles] = useState(true);
+	const profiles = useTauriInvoke<ISettingsProfile[]>("get_profiles", {});
 
 	useEffect(() => {
-		if (checkOnboarding()) return;
-	}, []);
+		if (profiles.isLoading || !profiles.data) return;
 
-	if (checkOnboarding()) {
+		const profileCount = profiles.data.length;
+
+		if (profileCount === 0) {
+			router.push("/onboarding");
+		} else {
+			setIsCheckingProfiles(false);
+		}
+	}, [profiles.data, profiles.isLoading, router]);
+
+	if (profiles.isLoading || isCheckingProfiles) {
 		return (
 			<main className="flex flex-col flex-1 w-full min-h-0 overflow-hidden">
 				<TutorialDialog />
