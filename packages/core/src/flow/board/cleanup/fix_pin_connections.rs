@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::flow::{
     board::{
         Board,
-        cleanup::{BoardCleanupLogic, PinLookup},
+        cleanup::{BoardCleanupLogic, NodeOrLayerRef, PinLookup},
     },
     pin::Pin,
 };
@@ -12,6 +12,7 @@ use crate::flow::{
 pub struct FixPinsCleanup {
     pub node_pins_connected_to_remove: HashMap<String, HashMap<String, HashSet<String>>>,
     pub node_pins_depends_on_remove: HashMap<String, HashMap<String, HashSet<String>>>,
+    pub pin_parent: HashMap<String, String>,
 }
 
 impl BoardCleanupLogic for FixPinsCleanup {
@@ -22,18 +23,21 @@ impl BoardCleanupLogic for FixPinsCleanup {
         Self {
             node_pins_connected_to_remove: HashMap::with_capacity(10),
             node_pins_depends_on_remove: HashMap::with_capacity(10),
+            pin_parent: HashMap::with_capacity(100),
         }
     }
 
+    fn initial_pin_iteration(&mut self, pin: &Pin, parent: NodeOrLayerRef) {
+        self.pin_parent.insert(pin.id.clone(), parent.id().to_string());
+    }
+
     fn main_pin_iteration(&mut self, pin: &mut Pin, pin_lookup: &PinLookup) {
-        let owner_parent_id_opt = pin_lookup
-            .get(&pin.id)
-            .map(|(_, owner_parent)| owner_parent.id().to_string());
+        let owner_parent_id_opt = self.pin_parent.get(&pin.id);
 
         for connected_to in pin.connected_to.iter() {
             match pin_lookup.get(connected_to) {
                 Some((target_pin, _)) => {
-                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref()
+                    if let Some(owner_parent_id) = owner_parent_id_opt
                         && !target_pin.depends_on.contains(&pin.id)
                     {
                         self.node_pins_connected_to_remove
@@ -45,7 +49,7 @@ impl BoardCleanupLogic for FixPinsCleanup {
                     }
                 }
                 None => {
-                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref() {
+                    if let Some(owner_parent_id) = owner_parent_id_opt {
                         self.node_pins_connected_to_remove
                             .entry(owner_parent_id.clone())
                             .or_default()
@@ -60,7 +64,7 @@ impl BoardCleanupLogic for FixPinsCleanup {
         for depends_on in pin.depends_on.iter() {
             match pin_lookup.get(depends_on) {
                 Some((target_pin, _)) => {
-                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref()
+                    if let Some(owner_parent_id) = owner_parent_id_opt
                         && !target_pin.connected_to.contains(&pin.id)
                     {
                         self.node_pins_depends_on_remove
@@ -72,7 +76,7 @@ impl BoardCleanupLogic for FixPinsCleanup {
                     }
                 }
                 None => {
-                    if let Some(owner_parent_id) = owner_parent_id_opt.as_ref() {
+                    if let Some(owner_parent_id) = owner_parent_id_opt {
                         self.node_pins_depends_on_remove
                             .entry(owner_parent_id.clone())
                             .or_default()
