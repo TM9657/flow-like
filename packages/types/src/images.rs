@@ -26,7 +26,7 @@ pub fn encode_as_webp(img: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
 
     let encoder = webp::Encoder::from_image(&img)
         .map_err(|e| anyhow::anyhow!("Failed to create WebP encoder: {}", e))?;
-    let encoded = encoder.encode(0.98);
+    let encoded = encoder.encode_lossless();
 
     buffer.extend_from_slice(&encoded);
     Ok(buffer)
