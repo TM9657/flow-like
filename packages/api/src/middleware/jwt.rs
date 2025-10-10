@@ -381,11 +381,34 @@ pub async fn jwt_middleware(
     if let Some(pat_header) = request.headers().get("x-pat")
         && let Ok(pat_str) = pat_header.to_str()
     {
+        let pat_str = pat_str.trim();
+        if !pat_str.starts_with("pat_") {
+            return Err(AuthorizationError::from(anyhow!("Invalid PAT format")));
+        }
+        let pat_parts = &pat_str[4..];
+        let parts: Vec<&str> = pat_parts.split('.').collect();
+        if parts.len() != 2 {
+            return Err(AuthorizationError::from(anyhow!("Invalid PAT format")));
+        }
+        let pat_id = parts[0];
+        let pat_secret = parts[1];
+
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(pat_secret.as_bytes());
+        let secret_hash = hasher.finalize().to_hex().to_string().to_lowercase();
+
         let db_pat = Pat::find()
-            .filter(pat::Column::Key.eq(pat_str))
+            .filter(pat::Column::Id.eq(pat_id)
+                .and(pat::Column::Key.eq(secret_hash)))
             .one(&state.db)
             .await?;
         if let Some(pat) = db_pat {
+            if let Some(valid_until) = pat.valid_until {
+                let now = chrono::Utc::now().naive_utc();
+                if valid_until < now {
+                    return Err(AuthorizationError::from(anyhow!("PAT is expired")));
+                }
+            }
             let pat_user = AppUser::PAT(PATUser {
                 pat: pat_str.to_string(),
                 sub: pat.user_id.clone(),
