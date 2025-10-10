@@ -31,7 +31,8 @@ export class TemplateState implements ITemplateState {
 			}
 
 			if (!this.backend.profile || !this.backend.queryClient) {
-				throw new Error("No profile set for Tauri backend");
+				console.warn("No profile set for Tauri backend, returning local templates");
+				return templates;
 			}
 
 			const promise = injectDataFunction(
@@ -75,6 +76,7 @@ export class TemplateState implements ITemplateState {
 				this.getTemplates,
 				[appId, language],
 				[],
+				templates,
 			);
 			this.backend.backgroundTaskHandler(promise);
 
@@ -95,33 +97,37 @@ export class TemplateState implements ITemplateState {
 			}
 		}
 
-		do {
-			const remoteData = await fetcher<[string, string, IMetadata][]>(
-				this.backend.profile,
-				`user/templates?limit=${limit}&offset=${offset}`,
-				undefined,
-				this.backend.auth,
-			);
+		try {
+			do {
+				const remoteData = await fetcher<[string, string, IMetadata][]>(
+					this.backend.profile,
+					`user/templates?limit=${limit}&offset=${offset}`,
+					undefined,
+					this.backend.auth,
+				);
 
-			foundAmount = remoteData.length;
-			offset += 100;
+				foundAmount = remoteData.length;
+				offset += 100;
 
-			for (const [appId, templateId, metadata] of remoteData) {
-				const found = mergedData.get(appId);
-				if (found) {
-					if (isEqual(found[2], metadata)) {
-						// If metadata is the same, skip adding it again
-						continue;
+				for (const [appId, templateId, metadata] of remoteData) {
+					const found = mergedData.get(appId);
+					if (found) {
+						if (isEqual(found[2], metadata)) {
+							// If metadata is the same, skip adding it again
+							continue;
+						}
 					}
+					mergedData.set(appId, [appId, templateId, metadata]);
+					await invoke("push_template_meta", {
+						appId: appId,
+						templateId: templateId,
+						metadata: metadata,
+					});
 				}
-				mergedData.set(appId, [appId, templateId, metadata]);
-				await invoke("push_template_meta", {
-					appId: appId,
-					templateId: templateId,
-					metadata: metadata,
-				});
-			}
-		} while (foundAmount > 0);
+			} while (foundAmount > 0);
+		} catch (error) {
+			console.error("Failed to fetch templates from remote:", error);
+		}
 
 		return Array.from(mergedData.values());
 	}
@@ -148,20 +154,21 @@ export class TemplateState implements ITemplateState {
 		}
 
 		if (!this.backend.profile || !this.backend.queryClient) {
-			throw new Error("No profile set for Tauri backend");
+			if (template) {
+				return template;
+			}
+			throw new Error("No profile set for Tauri backend and no local template available");
 		}
-
-		const remoteDataPromise: Promise<IBoard> = fetcher<IBoard>(
-			this.backend.profile,
-			`apps/${appId}/templates/${templateId}`,
-			undefined,
-			this.backend.auth,
-		);
 
 		if (template) {
 			const promise = injectDataFunction(
 				async () => {
-					const remoteData = await remoteDataPromise;
+					const remoteData = await fetcher<IBoard>(
+						this.backend.profile!,
+						`apps/${appId}/templates/${templateId}`,
+						undefined,
+						this.backend.auth,
+					);
 
 					if (!isEqual(template, remoteData)) {
 						await invoke("push_template_data", {
@@ -181,23 +188,40 @@ export class TemplateState implements ITemplateState {
 				this.getTemplate,
 				[appId, templateId, version],
 				[],
+				template,
 			);
 			this.backend.backgroundTaskHandler(promise);
 
 			return template;
 		}
-		const remoteData = await remoteDataPromise;
 
-		if (remoteData) {
-			await invoke("push_template_data", {
-				appId: appId,
-				templateId: templateId,
-				data: remoteData,
-				version: version,
-			});
+		try {
+			const remoteData = await fetcher<IBoard>(
+				this.backend.profile,
+				`apps/${appId}/templates/${templateId}`,
+				undefined,
+				this.backend.auth,
+			);
+
+			if (remoteData) {
+				await invoke("push_template_data", {
+					appId: appId,
+					templateId: templateId,
+					data: remoteData,
+					version: version,
+				});
+			}
+
+			return remoteData;
+		} catch (error) {
+			console.error("Failed to fetch template from remote:", error);
+			if (template) {
+				return template;
+			}
+			throw new Error(
+				"Failed to fetch template: no local cache available and remote fetch failed.",
+			);
 		}
-
-		return remoteData;
 	}
 
 	async upsertTemplate(
@@ -310,22 +334,23 @@ export class TemplateState implements ITemplateState {
 			!this.backend.auth ||
 			!this.backend.queryClient
 		) {
+			if (meta) {
+				return meta;
+			}
 			throw new Error(
 				"Profile, auth or query client not set. Cannot get template meta.",
 			);
 		}
 
-		const remoteMetaPromise: Promise<IMetadata> = fetcher<IMetadata>(
-			this.backend.profile,
-			`apps/${appId}/meta?language=${language ?? "en"}&template_id=${templateId}`,
-			undefined,
-			this.backend.auth,
-		);
-
 		if (meta) {
 			const promise = injectDataFunction(
 				async () => {
-					const remoteMeta = await remoteMetaPromise;
+					const remoteMeta = await fetcher<IMetadata>(
+						this.backend.profile!,
+						`apps/${appId}/meta?language=${language ?? "en"}&template_id=${templateId}`,
+						undefined,
+						this.backend.auth,
+					);
 
 					await invoke("push_template_meta", {
 						appId: appId,
@@ -341,24 +366,40 @@ export class TemplateState implements ITemplateState {
 				this.getTemplateMeta,
 				[appId, templateId, language],
 				[],
+				meta,
 			);
 			this.backend.backgroundTaskHandler(promise);
 
 			return meta;
 		}
 
-		const remoteMeta = await remoteMetaPromise;
+		try {
+			const remoteMeta = await fetcher<IMetadata>(
+				this.backend.profile,
+				`apps/${appId}/meta?language=${language ?? "en"}&template_id=${templateId}`,
+				undefined,
+				this.backend.auth,
+			);
 
-		if (remoteMeta) {
-			await invoke("push_template_meta", {
-				appId: appId,
-				templateId: templateId,
-				metadata: remoteMeta,
-				language,
-			});
+			if (remoteMeta) {
+				await invoke("push_template_meta", {
+					appId: appId,
+					templateId: templateId,
+					metadata: remoteMeta,
+					language,
+				});
+			}
+
+			return remoteMeta;
+		} catch (error) {
+			console.error("Failed to fetch template meta from remote:", error);
+			if (meta) {
+				return meta;
+			}
+			throw new Error(
+				"Failed to fetch template meta: no local cache available and remote fetch failed.",
+			);
 		}
-
-		return remoteMeta;
 	}
 
 	async pushTemplateMeta(

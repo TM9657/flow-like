@@ -3,7 +3,7 @@ use std::str::FromStr;
 use crate::{entity::pat, error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
 use flow_like_types::anyhow;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -24,6 +24,7 @@ pub async fn get_pats(
 
     let pats = pat::Entity::find()
         .filter(pat::Column::UserId.eq(sub))
+        .limit(1000)
         .all(&state.db)
         .await?
         .into_iter()

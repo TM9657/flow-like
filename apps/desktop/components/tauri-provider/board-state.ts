@@ -114,9 +114,10 @@ export class BoardState implements IBoardState {
 			!this.backend.auth ||
 			!this.backend.queryClient
 		) {
-			throw new Error(
-				"Profile, auth or query client not set. Cannot fetch boards.",
+			console.warn(
+				"Profile, auth or query client not set. Returning local boards only.",
 			);
+			return boards;
 		}
 
 		const promise = injectDataFunction(

@@ -165,13 +165,13 @@ export class UserState implements IUserState {
 			throw new Error("Profile or auth context not available");
 		}
 
-		const result = await fetcher<{pats:{
+		const result = await fetcher<{
 			id: string;
 			name: string;
 			created_at: string;
 			valid_until: string | null;
 			permission: number;
-		}[]}>(
+		}[]>(
 			this.backend.profile,
 			`user/pat`,
 			{
@@ -180,9 +180,8 @@ export class UserState implements IUserState {
 			this.backend.auth,
 		);
 
-		console.dir(result)
 
-		return result?.pats;
+		return result;
 	}
 
 	async deletePAT(id: string): Promise<void> {

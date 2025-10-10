@@ -66,6 +66,7 @@ import {
 	Edit3Icon,
 	ExternalLinkIcon,
 	HeartIcon,
+	KeyIcon,
 	LayoutDashboardIcon,
 	LibraryIcon,
 	LogInIcon,
@@ -934,7 +935,7 @@ export function NavUser({
 									</a>
 									<a href="/account/pat">
 										<DropdownMenuItem className="gap-2 p-2">
-											<BellIcon className="size-4" />
+											<KeyIcon className="size-4" />
 											Token
 										</DropdownMenuItem>
 									</a>

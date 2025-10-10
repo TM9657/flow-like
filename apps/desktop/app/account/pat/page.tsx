@@ -153,22 +153,22 @@ const PatManagementPage = () => {
 	};
 
 	return (
-		<div className="container mx-auto px-4 py-8 max-w-6xl">
+		<div className="container mx-auto px-4 py-8 max-w-6xl flex flex-col h-full flex-grow overflow-hidden">
 			{/* Header Section */}
-			<div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/20 p-8 md:p-12 mb-8 shadow-lg">
+			<div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/20 p-6 mb-6 shadow-lg">
 				<div className="absolute inset-0 bg-grid-white/5 [mask-image:radial-gradient(white,transparent_85%)]" />
 				<div className="relative z-10">
-					<div className="flex items-center gap-3 mb-4">
-						<div className="p-3 rounded-2xl bg-primary/10 backdrop-blur-sm">
-							<KeyRoundIcon className="h-8 w-8 text-primary" />
+					<div className="flex items-center gap-3 mb-2">
+						<div className="p-2 rounded-xl bg-primary/10 backdrop-blur-sm">
+							<KeyRoundIcon className="h-6 w-6 text-primary" />
 						</div>
 						<div>
-							<h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+							<h1 className="text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
 								Personal Access Tokens
 							</h1>
 						</div>
 					</div>
-					<p className="text-muted-foreground text-lg md:text-xl max-w-3xl">
+					<p className="text-muted-foreground text-sm max-w-3xl">
 						Manage your personal access tokens to integrate with external
 						applications and services securely.
 					</p>
@@ -176,17 +176,17 @@ const PatManagementPage = () => {
 			</div>
 
 			{/* Create Token Card */}
-			<Card className="p-6 md:p-8 mb-8 border-2 hover:border-primary/50 transition-colors">
+			<Card className="p-4 mb-6 border-2 hover:border-primary/50 transition-colors">
 				<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-					<div className="flex items-start gap-4">
+					<div className="flex items-start gap-3">
 						<div className="p-2 rounded-lg bg-primary/10">
-							<PlusIcon className="h-5 w-5 text-primary" />
+							<PlusIcon className="h-4 w-4 text-primary" />
 						</div>
 						<div className="flex-1">
-							<h2 className="text-xl font-semibold mb-1">
+							<h2 className="text-lg font-semibold mb-0.5">
 								Generate New Token
 							</h2>
-							<p className="text-sm text-muted-foreground">
+							<p className="text-xs text-muted-foreground">
 								Create a new personal access token with custom permissions and
 								expiration date.
 							</p>
@@ -204,15 +204,15 @@ const PatManagementPage = () => {
 			</Card>
 
 			{/* Tokens List */}
-			<div className="space-y-4">
-				<div className="flex items-center justify-between mb-4">
+			<div className="space-y-4 overflow-y-auto flex-grow flex flex-col pr-2">
+				<div className="flex items-center justify-between mb-4 sticky top-0 bg-background z-10 pb-2">
 					<h2 className="text-2xl font-semibold">Your Tokens</h2>
 					<div className="text-sm text-muted-foreground">
 						{pats.data?.length} {pats.data?.length === 1 ? "token" : "tokens"}
 					</div>
 				</div>
 
-				{loading ? (
+				{pats.isLoading ? (
 					<div className="grid gap-4">
 						{[1, 2, 3].map((i) => (
 							<Card key={i} className="p-6 animate-pulse">
@@ -245,7 +245,7 @@ const PatManagementPage = () => {
 						</div>
 					</Card>
 				) : (
-					<div className="grid gap-4">
+					<div className="grid gap-4 pb-4">
 						{pats.data?.map((pat) => {
 							const expired = isExpired(pat.valid_until);
 							return (
@@ -339,10 +339,9 @@ const PatManagementPage = () => {
 											<Tooltip>
 												<TooltipTrigger asChild>
 													<Button
-														variant="outline"
+														variant="destructive"
 														size="sm"
 														onClick={() => handleDeleteToken(pat.id, pat.name)}
-														className="text-destructive hover:bg-destructive/10 hover:text-destructive"
 													>
 														<Trash2Icon className="h-4 w-4" />
 													</Button>
@@ -360,7 +359,7 @@ const PatManagementPage = () => {
 
 			{/* Create Token Dialog */}
 			<Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-				<DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+				<DialogContent className="!w-[90vw] !max-w-6xl max-h-[90vh] overflow-y-auto">
 					<div className="space-y-6">
 						<div>
 							<h2 className="text-2xl font-bold mb-2">
@@ -434,7 +433,7 @@ const PatManagementPage = () => {
 											</span>
 											<CalendarIcon className="h-4 w-4 opacity-50" />
 										</button>
-										<div className="z-50 mt-2">
+										<div className="z-50 mt-2 flex flex-row justify-center">
 											<Card className="p-3">
 												<Calendar
 													mode="single"
