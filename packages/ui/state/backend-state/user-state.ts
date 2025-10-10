@@ -46,4 +46,7 @@ export interface IUserState {
 		operation: "Upsert" | "Remove",
 	): Promise<void>;
 	getInfo(): Promise<IUserInfo>;
+	createPAT(name: string, validUntil?: Date, permissions?: number): Promise<{pat: string, permission: number}>;
+	getPATs(): Promise<{id: string, name: string, created_at: string, valid_until: string | null, permission: number}[]>;
+	deletePAT(id: string): Promise<void>;
 }

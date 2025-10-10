@@ -15,16 +15,11 @@ pub struct PatOut {
     pub id: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GetPatsOutput {
-    pub pats: Vec<PatOut>,
-}
-
 #[tracing::instrument(name = "GET /user/pat", skip(state, user))]
 pub async fn get_pats(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
-) -> Result<Json<Vec<GetPatsOutput>>, ApiError> {
+) -> Result<Json<Vec<PatOut>>, ApiError> {
     let sub = user.sub()?;
 
     let pats = pat::Entity::find()
@@ -41,8 +36,7 @@ pub async fn get_pats(
                 id: pat.id,
             })
         })
-        .collect::<Result<Vec<PatOut>, ApiError>>()
-        .map(|pats| Json(vec![GetPatsOutput { pats }]))?;
+        .collect::<Result<Vec<PatOut>, ApiError>>()?;
 
-    Ok(pats)
+    Ok(Json(pats))
 }

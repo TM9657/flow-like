@@ -932,6 +932,12 @@ export function NavUser({
 											Notifications
 										</DropdownMenuItem>
 									</a>
+									<a href="/account/pat">
+										<DropdownMenuItem className="gap-2 p-2">
+											<BellIcon className="size-4" />
+											Token
+										</DropdownMenuItem>
+									</a>
 								</DropdownMenuGroup>
 								<DropdownMenuSeparator />
 								<DropdownMenuItem
