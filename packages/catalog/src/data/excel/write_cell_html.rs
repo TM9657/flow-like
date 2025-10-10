@@ -94,7 +94,6 @@ impl NodeLogic for WriteCellHtmlNode {
         };
 
         let _ = if book.get_sheet_by_name(&sheet).is_some() {
-            ()
         } else {
             book.new_sheet(&sheet)
                 .map_err(|e| flow_like_types::anyhow!("Failed to create sheet: {}", e))?;

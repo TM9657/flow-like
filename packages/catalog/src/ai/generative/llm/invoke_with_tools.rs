@@ -1,8 +1,3 @@
-/// # Invoke LLMs With Tools
-/// Make an LLM Invoke / Chat Completion Request allowing for tool calls with dedicated output pins.
-/// Iterates over all tool calls in LLM response.
-/// Once no more tool calls, stop execution.
-use crate::utils::json::parse_with_schema::tool_call_from_str;
 use flow_like::{
     bit::Bit,
     flow::{
@@ -15,7 +10,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_model_provider::{
-    history::{History, Tool, ToolCall, ToolChoice},
+    history::{History, Tool, ToolChoice},
     response::{Response, ResponseFunction},
 };
 use flow_like_types::{Error, Value, anyhow, async_trait, json, regex::Regex};
@@ -307,11 +302,9 @@ impl NodeLogic for InvokeLLMWithToolsNode {
                 &format!("system prompt (Local): {}", system_prompt),
                 LogLevel::Debug,
             );
-        } else {
-            if !tools.is_empty() && !matches!(tool_choice, ToolChoice::None) {
-                history.tools = Some(tools.clone());
-                history.tool_choice = Some(tool_choice.clone());
-            }
+        } else if !tools.is_empty() && !matches!(tool_choice, ToolChoice::None) {
+            history.tools = Some(tools.clone());
+            history.tool_choice = Some(tool_choice.clone());
         }
 
         // --- Invoke model

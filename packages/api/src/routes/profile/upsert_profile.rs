@@ -99,10 +99,7 @@ pub async fn upsert_profile(
         None
     };
 
-    let apps = match apps {
-        Some(apps) => Some(Value::Array(apps)),
-        None => None,
-    };
+    let apps = apps.map(Value::Array);
 
     let new_profile = profile::ActiveModel {
         id: Set(id),

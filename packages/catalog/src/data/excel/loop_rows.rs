@@ -1,12 +1,10 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use flow_like::{
     flow::{
-        board::Board,
         execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
         node::{Node, NodeLogic},
-        pin::{PinOptions, ValueType},
+        pin::PinOptions,
         variable::VariableType,
     },
     state::FlowLikeState,

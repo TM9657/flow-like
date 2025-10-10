@@ -30,13 +30,18 @@ pub mod info;
 pub mod lookup;
 pub mod manage_invite;
 pub mod notifications;
+pub mod pat;
 pub mod templates;
 pub mod upsert_info;
-pub mod pat;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/pat", get(pat::get_pats::get_pats).put(pat::create_pat::create_pat).delete(pat::delete_pat::delete_pat))
+        .route(
+            "/pat",
+            get(pat::get_pats::get_pats)
+                .put(pat::create_pat::create_pat)
+                .delete(pat::delete_pat::delete_pat),
+        )
         .route("/info", get(user_info).put(upsert_info::upsert_info))
         .route("/billing", get(get_billing_session))
         .route("/lookup/{sub}", get(lookup::user_lookup))

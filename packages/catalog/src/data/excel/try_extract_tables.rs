@@ -1,6 +1,6 @@
 use crate::data::excel::CSVTable;
 use crate::data::path::FlowPath;
-use calamine::{Data, Range, Reader, open_workbook_auto, open_workbook_auto_from_rs};
+use calamine::{Data, Range, Reader, open_workbook_auto_from_rs};
 use chrono::{Days, NaiveDate, NaiveDateTime, NaiveTime};
 use flow_like::flow::node::NodeLogic;
 use flow_like::{
@@ -21,8 +21,6 @@ use serde::{Deserialize, Serialize};
 use std::cmp::{max, min};
 use std::collections::VecDeque;
 use std::io::Cursor;
-use std::path::Path;
-use std::sync::Arc;
 use strsim::jaro_winkler;
 
 static TOTALS_RE: Lazy<regex::Regex> =
@@ -680,11 +678,11 @@ fn build_table_from_rect(
     let totals_re = &*TOTALS_RE;
 
     // Unit row: if directly under header looks like unit tokens, merge into header
-    if data_r0 <= rect.r1 {
-        if let Some(unit_row) = detect_unit_row(grid, rect, data_r0, &headers) {
-            merge_unit_into_headers(&mut headers, &unit_row);
-            data_r0 += 1; // skip the unit row in data
-        }
+    if data_r0 <= rect.r1
+        && let Some(unit_row) = detect_unit_row(grid, rect, data_r0, &headers)
+    {
+        merge_unit_into_headers(&mut headers, &unit_row);
+        data_r0 += 1; // skip the unit row in data
     }
 
     let mut max_width = headers.len();
@@ -727,12 +725,11 @@ fn build_table_from_rect(
         }
 
         // optionally drop totals rows
-        if cfg.drop_totals {
-            if let Some(first) = row.get(0) {
-                if totals_re.is_match(first) {
-                    continue;
-                }
-            }
+        if cfg.drop_totals
+            && let Some(first) = row.first()
+            && totals_re.is_match(first)
+        {
+            continue;
         }
 
         max_width = max(max_width, row.len());
@@ -849,14 +846,15 @@ fn is_banner_row(grid: &Vec<Vec<String>>, rect: &Rect, r: usize, merge_map: &Mer
                 if c >= merge_map[r].len() {
                     break;
                 }
-                if let Some(m) = merge_map[r][c] {
-                    if m.r0 == r && m.c0 == c {
-                        let span = m.c1.saturating_sub(m.c0) + 1;
-                        if span >= min_span {
-                            let s = grid[r][c].trim();
-                            if !s.is_empty() {
-                                return true;
-                            }
+                if let Some(m) = merge_map[r][c]
+                    && m.r0 == r
+                    && m.c0 == c
+                {
+                    let span = m.c1.saturating_sub(m.c0) + 1;
+                    if span >= min_span {
+                        let s = grid[r][c].trim();
+                        if !s.is_empty() {
+                            return true;
                         }
                     }
                 }
@@ -921,10 +919,10 @@ fn detect_left_header_cols(
             if s.chars().any(|ch| ch.is_ascii_alphabetic()) {
                 textish += 1;
             }
-            if let Some(p) = &prev {
-                if p == s {
-                    repeats += 1;
-                }
+            if let Some(p) = &prev
+                && p == s
+            {
+                repeats += 1;
             }
             prev = Some(s.to_string());
         }
@@ -1557,7 +1555,7 @@ fn merge_tables(mut a: Table, mut b: Table) -> Table {
     };
 
     let mut rows = a.rows;
-    rows.extend(b.rows.into_iter());
+    rows.extend(b.rows);
     Table { headers, rows }
 }
 
@@ -1741,10 +1739,10 @@ fn dedup_identical_columns(t: &mut Table) {
     let mut seen = std::collections::HashMap::<String, usize>::new();
 
     for (c, sig) in sigs {
-        if seen.contains_key(&sig) {
-            keep[c] = false;
+        if let std::collections::hash_map::Entry::Vacant(e) = seen.entry(sig) {
+            e.insert(c);
         } else {
-            seen.insert(sig, c);
+            keep[c] = false;
         }
     }
 
@@ -1774,12 +1772,12 @@ fn dedup_identical_columns(t: &mut Table) {
 
 fn strip_header_dup_suffix(h: &str) -> String {
     let s = h.trim();
-    if let Some(open) = s.rfind(" (") {
-        if s.ends_with(')') {
-            let num = &s[(open + 2)..(s.len() - 1)];
-            if !num.is_empty() && num.chars().all(|ch| ch.is_ascii_digit()) {
-                return s[..open].to_string();
-            }
+    if let Some(open) = s.rfind(" (")
+        && s.ends_with(')')
+    {
+        let num = &s[(open + 2)..(s.len() - 1)];
+        if !num.is_empty() && num.chars().all(|ch| ch.is_ascii_digit()) {
+            return s[..open].to_string();
         }
     }
     s.to_string()

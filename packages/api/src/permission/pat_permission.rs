@@ -16,6 +16,5 @@ bitflags! {
 }
 
 pub fn has_pat_permission(permissions: &PatPermission, permission: PatPermission) -> bool {
-    permissions.contains(permission)
-        || permissions.contains(PatPermission::All)
+    permissions.contains(permission) || permissions.contains(PatPermission::All)
 }

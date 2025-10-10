@@ -89,11 +89,11 @@ pub fn ensure_app_dirs() -> std::io::Result<()> {
 #[cfg(not(target_os = "ios"))]
 pub fn ensure_app_dirs() -> std::io::Result<()> {
     let bit_dir = dirs_next::data_dir()
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "data_dir() is None"))?
+        .ok_or_else(|| std::io::Error::other("data_dir() is None"))?
         .join("flow-like/bits");
     let project_dir = dirs_next::data_dir().unwrap().join("flow-like/projects");
     let cache_dir = dirs_next::cache_dir()
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "cache_dir() is None"))?
+        .ok_or_else(|| std::io::Error::other("cache_dir() is None"))?
         .join("flow-like");
 
     ensure_dir(&bit_dir)?;
@@ -288,6 +288,6 @@ fn settings_store_path() -> std::path::PathBuf {
     }
     #[cfg(not(target_os = "ios"))]
     {
-        return get_cache_dir().join("global-settings.json");
+        get_cache_dir().join("global-settings.json")
     }
 }

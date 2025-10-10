@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use super::{LLMCallback, ModelLogic};
 use crate::{
@@ -6,7 +6,7 @@ use crate::{
     provider::{ModelProvider, ModelProviderConfiguration, openai::OpenAIClient},
     response::Response,
 };
-use flow_like_types::{Result, Value, async_trait, sync::Mutex};
+use flow_like_types::{Result, async_trait, sync::Mutex};
 use openai_api_rs::v1::chat_completion::ChatCompletionRequest;
 mod history;
 mod response;

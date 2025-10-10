@@ -1,14 +1,6 @@
-use crate::{
-    entity::{template_profile, user},
-    error::ApiError,
-    middleware::jwt::AppUser,
-    state::AppState,
-};
+use crate::{entity::user, error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
-use flow_like::{
-    flow_like_model_provider::history::History,
-    profile::{Profile, Settings},
-};
+use flow_like::flow_like_model_provider::history::History;
 use sea_orm::EntityTrait;
 use serde::Serialize;
 

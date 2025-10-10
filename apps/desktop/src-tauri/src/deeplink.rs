@@ -29,7 +29,7 @@ pub fn handle_deep_link(app_handle: &AppHandle, urls: &Vec<Url>) {
                 let path_str = path.to_string_lossy().to_string();
                 println!("Received file URL to import: {}", path_str);
                 crate::utils::emit_throttled(
-                    &app_handle,
+                    app_handle,
                     crate::utils::UiEmitTarget::All,
                     "import/file",
                     json::json!({ "path": path_str }),
@@ -48,11 +48,8 @@ pub fn handle_deep_link(app_handle: &AppHandle, urls: &Vec<Url>) {
         let command = parts.next().unwrap_or("");
         let mut parts = command.splitn(2, '?');
 
-        match parts.next() {
-            Some("auth") => {
-                handle_auth(&app_handle, url_str);
-            }
-            _ => {}
+        if let Some("auth") = parts.next() {
+            handle_auth(app_handle, url_str);
         }
     }
 }
@@ -60,7 +57,7 @@ pub fn handle_deep_link(app_handle: &AppHandle, urls: &Vec<Url>) {
 fn handle_auth(app_handle: &AppHandle, url: &str) {
     println!("Handling auth URL: {}", url);
     crate::utils::emit_throttled(
-        &app_handle,
+        app_handle,
         crate::utils::UiEmitTarget::All,
         "oidc/url",
         json::json!({ "url": url }),

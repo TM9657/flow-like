@@ -28,7 +28,8 @@ impl BoardCleanupLogic for FixPinsCleanup {
     }
 
     fn initial_pin_iteration(&mut self, pin: &Pin, parent: NodeOrLayerRef) {
-        self.pin_parent.insert(pin.id.clone(), parent.id().to_string());
+        self.pin_parent
+            .insert(pin.id.clone(), parent.id().to_string());
     }
 
     fn main_pin_iteration(&mut self, pin: &mut Pin, pin_lookup: &PinLookup) {

@@ -119,7 +119,7 @@ impl Metadata {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Default)]
 pub enum BitTypes {
     Llm,
     Vlm,
@@ -137,14 +137,9 @@ pub enum BitTypes {
     Projection,
     Project,
     Board,
+    #[default]
     Other,
     ObjectDetection,
-}
-
-impl Default for BitTypes {
-    fn default() -> Self {
-        BitTypes::Other
-    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]

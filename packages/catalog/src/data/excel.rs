@@ -128,22 +128,26 @@ fn parse_date_string(s: &str) -> Option<(String, i64)> {
     }
 
     // European style: DD.MM.YYYY
-    if t.len() >= 10 && t.chars().nth(2) == Some('.') && t.chars().nth(5) == Some('.') {
-        if let Ok(d) = chrono::NaiveDate::parse_from_str(t, "%d.%m.%Y") {
-            return Some((
-                format!("{}T00:00:00", d.format("%Y-%m-%d")),
-                to_ms(d, NaiveTime::from_hms_opt(0, 0, 0)?),
-            ));
-        }
+    if t.len() >= 10
+        && t.chars().nth(2) == Some('.')
+        && t.chars().nth(5) == Some('.')
+        && let Ok(d) = chrono::NaiveDate::parse_from_str(t, "%d.%m.%Y")
+    {
+        return Some((
+            format!("{}T00:00:00", d.format("%Y-%m-%d")),
+            to_ms(d, NaiveTime::from_hms_opt(0, 0, 0)?),
+        ));
     }
     // Slash formats: try unambiguous first (YYYY/MM/DD)
-    if t.len() >= 10 && t.chars().nth(4) == Some('/') && t.chars().nth(7) == Some('/') {
-        if let Ok(d) = chrono::NaiveDate::parse_from_str(t, "%Y/%m/%d") {
-            return Some((
-                format!("{}T00:00:00", d.format("%Y-%m-%d")),
-                to_ms(d, NaiveTime::from_hms_opt(0, 0, 0)?),
-            ));
-        }
+    if t.len() >= 10
+        && t.chars().nth(4) == Some('/')
+        && t.chars().nth(7) == Some('/')
+        && let Ok(d) = chrono::NaiveDate::parse_from_str(t, "%Y/%m/%d")
+    {
+        return Some((
+            format!("{}T00:00:00", d.format("%Y-%m-%d")),
+            to_ms(d, NaiveTime::from_hms_opt(0, 0, 0)?),
+        ));
     }
     // MM/DD/YYYY or DD/MM/YYYY: attempt to disambiguate.
     if t.len() >= 10 && t.chars().nth(2) == Some('/') && t.chars().nth(5) == Some('/') {
@@ -233,7 +237,7 @@ impl CSVTable {
     pub fn new(headers: Vec<String>, rows: Vec<Vec<JsonValue>>, source: Option<FlowPath>) -> Self {
         let headers: Arc<[Arc<str>]> = headers
             .into_iter()
-            .map(|s| Arc::<str>::from(s))
+            .map(Arc::<str>::from)
             .collect::<Vec<_>>()
             .into();
 
@@ -543,7 +547,7 @@ pub fn parse_col_1_based(s: &str) -> flow_like_types::Result<u32> {
     // Otherwise treat as letters
     let mut acc: u32 = 0;
     for ch in trimmed.to_ascii_uppercase().chars() {
-        if !(('A'..='Z').contains(&ch)) {
+        if !ch.is_ascii_uppercase() {
             return Err(flow_like_types::anyhow!(
                 "Invalid column '{}': only letters A-Z or a positive number are allowed",
                 s

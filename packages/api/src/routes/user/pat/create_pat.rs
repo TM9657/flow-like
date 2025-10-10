@@ -1,15 +1,18 @@
-use std::str::FromStr;
-
 use crate::{entity::pat, error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
-use flow_like_types::{anyhow, base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine}, create_id, rand::{rngs::OsRng, TryRngCore}};
-use sea_orm::{ActiveModelTrait, ActiveValue::{NotSet, Set}};
+use flow_like_types::{
+    anyhow,
+    base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD},
+    create_id,
+    rand::{TryRngCore, rngs::OsRng},
+};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PatOut {
     pub pat: String,
-    pub permission: i64
+    pub permission: i64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -35,8 +38,10 @@ pub async fn create_pat(
     }
 
     let valid_until = match input.valid_until {
-        Some(ts) => Some(chrono::DateTime::from_timestamp(ts, 0)
-            .ok_or(anyhow!("Invalid valid_until timestamp"))?),
+        Some(ts) => Some(
+            chrono::DateTime::from_timestamp(ts, 0)
+                .ok_or(anyhow!("Invalid valid_until timestamp"))?,
+        ),
         None => None,
     };
     let naive_datetime = valid_until.map(|dt| dt.naive_utc());

@@ -1,8 +1,5 @@
-use std::str::FromStr;
-
 use crate::{entity::pat, error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
-use flow_like_types::anyhow;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +17,11 @@ pub async fn delete_pat(
     let sub = user.sub()?;
 
     pat::Entity::delete_many()
-        .filter(pat::Column::Id.eq(input.id).and(pat::Column::UserId.eq(sub)))
+        .filter(
+            pat::Column::Id
+                .eq(input.id)
+                .and(pat::Column::UserId.eq(sub)),
+        )
         .exec(&state.db)
         .await?;
 

@@ -15,7 +15,6 @@ use axum::{
     response::Response,
 };
 use flow_like::hub::UserTier;
-use flow_like_storage::datafusion::common::HashMap;
 use flow_like_types::Result;
 use flow_like_types::anyhow;
 use hyper::header::AUTHORIZATION;
@@ -398,8 +397,11 @@ pub async fn jwt_middleware(
         let secret_hash = hasher.finalize().to_hex().to_string().to_lowercase();
 
         let db_pat = Pat::find()
-            .filter(pat::Column::Id.eq(pat_id)
-                .and(pat::Column::Key.eq(secret_hash)))
+            .filter(
+                pat::Column::Id
+                    .eq(pat_id)
+                    .and(pat::Column::Key.eq(secret_hash)),
+            )
             .one(&state.db)
             .await?;
         if let Some(pat) = db_pat {

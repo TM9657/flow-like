@@ -537,7 +537,7 @@ async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
                     move |chunk_len, content_len| {
                         downloaded += chunk_len as u64;
 
-                        if let Some(total) = content_len.map(|v| v as u64) {
+                        if let Some(total) = content_len {
                             let pct = ((downloaded as f64 / total as f64) * 100.0).clamp(0.0, 100.0)
                                 as u64;
 
