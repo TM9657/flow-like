@@ -386,7 +386,7 @@ const PatManagementPage = () => {
 										className="w-full"
 									/>
 									<p className="text-xs text-muted-foreground">
-										Choose a descriptive name to identify this token's purpose.
+										Choose a descriptive name to identify this token&apos;s purpose.
 									</p>
 								</div>
 
@@ -504,7 +504,7 @@ const PatManagementPage = () => {
 								</h2>
 								<p className="text-muted-foreground">
 									Your personal access token has been generated. Make sure to
-									copy it now as you won't be able to see it again.
+									copy it now as you won&apos;t be able to see it again.
 								</p>
 							</div>
 						</div>
@@ -568,7 +568,7 @@ const PatManagementPage = () => {
 								}}
 								className="shadow-lg"
 							>
-								I've Saved My Token
+								I&apos;ve Saved My Token
 							</Button>
 						</div>
 					</div>
