@@ -385,7 +385,7 @@ export class EventState implements IEventState {
 			events: channel,
 			streamState: streamState,
 			credentials,
-			token
+			token,
 		});
 
 		closed = true;

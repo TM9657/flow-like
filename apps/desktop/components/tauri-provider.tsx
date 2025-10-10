@@ -9,7 +9,7 @@ import {
 	type IBit,
 	type IBitState,
 	type IBoardState,
-	ICapabilities,
+	type ICapabilities,
 	type IDatabaseState,
 	type IEventState,
 	type IGenericCommand,

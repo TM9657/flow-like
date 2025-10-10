@@ -41,9 +41,26 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import {
+	type ReactElement,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { Button, Sheet, SheetContent, SheetHeader, SheetTitle, useLogAggregation, useMobileHeader, viewportDb, viewportKey } from "../..";
+import {
+	Button,
+	Sheet,
+	SheetContent,
+	SheetHeader,
+	SheetTitle,
+	useLogAggregation,
+	useMobileHeader,
+	viewportDb,
+	viewportKey,
+} from "../..";
 import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
@@ -186,69 +203,92 @@ export function FlowBoard({
 	const { update: updateHeader } = useMobileHeader();
 
 	useEffect(() => {
-		const left: ReactElement[] = []
-		const right: ReactElement[] = []
+		const left: ReactElement[] = [];
+		const right: ReactElement[] = [];
 
-		if (typeof parentRegister.boardParents[boardId] === "string" && !currentLayer) {
+		if (
+			typeof parentRegister.boardParents[boardId] === "string" &&
+			!currentLayer
+		) {
 			left.push(
-				<Button variant={"default"} size={"icon"}  onClick={async () => {
-					const urlWithQuery = parentRegister.boardParents[boardId];
-					router.push(urlWithQuery);
-				}}>
+				<Button
+					variant={"default"}
+					size={"icon"}
+					onClick={async () => {
+						const urlWithQuery = parentRegister.boardParents[boardId];
+						router.push(urlWithQuery);
+					}}
+				>
 					<ArrowBigLeftDashIcon />
-				</Button>
-			)
+				</Button>,
+			);
 		}
 
 		right.push(
 			...[
-				<Button variant={"outline"} size={"icon"}  onClick={async () => {
-					toggleVars();
-				}}>
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						toggleVars();
+					}}
+				>
 					<VariableIcon />
 				</Button>,
-				<Button variant={"outline"} size={"icon"}  onClick={async () => {
-					setEditBoard(true);
-				}}>
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						setEditBoard(true);
+					}}
+				>
 					<NotebookPenIcon />
 				</Button>,
-				<Button variant={"outline"} size={"icon"}  onClick={async () => {
-					toggleRunHistory();
-				}}>
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						toggleRunHistory();
+					}}
+				>
 					<HistoryIcon />
-				</Button>
-			]
-		)
+				</Button>,
+			],
+		);
 
 		// Always expose Logs button; it opens the logs sheet (shows empty state when no run is selected)
 		right.push(
-			<Button variant={"outline"} size={"icon"} aria-label="Open logs" onClick={async () => {
-				toggleLogs();
-			}}>
+			<Button
+				variant={"outline"}
+				size={"icon"}
+				aria-label="Open logs"
+				onClick={async () => {
+					toggleLogs();
+				}}
+			>
 				<ScrollIcon />
-			</Button>
-		)
+			</Button>,
+		);
 
-		if(currentLayer) {
+		if (currentLayer) {
 			left.push(
-				<Button variant={"default"} size={"icon"}  onClick={async () => {
-					popLayer();
-				}}>
+				<Button
+					variant={"default"}
+					size={"icon"}
+					onClick={async () => {
+						popLayer();
+					}}
+				>
 					<SquareChevronUpIcon />
-				</Button>
-			)
+				</Button>,
+			);
 		}
 
 		updateHeader({
 			left,
-			right
-		})
-	}, [
-		currentMetadata,
-		currentLayer,
-		parentRegister.boardParents,
-		boardId,
-	])
+			right,
+		});
+	}, [currentMetadata, currentLayer, parentRegister.boardParents, boardId]);
 
 	const pinToNode = useCallback(
 		(pinId: string) => {
@@ -389,7 +429,9 @@ export function FlowBoard({
 	useEffect(() => {
 		if (!logPanelRef.current) return;
 		// Avoid auto-expanding logs on mobile to prevent layout jump
-		const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+		const isMobile =
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches;
 		if (isMobile) return;
 		logPanelRef.current.expand();
 		const size = logPanelRef.current.getSize();
@@ -420,7 +462,10 @@ export function FlowBoard({
 
 	function toggleVars() {
 		// On mobile use sheet instead of resizable panel
-		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+		if (
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches
+		) {
 			setVarsOpen((v) => !v);
 			return;
 		}
@@ -437,7 +482,10 @@ export function FlowBoard({
 	}
 
 	function toggleRunHistory() {
-		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+		if (
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches
+		) {
 			setRunsOpen((v) => !v);
 			return;
 		}
@@ -456,7 +504,10 @@ export function FlowBoard({
 	}
 
 	function toggleLogs() {
-		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+		if (
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches
+		) {
 			setLogsOpen((v) => !v);
 			return;
 		}
@@ -1490,17 +1541,17 @@ export function FlowBoard({
 					mobileClassName="hidden"
 					items={[
 						...(typeof parentRegister.boardParents[boardId] === "string" &&
-							!currentLayer
+						!currentLayer
 							? [
-								{
-									icon: <ArrowBigLeftDashIcon />,
-									title: "Back",
-									onClick: async () => {
-										const urlWithQuery = parentRegister.boardParents[boardId];
-										router.push(urlWithQuery);
+									{
+										icon: <ArrowBigLeftDashIcon />,
+										title: "Back",
+										onClick: async () => {
+											const urlWithQuery = parentRegister.boardParents[boardId];
+											router.push(urlWithQuery);
+										},
 									},
-								},
-							]
+								]
 							: []),
 						{
 							icon: <VariableIcon />,
@@ -1526,27 +1577,27 @@ export function FlowBoard({
 						},
 						...(currentMetadata
 							? [
-								{
-									icon: <ScrollIcon />,
-									title: "Logs",
-									onClick: async () => {
-										toggleLogs();
+									{
+										icon: <ScrollIcon />,
+										title: "Logs",
+										onClick: async () => {
+											toggleLogs();
+										},
 									},
-								},
-							]
+								]
 							: ([] as any)),
 						...(currentLayer
 							? [
-								{
-									icon: <SquareChevronUpIcon />,
-									title: "Layer Up",
-									separator: "left",
-									highlight: true,
-									onClick: async () => {
-										popLayer();
+									{
+										icon: <SquareChevronUpIcon />,
+										title: "Layer Up",
+										separator: "left",
+										highlight: true,
+										onClick: async () => {
+											popLayer();
+										},
 									},
-								},
-							]
+								]
 							: []),
 					]}
 				/>
@@ -1554,7 +1605,11 @@ export function FlowBoard({
 			<ResizablePanelGroup
 				direction="horizontal"
 				className="flex grow min-h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] md:min-h-dvh md:h-dvh overscroll-contain"
-				style={{ touchAction: "manipulation", WebkitOverflowScrolling: "touch", overflow: "hidden" }}
+				style={{
+					touchAction: "manipulation",
+					WebkitOverflowScrolling: "touch",
+					overflow: "hidden",
+				}}
 			>
 				{/* Desktop/Tablet side panels */}
 				<ResizablePanel
@@ -1594,7 +1649,11 @@ export function FlowBoard({
 								<div
 									className={`w-full h-full relative select-none touch-none ${isOver && "border-green-400 border-2 z-10"}`}
 									ref={setNodeRef}
-									style={{ WebkitUserSelect: "none", WebkitTouchCallout: "none", touchAction: "none" }}
+									style={{
+										WebkitUserSelect: "none",
+										WebkitTouchCallout: "none",
+										touchAction: "none",
+									}}
 									onTouchStart={(e) => {
 										const t = e.touches[0];
 										if (!t) return;
@@ -1605,23 +1664,47 @@ export function FlowBoard({
 										const onMove = (me: TouchEvent) => {
 											const tt = me.touches[0];
 											if (!tt) return;
-											if (Math.hypot(tt.clientX - startX, tt.clientY - startY) > 10) moved = true;
+											if (
+												Math.hypot(tt.clientX - startX, tt.clientY - startY) >
+												10
+											)
+												moved = true;
 										};
 										const timer = setTimeout(() => {
 											if (moved) return;
 											// Synthesize a contextmenu-like event for long-press
-											const evt = new MouseEvent("contextmenu", { clientX: startX, clientY: startY, bubbles: true, cancelable: true });
+											const evt = new MouseEvent("contextmenu", {
+												clientX: startX,
+												clientY: startY,
+												bubbles: true,
+												cancelable: true,
+											});
 											target.dispatchEvent(evt);
 										}, 450);
 										const onEnd = () => {
 											clearTimeout(timer);
-											document.removeEventListener("touchmove", onMove, { capture: true } as any);
-											document.removeEventListener("touchend", onEnd, { capture: true } as any);
-											document.removeEventListener("touchcancel", onEnd, { capture: true } as any);
+											document.removeEventListener("touchmove", onMove, {
+												capture: true,
+											} as any);
+											document.removeEventListener("touchend", onEnd, {
+												capture: true,
+											} as any);
+											document.removeEventListener("touchcancel", onEnd, {
+												capture: true,
+											} as any);
 										};
-										document.addEventListener("touchmove", onMove, { passive: true, capture: true } as any);
-										document.addEventListener("touchend", onEnd, { passive: true, capture: true } as any);
-										document.addEventListener("touchcancel", onEnd, { passive: true, capture: true } as any);
+										document.addEventListener("touchmove", onMove, {
+											passive: true,
+											capture: true,
+										} as any);
+										document.addEventListener("touchend", onEnd, {
+											passive: true,
+											capture: true,
+										} as any);
+										document.addEventListener("touchcancel", onEnd, {
+											passive: true,
+											capture: true,
+										} as any);
 									}}
 								>
 									{currentLayer && (
@@ -1732,8 +1815,8 @@ export function FlowBoard({
 											<Variable
 												variable={active?.data?.current as IVariable}
 												preview
-												onVariableChange={() => { }}
-												onVariableDeleted={() => { }}
+												onVariableChange={() => {}}
+												onVariableDeleted={() => {}}
 											/>
 										)}
 									</DragOverlay>
@@ -1791,7 +1874,10 @@ export function FlowBoard({
 						</SheetHeader>
 						{board.data && (
 							<div className="h-[calc(60dvh-3.5rem)] overflow-y-auto overscroll-contain">
-								<VariablesMenu board={board.data} executeCommand={executeCommand} />
+								<VariablesMenu
+									board={board.data}
+									executeCommand={executeCommand}
+								/>
 							</div>
 						)}
 					</SheetContent>

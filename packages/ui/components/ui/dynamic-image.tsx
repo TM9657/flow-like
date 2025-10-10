@@ -17,7 +17,12 @@ export const DynamicImage = memo(function DynamicImage({
 
 	if (!url.includes(".svg"))
 		return (
-			<img alt="dynamic_icon" src={url} className={`border-0 ${className}`} style={style} />
+			<img
+				alt="dynamic_icon"
+				src={url}
+				className={`border-0 ${className}`}
+				style={style}
+			/>
 		);
 
 	return <div ref={ref} className={`border-0 ${className}`} style={style} />;

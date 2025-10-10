@@ -15,10 +15,10 @@ import {
 } from "@tm9657/flow-like-ui";
 import type { IAppSearchSort } from "@tm9657/flow-like-ui/lib/schema/app/app-search-query";
 import type { IMediaItem } from "@tm9657/flow-like-ui/state/backend-state/app-state";
+import { toast } from "sonner";
 import { fetcher, put } from "../../lib/api";
 import { appsDB } from "../../lib/apps-db";
 import type { TauriBackend } from "../tauri-provider";
-import { toast } from "sonner";
 
 export class AppState implements IAppState {
 	constructor(private readonly backend: TauriBackend) {}
@@ -589,8 +589,8 @@ export class AppState implements IAppState {
 			return;
 		}
 
-		if(this.backend.auth) {
-			await this.backend.auth.signinRedirect()
+		if (this.backend.auth) {
+			await this.backend.auth.signinRedirect();
 			return;
 		}
 		toast.error("You must be logged in to request access to an app.");

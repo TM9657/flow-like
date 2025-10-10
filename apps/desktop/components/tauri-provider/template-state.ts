@@ -31,7 +31,9 @@ export class TemplateState implements ITemplateState {
 			}
 
 			if (!this.backend.profile || !this.backend.queryClient) {
-				console.warn("No profile set for Tauri backend, returning local templates");
+				console.warn(
+					"No profile set for Tauri backend, returning local templates",
+				);
 				return templates;
 			}
 
@@ -157,7 +159,9 @@ export class TemplateState implements ITemplateState {
 			if (template) {
 				return template;
 			}
-			throw new Error("No profile set for Tauri backend and no local template available");
+			throw new Error(
+				"No profile set for Tauri backend and no local template available",
+			);
 		}
 
 		if (template) {

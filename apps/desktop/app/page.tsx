@@ -5,10 +5,10 @@ import {
 	TutorialDialog,
 	useBackend,
 } from "@tm9657/flow-like-ui";
+import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTauriInvoke } from "../components/useInvoke";
-import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 
 export default function Home() {
 	const backend = useBackend();

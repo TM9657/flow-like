@@ -22,7 +22,10 @@ export default function OnboardingLayout({
 }
 
 const BackgroundFX = () => (
-	<div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+	<div
+		aria-hidden="true"
+		className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+	>
 		{/* Subtle gradient wash */}
 		<div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-background to-secondary/10" />
 		{/* Animated blobs */}

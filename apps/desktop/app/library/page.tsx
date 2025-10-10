@@ -80,7 +80,8 @@ export default function YoursPage() {
 			return true;
 		const platform = navigator.platform?.toLowerCase() ?? "";
 		const maxTouchPoints =
-			(navigator as Navigator & { maxTouchPoints?: number }).maxTouchPoints ?? 0;
+			(navigator as Navigator & { maxTouchPoints?: number }).maxTouchPoints ??
+			0;
 		return /mac/.test(platform) && maxTouchPoints > 1;
 	}, []);
 
@@ -111,8 +112,10 @@ export default function YoursPage() {
 		if (Array.isArray(selected)) return resolveSelectedPath(selected[0]);
 		if (typeof selected === "object") {
 			const candidate = selected as { path?: unknown; uri?: unknown };
-			if (typeof candidate.path === "string") return normalizePickerPath(candidate.path);
-			if (typeof candidate.uri === "string") return normalizePickerPath(candidate.uri);
+			if (typeof candidate.path === "string")
+				return normalizePickerPath(candidate.path);
+			if (typeof candidate.uri === "string")
+				return normalizePickerPath(candidate.uri);
 		}
 		return null;
 	};
@@ -124,7 +127,9 @@ export default function YoursPage() {
 				setImportDialogOpen(true);
 				return;
 			}
-			const toastId = toast.loading("Importing app...", { description: "Please wait." });
+			const toastId = toast.loading("Importing app...", {
+				description: "Please wait.",
+			});
 			try {
 				await invoke("import_app_from_file", { path });
 				toast.success("App imported successfully!", { id: toastId });
@@ -143,11 +148,11 @@ export default function YoursPage() {
 		const filtersOption: Filter[] | undefined = isMobile
 			? undefined
 			: [
-				{
-					name: "Flow App",
-					extensions: ["flow-app"],
-				},
-			];
+					{
+						name: "Flow App",
+						extensions: ["flow-app"],
+					},
+				];
 
 		const selection = await open({
 			multiple: false,
@@ -247,7 +252,12 @@ export default function YoursPage() {
 
 	const menuActions = useMemo(
 		() => [
-			<Button key="import" size="icon" variant="outline" onClick={pickImportFile}>
+			<Button
+				key="import"
+				size="icon"
+				variant="outline"
+				onClick={pickImportFile}
+			>
 				<ImportIcon className="h-4 w-4" />
 			</Button>,
 			<Button
@@ -258,27 +268,26 @@ export default function YoursPage() {
 			>
 				<Link2 className="h-4 w-4" />
 			</Button>,
-			<Button
-				key={"create"}
-				variant="default"
-				asChild
-			>
+			<Button key={"create"} variant="default" asChild>
 				<Link href="/library/new">
 					<Sparkles className="mr-2 h-4 w-4" />
 					Create App
 				</Link>
-			</Button>
+			</Button>,
 		],
 		[pickImportFile, setJoinDialogOpen],
 	);
 
 	// Listen for import/file events (e.g., from iOS when a file is opened with the app)
 	useEffect(() => {
-		const unlistenPromise = listen<{ path: string }>("import/file", async (event) => {
-			const path = event.payload.path;
-			if (!path) return;
-			await importApp(path);
-		});
+		const unlistenPromise = listen<{ path: string }>(
+			"import/file",
+			async (event) => {
+				const path = event.payload.path;
+				if (!path) return;
+				await importApp(path);
+			},
+		);
 
 		return () => {
 			unlistenPromise.then((unsub) => unsub()).catch(() => void 0);
@@ -288,7 +297,7 @@ export default function YoursPage() {
 	useMobileHeader({
 		right: menuActions,
 		title: "Library",
-	})
+	});
 
 	const renderAppCards = (items: any[]) => {
 		if (viewMode === "grid") {
@@ -355,16 +364,19 @@ export default function YoursPage() {
 								type Filter = { name: string; extensions: string[] };
 								let filtersOption: Filter[] | undefined;
 								// Use UA-based detection to avoid plugin availability issues
-								const ua = typeof navigator !== "undefined" ? navigator.userAgent.toLowerCase() : "";
+								const ua =
+									typeof navigator !== "undefined"
+										? navigator.userAgent.toLowerCase()
+										: "";
 								const isMobile = /android|iphone|ipad|ipod/.test(ua);
 								filtersOption = isMobile
 									? undefined
 									: [
-										{
-											name: "Flow App",
-											extensions: ["flow-app", "enc.flow-app"],
-										},
-									];
+											{
+												name: "Flow App",
+												extensions: ["flow-app", "enc.flow-app"],
+											},
+										];
 
 								const file = await open({
 									multiple: false,

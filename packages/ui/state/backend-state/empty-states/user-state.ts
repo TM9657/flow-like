@@ -43,11 +43,23 @@ export class EmptyUserState implements IUserState {
 		throw new Error("Method not implemented.");
 	}
 
-	createPAT(name: string, validUntil?: Date, permissions?: number): Promise<{pat: string, permission: number}> {
+	createPAT(
+		name: string,
+		validUntil?: Date,
+		permissions?: number,
+	): Promise<{ pat: string; permission: number }> {
 		throw new Error("Method not implemented.");
 	}
 
-	getPATs(): Promise<{id: string, name: string, created_at: string, valid_until: string | null, permission: number}[]> {
+	getPATs(): Promise<
+		{
+			id: string;
+			name: string;
+			created_at: string;
+			valid_until: string | null;
+			permission: number;
+		}[]
+	> {
 		throw new Error("Method not implemented.");
 	}
 

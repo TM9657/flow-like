@@ -2,13 +2,17 @@
 import type { IHub, UseQueryResult } from "@tm9657/flow-like-ui";
 import { Bit, Button, useBackend } from "@tm9657/flow-like-ui";
 import {
+	Alert,
+	AlertDescription,
+	AlertTitle,
+} from "@tm9657/flow-like-ui/components/ui/alert";
+import {
 	Avatar,
 	AvatarFallback,
 	AvatarImage,
 } from "@tm9657/flow-like-ui/components/ui/avatar";
-import { BitHover } from "@tm9657/flow-like-ui/components/ui/bit-hover";
 import { Badge } from "@tm9657/flow-like-ui/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@tm9657/flow-like-ui/components/ui/alert";
+import { BitHover } from "@tm9657/flow-like-ui/components/ui/bit-hover";
 import type { IBit } from "@tm9657/flow-like-ui/lib/schema/bit/bit";
 import { IBitTypes } from "@tm9657/flow-like-ui/lib/schema/bit/bit";
 import { humanFileSize } from "@tm9657/flow-like-ui/lib/utils";
@@ -111,7 +115,8 @@ export default function Onboarding() {
 			}),
 		[signInRequiredProfiles, activeProfiles],
 	);
-	const downloadHref = route.length > 0 ? `/onboarding/download?${route}` : null;
+	const downloadHref =
+		route.length > 0 ? `/onboarding/download?${route}` : null;
 	const showLocalModelAlert = !canHostModels && filteredOutCount > 0;
 
 	const handleSignIn = useCallback(async () => {
@@ -177,7 +182,10 @@ export default function Onboarding() {
 
 	useEffect(() => {
 		if (!defaultProfiles.data) return;
-		const profiles = defaultProfiles.data as [[ISettingsProfile, IBit[]][], IHub];
+		const profiles = defaultProfiles.data as [
+			[ISettingsProfile, IBit[]][],
+			IHub,
+		];
 		setProfiles(profiles[0]);
 	}, [defaultProfiles.data]);
 
@@ -203,7 +211,7 @@ export default function Onboarding() {
 				onSignIn={handleSignIn}
 				downloadHref={downloadHref}
 			/>
-			<br/>
+			<br />
 		</div>
 	);
 }
@@ -221,7 +229,8 @@ function OnboardingIntro() {
 				Select your starting profile
 			</h2>
 			<p className="text-sm sm:text-base text-muted-foreground/80 max-w-lg mx-auto leading-relaxed">
-				Choose one or more profiles that match your interests. You can always add, change or remove profiles later.
+				Choose one or more profiles that match your interests. You can always
+				add, change or remove profiles later.
 			</p>
 		</div>
 	);
@@ -246,9 +255,10 @@ function ProfilesSection({
 	activeProfiles: string[];
 	onToggleProfile: (profileId: string) => void;
 }>) {
-	const hiddenMessage = filteredOutCount === 1
-		? "1 profile includes a downloadable local LLM/VLM and isn't available on this device."
-		: `${filteredOutCount} profiles include downloadable local LLMs/VLMs and aren't available on this device.`;
+	const hiddenMessage =
+		filteredOutCount === 1
+			? "1 profile includes a downloadable local LLM/VLM and isn't available on this device."
+			: `${filteredOutCount} profiles include downloadable local LLMs/VLMs and aren't available on this device.`;
 
 	return (
 		<div className="w-full max-w-6xl space-y-4 sm:space-y-6">
@@ -261,7 +271,9 @@ function ProfilesSection({
 			{hasSignInProfiles && (
 				<Alert className="bg-muted/60 border-border/60 backdrop-blur-sm">
 					<AlertTitle>
-						{isAuthenticated ? "Hosted models unlocked" : "Hosted models need a sign-in"}
+						{isAuthenticated
+							? "Hosted models unlocked"
+							: "Hosted models need a sign-in"}
 					</AlertTitle>
 					<AlertDescription>
 						{isAuthenticated
@@ -272,27 +284,30 @@ function ProfilesSection({
 			)}
 			{noProfilesAvailable ? (
 				<div className="rounded-2xl border border-dashed border-border/60 bg-muted/40 px-6 py-12 text-center text-sm text-muted-foreground">
-					No compatible profiles are available for your current setup. Enable local model hosting or sign in to unlock more starter profiles.
+					No compatible profiles are available for your current setup. Enable
+					local model hosting or sign in to unlock more starter profiles.
 				</div>
 			) : (
 				<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-					{availableProfiles.map(({ profile, bits, hasLocalModels, requiresSignIn }) => {
-						const profileId = profile.hub_profile.id;
-						if (!profileId) return null;
-						const isActive = activeProfiles.includes(profileId);
-						return (
-							<PreviewCard
-								key={profileId}
-								bits={bits}
-								profile={profile}
-								active={isActive}
-								hasLocalModels={hasLocalModels}
-								requiresSignIn={requiresSignIn}
-								isAuthenticated={isAuthenticated}
-								onClick={() => onToggleProfile(profileId)}
-							/>
-						);
-					})}
+					{availableProfiles.map(
+						({ profile, bits, hasLocalModels, requiresSignIn }) => {
+							const profileId = profile.hub_profile.id;
+							if (!profileId) return null;
+							const isActive = activeProfiles.includes(profileId);
+							return (
+								<PreviewCard
+									key={profileId}
+									bits={bits}
+									profile={profile}
+									active={isActive}
+									hasLocalModels={hasLocalModels}
+									requiresSignIn={requiresSignIn}
+									isAuthenticated={isAuthenticated}
+									onClick={() => onToggleProfile(profileId)}
+								/>
+							);
+						},
+					)}
 				</div>
 			)}
 		</div>
@@ -324,12 +339,16 @@ function DownloadPanel({
 				<div className="flex items-center gap-3">
 					<CloudDownload className="h-5 w-5 text-primary" />
 					<div className="flex items-baseline gap-2">
-						<span className="text-lg font-medium">{humanFileSize(totalSize)}</span>
+						<span className="text-lg font-medium">
+							{humanFileSize(totalSize)}
+						</span>
 						{hasSignInProfiles && (
 							<Badge
 								variant="outline"
 								className={`text-[0.65rem] ${
-									isAuthenticated ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/40" : "text-amber-600"
+									isAuthenticated
+										? "bg-emerald-500/10 text-emerald-500 border-emerald-500/40"
+										: "text-amber-600"
 								}`}
 							>
 								{isAuthenticated ? "Ready" : "Sign-in needed"}
@@ -441,7 +460,10 @@ function PreviewCard({
 				{(hasLocalModels || requiresSignIn) && (
 					<div className="flex flex-wrap items-center gap-2 pt-1">
 						{hasLocalModels && (
-							<Badge variant={active ? "default" : "secondary"} className="text-[0.65rem] uppercase tracking-wide">
+							<Badge
+								variant={active ? "default" : "secondary"}
+								className="text-[0.65rem] uppercase tracking-wide"
+							>
 								Local model download
 							</Badge>
 						)}
@@ -449,7 +471,9 @@ function PreviewCard({
 							<Badge
 								variant="outline"
 								className={`text-[0.65rem] uppercase tracking-wide ${
-									isAuthenticated ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/40" : ""
+									isAuthenticated
+										? "bg-emerald-500/10 text-emerald-500 border-emerald-500/40"
+										: ""
 								}`}
 							>
 								{isAuthenticated ? "Hosted model ready" : "Requires sign in"}

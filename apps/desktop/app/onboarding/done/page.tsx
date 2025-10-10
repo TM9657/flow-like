@@ -1,6 +1,12 @@
 "use client";
 
-import { Button, Card, CardContent, CardHeader, ISettingsProfile } from "@tm9657/flow-like-ui";
+import {
+	Button,
+	Card,
+	CardContent,
+	CardHeader,
+	type ISettingsProfile,
+} from "@tm9657/flow-like-ui";
 import { PartyPopper } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback } from "react";
@@ -10,11 +16,15 @@ import { useTauriInvoke } from "../../../components/useInvoke";
 const CongratsHeader = () => (
 	<CardHeader className="text-center space-y-2">
 		<h2 className="text-2xl sm:text-3xl font-semibold">🎉 Congratulations!</h2>
-		<p className="text-muted-foreground">You have successfully completed the onboarding process.</p>
+		<p className="text-muted-foreground">
+			You have successfully completed the onboarding process.
+		</p>
 	</CardHeader>
 );
 
-const FinishSetupButton: React.FC<{ onFinish: () => void }> = ({ onFinish }) => (
+const FinishSetupButton: React.FC<{ onFinish: () => void }> = ({
+	onFinish,
+}) => (
 	<Button className="gap-2 w-full mt-6" onClick={onFinish}>
 		<PartyPopper className="h-4 w-4" aria-hidden="true" />
 		Finish Setup
@@ -37,9 +47,11 @@ export default function DonePage() {
 				<Card className="w-full max-w-md sm:max-w-lg md:max-w-2xl">
 					<CardContent className="pt-6">
 						<CongratsHeader />
-						<FinishSetupButton onFinish={async () => {
-							await onFinish();
-						}} />
+						<FinishSetupButton
+							onFinish={async () => {
+								await onFinish();
+							}}
+						/>
 					</CardContent>
 				</Card>
 			</div>

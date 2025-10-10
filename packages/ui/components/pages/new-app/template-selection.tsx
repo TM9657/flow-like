@@ -40,7 +40,9 @@ export function TemplateSection({
 							<CopyIcon className="h-5 w-5 text-primary" />
 						</div>
 						<div className="flex-1 min-w-0">
-							<CardTitle className="text-base sm:text-lg">Start With A Template?</CardTitle>
+							<CardTitle className="text-base sm:text-lg">
+								Start With A Template?
+							</CardTitle>
 							<CardDescription className="text-xs sm:text-sm">
 								Start with a pre-built template or create from scratch
 							</CardDescription>
@@ -65,7 +67,10 @@ export function TemplateSection({
 									if (checked) onSelectTemplate("", "");
 								}}
 							/>
-							<Label htmlFor="skip-template" className="text-xs sm:text-sm text-muted-foreground cursor-pointer">
+							<Label
+								htmlFor="skip-template"
+								className="text-xs sm:text-sm text-muted-foreground cursor-pointer"
+							>
 								Skip
 							</Label>
 						</div>

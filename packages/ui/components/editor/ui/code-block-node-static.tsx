@@ -1,16 +1,16 @@
 "use client";
 
-import * as React from "react";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import {
+	NodeApi,
 	SlateElement,
 	type SlateElementProps,
 	SlateLeaf,
 	type SlateLeafProps,
 	type TCodeBlockElement,
-	NodeApi,
 } from "platejs";
+import * as React from "react";
 import { Button } from "../../..";
-import { CheckIcon, CopyIcon } from "lucide-react";
 
 export function CodeBlockElementStatic(
 	props: SlateElementProps<TCodeBlockElement>,

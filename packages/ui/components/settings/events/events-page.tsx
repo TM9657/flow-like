@@ -674,7 +674,8 @@ function EventConfiguration({
 										<DialogHeader>
 											<DialogTitle>Add Flow Variables</DialogTitle>
 											<DialogDescription>
-												Select flow variables to override in this event configuration
+												Select flow variables to override in this event
+												configuration
 											</DialogDescription>
 										</DialogHeader>
 										<div className="space-y-2 max-h-80 overflow-y-auto">
@@ -682,40 +683,64 @@ function EventConfiguration({
 												Object.entries(board.data.variables)
 													.filter(([_, variable]) => variable.exposed)
 													.map(([key, variable]) => {
-														const isAlreadyAdded = formData.variables.hasOwnProperty(key);
+														const isAlreadyAdded =
+															formData.variables.hasOwnProperty(key);
 														return (
-															<div key={key} className="flex items-center justify-between p-3 border rounded">
-															<div className="flex-1">
-																<div className="flex flex-row items-center gap-2">
-																	<VariableTypeIndicator valueType={variable.data_type} type={variable.value_type} />
-																	<div className="font-medium text-sm">{variable.name}</div>
-																</div>
-																{variable.default_value && (
-																	<div className="text-xs text-muted-foreground mt-1">
-																		Default: <span>{String(parseUint8ArrayToJson(variable.default_value))}</span>
-																	</div>
-																)}
-															</div>
-															<Button
-																variant={isAlreadyAdded ? "outline" : "default"}
-																size="sm"
-																onClick={() => {
-																	if (isAlreadyAdded) {
-																		const newVars = { ...formData.variables };
-																		delete newVars[key];
-																		handleInputChange("variables", newVars);
-																	} else {
-																		handleInputChange("variables", { ...formData.variables, [key]: variable });
-																	}
-																}}
+															<div
+																key={key}
+																className="flex items-center justify-between p-3 border rounded"
 															>
-																{isAlreadyAdded ? "Remove" : "Add"}
-															</Button>
-														</div>
-													);
-												})}
-											{(!board.data?.variables || Object.keys(board.data.variables).length === 0) && (
-												<div className="text-center py-8 text-muted-foreground">No board variables available</div>
+																<div className="flex-1">
+																	<div className="flex flex-row items-center gap-2">
+																		<VariableTypeIndicator
+																			valueType={variable.data_type}
+																			type={variable.value_type}
+																		/>
+																		<div className="font-medium text-sm">
+																			{variable.name}
+																		</div>
+																	</div>
+																	{variable.default_value && (
+																		<div className="text-xs text-muted-foreground mt-1">
+																			Default:{" "}
+																			<span>
+																				{String(
+																					parseUint8ArrayToJson(
+																						variable.default_value,
+																					),
+																				)}
+																			</span>
+																		</div>
+																	)}
+																</div>
+																<Button
+																	variant={
+																		isAlreadyAdded ? "outline" : "default"
+																	}
+																	size="sm"
+																	onClick={() => {
+																		if (isAlreadyAdded) {
+																			const newVars = { ...formData.variables };
+																			delete newVars[key];
+																			handleInputChange("variables", newVars);
+																		} else {
+																			handleInputChange("variables", {
+																				...formData.variables,
+																				[key]: variable,
+																			});
+																		}
+																	}}
+																>
+																	{isAlreadyAdded ? "Remove" : "Add"}
+																</Button>
+															</div>
+														);
+													})}
+											{(!board.data?.variables ||
+												Object.keys(board.data.variables).length === 0) && (
+												<div className="text-center py-8 text-muted-foreground">
+													No board variables available
+												</div>
 											)}
 										</div>
 									</DialogContent>
@@ -733,7 +758,13 @@ function EventConfiguration({
 										variable={value}
 										onUpdate={async (variable) => {
 											if (!isEditing) setIsEditing(true);
-											const newVars = { ...formData.variables, [key]: { ...variable, default_value: variable.default_value } };
+											const newVars = {
+												...formData.variables,
+												[key]: {
+													...variable,
+													default_value: variable.default_value,
+												},
+											};
 											handleInputChange("variables", newVars);
 										}}
 									/>
@@ -741,7 +772,9 @@ function EventConfiguration({
 							</div>
 						) : (
 							<p className="text-sm text-muted-foreground">
-								{isEditing ? "No variables configured. Click 'Add Flow Variables' to get started." : "No variables configured"}
+								{isEditing
+									? "No variables configured. Click 'Add Flow Variables' to get started."
+									: "No variables configured"}
 							</p>
 						)}
 					</CardContent>
@@ -787,7 +820,9 @@ function EventConfiguration({
 							{isEditing ? (
 								<Textarea
 									value={formData.notes?.NOTES ?? ""}
-									onChange={(e) => handleInputChange("notes", { NOTES: e.target.value })}
+									onChange={(e) =>
+										handleInputChange("notes", { NOTES: e.target.value })
+									}
 									placeholder="Add notes about this event..."
 									rows={4}
 								/>
@@ -880,9 +915,13 @@ function EventsTable({
 					<div className="min-w-0">
 						<div className="font-medium truncate flex items-center gap-2">
 							{event.name}
-							<span className="text-xs text-muted-foreground font-mono hidden sm:inline">{event.id.slice(0, 8)}...</span>
+							<span className="text-xs text-muted-foreground font-mono hidden sm:inline">
+								{event.id.slice(0, 8)}...
+							</span>
 						</div>
-						<div className="text-xs text-muted-foreground font-mono sm:hidden">{event.id.slice(0, 8)}...</div>
+						<div className="text-xs text-muted-foreground font-mono sm:hidden">
+							{event.id.slice(0, 8)}...
+						</div>
 					</div>
 				</div>
 				<div className="flex items-center gap-2 flex-shrink-0">
@@ -897,16 +936,27 @@ function EventsTable({
 			{(event.description || boardsMap.get(event.board_id)) && (
 				<div className="mt-2 flex items-start justify-between gap-3">
 					<div className="text-sm text-muted-foreground min-w-0">
-						{event.description ? truncateText(event.description, 100) : "No description"}
+						{event.description
+							? truncateText(event.description, 100)
+							: "No description"}
 					</div>
 					<div className="text-xs text-muted-foreground flex-shrink-0 text-right">
 						<div>{boardsMap.get(event.board_id) ?? "Unknown"}</div>
-						<div>{event.board_version ? `v${event.board_version.join(".")}` : "Latest"}</div>
+						<div>
+							{event.board_version
+								? `v${event.board_version.join(".")}`
+								: "Latest"}
+						</div>
 					</div>
 				</div>
 			)}
 			<div className="mt-3 flex items-center gap-2">
-				<Button variant="outline" size="sm" onClick={() => onEdit(event)} className="gap-1">
+				<Button
+					variant="outline"
+					size="sm"
+					onClick={() => onEdit(event)}
+					className="gap-1"
+				>
 					<EditIcon className="h-4 w-4" /> Edit
 				</Button>
 				<Button
@@ -952,8 +1002,13 @@ function EventsTable({
 						Create Event
 					</Button>
 					<div className="hidden sm:flex items-center gap-2">
-						<Label htmlFor="pageSize" className="text-sm">Show:</Label>
-						<Select value={pageSize.toString()} onValueChange={(value) => setPageSize(Number(value))}>
+						<Label htmlFor="pageSize" className="text-sm">
+							Show:
+						</Label>
+						<Select
+							value={pageSize.toString()}
+							onValueChange={(value) => setPageSize(Number(value))}
+						>
 							<SelectTrigger className="w-20">
 								<SelectValue />
 							</SelectTrigger>
@@ -1007,8 +1062,12 @@ function EventsTable({
 									<TableRow>
 										<TableHead className="w-12">Status</TableHead>
 										<TableHead className="min-w-[200px]">Name</TableHead>
-										<TableHead className="min-w-[300px] hidden xl:table-cell">Description</TableHead>
-										<TableHead className="min-w-[150px] hidden lg:table-cell">Flow</TableHead>
+										<TableHead className="min-w-[300px] hidden xl:table-cell">
+											Description
+										</TableHead>
+										<TableHead className="min-w-[150px] hidden lg:table-cell">
+											Flow
+										</TableHead>
 										<TableHead className="w-32">Event Type</TableHead>
 										<TableHead className="w-32">Last Updated</TableHead>
 										<TableHead className="w-24">Actions</TableHead>
@@ -1019,37 +1078,75 @@ function EventsTable({
 										<TableRow key={event.id} className="hover:bg-muted/50">
 											<TableCell>
 												<div className="flex items-center">
-													<div className={`w-2 h-2 rounded-full ${event.active ? "bg-green-500" : "bg-orange-500"}`} />
+													<div
+														className={`w-2 h-2 rounded-full ${event.active ? "bg-green-500" : "bg-orange-500"}`}
+													/>
 												</div>
 											</TableCell>
 											<TableCell>
 												<div className="font-medium">{event.name}</div>
-												<div className="text-xs text-muted-foreground font-mono">{event.id.slice(0, 8)}...</div>
+												<div className="text-xs text-muted-foreground font-mono">
+													{event.id.slice(0, 8)}...
+												</div>
 											</TableCell>
 											<TableCell className="hidden xl:table-cell">
 												<div className="text-sm text-muted-foreground">
-													{event.description ? truncateText(event.description, 80) : "No description"}
+													{event.description
+														? truncateText(event.description, 80)
+														: "No description"}
 												</div>
 											</TableCell>
 											<TableCell className="hidden lg:table-cell">
-												<div className="text-sm">{boardsMap.get(event.board_id) ?? "Unknown"}</div>
-												<div className="text-xs text-muted-foreground">{event.board_version ? `v${event.board_version.join(".")}` : "Latest"}</div>
+												<div className="text-sm">
+													{boardsMap.get(event.board_id) ?? "Unknown"}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													{event.board_version
+														? `v${event.board_version.join(".")}`
+														: "Latest"}
+												</div>
 											</TableCell>
 											<TableCell>
-												<div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">{event.event_type}</div>
+												<div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
+													{event.event_type}
+												</div>
 											</TableCell>
 											<TableCell>
-												<div className="text-sm text-muted-foreground">{formatRelativeTime(event.updated_at.secs_since_epoch)}</div>
+												<div className="text-sm text-muted-foreground">
+													{formatRelativeTime(
+														event.updated_at.secs_since_epoch,
+													)}
+												</div>
 											</TableCell>
 											<TableCell>
 												<div className="flex items-center gap-1">
-													<Button variant="ghost" size="sm" onClick={() => onEdit(event)} className="h-8 w-8 p-0" aria-label="Edit">
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() => onEdit(event)}
+														className="h-8 w-8 p-0"
+														aria-label="Edit"
+													>
 														<EditIcon className="h-4 w-4" />
 													</Button>
-													<Button variant="ghost" size="sm" onClick={() => onNavigateToNode(event, event.node_id)} className="h-8 w-8 p-0" aria-label="Open">
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() =>
+															onNavigateToNode(event, event.node_id)
+														}
+														className="h-8 w-8 p-0"
+														aria-label="Open"
+													>
 														<ExternalLinkIcon className="h-4 w-4" />
 													</Button>
-													<Button variant="ghost" size="sm" onClick={() => onDelete(event.id)} className="h-8 w-8 p-0 text-destructive hover:text-destructive" aria-label="Delete">
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() => onDelete(event.id)}
+														className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+														aria-label="Delete"
+													>
 														<Trash2 className="h-4 w-4" />
 													</Button>
 												</div>
@@ -1066,13 +1163,17 @@ function EventsTable({
 					<div className="border-t bg-background p-4 flex-shrink-0">
 						<div className="flex items-center justify-between">
 							<div className="text-sm text-muted-foreground">
-								Showing {startIndex + 1} to {Math.min(startIndex + pageSize, filteredEvents.length)} of {filteredEvents.length} results
+								Showing {startIndex + 1} to{" "}
+								{Math.min(startIndex + pageSize, filteredEvents.length)} of{" "}
+								{filteredEvents.length} results
 							</div>
 							<div className="flex items-center gap-2">
 								<Button
 									variant="outline"
 									size="sm"
-									onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+									onClick={() =>
+										setCurrentPage((prev) => Math.max(1, prev - 1))
+									}
 									disabled={currentPage === 1}
 								>
 									Previous
@@ -1082,13 +1183,16 @@ function EventsTable({
 										let pageNum: number;
 										if (totalPages <= 5) pageNum = i + 1;
 										else if (currentPage <= 3) pageNum = i + 1;
-										else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+										else if (currentPage >= totalPages - 2)
+											pageNum = totalPages - 4 + i;
 										else pageNum = currentPage - 2 + i;
 
 										return (
 											<Button
 												key={pageNum}
-												variant={currentPage === pageNum ? "default" : "outline"}
+												variant={
+													currentPage === pageNum ? "default" : "outline"
+												}
 												size="sm"
 												onClick={() => setCurrentPage(pageNum)}
 												className="w-8 h-8 p-0"
@@ -1101,7 +1205,9 @@ function EventsTable({
 								<Button
 									variant="outline"
 									size="sm"
-									onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+									onClick={() =>
+										setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+									}
 									disabled={currentPage === totalPages}
 								>
 									Next

@@ -121,7 +121,10 @@ const ImportEncryptedDialog: React.FC<ImportEncryptedDialogProps> = ({
 							Cancel
 						</Button>
 					</DialogClose>
-					<Button onClick={handleImport} disabled={loading || password.trim() === ""}>
+					<Button
+						onClick={handleImport}
+						disabled={loading || password.trim() === ""}
+					>
 						{loading ? "Importing..." : "Import"}
 					</Button>
 				</DialogFooter>

@@ -52,11 +52,15 @@
 	--radius: 0.3rem;
 	--shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
 	--shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-	--shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+	--shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px
+		hsl(0 0% 0% / 0.1);
 	--shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
-	--shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
-	--shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
-	--shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+	--shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px
+		hsl(0 0% 0% / 0.1);
+	--shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px
+		hsl(0 0% 0% / 0.1);
+	--shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px
+		hsl(0 0% 0% / 0.1);
 	--shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
 	--tracking-normal: 0em;
 	--spacing: 0.25rem;
@@ -113,11 +117,15 @@
 	--radius: 0.3rem;
 	--shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
 	--shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-	--shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+	--shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px
+		hsl(0 0% 0% / 0.1);
 	--shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
-	--shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
-	--shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
-	--shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+	--shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px
+		hsl(0 0% 0% / 0.1);
+	--shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px
+		hsl(0 0% 0% / 0.1);
+	--shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px
+		hsl(0 0% 0% / 0.1);
 	--shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
 
 	--pin-string: oklch(71.8% 0.202 349.761);
@@ -195,9 +203,11 @@
 	--pin-date: var(--pin-date);
 	--pin-pathbuf: var(--pin-pathbuf);
 
-	--shadow-floating: rgba(16, 16, 16, 0.06) 0px 0px 0px 1px,
+	--shadow-floating:
+		rgba(16, 16, 16, 0.06) 0px 0px 0px 1px,
 		rgba(16, 16, 16, 0.11) 0px 3px 7px, rgba(16, 16, 16, 0.21) 0px 9px 25px;
-	--shadow-toolbar: rgba(0, 0, 0, 0.08) 0px 16px 24px 0px,
+	--shadow-toolbar:
+		rgba(0, 0, 0, 0.08) 0px 16px 24px 0px,
 		rgba(0, 0, 0, 0.1) 0px 2px 6px 0px, rgba(0, 0, 0, 0.1) 0px 0px 1px 0px;
 
 	--animate-ai-bounce: ai-bounce 0.4s infinite;
@@ -207,7 +217,6 @@
 	--animate-zoom: zoom 100ms ease-in;
 
 	@keyframes ai-bounce {
-
 		0%,
 		100% {
 			animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
@@ -231,7 +240,6 @@
 	}
 
 	@keyframes pulse {
-
 		0%,
 		100% {
 			box-shadow: 0 0 0 0 var(--pulse-color);
@@ -284,8 +292,13 @@
 		text-rendering: optimizeLegibility;
 	}
 
-	html, body { height: 100%; }
-	body { overflow: hidden; }
+	html,
+	body {
+		height: 100%;
+	}
+	body {
+		overflow: hidden;
+	}
 
 	@supports (font: -apple-system-body) and (-webkit-appearance: none) {
 		[data-wrapper] {
@@ -348,10 +361,12 @@
 
 	.highlight {
 		animation: highlight-anim 3s linear infinite;
-		background: linear-gradient(90deg,
-				var(--primary) 50%,
-				var(--tertiary) 75%,
-				var(--primary) 100%);
+		background: linear-gradient(
+			90deg,
+			var(--primary) 50%,
+			var(--tertiary) 75%,
+			var(--primary) 100%
+		);
 		background-size: 200%;
 		-webkit-background-clip: text;
 		-webkit-text-fill-color: transparent;

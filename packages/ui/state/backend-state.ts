@@ -39,7 +39,6 @@ export type {
 } from "./backend-state/types";
 export * from "./backend-state/db-state";
 
-
 export interface ICapabilities {
 	needsSignIn: boolean;
 	canHostLlamaCPP: boolean;

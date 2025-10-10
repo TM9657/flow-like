@@ -19,17 +19,17 @@ export function BooleanVariable({
 		<>
 			<VariableDescription pin={pin} />
 			<div className="flex flex-row justify-start">
-			<Checkbox
-				checked={parseUint8ArrayToJson(value) ?? false}
-				onCheckedChange={(checked) => {
-					setValue(convertJsonToUint8Array(checked));
-				}}
-				className="scale-50"
-				style={{
-					translate: "-25%",
-				}}
+				<Checkbox
+					checked={parseUint8ArrayToJson(value) ?? false}
+					onCheckedChange={(checked) => {
+						setValue(convertJsonToUint8Array(checked));
+					}}
+					className="scale-50"
+					style={{
+						translate: "-25%",
+					}}
 				/>
-				</div>
+			</div>
 		</>
 	);
 }

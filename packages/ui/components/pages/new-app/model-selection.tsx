@@ -36,7 +36,9 @@ export function ModelSection({
 							<Brain className="h-5 w-5 text-primary" />
 						</div>
 						<div className="min-w-0">
-							<CardTitle className="text-base sm:text-lg">Embedding Models</CardTitle>
+							<CardTitle className="text-base sm:text-lg">
+								Embedding Models
+							</CardTitle>
 							<CardDescription className="text-xs sm:text-sm">
 								Select models for semantic search and AI capabilities
 							</CardDescription>

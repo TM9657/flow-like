@@ -17,7 +17,7 @@ import { fetcher } from "../../lib/api";
 import type { TauriBackend } from "../tauri-provider";
 
 export class UserState implements IUserState {
-	constructor(private readonly backend: TauriBackend) { }
+	constructor(private readonly backend: TauriBackend) {}
 	async lookupUser(userId: string): Promise<IUserLookup> {
 		if (!this.backend.profile || !this.backend.auth) {
 			throw new Error("Profile or auth context not available");
@@ -137,12 +137,18 @@ export class UserState implements IUserState {
 		});
 	}
 
-	async createPAT(name: string, validUntil?: Date, permissions?: number): Promise<{ pat: string; permission: number; }> {
+	async createPAT(
+		name: string,
+		validUntil?: Date,
+		permissions?: number,
+	): Promise<{ pat: string; permission: number }> {
 		if (!this.backend.profile || !this.backend.auth) {
 			throw new Error("Profile or auth context not available");
 		}
 
-		const unix = validUntil ? Math.floor(validUntil.getTime() / 1000) : undefined;
+		const unix = validUntil
+			? Math.floor(validUntil.getTime() / 1000)
+			: undefined;
 
 		const result = await fetcher<{
 			pat: string;
@@ -160,18 +166,28 @@ export class UserState implements IUserState {
 		return result;
 	}
 
-	async getPATs(): Promise<{ id: string; name: string; created_at: string; valid_until: string | null; permission: number; }[]> {
-		if (!this.backend.profile || !this.backend.auth) {
-			throw new Error("Profile or auth context not available");
-		}
-
-		const result = await fetcher<{
+	async getPATs(): Promise<
+		{
 			id: string;
 			name: string;
 			created_at: string;
 			valid_until: string | null;
 			permission: number;
-		}[]>(
+		}[]
+	> {
+		if (!this.backend.profile || !this.backend.auth) {
+			throw new Error("Profile or auth context not available");
+		}
+
+		const result = await fetcher<
+			{
+				id: string;
+				name: string;
+				created_at: string;
+				valid_until: string | null;
+				permission: number;
+			}[]
+		>(
 			this.backend.profile,
 			`user/pat`,
 			{
@@ -179,7 +195,6 @@ export class UserState implements IUserState {
 			},
 			this.backend.auth,
 		);
-
 
 		return result;
 	}

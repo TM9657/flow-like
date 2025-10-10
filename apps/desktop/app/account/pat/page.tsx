@@ -15,9 +15,10 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 	useBackend,
-    useInvoke,
+	useInvoke,
 } from "@tm9657/flow-like-ui";
 import { cn } from "@tm9657/flow-like-ui/lib/utils";
+import { format } from "date-fns";
 import {
 	CalendarIcon,
 	CheckIcon,
@@ -27,8 +28,7 @@ import {
 	ShieldCheckIcon,
 	Trash2Icon,
 } from "lucide-react";
-import { format } from "date-fns";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 interface PAT {
@@ -47,7 +47,7 @@ const permissionLevels = [
 
 const PatManagementPage = () => {
 	const backend = useBackend();
-	const pats = useInvoke(backend.userState.getPATs, backend.userState, [])
+	const pats = useInvoke(backend.userState.getPATs, backend.userState, []);
 	const [loading, setLoading] = useState(true);
 	const [creating, setCreating] = useState(false);
 	const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -93,7 +93,7 @@ const PatManagementPage = () => {
 			setSelectedPermission(1);
 
 			// Reload PATs list
-			await pats.refetch()
+			await pats.refetch();
 			toast.success("Token created successfully!");
 		} catch (error) {
 			toast.error("Failed to create token");
@@ -142,8 +142,7 @@ const PatManagementPage = () => {
 
 	const getPermissionLabel = (permission: number) => {
 		return (
-			permissionLevels.find((p) => p.value === permission)?.label ||
-			"Unknown"
+			permissionLevels.find((p) => p.value === permission)?.label || "Unknown"
 		);
 	};
 
@@ -230,15 +229,16 @@ const PatManagementPage = () => {
 								<KeyRoundIcon className="h-8 w-8 text-muted-foreground" />
 							</div>
 							<div>
-								<h3 className="text-lg font-semibold mb-2">
-									No tokens yet
-								</h3>
+								<h3 className="text-lg font-semibold mb-2">No tokens yet</h3>
 								<p className="text-muted-foreground max-w-md">
 									Get started by creating your first personal access token to
 									integrate with external services.
 								</p>
 							</div>
-							<Button onClick={() => setShowCreateDialog(true)} className="mt-2">
+							<Button
+								onClick={() => setShowCreateDialog(true)}
+								className="mt-2"
+							>
 								<PlusIcon className="h-4 w-4 mr-2" />
 								Create Your First Token
 							</Button>
@@ -262,17 +262,13 @@ const PatManagementPage = () => {
 												<div
 													className={cn(
 														"p-2 rounded-lg mt-0.5",
-														expired
-															? "bg-destructive/10"
-															: "bg-primary/10",
+														expired ? "bg-destructive/10" : "bg-primary/10",
 													)}
 												>
 													<KeyRoundIcon
 														className={cn(
 															"h-4 w-4",
-															expired
-																? "text-destructive"
-																: "text-primary",
+															expired ? "text-destructive" : "text-primary",
 														)}
 													/>
 												</div>
@@ -362,9 +358,7 @@ const PatManagementPage = () => {
 				<DialogContent className="!w-[90vw] !max-w-6xl max-h-[90vh] overflow-y-auto">
 					<div className="space-y-6">
 						<div>
-							<h2 className="text-2xl font-bold mb-2">
-								Create New Token
-							</h2>
+							<h2 className="text-2xl font-bold mb-2">Create New Token</h2>
 							<p className="text-muted-foreground">
 								Configure your new personal access token. The token value will
 								be shown only once after creation.
@@ -373,119 +367,120 @@ const PatManagementPage = () => {
 
 						<Separator />
 
-							<div className="space-y-5">
-								<div className="space-y-2">
-									<Label htmlFor="token-name" className="text-sm font-medium">
-										Token Name *
-									</Label>
-									<Input
-										id="token-name"
-										placeholder="e.g., GitHub Actions, Production API"
-										value={tokenName}
-										onChange={(e) => setTokenName(e.target.value)}
-										className="w-full"
-									/>
-									<p className="text-xs text-muted-foreground">
-										Choose a descriptive name to identify this token&apos;s purpose.
-									</p>
-								</div>
+						<div className="space-y-5">
+							<div className="space-y-2">
+								<Label htmlFor="token-name" className="text-sm font-medium">
+									Token Name *
+								</Label>
+								<Input
+									id="token-name"
+									placeholder="e.g., GitHub Actions, Production API"
+									value={tokenName}
+									onChange={(e) => setTokenName(e.target.value)}
+									className="w-full"
+								/>
+								<p className="text-xs text-muted-foreground">
+									Choose a descriptive name to identify this token&apos;s
+									purpose.
+								</p>
+							</div>
 
-								<div className="space-y-2">
-									<Label className="text-sm font-medium">
-										Permission Level *
-									</Label>
-									<Select
-										value={selectedPermission.toString()}
-										onValueChange={(value) =>
-											setSelectedPermission(Number.parseInt(value))
-										}
-									>
-										<option value="" disabled>
-											Select permission level
+							<div className="space-y-2">
+								<Label className="text-sm font-medium">
+									Permission Level *
+								</Label>
+								<Select
+									value={selectedPermission.toString()}
+									onValueChange={(value) =>
+										setSelectedPermission(Number.parseInt(value))
+									}
+								>
+									<option value="" disabled>
+										Select permission level
+									</option>
+									{permissionLevels.map((level) => (
+										<option key={level.value} value={level.value.toString()}>
+											{level.label} - {level.description}
 										</option>
-										{permissionLevels.map((level) => (
-											<option key={level.value} value={level.value.toString()}>
-												{level.label} - {level.description}
-											</option>
-										))}
-									</Select>
-									<p className="text-xs text-muted-foreground">
-										Choose the access level for this token.
-									</p>
-								</div>
+									))}
+								</Select>
+								<p className="text-xs text-muted-foreground">
+									Choose the access level for this token.
+								</p>
+							</div>
 
-								<div className="space-y-2">
-									<Label className="text-sm font-medium">
-										Expiration Date (Optional)
-									</Label>
-									<Popover>
-										<button
-											type="button"
-											className={cn(
-												"w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-												!expirationDate && "text-muted-foreground",
+							<div className="space-y-2">
+								<Label className="text-sm font-medium">
+									Expiration Date (Optional)
+								</Label>
+								<Popover>
+									<button
+										type="button"
+										className={cn(
+											"w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+											!expirationDate && "text-muted-foreground",
+										)}
+									>
+										<span>
+											{expirationDate
+												? format(expirationDate, "PPP")
+												: "No expiration"}
+										</span>
+										<CalendarIcon className="h-4 w-4 opacity-50" />
+									</button>
+									<div className="z-50 mt-2 flex flex-row justify-center">
+										<Card className="p-3">
+											<Calendar
+												mode="single"
+												selected={expirationDate}
+												onSelect={setExpirationDate}
+												disabled={(date) => date < new Date()}
+												initialFocus
+											/>
+											{expirationDate && (
+												<div className="mt-2 pt-2 border-t">
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() => setExpirationDate(undefined)}
+														className="w-full"
+													>
+														Clear Date
+													</Button>
+												</div>
 											)}
-										>
-											<span>
-												{expirationDate
-													? format(expirationDate, "PPP")
-													: "No expiration"}
-											</span>
-											<CalendarIcon className="h-4 w-4 opacity-50" />
-										</button>
-										<div className="z-50 mt-2 flex flex-row justify-center">
-											<Card className="p-3">
-												<Calendar
-													mode="single"
-													selected={expirationDate}
-													onSelect={setExpirationDate}
-													disabled={(date) => date < new Date()}
-													initialFocus
-												/>
-												{expirationDate && (
-													<div className="mt-2 pt-2 border-t">
-														<Button
-															variant="ghost"
-															size="sm"
-															onClick={() => setExpirationDate(undefined)}
-															className="w-full"
-														>
-															Clear Date
-														</Button>
-													</div>
-												)}
-											</Card>
-										</div>
-									</Popover>
-									<p className="text-xs text-muted-foreground">
-										Leave empty for a token that never expires.
-									</p>
-								</div>
+										</Card>
+									</div>
+								</Popover>
+								<p className="text-xs text-muted-foreground">
+									Leave empty for a token that never expires.
+								</p>
 							</div>
+						</div>
 
-							<Separator />
+						<Separator />
 
-							<div className="flex flex-col-reverse sm:flex-row gap-3 justify-end">
-								<Button
-									variant="outline"
-									onClick={() => {
-										setShowCreateDialog(false);
-										setTokenName("");
-										setExpirationDate(undefined);
-										setSelectedPermission(1);
-									}}
-									disabled={creating}
-								>
-									Cancel
-								</Button>
-								<Button
-									onClick={handleCreateToken}
-									disabled={creating || !tokenName.trim()}
-									className="shadow-lg"
-								>
-									{creating ? "Creating..." : "Create Token"}
-								</Button>
-							</div>
+						<div className="flex flex-col-reverse sm:flex-row gap-3 justify-end">
+							<Button
+								variant="outline"
+								onClick={() => {
+									setShowCreateDialog(false);
+									setTokenName("");
+									setExpirationDate(undefined);
+									setSelectedPermission(1);
+								}}
+								disabled={creating}
+							>
+								Cancel
+							</Button>
+							<Button
+								onClick={handleCreateToken}
+								disabled={creating || !tokenName.trim()}
+								className="shadow-lg"
+							>
+								{creating ? "Creating..." : "Create Token"}
+							</Button>
+						</div>
 					</div>
 				</DialogContent>
 			</Dialog>
@@ -511,52 +506,52 @@ const PatManagementPage = () => {
 
 						<Separator />
 
-							<div className="space-y-4">
-								<div className="p-4 rounded-lg bg-muted/50 border-2 border-dashed border-primary/30">
-									<Label className="text-xs font-medium text-muted-foreground mb-2 block">
-										YOUR TOKEN
-									</Label>
-									<div className="flex items-center gap-2 mb-3">
-										<code className="flex-1 p-3 rounded bg-background border font-mono text-sm break-all select-all">
-											{newToken}
-										</code>
-									</div>
-									<Button
-										variant="secondary"
-										size="sm"
-										onClick={() => copyToClipboard(newToken)}
-										className="w-full"
-									>
-										<CopyIcon className="h-4 w-4 mr-2" />
-										Copy Token to Clipboard
-									</Button>
+						<div className="space-y-4">
+							<div className="p-4 rounded-lg bg-muted/50 border-2 border-dashed border-primary/30">
+								<Label className="text-xs font-medium text-muted-foreground mb-2 block">
+									YOUR TOKEN
+								</Label>
+								<div className="flex items-center gap-2 mb-3">
+									<code className="flex-1 p-3 rounded bg-background border font-mono text-sm break-all select-all">
+										{newToken}
+									</code>
 								</div>
+								<Button
+									variant="secondary"
+									size="sm"
+									onClick={() => copyToClipboard(newToken)}
+									className="w-full"
+								>
+									<CopyIcon className="h-4 w-4 mr-2" />
+									Copy Token to Clipboard
+								</Button>
+							</div>
 
-								<div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
-									<div className="flex gap-3">
-										<div className="mt-0.5">
-											<ShieldCheckIcon className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-										</div>
-										<div className="flex-1 space-y-1">
-											<h4 className="font-semibold text-sm text-amber-600 dark:text-amber-400">
-												Important Security Notice
-											</h4>
-											<ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-												<li>Store this token in a secure location</li>
-												<li>Never share it in public repositories or channels</li>
-												<li>
-													Treat it like a password - it has{" "}
-													{getPermissionLabel(newTokenPermission)} access
-												</li>
-												<li>
-													If compromised, delete it immediately and create a new
-													one
-												</li>
-											</ul>
-										</div>
+							<div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+								<div className="flex gap-3">
+									<div className="mt-0.5">
+										<ShieldCheckIcon className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+									</div>
+									<div className="flex-1 space-y-1">
+										<h4 className="font-semibold text-sm text-amber-600 dark:text-amber-400">
+											Important Security Notice
+										</h4>
+										<ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+											<li>Store this token in a secure location</li>
+											<li>Never share it in public repositories or channels</li>
+											<li>
+												Treat it like a password - it has{" "}
+												{getPermissionLabel(newTokenPermission)} access
+											</li>
+											<li>
+												If compromised, delete it immediately and create a new
+												one
+											</li>
+										</ul>
 									</div>
 								</div>
 							</div>
+						</div>
 
 						<Separator />
 

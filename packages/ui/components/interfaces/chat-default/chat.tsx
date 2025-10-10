@@ -90,7 +90,10 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 			if (!messagesEndRef.current) return;
 			if (!shouldAutoScroll) return;
 			isScrollingProgrammatically.current = true;
-			messagesEndRef.current.scrollIntoView({ behavior: "instant", block: "end" });
+			messagesEndRef.current.scrollIntoView({
+				behavior: "instant",
+				block: "end",
+			});
 			// Reset the flag after scroll animation completes
 			setTimeout(() => {
 				isScrollingProgrammatically.current = false;
@@ -161,7 +164,10 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 				if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
 					setTimeout(() => {
 						try {
-							messagesEndRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+							messagesEndRef.current?.scrollIntoView({
+								block: "end",
+								behavior: "smooth",
+							});
 						} catch {}
 					}, 100);
 				}
@@ -191,7 +197,8 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 				passive: true,
 				capture: true,
 			} as AddEventListenerOptions);
-			return () => document.removeEventListener("touchstart", onTouchStart, true as any);
+			return () =>
+				document.removeEventListener("touchstart", onTouchStart, true as any);
 		}, []);
 
 		// Expose methods via ref
@@ -224,7 +231,10 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 		return (
 			<main
 				className="flex flex-col h-dvh w-full items-center flex-grow bg-background max-h-dvh overflow-hidden"
-				style={{ WebkitOverflowScrolling: "touch", touchAction: "manipulation" }}
+				style={{
+					WebkitOverflowScrolling: "touch",
+					touchAction: "manipulation",
+				}}
 			>
 				<div className="h-full flex-grow flex flex-col bg-background max-h-dvh w-full overflow-hidden">
 					{/* Messages Container */}
