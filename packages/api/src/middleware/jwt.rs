@@ -20,7 +20,6 @@ use flow_like_types::anyhow;
 use hyper::header::AUTHORIZATION;
 use sea_orm::{
     ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait,
-    sqlx::types::chrono,
 };
 use serde::de::{self, Unexpected};
 use serde::{Deserialize, Deserializer};
@@ -358,6 +357,7 @@ pub async fn jwt_middleware(
     let mut request = request;
     if let Some(auth_header) = request.headers().get(AUTHORIZATION)
         && let Ok(token) = auth_header.to_str()
+        && !token.starts_with("pat_")
     {
         let token = if token.starts_with("Bearer ") {
             &token[7..]
@@ -377,10 +377,11 @@ pub async fn jwt_middleware(
         return Ok(next.run(request).await);
     }
 
-    if let Some(pat_header) = request.headers().get("x-pat")
-        && let Ok(pat_str) = pat_header.to_str()
+    if let Some(auth_header) = request.headers().get(AUTHORIZATION)
+        && let Ok(token) = auth_header.to_str()
+        && token.starts_with("pat_")
     {
-        let pat_str = pat_str.trim();
+        let pat_str = token.trim();
         if !pat_str.starts_with("pat_") {
             return Err(AuthorizationError::from(anyhow!("Invalid PAT format")));
         }

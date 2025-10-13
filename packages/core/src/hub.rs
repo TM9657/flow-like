@@ -1,9 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    bit::{Bit, BitTypes},
-    profile::Profile,
-    utils::{http::HTTPClient, recursion::RecursionGuard},
+    bit::{Bit, BitTypes}, credentials::SharedCredentials, profile::Profile, utils::{http::HTTPClient, recursion::RecursionGuard}
 };
 use flow_like_types::{Result, sync::Mutex};
 use schemars::JsonSchema;
@@ -246,6 +244,25 @@ impl Hub {
             .map_err(|e| flow_like_types::Error::msg(format!("Invalid URL: {}", e)))?;
 
         Ok(url)
+    }
+
+    pub async fn shared_credentials(&self, token: &str, app_id: &str) -> Result<SharedCredentials> {
+        let presign_url = self.construct_url(&format!("api/v1/apps/{}/invoke/presign", app_id))?;
+        let token = if token.starts_with("pat_") {
+            token.to_string()
+        } else {
+            format!("Bearer {}", token)
+        };
+
+        let request = self
+            .http_client()
+            .client()
+            .get(presign_url)
+            .header("Authorization", token)
+            .build()?;
+
+        let shared_credentials = self.http_client().client().execute(request).await?.json::<SharedCredentials>().await?;
+        Ok(shared_credentials)
     }
 
     pub async fn get_bit(&self, bit_id: &str) -> Result<Bit> {

@@ -5,7 +5,7 @@ use flow_like_types::sync::Mutex;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 
-use crate::{profile::UserProfile, settings::Settings};
+use crate::{event_bus::EventBus, profile::UserProfile, settings::Settings};
 
 pub struct TauriFlowLikeState(pub Arc<Mutex<FlowLikeState>>);
 impl TauriFlowLikeState {
@@ -79,5 +79,27 @@ impl TauriSettingsState {
         let settings = settings.lock().await;
         let current_profile = settings.get_current_profile()?;
         Ok(current_profile)
+    }
+}
+
+pub struct TauriEventBusState(pub Arc<EventBus>);
+impl TauriEventBusState {
+    #[inline]
+    pub fn construct(app_handle: &AppHandle) -> anyhow::Result<Arc<EventBus>> {
+        app_handle
+            .try_state::<TauriEventBusState>()
+            .map(|state| state.0.clone())
+            .ok_or_else(|| anyhow::anyhow!("EventBus State not found"))
+    }
+}
+
+pub struct TauriEventSinkManagerState(pub Arc<Mutex<crate::event_sink::EventSinkManager>>);
+impl TauriEventSinkManagerState {
+    #[inline]
+    pub async fn construct(app_handle: &AppHandle) -> anyhow::Result<Arc<Mutex<crate::event_sink::EventSinkManager>>> {
+        app_handle
+            .try_state::<TauriEventSinkManagerState>()
+            .map(|state| state.0.clone())
+            .ok_or_else(|| anyhow::anyhow!("EventSinkManager State not found"))
     }
 }

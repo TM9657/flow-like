@@ -25,7 +25,7 @@ async fn execute_internal(
     app_id: String,
     mut board_id: String,
     mut payload: RunPayload,
-    events: tauri::ipc::Channel<Vec<InterComEvent>>,
+    events: Option<tauri::ipc::Channel<Vec<InterComEvent>>>,
     event_id: Option<String>,
     stream_state: bool,
     credentials: Option<SharedCredentials>,
@@ -56,6 +56,10 @@ async fn execute_internal(
 
     let buffered_sender = Arc::new(BufferedInterComHandler::new(
         Arc::new(move |event| {
+            if events.is_none() {
+                return Box::pin(async { Ok(()) });
+            }
+            let events = events.as_ref().unwrap();
             let events_cb = events.clone();
             let app_handle = app_handle.clone();
             Box::pin({
@@ -181,7 +185,7 @@ pub async fn execute_board(
         app_id,
         board_id,
         payload,
-        events,
+        Some(events),
         None,
         stream_state,
         credentials,
@@ -207,7 +211,7 @@ pub async fn execute_event(
         app_id,
         String::new(), // Will be read from the event anyways
         payload,
-        events,
+        Some(events),
         Some(event_id),
         stream_state,
         credentials,

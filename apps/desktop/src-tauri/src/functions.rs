@@ -4,6 +4,8 @@ pub mod ai;
 pub mod app;
 pub mod bit;
 pub mod download;
+pub mod event_bus_commands;
+pub mod event_sink_commands;
 pub mod file;
 pub mod flow;
 pub mod settings;

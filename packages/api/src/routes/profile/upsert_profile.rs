@@ -6,7 +6,7 @@ use axum::{
 use flow_like::profile::{ProfileApp, Settings};
 use flow_like_types::{Value, create_id};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, sqlx::types::chrono,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::to_value;

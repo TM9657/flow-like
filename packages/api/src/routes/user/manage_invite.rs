@@ -15,7 +15,7 @@ use axum::{
 use flow_like_types::create_id;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter,
-    TransactionTrait, sqlx::types::chrono,
+    TransactionTrait,
 };
 
 #[tracing::instrument(name = "DELETE /user/invites/{invite_id}", skip(state, user))]
