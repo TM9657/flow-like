@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlackSink {
-    pub id: String,
     pub bot_token: String,
     pub app_token: Option<String>,
     pub channel_id: Option<String>,

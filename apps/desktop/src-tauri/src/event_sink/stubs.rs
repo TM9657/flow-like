@@ -2,11 +2,10 @@
 // These provide basic structure but need full implementation later
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
-use super::{EventRegistration, EventSink};
 use super::manager::DbConnection;
+use super::{EventRegistration, EventSink};
 
 // ========== PLACEHOLDER IMPLEMENTATIONS ==========
 // These sinks have minimal implementations to allow compilation
@@ -24,13 +23,27 @@ impl EventSink for crate::event_sink::file::FileSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Registered file watcher: {} -> event {} (NOT IMPLEMENTED)", self.path, registration.event_id);
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!(
+            "Registered file watcher: {} -> event {} (NOT IMPLEMENTED)",
+            self.path,
+            registration.event_id
+        );
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Unregistered file watcher: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!("Unregistered file watcher: {}", registration.event_id);
         Ok(())
     }
 }
@@ -47,13 +60,27 @@ impl EventSink for crate::event_sink::webhook::WebhookSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Registered webhook: {} -> event {} (NOT IMPLEMENTED)", self.path, registration.event_id);
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!(
+            "Registered webhook: {} -> event {} (NOT IMPLEMENTED)",
+            self.path,
+            registration.event_id
+        );
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Unregistered webhook: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!("Unregistered webhook: {}", registration.event_id);
         Ok(())
     }
 }
@@ -70,13 +97,27 @@ impl EventSink for crate::event_sink::slack::SlackSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Registered Slack: channel {} -> event {} (NOT IMPLEMENTED)", self.channel_id.as_deref().unwrap_or("any"), registration.event_id);
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!(
+            "Registered Slack: channel {} -> event {} (NOT IMPLEMENTED)",
+            self.channel_id.as_deref().unwrap_or("any"),
+            registration.event_id
+        );
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Unregistered Slack: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!("Unregistered Slack: {}", registration.event_id);
         Ok(())
     }
 }
@@ -93,13 +134,26 @@ impl EventSink for crate::event_sink::telegram::TelegramSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Registered Telegram bot -> event {} (NOT IMPLEMENTED)", registration.event_id);
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!(
+            "Registered Telegram bot -> event {} (NOT IMPLEMENTED)",
+            registration.event_id
+        );
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Unregistered Telegram bot: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!("Unregistered Telegram bot: {}", registration.event_id);
         Ok(())
     }
 }
@@ -116,13 +170,27 @@ impl EventSink for crate::event_sink::web_watcher::WebWatcherSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Registered web watcher: {} -> event {} (NOT IMPLEMENTED)", self.url, registration.event_id);
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!(
+            "Registered web watcher: {} -> event {} (NOT IMPLEMENTED)",
+            self.url,
+            registration.event_id
+        );
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Unregistered web watcher: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!("Unregistered web watcher: {}", registration.event_id);
         Ok(())
     }
 }
@@ -139,13 +207,28 @@ impl EventSink for crate::event_sink::geolocation::GeoLocationSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Registered geofence: ({}, {}) -> event {} (NOT IMPLEMENTED)", self.latitude, self.longitude, registration.event_id);
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!(
+            "Registered geofence: ({}, {}) -> event {} (NOT IMPLEMENTED)",
+            self.latitude,
+            self.longitude,
+            registration.event_id
+        );
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Unregistered geofence: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!("Unregistered geofence: {}", registration.event_id);
         Ok(())
     }
 }
@@ -162,13 +245,27 @@ impl EventSink for crate::event_sink::github::GitHubSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Registered GitHub watcher: {} -> event {} (NOT IMPLEMENTED)", self.repository, registration.event_id);
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!(
+            "Registered GitHub watcher: {} -> event {} (NOT IMPLEMENTED)",
+            self.repository,
+            registration.event_id
+        );
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Unregistered GitHub watcher: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!("Unregistered GitHub watcher: {}", registration.event_id);
         Ok(())
     }
 }
@@ -185,13 +282,28 @@ impl EventSink for crate::event_sink::mqtt::MQTTSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Registered MQTT subscription: {} on {} -> event {} (NOT IMPLEMENTED)", self.topic, self.broker_url, registration.event_id);
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!(
+            "Registered MQTT subscription: {} on {} -> event {} (NOT IMPLEMENTED)",
+            self.topic,
+            self.broker_url,
+            registration.event_id
+        );
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Unregistered MQTT subscription: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!("Unregistered MQTT subscription: {}", registration.event_id);
         Ok(())
     }
 }
@@ -208,13 +320,27 @@ impl EventSink for crate::event_sink::notion::NotionSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Registered Notion watcher: db {:?} -> event {} (NOT IMPLEMENTED)", self.database_id, registration.event_id);
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!(
+            "Registered Notion watcher: db {:?} -> event {} (NOT IMPLEMENTED)",
+            self.database_id,
+            registration.event_id
+        );
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, _db: DbConnection) -> Result<()> {
-        tracing::info!("Unregistered Notion watcher: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        _db: DbConnection,
+    ) -> Result<()> {
+        tracing::info!("Unregistered Notion watcher: {}", registration.event_id);
         Ok(())
     }
 }

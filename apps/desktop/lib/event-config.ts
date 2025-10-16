@@ -1,11 +1,13 @@
 import {
 	ApiConfig,
 	ChatInterface,
+	CronJobConfig,
 	type IEventMapping,
 	SimpleChatConfig,
 	UserMailConfig,
 	WebhookConfig,
 } from "@tm9657/flow-like-ui";
+import { createId } from "@paralleldrive/cuid2";
 
 export const EVENT_CONFIG: IEventMapping = {
 	events_chat: {
@@ -32,13 +34,15 @@ export const EVENT_CONFIG: IEventMapping = {
 		configInterfaces: {
 			user_mail: UserMailConfig,
 		},
-		defaultEventType: "user_mail",
-		eventTypes: ["user_mail"],
+		defaultEventType: "email",
+		eventTypes: ["email"],
 		configs: {
-			user_mail: {
-				mail: "",
-				sender_name: "",
-				secret_imap_password: "",
+			email: {
+				imap_server: "",
+				imap_port: 993,
+				username: "",
+				password: "",
+				use_tls: true,
 			},
 		},
 		useInterfaces: {},
@@ -60,10 +64,15 @@ export const EVENT_CONFIG: IEventMapping = {
 	events_simple: {
 		configInterfaces: {
 			webhook: WebhookConfig,
+			cron: CronJobConfig
 		},
 		defaultEventType: "quick_action",
-		eventTypes: ["quick_action", "webhook"],
-		configs: {},
+		eventTypes: ["quick_action", "webhook", "cron"],
+		configs: {
+			cron: {
+				expression: "0 * * * *",
+			},
+		},
 		useInterfaces: {},
 	},
 };

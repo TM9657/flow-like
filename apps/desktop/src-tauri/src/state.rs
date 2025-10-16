@@ -96,7 +96,9 @@ impl TauriEventBusState {
 pub struct TauriEventSinkManagerState(pub Arc<Mutex<crate::event_sink::EventSinkManager>>);
 impl TauriEventSinkManagerState {
     #[inline]
-    pub async fn construct(app_handle: &AppHandle) -> anyhow::Result<Arc<Mutex<crate::event_sink::EventSinkManager>>> {
+    pub async fn construct(
+        app_handle: &AppHandle,
+    ) -> anyhow::Result<Arc<Mutex<crate::event_sink::EventSinkManager>>> {
         app_handle
             .try_state::<TauriEventSinkManagerState>()
             .map(|state| state.0.clone())

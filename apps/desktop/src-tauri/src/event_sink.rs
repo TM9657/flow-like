@@ -60,15 +60,25 @@ pub trait EventSink: Send + Sync {
 
     /// Called when a new event registration is added for this sink
     /// The sink should set up the specific trigger (e.g., add route to HTTP server, register Discord handler)
-    async fn on_register(&self, app_handle: &AppHandle, registration: &EventRegistration, db: DbConnection) -> anyhow::Result<()>;
+    async fn on_register(
+        &self,
+        app_handle: &AppHandle,
+        registration: &EventRegistration,
+        db: DbConnection,
+    ) -> anyhow::Result<()>;
 
     /// Called when an event registration is removed
     /// The sink should clean up the specific trigger
-    async fn on_unregister(&self, app_handle: &AppHandle, registration: &EventRegistration, db: DbConnection) -> anyhow::Result<()>;
+    async fn on_unregister(
+        &self,
+        app_handle: &AppHandle,
+        registration: &EventRegistration,
+        db: DbConnection,
+    ) -> anyhow::Result<()>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "config")]
+#[serde(untagged)]
 pub enum EventConfig {
     Cron(CronSink),
     Discord(DiscordSink),
@@ -79,17 +89,17 @@ pub enum EventConfig {
 
     // Check for the state of a website and trigger the event when it changes
     WebWatcher(WebWatcherSink),
-    RSS(RSSSink),
+    Rss(RSSSink),
 
     Deeplink(DeeplinkSink),
     Http(HttpSink),
     Webhook(WebhookSink),
-    MQTT(MQTTSink),
-    MCP(MCPSink),
+    Mqtt(MQTTSink),
+    Mcp(MCPSink),
     File(FileSink),
     GitHub(GitHubSink),
 
-    NFC(NFCSink),
+    Nfc(NFCSink),
     GeoLocation(GeoLocationSink),
     Notion(NotionSink),
     Shortcut(ShortcutSink),
@@ -97,7 +107,7 @@ pub enum EventConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventRegistration {
-    pub event_id: String,  // Primary key - each event can only be attached to one sink
+    pub event_id: String, // Primary key - each event can only be attached to one sink
     pub name: String,
     pub r#type: String,
     pub updated_at: SystemTime,

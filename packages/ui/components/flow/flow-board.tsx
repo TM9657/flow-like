@@ -460,6 +460,23 @@ export function FlowBoard({
 	const [runsOpen, setRunsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
 
+	// Clear selections when version changes
+	useEffect(() => {
+		selected.current.clear();
+		setNodes((nds) =>
+			nds.map((node) => ({
+				...node,
+				selected: false,
+			})),
+		);
+		setEdges((eds) =>
+			eds.map((edge) => ({
+				...edge,
+				selected: false,
+			})),
+		);
+	}, [version, setNodes, setEdges]);
+
 	function toggleVars() {
 		// On mobile use sheet instead of resizable panel
 		if (
@@ -1145,12 +1162,13 @@ export function FlowBoard({
 			edges,
 			currentLayer,
 			boardRef,
+			version,
 		);
 
 		setNodes(parsed.nodes);
 		setEdges(parsed.edges);
 		setPinCache(new Map(parsed.cache));
-	}, [board.data, currentLayer, currentProfile.data]);
+	}, [board.data, currentLayer, currentProfile.data, version]);
 
 	const nodeTypes = useMemo(
 		() => ({
@@ -1166,6 +1184,11 @@ export function FlowBoard({
 	const onConnect = useCallback(
 		(params: any) =>
 			setEdges((eds) => {
+				// Don't execute commands when viewing an old version
+				if (typeof version !== "undefined") {
+					return eds;
+				}
+
 				const [sourcePin, sourceNode] = pinCache.get(params.sourceHandle) || [];
 				const [targetPin, targetNode] = pinCache.get(params.targetHandle) || [];
 
@@ -1183,7 +1206,7 @@ export function FlowBoard({
 
 				return addEdge(params, eds);
 			}),
-		[setEdges, pinCache, boardId],
+		[setEdges, pinCache, boardId, version, executeCommand],
 	);
 
 	const onConnectEnd = useCallback(
@@ -1233,6 +1256,11 @@ export function FlowBoard({
 					if (!change.selected) selected.current.delete(selectedId);
 				}
 
+				// Don't execute commands when viewing an old version
+				if (typeof version !== "undefined") {
+					return applyNodeChanges(changes, nds);
+				}
+
 				const removeChanges = changes.filter(
 					(change: any) => change.type === "remove",
 				);
@@ -1279,7 +1307,7 @@ export function FlowBoard({
 
 				return applyNodeChanges(changes, nds);
 			}),
-		[setNodes, board.data, boardId, executeCommands],
+		[setNodes, board.data, boardId, executeCommands, version],
 	);
 
 	const onEdgesChange: OnEdgesChange = useCallback(
@@ -1304,6 +1332,11 @@ export function FlowBoard({
 								? { ...edge, animated: !change.selected }
 								: edge,
 						);
+				}
+
+				// Don't execute commands when viewing an old version
+				if (typeof version !== "undefined") {
+					return applyEdgeChanges(changes, eds);
 				}
 
 				const removeChanges = changes.filter(
@@ -1332,7 +1365,7 @@ export function FlowBoard({
 
 				return applyEdgeChanges(changes, eds);
 			}),
-		[setEdges, board.data, boardId, pinCache],
+		[setEdges, board.data, boardId, pinCache, executeCommands, version],
 	);
 
 	const onReconnectStart = useCallback(() => {
@@ -1341,6 +1374,11 @@ export function FlowBoard({
 
 	const onReconnect = useCallback(
 		async (oldEdge: any, newConnection: Connection) => {
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
+			}
+
 			// Check if the edge is actually being moved
 			const new_id = `${newConnection.sourceHandle}-${newConnection.targetHandle}`;
 			if (oldEdge.id === new_id) return;
@@ -1381,11 +1419,16 @@ export function FlowBoard({
 			edgeReconnectSuccessful.current = true;
 			setEdges((els) => reconnectEdge(oldEdge, newConnection, els));
 		},
-		[setEdges, pinToNode, executeCommands],
+		[setEdges, pinToNode, executeCommands, version],
 	);
 
 	const onReconnectEnd = useCallback(
 		async (event: any, edge: any) => {
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
+			}
+
 			if (!edgeReconnectSuccessful.current) {
 				const { source, target, sourceHandle, targetHandle } = edge;
 				const from_node = pinToNode(sourceHandle);
@@ -1403,7 +1446,7 @@ export function FlowBoard({
 
 			edgeReconnectSuccessful.current = true;
 		},
-		[setEdges, pinToNode],
+		[setEdges, pinToNode, version, executeCommand],
 	);
 
 	const onContextMenuCB = useCallback((event: any) => {
@@ -1412,6 +1455,10 @@ export function FlowBoard({
 
 	const onNodeDragStop = useCallback(
 		async (event: any, node: any, nodes: any) => {
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
+			}
 			const commands: IGenericCommand[] = [];
 			for await (const node of nodes) {
 				const command = moveNodeCommand({
@@ -1424,7 +1471,7 @@ export function FlowBoard({
 			}
 			await executeCommands(commands);
 		},
-		[boardId, executeCommands, currentLayer],
+		[boardId, executeCommands, currentLayer, version],
 	);
 
 	const isValidConnectionCB = useCallback(
@@ -1451,6 +1498,11 @@ export function FlowBoard({
 	);
 
 	const onCommentPlace = useCallback(async () => {
+		// Don't execute commands when viewing an old version
+		if (typeof version !== "undefined") {
+			return;
+		}
+
 		const location = screenToFlowPosition({
 			x: clickPosition.x,
 			y: clickPosition.y,
@@ -1473,7 +1525,7 @@ export function FlowBoard({
 		});
 
 		await executeCommand(command);
-	}, [currentLayer, clickPosition, executeCommand]);
+	}, [currentLayer, clickPosition, executeCommand, version]);
 
 	const onNodeDrag = useCallback(
 		(event: any, node: Node, nodes: Node[]) => {
@@ -1926,7 +1978,7 @@ export function FlowBoard({
 					</SheetContent>
 				</Sheet>
 			</ResizablePanelGroup>
-			<PinEditModal appId={appId} boardId={boardId} />
+			<PinEditModal appId={appId} boardId={boardId} version={version} />
 		</div>
 	);
 }

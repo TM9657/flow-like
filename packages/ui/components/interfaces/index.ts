@@ -1,6 +1,7 @@
 export * from "./chat-default";
 export * from "./configs/api";
 export * from "./configs/simple_chat";
+export * from "./configs/cron";
 export * from "./configs/translation";
 export * from "./configs/user_mail";
 export * from "./configs/webhook";

@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileSink {
-    pub id: String,
     pub path: String,
     pub watch_type: FileWatchType,
     pub file_pattern: Option<String>,

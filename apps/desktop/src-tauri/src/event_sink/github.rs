@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitHubSink {
-    pub id: String,
     pub personal_access_token: String,
     pub repository: String,
     pub events: Vec<GitHubEventType>,

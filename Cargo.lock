@@ -5143,6 +5143,7 @@ dependencies = [
  "async-trait",
  "axum 0.7.9",
  "chrono",
+ "chrono-tz 0.10.4",
  "cocoa",
  "cron",
  "dirs-next",

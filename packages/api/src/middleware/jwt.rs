@@ -18,9 +18,7 @@ use flow_like::hub::UserTier;
 use flow_like_types::Result;
 use flow_like_types::anyhow;
 use hyper::header::AUTHORIZATION;
-use sea_orm::{
-    ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait,
-};
+use sea_orm::{ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait};
 use serde::de::{self, Unexpected};
 use serde::{Deserialize, Deserializer};
 

@@ -3,12 +3,11 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
-use super::{EventRegistration, EventSink};
 use super::manager::DbConnection;
+use super::{EventRegistration, EventSink};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailSink {
-    pub id: String,
     pub imap_server: String,
     pub imap_port: u16,
     pub username: String,
@@ -24,8 +23,7 @@ impl EmailSink {
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS email_watchers (
-                id TEXT PRIMARY KEY,
-                event_id TEXT NOT NULL UNIQUE,
+                event_id TEXT PRIMARY KEY,
                 imap_server TEXT NOT NULL,
                 imap_port INTEGER NOT NULL,
                 username TEXT NOT NULL,
@@ -43,7 +41,11 @@ impl EmailSink {
         Ok(())
     }
 
-    fn add_watcher(db: &DbConnection, registration: &EventRegistration, config: &EmailSink) -> Result<()> {
+    fn add_watcher(
+        db: &DbConnection,
+        registration: &EventRegistration,
+        config: &EmailSink,
+    ) -> Result<()> {
         let conn = db.lock().unwrap();
 
         let now = std::time::SystemTime::now()
@@ -52,10 +54,9 @@ impl EmailSink {
 
         conn.execute(
             "INSERT OR REPLACE INTO email_watchers
-             (id, event_id, imap_server, imap_port, username, password, folder, use_tls, last_seen_uid, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             (event_id, imap_server, imap_port, username, password, folder, use_tls, last_seen_uid, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
-                config.id,
                 registration.event_id,
                 config.imap_server,
                 config.imap_port,
@@ -71,9 +72,12 @@ impl EmailSink {
         Ok(())
     }
 
-    fn remove_watcher(db: &DbConnection, watcher_id: &str) -> Result<()> {
+    fn remove_watcher(db: &DbConnection, event_id: &str) -> Result<()> {
         let conn = db.lock().unwrap();
-        conn.execute("DELETE FROM email_watchers WHERE id = ?1", params![watcher_id])?;
+        conn.execute(
+            "DELETE FROM email_watchers WHERE event_id = ?1",
+            params![event_id],
+        )?;
         Ok(())
     }
 }
@@ -100,7 +104,12 @@ impl EventSink for EmailSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, db: DbConnection) -> Result<()> {
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        db: DbConnection,
+    ) -> Result<()> {
         Self::add_watcher(&db, registration, self)?;
         tracing::info!(
             "Registered email watcher: {}@{} -> event {}",
@@ -111,9 +120,14 @@ impl EventSink for EmailSink {
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, db: DbConnection) -> Result<()> {
-        Self::remove_watcher(&db, &self.id)?;
-        tracing::info!("Unregistered email watcher: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        db: DbConnection,
+    ) -> Result<()> {
+        Self::remove_watcher(&db, &registration.event_id)?;
+        tracing::info!("Unregistered email watcher: {}", registration.event_id);
         Ok(())
     }
 }

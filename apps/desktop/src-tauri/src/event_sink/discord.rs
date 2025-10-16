@@ -4,12 +4,11 @@ use serde::{Deserialize, Serialize};
 use serenity::all::GatewayIntents;
 use tauri::AppHandle;
 
-use super::{EventRegistration, EventSink};
 use super::manager::DbConnection;
+use super::{EventRegistration, EventSink};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscordSink {
-    pub id: String,
     pub token: String,
     pub channel_id: Option<String>,
     pub intents: Option<Vec<GatewayIntents>>,
@@ -21,25 +20,22 @@ impl DiscordSink {
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS discord_bots (
-                id TEXT PRIMARY KEY,
-                token TEXT NOT NULL,
+                token TEXT PRIMARY KEY,
                 intents TEXT,
                 connected INTEGER NOT NULL DEFAULT 0,
                 last_message_id TEXT,
-                created_at INTEGER NOT NULL,
-                UNIQUE(token)
+                created_at INTEGER NOT NULL
             )",
             [],
         )?;
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS discord_handlers (
-                id TEXT PRIMARY KEY,
-                bot_id TEXT NOT NULL,
-                event_id TEXT NOT NULL UNIQUE,
+                event_id TEXT PRIMARY KEY,
+                bot_token TEXT NOT NULL,
                 channel_id TEXT,
                 created_at INTEGER NOT NULL,
-                FOREIGN KEY(bot_id) REFERENCES discord_bots(id) ON DELETE CASCADE
+                FOREIGN KEY(bot_token) REFERENCES discord_bots(token) ON DELETE CASCADE
             )",
             [],
         )?;
@@ -47,44 +43,45 @@ impl DiscordSink {
         Ok(())
     }
 
-    fn add_bot_and_handler(db: &DbConnection, registration: &EventRegistration, config: &DiscordSink) -> Result<()> {
+    fn add_bot_and_handler(
+        db: &DbConnection,
+        registration: &EventRegistration,
+        config: &DiscordSink,
+    ) -> Result<()> {
         let conn = db.lock().unwrap();
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs() as i64;
 
-        let intents_json = config.intents.as_ref()
+        let intents_json = config
+            .intents
+            .as_ref()
             .map(|i| serde_json::to_string(i))
             .transpose()?;
 
         conn.execute(
-            "INSERT OR IGNORE INTO discord_bots (id, token, intents, created_at)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![config.id.clone(), config.token, intents_json, now],
+            "INSERT OR IGNORE INTO discord_bots (token, intents, created_at)
+             VALUES (?1, ?2, ?3)",
+            params![config.token, intents_json, now],
         )?;
 
-        let handler_id = format!("{}_{}", config.id, registration.event_id);
         conn.execute(
             "INSERT OR REPLACE INTO discord_handlers
-             (id, bot_id, event_id, channel_id, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                handler_id,
-                config.id,
-                registration.event_id,
-                config.channel_id,
-                now,
-            ],
+             (event_id, bot_token, channel_id, created_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![registration.event_id, config.token, config.channel_id, now,],
         )?;
 
         Ok(())
     }
 
-    fn remove_handler(db: &DbConnection, config_id: &str, event_id: &str) -> Result<()> {
+    fn remove_handler(db: &DbConnection, event_id: &str) -> Result<()> {
         let conn = db.lock().unwrap();
-        let handler_id = format!("{}_{}", config_id, event_id);
-        conn.execute("DELETE FROM discord_handlers WHERE id = ?1", params![handler_id])?;
+        conn.execute(
+            "DELETE FROM discord_handlers WHERE event_id = ?1",
+            params![event_id],
+        )?;
         Ok(())
     }
 }
@@ -111,13 +108,25 @@ impl EventSink for DiscordSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, db: DbConnection) -> Result<()> {
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        db: DbConnection,
+    ) -> Result<()> {
         Self::add_bot_and_handler(&db, registration, self)?;
 
         if let Some(channel) = &self.channel_id {
-            tracing::info!("Registered Discord handler for channel {} -> event {}", channel, registration.event_id);
+            tracing::info!(
+                "Registered Discord handler for channel {} -> event {}",
+                channel,
+                registration.event_id
+            );
         } else {
-            tracing::info!("Registered Discord handler for all channels -> event {}", registration.event_id);
+            tracing::info!(
+                "Registered Discord handler for all channels -> event {}",
+                registration.event_id
+            );
         }
 
         // TODO: If this is a new bot token, create and connect the Discord client
@@ -125,9 +134,14 @@ impl EventSink for DiscordSink {
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, registration: &EventRegistration, db: DbConnection) -> Result<()> {
-        Self::remove_handler(&db, &self.id, &registration.event_id)?;
-        tracing::info!("Unregistered Discord handler: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        db: DbConnection,
+    ) -> Result<()> {
+        Self::remove_handler(&db, &registration.event_id)?;
+        tracing::info!("Unregistered Discord handler: {}", registration.event_id);
 
         // TODO: If no more handlers for this bot, disconnect the client
 

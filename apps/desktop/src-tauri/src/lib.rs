@@ -1,10 +1,10 @@
 mod deeplink;
+mod event_bus;
+mod event_sink;
 mod functions;
 mod profile;
 mod settings;
 mod state;
-mod event_bus;
-mod event_sink;
 pub mod utils;
 use flow_like::{
     flow_like_storage::{
@@ -269,28 +269,39 @@ pub fn run() {
             let (event_bus, mut event_receiver) = EventBus::new(app.app_handle().clone());
             app.manage(state::TauriEventBusState(event_bus));
 
-            // Initialize Event Sink Manager
+            // Initialize Event Sink Manager synchronously to ensure it's ready before accepting commands
             let settings_clone = settings_state_for_sink.clone();
             let manager_init_handle = app.app_handle().clone();
+
+            // Block on initialization to ensure EventSinkManager is ready
             tauri::async_runtime::spawn(async move {
                 let event_sink_db_path = settings_clone
                     .lock()
                     .await
                     .project_dir
+                    .parent()
+                    .unwrap()
                     .join("event_sinks.db")
                     .to_string_lossy()
                     .to_string();
 
                 match event_sink::EventSinkManager::new(&event_sink_db_path) {
                     Ok(manager) => {
-                        tracing::info!("Event Sink Manager initialized");
-                        manager_init_handle.manage(state::TauriEventSinkManagerState(Arc::new(Mutex::new(manager))));
+                        tracing::info!("Event Sink Manager initialized successfully");
+                        manager_init_handle.manage(state::TauriEventSinkManagerState(Arc::new(
+                            Mutex::new(manager),
+                        )));
 
                         // Load existing registrations from database
-                        if let Some(manager_state) = manager_init_handle.try_state::<state::TauriEventSinkManagerState>() {
+                        if let Some(manager_state) =
+                            manager_init_handle.try_state::<state::TauriEventSinkManagerState>()
+                        {
                             let manager = manager_state.0.lock().await;
                             if let Err(e) = manager.init_from_storage(&manager_init_handle).await {
-                                tracing::error!("Failed to restore event sink registrations: {}", e);
+                                tracing::error!(
+                                    "Failed to restore event sink registrations: {}",
+                                    e
+                                );
                             } else {
                                 tracing::info!("Event sink registrations restored from database");
                             }
@@ -437,7 +448,8 @@ pub fn run() {
                 println!("Starting EventBus Sink");
 
                 let (flow_like_state, hub_url, http_client) = {
-                    let flow_like_state = match state::TauriFlowLikeState::construct(&handle).await {
+                    let flow_like_state = match state::TauriFlowLikeState::construct(&handle).await
+                    {
                         Ok(s) => s,
                         Err(e) => {
                             eprintln!("EventBus sink init failed: {:?}", e);
@@ -591,6 +603,7 @@ pub fn run() {
             functions::event_sink_commands::remove_event_sink,
             functions::event_sink_commands::get_event_sink,
             functions::event_sink_commands::list_event_sinks,
+            functions::event_sink_commands::is_event_sink_active,
         ]);
 
     #[cfg(desktop)]

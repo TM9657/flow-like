@@ -3,7 +3,7 @@ use axum::{
     Router,
     body::Body,
     extract::{Path as AxumPath, State},
-    http::{Request, StatusCode, Method, HeaderMap},
+    http::{HeaderMap, Method, Request, StatusCode},
     response::IntoResponse,
     routing::any,
 };
@@ -13,13 +13,12 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 use tower::ServiceBuilder;
 
-use super::{EventRegistration, EventSink};
 use super::manager::DbConnection;
+use super::{EventRegistration, EventSink};
 use crate::state::TauriEventBusState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpSink {
-    pub id: String,
     pub path: String,
     pub method: String,
     pub auth_token: Option<String>,
@@ -31,12 +30,11 @@ impl HttpSink {
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS http_routes (
-                id TEXT PRIMARY KEY,
+                event_id TEXT PRIMARY KEY,
                 app_id TEXT NOT NULL,
                 path TEXT NOT NULL,
                 method TEXT NOT NULL,
                 auth_token TEXT,
-                event_id TEXT NOT NULL UNIQUE,
                 created_at INTEGER NOT NULL,
                 UNIQUE(app_id, path, method)
             )",
@@ -46,7 +44,11 @@ impl HttpSink {
         Ok(())
     }
 
-    fn add_route(db: &DbConnection, registration: &EventRegistration, config: &HttpSink) -> Result<()> {
+    fn add_route(
+        db: &DbConnection,
+        registration: &EventRegistration,
+        config: &HttpSink,
+    ) -> Result<()> {
         let conn = db.lock().unwrap();
 
         let now = std::time::SystemTime::now()
@@ -55,15 +57,14 @@ impl HttpSink {
 
         conn.execute(
             "INSERT OR REPLACE INTO http_routes
-             (id, app_id, path, method, auth_token, event_id, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+             (event_id, app_id, path, method, auth_token, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
-                config.id,
+                registration.event_id,
                 registration.app_id,
                 config.path,
                 config.method,
                 config.auth_token,
-                registration.event_id,
                 now,
             ],
         )?;
@@ -71,9 +72,12 @@ impl HttpSink {
         Ok(())
     }
 
-    fn remove_route(db: &DbConnection, route_id: &str) -> Result<()> {
+    fn remove_route(db: &DbConnection, event_id: &str) -> Result<()> {
         let conn = db.lock().unwrap();
-        conn.execute("DELETE FROM http_routes WHERE id = ?1", params![route_id])?;
+        conn.execute(
+            "DELETE FROM http_routes WHERE event_id = ?1",
+            params![event_id],
+        )?;
         Ok(())
     }
 
@@ -94,23 +98,22 @@ impl HttpSink {
         let route_info = {
             let conn = state.db.lock().unwrap();
             let mut stmt = match conn.prepare(
-                "SELECT id, event_id, auth_token FROM http_routes
-                 WHERE app_id = ?1 AND path = ?2 AND method = ?3"
+                "SELECT event_id, auth_token FROM http_routes
+                 WHERE app_id = ?1 AND path = ?2 AND method = ?3",
             ) {
                 Ok(stmt) => stmt,
-                Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+                Err(_) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
+                }
             };
 
             stmt.query_row(params![app_id, full_path, method_str], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                ))
-            }).ok()
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+            })
+            .ok()
         };
 
-        let Some((route_id, event_id, auth_token)) = route_info else {
+        let Some((event_id, auth_token)) = route_info else {
             return (StatusCode::NOT_FOUND, "Route not found").into_response();
         };
 
@@ -125,21 +128,27 @@ impl HttpSink {
             }
         }
 
-        tracing::info!("HTTP request matched: {} {} -> event {}", method_str, full_path, event_id);
+        tracing::info!(
+            "HTTP request matched: {} {} -> event {}",
+            method_str,
+            full_path,
+            event_id
+        );
 
         // Get the offline flag from the event registration
         let offline = {
             let conn = state.db.lock().unwrap();
-            let mut stmt = match conn.prepare(
-                "SELECT offline FROM event_registrations WHERE event_id = ?1"
-            ) {
+            let mut stmt = match conn
+                .prepare("SELECT offline FROM event_registrations WHERE event_id = ?1")
+            {
                 Ok(stmt) => stmt,
-                Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+                Err(_) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
+                }
             };
 
-            stmt.query_row(params![event_id], |row| {
-                row.get::<_, bool>(0)
-            }).unwrap_or(false)
+            stmt.query_row(params![event_id], |row| row.get::<_, bool>(0))
+                .unwrap_or(false)
         };
 
         // Fire event through EventBus
@@ -149,15 +158,25 @@ impl HttpSink {
             // TODO: Parse request body as payload
             let payload = None;
 
-            if let Err(e) = event_bus.push_event(payload, app_id.clone(), event_id.clone(), offline) {
+            if let Err(e) = event_bus.push_event(payload, app_id.clone(), event_id.clone(), offline)
+            {
                 tracing::error!("Failed to push event to EventBus: {}", e);
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to trigger event").into_response();
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to trigger event")
+                    .into_response();
             }
 
-            tracing::info!("Event {} triggered successfully via route {} (offline: {})", event_id, route_id, offline);
+            tracing::info!(
+                "Event {} triggered successfully (offline: {})",
+                event_id,
+                offline
+            );
         } else {
             tracing::error!("EventBus state not available");
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Event system not available").into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Event system not available",
+            )
+                .into_response();
         }
 
         (StatusCode::OK, "Event triggered").into_response()
@@ -186,7 +205,6 @@ impl EventSink for HttpSink {
             .with_state(state)
             .layer(ServiceBuilder::new());
 
-        let app_handle_clone = app_handle.clone();
         tokio::spawn(async move {
             let listener = match tokio::net::TcpListener::bind("0.0.0.0:9657").await {
                 Ok(l) => l,
@@ -213,7 +231,12 @@ impl EventSink for HttpSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, db: DbConnection) -> Result<()> {
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        db: DbConnection,
+    ) -> Result<()> {
         Self::add_route(&db, registration, self)?;
         tracing::info!(
             "Registered HTTP route: {} {} -> event {}",
@@ -224,8 +247,13 @@ impl EventSink for HttpSink {
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, db: DbConnection) -> Result<()> {
-        Self::remove_route(&db, &self.id)?;
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        db: DbConnection,
+    ) -> Result<()> {
+        Self::remove_route(&db, &registration.event_id)?;
         tracing::info!("Unregistered HTTP route: {} {}", self.method, self.path);
         Ok(())
     }

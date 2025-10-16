@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MCPSink {
-    pub id: String,
     pub server_url: String,
     pub api_key: Option<String>,
     pub event_type: String,

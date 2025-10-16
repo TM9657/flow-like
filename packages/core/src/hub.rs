@@ -1,7 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    bit::{Bit, BitTypes}, credentials::SharedCredentials, profile::Profile, utils::{http::HTTPClient, recursion::RecursionGuard}
+    bit::{Bit, BitTypes},
+    credentials::SharedCredentials,
+    profile::Profile,
+    utils::{http::HTTPClient, recursion::RecursionGuard},
 };
 use flow_like_types::{Result, sync::Mutex};
 use schemars::JsonSchema;
@@ -261,7 +264,13 @@ impl Hub {
             .header("Authorization", token)
             .build()?;
 
-        let shared_credentials = self.http_client().client().execute(request).await?.json::<SharedCredentials>().await?;
+        let shared_credentials = self
+            .http_client()
+            .client()
+            .execute(request)
+            .await?
+            .json::<SharedCredentials>()
+            .await?;
         Ok(shared_credentials)
     }
 

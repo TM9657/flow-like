@@ -71,9 +71,7 @@ pub async fn get_event_sink(
         .map_err(|e| format!("Failed to get EventSinkManager: {}", e))?;
 
     let manager = manager_arc.lock().await;
-    manager
-        .get_registration(&event_id)
-        .map_err(|e| e.into())
+    manager.get_registration(&event_id).map_err(|e| e.into())
 }
 
 /// List all event sink registrations
@@ -87,7 +85,21 @@ pub async fn list_event_sinks(
         .map_err(|e| format!("Failed to get EventSinkManager: {}", e))?;
 
     let manager = manager_arc.lock().await;
-    manager
-        .list_registrations()
-        .map_err(|e| e.into())
+    manager.list_registrations().map_err(|e| e.into())
+}
+
+/// Check if a sink is active for an event
+/// Returns true if the event is registered and has an active sink
+#[instrument(skip(app_handle))]
+#[tauri::command(async)]
+pub async fn is_event_sink_active(
+    app_handle: AppHandle,
+    event_id: String,
+) -> Result<bool, TauriFunctionError> {
+    let manager_arc = TauriEventSinkManagerState::construct(&app_handle)
+        .await
+        .map_err(|e| format!("Failed to get EventSinkManager: {}", e))?;
+
+    let manager = manager_arc.lock().await;
+    Ok(manager.is_event_active(&event_id))
 }

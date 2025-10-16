@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TelegramSink {
-    pub id: String,
     pub bot_token: String,
     pub chat_id: Option<String>,
     pub allowed_updates: Option<Vec<String>>,

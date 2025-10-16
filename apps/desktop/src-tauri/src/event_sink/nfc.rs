@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NFCSink {
-    pub id: String,
     pub tag_id: Option<String>,
     pub read_mode: NFCReadMode,
     pub last_tag_id: Option<String>,

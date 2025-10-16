@@ -152,6 +152,7 @@ pub struct ExecutionContext {
     pub credentials: Option<Arc<SharedCredentials>>,
     pub delegated: bool,
     pub context_state: BTreeMap<String, Value>,
+    pub context_pin_overrides: Option<BTreeMap<String, Value>>,
     run_id: String,
     state: NodeState,
     callback: InterComCallback,
@@ -215,6 +216,7 @@ impl ExecutionContext {
             nodes,
             completion_callbacks,
             credentials,
+            context_pin_overrides: None,
             delegated: false,
         }
     }
@@ -224,8 +226,32 @@ impl ExecutionContext {
         self.started_by.as_ref().and_then(|v| v.first().cloned())
     }
 
+    pub fn override_pin_value(&mut self, node_id: &str, pin_name: &str, value: Value) {
+        if self.context_pin_overrides.is_none() {
+            self.context_pin_overrides = Some(BTreeMap::new());
+        }
+
+        let key = format!("{}.{}", node_id, pin_name);
+        if let Some(overrides) = &mut self.context_pin_overrides {
+            overrides.insert(key, value);
+        }
+    }
+
+    pub fn clear_pin_override(&mut self, node_id: &str, pin_name: &str) {
+        if let Some(overrides) = &mut self.context_pin_overrides {
+            let key = format!("{}.{}", node_id, pin_name);
+            overrides.remove(&key);
+        }
+    }
+
+    pub fn clear_all_pin_overrides(&mut self) {
+        if let Some(overrides) = &mut self.context_pin_overrides {
+            overrides.clear();
+        }
+    }
+
     pub async fn create_sub_context(&self, node: &Arc<InternalNode>) -> ExecutionContext {
-        ExecutionContext::new(
+        let mut context = ExecutionContext::new(
             self.nodes.clone(),
             &self.run,
             &self.app_state,
@@ -240,7 +266,11 @@ impl ExecutionContext {
             self.credentials.clone(),
             self.token.clone(),
         )
-        .await
+        .await;
+
+        context.context_pin_overrides = self.context_pin_overrides.clone();
+
+        context
     }
 
     pub async fn get_variable(&self, variable_id: &str) -> flow_like_types::Result<Variable> {

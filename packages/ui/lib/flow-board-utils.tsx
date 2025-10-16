@@ -252,6 +252,7 @@ export function parseBoard(
 	oldEdges?: any[],
 	currentLayer?: string,
 	boardRef?: RefObject<IBoard | undefined>,
+	version?: [number, number, number],
 ) {
 	const nodes: any[] = [];
 	const edges: any[] = [];
@@ -294,6 +295,7 @@ export function parseBoard(
 					hash: hash,
 					boardId: board.id,
 					appId: appId,
+					version: version,
 					onExecute: async (node: INode, payload?: object) => {
 						await executeBoard(node, payload);
 					},

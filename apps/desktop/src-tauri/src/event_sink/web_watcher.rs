@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebWatcherSink {
-    pub id: String,
     pub url: String,
     pub check_interval: u64,
     pub selector: Option<String>,

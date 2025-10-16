@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeoLocationSink {
-    pub id: String,
     pub latitude: f64,
     pub longitude: f64,
     pub radius: f64,

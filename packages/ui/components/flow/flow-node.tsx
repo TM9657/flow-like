@@ -90,6 +90,7 @@ export type FlowNode = Node<
 		boardId: string;
 		appId: string;
 		transparent?: boolean;
+		version?: [number, number, number];
 		onExecute: (node: INode, payload?: object) => Promise<void>;
 		onCopy: () => Promise<void>;
 	},
@@ -224,6 +225,10 @@ const FlowNodeInner = memo(
 
 		const addPin = useCallback(
 			async (node: INode, pin: IPin, index: number) => {
+				if (typeof props.data.version !== "undefined") {
+					return;
+				}
+
 				const backend = useBackendStore.getState().backend;
 				if (!backend) return;
 				const nodeGuard = reactFlow
@@ -294,10 +299,14 @@ const FlowNodeInner = memo(
 					props.data.boardId,
 				]);
 			},
-			[reactFlow, sortPins, pushCommand, invalidate],
+			[reactFlow, sortPins, pushCommand, invalidate, props.data.version],
 		);
 		const pinRemoveCallback = useCallback(
 			async (pinToRemove: IPin) => {
+				if (typeof props.data.version !== "undefined") {
+					return;
+				}
+
 				const backend = useBackendStore.getState().backend;
 				if (!backend) return;
 
@@ -345,7 +354,7 @@ const FlowNodeInner = memo(
 					props.data.boardId,
 				]);
 			},
-			[inputPins, outputPins, getNode],
+			[inputPins, outputPins, getNode, props.data.version],
 		);
 
 		const parsePins = useCallback(
@@ -443,59 +452,61 @@ const FlowNodeInner = memo(
 								index={arrayIndex}
 								input
 							/>
-						) : (
-							<FlowPin
-								appId={props.data.appId}
-								key={pin.id}
-								node={props.data.node}
-								boardId={props.data.boardId}
-								pin={pin}
-								onPinRemove={pinRemoveCallback}
-								skipOffset={isReroute}
-							/>
-						);
-					}),
-			[
-				inputPins,
-				props.data.node,
-				props.data.boardId,
-				pinRemoveCallback,
-				isReroute,
-			],
-		);
-
-		const renderOutputPins = useMemo(
-			() =>
-				outputPins.map((pin, arrayIndex) => {
-					return isPinAction(pin) ? (
-						<FlowPinAction
-							action={pin}
-							index={arrayIndex}
-							input={false}
-							key={`${pin.pin.id}__action`}
-						/>
 					) : (
 						<FlowPin
 							appId={props.data.appId}
+							key={pin.id}
 							node={props.data.node}
 							boardId={props.data.boardId}
 							pin={pin}
-							key={pin.id}
 							onPinRemove={pinRemoveCallback}
 							skipOffset={isReroute}
+							version={props.data.version}
 						/>
 					);
 				}),
-			[
-				outputPins,
-				props.data.node,
-				props.data.boardId,
-				pinRemoveCallback,
-				isReroute,
-			],
-		);
+		[
+			inputPins,
+			props.data.node,
+			props.data.boardId,
+			pinRemoveCallback,
+			isReroute,
+			props.data.version,
+		],
+	);
 
-		const playNode = useMemo(() => {
+	const renderOutputPins = useMemo(
+		() =>
+			outputPins.map((pin, arrayIndex) => {
+				return isPinAction(pin) ? (
+					<FlowPinAction
+						action={pin}
+						index={arrayIndex}
+						input={false}
+						key={`${pin.pin.id}__action`}
+					/>
+				) : (
+					<FlowPin
+						appId={props.data.appId}
+						node={props.data.node}
+						boardId={props.data.boardId}
+						pin={pin}
+						key={pin.id}
+						onPinRemove={pinRemoveCallback}
+						skipOffset={isReroute}
+						version={props.data.version}
+					/>
+				);
+			}),
+		[
+			outputPins,
+			props.data.node,
+			props.data.boardId,
+			pinRemoveCallback,
+			isReroute,
+			props.data.version,
+		],
+	);		const playNode = useMemo(() => {
 			if (!props.data.node.start) return null;
 			if (executionState === "done" || executing)
 				return (
@@ -723,6 +734,10 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	}, [flow]);
 
 	const handleError = useCallback(async () => {
+		if (typeof props.data.version !== "undefined") {
+			return;
+		}
+
 		const node = flow.getNodes().find((node) => node.id === props.id);
 		if (!node) return;
 
@@ -823,6 +838,10 @@ function FlowNode(props: NodeProps<FlowNode>) {
 
 	const handleCollapse = useCallback(
 		async (x: number, y: number) => {
+			if (typeof props.data.version !== "undefined") {
+				return;
+			}
+
 			const selectedNodes = flow.getNodes().filter((node) => node.selected);
 			const flowCords = flow.screenToFlowPosition({
 				x: x,
@@ -874,6 +893,10 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	);
 
 	const deleteNodes = useCallback(async () => {
+		if (typeof props.data.version !== "undefined") {
+			return;
+		}
+
 		const nodes = flow.getNodes().filter((node) => node.selected);
 		if (!nodes || nodes.length === 0) return;
 
@@ -900,6 +923,10 @@ function FlowNode(props: NodeProps<FlowNode>) {
 
 	const orderNodes = useCallback(
 		async (type: "align" | "justify", dir: "start" | "end" | "center") => {
+			if (typeof props.data.version !== "undefined") {
+				return;
+			}
+
 			const selectedNodes = flow.getNodes().filter((node) => node.selected);
 			if (selectedNodes.length <= 1) return;
 			let currentLayer: string | undefined = undefined;

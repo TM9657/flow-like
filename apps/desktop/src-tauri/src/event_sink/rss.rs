@@ -1,17 +1,19 @@
 use anyhow::Result;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
-use super::{EventRegistration, EventSink};
 use super::manager::DbConnection;
+use super::{EventRegistration, EventSink};
 use crate::state::TauriEventBusState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RSSSink {
-    pub id: String,
     pub feed_url: String,
     pub poll_interval: u64,
     pub headers: Option<Vec<(String, String)>>,
@@ -24,8 +26,7 @@ impl RSSSink {
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS rss_feeds (
-                id TEXT PRIMARY KEY,
-                event_id TEXT NOT NULL UNIQUE,
+                event_id TEXT PRIMARY KEY,
                 feed_url TEXT NOT NULL,
                 poll_interval INTEGER NOT NULL,
                 headers TEXT,
@@ -41,27 +42,34 @@ impl RSSSink {
         Ok(())
     }
 
-    fn add_feed(db: &DbConnection, registration: &EventRegistration, config: &RSSSink) -> Result<()> {
+    fn add_feed(
+        db: &DbConnection,
+        registration: &EventRegistration,
+        config: &RSSSink,
+    ) -> Result<()> {
         let conn = db.lock().unwrap();
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs() as i64;
 
-        let headers_json = config.headers.as_ref()
+        let headers_json = config
+            .headers
+            .as_ref()
             .map(|h| serde_json::to_string(h).ok())
             .flatten();
 
-        let keywords_json = config.filter_keywords.as_ref()
+        let keywords_json = config
+            .filter_keywords
+            .as_ref()
             .map(|k| serde_json::to_string(k).ok())
             .flatten();
 
         conn.execute(
             "INSERT OR REPLACE INTO rss_feeds
-             (id, event_id, feed_url, poll_interval, headers, filter_keywords, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+             (event_id, feed_url, poll_interval, headers, filter_keywords, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
-                config.id,
                 registration.event_id,
                 config.feed_url,
                 config.poll_interval,
@@ -74,9 +82,12 @@ impl RSSSink {
         Ok(())
     }
 
-    fn remove_feed(db: &DbConnection, feed_id: &str) -> Result<()> {
+    fn remove_feed(db: &DbConnection, event_id: &str) -> Result<()> {
         let conn = db.lock().unwrap();
-        conn.execute("DELETE FROM rss_feeds WHERE id = ?1", params![feed_id])?;
+        conn.execute(
+            "DELETE FROM rss_feeds WHERE event_id = ?1",
+            params![event_id],
+        )?;
         Ok(())
     }
 
@@ -88,25 +99,24 @@ impl RSSSink {
         let feeds = {
             let conn = db.lock().unwrap();
             let mut stmt = conn.prepare(
-                "SELECT id, event_id, feed_url, poll_interval, last_checked, last_item_guid
+                "SELECT event_id, feed_url, poll_interval, last_checked, last_item_guid
                  FROM rss_feeds
-                 WHERE last_checked IS NULL OR last_checked + poll_interval <= ?1"
+                 WHERE last_checked IS NULL OR last_checked + poll_interval <= ?1",
             )?;
 
             stmt.query_map(params![now], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, Option<i64>>(4)?,
-                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
                 ))
             })?
             .collect::<Result<Vec<_>, _>>()?
         };
 
-        for (feed_id, event_id, feed_url, _poll_interval, _last_checked, last_guid) in feeds {
+        for (event_id, feed_url, _poll_interval, _last_checked, _last_guid) in feeds {
             tracing::info!("Checking RSS feed: {} -> event {}", feed_url, event_id);
 
             // TODO: Fetch and parse RSS feed
@@ -117,11 +127,12 @@ impl RSSSink {
             let registration_info = {
                 let conn = db.lock().unwrap();
                 let mut stmt = conn.prepare(
-                    "SELECT app_id, offline FROM event_registrations WHERE event_id = ?1"
+                    "SELECT app_id, offline FROM event_registrations WHERE event_id = ?1",
                 )?;
                 stmt.query_row(params![event_id], |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
-                }).ok()
+                })
+                .ok()
             };
 
             if let Some((app_id, offline)) = registration_info {
@@ -131,19 +142,23 @@ impl RSSSink {
                     if let Err(e) = event_bus.push_event(None, app_id, event_id.clone(), offline) {
                         tracing::error!("Failed to push RSS event to EventBus: {}", e);
                     } else {
-                        tracing::info!("RSS event {} triggered successfully (offline: {})", event_id, offline);
+                        tracing::info!(
+                            "RSS event {} triggered successfully (offline: {})",
+                            event_id,
+                            offline
+                        );
                     }
                 } else {
-                    tracing::error!("EventBus state not available for RSS feed {}", feed_id);
+                    tracing::error!("EventBus state not available for RSS feed {}", event_id);
                 }
             } else {
-                tracing::error!("Could not find registration info for RSS feed {}", feed_id);
+                tracing::error!("Could not find registration info for RSS feed {}", event_id);
             }
 
             let conn = db.lock().unwrap();
             conn.execute(
-                "UPDATE rss_feeds SET last_checked = ?1 WHERE id = ?2",
-                params![now, feed_id],
+                "UPDATE rss_feeds SET last_checked = ?1 WHERE event_id = ?2",
+                params![now, event_id],
             )?;
         }
 
@@ -184,15 +199,29 @@ impl EventSink for RSSSink {
         Ok(())
     }
 
-    async fn on_register(&self, _app_handle: &AppHandle, registration: &EventRegistration, db: DbConnection) -> Result<()> {
+    async fn on_register(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        db: DbConnection,
+    ) -> Result<()> {
         Self::add_feed(&db, registration, self)?;
-        tracing::info!("Registered RSS feed: {} -> event {}", self.feed_url, registration.event_id);
+        tracing::info!(
+            "Registered RSS feed: {} -> event {}",
+            self.feed_url,
+            registration.event_id
+        );
         Ok(())
     }
 
-    async fn on_unregister(&self, _app_handle: &AppHandle, _registration: &EventRegistration, db: DbConnection) -> Result<()> {
-        Self::remove_feed(&db, &self.id)?;
-        tracing::info!("Unregistered RSS feed: {}", self.id);
+    async fn on_unregister(
+        &self,
+        _app_handle: &AppHandle,
+        registration: &EventRegistration,
+        db: DbConnection,
+    ) -> Result<()> {
+        Self::remove_feed(&db, &registration.event_id)?;
+        tracing::info!("Unregistered RSS feed: {}", registration.event_id);
         Ok(())
     }
 }

@@ -69,6 +69,7 @@ function FlowPinInnerComponent({
 	node,
 	skipOffset,
 	onPinRemove,
+	version,
 }: Readonly<{
 	pin: IPin;
 	boardId: string;
@@ -76,6 +77,7 @@ function FlowPinInnerComponent({
 	node: INode | ILayer;
 	skipOffset?: boolean;
 	onPinRemove?: (pin: IPin) => Promise<void>;
+	version?: [number, number, number];
 }>) {
 	const { pushCommand } = useUndoRedo(appId, boardId);
 	const invalidate = useInvalidateInvoke();
@@ -148,6 +150,10 @@ function FlowPinInnerComponent({
 
 	const updateNode = useCallback(
 		async (value: any) => {
+			if (typeof version !== "undefined") {
+				return;
+			}
+
 			if (node.nodes) return;
 			const currentNode = getNode(node.id);
 			if (!currentNode) return;
@@ -181,7 +187,7 @@ function FlowPinInnerComponent({
 			await pushCommand(result, false);
 			await refetchBoard();
 		},
-		[pin.id, refetchBoard, boardId, pushCommand, getNode, node, pin],
+		[pin.id, refetchBoard, boardId, pushCommand, getNode, node, pin, version],
 	);
 
 	useEffect(() => {
@@ -308,13 +314,15 @@ function FlowPin({
 	node,
 	onPinRemove,
 	skipOffset,
+	version,
 }: Readonly<{
 	pin: IPin;
 	boardId: string;
 	appId: string;
 	node: INode | ILayer;
 	skipOffset?: boolean;
-	onPinRemove: (pin: IPin) => Promise<void>;
+	onPinRemove?: (pin: IPin) => Promise<void>;
+	version?: [number, number, number];
 }>) {
 	if (pin.dynamic) {
 		return (
@@ -326,6 +334,7 @@ function FlowPin({
 				node={node}
 				skipOffset={skipOffset}
 				onPinRemove={onPinRemove}
+				version={version}
 			/>
 		);
 	}
@@ -338,6 +347,7 @@ function FlowPin({
 			boardId={boardId}
 			node={node}
 			skipOffset={skipOffset}
+			version={version}
 		/>
 	);
 }

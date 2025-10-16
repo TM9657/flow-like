@@ -60,6 +60,7 @@ export class EventState implements IEventState {
 						appId: appId,
 						event: remoteData,
 						enforceId: true,
+						offline: isOffline,
 					});
 				}
 
@@ -106,6 +107,7 @@ export class EventState implements IEventState {
 						appId: appId,
 						event: event,
 						enforceId: true,
+						offline: isOffline,
 					});
 				}
 
@@ -179,6 +181,7 @@ export class EventState implements IEventState {
 				appId: appId,
 				event: event,
 				versionType: versionType,
+				offline: isOffline,
 			});
 		}
 		if (
@@ -207,6 +210,7 @@ export class EventState implements IEventState {
 			event: response,
 			versionType: versionType,
 			enforceId: true,
+			offline: isOffline,
 		});
 		return response;
 	}

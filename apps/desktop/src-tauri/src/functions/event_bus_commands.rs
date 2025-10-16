@@ -35,24 +35,17 @@ pub async fn push_event(
 /// Register a Personal Access Token (PAT) for online event execution
 #[instrument(skip_all)]
 #[tauri::command(async)]
-pub async fn register_pat(
-    app_handle: AppHandle,
-    pat: String,
-) -> Result<(), TauriFunctionError> {
+pub async fn register_pat(app_handle: AppHandle, pat: String) -> Result<(), TauriFunctionError> {
     let event_bus = state::TauriEventBusState::construct(&app_handle)
         .map_err(|e| format!("Failed to get EventBus: {}", e))?;
 
-    event_bus
-        .register_pat(pat)
-        .map_err(|e| e.into())
+    event_bus.register_pat(pat).map_err(|e| e.into())
 }
 
 /// Get the currently registered PAT (if any)
 #[instrument(skip_all)]
 #[tauri::command(async)]
-pub async fn get_pat(
-    app_handle: AppHandle,
-) -> Result<Option<String>, TauriFunctionError> {
+pub async fn get_pat(app_handle: AppHandle) -> Result<Option<String>, TauriFunctionError> {
     let event_bus = state::TauriEventBusState::construct(&app_handle)
         .map_err(|e| format!("Failed to get EventBus: {}", e))?;
 
