@@ -268,65 +268,6 @@ export function PatSelectorDialog({
 									</div>
 								) : (
 									<>
-										<div className="space-y-2">
-											<Label>Select Token</Label>
-											<div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-2">
-												{pats.data?.map((pat) => {
-													const expired = isExpired(pat.valid_until);
-													return (
-														<button
-															key={pat.id}
-															type="button"
-															onClick={() => setSelectedPatId(pat.id)}
-															disabled={expired}
-															className={cn(
-																"w-full text-left p-3 rounded-lg border-2 transition-all",
-																selectedPatId === pat.id
-																	? "border-primary bg-primary/5"
-																	: "border-border hover:border-primary/50",
-																expired && "opacity-50 cursor-not-allowed",
-															)}
-														>
-															<div className="flex items-start gap-3">
-																<div className="flex-1 min-w-0">
-																	<div className="flex items-center gap-2 mb-1">
-																		<h4 className="font-semibold truncate">
-																			{pat.name}
-																		</h4>
-																		{expired && (
-																			<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
-																				Expired
-																			</span>
-																		)}
-																	</div>
-																	<div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-																		<div className="flex items-center gap-1">
-																			<ShieldCheckIcon className="h-3.5 w-3.5" />
-																			<span>{getPermissionLabel(pat.permission)}</span>
-																		</div>
-																		<div className="flex items-center gap-1">
-																			<CalendarIcon className="h-3.5 w-3.5" />
-																			<span>Created {formatDate(pat.created_at)}</span>
-																		</div>
-																		{pat.valid_until && (
-																			<div className="flex items-center gap-1">
-																				<CalendarIcon className="h-3.5 w-3.5" />
-																				<span>
-																					Expires {formatDate(pat.valid_until)}
-																				</span>
-																			</div>
-																		)}
-																	</div>
-																</div>
-																{selectedPatId === pat.id && (
-																	<CheckIcon className="h-5 w-5 text-primary flex-shrink-0" />
-																)}
-															</div>
-														</button>
-													);
-												})}
-											</div>
-										</div>
 										<div className="flex justify-end gap-2">
 											<Button variant="outline" onClick={() => onOpenChange(false)}>
 												Cancel

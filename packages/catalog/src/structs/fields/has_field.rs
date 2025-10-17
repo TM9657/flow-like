@@ -7,7 +7,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::async_trait;
-use std::collections::HashMap;
+use super::path_utils::has_value_by_path;
 
 #[derive(Default)]
 pub struct HasStructFieldNode {}
@@ -24,7 +24,7 @@ impl NodeLogic for HasStructFieldNode {
         let mut node = Node::new(
             "struct_has",
             "Has Field",
-            "Checks if a field exists in a struct",
+            "Checks if a field exists in a struct (supports dot notation and array access)",
             "Structs/Fields",
         );
         node.add_icon("/flow/icons/struct.svg");
@@ -38,20 +38,20 @@ impl NodeLogic for HasStructFieldNode {
 
         node.add_input_pin("struct", "Struct", "Struct Output", VariableType::Struct);
 
-        node.add_input_pin("field", "Field", "Field to get", VariableType::String);
+        node.add_input_pin("field", "Field", "Field path (e.g., 'message.content' or 'items[0].name')", VariableType::String);
 
         return node;
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let struct_value = context
-            .evaluate_pin::<HashMap<String, flow_like_types::Value>>("struct")
+            .evaluate_pin::<flow_like_types::Value>("struct")
             .await?;
         let field = context.evaluate_pin::<String>("field").await?;
 
-        let value = struct_value.get(&field);
+        let found = has_value_by_path(&struct_value, &field);
         context
-            .set_pin_value("found", flow_like_types::json::json!(value.is_some()))
+            .set_pin_value("found", flow_like_types::json::json!(found))
             .await?;
 
         return Ok(());

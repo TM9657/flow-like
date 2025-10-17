@@ -211,8 +211,7 @@ impl Hub {
 
         let url = match Url::parse(&url) {
             Ok(url) => url,
-            Err(e) => {
-                println!("Error parsing URL: {:?}", e);
+            Err(_e) => {
                 return Err(flow_like_types::Error::msg("Invalid URL"));
             }
         };
@@ -250,195 +249,34 @@ impl Hub {
     }
 
     pub async fn shared_credentials(&self, token: &str, app_id: &str) -> Result<SharedCredentials> {
-        use std::time::{Instant, SystemTime, UNIX_EPOCH};
-
-        // Inline helper: quick timestamp for logs
-        let now_str = || {
-            let dur = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default();
-            format!("{}.{:03}", dur.as_secs(), dur.subsec_millis())
-        };
-
-        println!("🔑 [{}][shared_credentials] ========== START ==========", now_str());
-        println!("🔑 [{}][shared_credentials] Input app_id: {}", now_str(), app_id);
-        println!("🔑 [{}][shared_credentials] Input token length: {} chars", now_str(), token.len());
-        println!("🔑 [{}][shared_credentials] Token first 10 chars: {}", now_str(), &token.chars().take(10).collect::<String>());
-        println!("🔑 [{}][shared_credentials] Token starts_with 'pat_': {}", now_str(), token.starts_with("pat_"));
-        println!("🔑 [{}][shared_credentials] Token starts_with 'Bearer ': {}", now_str(), token.starts_with("Bearer "));
-        println!("🔑 [{}][shared_credentials] Hub domain: {}", now_str(), self.domain);
-
-        // Build URL
         let presign_path = format!("api/v1/apps/{}/invoke/presign", app_id);
-        println!("🔑 [{}][shared_credentials] Constructing URL with path: {}", now_str(), presign_path);
 
-        let presign_url = match self.construct_url(&presign_path) {
-            Ok(u) => {
-                println!("✅ [{}][shared_credentials] presign_url = {}", now_str(), u);
-                u
-            }
-            Err(e) => {
-                println!(
-                    "❌ [{}][shared_credentials][ERROR] construct_url failed: {:?}",
-                    now_str(),
-                    e
-                );
-                return Err(e);
-            }
-        };
+        let presign_url = self.construct_url(&presign_path)?;
 
-        // Normalize Authorization header
         let auth_val = if token.starts_with("pat_") {
-            println!("🔑 [{}][shared_credentials] Token detected as PAT (starts with 'pat_')", now_str());
             token.to_string()
         } else if token.starts_with("Bearer ") {
-            println!("🔑 [{}][shared_credentials] Token already has 'Bearer ' prefix", now_str());
             token.to_string()
         } else {
-            println!("🔑 [{}][shared_credentials] Token needs 'Bearer ' prefix", now_str());
             format!("Bearer {}", token)
         };
 
-        println!("🔑 [{}][shared_credentials] Final Authorization header = {}", now_str(), auth_val);
-        println!("🔑 [{}][shared_credentials] Auth header length: {}", now_str(), auth_val.len());
-
-        // Client
-        println!("🌐 [{}][shared_credentials] Getting HTTP client...", now_str());
         let client = self.http_client().client();
-        println!("✅ [{}][shared_credentials] HTTP client ready", now_str());
 
-        // Build request
-        let build_start = Instant::now();
-        println!("📦 [{}][shared_credentials] Building request...", now_str());
-        let request = match client
+        let request = client
             .get(presign_url.clone())
             .header("Authorization", &auth_val)
             .build()
-        {
-            Ok(rq) => {
-                println!(
-                    "✅ [{}][shared_credentials] Built request in {:?}",
-                    now_str(),
-                    build_start.elapsed()
-                );
-                println!("📦 [{}][shared_credentials]   Method: {}", now_str(), rq.method());
-                println!("📦 [{}][shared_credentials]   URL: {}", now_str(), rq.url());
+            .map_err(flow_like_types::Error::from)?;
 
-                // Dump all request headers
-                println!("📦 [{}][shared_credentials] Request headers:", now_str());
-                for (k, v) in rq.headers().iter() {
-                    let value_str = v.to_str().unwrap_or("<non-utf8>");
-                    // Mask sensitive headers partially
-                    if k.as_str().to_lowercase() == "authorization" {
-                        println!("  ✅ {}: {} (length: {})", k,
-                            if value_str.len() > 20 {
-                                format!("{}...{}", &value_str[..10], &value_str[value_str.len()-5..])
-                            } else {
-                                value_str.to_string()
-                            },
-                            value_str.len()
-                        );
-                    } else {
-                        println!("  - {}: {}", k, value_str);
-                    }
-                }
-                rq
-            }
-            Err(e) => {
-                println!(
-                    "❌ [{}][shared_credentials][ERROR] Request build error: {:?}",
-                    now_str(),
-                    e
-                );
-                return Err(flow_like_types::Error::from(e));
-            }
-        };
+        let resp = client.execute(request).await
+            .map_err(flow_like_types::Error::from)?;
 
-        // Execute
-        let exec_start = Instant::now();
-        println!("🚀 [{}][shared_credentials] Executing HTTP request...", now_str());
-        let resp = match client.execute(request).await {
-            Ok(rp) => {
-                println!(
-                    "✅ [{}][shared_credentials] Request executed successfully in {:?}",
-                    now_str(),
-                    exec_start.elapsed()
-                );
-                rp
-            }
-            Err(e) => {
-                println!(
-                    "❌ [{}][shared_credentials][ERROR] Execute/network error: {:?}",
-                    now_str(),
-                    e
-                );
-                println!("❌ [{}][shared_credentials][ERROR] Error details:", now_str());
-                println!("     - Is timeout: {}", e.is_timeout());
-                println!("     - Is connect: {}", e.is_connect());
-                println!("     - Is request: {}", e.is_request());
-                if let Some(url) = e.url() {
-                    println!("     - URL: {}", url);
-                }
-                return Err(flow_like_types::Error::from(e));
-            }
-        };
-
-        // Status + headers
         let status = resp.status();
-        let status_code = status.as_u16();
-        println!("📥 [{}][shared_credentials] Response received:", now_str());
-        println!("    Status: {} ({})", status, status_code);
-        println!("    Is Success: {}", status.is_success());
-        println!("    Is Client Error: {}", status.is_client_error());
-        println!("    Is Server Error: {}", status.is_server_error());
+        let body_text = resp.text().await
+            .map_err(flow_like_types::Error::from)?;
 
-        println!("📥 [{}][shared_credentials] Response headers:", now_str());
-        for (k, v) in resp.headers().iter() {
-            println!("  - {}: {}", k, v.to_str().unwrap_or("<non-utf8>"));
-        }
-
-        // Read body as text (always), print it, then parse JSON from the text
-        // (This consumes the body once; fine since we parse from the captured text.)
-        let body_start = Instant::now();
-        println!("📄 [{}][shared_credentials] Reading response body...", now_str());
-        let body_text = match resp.text().await {
-            Ok(t) => {
-                println!(
-                    "✅ [{}][shared_credentials] Received body in {:?} ({} bytes)",
-                    now_str(),
-                    body_start.elapsed(),
-                    t.len()
-                );
-                println!(
-                    "📄 ========== RESPONSE BODY BEGIN ==========\n{}\n========== RESPONSE BODY END ==========",
-                    t
-                );
-                t
-            }
-            Err(e) => {
-                println!(
-                    "❌ [{}][shared_credentials][ERROR] Failed reading body text: {:?}",
-                    now_str(),
-                    e
-                );
-                return Err(flow_like_types::Error::from(e));
-            }
-        };
-
-        // Check status BEFORE parsing (early exit on error)
         if !status.is_success() {
-            println!(
-                "❌ [{}][shared_credentials][ERROR] Non-success status: {}",
-                now_str(),
-                status
-            );
-            println!("❌ [{}][shared_credentials][ERROR] Response body (above) indicates failure", now_str());
-
-            // Try to parse error details if it's JSON
-            if let Ok(error_json) = flow_like_types::json::from_str::<flow_like_types::Value>(&body_text) {
-                println!("❌ [{}][shared_credentials][ERROR] Parsed error JSON: {:#?}", now_str(), error_json);
-            }
-
             return Err(flow_like_types::Error::msg(format!(
                 "presign failed: status={} body={}",
                 status,
@@ -446,35 +284,9 @@ impl Hub {
             )));
         }
 
-        // Parse JSON
-        let parse_start = Instant::now();
-        println!("🔍 [{}][shared_credentials] Parsing JSON response...", now_str());
-        let shared_credentials: SharedCredentials = match flow_like_types::json::from_str(
-            &body_text,
-        ) {
-            Ok(val) => {
-                println!(
-                    "✅ [{}][shared_credentials] JSON parsed successfully in {:?}",
-                    now_str(),
-                    parse_start.elapsed()
-                );
-                println!("✅ [{}][shared_credentials] SharedCredentials fields present:", now_str());
-                // Add field validation if SharedCredentials has known fields
-                val
-            }
-            Err(e) => {
-                println!(
-                    "❌ [{}][shared_credentials][ERROR] JSON parse error: {:?}",
-                    now_str(),
-                    e
-                );
-                println!("❌ [{}][shared_credentials][ERROR] Expected SharedCredentials format", now_str());
-                println!("❌ [{}][shared_credentials][ERROR] Raw body was printed above", now_str());
-                return Err(flow_like_types::Error::msg(format!("JSON parse error: {}", e)));
-            }
-        };
+        let shared_credentials: SharedCredentials = flow_like_types::json::from_str(&body_text)
+            .map_err(|e| flow_like_types::Error::msg(format!("JSON parse error: {}", e)))?;
 
-        println!("🎉 [{}][shared_credentials] ========== SUCCESS - DONE ==========", now_str());
         Ok(shared_credentials)
     }
 
@@ -542,9 +354,7 @@ impl Hub {
 
     pub async fn get_profiles(&self) -> Result<Vec<Profile>> {
         let profiles_url = self.construct_url("api/v1/info/profiles")?;
-        println!("Requesting profiles from: {}", profiles_url);
         let request = self.http_client().client().get(profiles_url).build()?;
-        println!("Request: {:?}", request);
         let bits = self
             .http_client()
             .hashed_request::<Vec<Profile>>(request)

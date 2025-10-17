@@ -74,8 +74,6 @@ impl RegistrationStorage {
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs() as i64;
 
-        // Debug: Log PAT before saving
-        println!("Saving registration for event {} with PAT present: {}", registration.event_id, registration.personal_access_token.is_some());
         tracing::info!("Saving registration for event {} with PAT present: {}", registration.event_id, registration.personal_access_token.is_some());
 
         conn.execute(
@@ -96,7 +94,6 @@ impl RegistrationStorage {
             ],
         )?;
 
-        println!("Successfully saved registration for event {}", registration.event_id);
         tracing::info!("Successfully saved registration for event {}", registration.event_id);
 
         Ok(())
@@ -254,11 +251,9 @@ impl EventSinkManager {
 
         if !started.contains(sink_type) {
             tracing::info!("🚀 Starting {} sink for the first time", sink_type);
-            println!("🚀 Starting {} sink for the first time", sink_type);
             sink.start(app_handle, self.db.clone()).await?;
             started.insert(sink_type.to_string());
             tracing::info!("✅ {} sink started and marked as active", sink_type);
-            println!("✅ {} sink started and marked as active", sink_type);
         } else {
             tracing::debug!("Sink {} already started, skipping", sink_type);
         }
@@ -279,17 +274,13 @@ impl EventSinkManager {
         event_id: &str,
         payload: Option<flow_like_types::Value>,
     ) -> Result<bool> {
-        println!("🔥 [FIRE_EVENT] Starting fire_event for: {}", event_id);
         tracing::info!("🔥 [FIRE_EVENT] Starting fire_event for: {}", event_id);
 
-        println!("🔥 [FIRE_EVENT] Attempting to lock database connection...");
         let conn = self.db.lock().unwrap();
-        println!("✅ [FIRE_EVENT] Database connection locked");
 
         let mut stmt = conn.prepare(
             "SELECT app_id, offline, personal_access_token FROM event_registrations WHERE event_id = ?1",
         )?;
-        println!("✅ [FIRE_EVENT] SQL statement prepared");
 
         let query_result = stmt.query_row(params![event_id], |row| {
             Ok((
@@ -300,35 +291,22 @@ impl EventSinkManager {
         });
 
         let (app_id, offline, personal_access_token) = match query_result {
-            Ok(result) => {
-                println!("✅ [FIRE_EVENT] Query successful for event: {}", event_id);
-                result
-            }
+            Ok(result) => result,
             Err(e) => {
-                println!("❌ [FIRE_EVENT] Query failed for event {}: {:?}", event_id, e);
                 drop(stmt);
                 drop(conn);
                 return Err(e.into());
             }
         };
 
-        println!("🔥 [FIRE_EVENT] Retrieved config - app_id: {}, offline: {}, has_token: {}",
-                 app_id, offline, personal_access_token.is_some());
-
-        println!("🔥 [FIRE_EVENT] Dropping statement and connection...");
         drop(stmt);
         drop(conn);
-        println!("✅ [FIRE_EVENT] Database resources released");
 
-        println!("🔥 [FIRE_EVENT] Attempting to get EventBus state...");
         if let Some(event_bus_state) = app_handle.try_state::<crate::state::TauriEventBusState>()
         {
-            println!("✅ [FIRE_EVENT] EventBus state found");
             let event_bus = &event_bus_state.0;
 
-            // Use stored personal_access_token if available, otherwise use default
             let push_result = if let Some(token) = personal_access_token {
-                println!("🔥 [FIRE_EVENT] Pushing event WITH token");
                 event_bus.push_event_with_token(
                     payload,
                     app_id.clone(),
@@ -337,26 +315,18 @@ impl EventSinkManager {
                     Some(token),
                 )
             } else {
-                println!("🔥 [FIRE_EVENT] Pushing event WITHOUT token");
                 event_bus.push_event_with_token(payload, app_id.clone(), event_id.to_string(), offline, personal_access_token)
             };
 
             match push_result {
-                Ok(_) => {
-                    println!("✅ [FIRE_EVENT] Event {} pushed successfully", event_id);
-                    Ok(true)
-                }
+                Ok(_) => Ok(true),
                 Err(e) => {
-                    println!("❌ [FIRE_EVENT] Failed to push event {}: {:?}", event_id, e);
                     tracing::error!("Failed to push event {}: {:?}", event_id, e);
                     Ok(false)
                 }
             }
         } else {
-            println!("❌ [FIRE_EVENT] EventBus state not available for {}", event_id);
             tracing::error!("EventBus state not available for {}", event_id);
-            #[cfg(debug_assertions)]
-            println!("❌ EventBus state not available for {}", event_id);
             Ok(false)
         }
     }
@@ -573,27 +543,16 @@ impl EventSinkManager {
         tracing::info!("Event Type: {}", event.event_type);
         tracing::info!("Event Active: {}", event.active);
         tracing::info!("Config bytes length: {}", event.config.len());
-        println!("=== register_from_flow_event DEBUG ===");
-        println!("Event ID: {}", event.id);
-        println!("Event Name: {}", event.name);
-        println!("Event Type: {}", event.event_type);
-        println!("Event Active: {}", event.active);
-        println!("Config bytes length: {}", event.config.len());
 
         if !event.config.is_empty() {
             if let Ok(config_str) = String::from_utf8(event.config.clone()) {
                 tracing::info!("Config as string: {}", config_str);
-                println!("Config as string: {}", config_str);
             }
         }
 
         // Check if this event type supports sink registration
         if !Self::supports_sink_registration(&event.event_type) {
             tracing::debug!(
-                "Event type '{}' does not require sink registration, skipping",
-                event.event_type
-            );
-            println!(
                 "Event type '{}' does not require sink registration, skipping",
                 event.event_type
             );
@@ -607,7 +566,6 @@ impl EventSinkManager {
         // Only register active events
         if !event.active {
             tracing::info!("Skipping registration for inactive event: {}", event.id);
-            println!("Skipping registration for inactive event: {}", event.id);
             // If it was previously registered, unregister it
             if self.storage.get_registration(&event.id)?.is_some() {
                 self.unregister_event(app_handle, &event.id).await?;
@@ -662,8 +620,6 @@ impl EventSinkManager {
                     personal_access_token: final_pat.clone(),
                 };
 
-                // Debug: Log PAT in registration
-                println!("Registering event {} with PAT present: {}", event.id, registration.personal_access_token.is_some());
                 tracing::info!("Registering event {} with PAT present: {}", event.id, registration.personal_access_token.is_some());
 
                 self.register_event(app_handle, registration).await?;
@@ -681,11 +637,6 @@ impl EventSinkManager {
                     e
                 );
                 tracing::warn!("Event will not have an active sink");
-                println!(
-                    "Could not parse config for event {} (type: {}): {}",
-                    event.id, event.event_type, e
-                );
-                println!("Event will not have an active sink");
                 // If it was previously registered, unregister it
                 if self.storage.get_registration(&event.id)?.is_some() {
                     self.unregister_event(app_handle, &event.id).await?;
@@ -878,10 +829,6 @@ impl EventSinkManager {
             "🔄 Loading {} event registrations from database",
             registrations.len()
         );
-        println!(
-            "🔄 Loading {} event registrations from database",
-            registrations.len()
-        );
 
         // Group registrations by sink type to start each sink once
         let mut sink_types = std::collections::HashSet::new();
@@ -914,11 +861,9 @@ impl EventSinkManager {
 
         // Start each unique sink type
         tracing::info!("📋 Unique sink types to start: {:?}", sink_types);
-        println!("📋 Unique sink types to start: {:?}", sink_types);
 
         for sink_type in sink_types {
             tracing::info!("⚙️ Starting {} sink during initialization", sink_type);
-            println!("⚙️ Starting {} sink during initialization", sink_type);
 
             // Start the sink by ensuring it's initialized
             // The sink's start() method will spawn the background worker
@@ -935,7 +880,6 @@ impl EventSinkManager {
                         .await
                     {
                         tracing::error!("❌ Failed to start cron sink: {}", e);
-                        println!("❌ Failed to start cron sink: {}", e);
                     }
                 }
                 // Add other sink types as needed
@@ -949,10 +893,6 @@ impl EventSinkManager {
         }
 
         tracing::info!(
-            "✅ Sink initialization complete. {} event registrations ready.",
-            registrations.len()
-        );
-        println!(
             "✅ Sink initialization complete. {} event registrations ready.",
             registrations.len()
         );
