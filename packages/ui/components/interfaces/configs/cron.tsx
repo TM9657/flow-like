@@ -39,28 +39,46 @@ const domToText = (s:string)=>{ const a=list(s)??range(s); if(a) return joinList
 const monToText = (s:string)=>{ const a=list(s)??range(s); if(a) return joinList(a.map(monName)); const n=exact(s); return n!==null?monName(n):null; };
 const dowToText = (s:string)=>{ if(s==="1-5") return "weekdays"; if(s==="0,6"||s==="6,0") return "weekends"; const a=list(s)??range(s); if(a) return joinList(a.map(dowName)); const n=exact(s); return n!==null?dowName(n):null; };
 
-function humanizeCron5(expr: string, opts?: { tz?: string }) {
+function humanizeCron(expr: string, opts?: { tz?: string }) {
   const tz = opts?.tz ? ` (${opts.tz})` : "";
   if (!expr?.trim()) return "";
-  const [min="*", hour="*", dom="*", mon="*", dow="*"] = expr.trim().split(/\s+/, 5);
+  const parts = expr.trim().split(/\s+/);
 
-  // Fast paths
-  if (min==="*" && hour==="*" && dom==="*" && mon==="*" && dow==="*") return `Every minute${tz}`;
-  const mStep = step(min);
-  if (mStep && hour==="*" && dom==="*" && mon==="*" && dow==="*") return `Every ${mStep} minutes${tz}`;
-  const mExact = exact(min); const hExact = exact(hour); const hStep = step(hour);
-  if (mExact!==null && hour==="*" && dom==="*" && mon==="*" && dow==="*") return `At :${pad2(mExact)} past every hour${tz}`;
-  if (mExact!==null && hExact!==null && dom==="*" && mon==="*" && dow==="*") return `At ${pad2(hExact)}:${pad2(mExact)} every day${tz}`;
-  if (mExact!==null && hStep && dom==="*" && mon==="*" && dow==="*") return `Every ${hStep} hours at :${pad2(mExact)}${tz}`;
+  // Support both 5-field and 6-field (with seconds) cron
+  const [sec, min, hour, dom, mon, dow] = parts.length === 6
+    ? parts
+    : ["0", ...parts];
+
+  const sExact = exact(sec || "*");
+  const mExact = exact(min || "*");
+  const hExact = exact(hour || "*");
+  const mStep = step(min || "*");
+  const hStep = step(hour || "*");
+  const sStep = step(sec || "*");
+
+  // Fast paths with seconds support
+  if (sec==="*" && min==="*" && hour==="*" && dom==="*" && mon==="*" && dow==="*") return `Every second${tz}`;
+  if (sStep && min==="*" && hour==="*" && dom==="*" && mon==="*" && dow==="*") return `Every ${sStep} seconds${tz}`;
+  if (sExact!==null && min==="*" && hour==="*" && dom==="*" && mon==="*" && dow==="*") return `At :${pad2(sExact)} of every minute${tz}`;
+  if (sec==="0" && min==="*" && hour==="*" && dom==="*" && mon==="*" && dow==="*") return `Every minute${tz}`;
+  if (sec==="0" && mStep && hour==="*" && dom==="*" && mon==="*" && dow==="*") return `Every ${mStep} minutes${tz}`;
+  if (sec==="0" && mExact!==null && hour==="*" && dom==="*" && mon==="*" && dow==="*") return `At :${pad2(mExact)} past every hour${tz}`;
+  if (sec==="0" && mExact!==null && hExact!==null && dom==="*" && mon==="*" && dow==="*") return `At ${pad2(hExact)}:${pad2(mExact)} every day${tz}`;
+  if (sec==="0" && mExact!==null && hStep && dom==="*" && mon==="*" && dow==="*") return `Every ${hStep} hours at :${pad2(mExact)}${tz}`;
+
+  // With specific seconds
+  if (sExact!==null && mExact!==null && hExact!==null && dom==="*" && mon==="*" && dow==="*") {
+    return `At ${pad2(hExact)}:${pad2(mExact)}:${pad2(sExact)} every day${tz}`;
+  }
 
   // DOW / monthly / monthly+day
-  if (mExact!==null && hExact!==null && dom==="*" && mon==="*" && dow!=="*") {
+  if (sec==="0" && mExact!==null && hExact!==null && dom==="*" && mon==="*" && dow!=="*") {
     const when = dowToText(dow); if (when) return `At ${pad2(hExact)}:${pad2(mExact)} on ${when}${tz}`;
   }
-  if (mExact!==null && hExact!==null && dom!=="*" && mon==="*" && dow==="*") {
+  if (sec==="0" && mExact!==null && hExact!==null && dom!=="*" && mon==="*" && dow==="*") {
     const days = domToText(dom); if (days) return `At ${pad2(hExact)}:${pad2(mExact)} on the ${days} of every month${tz}`;
   }
-  if (mExact!==null && hExact!==null && mon!=="*" && dow==="*") {
+  if (sec==="0" && mExact!==null && hExact!==null && mon!=="*" && dow==="*") {
     const months = monToText(mon);
     if (months) {
       if (dom==="*") return `At ${pad2(hExact)}:${pad2(mExact)} in ${months}${tz}`;
@@ -68,7 +86,7 @@ function humanizeCron5(expr: string, opts?: { tz?: string }) {
       if (days) return `At ${pad2(hExact)}:${pad2(mExact)} on the ${days} of ${months}${tz}`;
     }
   }
-  if (mExact!==null && hExact!==null && mon!=="*" && dow!=="*") {
+  if (sec==="0" && mExact!==null && hExact!==null && mon!=="*" && dow!=="*") {
     const months = monToText(mon); const when = dowToText(dow);
     if (months && when) return `At ${pad2(hExact)}:${pad2(mExact)} on ${when} in ${months}${tz}`;
   }
@@ -94,11 +112,13 @@ export type CronSink = {
 type Mode = "one_time" | "recurring";
 
 const QUICK_CRON_PRESETS = [
-  { label: "Every 5 minutes", value: "*/5 * * * *" },
-  { label: "Hourly (:00)", value: "0 * * * *" },
-  { label: "Daily 09:00", value: "0 9 * * *" },
-  { label: "Weekdays 09:00", value: "0 9 * * 1-5" },
-  { label: "Sundays 18:00", value: "0 18 * * 0" },
+  { label: "Every 30 seconds", value: "*/30 * * * * *" },
+  { label: "Every minute", value: "0 * * * * *" },
+  { label: "Every 5 minutes", value: "0 */5 * * * *" },
+  { label: "Hourly (:00)", value: "0 0 * * * *" },
+  { label: "Daily 09:00", value: "0 0 9 * * *" },
+  { label: "Weekdays 09:00", value: "0 0 9 * * 1-5" },
+  { label: "Sundays 18:00", value: "0 0 18 * * 0" },
 ];
 
 /* -----------------------------------------------------------------------------
@@ -198,11 +218,11 @@ export function CronJobConfig({
 
   // Humanized cron (no deps)
   const cronHuman = useMemo(
-    () => (expression.trim() ? humanizeCron5(expression, { tz: timezone }) : ""),
+    () => (expression.trim() ? humanizeCron(expression, { tz: timezone }) : ""),
     [expression, timezone]
   );
 
-  // Next runs via cron-parser (fixed import)
+  // Next runs via cron-parser (supports 5 or 6 field expressions)
   const cronNextRuns = useMemo(() => {
     if (!expression.trim()) return [];
     try {
@@ -247,7 +267,7 @@ export function CronJobConfig({
       }
     } else {
       setValue("scheduled_for", null);
-      if (!expression.trim()) setValue("expression", "0 9 * * *");
+      if (!expression.trim()) setValue("expression", "0 0 9 * * *");
     }
   };
 
@@ -375,15 +395,15 @@ export function CronJobConfig({
           <div className="space-y-2">
             <Label htmlFor="cron_expression">Cron Expression</Label>
             <Input
-              id="cron_expression"
-              value={expression}
-              onChange={(e) => setValue("expression", e.target.value)}
-              placeholder="*/5 * * * *"
-              disabled={!isEditing}
-              aria-invalid={!isCronValid}
-            />
+            id="cron_expression"
+            value={expression}
+            onChange={(e) => setValue("expression", e.target.value)}
+            placeholder="0 */5 * * * *"
+            disabled={!isEditing}
+            aria-invalid={!isCronValid}
+          />
             <p className="text-sm text-muted-foreground">
-              5-field cron (<code>min hour dom mon dow</code>). Timezone applied: <strong>{timezone}</strong>.
+              6-field cron (<code>sec min hour dom mon dow</code>) or 5-field (<code>min hour dom mon dow</code>). Timezone applied: <strong>{timezone}</strong>.
             </p>
           </div>
 
@@ -467,37 +487,37 @@ function GuidedCronBuilder({
   disabled?: boolean;
 }) {
   const parts = (value || "").trim().split(/\s+/);
-  const [min, hour, dom, mon, dow] = [
-    parts[0] || "*",
-    parts[1] || "*",
-    parts[2] || "*",
-    parts[3] || "*",
-    parts[4] || "*",
-  ];
+
+  // Support both 5-field and 6-field cron
+  const [sec, min, hour, dom, mon, dow] = parts.length === 6
+    ? parts
+    : ["0", parts[0] || "*", parts[1] || "*", parts[2] || "*", parts[3] || "*", parts[4] || "*"];
+
   const setPart = (i: number, v: string) => {
-    const next = [min, hour, dom, mon, dow];
+    const next = [sec, min, hour, dom, mon, dow];
     next[i] = v;
     onChange(next.join(" "));
   };
 
   const fields: Array<[string, string, (v: string) => void, string[]]> = [
-    ["Minute", min, (v) => setPart(0, v), ["0", "*/5", "*/10", "*/15", "*"]],
-    ["Hour", hour, (v) => setPart(1, v), ["*", "0", "8", "9", "12", "18"]],
-    ["Day of Month", dom, (v) => setPart(2, v), ["*", "1", "15", "28"]],
-    ["Month", mon, (v) => setPart(3, v), ["*", "1", "4", "7", "10"]],
-    ["Day of Week", dow, (v) => setPart(4, v), ["*", "1-5", "0", "6"]],
+    ["Second", sec, (v) => setPart(0, v), ["0", "*/10", "*/15", "*/30", "*"]],
+    ["Minute", min, (v) => setPart(1, v), ["0", "*/5", "*/10", "*/15", "*"]],
+    ["Hour", hour, (v) => setPart(2, v), ["*", "0", "8", "9", "12", "18"]],
+    ["Day of Month", dom, (v) => setPart(3, v), ["*", "1", "15", "28"]],
+    ["Month", mon, (v) => setPart(4, v), ["*", "1", "4", "7", "10"]],
+    ["Day of Week", dow, (v) => setPart(5, v), ["*", "1-5", "0", "6"]],
   ];
 
   return (
     <div className="rounded-lg border p-4 space-y-3">
       <div className="flex items-center justify-between">
         <Label>Guided builder</Label>
-        <Badge variant="secondary">min hour dom mon dow</Badge>
+        <Badge variant="secondary">sec min hour dom mon dow</Badge>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {fields.map(([label, val, cb, sugg], idx) => (
           <div className="space-y-2" key={idx}>
-            <Label>{label}</Label>
+            <Label className="text-xs">{label}</Label>
             <Input value={val} onChange={(e) => cb(e.target.value)} disabled={disabled} />
             <div className="flex flex-wrap gap-1">
               {sugg.map((s) => (

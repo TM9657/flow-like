@@ -116,4 +116,5 @@ pub struct EventRegistration {
     pub offline: bool,
     pub app_id: String,
     pub default_payload: Option<flow_like_types::Value>,
+    pub personal_access_token: Option<String>,
 }

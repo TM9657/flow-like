@@ -61,6 +61,7 @@ export interface IBackendState {
 	dbState: IDatabaseState;
 
 	capabilities(): ICapabilities;
+	isOffline(appId: string): Promise<boolean>;
 }
 
 interface BackendStoreState {

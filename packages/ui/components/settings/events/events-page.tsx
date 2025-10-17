@@ -20,6 +20,7 @@ import {
 	type IEventMapping,
 	Input,
 	Label,
+	PatSelectorDialog,
 	Select,
 	SelectContent,
 	SelectItem,
@@ -60,8 +61,19 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 type ViewMode = "list" | "table";
+
+// Helper function to check if an event requires a sink based on eventMapping
+function eventRequiresSink(
+	eventMapping: IEventMapping,
+	event: IEvent,
+	nodeName?: string,
+): boolean {
+	if (!nodeName) return false;
+	const eventTypeConfig = eventMapping[nodeName];
+	return eventTypeConfig?.withSink.includes(event.event_type) ?? false;
+}
 
 export default function EventsPage({
 	eventMapping,
@@ -99,7 +111,7 @@ export default function EventsPage({
 		setEditingEvent(events.data?.find((event) => event.id === eventId) ?? null);
 	}, [editingEvent, id, eventId, events.data]);
 
-	const handleCreateEvent = async (newEvent: Partial<IEvent>) => {
+	const handleCreateEvent = useCallback(async (newEvent: Partial<IEvent>) => {
 		if (!id) {
 			console.error("App ID is required to create an event");
 			return;
@@ -132,9 +144,9 @@ export default function EventsPage({
 		await backend.eventState.upsertEvent(id, event);
 		await events.refetch();
 		setIsCreateDialogOpen(false);
-	};
+	}, [id, events, backend.eventState]);
 
-	const handleDeleteEvent = async (eventId: string) => {
+	const handleDeleteEvent = useCallback(async (eventId: string) => {
 		if (!id) {
 			console.error("App ID is required to delete an event");
 			return;
@@ -145,16 +157,22 @@ export default function EventsPage({
 		}
 		console.log(`Deleted event with ID: ${eventId}`);
 		await events.refetch();
-	};
+	}, [id, editingEvent, events, backend.eventState]);
 
-	const handleEditingEvent = (event?: IEvent) => {
+	const handleEditingEvent = useCallback((event?: IEvent) => {
 		let additionalParams = "";
 		if (event?.id) {
 			additionalParams = `&eventId=${event.id}`;
 		}
 
 		router.push(`/library/config/events?id=${id}${additionalParams}`);
-	};
+	}, [id, router]);
+
+	const handleNavigateToNode = useCallback((event: IEvent, nodeId: string) => {
+		router.push(
+			`/flow?id=${event.board_id}&app=${id}&node=${nodeId}${event.board_version ? `&version=${event.board_version.join("_")}` : ""}`,
+		);
+	}, [id, router]);
 
 	if (id && editingEvent) {
 		return (
@@ -197,13 +215,11 @@ export default function EventsPage({
 						<EventsTable
 							events={events.data ?? []}
 							boardsMap={boardsMap}
+							appId={id ?? ""}
+							eventMapping={eventMapping}
 							onEdit={handleEditingEvent}
 							onDelete={handleDeleteEvent}
-							onNavigateToNode={(event, nodeId) => {
-								router.push(
-									`/flow?id=${event.board_id}&app=${id}&node=${nodeId}${event.board_version ? `&version=${event.board_version.join("_")}` : ""}`,
-								);
-							}}
+							onNavigateToNode={handleNavigateToNode}
 							onCreateEvent={() => setIsCreateDialogOpen(true)}
 						/>
 					)}
@@ -248,6 +264,8 @@ function EventConfiguration({
 	const backend = useBackend();
 	const [isEditing, setIsEditing] = useState(false);
 	const [formData, setFormData] = useState<IEvent>(event);
+	const [showPatDialog, setShowPatDialog] = useState(false);
+	const [isOffline, setIsOffline] = useState<boolean | null>(null);
 
 	const boards = useInvoke(
 		backend.boardState.getBoards,
@@ -272,6 +290,17 @@ function EventConfiguration({
 		(formData.board_id ?? "") !== "" && isEditing,
 	);
 
+	// Check if app is offline
+	useEffect(() => {
+		const checkOffline = async () => {
+			const offline = await backend.isOffline(appId);
+			setIsOffline(offline);
+		};
+		if (appId) {
+			checkOffline();
+		}
+	}, [appId, backend]);
+
 	const handleInputChange = (field: keyof IEvent, value: any) => {
 		console.dir({
 			field,
@@ -280,10 +309,27 @@ function EventConfiguration({
 		setFormData((prev) => ({ ...prev, [field]: value }));
 	};
 
-	const handleSave = async () => {
-		await backend.eventState.upsertEvent(appId, formData);
+	const checkRequiresSink = () : boolean => {
+		const node = board.data?.nodes?.[formData.node_id];
+		if(!node) return false;
+		const eventTypeConfig = eventMapping[node?.name];
+		return eventTypeConfig?.withSink.includes(formData.event_type);
+	}
+
+	const handleSave = async (selectedPat?: string) => {
+		const requiresSink = checkRequiresSink();
+
+		if (requiresSink && !isOffline && !selectedPat) {
+			// Show PAT selector dialog
+			setShowPatDialog(true);
+			return;
+		}
+
+		// Save the event with the PAT if provided
+		await backend.eventState.upsertEvent(appId, formData, undefined, selectedPat);
 		onReload?.();
 		setIsEditing(false);
+		setShowPatDialog(false);
 	};
 
 	const handleCancel = () => {
@@ -332,7 +378,7 @@ function EventConfiguration({
 								Cancel
 							</Button>
 							<Button
-								onClick={handleSave}
+								onClick={() => handleSave()}
 								className="gap-2 bg-orange-600 hover:bg-orange-700"
 							>
 								<SaveIcon className="h-4 w-4" />
@@ -358,7 +404,7 @@ function EventConfiguration({
 						Cancel
 					</Button>
 					<Button
-						onClick={handleSave}
+						onClick={() => handleSave()}
 						className="gap-2 shadow-lg bg-orange-600 hover:bg-orange-700"
 					>
 						<SaveIcon className="h-4 w-4" />
@@ -835,13 +881,82 @@ function EventConfiguration({
 					</Card>
 				)}
 			</div>
+
+			{/* PAT Selector Dialog */}
+			<PatSelectorDialog
+				open={showPatDialog}
+				onOpenChange={setShowPatDialog}
+				onPatSelected={(token) => {
+					handleSave(token);
+				}}
+			/>
 		</div>
+	);
+}
+
+// Helper component for activate sink button in table
+function TableActivateSinkButton({
+	event,
+	appId,
+	onActivated,
+}: {
+	event: IEvent;
+	appId: string;
+	onActivated: () => void;
+}) {
+	const backend = useBackend();
+	const [showDialog, setShowDialog] = useState(false);
+
+	const handleActivate = async (pat?: string) => {
+		try {
+			// Ensure the event is set to active before upserting
+			const activeEvent = { ...event, active: true };
+			await backend.eventState.upsertEvent(appId, activeEvent, undefined, pat);
+			setShowDialog(false);
+			onActivated();
+		} catch (error) {
+			console.error("Failed to activate sink:", error);
+		}
+	};
+
+	const handleClick = async () => {
+		const isOffline = await backend.isOffline(appId);
+		if (!isOffline) {
+			// Online project - show PAT dialog
+			setShowDialog(true);
+		} else {
+			// Offline project - directly activate without PAT
+			await handleActivate();
+		}
+	};
+
+	return (
+		<>
+			<Button
+				variant="ghost"
+				size="sm"
+				className="h-6 px-2 text-xs gap-1"
+				onClick={handleClick}
+			>
+				<Play className="h-3 w-3" />
+				Activate
+			</Button>
+			<PatSelectorDialog
+				open={showDialog}
+				onOpenChange={setShowDialog}
+				onPatSelected={handleActivate}
+				title="Activate Event Sink"
+				description="Select or create a Personal Access Token to activate this event sink."
+			/>
+		</>
 	);
 }
 
 interface IEventsTableProps {
 	events: IEvent[];
 	boardsMap: Map<string, string>;
+	appId: string;
+	eventMapping: IEventMapping;
 	onEdit: (event: IEvent) => void;
 	onDelete: (eventId: string) => void;
 	onNavigateToNode: (event: IEvent, nodeId: string) => void;
@@ -851,15 +966,54 @@ interface IEventsTableProps {
 function EventsTable({
 	events,
 	boardsMap,
+	appId,
+	eventMapping,
 	onEdit,
 	onDelete,
 	onNavigateToNode,
 	onCreateEvent,
 }: Readonly<IEventsTableProps>) {
+	const backend = useBackend();
 	const [currentPage, setCurrentPage] = useState(1);
 	const [pageSize, setPageSize] = useState(50);
 	const [searchTerm, setSearchTerm] = useState("");
 	const [viewMode, setViewMode] = useState<ViewMode>("list");
+	const [sinkStatuses, setSinkStatuses] = useState<Map<string, boolean>>(
+		new Map(),
+	);
+	const [eventNodeNames, setEventNodeNames] = useState<Map<string, string>>(
+		new Map(),
+	);
+
+	// Fetch boards to get node names for events
+	useEffect(() => {
+		const fetchNodeNames = async () => {
+			const nodeNamesMap = new Map<string, string>();
+			const uniqueBoardIds = [...new Set(events.map(e => e.board_id))];
+
+			for (const boardId of uniqueBoardIds) {
+				try {
+					const board = await backend.boardState.getBoard(appId, boardId);
+					// Map each event to its node name
+					events.forEach(event => {
+						if (event.board_id === boardId && event.node_id) {
+							const node = board?.nodes?.[event.node_id];
+							if (node?.name) {
+								nodeNamesMap.set(event.id, node.name);
+							}
+						}
+					});
+				} catch (error) {
+					console.error(`Failed to fetch board ${boardId}:`, error);
+				}
+			}
+			setEventNodeNames(nodeNamesMap);
+		};
+
+		if (events.length > 0) {
+			fetchNodeNames();
+		}
+	}, [events, appId, backend.boardState]);
 
 	const filteredEvents = useMemo(() => {
 		if (!searchTerm) return events;
@@ -881,7 +1035,37 @@ function EventsTable({
 		startIndex + pageSize,
 	);
 
-	const formatRelativeTime = (timestamp: number) => {
+	// Check sink status for events that require it
+	useEffect(() => {
+		const checkSinkStatuses = async () => {
+			const statuses = new Map<string, boolean>();
+			const eventIds = paginatedEvents.map(e => e.id).join(',');
+
+			for (const event of paginatedEvents) {
+				const nodeName = eventNodeNames.get(event.id);
+				if (eventRequiresSink(eventMapping, event, nodeName)) {
+					try {
+						const isActive = await backend.eventState.isEventSinkActive(event.id);
+						statuses.set(event.id, isActive);
+					} catch (error) {
+						console.error(
+							`Failed to check sink status for event ${event.id}:`,
+							error,
+						);
+						statuses.set(event.id, false);
+					}
+				}
+			}
+			setSinkStatuses(statuses);
+		};
+
+		if (paginatedEvents.length > 0 && eventNodeNames.size > 0) {
+			checkSinkStatuses();
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [paginatedEvents.map(e => e.id).join(','), eventNodeNames.size, backend.eventState]);
+
+	const formatRelativeTime = useCallback((timestamp: number) => {
 		const now = Date.now();
 		const eventTime = timestamp * 1000;
 		const diffMs = now - eventTime;
@@ -895,89 +1079,165 @@ function EventsTable({
 			return `${Math.floor(diffDays)}d ago`;
 		}
 		return new Date(eventTime).toLocaleDateString();
-	};
+	}, []);
 
-	const truncateText = (text: string, maxLength = 50) =>
-		text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+	const truncateText = useCallback((text: string, maxLength = 50) =>
+		text.length > maxLength ? `${text.slice(0, maxLength)}...` : text, []);
 
 	useEffect(() => {
 		setCurrentPage(1);
 	}, [searchTerm]);
 
 	// Compact, non-card list item for all screens
-	const ListEventItem = ({ event }: { event: IEvent }) => (
-		<div className="px-3 py-3 border-b hover:bg-muted/50 transition-colors">
-			<div className="flex items-start justify-between gap-3">
-				<div className="flex items-start gap-3 min-w-0">
-					<div
-						className={`mt-1 w-2 h-2 rounded-full ${event.active ? "bg-green-500" : "bg-orange-500"}`}
-					/>
-					<div className="min-w-0">
-						<div className="font-medium truncate flex items-center gap-2">
-							{event.name}
-							<span className="text-xs text-muted-foreground font-mono hidden sm:inline">
-								{event.id.slice(0, 8)}...
-							</span>
+	const ListEventItem = ({ event }: { event: IEvent }) => {
+		const nodeName = eventNodeNames.get(event.id);
+		const requiresSink = eventRequiresSink(eventMapping, event, nodeName);
+		const sinkActive = sinkStatuses.get(event.id);
+		const [showActivateDialog, setShowActivateDialog] = useState(false);
+
+		const handleActivateSink = async (pat?: string) => {
+			try {
+				// Ensure the event is set to active before upserting
+				const activeEvent = { ...event, active: true };
+				await backend.eventState.upsertEvent(appId, activeEvent, undefined, pat);
+				setShowActivateDialog(false);
+				// Trigger a re-check of sink statuses
+				const checkStatus = async () => {
+					const statuses = new Map<string, boolean>();
+					for (const ev of paginatedEvents) {
+						const evNodeName = eventNodeNames.get(ev.id);
+						if (eventRequiresSink(eventMapping, ev, evNodeName)) {
+							try {
+								const isActive = await backend.eventState.isEventSinkActive(ev.id);
+								statuses.set(ev.id, isActive);
+							} catch (error) {
+								console.error(`Failed to check sink status for event ${ev.id}:`, error);
+								statuses.set(ev.id, false);
+							}
+						}
+					}
+					setSinkStatuses(statuses);
+				};
+				await checkStatus();
+			} catch (error) {
+				console.error("Failed to activate sink:", error);
+			}
+		};
+
+		const handleActivateClick = async () => {
+			const isOffline = await backend.isOffline(appId);
+			if (!isOffline) {
+				// Online project - show PAT dialog
+				setShowActivateDialog(true);
+			} else {
+				// Offline project - directly activate without PAT
+				await handleActivateSink();
+			}
+		};
+
+		return (
+			<>
+				<div className="px-3 py-3 border-b hover:bg-muted/50 transition-colors">
+					<div className="flex items-start justify-between gap-3">
+						<div className="flex items-start gap-3 min-w-0">
+							<div
+								className={`mt-1 w-2 h-2 rounded-full ${event.active ? "bg-green-500" : "bg-orange-500"}`}
+							/>
+							<div className="min-w-0">
+								<div className="font-medium truncate flex items-center gap-2 flex-wrap">
+									{event.name}
+									<span className="text-xs text-muted-foreground font-mono hidden sm:inline">
+										{event.id.slice(0, 8)}...
+									</span>
+									{requiresSink && (
+										<span
+											className={`text-xs px-2 py-0.5 rounded-full ${sinkActive ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"}`}
+										>
+											{sinkActive ? "Sink Active" : "Sink Inactive"}
+										</span>
+									)}
+									{requiresSink && !sinkActive && (
+										<Button
+											variant="ghost"
+											size="sm"
+											className="h-6 px-2 text-xs gap-1"
+											onClick={handleActivateClick}
+										>
+											<Play className="h-3 w-3" />
+											Activate
+										</Button>
+									)}
+								</div>
+								<div className="text-xs text-muted-foreground font-mono sm:hidden">
+									{event.id.slice(0, 8)}...
+								</div>
+							</div>
 						</div>
-						<div className="text-xs text-muted-foreground font-mono sm:hidden">
-							{event.id.slice(0, 8)}...
+						<div className="flex items-center gap-2 flex-shrink-0">
+							<div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
+								{event.event_type}
+							</div>
+							<div className="text-xs text-muted-foreground whitespace-nowrap">
+								{formatRelativeTime(event.updated_at.secs_since_epoch)}
+							</div>
 						</div>
+					</div>
+					{(event.description || boardsMap.get(event.board_id)) && (
+						<div className="mt-2 flex items-start justify-between gap-3">
+							<div className="text-sm text-muted-foreground min-w-0">
+								{event.description
+									? truncateText(event.description, 100)
+									: "No description"}
+							</div>
+							<div className="text-xs text-muted-foreground flex-shrink-0 text-right">
+								<div>{boardsMap.get(event.board_id) ?? "Unknown"}</div>
+								<div>
+									{event.board_version
+										? `v${event.board_version.join(".")}`
+										: "Latest"}
+								</div>
+							</div>
+						</div>
+					)}
+					<div className="mt-3 flex items-center gap-2">
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => onEdit(event)}
+							className="gap-1"
+						>
+							<EditIcon className="h-4 w-4" /> Edit
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => onNavigateToNode(event, event.node_id)}
+							className="gap-1"
+						>
+							<ExternalLinkIcon className="h-4 w-4" /> Open
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={() => onDelete(event.id)}
+							className="text-destructive hover:text-destructive"
+						>
+							<Trash2 className="h-4 w-4" />
+						</Button>
 					</div>
 				</div>
-				<div className="flex items-center gap-2 flex-shrink-0">
-					<div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
-						{event.event_type}
-					</div>
-					<div className="text-xs text-muted-foreground whitespace-nowrap">
-						{formatRelativeTime(event.updated_at.secs_since_epoch)}
-					</div>
-				</div>
-			</div>
-			{(event.description || boardsMap.get(event.board_id)) && (
-				<div className="mt-2 flex items-start justify-between gap-3">
-					<div className="text-sm text-muted-foreground min-w-0">
-						{event.description
-							? truncateText(event.description, 100)
-							: "No description"}
-					</div>
-					<div className="text-xs text-muted-foreground flex-shrink-0 text-right">
-						<div>{boardsMap.get(event.board_id) ?? "Unknown"}</div>
-						<div>
-							{event.board_version
-								? `v${event.board_version.join(".")}`
-								: "Latest"}
-						</div>
-					</div>
-				</div>
-			)}
-			<div className="mt-3 flex items-center gap-2">
-				<Button
-					variant="outline"
-					size="sm"
-					onClick={() => onEdit(event)}
-					className="gap-1"
-				>
-					<EditIcon className="h-4 w-4" /> Edit
-				</Button>
-				<Button
-					variant="outline"
-					size="sm"
-					onClick={() => onNavigateToNode(event, event.node_id)}
-					className="gap-1"
-				>
-					<ExternalLinkIcon className="h-4 w-4" /> Open
-				</Button>
-				<Button
-					variant="ghost"
-					size="sm"
-					onClick={() => onDelete(event.id)}
-					className="text-destructive hover:text-destructive"
-				>
-					<Trash2 className="h-4 w-4" />
-				</Button>
-			</div>
-		</div>
-	);
+
+				{/* PAT Selector Dialog for Activation */}
+				<PatSelectorDialog
+					open={showActivateDialog}
+					onOpenChange={setShowActivateDialog}
+					onPatSelected={handleActivateSink}
+					title="Activate Event Sink"
+					description="Select or create a Personal Access Token to activate this event sink."
+				/>
+			</>
+		);
+	};
 
 	return (
 		<div className="flex flex-col h-full min-h-0">
@@ -1074,21 +1334,46 @@ function EventsTable({
 									</TableRow>
 								</TableHeader>
 								<TableBody>
-									{paginatedEvents.map((event) => (
-										<TableRow key={event.id} className="hover:bg-muted/50">
-											<TableCell>
-												<div className="flex items-center">
-													<div
-														className={`w-2 h-2 rounded-full ${event.active ? "bg-green-500" : "bg-orange-500"}`}
-													/>
-												</div>
-											</TableCell>
-											<TableCell>
-												<div className="font-medium">{event.name}</div>
-												<div className="text-xs text-muted-foreground font-mono">
-													{event.id.slice(0, 8)}...
-												</div>
-											</TableCell>
+									{paginatedEvents.map((event) => {
+										const nodeName = eventNodeNames.get(event.id);
+										const requiresSink = eventRequiresSink(eventMapping, event, nodeName);
+										const sinkActive = sinkStatuses.get(event.id);
+
+										return (
+											<TableRow key={event.id} className="hover:bg-muted/50">
+												<TableCell>
+													<div className="flex items-center">
+														<div
+															className={`w-2 h-2 rounded-full ${event.active ? "bg-green-500" : "bg-orange-500"}`}
+														/>
+													</div>
+												</TableCell>
+												<TableCell>
+													<div className="font-medium">{event.name}</div>
+													<div className="text-xs text-muted-foreground font-mono">
+														{event.id.slice(0, 8)}...
+													</div>
+													{requiresSink && (
+														<div className="flex items-center gap-2 mt-1">
+															<div
+																className={`text-xs px-2 py-0.5 rounded-full inline-block ${sinkActive ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"}`}
+															>
+																{sinkActive ? "Sink Active" : "Sink Inactive"}
+															</div>
+															{!sinkActive && (
+																<TableActivateSinkButton event={event} appId={appId} onActivated={async () => {
+																	// Refresh sink status after activation
+																	try {
+																		const isActive = await backend.eventState.isEventSinkActive(event.id);
+																		setSinkStatuses(prev => new Map(prev).set(event.id, isActive));
+																	} catch (error) {
+																		console.error("Failed to refresh sink status:", error);
+																	}
+																}} />
+															)}
+														</div>
+													)}
+												</TableCell>
 											<TableCell className="hidden xl:table-cell">
 												<div className="text-sm text-muted-foreground">
 													{event.description
@@ -1152,7 +1437,8 @@ function EventsTable({
 												</div>
 											</TableCell>
 										</TableRow>
-									))}
+										);
+									})}
 								</TableBody>
 							</Table>
 						</div>

@@ -207,7 +207,18 @@ impl EventBus {
         event_id: String,
         offline: bool,
     ) -> Result<(), String> {
-        let token = self.pat.read().unwrap().clone();
+        self.push_event_with_token(payload, app_id, event_id, offline, None)
+    }
+
+    pub fn push_event_with_token(
+        &self,
+        payload: Option<Value>,
+        app_id: String,
+        event_id: String,
+        offline: bool,
+        override_token: Option<String>,
+    ) -> Result<(), String> {
+        let token = override_token.or_else(|| self.pat.read().unwrap().clone());
 
         if !offline && token.is_none() {
             return Err("No token registered, cannot send online events".to_string());

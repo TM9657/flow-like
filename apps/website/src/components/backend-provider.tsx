@@ -54,6 +54,10 @@ export class EmptyBackend implements IBackendState {
 			canExecuteLocally: false,
 		};
 	}
+
+	async isOffline(_appId: string): Promise<boolean> {
+		return false;
+	}
 }
 
 export function EmptyBackendProvider({ data }: Readonly<{ data: string }>) {

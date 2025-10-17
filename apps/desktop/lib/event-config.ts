@@ -29,6 +29,7 @@ export const EVENT_CONFIG: IEventMapping = {
 		},
 		defaultEventType: "simple_chat",
 		eventTypes: ["simple_chat", "advanced_chat"],
+		withSink: [],
 	},
 	events_mail: {
 		configInterfaces: {
@@ -46,6 +47,7 @@ export const EVENT_CONFIG: IEventMapping = {
 			},
 		},
 		useInterfaces: {},
+		withSink: ["email"],
 	},
 	events_api: {
 		configInterfaces: {
@@ -60,6 +62,7 @@ export const EVENT_CONFIG: IEventMapping = {
 			},
 		},
 		useInterfaces: {},
+		withSink: ["api"],
 	},
 	events_simple: {
 		configInterfaces: {
@@ -68,9 +71,10 @@ export const EVENT_CONFIG: IEventMapping = {
 		},
 		defaultEventType: "quick_action",
 		eventTypes: ["quick_action", "webhook", "cron"],
+		withSink: ["cron", "webhook"],
 		configs: {
 			cron: {
-				expression: "0 * * * *",
+				expression: "* */1 * * *",
 			},
 		},
 		useInterfaces: {},

@@ -174,6 +174,7 @@ export class EventState implements IEventState {
 		appId: string,
 		event: IEvent,
 		versionType?: IVersionType,
+		personalAccessToken?: string,
 	): Promise<IEvent> {
 		const isOffline = await this.backend.isOffline(appId);
 		if (isOffline) {
@@ -182,6 +183,7 @@ export class EventState implements IEventState {
 				event: event,
 				versionType: versionType,
 				offline: isOffline,
+				personalAccessToken: personalAccessToken,
 			});
 		}
 		if (
@@ -211,6 +213,7 @@ export class EventState implements IEventState {
 			versionType: versionType,
 			enforceId: true,
 			offline: isOffline,
+			personalAccessToken: personalAccessToken,
 		});
 		return response;
 	}
@@ -400,6 +403,12 @@ export class EventState implements IEventState {
 	async cancelExecution(runId: string): Promise<void> {
 		await invoke("cancel_execution", {
 			runId: runId,
+		});
+	}
+
+	async isEventSinkActive(eventId: string): Promise<boolean> {
+		return await invoke<boolean>("is_event_sink_active", {
+			eventId: eventId,
 		});
 	}
 }
