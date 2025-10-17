@@ -139,7 +139,7 @@ impl RSSSink {
                 if let Some(event_bus_state) = _app_handle.try_state::<TauriEventBusState>() {
                     let event_bus = &event_bus_state.0;
 
-                    if let Err(e) = event_bus.push_event(None, app_id, event_id.clone(), offline) {
+                    if let Err(e) = event_bus.push_event_with_token(None, app_id, event_id.clone(), offline, None) {
                         tracing::error!("Failed to push RSS event to EventBus: {}", e);
                     } else {
                         tracing::info!(
@@ -176,7 +176,7 @@ impl EventSink for RSSSink {
         let worker_running = running.clone();
         let worker_db = db.clone();
 
-        tokio::spawn(async move {
+        flow_like_types::tokio::spawn(async move {
             tracing::info!("RSS worker thread started");
 
             while worker_running.load(Ordering::Relaxed) {
@@ -184,7 +184,7 @@ impl EventSink for RSSSink {
                     tracing::error!("Error processing RSS feeds: {}", e);
                 }
 
-                tokio::time::sleep(Duration::from_secs(10)).await;
+                flow_like_types::tokio::time::sleep(Duration::from_secs(10)).await;
             }
 
             tracing::info!("RSS worker thread stopped");

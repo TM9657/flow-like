@@ -183,7 +183,7 @@ export class EventState implements IEventState {
 				event: event,
 				versionType: versionType,
 				offline: isOffline,
-				personalAccessToken: personalAccessToken,
+				pat: personalAccessToken,
 			});
 		}
 		if (
@@ -213,7 +213,7 @@ export class EventState implements IEventState {
 			versionType: versionType,
 			enforceId: true,
 			offline: isOffline,
-			personalAccessToken: personalAccessToken,
+			pat: personalAccessToken,
 		});
 		return response;
 	}

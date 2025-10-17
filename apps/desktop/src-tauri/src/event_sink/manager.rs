@@ -227,7 +227,7 @@ impl RegistrationStorage {
 pub struct EventSinkManager {
     db: DbConnection,
     storage: Arc<RegistrationStorage>,
-    started_sinks: Arc<tokio::sync::Mutex<HashSet<String>>>,
+    started_sinks: Arc<flow_like_types::tokio::sync::Mutex<HashSet<String>>>,
 }
 
 impl EventSinkManager {
@@ -239,7 +239,7 @@ impl EventSinkManager {
         Ok(Self {
             db,
             storage,
-            started_sinks: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
+            started_sinks: Arc::new(flow_like_types::tokio::sync::Mutex::new(HashSet::new())),
         })
     }
 
@@ -279,28 +279,56 @@ impl EventSinkManager {
         event_id: &str,
         payload: Option<flow_like_types::Value>,
     ) -> Result<bool> {
+        println!("🔥 [FIRE_EVENT] Starting fire_event for: {}", event_id);
+        tracing::info!("🔥 [FIRE_EVENT] Starting fire_event for: {}", event_id);
+
+        println!("🔥 [FIRE_EVENT] Attempting to lock database connection...");
         let conn = self.db.lock().unwrap();
+        println!("✅ [FIRE_EVENT] Database connection locked");
+
         let mut stmt = conn.prepare(
             "SELECT app_id, offline, personal_access_token FROM event_registrations WHERE event_id = ?1",
         )?;
+        println!("✅ [FIRE_EVENT] SQL statement prepared");
 
-        let (app_id, offline, personal_access_token) = stmt.query_row(params![event_id], |row| {
+        let query_result = stmt.query_row(params![event_id], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, bool>(1)?,
                 row.get::<_, Option<String>>(2)?,
             ))
-        })?;
+        });
 
+        let (app_id, offline, personal_access_token) = match query_result {
+            Ok(result) => {
+                println!("✅ [FIRE_EVENT] Query successful for event: {}", event_id);
+                result
+            }
+            Err(e) => {
+                println!("❌ [FIRE_EVENT] Query failed for event {}: {:?}", event_id, e);
+                drop(stmt);
+                drop(conn);
+                return Err(e.into());
+            }
+        };
+
+        println!("🔥 [FIRE_EVENT] Retrieved config - app_id: {}, offline: {}, has_token: {}",
+                 app_id, offline, personal_access_token.is_some());
+
+        println!("🔥 [FIRE_EVENT] Dropping statement and connection...");
         drop(stmt);
         drop(conn);
+        println!("✅ [FIRE_EVENT] Database resources released");
 
+        println!("🔥 [FIRE_EVENT] Attempting to get EventBus state...");
         if let Some(event_bus_state) = app_handle.try_state::<crate::state::TauriEventBusState>()
         {
+            println!("✅ [FIRE_EVENT] EventBus state found");
             let event_bus = &event_bus_state.0;
 
             // Use stored personal_access_token if available, otherwise use default
             let push_result = if let Some(token) = personal_access_token {
+                println!("🔥 [FIRE_EVENT] Pushing event WITH token");
                 event_bus.push_event_with_token(
                     payload,
                     app_id.clone(),
@@ -309,18 +337,26 @@ impl EventSinkManager {
                     Some(token),
                 )
             } else {
-                event_bus.push_event(payload, app_id.clone(), event_id.to_string(), offline)
+                println!("🔥 [FIRE_EVENT] Pushing event WITHOUT token");
+                event_bus.push_event_with_token(payload, app_id.clone(), event_id.to_string(), offline, personal_access_token)
             };
 
             match push_result {
-                Ok(_) => Ok(true),
+                Ok(_) => {
+                    println!("✅ [FIRE_EVENT] Event {} pushed successfully", event_id);
+                    Ok(true)
+                }
                 Err(e) => {
+                    println!("❌ [FIRE_EVENT] Failed to push event {}: {:?}", event_id, e);
                     tracing::error!("Failed to push event {}: {:?}", event_id, e);
                     Ok(false)
                 }
             }
         } else {
+            println!("❌ [FIRE_EVENT] EventBus state not available for {}", event_id);
             tracing::error!("EventBus state not available for {}", event_id);
+            #[cfg(debug_assertions)]
+            println!("❌ EventBus state not available for {}", event_id);
             Ok(false)
         }
     }
@@ -579,6 +615,35 @@ impl EventSinkManager {
             return Ok(());
         }
 
+        // Determine which PAT to use based on existing registration
+        let final_pat = if let Some(existing_reg) = self.storage.get_registration(&event.id)? {
+            match (&existing_reg.personal_access_token, &personal_access_token) {
+                (Some(existing), None) => {
+                    // Keep existing PAT if new one is None
+                    tracing::info!("Keeping existing PAT for event {}", event.id);
+                    Some(existing.clone())
+                }
+                (None, Some(new_pat)) => {
+                    // Use new PAT if existing is None
+                    tracing::info!("Using new PAT for event {}", event.id);
+                    Some(new_pat.clone())
+                }
+                (Some(_), Some(new_pat)) => {
+                    // Both exist, use new one
+                    tracing::info!("Updating PAT for event {}", event.id);
+                    Some(new_pat.clone())
+                }
+                (None, None) => {
+                    // Neither exists
+                    tracing::info!("No PAT for event {}", event.id);
+                    None
+                }
+            }
+        } else {
+            // No existing registration, use whatever was provided
+            personal_access_token
+        };
+
         // Parse config bytes to determine sink type and configuration
         let config_result = self.parse_event_config(&event.event_type, &event.config);
 
@@ -594,7 +659,7 @@ impl EventSinkManager {
                     offline: offline.unwrap_or(true),
                     app_id: app_id.to_string(),
                     default_payload: None, // TODO: Parse from event if needed
-                    personal_access_token: personal_access_token.clone(),
+                    personal_access_token: final_pat.clone(),
                 };
 
                 // Debug: Log PAT in registration
@@ -761,11 +826,17 @@ impl EventSinkManager {
     /// Check if a sink is active for an event
     /// Returns true if the event is registered and has an active sink
     pub fn is_event_active(&self, event_id: &str) -> bool {
-        self.storage
+        let registration = self.storage
             .get_registration(event_id)
             .ok()
-            .flatten()
-            .is_some()
+            .flatten();
+
+        if let Some(reg) = registration {
+            // An event is considered active if it is registered and not offline
+            (!reg.offline && reg.personal_access_token.is_some()) || reg.offline
+        } else {
+            false
+        }
     }
 
     /// Check if an event type supports sink registration

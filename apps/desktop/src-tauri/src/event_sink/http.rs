@@ -256,12 +256,7 @@ impl HttpSink {
 
             let payload = None;
 
-            // Use stored personal_access_token if available, otherwise use default
-            let push_result = if let Some(token) = personal_access_token {
-                event_bus.push_event_with_token(payload, app_id.clone(), event_id.clone(), offline, Some(token))
-            } else {
-                event_bus.push_event(payload, app_id.clone(), event_id.clone(), offline)
-            };
+            let push_result = event_bus.push_event_with_token(payload, app_id.clone(), event_id.clone(), offline, personal_access_token);
 
             if let Err(e) = push_result {
                 tracing::error!("Failed to push event to EventBus: {}", e);
@@ -319,8 +314,8 @@ impl EventSink for HttpSink {
             .with_state(state)
             .layer(ServiceBuilder::new());
 
-        tokio::spawn(async move {
-            let listener = match tokio::net::TcpListener::bind("0.0.0.0:9657").await {
+        flow_like_types::tokio::spawn(async move {
+            let listener = match flow_like_types::tokio::net::TcpListener::bind("0.0.0.0:9657").await {
                 Ok(l) => l,
                 Err(e) => {
                     tracing::error!("❌ Failed to bind HTTP server on 0.0.0.0:9657: {}", e);

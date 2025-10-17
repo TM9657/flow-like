@@ -85,6 +85,9 @@ export default function EventsPage({
 	const backend = useBackend();
 	const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 	const [editingEvent, setEditingEvent] = useState<IEvent | null>(null);
+	const [showCreatePatDialog, setShowCreatePatDialog] = useState(false);
+	const [pendingEvent, setPendingEvent] = useState<IEvent | null>(null);
+	const [isOffline, setIsOffline] = useState<boolean | null>(null);
 
 	const router = useRouter();
 	const events = useInvoke(
@@ -111,7 +114,18 @@ export default function EventsPage({
 		setEditingEvent(events.data?.find((event) => event.id === eventId) ?? null);
 	}, [editingEvent, id, eventId, events.data]);
 
-	const handleCreateEvent = useCallback(async (newEvent: Partial<IEvent>) => {
+	// Check if app is offline
+	useEffect(() => {
+		const checkOffline = async () => {
+			if (id) {
+				const offline = await backend.isOffline(id);
+				setIsOffline(offline);
+			}
+		};
+		checkOffline();
+	}, [id, backend]);
+
+	const handleCreateEvent = useCallback(async (newEvent: Partial<IEvent>, selectedPat?: string) => {
 		if (!id) {
 			console.error("App ID is required to create an event");
 			return;
@@ -141,10 +155,33 @@ export default function EventsPage({
 			canary: null,
 			notes: null,
 		};
-		await backend.eventState.upsertEvent(id, event);
+
+		// Check if the event requires a sink and PAT is needed
+		if (event.board_id && event.node_id) {
+			try {
+				const board = await backend.boardState.getBoard(id, event.board_id, event.board_version as [number, number, number] | undefined);
+				const node = board?.nodes?.[event.node_id];
+				if (node?.name) {
+					const requiresSink = eventRequiresSink(eventMapping, event, node.name);
+
+					if (requiresSink && !isOffline && !selectedPat) {
+						// Store the event and show PAT dialog
+						setPendingEvent(event);
+						setShowCreatePatDialog(true);
+						return;
+					}
+				}
+			} catch (error) {
+				console.error("Failed to fetch board for sink check:", error);
+			}
+		}
+
+		await backend.eventState.upsertEvent(id, event, undefined, selectedPat);
 		await events.refetch();
 		setIsCreateDialogOpen(false);
-	}, [id, events, backend.eventState]);
+		setShowCreatePatDialog(false);
+		setPendingEvent(null);
+	}, [id, events, backend.eventState, backend.boardState, eventMapping, isOffline]);
 
 	const handleDeleteEvent = useCallback(async (eventId: string) => {
 		if (!id) {
@@ -173,6 +210,16 @@ export default function EventsPage({
 			`/flow?id=${event.board_id}&app=${id}&node=${nodeId}${event.board_version ? `&version=${event.board_version.join("_")}` : ""}`,
 		);
 	}, [id, router]);
+
+	const handleCreateWithPat = useCallback(async (selectedPat: string) => {
+		if (pendingEvent && id) {
+			await backend.eventState.upsertEvent(id, pendingEvent, undefined, selectedPat);
+			await events.refetch();
+			setIsCreateDialogOpen(false);
+			setShowCreatePatDialog(false);
+			setPendingEvent(null);
+		}
+	}, [pendingEvent, id, backend.eventState, events]);
 
 	if (id && editingEvent) {
 		return (
@@ -244,6 +291,15 @@ export default function EventsPage({
 					)}
 				</DialogContent>
 			</Dialog>
+
+			{/* PAT Selector Dialog for Event Creation */}
+			<PatSelectorDialog
+				open={showCreatePatDialog}
+				onOpenChange={setShowCreatePatDialog}
+				onPatSelected={handleCreateWithPat}
+				title="Create Event with Sink"
+				description="This event requires a sink. Select or create a Personal Access Token to activate the event sink."
+			/>
 		</div>
 	);
 }

@@ -102,7 +102,13 @@ impl CronSink {
         registration: &EventRegistration,
         config: &CronSink,
     ) -> Result<()> {
+        println!("🔧 [CRON] Adding cron job for event_id: {}", registration.event_id);
         tracing::info!("Adding cron job for event_id: {}", registration.event_id);
+        println!("🔧 [CRON] Config: expression={:?}, scheduled_for={:?}, timezone={:?}",
+            config.expression,
+            config.scheduled_for,
+            config.timezone
+        );
         tracing::debug!(
             "Config: expression={:?}, scheduled_for={:?}, timezone={:?}",
             config.expression,
@@ -113,6 +119,7 @@ impl CronSink {
         let conn = db.lock().unwrap();
         let now = Utc::now().timestamp();
         let tz = Self::parse_tz(config.timezone.as_deref());
+        println!("🔧 [CRON] Current timestamp: {}, timezone: {:?}", now, tz);
 
         let expression = config
             .expression
@@ -137,11 +144,15 @@ impl CronSink {
             .map(|dt| dt.timestamp());
 
         let next_run = if let Some(ref expr) = expression {
-            Self::compute_next_from_cron(expr.trim(), tz)
+            let computed = Self::compute_next_from_cron(expr.trim(), tz);
+            println!("🔧 [CRON] Computed next_run from expression '{}': {:?}", expr, computed);
+            computed
         } else {
+            println!("🔧 [CRON] Using scheduled_for_ts: {:?}", scheduled_for_ts);
             scheduled_for_ts
         };
 
+        println!("🔧 [CRON] Final next_run: {:?} for event_id: {}", next_run, registration.event_id);
         tracing::info!(
             "Calculated next_run: {:?} for event_id: {}",
             next_run,
@@ -163,6 +174,7 @@ impl CronSink {
             ],
         )?;
 
+        println!("✅ [CRON] Successfully inserted cron job for event_id: {}", registration.event_id);
         tracing::info!(
             "Successfully inserted cron job for event_id: {}",
             registration.event_id
@@ -261,10 +273,29 @@ impl CronSink {
     fn fire_event(app_handle: &AppHandle, event_id: &str) -> Result<bool> {
         use crate::state::TauriEventSinkManagerState;
 
+        println!("🔥 [CRON] fire_event called for: {}", event_id);
         if let Some(manager_state) = app_handle.try_state::<TauriEventSinkManagerState>() {
-            let manager = manager_state.0.blocking_lock();
-            manager.fire_event(app_handle, event_id, None)
+            println!("🔥 [CRON] EventSinkManager state found, attempting to acquire lock...");
+
+            // Use try_lock first to avoid potential deadlock
+            match manager_state.0.try_lock() {
+                Ok(manager) => {
+                    println!("✅ [CRON] Lock acquired successfully");
+                    let result = manager.fire_event(app_handle, event_id, None);
+                    println!("🔥 [CRON] fire_event result: {:?}", result);
+                    result
+                }
+                Err(_) => {
+                    println!("⚠️ [CRON] Could not acquire lock immediately, using blocking_lock...");
+                    let manager = manager_state.0.blocking_lock();
+                    println!("✅ [CRON] blocking_lock acquired");
+                    let result = manager.fire_event(app_handle, event_id, None);
+                    println!("🔥 [CRON] fire_event result: {:?}", result);
+                    result
+                }
+            }
         } else {
+            println!("❌ [CRON] EventSinkManager state not available for {}", event_id);
             tracing::error!("EventSinkManager state not available for {}", event_id);
             Ok(false)
         }
@@ -277,21 +308,25 @@ impl CronSink {
         tz: Tz,
         now: i64,
     ) -> Result<()> {
+        println!("🔄 [CRON] handle_executed_job for: {} (expression: {:?})", event_id, expression);
         let conn = db.lock().unwrap();
 
         if let Some(expr) = expression.filter(|e| !e.trim().is_empty()) {
             if let Some(next_ts) = Self::compute_next_from_cron(expr.trim(), tz) {
+                println!("🔄 [CRON] Updating job {} with next_run: {}", event_id, next_ts);
                 conn.execute(
                     "UPDATE cron_jobs SET last_fired = ?1, next_run = ?2 WHERE event_id = ?3",
                     params![now, next_ts, event_id],
                 )?;
             } else {
+                println!("🗑️ [CRON] No next run found, deleting job: {}", event_id);
                 conn.execute(
                     "DELETE FROM cron_jobs WHERE event_id = ?1",
                     params![event_id],
                 )?;
             }
         } else {
+            println!("🗑️ [CRON] One-time job completed, deleting: {}", event_id);
             conn.execute(
                 "DELETE FROM cron_jobs WHERE event_id = ?1",
                 params![event_id],
@@ -312,36 +347,44 @@ impl CronSink {
     }
 
     async fn process_jobs(db: &DbConnection, app_handle: &AppHandle) -> Result<Option<i64>> {
+        println!("⏰ [CRON] Processing jobs cycle started");
         Self::calculate_missing_next_runs(db)?;
 
         let now = Utc::now().timestamp();
+        println!("⏰ [CRON] Current timestamp: {}", now);
         let due_jobs = Self::get_due_jobs(db, now)?;
 
+        println!("⏰ [CRON] Found {} due jobs at timestamp {}", due_jobs.len(), now);
         tracing::debug!("Found {} due jobs at timestamp {}", due_jobs.len(), now);
 
         for (event_id, expression, _scheduled_for, tz_str) in due_jobs {
             let tz = Self::parse_tz(Some(&tz_str));
 
+            println!("🔥 [CRON] Firing event: {} (expression: {:?})", event_id, expression);
             tracing::info!("Firing event: {}", event_id);
 
             match Self::fire_event(app_handle, &event_id) {
                 Ok(true) => {
+                    println!("✅ [CRON] Event {} fired successfully", event_id);
                     tracing::info!("Event {} fired successfully", event_id);
                     Self::handle_executed_job(db, &event_id, expression, tz, now)?;
                 }
                 Ok(false) => {
+                    println!("⚠️ [CRON] Event {} failed to fire, will retry in next cycle", event_id);
                     tracing::warn!(
                         "Event {} failed to fire, will retry in next cycle",
                         event_id
                     );
                 }
                 Err(e) => {
+                    println!("❌ [CRON] Error firing event {}: {}", event_id, e);
                     tracing::error!("Error firing event {}: {}", event_id, e);
                 }
             }
         }
 
         let next = Self::get_next_upcoming(db);
+        println!("⏰ [CRON] Next upcoming job at: {:?}", next);
         tracing::debug!("Next upcoming job at: {:?}", next);
         Ok(next)
     }
@@ -355,7 +398,8 @@ impl EventSink for CronSink {
         let app_handle = app_handle.clone();
         let worker_db = db.clone();
 
-        tokio::spawn(async move {
+        flow_like_types::tokio::spawn(async move {
+            println!("🚀 [CRON] Cron worker started");
             tracing::info!("🚀 Cron worker started");
 
             const MIN_TICK: Duration = Duration::from_millis(250);
@@ -365,6 +409,7 @@ impl EventSink for CronSink {
                 let next_upcoming = match Self::process_jobs(&worker_db, &app_handle).await {
                     Ok(ts) => ts,
                     Err(e) => {
+                        println!("❌ [CRON] Cron processing error: {}", e);
                         tracing::error!("Cron processing error: {}", e);
                         None
                     }
@@ -373,16 +418,20 @@ impl EventSink for CronSink {
                 let now = Utc::now().timestamp();
                 let sleep_dur = if let Some(ts) = next_upcoming {
                     if ts <= now {
+                        println!("⏰ [CRON] Job is overdue, using MIN_TICK");
                         MIN_TICK
                     } else {
                         let d = Duration::from_secs((ts - now) as u64);
-                        d.min(MAX_TICK).max(MIN_TICK)
+                        let final_dur = d.min(MAX_TICK).max(MIN_TICK);
+                        println!("💤 [CRON] Sleeping for {:?} until next job at timestamp {}", final_dur, ts);
+                        final_dur
                     }
                 } else {
+                    println!("💤 [CRON] No upcoming jobs, sleeping for MAX_TICK");
                     MAX_TICK
                 };
 
-                tokio::time::sleep(sleep_dur).await;
+                flow_like_types::tokio::time::sleep(sleep_dur).await;
             }
         });
 
@@ -400,6 +449,7 @@ impl EventSink for CronSink {
         registration: &EventRegistration,
         db: DbConnection,
     ) -> Result<()> {
+        println!("📝 [CRON] CronSink::on_register called for event_id: {}", registration.event_id);
         tracing::info!(
             "CronSink::on_register called for event_id: {}",
             registration.event_id
@@ -407,6 +457,7 @@ impl EventSink for CronSink {
 
         Self::add_job(&db, registration, self)?;
 
+        println!("✅ [CRON] CronSink::on_register completed for event_id: {}", registration.event_id);
         tracing::info!(
             "CronSink::on_register completed for event_id: {}",
             registration.event_id

@@ -93,8 +93,12 @@ impl EventBusEvent {
         if !self.offline
             && let Some(token) = &self.token
         {
+            println!("🔑 Fetching shared credentials for app: {}", self.app_id);
             let shared_credentials = hub.shared_credentials(token, &self.app_id).await?;
+            println!("🔑 Fetched shared credentials for app: {}", self.app_id);
             credentials = Some(shared_credentials);
+        } else {
+            println!("🔑 Skipping credential fetch for offline event or missing token for app: {}, ({}, {})", self.app_id, self.offline, self.token.is_none());
         }
 
         let mut internal_run = InternalRun::new(
@@ -183,8 +187,6 @@ impl EventBusEvent {
 pub struct EventBus {
     sender: mpsc::Sender<EventBusEvent>,
     app_handle: AppHandle,
-
-    pat: RwLock<Option<String>>,
 }
 
 impl EventBus {
@@ -193,21 +195,8 @@ impl EventBus {
         let new_self = Self {
             sender,
             app_handle,
-            pat: RwLock::new(None),
         };
-
-        new_self.load_pat();
         (Arc::new(new_self), receiver)
-    }
-
-    pub fn push_event(
-        &self,
-        payload: Option<Value>,
-        app_id: String,
-        event_id: String,
-        offline: bool,
-    ) -> Result<(), String> {
-        self.push_event_with_token(payload, app_id, event_id, offline, None)
     }
 
     pub fn push_event_with_token(
@@ -216,9 +205,8 @@ impl EventBus {
         app_id: String,
         event_id: String,
         offline: bool,
-        override_token: Option<String>,
+        token: Option<String>,
     ) -> Result<(), String> {
-        let token = override_token.or_else(|| self.pat.read().unwrap().clone());
 
         if !offline && token.is_none() {
             return Err("No token registered, cannot send online events".to_string());
@@ -235,46 +223,6 @@ impl EventBus {
         self.sender
             .try_send(event)
             .map_err(|e| format!("Failed to send event: {}", e))
-    }
-
-    pub fn register_pat(&self, pat: String) -> Result<(), String> {
-        *self.pat.write().unwrap() = Some(pat);
-        self.serialize_pat();
-        Ok(())
-    }
-
-    pub fn get_pat(&self) -> Option<String> {
-        self.pat.read().unwrap().clone()
-    }
-
-    fn serialize_pat(&self) {
-        let dir = event_bus_dir();
-        if let Err(e) = std::fs::create_dir_all(&dir) {
-            eprintln!("Failed to create event bus directory: {}", e);
-            return;
-        }
-
-        let pat_path = dir.join("pat.txt");
-        if let Some(pat) = self.get_pat() {
-            if let Err(e) = std::fs::write(&pat_path, pat) {
-                eprintln!("Failed to write PAT to file: {}", e);
-            }
-        }
-    }
-
-    fn load_pat(&self) {
-        let dir = event_bus_dir();
-        let pat_path = dir.join("pat.txt");
-        if pat_path.exists() {
-            match std::fs::read_to_string(&pat_path) {
-                Ok(pat) => {
-                    let _ = self.register_pat(pat);
-                }
-                Err(e) => {
-                    eprintln!("Failed to read PAT from file: {}", e);
-                }
-            }
-        }
     }
 }
 

@@ -72,24 +72,16 @@ pub async fn upsert_event(
     version_type: Option<VersionType>,
     enforce_id: Option<bool>,
     offline: Option<bool>,
-    personal_access_token: Option<String>,
+    pat: Option<String>,
 ) -> Result<Event, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
 
     if let Ok(mut app) = App::load(app_id.clone(), flow_like_state).await {
         let event = app.upsert_event(event, version_type, enforce_id).await?;
 
-        // Use provided PAT or fallback to event bus PAT
-        let personal_access_token = personal_access_token.or_else(|| {
-            match crate::state::TauriEventBusState::construct(&handler) {
-                Ok(event_bus) => event_bus.get_pat(),
-                Err(_) => None,
-            }
-        });
-
         // Debug: Log PAT presence
-        println!("PAT present for event {}: {}", event.id, personal_access_token.is_some());
-        tracing::info!("PAT present for event {}: {}", event.id, personal_access_token.is_some());
+        println!("PAT present for event {}: {}", event.id, pat.is_some());
+        tracing::info!("PAT present for event {}: {}", event.id, pat.is_some());
 
         // Automatically register/update the event with the sink manager if applicable
         match crate::state::TauriEventSinkManagerState::construct(&handler).await {
@@ -98,7 +90,7 @@ pub async fn upsert_event(
                 tracing::info!("Auto-registering event {} with sink manager", event.id);
                 let manager = event_sink_manager.lock().await;
                 if let Err(e) = manager
-                    .register_from_flow_event(&handler, &app_id, &event, offline, personal_access_token)
+                    .register_from_flow_event(&handler, &app_id, &event, offline, pat)
                     .await
                 {
                     println!(
