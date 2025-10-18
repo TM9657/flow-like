@@ -1,3 +1,4 @@
+use super::path_utils::get_value_by_path;
 use flow_like::{
     flow::{
         board::Board,
@@ -9,7 +10,6 @@ use flow_like::{
 };
 use flow_like_types::async_trait;
 use std::sync::Arc;
-use super::path_utils::get_value_by_path;
 
 #[derive(Default)]
 pub struct GetStructFieldNode {}
@@ -46,7 +46,12 @@ impl NodeLogic for GetStructFieldNode {
 
         node.add_input_pin("struct", "Struct", "Struct Output", VariableType::Struct);
 
-        node.add_input_pin("field", "Field", "Field path (e.g., 'message.content' or 'items[0].name')", VariableType::String);
+        node.add_input_pin(
+            "field",
+            "Field",
+            "Field path (e.g., 'message.content' or 'items[0].name')",
+            VariableType::String,
+        );
 
         return node;
     }

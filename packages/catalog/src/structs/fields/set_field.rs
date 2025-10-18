@@ -1,3 +1,4 @@
+use super::path_utils::set_value_by_path;
 use flow_like::{
     flow::{
         board::Board,
@@ -9,7 +10,6 @@ use flow_like::{
 };
 use flow_like_types::async_trait;
 use std::sync::Arc;
-use super::path_utils::set_value_by_path;
 
 #[derive(Default)]
 pub struct SetStructFieldNode {}
@@ -47,7 +47,12 @@ impl NodeLogic for SetStructFieldNode {
         node.add_output_pin("struct_out", "Struct", "Struct Out", VariableType::Struct);
         node.add_input_pin("struct_in", "Struct", "Struct In", VariableType::Struct);
 
-        node.add_input_pin("field", "Field", "Field path (e.g., 'message.content' or 'items[0].name')", VariableType::String);
+        node.add_input_pin(
+            "field",
+            "Field",
+            "Field path (e.g., 'message.content' or 'items[0].name')",
+            VariableType::String,
+        );
 
         node.add_input_pin("value", "Value", "Value to set", VariableType::Generic);
 
@@ -67,9 +72,7 @@ impl NodeLogic for SetStructFieldNode {
 
         set_value_by_path(&mut old_struct, &field, value)?;
 
-        context
-            .set_pin_value("struct_out", old_struct)
-            .await?;
+        context.set_pin_value("struct_out", old_struct).await?;
         context.activate_exec_pin("exec_out").await?;
         return Ok(());
     }

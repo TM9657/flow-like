@@ -100,10 +100,9 @@ pub fn set_value_by_path(value: &mut Value, path: &str, new_value: Value) -> Res
                         obj.insert(field_name.clone(), new_value);
                         return Ok(());
                     } else {
-                        return Err(anyhow!(
-                            "Cannot set field '{}' on non-object",
-                            field_name
-                        ).into());
+                        return Err(
+                            anyhow!("Cannot set field '{}' on non-object", field_name).into()
+                        );
                     }
                 }
                 PathSegment::ArrayIndex(index) => {
@@ -112,15 +111,10 @@ pub fn set_value_by_path(value: &mut Value, path: &str, new_value: Value) -> Res
                             arr[*index] = new_value;
                             return Ok(());
                         } else {
-                            return Err(anyhow!(
-                                "Array index {} out of bounds",
-                                index
-                            ).into());
+                            return Err(anyhow!("Array index {} out of bounds", index).into());
                         }
                     } else {
-                        return Err(anyhow!(
-                            "Cannot index non-array"
-                        ).into());
+                        return Err(anyhow!("Cannot index non-array").into());
                     }
                 }
             }
@@ -136,7 +130,8 @@ pub fn set_value_by_path(value: &mut Value, path: &str, new_value: Value) -> Res
                         return Err(anyhow!(
                             "Cannot traverse field '{}' on non-object",
                             field_name
-                        ).into());
+                        )
+                        .into());
                     }
                 }
                 PathSegment::ArrayIndex(index) => {
@@ -144,15 +139,10 @@ pub fn set_value_by_path(value: &mut Value, path: &str, new_value: Value) -> Res
                         if *index < arr.len() {
                             current = &mut arr[*index];
                         } else {
-                            return Err(anyhow!(
-                                "Array index {} out of bounds",
-                                index
-                            ).into());
+                            return Err(anyhow!("Array index {} out of bounds", index).into());
                         }
                     } else {
-                        return Err(anyhow!(
-                            "Cannot index non-array"
-                        ).into());
+                        return Err(anyhow!("Cannot index non-array").into());
                     }
                 }
             }

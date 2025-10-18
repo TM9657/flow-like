@@ -365,9 +365,9 @@ function EventConfiguration({
 		setFormData((prev) => ({ ...prev, [field]: value }));
 	};
 
-	const checkRequiresSink = () : boolean => {
+	const checkRequiresSink = (): boolean => {
 		const node = board.data?.nodes?.[formData.node_id];
-		if(!node) return false;
+		if (!node) return false;
 		const eventTypeConfig = eventMapping[node?.name];
 		return eventTypeConfig?.withSink.includes(formData.event_type);
 	}
@@ -840,10 +840,10 @@ function EventConfiguration({
 													})}
 											{(!board.data?.variables ||
 												Object.keys(board.data.variables).length === 0) && (
-												<div className="text-center py-8 text-muted-foreground">
-													No board variables available
-												</div>
-											)}
+													<div className="text-center py-8 text-muted-foreground">
+														No board variables available
+													</div>
+												)}
 										</div>
 									</DialogContent>
 								</Dialog>
@@ -1273,10 +1273,9 @@ function EventsTable({
 							<ExternalLinkIcon className="h-4 w-4" /> Open
 						</Button>
 						<Button
-							variant="ghost"
+							variant="destructive"
 							size="sm"
 							onClick={() => onDelete(event.id)}
-							className="text-destructive hover:text-destructive"
 						>
 							<Trash2 className="h-4 w-4" />
 						</Button>
@@ -1430,69 +1429,69 @@ function EventsTable({
 														</div>
 													)}
 												</TableCell>
-											<TableCell className="hidden xl:table-cell">
-												<div className="text-sm text-muted-foreground">
-													{event.description
-														? truncateText(event.description, 80)
-														: "No description"}
-												</div>
-											</TableCell>
-											<TableCell className="hidden lg:table-cell">
-												<div className="text-sm">
-													{boardsMap.get(event.board_id) ?? "Unknown"}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													{event.board_version
-														? `v${event.board_version.join(".")}`
-														: "Latest"}
-												</div>
-											</TableCell>
-											<TableCell>
-												<div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
-													{event.event_type}
-												</div>
-											</TableCell>
-											<TableCell>
-												<div className="text-sm text-muted-foreground">
-													{formatRelativeTime(
-														event.updated_at.secs_since_epoch,
-													)}
-												</div>
-											</TableCell>
-											<TableCell>
-												<div className="flex items-center gap-1">
-													<Button
-														variant="ghost"
-														size="sm"
-														onClick={() => onEdit(event)}
-														className="h-8 w-8 p-0"
-														aria-label="Edit"
-													>
-														<EditIcon className="h-4 w-4" />
-													</Button>
-													<Button
-														variant="ghost"
-														size="sm"
-														onClick={() =>
-															onNavigateToNode(event, event.node_id)
-														}
-														className="h-8 w-8 p-0"
-														aria-label="Open"
-													>
-														<ExternalLinkIcon className="h-4 w-4" />
-													</Button>
-													<Button
-														variant="ghost"
-														size="sm"
-														onClick={() => onDelete(event.id)}
-														className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-														aria-label="Delete"
-													>
-														<Trash2 className="h-4 w-4" />
-													</Button>
-												</div>
-											</TableCell>
-										</TableRow>
+												<TableCell className="hidden xl:table-cell">
+													<div className="text-sm text-muted-foreground">
+														{event.description
+															? truncateText(event.description, 80)
+															: "No description"}
+													</div>
+												</TableCell>
+												<TableCell className="hidden lg:table-cell">
+													<div className="text-sm">
+														{boardsMap.get(event.board_id) ?? "Unknown"}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														{event.board_version
+															? `v${event.board_version.join(".")}`
+															: "Latest"}
+													</div>
+												</TableCell>
+												<TableCell>
+													<div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
+														{event.event_type}
+													</div>
+												</TableCell>
+												<TableCell>
+													<div className="text-sm text-muted-foreground">
+														{formatRelativeTime(
+															event.updated_at.secs_since_epoch,
+														)}
+													</div>
+												</TableCell>
+												<TableCell>
+													<div className="flex items-center gap-1">
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() => onEdit(event)}
+															className="h-8 w-8 p-0"
+															aria-label="Edit"
+														>
+															<EditIcon className="h-4 w-4" />
+														</Button>
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() =>
+																onNavigateToNode(event, event.node_id)
+															}
+															className="h-8 w-8 p-0"
+															aria-label="Open"
+														>
+															<ExternalLinkIcon className="h-4 w-4" />
+														</Button>
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() => onDelete(event.id)}
+															className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+															aria-label="Delete"
+														>
+															<Trash2 className="h-4 w-4" />
+														</Button>
+													</div>
+												</TableCell>
+											</TableRow>
 										);
 									})}
 								</TableBody>

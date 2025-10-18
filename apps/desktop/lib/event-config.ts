@@ -49,7 +49,7 @@ export const EVENT_CONFIG: IEventMapping = {
 		useInterfaces: {},
 		withSink: ["email"],
 	},
-	events_api: {
+	events_generic: {
 		configInterfaces: {
 			api: ApiConfig,
 		},

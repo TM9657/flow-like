@@ -98,7 +98,12 @@ impl EventBusEvent {
             println!("🔑 Fetched shared credentials for app: {}", self.app_id);
             credentials = Some(shared_credentials);
         } else {
-            println!("🔑 Skipping credential fetch for offline event or missing token for app: {}, ({}, {})", self.app_id, self.offline, self.token.is_none());
+            println!(
+                "🔑 Skipping credential fetch for offline event or missing token for app: {}, ({}, {})",
+                self.app_id,
+                self.offline,
+                self.token.is_none()
+            );
         }
 
         let mut internal_run = InternalRun::new(
@@ -192,10 +197,7 @@ pub struct EventBus {
 impl EventBus {
     pub fn new(app_handle: AppHandle) -> (Arc<Self>, mpsc::Receiver<EventBusEvent>) {
         let (sender, receiver) = mpsc::channel(MAX_QUEUE_SIZE);
-        let new_self = Self {
-            sender,
-            app_handle,
-        };
+        let new_self = Self { sender, app_handle };
         (Arc::new(new_self), receiver)
     }
 
@@ -207,7 +209,6 @@ impl EventBus {
         offline: bool,
         token: Option<String>,
     ) -> Result<(), String> {
-
         if !offline && token.is_none() {
             return Err("No token registered, cannot send online events".to_string());
         }

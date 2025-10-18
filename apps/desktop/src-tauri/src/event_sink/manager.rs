@@ -74,7 +74,11 @@ impl RegistrationStorage {
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs() as i64;
 
-        tracing::info!("Saving registration for event {} with PAT present: {}", registration.event_id, registration.personal_access_token.is_some());
+        tracing::info!(
+            "Saving registration for event {} with PAT present: {}",
+            registration.event_id,
+            registration.personal_access_token.is_some()
+        );
 
         conn.execute(
             "INSERT OR REPLACE INTO event_registrations
@@ -94,7 +98,10 @@ impl RegistrationStorage {
             ],
         )?;
 
-        tracing::info!("Successfully saved registration for event {}", registration.event_id);
+        tracing::info!(
+            "Successfully saved registration for event {}",
+            registration.event_id
+        );
 
         Ok(())
     }
@@ -302,8 +309,7 @@ impl EventSinkManager {
         drop(stmt);
         drop(conn);
 
-        if let Some(event_bus_state) = app_handle.try_state::<crate::state::TauriEventBusState>()
-        {
+        if let Some(event_bus_state) = app_handle.try_state::<crate::state::TauriEventBusState>() {
             let event_bus = &event_bus_state.0;
 
             let push_result = if let Some(token) = personal_access_token {
@@ -315,7 +321,13 @@ impl EventSinkManager {
                     Some(token),
                 )
             } else {
-                event_bus.push_event_with_token(payload, app_id.clone(), event_id.to_string(), offline, personal_access_token)
+                event_bus.push_event_with_token(
+                    payload,
+                    app_id.clone(),
+                    event_id.to_string(),
+                    offline,
+                    personal_access_token,
+                )
             };
 
             match push_result {
@@ -620,7 +632,11 @@ impl EventSinkManager {
                     personal_access_token: final_pat.clone(),
                 };
 
-                tracing::info!("Registering event {} with PAT present: {}", event.id, registration.personal_access_token.is_some());
+                tracing::info!(
+                    "Registering event {} with PAT present: {}",
+                    event.id,
+                    registration.personal_access_token.is_some()
+                );
 
                 self.register_event(app_handle, registration).await?;
                 tracing::info!(
@@ -777,10 +793,7 @@ impl EventSinkManager {
     /// Check if a sink is active for an event
     /// Returns true if the event is registered and has an active sink
     pub fn is_event_active(&self, event_id: &str) -> bool {
-        let registration = self.storage
-            .get_registration(event_id)
-            .ok()
-            .flatten();
+        let registration = self.storage.get_registration(event_id).ok().flatten();
 
         if let Some(reg) = registration {
             // An event is considered active if it is registered and not offline

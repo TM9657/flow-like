@@ -269,18 +269,18 @@ impl Hub {
             .build()
             .map_err(flow_like_types::Error::from)?;
 
-        let resp = client.execute(request).await
+        let resp = client
+            .execute(request)
+            .await
             .map_err(flow_like_types::Error::from)?;
 
         let status = resp.status();
-        let body_text = resp.text().await
-            .map_err(flow_like_types::Error::from)?;
+        let body_text = resp.text().await.map_err(flow_like_types::Error::from)?;
 
         if !status.is_success() {
             return Err(flow_like_types::Error::msg(format!(
                 "presign failed: status={} body={}",
-                status,
-                body_text
+                status, body_text
             )));
         }
 

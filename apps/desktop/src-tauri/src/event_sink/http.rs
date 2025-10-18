@@ -152,12 +152,7 @@ impl HttpSink {
         let method_str = method.as_str();
         let full_path = format!("/{}", path);
 
-        tracing::debug!(
-            "HTTP request received: {} /{}/{}",
-            method_str,
-            app_id,
-            path
-        );
+        tracing::debug!("HTTP request received: {} /{}/{}", method_str, app_id, path);
 
         let route_info = {
             let conn = state.db.lock().unwrap();
@@ -179,12 +174,7 @@ impl HttpSink {
         };
 
         let Some((event_id, auth_token)) = route_info else {
-            tracing::debug!(
-                "Route not found: {} /{}/{}",
-                method_str,
-                app_id,
-                path
-            );
+            tracing::debug!("Route not found: {} /{}/{}", method_str, app_id, path);
             return (StatusCode::NOT_FOUND, "Route not found").into_response();
         };
 
@@ -201,7 +191,10 @@ impl HttpSink {
                     app_id,
                     path
                 );
-                return (StatusCode::UNAUTHORIZED, "Invalid or missing authorization token")
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    "Invalid or missing authorization token",
+                )
                     .into_response();
             }
         }
@@ -236,7 +229,10 @@ impl HttpSink {
                 Ok(result) => result,
                 Err(e) => {
                     tracing::error!("Event registration not found for event {}: {}", event_id, e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, "Event registration not found")
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Event registration not found",
+                    )
                         .into_response();
                 }
             }
@@ -256,7 +252,13 @@ impl HttpSink {
 
             let payload = None;
 
-            let push_result = event_bus.push_event_with_token(payload, app_id.clone(), event_id.clone(), offline, personal_access_token);
+            let push_result = event_bus.push_event_with_token(
+                payload,
+                app_id.clone(),
+                event_id.clone(),
+                offline,
+                personal_access_token,
+            );
 
             if let Err(e) = push_result {
                 tracing::error!("Failed to push event to EventBus: {}", e);
@@ -315,13 +317,14 @@ impl EventSink for HttpSink {
             .layer(ServiceBuilder::new());
 
         flow_like_types::tokio::spawn(async move {
-            let listener = match flow_like_types::tokio::net::TcpListener::bind("0.0.0.0:9657").await {
-                Ok(l) => l,
-                Err(e) => {
-                    tracing::error!("❌ Failed to bind HTTP server on 0.0.0.0:9657: {}", e);
-                    return;
-                }
-            };
+            let listener =
+                match flow_like_types::tokio::net::TcpListener::bind("0.0.0.0:9657").await {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::error!("❌ Failed to bind HTTP server on 0.0.0.0:9657: {}", e);
+                        return;
+                    }
+                };
 
             tracing::info!("✅ HTTP server listening on http://0.0.0.0:9657");
             tracing::info!("   Example: POST http://localhost:9657/my-app/webhook");

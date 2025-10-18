@@ -139,7 +139,13 @@ impl RSSSink {
                 if let Some(event_bus_state) = _app_handle.try_state::<TauriEventBusState>() {
                     let event_bus = &event_bus_state.0;
 
-                    if let Err(e) = event_bus.push_event_with_token(None, app_id, event_id.clone(), offline, None) {
+                    if let Err(e) = event_bus.push_event_with_token(
+                        None,
+                        app_id,
+                        event_id.clone(),
+                        offline,
+                        None,
+                    ) {
                         tracing::error!("Failed to push RSS event to EventBus: {}", e);
                     } else {
                         tracing::info!(

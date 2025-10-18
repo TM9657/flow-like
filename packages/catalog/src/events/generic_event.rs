@@ -6,7 +6,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::async_trait;
+use flow_like_types::{async_trait, json::json};
 
 #[derive(Default)]
 pub struct GenericEventNode {}
@@ -54,13 +54,36 @@ impl NodeLogic for GenericEventNode {
             return Ok(());
         }
 
-        let payload = context.get_payload().await?;
-        let payload = payload
+        let payload_data = context.get_payload().await?;
+        let mut payload = payload_data
             .payload
             .clone()
-            .ok_or_else(|| flow_like_types::anyhow!("Payload is missing",))?;
+            .ok_or_else(|| flow_like_types::anyhow!("Payload is missing"))?;
 
-        context.set_pin_value("payload", payload).await?;
+        if let Some(obj) = payload.as_object_mut() {
+            let mut output_pins = Vec::new();
+            for (_, pin_ref) in context.node.pins.iter() {
+                let pin_ref_guard = pin_ref.lock().await;
+                let pin = pin_ref_guard.pin.lock().await;
+                if pin.pin_type == flow_like::flow::pin::PinType::Output
+                    && pin.data_type != VariableType::Execution
+                    && pin.name != "payload"
+                {
+                    output_pins.push(pin.name.clone());
+                }
+            }
+
+            for pin_name in output_pins {
+                if let Some(value) = obj.remove(&pin_name) {
+                    context.set_pin_value(&pin_name, value).await?;
+                }
+            }
+
+            context.set_pin_value("payload", json!(obj)).await?;
+        } else {
+            context.set_pin_value("payload", payload).await?;
+        }
+
         context.activate_exec_pin_ref(&exec_out_pin).await?;
 
         return Ok(());

@@ -1,3 +1,4 @@
+use super::path_utils::has_value_by_path;
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -7,7 +8,6 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::async_trait;
-use super::path_utils::has_value_by_path;
 
 #[derive(Default)]
 pub struct HasStructFieldNode {}
@@ -38,7 +38,12 @@ impl NodeLogic for HasStructFieldNode {
 
         node.add_input_pin("struct", "Struct", "Struct Output", VariableType::Struct);
 
-        node.add_input_pin("field", "Field", "Field path (e.g., 'message.content' or 'items[0].name')", VariableType::String);
+        node.add_input_pin(
+            "field",
+            "Field",
+            "Field path (e.g., 'message.content' or 'items[0].name')",
+            VariableType::String,
+        );
 
         return node;
     }
