@@ -27,6 +27,8 @@ import {
 	useInvoke,
 	useMiniSearch,
 	useMobileHeader,
+	useQueryClient,
+	useNetworkStatus,
 } from "@tm9657/flow-like-ui";
 import {
 	ArrowUpDown,
@@ -49,6 +51,8 @@ import ImportEncryptedDialog from "./components/ImportEncryptedDialog";
 
 export default function YoursPage() {
 	const backend = useBackend();
+	const queryClient = useQueryClient();
+	const isOnline = useNetworkStatus();
 	const currentProfile = useInvoke(
 		backend.userState.getSettingsProfile,
 		backend.userState,
@@ -67,6 +71,18 @@ export default function YoursPage() {
 	const [sortBy, setSortBy] = useState<
 		"created" | "updated" | "visibility" | "name"
 	>("created");
+
+	// Handle app click with force refetch when online
+	const handleAppClick = useCallback(
+		(appId: string) => {
+			if (isOnline) {
+				// Force refetch all queries when clicking on an app (if online)
+				queryClient.invalidateQueries();
+			}
+			router.push(`/use?id=${appId}`);
+		},
+		[isOnline, queryClient, router],
+	);
 
 	const isMobileDevice = useCallback(() => {
 		if (typeof navigator === "undefined") return false;
@@ -310,7 +326,8 @@ export default function YoursPage() {
 								app={meta.app}
 								metadata={meta as IMetadata}
 								variant="extended"
-								onClick={() => router.push(`/use?id=${meta.id}`)}
+								onClick={() => handleAppClick(meta.id)}
+								onSettingsClick={() => router.push(`/library/config?id=${meta.id}`)}
 								className="w-full"
 							/>
 						</div>
@@ -328,7 +345,7 @@ export default function YoursPage() {
 							app={meta.app}
 							metadata={meta as IMetadata}
 							variant="small"
-							onClick={() => router.push(`/use?id=${meta.id}`)}
+							onClick={() => handleAppClick(meta.id)}
 							className="w-full"
 						/>
 					</div>

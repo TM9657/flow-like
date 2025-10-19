@@ -58,6 +58,7 @@ export const EVENT_CONFIG: IEventMapping = {
 		configs: {
 			api: {
 				method: "GET",
+				path: `/${createId()}`,
 				public_endpoint: false,
 			},
 		},

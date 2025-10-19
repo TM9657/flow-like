@@ -51,3 +51,4 @@ export * from "./tabs";
 export * from "./text-editor";
 export * from "./textarea";
 export * from "./tooltip";
+export * from "./network-status-indicator";

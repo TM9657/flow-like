@@ -1,22 +1,18 @@
 use anyhow::Result;
 use axum::{
-    Router,
-    body::Body,
-    extract::{Path as AxumPath, State},
-    http::{HeaderMap, Method, Request, StatusCode},
-    response::IntoResponse,
-    routing::any,
+    body::Body, extract::{Path as AxumPath, State}, response::IntoResponse, Json, Router
 };
+use axum::http::{HeaderMap, StatusCode};
+use flow_like_types::intercom::BufferedInterComHandler;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
-use tower::ServiceBuilder;
 
 use super::manager::DbConnection;
 use super::{EventRegistration, EventSink};
-use crate::state::TauriEventBusState;
-
+use crate::utils::UiEmitTarget;
+use flow_like_types::sync::Mutex;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpSink {
     pub path: String,
@@ -54,11 +50,11 @@ impl HttpSink {
         registration: &EventRegistration,
         config: &HttpSink,
     ) -> Result<()> {
-        let conn = db.lock().unwrap();
-
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs() as i64;
+
+        let conn = db.lock().unwrap();
 
         let existing = conn
             .query_row(
@@ -120,6 +116,7 @@ impl HttpSink {
 
     fn list_routes(db: &DbConnection) -> Result<Vec<(String, String, String, String)>> {
         let conn = db.lock().unwrap();
+
         let mut stmt = conn.prepare(
             "SELECT app_id, method, path, event_id FROM http_routes ORDER BY app_id, path, method",
         )?;
@@ -145,139 +142,203 @@ impl HttpSink {
     async fn handle_request(
         State(state): State<Arc<HttpServerState>>,
         AxumPath((app_id, path)): AxumPath<(String, String)>,
-        method: Method,
+        method: axum::http::Method,
         headers: HeaderMap,
-        _request: Request<Body>,
+        body: Body,
     ) -> impl IntoResponse {
+        use crate::state::TauriEventSinkManagerState;
+
+        // Extract body as string
+        let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                eprintln!("[HTTP] Failed to read request body: {}", e);
+                return (StatusCode::BAD_REQUEST, "Failed to read request body").into_response();
+            }
+        };
+
+        let body_str = if !body_bytes.is_empty() {
+            match String::from_utf8(body_bytes.to_vec()) {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    eprintln!("[HTTP] Invalid UTF-8 in request body: {}", e);
+                    return (StatusCode::BAD_REQUEST, "Invalid UTF-8 in request body").into_response();
+                }
+            }
+        } else {
+            None
+        };
+
         let method_str = method.as_str();
         let full_path = format!("/{}", path);
+        let path_without_app_id = full_path.strip_prefix(&format!("/{}", app_id)).unwrap_or(&full_path);
 
-        tracing::debug!("HTTP request received: {} /{}/{}", method_str, app_id, path);
-
-        let route_info = {
-            let conn = state.db.lock().unwrap();
-            let mut stmt = match conn.prepare(
-                "SELECT event_id, auth_token FROM http_routes
-                 WHERE app_id = ?1 AND path = ?2 AND method = ?3",
-            ) {
-                Ok(stmt) => stmt,
-                Err(e) => {
-                    tracing::error!("Database prepare error: {}", e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
-                }
-            };
-
-            stmt.query_row(params![app_id, full_path, method_str], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
-            })
-            .ok()
-        };
-
-        let Some((event_id, auth_token)) = route_info else {
-            tracing::debug!("Route not found: {} /{}/{}", method_str, app_id, path);
-            return (StatusCode::NOT_FOUND, "Route not found").into_response();
-        };
-
-        if let Some(required_token) = auth_token {
-            let provided_token = headers
-                .get("Authorization")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.strip_prefix("Bearer "));
-
-            if provided_token != Some(&required_token) {
-                tracing::warn!(
-                    "Unauthorized access attempt for route: {} /{}/{}",
-                    method_str,
-                    app_id,
-                    path
-                );
-                return (
-                    StatusCode::UNAUTHORIZED,
-                    "Invalid or missing authorization token",
-                )
-                    .into_response();
-            }
-        }
-
-        tracing::info!(
-            "HTTP request matched: {} /{}/{} -> event {}",
-            method_str,
-            app_id,
-            path,
-            event_id
+        println!(
+            "[HTTP] Received {} request for /{}{}, path without app_id: {}",
+            method_str, app_id, full_path, path_without_app_id
         );
 
-        let (offline, reg_app_id, personal_access_token) = {
+        let app_handle = state.app_handle.clone();
+
+        // Query database and release lock immediately to prevent deadlock
+        let (event_id, auth_token): (String, Option<String>) = {
             let conn = state.db.lock().unwrap();
-            let mut stmt = match conn.prepare(
-                "SELECT offline, app_id, personal_access_token FROM event_registrations WHERE event_id = ?1",
+
+            let mut route_stmt = match conn.prepare(
+                "SELECT event_id, auth_token FROM http_routes
+                     WHERE app_id = ?1 AND path = ?2 AND method = ?3",
             ) {
                 Ok(stmt) => stmt,
                 Err(e) => {
-                    tracing::error!("Failed to query event registration: {}", e);
+                    eprintln!("[HTTP] Database error preparing route statement: {}", e);
                     return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
                 }
             };
 
-            match stmt.query_row(params![event_id], |row| {
-                Ok((
-                    row.get::<_, bool>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                ))
-            }) {
+            println!(
+                "[HTTP] Querying route for app_id: {}, path: {}, method: {}",
+                app_id, path_without_app_id, method_str
+            );
+
+            let route_result = route_stmt.query_row(params![app_id, path_without_app_id, method_str], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+            });
+
+            match route_result {
                 Ok(result) => result,
                 Err(e) => {
-                    tracing::error!("Event registration not found for event {}: {}", event_id, e);
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Event registration not found",
-                    )
-                        .into_response();
+                    eprintln!("[HTTP] Error querying route: {}", e);
+                    return (StatusCode::NOT_FOUND, "Route not found").into_response();
                 }
             }
+            // Lock is released here when conn goes out of scope
         };
 
-        if reg_app_id != app_id {
-            tracing::error!(
-                "App ID mismatch: route app_id={}, registration app_id={}",
-                app_id,
-                reg_app_id
-            );
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Configuration error").into_response();
+        println!("[HTTP] Route found: event_id: {}, auth_token: {:?}", event_id, auth_token);
+
+
+        if let Some(auth_token) = auth_token {
+            let header_token = headers
+                .get("Authorization")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+
+            if header_token != auth_token {
+                return (StatusCode::UNAUTHORIZED, "Invalid auth token").into_response();
+            }
         }
 
-        if let Some(event_bus_state) = state.app_handle.try_state::<TauriEventBusState>() {
-            let event_bus = &event_bus_state.0;
+        println!("[HTTP] Authentication passed");
 
-            let payload = None;
-
-            let push_result = event_bus.push_event_with_token(
-                payload,
-                app_id.clone(),
-                event_id.clone(),
-                offline,
-                personal_access_token,
-            );
-
-            if let Err(e) = push_result {
-                tracing::error!("Failed to push event to EventBus: {}", e);
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to trigger event")
-                    .into_response();
+        // Extract body from request
+        let body = if let Some(body_str) = body_str {
+            if !body_str.is_empty() {
+                match serde_json::from_str::<flow_like_types::Value>(&body_str) {
+                    Ok(value) => Some(value),
+                    Err(e) => {
+                        eprintln!("[HTTP] Failed to parse JSON body: {}", e);
+                        return (StatusCode::BAD_REQUEST, "Invalid JSON body").into_response();
+                    }
+                }
+            } else {
+                None
             }
-
-            tracing::info!(
-                "Event {} triggered successfully (offline: {})",
-                event_id,
-                offline
-            );
         } else {
-            tracing::error!("EventBus state not available");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Event system not available",
-            )
-                .into_response();
+            None
+        };
+
+        println!("[HTTP] Triggering event: {}, with body {:?}", event_id, body);
+
+        let response = Arc::new(Mutex::new(None));
+        let (tx, rx) = flow_like_types::tokio::sync::oneshot::channel::<()>();
+        let tx = Arc::new(Mutex::new(Some(tx)));
+        let app_handle_clone = app_handle.clone();
+        let response_clone = response.clone();
+        let tx_clone = tx.clone();
+        let callback = BufferedInterComHandler::new(
+                Arc::new(move |events| {
+                    let app_handle = app_handle_clone.clone();
+                    let response = response_clone.clone();
+                    let tx = tx_clone.clone();
+                    Box::pin({
+                        async move {
+                            for event in &events {
+                                if event.event_type == "generic_result" {
+                                    println!("[HTTP] Received generic_result event: {:?}", event);
+                                    let mut resp_lock = response.lock().await;
+                                    *resp_lock = Some(event.payload.clone());
+
+                                    // Signal that we received a response
+                                    if let Some(sender) = tx.lock().await.take() {
+                                        let _ = sender.send(());
+                                    }
+                                }
+                            }
+
+                            let first_event = events.first();
+                            if let Some(first_event) = first_event {
+                                crate::utils::emit_throttled(
+                                    &app_handle,
+                                    UiEmitTarget::All,
+                                    &first_event.event_type,
+                                    events.clone(),
+                                    std::time::Duration::from_millis(150),
+                                );
+                            }
+
+                            Ok(())
+                        }
+                    })
+                }),
+                Some(100),
+                Some(400),
+                Some(true),
+            );
+
+        if let Some(manager_state) = app_handle.try_state::<TauriEventSinkManagerState>() {
+            let result = match manager_state.0.try_lock() {
+                Ok(manager) => manager.fire_event(&app_handle, &event_id, body, Some(callback)),
+                Err(_) => {
+                    let manager = manager_state.0.blocking_lock();
+                    manager.fire_event(&app_handle, &event_id, body, Some(callback))
+                }
+            };
+
+            println!("[HTTP] Event {} fired, awaiting result...", event_id);
+
+            if let Err(e) = result {
+                eprintln!(
+                    "[HTTP] Failed to fire event '{}' for HTTP request: {}",
+                    event_id, e
+                );
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to trigger event").into_response();
+            }
+        } else {
+            tracing::error!("EventSinkManager state not available for {}", event_id);
+        }
+
+        // Wait for the callback to receive the response (with timeout)
+        let timeout_result = flow_like_types::tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            rx
+        ).await;
+
+        match timeout_result {
+            Ok(Ok(())) => {
+                // Response received
+                if let Some(resp) = &*response.lock().await {
+                    println!("[HTTP] Returning response for event {}: {:?}", event_id, resp);
+                    return (StatusCode::OK, Json(resp.clone())).into_response();
+                }
+            },
+            Ok(Err(_)) => {
+                // Channel closed without sending (shouldn't happen)
+                tracing::warn!("[HTTP] Response channel closed without response for event {}", event_id);
+            },
+            Err(_) => {
+                // Timeout
+                tracing::warn!("[HTTP] Timeout waiting for response for event {}", event_id);
+            }
         }
 
         (StatusCode::OK, "Event triggered").into_response()
@@ -305,34 +366,62 @@ impl EventSink for HttpSink {
             }
         }
 
+        // Check if server is already running by trying to connect to it
+        let server_check = flow_like_types::tokio::net::TcpStream::connect("127.0.0.1:9657").await;
+        if server_check.is_ok() {
+            tracing::info!("✅ HTTP server already running on port 9657, skipping server start");
+            return Ok(());
+        }
+
         let state = Arc::new(HttpServerState {
             db: db.clone(),
             app_handle: app_handle.clone(),
         });
 
-        let app = Router::new()
-            .route("/:app_id/*path", any(Self::handle_request))
-            .route("/health", axum::routing::get(Self::health_check))
-            .with_state(state)
-            .layer(ServiceBuilder::new());
+        // Build router in a blocking context to avoid any async interference
+        let app = flow_like_types::tokio::task::spawn_blocking(move || {
+            Router::new()
+                .route("/health", axum::routing::get(Self::health_check))
+                .route(
+                    "/{app_id}/{*rest}",
+                    axum::routing::any(Self::handle_request),
+                )
+                .with_state(state)
+        })
+        .await
+        .expect("Failed to build router");
+
+        // Use a channel to wait for server to actually start before returning
+        let (tx, rx) = flow_like_types::tokio::sync::oneshot::channel();
 
         flow_like_types::tokio::spawn(async move {
             let listener =
                 match flow_like_types::tokio::net::TcpListener::bind("0.0.0.0:9657").await {
-                    Ok(l) => l,
+                    Ok(l) => {
+                        tracing::info!("✅ HTTP server listening on http://0.0.0.0:9657");
+                        tracing::info!("   Example: POST http://localhost:9657/my-app/webhook");
+                        let _ = tx.send(());
+                        l
+                    }
                     Err(e) => {
                         tracing::error!("❌ Failed to bind HTTP server on 0.0.0.0:9657: {}", e);
+                        let _ = tx.send(());
                         return;
                     }
                 };
-
-            tracing::info!("✅ HTTP server listening on http://0.0.0.0:9657");
-            tracing::info!("   Example: POST http://localhost:9657/my-app/webhook");
 
             if let Err(e) = axum::serve(listener, app).await {
                 tracing::error!("❌ HTTP server error: {}", e);
             }
         });
+
+        // Wait for server to start (with timeout)
+        let result =
+            flow_like_types::tokio::time::timeout(std::time::Duration::from_secs(5), rx).await;
+
+        if result.is_err() {
+            tracing::error!("❌ HTTP server failed to start within 5 seconds (timeout)");
+        }
 
         Ok(())
     }
@@ -364,6 +453,7 @@ impl EventSink for HttpSink {
         }
 
         Self::add_route(&db, registration, self)?;
+
         tracing::info!(
             "✓ Registered HTTP route: {} /{}{} -> event {} (app: {})",
             self.method.to_uppercase(),

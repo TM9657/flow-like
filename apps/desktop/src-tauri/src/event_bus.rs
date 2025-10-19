@@ -5,6 +5,7 @@ use flow_like::flow_like_storage::{Path, serde_arrow};
 use flow_like::hub::Hub;
 use flow_like::state::RunData;
 use flow_like::{flow::execution::RunPayload, state::FlowLikeState};
+use flow_like_types::intercom::InterComCallback;
 use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
 use flow_like_types::tokio_util::sync::CancellationToken;
 use flow_like_types::{Value, sync::mpsc, tokio::sync::Mutex};
@@ -30,6 +31,8 @@ pub struct EventBusEvent {
 
     // Either Access Token or PAT
     pub token: Option<String>,
+
+    pub callback: Option<Arc<BufferedInterComHandler>>,
 }
 
 impl EventBusEvent {
@@ -63,47 +66,42 @@ impl EventBusEvent {
         let profile = TauriSettingsState::current_profile(&app_handle).await?;
 
         let app_handle_clone = app_handle.clone();
-        let buffered_sender = Arc::new(BufferedInterComHandler::new(
-            Arc::new(move |event| {
-                let app_handle = app_handle_clone.clone();
-                Box::pin({
-                    async move {
-                        let first_event = event.first();
+        let buffered_sender = if let Some(callback) = &self.callback {
+            callback.clone()
+        } else {
+            BufferedInterComHandler::new(
+                Arc::new(move |event| {
+                    let app_handle = app_handle_clone.clone();
+                    Box::pin({
+                        async move {
+                            let first_event = event.first();
 
-                        if let Some(first_event) = first_event {
-                            crate::utils::emit_throttled(
-                                &app_handle,
-                                UiEmitTarget::All,
-                                &first_event.event_type,
-                                event.clone(),
-                                std::time::Duration::from_millis(150),
-                            );
+                            if let Some(first_event) = first_event {
+                                crate::utils::emit_throttled(
+                                    &app_handle,
+                                    UiEmitTarget::All,
+                                    &first_event.event_type,
+                                    event.clone(),
+                                    std::time::Duration::from_millis(150),
+                                );
+                            }
+
+                            Ok(())
                         }
-
-                        Ok(())
-                    }
-                })
-            }),
-            Some(100),
-            Some(400),
-            Some(true),
-        ));
+                    })
+                }),
+                Some(100),
+                Some(400),
+                Some(true),
+            )
+        };
 
         let mut credentials = None;
         if !self.offline
             && let Some(token) = &self.token
         {
-            println!("🔑 Fetching shared credentials for app: {}", self.app_id);
             let shared_credentials = hub.shared_credentials(token, &self.app_id).await?;
-            println!("🔑 Fetched shared credentials for app: {}", self.app_id);
             credentials = Some(shared_credentials);
-        } else {
-            println!(
-                "🔑 Skipping credential fetch for offline event or missing token for app: {}, ({}, {})",
-                self.app_id,
-                self.offline,
-                self.token.is_none()
-            );
         }
 
         let mut internal_run = InternalRun::new(
@@ -208,6 +206,7 @@ impl EventBus {
         event_id: String,
         offline: bool,
         token: Option<String>,
+        callback: Option<Arc<BufferedInterComHandler>>,
     ) -> Result<(), String> {
         if !offline && token.is_none() {
             return Err("No token registered, cannot send online events".to_string());
@@ -219,6 +218,7 @@ impl EventBus {
             event_id,
             token,
             offline,
+            callback
         };
 
         self.sender

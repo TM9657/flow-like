@@ -71,6 +71,7 @@ export function EventTypeConfiguration({
 }
 
 export function EventTranslation({
+	appId,
 	eventConfig,
 	eventType,
 	editing,
@@ -79,6 +80,7 @@ export function EventTranslation({
 	config,
 	onUpdate,
 }: Readonly<{
+	appId: string;
 	eventConfig: IEventMapping;
 	eventType: string;
 	editing: boolean;
@@ -103,7 +105,7 @@ export function EventTranslation({
 	const configProps = useMemo(
 		() => ({
 			isEditing: editing,
-			appId: board.app_id,
+			appId,
 			boardId: board.id,
 			config: intermediateConfig,
 			node: node,

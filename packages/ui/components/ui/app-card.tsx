@@ -6,6 +6,7 @@ import {
 	FlaskConicalIcon,
 	GlobeLockIcon,
 	LockIcon,
+	Settings,
 	Star,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -21,6 +22,7 @@ interface AppCardProps {
 	metadata?: IMetadata;
 	variant: "extended" | "small";
 	onClick?: () => void;
+	onSettingsClick?: () => void;
 	multiSelected?: boolean;
 	className?: string;
 }
@@ -31,6 +33,7 @@ export function AppCard({
 	metadata,
 	variant = "extended",
 	onClick,
+	onSettingsClick,
 	multiSelected,
 	className = "",
 }: Readonly<AppCardProps>) {
@@ -41,6 +44,7 @@ export function AppCard({
 				app={app}
 				metadata={metadata}
 				onClick={onClick}
+				onSettingsClick={onSettingsClick}
 				className={className}
 				multiSelected={multiSelected}
 			/>
@@ -53,6 +57,7 @@ export function AppCard({
 			app={app}
 			metadata={metadata}
 			onClick={onClick}
+			onSettingsClick={onSettingsClick}
 			className={className}
 			multiSelected={multiSelected}
 		/>
@@ -179,12 +184,19 @@ function SmallAppCard({
 	app,
 	metadata,
 	onClick,
+	onSettingsClick,
 	className,
 	multiSelected,
 }: Readonly<
 	Pick<
 		AppCardProps,
-		"app" | "apps" | "metadata" | "onClick" | "className" | "multiSelected"
+		| "app"
+		| "apps"
+		| "metadata"
+		| "onClick"
+		| "onSettingsClick"
+		| "className"
+		| "multiSelected"
 	>
 >) {
 	const formatPrice = (price: number) => `€${(price / 100).toFixed(2)}`;
@@ -305,18 +317,31 @@ function ExtendedAppCard({
 	app,
 	metadata,
 	onClick,
+	onSettingsClick,
 	className,
 	multiSelected,
 }: Readonly<
 	Pick<
 		AppCardProps,
-		"app" | "apps" | "metadata" | "onClick" | "className" | "multiSelected"
+		| "app"
+		| "apps"
+		| "metadata"
+		| "onClick"
+		| "onSettingsClick"
+		| "className"
+		| "multiSelected"
 	>
 >) {
 	const formatPrice = (price: number) => `€${(price / 100).toFixed(2)}`;
 	const appName = metadata?.name ?? app.id;
 	const appIcon = metadata?.icon ?? "/app-logo.webp";
 	const hasRating = app.rating_count > 0;
+	const userOwnsApp = apps.find((a) => a.id === app.id);
+	const showSettingsButton =
+		onSettingsClick &&
+		(app.visibility === IAppVisibility.Offline ||
+			app.visibility === IAppVisibility.Private ||
+			userOwnsApp);
 
 	const itemVariants = {
 		hidden: { opacity: 0, y: 20 },
@@ -361,7 +386,21 @@ function ExtendedAppCard({
 					/>
 					<div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
 
-					<div className="absolute top-3 right-3 z-10">
+					<div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+						{showSettingsButton && (
+							<motion.button
+								type="button"
+								onClick={(e) => {
+									e.stopPropagation();
+									onSettingsClick?.();
+								}}
+								className="relative bg-white/20 dark:bg-white/10 backdrop-blur-md rounded-full p-2 border border-white/30 dark:border-white/20 shadow-lg hover:shadow-xl hover:bg-white/30 dark:hover:bg-white/15 transition-all duration-300"
+								whileHover={{ scale: 1.05 }}
+								whileTap={{ scale: 0.95 }}
+							>
+								<Settings className="w-3.5 h-3.5 text-white drop-shadow-xs" />
+							</motion.button>
+						)}
 						<VisibilityIcon visibility={app.visibility} />
 					</div>
 
@@ -456,10 +495,7 @@ function Checkbox({
 	return (
 		<div
 			className="relative cursor-pointer"
-			onClick={(e) => {
-				e.stopPropagation();
-				onCheckedChange();
-			}}
+			onClick={onCheckedChange}
 		>
 			<motion.div
 				className={`w-5 h-5 rounded border-2 transition-all duration-200 ${

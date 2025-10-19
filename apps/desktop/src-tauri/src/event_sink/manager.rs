@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use flow_like_types::intercom::BufferedInterComHandler;
 use rusqlite::{Connection, params};
 use serde_json;
 use std::collections::HashSet;
@@ -6,8 +7,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager};
 
+use crate::event_sink::cron::CronSchedule;
+
 use super::cron::CronSink;
-use super::*;
 use super::{EventConfig, EventRegistration, EventSink};
 
 pub type DbConnection = Arc<Mutex<Connection>>;
@@ -56,8 +58,6 @@ impl RegistrationStorage {
     }
 
     fn save_registration(&self, registration: &EventRegistration) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-
         let config_json = serde_json::to_string(&registration.config)?;
         let default_payload_json = registration
             .default_payload
@@ -80,23 +80,28 @@ impl RegistrationStorage {
             registration.personal_access_token.is_some()
         );
 
-        conn.execute(
-            "INSERT OR REPLACE INTO event_registrations
-             (event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                registration.event_id,
-                registration.name,
-                registration.r#type,
-                updated_at,
-                created_at,
-                config_json,
-                registration.offline as i32,
-                registration.app_id,
-                default_payload_json,
-                registration.personal_access_token,
-            ],
-        )?;
+        // Acquire lock in limited scope to minimize lock duration
+        {
+            let conn = self.conn.lock().unwrap();
+
+            conn.execute(
+                "INSERT OR REPLACE INTO event_registrations
+                 (event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    registration.event_id,
+                    registration.name,
+                    registration.r#type,
+                    updated_at,
+                    created_at,
+                    config_json,
+                    registration.offline as i32,
+                    registration.app_id,
+                    default_payload_json,
+                    registration.personal_access_token,
+                ],
+            )?;
+        }
 
         tracing::info!(
             "Successfully saved registration for event {}",
@@ -254,11 +259,20 @@ impl EventSinkManager {
         app_handle: &AppHandle,
         sink: &dyn EventSink,
     ) -> Result<()> {
-        let mut started = self.started_sinks.lock().await;
+        // Check if already started WITHOUT holding the lock during start()
+        let needs_start = {
+            let started = self.started_sinks.lock().await;
+            !started.contains(sink_type)
+        };
 
-        if !started.contains(sink_type) {
+        if needs_start {
             tracing::info!("🚀 Starting {} sink for the first time", sink_type);
+
+            // Call start() WITHOUT holding the lock!
             sink.start(app_handle, self.db.clone()).await?;
+
+            // Now acquire lock again to mark as started
+            let mut started = self.started_sinks.lock().await;
             started.insert(sink_type.to_string());
             tracing::info!("✅ {} sink started and marked as active", sink_type);
         } else {
@@ -280,6 +294,7 @@ impl EventSinkManager {
         app_handle: &AppHandle,
         event_id: &str,
         payload: Option<flow_like_types::Value>,
+        callback: Option<Arc<BufferedInterComHandler>>,
     ) -> Result<bool> {
         tracing::info!("🔥 [FIRE_EVENT] Starting fire_event for: {}", event_id);
 
@@ -319,6 +334,7 @@ impl EventSinkManager {
                     event_id.to_string(),
                     offline,
                     Some(token),
+                    callback
                 )
             } else {
                 event_bus.push_event_with_token(
@@ -327,6 +343,7 @@ impl EventSinkManager {
                     event_id.to_string(),
                     offline,
                     personal_access_token,
+                    callback
                 )
             };
 
@@ -435,19 +452,19 @@ impl EventSinkManager {
                 sink.on_register(app_handle, &registration, self.db.clone())
                     .await?;
             }
-            EventConfig::Deeplink(sink) => {
+            EventConfig::Deeplink(_sink) => {
                 tracing::warn!("Deeplink sink not yet implemented");
                 // TODO: Implement DeeplinkSink
             }
-            EventConfig::Nfc(sink) => {
+            EventConfig::Nfc(_sink) => {
                 tracing::warn!("NFC sink not yet implemented");
                 // TODO: Implement NFCSink
             }
-            EventConfig::Shortcut(sink) => {
+            EventConfig::Shortcut(_sink) => {
                 tracing::warn!("Shortcut sink not yet implemented");
                 // TODO: Implement ShortcutSink
             }
-            EventConfig::Mcp(sink) => {
+            EventConfig::Mcp(_sink) => {
                 tracing::warn!("MCP sink not yet implemented");
                 // TODO: Implement MCPSink
             }
@@ -549,25 +566,8 @@ impl EventSinkManager {
         offline: Option<bool>,
         personal_access_token: Option<String>,
     ) -> Result<()> {
-        tracing::info!("=== register_from_flow_event DEBUG ===");
-        tracing::info!("Event ID: {}", event.id);
-        tracing::info!("Event Name: {}", event.name);
-        tracing::info!("Event Type: {}", event.event_type);
-        tracing::info!("Event Active: {}", event.active);
-        tracing::info!("Config bytes length: {}", event.config.len());
-
-        if !event.config.is_empty() {
-            if let Ok(config_str) = String::from_utf8(event.config.clone()) {
-                tracing::info!("Config as string: {}", config_str);
-            }
-        }
-
         // Check if this event type supports sink registration
         if !Self::supports_sink_registration(&event.event_type) {
-            tracing::debug!(
-                "Event type '{}' does not require sink registration, skipping",
-                event.event_type
-            );
             // Clean up if it was previously registered (e.g., type changed)
             if self.storage.get_registration(&event.id)?.is_some() {
                 self.unregister_event(app_handle, &event.id).await?;
@@ -577,7 +577,6 @@ impl EventSinkManager {
 
         // Only register active events
         if !event.active {
-            tracing::info!("Skipping registration for inactive event: {}", event.id);
             // If it was previously registered, unregister it
             if self.storage.get_registration(&event.id)?.is_some() {
                 self.unregister_event(app_handle, &event.id).await?;
@@ -588,26 +587,10 @@ impl EventSinkManager {
         // Determine which PAT to use based on existing registration
         let final_pat = if let Some(existing_reg) = self.storage.get_registration(&event.id)? {
             match (&existing_reg.personal_access_token, &personal_access_token) {
-                (Some(existing), None) => {
-                    // Keep existing PAT if new one is None
-                    tracing::info!("Keeping existing PAT for event {}", event.id);
-                    Some(existing.clone())
-                }
-                (None, Some(new_pat)) => {
-                    // Use new PAT if existing is None
-                    tracing::info!("Using new PAT for event {}", event.id);
-                    Some(new_pat.clone())
-                }
-                (Some(_), Some(new_pat)) => {
-                    // Both exist, use new one
-                    tracing::info!("Updating PAT for event {}", event.id);
-                    Some(new_pat.clone())
-                }
-                (None, None) => {
-                    // Neither exists
-                    tracing::info!("No PAT for event {}", event.id);
-                    None
-                }
+                (Some(existing), None) => Some(existing.clone()),
+                (None, Some(new_pat)) => Some(new_pat.clone()),
+                (Some(_), Some(new_pat)) => Some(new_pat.clone()),
+                (None, None) => None,
             }
         } else {
             // No existing registration, use whatever was provided
@@ -632,27 +615,9 @@ impl EventSinkManager {
                     personal_access_token: final_pat.clone(),
                 };
 
-                tracing::info!(
-                    "Registering event {} with PAT present: {}",
-                    event.id,
-                    registration.personal_access_token.is_some()
-                );
-
                 self.register_event(app_handle, registration).await?;
-                tracing::info!(
-                    "Auto-registered event {} with type {}",
-                    event.id,
-                    event.event_type
-                );
             }
-            Err(e) => {
-                tracing::warn!(
-                    "Could not parse config for event {} (type: {}): {}",
-                    event.id,
-                    event.event_type,
-                    e
-                );
-                tracing::warn!("Event will not have an active sink");
+            Err(_e) => {
                 // If it was previously registered, unregister it
                 if self.storage.get_registration(&event.id)?.is_some() {
                     self.unregister_event(app_handle, &event.id).await?;
@@ -846,14 +811,8 @@ impl EventSinkManager {
         // Group registrations by sink type to start each sink once
         let mut sink_types = std::collections::HashSet::new();
         for registration in &registrations {
-            tracing::debug!(
-                "Found registration: event_id={}, type={}",
-                registration.event_id,
-                registration.r#type
-            );
             // Extract sink type from config
             let sink_type = match &registration.config {
-                EventConfig::Cron(_) => "cron",
                 EventConfig::Discord(_) => "discord",
                 EventConfig::Email(_) => "email",
                 EventConfig::Http(_) => "http",
@@ -867,8 +826,10 @@ impl EventSinkManager {
                 EventConfig::Mqtt(_) => "mqtt",
                 EventConfig::Notion(_) => "notion",
                 EventConfig::GeoLocation(_) => "geolocation",
-                _ => continue, // Skip unimplemented sinks
+                EventConfig::Cron(_) => "cron",
+                _ => continue,
             };
+
             sink_types.insert(sink_type);
         }
 
@@ -878,13 +839,12 @@ impl EventSinkManager {
         for sink_type in sink_types {
             tracing::info!("⚙️ Starting {} sink during initialization", sink_type);
 
-            // Start the sink by ensuring it's initialized
-            // The sink's start() method will spawn the background worker
             match sink_type {
                 "cron" => {
                     let cron_sink = CronSink {
-                        expression: None,
-                        scheduled_for: None,
+                        schedule: CronSchedule::Expression {
+                            expression: "0 0 * * *".to_string(),
+                        },
                         last_fired: None,
                         timezone: None,
                     };
@@ -895,7 +855,63 @@ impl EventSinkManager {
                         tracing::error!("❌ Failed to start cron sink: {}", e);
                     }
                 }
-                // Add other sink types as needed
+                "http" | "api" => {
+                    let http_sink = super::http::HttpSink {
+                        path: String::new(),
+                        method: String::new(),
+                        auth_token: None,
+                    };
+                    if let Err(e) = self
+                        .ensure_sink_started("http", app_handle, &http_sink)
+                        .await
+                    {
+                        tracing::error!("❌ Failed to start http sink: {}", e);
+                    }
+                }
+                "discord" => {
+                    let discord_sink = super::discord::DiscordSink {
+                        token: String::new(),
+                        channel_id: None,
+                        intents: None,
+                    };
+                    if let Err(e) = self
+                        .ensure_sink_started("discord", app_handle, &discord_sink)
+                        .await
+                    {
+                        tracing::error!("❌ Failed to start discord sink: {}", e);
+                    }
+                }
+                "email" => {
+                    let email_sink = super::email::EmailSink {
+                        imap_server: String::new(),
+                        imap_port: 993,
+                        username: String::new(),
+                        password: String::new(),
+                        folder: None,
+                        use_tls: true,
+                        last_seen_uid: None,
+                    };
+                    if let Err(e) = self
+                        .ensure_sink_started("email", app_handle, &email_sink)
+                        .await
+                    {
+                        tracing::error!("❌ Failed to start email sink: {}", e);
+                    }
+                }
+                "rss" => {
+                    let rss_sink = super::rss::RSSSink {
+                        feed_url: String::new(),
+                        poll_interval: 300,
+                        headers: None,
+                        filter_keywords: None,
+                    };
+                    if let Err(e) = self
+                        .ensure_sink_started("rss", app_handle, &rss_sink)
+                        .await
+                    {
+                        tracing::error!("❌ Failed to start rss sink: {}", e);
+                    }
+                }
                 _ => {
                     tracing::debug!(
                         "Sink type {} will be started on first registration",

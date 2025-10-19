@@ -28,9 +28,19 @@ impl ScheduledLocal {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CronSchedule {
+    // Only "expression" is allowed in this branch
+    Expression { expression: String },
+
+    // Only "scheduled_for" is allowed in this branch
+    Scheduled { scheduled_for: ScheduledLocal },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CronSink {
-    pub expression: Option<String>,
-    pub scheduled_for: Option<ScheduledLocal>,
+    #[serde(flatten)]
+    pub schedule: CronSchedule,
     pub last_fired: Option<String>,
     pub timezone: Option<String>,
 }
@@ -103,31 +113,35 @@ impl CronSink {
         config: &CronSink,
     ) -> Result<()> {
         tracing::info!("Adding cron job for event_id: {}", registration.event_id);
-        tracing::debug!(
-            "Config: expression={:?}, scheduled_for={:?}, timezone={:?}",
-            config.expression,
-            config.scheduled_for,
-            config.timezone
-        );
 
         let conn = db.lock().unwrap();
         let now = Utc::now().timestamp();
         let tz = Self::parse_tz(config.timezone.as_deref());
 
-        let expression = config
-            .expression
-            .as_ref()
-            .map(|e| e.trim())
-            .filter(|e| !e.is_empty())
-            .map(|e| e.to_string());
-
-        let scheduled_for_ts = if expression.is_none() {
-            config
-                .scheduled_for
-                .as_ref()
-                .and_then(|sl| sl.to_utc_timestamp(tz))
-        } else {
-            None
+        let (expression, scheduled_for_ts) = match &config.schedule {
+            CronSchedule::Expression { expression } => {
+                tracing::debug!(
+                    "Config: expression='{}', timezone={:?}",
+                    expression,
+                    config.timezone
+                );
+                let expr = expression.trim();
+                if expr.is_empty() {
+                    return Err(anyhow::anyhow!("Cron expression cannot be empty"));
+                }
+                (Some(expr.to_string()), None)
+            }
+            CronSchedule::Scheduled { scheduled_for } => {
+                tracing::debug!(
+                    "Config: scheduled_for='{} {}', timezone={:?}",
+                    scheduled_for.date,
+                    scheduled_for.time,
+                    config.timezone
+                );
+                let ts = scheduled_for.to_utc_timestamp(tz)
+                    .ok_or_else(|| anyhow::anyhow!("Invalid scheduled_for date/time"))?;
+                (None, Some(ts))
+            }
         };
 
         let last_fired_ts = config
@@ -263,10 +277,10 @@ impl CronSink {
 
         if let Some(manager_state) = app_handle.try_state::<TauriEventSinkManagerState>() {
             match manager_state.0.try_lock() {
-                Ok(manager) => manager.fire_event(app_handle, event_id, None),
+                Ok(manager) => manager.fire_event(app_handle, event_id, None, None),
                 Err(_) => {
                     let manager = manager_state.0.blocking_lock();
-                    manager.fire_event(app_handle, event_id, None)
+                    manager.fire_event(app_handle, event_id, None, None)
                 }
             }
         } else {

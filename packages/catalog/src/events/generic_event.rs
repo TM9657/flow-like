@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -7,6 +9,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::{async_trait, json::json};
+pub mod push_generic_result;
 
 #[derive(Default)]
 pub struct GenericEventNode {}
@@ -60,6 +63,8 @@ impl NodeLogic for GenericEventNode {
             .clone()
             .ok_or_else(|| flow_like_types::anyhow!("Payload is missing"))?;
 
+        println!("Generic Event triggered with payload: {}", payload);
+
         if let Some(obj) = payload.as_object_mut() {
             let mut output_pins = Vec::new();
             for (_, pin_ref) in context.node.pins.iter() {
@@ -88,4 +93,11 @@ impl NodeLogic for GenericEventNode {
 
         return Ok(());
     }
+}
+
+pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
+    vec![
+        Arc::new(GenericEventNode::default()) as Arc<dyn NodeLogic>,
+        Arc::new(push_generic_result::ReturnGenericResultNode::default()) as Arc<dyn NodeLogic>,
+    ]
 }

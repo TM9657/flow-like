@@ -188,7 +188,11 @@ export default function EventsPage({
 			console.error("App ID is required to delete an event");
 			return;
 		}
-		await backend.eventState.deleteEvent(id, eventId);
+		try {
+			await backend.eventState.deleteEvent(id, eventId);
+		}catch(e) {
+		await events.refetch();
+		}
 		if (editingEvent?.id === eventId) {
 			setEditingEvent(null);
 		}
@@ -893,6 +897,7 @@ function EventConfiguration({
 						</CardHeader>
 						<CardContent className="space-y-4 flex flex-col items-start">
 							<EventTranslation
+							appId={appId}
 								eventType={formData.event_type}
 								eventConfig={eventMapping}
 								editing={isEditing}

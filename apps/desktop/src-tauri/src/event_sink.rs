@@ -80,7 +80,6 @@ pub trait EventSink: Send + Sync {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EventConfig {
-    Cron(CronSink),
     Discord(DiscordSink),
     Email(EmailSink),
 
@@ -103,6 +102,7 @@ pub enum EventConfig {
     GeoLocation(GeoLocationSink),
     Notion(NotionSink),
     Shortcut(ShortcutSink),
+    Cron(CronSink),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -145,6 +145,7 @@ impl RSSSink {
                         event_id.clone(),
                         offline,
                         None,
+                        None
                     ) {
                         tracing::error!("Failed to push RSS event to EventBus: {}", e);
                     } else {

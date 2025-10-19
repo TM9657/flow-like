@@ -9,6 +9,8 @@ import { Toaster } from "@tm9657/flow-like-ui/components/ui/sonner";
 import { TooltipProvider } from "@tm9657/flow-like-ui/components/ui/tooltip";
 import "@tm9657/flow-like-ui/global.css";
 import { createIDBPersister } from "@tm9657/flow-like-ui/lib/persister";
+import { useNetworkStatus } from "@tm9657/flow-like-ui/hooks/use-network-status";
+import { NetworkStatusIndicator } from "@tm9657/flow-like-ui/components/ui/network-status-indicator";
 import {
 	Architects_Daughter,
 	DM_Sans,
@@ -36,6 +38,7 @@ import {
 	Space_Grotesk,
 	Space_Mono,
 } from "next/font/google";
+import { useEffect } from "react";
 import { AppSidebar } from "../components/app-sidebar";
 import { DesktopAuthProvider } from "../components/auth-provider";
 import GlobalAnchorHandler from "../components/global-anchor-component";
@@ -50,7 +53,14 @@ const persister = createIDBPersister();
 const queryClient = new QueryClient({
 	defaultOptions: {
 		queries: {
-			networkMode: "offlineFirst",
+			networkMode: "always",
+			staleTime: 30 * 1000,
+			gcTime: 7 * 24 * 60 * 60 * 1000,
+			refetchOnWindowFocus: false,
+			refetchOnReconnect: false,
+			refetchOnMount: true,
+			retry: 1,
+			retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
 		},
 	},
 });
@@ -112,6 +122,23 @@ const architectsDaughter = Architects_Daughter({
 	preload: true,
 });
 
+function NetworkAwareProvider({ children }: { children: React.ReactNode }) {
+	const isOnline = useNetworkStatus();
+
+	useEffect(() => {
+		// When network comes back online, refetch all active queries
+		if (isOnline) {
+			console.log("Network reconnected - refetching stale queries");
+			queryClient.refetchQueries({
+				type: "active",
+				stale: true,
+			});
+		}
+	}, [isOnline]);
+
+	return <>{children}</>;
+}
+
 export default function RootLayout({
 	children,
 }: Readonly<{
@@ -128,29 +155,32 @@ export default function RootLayout({
 							persister,
 						}}
 					>
+					<NetworkAwareProvider>
 						<body className={inter.className}>
+							<NetworkStatusIndicator />
 							<UpdateProvider />
 							<GlobalAnchorHandler />
-							<ThemeProvider
-								attribute="class"
-								defaultTheme="system"
-								enableSystem
-								storageKey="theme"
-								disableTransitionOnChange
-							>
-								<TooltipProvider>
-									<Toaster />
-									<ToastProvider />
-									<TauriProvider>
-										<DesktopAuthProvider>
-											<PostHogPageView />
-											<ThemeLoader />
-											<AppSidebar>{children}</AppSidebar>
-										</DesktopAuthProvider>
-									</TauriProvider>
-								</TooltipProvider>
+								<ThemeProvider
+									attribute="class"
+									defaultTheme="system"
+									enableSystem
+									storageKey="theme"
+									disableTransitionOnChange
+								>
+									<TooltipProvider>
+										<Toaster />
+										<ToastProvider />
+										<TauriProvider>
+											<DesktopAuthProvider>
+												<PostHogPageView />
+												<ThemeLoader />
+												<AppSidebar>{children}</AppSidebar>
+											</DesktopAuthProvider>
+										</TauriProvider>
+									</TooltipProvider>
 							</ThemeProvider>
 						</body>
+						</NetworkAwareProvider>
 					</PersistQueryClientProvider>
 				</ReactFlowProvider>
 			</PHProvider>
