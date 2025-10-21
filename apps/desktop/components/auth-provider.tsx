@@ -1,7 +1,7 @@
 "use client";
 import { listen } from "@tauri-apps/api/event";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getAllWindows } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useBackend, useInvoke } from "@tm9657/flow-like-ui";
 import { Amplify } from "aws-amplify";
 import {
@@ -17,14 +17,13 @@ import {
 	type UserManagerSettings,
 	WebStorageStateStore,
 } from "oidc-client-ts";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "react-oidc-context";
 import { get } from "../lib/api";
 import { TauriBackend } from "./tauri-provider";
-import { openUrl } from '@tauri-apps/plugin-opener';
 
 export class OIDCTokenProvider implements TokenProvider {
-	constructor(private readonly userManager: UserManager) { }
+	constructor(private readonly userManager: UserManager) {}
 	async getTokens(options?: {
 		forceRefresh?: boolean;
 	}): Promise<AuthTokens | null> {

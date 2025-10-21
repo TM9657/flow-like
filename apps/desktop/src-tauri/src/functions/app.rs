@@ -1,6 +1,5 @@
 use std::{
     io::Cursor,
-    sync::Arc,
     time::{Duration, SystemTime},
 };
 
@@ -13,13 +12,9 @@ use flow_like::{
         board::{Board, ExecutionStage},
         execution::LogLevel,
     },
-    flow_like_storage::{
-        Path,
-        object_store::{self, ObjectStore},
-    },
+    flow_like_storage::{Path, object_store::ObjectStore},
     profile::ProfileApp,
     state::FlowLikeState,
-    utils::compression::from_compressed,
 };
 use flow_like_types::anyhow;
 use flow_like_types::create_id;
@@ -28,7 +23,6 @@ use image::ImageReader;
 use serde::Deserialize;
 use serde_json::Value;
 use tauri::AppHandle;
-use tauri_plugin_dialog::DialogExt;
 pub mod sharing;
 pub mod tables;
 

@@ -1,4 +1,6 @@
 mod deeplink;
+mod event_bus;
+mod event_sink;
 mod functions;
 mod profile;
 mod settings;
@@ -10,6 +12,7 @@ use flow_like::{
         files::store::{FlowLikeStore, local_store::LocalObjectStore},
         lancedb,
     },
+    hub::Hub,
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
@@ -26,7 +29,7 @@ use tauri_plugin_updater::UpdaterExt;
 #[cfg(not(debug_assertions))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::deeplink::handle_deep_link;
+use crate::{deeplink::handle_deep_link, event_bus::EventBus};
 
 // --- iOS Release logging -----------------------------------------------------
 #[cfg(all(target_os = "ios", not(debug_assertions)))]
@@ -245,6 +248,7 @@ pub fn run() {
         }
     }
 
+    let settings_state_for_sink = settings_state.clone();
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
@@ -252,7 +256,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
+        .setup(move |app| {
             #[cfg(desktop)]
             if let Err(e) = app
                 .handle()
@@ -261,10 +265,59 @@ pub fn run() {
                 eprintln!("Failed to register updater plugin: {}", e);
             }
 
+            // Initialize EventBus and register as managed state
+            let (event_bus, mut event_receiver) = EventBus::new(app.app_handle().clone());
+            app.manage(state::TauriEventBusState(event_bus));
+
+            // Initialize Event Sink Manager synchronously to ensure it's ready before accepting commands
+            let settings_clone = settings_state_for_sink.clone();
+            let manager_init_handle = app.app_handle().clone();
+
+            // Block on initialization to ensure EventSinkManager is ready
+            tauri::async_runtime::spawn(async move {
+                let event_sink_db_path = settings_clone
+                    .lock()
+                    .await
+                    .project_dir
+                    .parent()
+                    .unwrap()
+                    .join("event_sinks.db")
+                    .to_string_lossy()
+                    .to_string();
+
+                match event_sink::EventSinkManager::new(&event_sink_db_path) {
+                    Ok(manager) => {
+                        tracing::info!("Event Sink Manager initialized successfully");
+                        manager_init_handle.manage(state::TauriEventSinkManagerState(Arc::new(
+                            Mutex::new(manager),
+                        )));
+
+                        // Load existing registrations from database
+                        if let Some(manager_state) =
+                            manager_init_handle.try_state::<state::TauriEventSinkManagerState>()
+                        {
+                            let manager = manager_state.0.lock().await;
+                            if let Err(e) = manager.init_from_storage(&manager_init_handle).await {
+                                tracing::error!(
+                                    "Failed to restore event sink registrations: {}",
+                                    e
+                                );
+                            } else {
+                                tracing::info!("Event sink registrations restored from database");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to initialize Event Sink Manager: {}", e);
+                    }
+                }
+            });
+
             let relay_handle = app.app_handle().clone();
             let gc_handle = relay_handle.clone();
             let refetch_handle = relay_handle.clone();
             let deep_link_handle = relay_handle.clone();
+            let event_bus_handle = relay_handle.clone();
 
             #[cfg(desktop)]
             {
@@ -385,11 +438,66 @@ pub fn run() {
                 }
             });
 
+            // EventBus event processing sink
+            tauri::async_runtime::spawn(async move {
+                #[cfg(target_os = "ios")]
+                flow_like_types::tokio::time::sleep(Duration::from_millis(1200)).await;
+
+                let handle = event_bus_handle;
+
+                println!("Starting EventBus Sink");
+
+                let (flow_like_state, hub_url, http_client) = {
+                    let flow_like_state = match state::TauriFlowLikeState::construct(&handle).await
+                    {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("EventBus sink init failed: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    let settings = match state::TauriSettingsState::construct(&handle).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("EventBus sink settings init failed: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    let hub_url = settings.lock().await.default_hub.clone();
+                    let http_client = flow_like_state.lock().await.http_client.clone();
+
+                    (flow_like_state, hub_url, http_client)
+                };
+
+                let hub = match Hub::new(&hub_url, http_client).await {
+                    Ok(h) => h,
+                    Err(e) => {
+                        eprintln!("Failed to initialize Hub for EventBus: {:?}", e);
+                        return;
+                    }
+                };
+
+                println!("EventBus Sink Started");
+
+                while let Some(event) = event_receiver.recv().await {
+                    match event.execute(&handle, flow_like_state.clone(), &hub).await {
+                        Ok(meta) => _ = meta,
+                        Err(e) => {
+                            eprintln!("Error executing event: {:?}", e);
+                        }
+                    }
+                }
+
+                println!("EventBus Sink stopped");
+            });
+
             Ok(())
         })
         .plugin(tauri_plugin_shell::init())
         .manage(state::TauriSettingsState(settings_state))
-        .manage(state::TauriFlowLikeState(state_ref))
+        .manage(state::TauriFlowLikeState(state_ref.clone()))
         .invoke_handler(tauri::generate_handler![
             update,
             functions::file::get_path_meta,
@@ -482,6 +590,11 @@ pub fn run() {
             functions::flow::template::delete_template,
             functions::flow::template::get_template_meta,
             functions::flow::template::push_template_meta,
+            functions::event_sink_commands::add_event_sink,
+            functions::event_sink_commands::remove_event_sink,
+            functions::event_sink_commands::get_event_sink,
+            functions::event_sink_commands::list_event_sinks,
+            functions::event_sink_commands::is_event_sink_active,
         ]);
 
     #[cfg(desktop)]
@@ -537,7 +650,7 @@ async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
                     move |chunk_len, content_len| {
                         downloaded += chunk_len as u64;
 
-                        if let Some(total) = content_len.map(|v| v as u64) {
+                        if let Some(total) = content_len {
                             let pct = ((downloaded as f64 / total as f64) * 100.0).clamp(0.0, 100.0)
                                 as u64;
 

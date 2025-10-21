@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Folder, Plus, X } from "lucide-react";
+import { Check, Folder, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
 	Avatar,

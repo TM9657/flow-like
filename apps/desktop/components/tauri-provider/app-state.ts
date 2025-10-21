@@ -15,10 +15,10 @@ import {
 } from "@tm9657/flow-like-ui";
 import type { IAppSearchSort } from "@tm9657/flow-like-ui/lib/schema/app/app-search-query";
 import type { IMediaItem } from "@tm9657/flow-like-ui/state/backend-state/app-state";
+import { toast } from "sonner";
 import { fetcher, put } from "../../lib/api";
 import { appsDB } from "../../lib/apps-db";
 import type { TauriBackend } from "../tauri-provider";
-import { toast } from "sonner";
 
 export class AppState implements IAppState {
 	constructor(private readonly backend: TauriBackend) {}
@@ -116,7 +116,7 @@ export class AppState implements IAppState {
 		limit?: number,
 	): Promise<[IApp, IMetadata | undefined][]> {
 		if (!this.backend.profile) {
-			throw new Error("Profile not set. Cannot search apps.");
+			return [];
 		}
 
 		const queryParams: Record<string, string> = {};
@@ -136,12 +136,17 @@ export class AppState implements IAppState {
 			return this.getApps();
 		}
 
-		return await fetcher(
-			this.backend.profile,
-			`apps/search?${new URLSearchParams(queryParams)}`,
-			undefined,
-			this.backend.auth,
-		);
+		try {
+			return await fetcher(
+				this.backend.profile,
+				`apps/search?${new URLSearchParams(queryParams)}`,
+				undefined,
+				this.backend.auth,
+			);
+		} catch (error) {
+			console.error("Failed to search apps:", error);
+			return [];
+		}
 	}
 
 	async getApps(): Promise<[IApp, IMetadata | undefined][]> {
@@ -256,6 +261,7 @@ export class AppState implements IAppState {
 			this.getApp,
 			[appId],
 			[],
+			localApp,
 		);
 		this.backend.backgroundTaskHandler(promise);
 
@@ -315,22 +321,23 @@ export class AppState implements IAppState {
 			!this.backend.auth ||
 			!this.backend.queryClient
 		) {
+			if (meta) {
+				return meta;
+			}
 			throw new Error(
 				"Profile, auth or query client not set. Cannot get app meta.",
 			);
 		}
 
-		const remoteDataPromise = fetcher<IMetadata>(
-			this.backend.profile,
-			`apps/${appId}/meta?language=${language ?? "en"}`,
-			undefined,
-			this.backend.auth,
-		);
-
 		if (meta) {
 			const promise = injectDataFunction(
 				async () => {
-					const remoteMeta: IMetadata = await remoteDataPromise;
+					const remoteMeta: IMetadata = await fetcher<IMetadata>(
+						this.backend.profile!,
+						`apps/${appId}/meta?language=${language ?? "en"}`,
+						undefined,
+						this.backend.auth,
+					);
 
 					await invoke("push_app_meta", {
 						appId: appId,
@@ -345,23 +352,39 @@ export class AppState implements IAppState {
 				this.getAppMeta,
 				[appId, language],
 				[],
+				meta,
 			);
 			this.backend.backgroundTaskHandler(promise);
 
 			return meta;
 		}
 
-		const remoteMeta: IMetadata = await remoteDataPromise;
+		try {
+			const remoteMeta: IMetadata = await fetcher<IMetadata>(
+				this.backend.profile,
+				`apps/${appId}/meta?language=${language ?? "en"}`,
+				undefined,
+				this.backend.auth,
+			);
 
-		if (remoteMeta) {
-			await invoke("push_app_meta", {
-				appId: appId,
-				metadata: remoteMeta,
-				language,
-			});
+			if (remoteMeta) {
+				await invoke("push_app_meta", {
+					appId: appId,
+					metadata: remoteMeta,
+					language,
+				});
+			}
+
+			return remoteMeta;
+		} catch (error) {
+			console.error("Failed to fetch app meta from remote:", error);
+			if (meta) {
+				return meta;
+			}
+			throw new Error(
+				"Failed to fetch app meta: no local cache available and remote fetch failed.",
+			);
 		}
-
-		return remoteMeta;
 	}
 
 	async pushAppMeta(
@@ -566,8 +589,8 @@ export class AppState implements IAppState {
 			return;
 		}
 
-		if(this.backend.auth) {
-			await this.backend.auth.signinRedirect()
+		if (this.backend.auth) {
+			await this.backend.auth.signinRedirect();
 			return;
 		}
 		toast.error("You must be logged in to request access to an app.");

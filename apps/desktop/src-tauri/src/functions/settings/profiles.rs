@@ -12,7 +12,7 @@ use flow_like::{
 use flow_like_types::tokio::task::JoinHandle;
 use futures::future::join_all;
 use serde::Deserialize;
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 use tauri::{AppHandle, Url};
 use tauri_plugin_dialog::DialogExt;
 use tracing::instrument;
@@ -45,12 +45,12 @@ pub async fn get_profiles(app_handle: AppHandle) -> HashMap<String, UserProfile>
     };
 
     for profile in profiles.values_mut() {
-        if let Some(icon) = profile.hub_profile.icon.clone() {
-            if !icon.starts_with("http://") && !icon.starts_with("https://") {
-                if let Ok(icon) = presign_icon(&icon) {
-                    profile.hub_profile.icon = Some(icon);
-                }
-            }
+        if let Some(icon) = profile.hub_profile.icon.clone()
+            && !icon.starts_with("http://")
+            && !icon.starts_with("https://")
+            && let Ok(icon) = presign_icon(&icon)
+        {
+            profile.hub_profile.icon = Some(icon);
         }
     }
 
@@ -145,12 +145,12 @@ pub async fn get_current_profile(app_handle: AppHandle) -> Result<UserProfile, T
         .await
         .set_execution_settings(profile.execution_settings.clone());
 
-    if let Some(icon) = profile.hub_profile.icon.clone() {
-        if !icon.starts_with("http://") && !icon.starts_with("https://") {
-            if let Ok(icon) = presign_icon(&icon) {
-                profile.hub_profile.icon = Some(icon);
-            }
-        }
+    if let Some(icon) = profile.hub_profile.icon.clone()
+        && !icon.starts_with("http://")
+        && !icon.starts_with("https://")
+        && let Ok(icon) = presign_icon(&icon)
+    {
+        profile.hub_profile.icon = Some(icon);
     }
 
     Ok(profile)
@@ -289,7 +289,7 @@ pub async fn change_profile_image(
     profile: UserProfile,
 ) -> Result<(), TauriFunctionError> {
     let dir = get_cache_dir();
-    let dir = PathBuf::from(dir).join("icons");
+    let dir = dir.join("icons");
     let file_path = app_handle
         .dialog()
         .file()
@@ -318,10 +318,11 @@ pub async fn change_profile_image(
         .ok_or(anyhow::anyhow!("Profile not found"))?;
 
     let mut icon_to_delete = None;
-    if let Some(old_icon) = profile.hub_profile.icon.take() {
-        if !old_icon.starts_with("http://") && !old_icon.starts_with("https://") {
-            icon_to_delete = Some(old_icon);
-        }
+    if let Some(old_icon) = profile.hub_profile.icon.take()
+        && !old_icon.starts_with("http://")
+        && !old_icon.starts_with("https://")
+    {
+        icon_to_delete = Some(old_icon);
     }
 
     println!("Setting icon to {}", icon);
@@ -364,16 +365,16 @@ pub async fn profile_update_app(
         .ok_or(anyhow::anyhow!("Profile not found"))?;
     match operation {
         ProfileAppUpdateOperation::Upsert => {
-            profile.hub_profile.apps.as_mut().map(|apps| {
+            if let Some(apps) = profile.hub_profile.apps.as_mut() {
                 apps.retain(|a| a.app_id != app.app_id);
-            });
+            }
 
             profile.hub_profile.apps.get_or_insert(vec![]).push(app);
         }
         ProfileAppUpdateOperation::Remove => {
-            profile.hub_profile.apps.as_mut().map(|apps| {
+            if let Some(apps) = profile.hub_profile.apps.as_mut() {
                 apps.retain(|a| a.app_id != app.app_id);
-            });
+            }
         }
     }
     settings.serialize();

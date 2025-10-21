@@ -2,7 +2,7 @@
 
 import { createId } from "@paralleldrive/cuid2";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { openUrl as shellOpen } from '@tauri-apps/plugin-opener';
+import { openUrl as shellOpen } from "@tauri-apps/plugin-opener";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -14,19 +14,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 const isIosLike = () => {
 	if (typeof navigator === "undefined") return false;
 	// iPhone, iPad, iPod; also iPadOS reports MacIntel + touch
-	return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-		(navigator.platform === "MacIntel" && (navigator as any).maxTouchPoints > 1);
+	return (
+		/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+		(navigator.platform === "MacIntel" && (navigator as any).maxTouchPoints > 1)
+	);
 };
 
 const isTauri = () =>
-	typeof window !== "undefined" && (
-		"__TAURI__" in (window as any) ||
+	typeof window !== "undefined" &&
+	("__TAURI__" in (window as any) ||
 		"__TAURI_INTERNAL__" in (window as any) ||
-		"__TAURI_IPC__" in (window as any)
-	);
+		"__TAURI_IPC__" in (window as any));
 
-const isHttpish = (href: string) =>
-	/^(https?:|mailto:|tel:)/i.test(href);
+const isHttpish = (href: string) => /^(https?:|mailto:|tel:)/i.test(href);
 
 const sameOrigin = (href: string) => {
 	try {
@@ -69,7 +69,12 @@ const GlobalAnchorHandler = () => {
 	} | null>(null);
 
 	// Track touch/pointer start for iOS to differentiate scroll from tap
-	const touchMetaRef = useRef<{ x: number; y: number; time: number; active: boolean }>({
+	const touchMetaRef = useRef<{
+		x: number;
+		y: number;
+		time: number;
+		active: boolean;
+	}>({
 		x: 0,
 		y: 0,
 		time: 0,
@@ -79,31 +84,36 @@ const GlobalAnchorHandler = () => {
 	const IOS = useMemo(isIosLike, []);
 	const TAURI = useMemo(isTauri, []);
 
-	const createNewWindow = useCallback((url: string, title?: string) => {
-		// Desktop-only: iOS WKWebView doesn't support multiple windows like desktop
-		if (!TAURI || IOS) {
-			// Fallback to shell open if we can't spawn a new webview
-			if (isHttpish(url)) void openInBrowser(url);
-			return;
-		}
+	const createNewWindow = useCallback(
+		(url: string, title?: string) => {
+			// Desktop-only: iOS WKWebView doesn't support multiple windows like desktop
+			if (!TAURI || IOS) {
+				// Fallback to shell open if we can't spawn a new webview
+				if (isHttpish(url)) void openInBrowser(url);
+				return;
+			}
 
-		const windowLabel = `window-${createId()}`;
-		try {
-			const _view = new WebviewWindow(windowLabel, {
-				url,
-				title: title ?? "Flow-Like",
-				focus: true,
-				resizable: true,
-				maximized: true,
-			});
-		} catch (error) {
-			console.error("Failed to create new window:", error);
-		}
-	}, [IOS, TAURI]);
+			const windowLabel = `window-${createId()}`;
+			try {
+				const _view = new WebviewWindow(windowLabel, {
+					url,
+					title: title ?? "Flow-Like",
+					focus: true,
+					resizable: true,
+					maximized: true,
+				});
+			} catch (error) {
+				console.error("Failed to create new window:", error);
+			}
+		},
+		[IOS, TAURI],
+	);
 
 	useEffect(() => {
 		const lastTouchHandledAt = { value: 0 };
-		const findAnchorElement = (target: HTMLElement): HTMLAnchorElement | null => {
+		const findAnchorElement = (
+			target: HTMLElement,
+		): HTMLAnchorElement | null => {
 			let el: HTMLElement | null = target;
 			while (el) {
 				if (el.tagName === "A") return el as HTMLAnchorElement;
@@ -129,7 +139,10 @@ const GlobalAnchorHandler = () => {
 		};
 
 		// Unified external open handler
-		const openExternallyIfNeeded = async (a: HTMLAnchorElement, e: MouseEvent) => {
+		const openExternallyIfNeeded = async (
+			a: HTMLAnchorElement,
+			e: MouseEvent,
+		) => {
 			const href = a.href;
 			if (!href) return false;
 
@@ -185,9 +198,7 @@ const GlobalAnchorHandler = () => {
 			event.stopImmediatePropagation();
 
 			const linkTitle =
-				anchor.textContent?.trim() ??
-				anchor.getAttribute("title") ??
-				undefined;
+				anchor.textContent?.trim() ?? anchor.getAttribute("title") ?? undefined;
 
 			// If on iOS, prefer opening true external links in Safari; otherwise let app handle
 			if (IOS) {
@@ -318,7 +329,10 @@ const GlobalAnchorHandler = () => {
 
 		document.addEventListener("mousedown", handleMouseDown, true);
 		document.addEventListener("auxclick", handleAuxClick, true);
-		document.addEventListener("touchstart", handleTouchStart, { passive: true, capture: true });
+		document.addEventListener("touchstart", handleTouchStart, {
+			passive: true,
+			capture: true,
+		});
 		document.addEventListener("pointerdown", handlePointerDown as any, true);
 		document.addEventListener("touchend", handleTouchEnd, true);
 		document.addEventListener("pointerup", handlePointerUp as any, true);
@@ -329,7 +343,11 @@ const GlobalAnchorHandler = () => {
 			document.removeEventListener("mousedown", handleMouseDown, true);
 			document.removeEventListener("auxclick", handleAuxClick, true);
 			document.removeEventListener("touchstart", handleTouchStart, true);
-			document.removeEventListener("pointerdown", handlePointerDown as any, true);
+			document.removeEventListener(
+				"pointerdown",
+				handlePointerDown as any,
+				true,
+			);
 			document.removeEventListener("touchend", handleTouchEnd, true);
 			document.removeEventListener("pointerup", handlePointerUp as any, true);
 			document.removeEventListener("click", handleClick, true);

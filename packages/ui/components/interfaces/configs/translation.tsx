@@ -71,6 +71,7 @@ export function EventTypeConfiguration({
 }
 
 export function EventTranslation({
+	appId,
 	eventConfig,
 	eventType,
 	editing,
@@ -79,6 +80,7 @@ export function EventTranslation({
 	config,
 	onUpdate,
 }: Readonly<{
+	appId: string;
 	eventConfig: IEventMapping;
 	eventType: string;
 	editing: boolean;
@@ -95,39 +97,42 @@ export function EventTranslation({
 		return eventConfig[node?.name];
 	}, [node?.name]);
 
-	const eventConfigComponent = useMemo(() => {
+	const ConfigInterface = useMemo(() => {
 		if (!foundEventConfig) return null;
-		return foundEventConfig.configInterfaces[eventType]
-			? foundEventConfig.configInterfaces[eventType]({
-					isEditing: editing,
-					appId: board.app_id,
-					boardId: board.id,
-					config: intermediateConfig,
-					node: node,
-					nodeId: nodeId ?? "",
-					onConfigUpdate: (payload) => {
-						setIntermediateConfig(payload);
-						if (onUpdate) {
-							onUpdate(payload);
-						}
-					},
-				})
-			: null;
-	}, [
-		foundEventConfig,
-		eventType,
-		intermediateConfig,
-		board.app_id,
-		board.id,
-		node,
-		nodeId,
-		editing,
-		onUpdate,
-	]);
+		return foundEventConfig.configInterfaces[eventType] || null;
+	}, [foundEventConfig, eventType]);
 
-	if (!node) return <p className="text-red-500">Node not found.</p>;
+	const configProps = useMemo(
+		() => ({
+			isEditing: editing,
+			appId,
+			boardId: board.id,
+			config: intermediateConfig,
+			node: node,
+			nodeId: nodeId ?? "",
+			onConfigUpdate: (payload: Partial<IEventPayload>) => {
+				setIntermediateConfig(payload);
+				if (onUpdate) {
+					onUpdate(payload);
+				}
+			},
+		}),
+		[
+			editing,
+			board.app_id,
+			board.id,
+			intermediateConfig,
+			node,
+			nodeId,
+			onUpdate,
+		]
+	);
 
-	if (!foundEventConfig || !eventConfigComponent) {
+	if (!node) {
+		return <p className="text-red-500">Node not found.</p>;
+	}
+
+	if (!foundEventConfig || !ConfigInterface) {
 		return (
 			<div className="w-full space-y-4">
 				<p className="text-sm text-muted-foreground">
@@ -137,7 +142,9 @@ export function EventTranslation({
 		);
 	}
 
-	if (eventConfigComponent) {
-		return <div className="w-full space-y-4">{eventConfigComponent}</div>;
-	}
+	return (
+		<div className="w-full space-y-4">
+			<ConfigInterface {...configProps} />
+		</div>
+	);
 }

@@ -30,18 +30,22 @@ export const DndKit = [
 		},
 		render: {
 			aboveNodes: BlockDraggable,
-				aboveSlate: (props) => {
-					const backend = isTauri() ? TouchBackend : HTML5Backend;
-					const options = isTauri()
-						? { enableMouseEvents: true, delayTouchStart: 120, ignoreContextMenu: true }
-						: undefined;
-					return (
-						// react-dnd types allow options; cast if needed to satisfy TS in this environment
-						<DndProvider backend={backend as any} options={options as any}>
-							{props.children}
-						</DndProvider>
-					);
-				},
+			aboveSlate: (props) => {
+				const backend = isTauri() ? TouchBackend : HTML5Backend;
+				const options = isTauri()
+					? {
+							enableMouseEvents: true,
+							delayTouchStart: 120,
+							ignoreContextMenu: true,
+						}
+					: undefined;
+				return (
+					// react-dnd types allow options; cast if needed to satisfy TS in this environment
+					<DndProvider backend={backend as any} options={options as any}>
+						{props.children}
+					</DndProvider>
+				);
+			},
 		},
 	}),
 ];

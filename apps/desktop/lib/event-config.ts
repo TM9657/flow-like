@@ -1,16 +1,21 @@
 import {
 	ApiConfig,
 	ChatInterface,
+	CronJobConfig,
+	DeeplinkConfig,
+	DiscordConfig,
 	type IEventMapping,
 	SimpleChatConfig,
 	UserMailConfig,
 	WebhookConfig,
 } from "@tm9657/flow-like-ui";
+import { createId } from "@paralleldrive/cuid2";
 
 export const EVENT_CONFIG: IEventMapping = {
 	events_chat: {
 		configInterfaces: {
 			simple_chat: SimpleChatConfig,
+			discord: DiscordConfig,
 		},
 		useInterfaces: {
 			simple_chat: ChatInterface,
@@ -24,46 +29,77 @@ export const EVENT_CONFIG: IEventMapping = {
 				default_tools: [],
 				example_messages: [],
 			},
+			discord: {
+				token: "",
+				bot_name: "Flow-Like Bot",
+				bot_description: "",
+				intents: ["Guilds", "GuildMessages", "MessageContent"],
+				channel_whitelist: [],
+				channel_blacklist: [],
+				respond_to_mentions: true,
+				respond_to_dms: true,
+				command_prefix: "!",
+			},
 		},
 		defaultEventType: "simple_chat",
-		eventTypes: ["simple_chat", "advanced_chat"],
+		eventTypes: ["simple_chat", "advanced_chat", "discord"],
+		withSink: ["discord"],
 	},
 	events_mail: {
 		configInterfaces: {
 			user_mail: UserMailConfig,
 		},
-		defaultEventType: "user_mail",
-		eventTypes: ["user_mail"],
+		defaultEventType: "email",
+		eventTypes: ["email"],
 		configs: {
-			user_mail: {
-				mail: "",
-				sender_name: "",
-				secret_imap_password: "",
+			email: {
+				imap_server: "",
+				imap_port: 993,
+				username: "",
+				password: "",
+				use_tls: true,
 			},
 		},
 		useInterfaces: {},
+		withSink: ["email"],
 	},
-	events_api: {
+	events_generic: {
 		configInterfaces: {
 			api: ApiConfig,
+			deeplink: DeeplinkConfig,
 		},
 		defaultEventType: "api",
-		eventTypes: ["api"],
+		eventTypes: ["api", "deeplink"],
 		configs: {
 			api: {
 				method: "GET",
+				path: `/${createId()}`,
 				public_endpoint: false,
+			},
+			deeplink: {
+				path: createId(),
 			},
 		},
 		useInterfaces: {},
+		withSink: ["api", "deeplink"],
 	},
 	events_simple: {
 		configInterfaces: {
-			webhook: WebhookConfig,
+			api: WebhookConfig,
+			cron: CronJobConfig,
+			deeplink: DeeplinkConfig,
 		},
 		defaultEventType: "quick_action",
-		eventTypes: ["quick_action", "webhook"],
-		configs: {},
+		eventTypes: ["quick_action", "api", "cron", "deeplink"],
+		withSink: ["cron", "api", "deeplink"],
+		configs: {
+			cron: {
+				expression: "* */1 * * *",
+			},
+			deeplink: {
+				path: createId(),
+			},
+		},
 		useInterfaces: {},
 	},
 };

@@ -549,10 +549,11 @@ export default function Id() {
 								</Badge>
 							</div>
 							<div
-								className={`relative group border-2 border-dashed rounded-lg overflow-hidden transition-all duration-200 ${canEdit
-									? "border-gray-300 dark:border-gray-700 hover:border-primary cursor-pointer"
-									: "border-gray-200 dark:border-gray-800 cursor-not-allowed opacity-60"
-									}`}
+								className={`relative group border-2 border-dashed rounded-lg overflow-hidden transition-all duration-200 ${
+									canEdit
+										? "border-gray-300 dark:border-gray-700 hover:border-primary cursor-pointer"
+										: "border-gray-200 dark:border-gray-800 cursor-not-allowed opacity-60"
+								}`}
 								style={{ aspectRatio: "2/1" }}
 								onClick={canEdit ? handleThumbnailUpload : undefined}
 							>
@@ -603,10 +604,11 @@ export default function Id() {
 							</div>
 							<div className="flex justify-center">
 								<div
-									className={`relative group border-2 border-dashed rounded-lg overflow-hidden transition-all duration-200 w-40 h-40 ${canEdit
-										? "border-gray-300 dark:border-gray-700 hover:border-primary cursor-pointer"
-										: "border-gray-200 dark:border-gray-800 cursor-not-allowed opacity-60"
-										}`}
+									className={`relative group border-2 border-dashed rounded-lg overflow-hidden transition-all duration-200 w-40 h-40 ${
+										canEdit
+											? "border-gray-300 dark:border-gray-700 hover:border-primary cursor-pointer"
+											: "border-gray-200 dark:border-gray-800 cursor-not-allowed opacity-60"
+									}`}
 									onClick={canEdit ? handleIconUpload : undefined}
 								>
 									{/* Current icon or placeholder */}
@@ -858,12 +860,13 @@ export default function Id() {
 										<SelectItem key={status} value={status}>
 											<div className="flex items-center gap-2">
 												<div
-													className={`w-2 h-2 rounded-full ${status === IAppStatus.Active
-														? "bg-green-500"
-														: status === IAppStatus.Inactive
-															? "bg-yellow-500"
-															: "bg-gray-500"
-														}`}
+													className={`w-2 h-2 rounded-full ${
+														status === IAppStatus.Active
+															? "bg-green-500"
+															: status === IAppStatus.Inactive
+																? "bg-yellow-500"
+																: "bg-gray-500"
+													}`}
 												/>
 												{status}
 											</div>
@@ -1062,10 +1065,15 @@ export default function Id() {
 					<div className="flex items-center justify-between px-6 py-2 h-20 border-b bg-background">
 						<div>
 							<div className="text-lg font-semibold">Edit Long Description</div>
-							<div className="text-sm text-muted-foreground">Markdown supported</div>
+							<div className="text-sm text-muted-foreground">
+								Markdown supported
+							</div>
 						</div>
 						<div className="flex gap-2">
-							<Button variant="outline" onClick={() => setLongDescEditorOpen(false)}>
+							<Button
+								variant="outline"
+								onClick={() => setLongDescEditorOpen(false)}
+							>
 								Cancel
 							</Button>
 							<Button
@@ -1088,7 +1096,7 @@ export default function Id() {
 							<div
 								ref={editorAreaRef}
 								onKeyDown={(e) => {
-									if (e.key === 'Escape') {
+									if (e.key === "Escape") {
 										e.stopPropagation();
 									}
 								}}

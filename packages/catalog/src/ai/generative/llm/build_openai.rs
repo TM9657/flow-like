@@ -1,10 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use flow_like::{
-    bit::{Bit, BitModelClassification, BitModelPreference, VLMParameters},
+    bit::{Bit, BitModelClassification, VLMParameters},
     flow::{
         board::Board,
-        execution::{LogLevel, context::ExecutionContext},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         pin::PinOptions,
         variable::VariableType,
@@ -14,9 +14,8 @@ use flow_like::{
 use flow_like_storage::blake3;
 use flow_like_types::{
     Value, async_trait,
-    json::{json, to_string, to_value},
+    json::{json, to_value},
 };
-use tract_tflite::internal::tract_core::model;
 
 #[derive(Default)]
 pub struct BuildOpenAiNode {}
@@ -81,15 +80,9 @@ impl NodeLogic for BuildOpenAiNode {
         let endpoint = context.evaluate_pin::<String>("endpoint").await?;
 
         let mut params = HashMap::new();
-        params.insert(
-            "api_key".to_string(),
-            json!(api_key),
-        );
+        params.insert("api_key".to_string(), json!(api_key));
         hasher.update(api_key.as_bytes());
-        params.insert(
-            "endpoint".to_string(),
-            json!(endpoint),
-        );
+        params.insert("endpoint".to_string(), json!(endpoint));
         hasher.update(endpoint.as_bytes());
 
         if provider.to_lowercase() == "azure" {
@@ -97,18 +90,18 @@ impl NodeLogic for BuildOpenAiNode {
             hasher.update(b"azure");
         }
 
-        if let Ok(model_id) = context.evaluate_pin::<String>("model_id").await {
-            if !model_id.is_empty() {
-                params.insert("model_id".to_string(), json!(model_id));
-                hasher.update(model_id.as_bytes());
-            }
+        if let Ok(model_id) = context.evaluate_pin::<String>("model_id").await
+            && !model_id.is_empty()
+        {
+            params.insert("model_id".to_string(), json!(model_id));
+            hasher.update(model_id.as_bytes());
         }
 
-        if let Ok(version) = context.evaluate_pin::<String>("version").await {
-            if !version.is_empty() {
-                params.insert("version".to_string(), json!(version));
-                hasher.update(version.as_bytes());
-            }
+        if let Ok(version) = context.evaluate_pin::<String>("version").await
+            && !version.is_empty()
+        {
+            params.insert("version".to_string(), json!(version));
+            hasher.update(version.as_bytes());
         }
 
         let bit_hash = hasher.finalize().to_hex().to_string();
@@ -118,8 +111,18 @@ impl NodeLogic for BuildOpenAiNode {
             model_classification: BitModelClassification::default(),
             provider: flow_like_model_provider::provider::ModelProvider {
                 provider_name: "custom:openai".into(),
-                model_id: Some(context.evaluate_pin::<String>("model_id").await.unwrap_or("gpt-5".into())),
-                version: Some(context.evaluate_pin::<String>("version").await.unwrap_or("v1".into())),
+                model_id: Some(
+                    context
+                        .evaluate_pin::<String>("model_id")
+                        .await
+                        .unwrap_or("gpt-5".into()),
+                ),
+                version: Some(
+                    context
+                        .evaluate_pin::<String>("version")
+                        .await
+                        .unwrap_or("v1".into()),
+                ),
                 params: Some(params),
             },
         };

@@ -60,6 +60,7 @@ export class EventState implements IEventState {
 						appId: appId,
 						event: remoteData,
 						enforceId: true,
+						offline: isOffline,
 					});
 				}
 
@@ -106,6 +107,7 @@ export class EventState implements IEventState {
 						appId: appId,
 						event: event,
 						enforceId: true,
+						offline: isOffline,
 					});
 				}
 
@@ -172,6 +174,7 @@ export class EventState implements IEventState {
 		appId: string,
 		event: IEvent,
 		versionType?: IVersionType,
+		personalAccessToken?: string,
 	): Promise<IEvent> {
 		const isOffline = await this.backend.isOffline(appId);
 		if (isOffline) {
@@ -179,6 +182,8 @@ export class EventState implements IEventState {
 				appId: appId,
 				event: event,
 				versionType: versionType,
+				offline: isOffline,
+				pat: personalAccessToken,
 			});
 		}
 		if (
@@ -207,6 +212,8 @@ export class EventState implements IEventState {
 			event: response,
 			versionType: versionType,
 			enforceId: true,
+			offline: isOffline,
+			pat: personalAccessToken,
 		});
 		return response;
 	}
@@ -385,7 +392,7 @@ export class EventState implements IEventState {
 			events: channel,
 			streamState: streamState,
 			credentials,
-			token
+			token,
 		});
 
 		closed = true;
@@ -396,6 +403,12 @@ export class EventState implements IEventState {
 	async cancelExecution(runId: string): Promise<void> {
 		await invoke("cancel_execution", {
 			runId: runId,
+		});
+	}
+
+	async isEventSinkActive(eventId: string): Promise<boolean> {
+		return await invoke<boolean>("is_event_sink_active", {
+			eventId: eventId,
 		});
 	}
 }

@@ -13,7 +13,20 @@ const PersistQueryClientProvider = lazy(() =>
 
 const Board = lazy(() => import("./board"));
 const persister = createIDBPersister();
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+	defaultOptions: {
+		queries: {
+			networkMode: "offlineFirst",
+			staleTime: 1000,
+			gcTime: 24 * 60 * 60 * 1000,
+			refetchOnWindowFocus: false,
+			refetchOnReconnect: "always",
+			refetchOnMount: false,
+			retry: 1,
+			retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+		},
+	},
+});
 export default function BoardWrapper({
 	nodes,
 	edges,

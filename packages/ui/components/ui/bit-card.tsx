@@ -117,7 +117,6 @@ export function BitCard({
 		[],
 	);
 
-
 	// A bit is considered "virtual" if it has no download link OR its size resolves to 0.
 	// These represent hosted / proxied models (no local artifact). We immediately treat
 	// a download request as a no-op success so the UI does not show a perpetual "Queued" state.
@@ -362,17 +361,17 @@ export function BitCard({
 								<Badge
 									variant={isInstalled.data ? "default" : "outline"}
 									className={`text-xs font-medium transition-all ${
-										(isInstalled.data || bitSize.data === 0)
+										isInstalled.data || bitSize.data === 0
 											? "bg-emerald-500 hover:bg-emerald-600 text-white"
 											: "hover:bg-primary/10"
 									}`}
 								>
-									{(isInstalled.data || bitSize.data === 0) ? (
+									{isInstalled.data || bitSize.data === 0 ? (
 										<PackageCheckIcon className="h-3 w-3 mr-1" />
 									) : (
 										<DownloadCloudIcon className="h-3 w-3 mr-1" />
 									)}
-									{(bitSize.data === 0)
+									{bitSize.data === 0
 										? "Hosted"
 										: humanFileSize(bitSize.data ?? 0)}
 								</Badge>

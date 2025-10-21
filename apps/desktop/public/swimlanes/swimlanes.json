@@ -21,12 +21,11 @@
 				"id": "featured-3",
 				"type": "static",
 				"title": "Build Your First Flow",
-				"description":
-					"Learn how to create powerful workflows with our comprehensive guide",
+				"description": "Learn how to create powerful workflows with our comprehensive guide",
 				"image": "/placeholder-thumbnail.webp",
 				"link": "https://docs.flow-like.com/start/first-use/",
 				"badge": "Tutorial",
-                "icon": "https://cdn.flow-like.com/media/play.svg",
+				"icon": "https://cdn.flow-like.com/media/play.svg",
 				"gradient": "from-blue-500 to-purple-600"
 			}
 		],
@@ -54,8 +53,7 @@
 				"id": "model-spotlight",
 				"type": "static",
 				"title": "New: Advanced Vision Models",
-				"description":
-					"Experience next-generation image understanding with our latest model collection",
+				"description": "Experience next-generation image understanding with our latest model collection",
 				"image": "/swimlanes/gemma.jpg",
 				"badge": "New",
 				"icon": "https://cdn.flow-like.com/media/sparkles.svg",
@@ -97,8 +95,7 @@
 				"id": "trend-spotlight-release",
 				"type": "static",
 				"title": "Release v0.0.4 - New Features!",
-				"description":
-					"Excel Tables, ML Nodes & Auto-Updates! Check out what's new in Flow Like.",
+				"description": "Excel Tables, ML Nodes & Auto-Updates! Check out what's new in Flow Like.",
 				"badge": "Release",
 				"icon": "/base-logo.svg",
 				"gradient": "from-[#7289da] to-[#99aab5] dark:to-[#424549]",
@@ -126,8 +123,7 @@
 				"id": "trend-spotlight",
 				"type": "static",
 				"title": "Join Our Community!",
-				"description":
-					"Connect, share, and get support on Discord. Be part of the Flow Like community.",
+				"description": "Connect, share, and get support on Discord. Be part of the Flow Like community.",
 				"badge": "Community",
 				"icon": "https://cdn.flow-like.com/media/discord.svg",
 				"gradient": "from-[#7289da] to-[#99aab5] dark:to-[#424549]",

@@ -40,7 +40,6 @@ export function useInvoke<T, Args extends any[]>(
 			...args,
 			...additionalDeps,
 		].filter((arg) => typeof arg !== "undefined"),
-		staleTime: 1000,
 		queryFn: async () => {
 			try {
 				console.log(
@@ -61,6 +60,8 @@ export function useInvoke<T, Args extends any[]>(
 			}
 		},
 		enabled,
+		// Use defaults from QueryClient, but allow individual overrides if needed
+		// This ensures consistency with global cache settings
 	});
 
 	return query;

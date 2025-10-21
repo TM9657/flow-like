@@ -1,9 +1,6 @@
 use std::time::Duration;
 
-use crate::{
-    entity::user, error::ApiError, middleware::jwt::AppUser, state::AppState,
-    user_management::UserManagement,
-};
+use crate::{entity::user, error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
 use flow_like_types::create_id;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait};

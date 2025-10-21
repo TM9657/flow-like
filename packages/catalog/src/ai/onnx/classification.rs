@@ -23,7 +23,7 @@ use flow_like_model_provider::ml::{
     ort::{
         inputs,
         session::{Session, SessionInputValue, SessionOutputs},
-        value::{TensorRef, Value},
+        value::Value,
     },
 };
 use ndarray::{Array1, ArrayView1};

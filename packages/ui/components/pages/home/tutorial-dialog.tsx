@@ -1,19 +1,7 @@
 import { GitHubLogoIcon } from "@radix-ui/react-icons";
 import { Button } from "@tm9657/flow-like-ui";
-import {
-	Book,
-	Heart,
-	MessageCircle,
-	Rocket,
-	Zap,
-} from "lucide-react";
-import {
-	useEffect,
-	useMemo,
-	useState,
-	useRef,
-	useCallback,
-} from "react";
+import { Book, Heart, MessageCircle, Rocket, Zap } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type WelcomeStep = "welcome" | "docs" | "discord" | "github";
 
@@ -38,26 +26,32 @@ function usePrefersReducedMotion() {
 }
 
 // Spectacular animated starfield background with parallax and comets
-function UniverseBackground({ variant = "welcome" }: { variant?: WelcomeStep }) {
+function UniverseBackground({
+	variant = "welcome",
+}: { variant?: WelcomeStep }) {
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const rafRef = useRef<number | null>(null);
-	const starsRef = useRef<Array<{
-		x: number;
-		y: number;
-		z: number; // depth 0..1
-		size: number;
-		baseAlpha: number;
-		twinkle: number;
-		hue: number;
-	}>>([]);
-	const cometsRef = useRef<Array<{
-		x: number;
-		y: number;
-		vx: number;
-		vy: number;
-		life: number;
-		maxLife: number;
-	}>>([]);
+	const starsRef = useRef<
+		Array<{
+			x: number;
+			y: number;
+			z: number; // depth 0..1
+			size: number;
+			baseAlpha: number;
+			twinkle: number;
+			hue: number;
+		}>
+	>([]);
+	const cometsRef = useRef<
+		Array<{
+			x: number;
+			y: number;
+			vx: number;
+			vy: number;
+			life: number;
+			maxLife: number;
+		}>
+	>([]);
 	const pointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 	const reducedMotion = usePrefersReducedMotion();
 
@@ -83,29 +77,33 @@ function UniverseBackground({ variant = "welcome" }: { variant?: WelcomeStep }) 
 		if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 	}, []);
 
-	const seedStars = useCallback((canvas: HTMLCanvasElement) => {
-		const area = canvas.clientWidth * canvas.clientHeight;
-		const density = reducedMotion ? 0.00015 : 0.00035; // stars per px
-		const count = Math.max(80, Math.min(900, Math.floor(area * density)));
-		const arr: typeof starsRef.current = [];
-		for (let i = 0; i < count; i++) {
-			const z = Math.random();
-			const size = 0.7 + Math.pow(z, 2) * 1.8;
-			const baseAlpha = 0.25 + Math.random() * 0.55;
-			const twinkle = 0.5 + Math.random() * 1.5;
-			const hue = palette.hueMin + Math.random() * (palette.hueMax - palette.hueMin);
-			arr.push({
-				x: Math.random() * canvas.clientWidth,
-				y: Math.random() * canvas.clientHeight,
-				z,
-				size,
-				baseAlpha,
-				twinkle,
-				hue,
-			});
-		}
-		starsRef.current = arr;
-	}, [palette, reducedMotion]);
+	const seedStars = useCallback(
+		(canvas: HTMLCanvasElement) => {
+			const area = canvas.clientWidth * canvas.clientHeight;
+			const density = reducedMotion ? 0.00015 : 0.00035; // stars per px
+			const count = Math.max(80, Math.min(900, Math.floor(area * density)));
+			const arr: typeof starsRef.current = [];
+			for (let i = 0; i < count; i++) {
+				const z = Math.random();
+				const size = 0.7 + Math.pow(z, 2) * 1.8;
+				const baseAlpha = 0.25 + Math.random() * 0.55;
+				const twinkle = 0.5 + Math.random() * 1.5;
+				const hue =
+					palette.hueMin + Math.random() * (palette.hueMax - palette.hueMin);
+				arr.push({
+					x: Math.random() * canvas.clientWidth,
+					y: Math.random() * canvas.clientHeight,
+					z,
+					size,
+					baseAlpha,
+					twinkle,
+					hue,
+				});
+			}
+			starsRef.current = arr;
+		},
+		[palette, reducedMotion],
+	);
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -117,7 +115,7 @@ function UniverseBackground({ variant = "welcome" }: { variant?: WelcomeStep }) 
 		const ctx = canvas.getContext("2d");
 		if (!ctx) return;
 
-	const draw = (now: number) => {
+		const draw = (now: number) => {
 			const dt = Math.min(0.05, (now - last) / 1000);
 			last = now;
 			ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
@@ -133,7 +131,11 @@ function UniverseBackground({ variant = "welcome" }: { variant?: WelcomeStep }) 
 				const depth = 0.3 + s.z * 0.7;
 				const px = s.x + parallaxX * (1 - depth) * 12;
 				const py = s.y + parallaxY * (1 - depth) * 12;
-				const alpha = s.baseAlpha * (reducedMotion ? 1 : 0.5 + 0.5 * Math.sin(now * 0.002 * s.twinkle + i));
+				const alpha =
+					s.baseAlpha *
+					(reducedMotion
+						? 1
+						: 0.5 + 0.5 * Math.sin(now * 0.002 * s.twinkle + i));
 
 				ctx.beginPath();
 				ctx.fillStyle = `hsla(${s.hue}, 80%, ${variant === "github" ? 88 : 74}%, ${alpha})`;
@@ -150,7 +152,14 @@ function UniverseBackground({ variant = "welcome" }: { variant?: WelcomeStep }) 
 				const y = fromTop ? -40 : Math.random() * canvas.clientHeight * 0.4;
 				const angle = (fromTop ? 1 : 0.7) + Math.random() * 0.3;
 				const speed = 280 + Math.random() * 140;
-				cometsRef.current.push({ x, y, vx: speed * angle, vy: speed * 0.45, life: 0, maxLife: 1.8 + Math.random() * 0.8 });
+				cometsRef.current.push({
+					x,
+					y,
+					vx: speed * angle,
+					vy: speed * 0.45,
+					life: 0,
+					maxLife: 1.8 + Math.random() * 0.8,
+				});
 			}
 
 			ctx.globalCompositeOperation = "lighter";
@@ -187,20 +196,33 @@ function UniverseBackground({ variant = "welcome" }: { variant?: WelcomeStep }) 
 				const w = canvas.clientWidth;
 				const h = canvas.clientHeight;
 
-				const drawAurora = (offset: number, amp: number, thickness: number, speed: number) => {
+				const drawAurora = (
+					offset: number,
+					amp: number,
+					thickness: number,
+					speed: number,
+				) => {
 					ctx.save();
 					ctx.globalCompositeOperation = "lighter";
 					ctx.globalAlpha = 0.08;
 					ctx.lineWidth = thickness;
-					const grad = ctx.createLinearGradient(0, h * 0.25 + offset, w, h * 0.75 + offset);
+					const grad = ctx.createLinearGradient(
+						0,
+						h * 0.25 + offset,
+						w,
+						h * 0.75 + offset,
+					);
 					grad.addColorStop(0, `hsla(${baseHueA}, 100%, 70%, 0.6)`);
 					grad.addColorStop(0.5, `hsla(${baseHueB}, 100%, 60%, 0.35)`);
 					grad.addColorStop(1, `hsla(${baseHueA}, 100%, 75%, 0.5)`);
 					ctx.strokeStyle = grad;
 					ctx.beginPath();
-					const k = (now * 0.001 * speed);
+					const k = now * 0.001 * speed;
 					for (let x = -50; x <= w + 50; x += 6) {
-						const y = h * 0.5 + Math.sin(x * 0.008 + k + offset) * amp + Math.cos(x * 0.015 - k * 0.6) * (amp * 0.4);
+						const y =
+							h * 0.5 +
+							Math.sin(x * 0.008 + k + offset) * amp +
+							Math.cos(x * 0.015 - k * 0.6) * (amp * 0.4);
 						if (x === -50) ctx.moveTo(x, y);
 						else ctx.lineTo(x, y);
 					}
@@ -281,10 +303,17 @@ export function TutorialDialog() {
 			const ua = navigator.userAgent.toLowerCase();
 			const isLinux = ua.includes("linux");
 			const hasBackdrop =
-				(CSS && (CSS as any).supports && (CSS as any).supports("backdrop-filter", "blur(4px)")) ||
-				(CSS && (CSS as any).supports && (CSS as any).supports("-webkit-backdrop-filter", "blur(4px)"));
+				(CSS &&
+					(CSS as any).supports &&
+					(CSS as any).supports("backdrop-filter", "blur(4px)")) ||
+				(CSS &&
+					(CSS as any).supports &&
+					(CSS as any).supports("-webkit-backdrop-filter", "blur(4px)"));
 			// Some Linux WebKit builds lie about supports; prefer hard fallback on Linux + WebKit.
-			const isWebKit = /applewebkit\//.test(ua) && !/chrome\//.test(ua) ? true : /webkit/.test(ua);
+			const isWebKit =
+				/applewebkit\//.test(ua) && !/chrome\//.test(ua)
+					? true
+					: /webkit/.test(ua);
 			const forceFallback = isLinux && isWebKit;
 			setSupportsBackdrop(Boolean(hasBackdrop) && !forceFallback);
 		} catch {
@@ -365,7 +394,10 @@ export function TutorialDialog() {
 			/>
 
 			{/* Confetti overlay */}
-			<canvas ref={confettiCanvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-[11]" />
+			<canvas
+				ref={confettiCanvasRef}
+				className="absolute inset-0 w-full h-full pointer-events-none z-[11]"
+			/>
 
 			<div className="relative z-10 w-full h-full flex items-stretch justify-center">
 				{children}
@@ -573,18 +605,21 @@ export function TutorialDialog() {
 	if (!showTutorial) return null;
 
 	return (
-		<div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Welcome tour">
+		<div
+			className="fixed inset-0 z-50"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Welcome tour"
+		>
 			<AnimatedBackground variant={currentStep}>
 				{/* Container: mobile centered card, desktop card */}
 				<div
-					className={
-						`w-full max-w-[420px] mx-2 sm:mx-0 sm:w-[750px] sm:max-w-[90vw] h-auto max-h-[85dvh] sm:h-auto ${
-							supportsBackdrop
-								? "bg-background/25 backdrop-blur-2xl border"
-								: "bg-card border"
-						}
-						border-border/40 rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl overflow-hidden flex flex-col`
+					className={`w-full max-w-[420px] mx-2 sm:mx-0 sm:w-[750px] sm:max-w-[90vw] h-auto max-h-[85dvh] sm:h-auto ${
+						supportsBackdrop
+							? "bg-background/25 backdrop-blur-2xl border"
+							: "bg-card border"
 					}
+						border-border/40 rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl overflow-hidden flex flex-col`}
 					ref={containerRef}
 					onTouchStart={(e) => {
 						touchStartXRef.current = e.touches[0]?.clientX ?? null;
@@ -628,17 +663,32 @@ export function TutorialDialog() {
 
 					{/* Body */}
 					<div
-						className={supportsBackdrop ? "flex-1 min-h-0 overflow-y-auto bg-background/10 backdrop-blur-lg sm:h-[450px]" : "flex-1 min-h-0 overflow-y-auto bg-card sm:h-[450px]"}
+						className={
+							supportsBackdrop
+								? "flex-1 min-h-0 overflow-y-auto bg-background/10 backdrop-blur-lg sm:h-[450px]"
+								: "flex-1 min-h-0 overflow-y-auto bg-card sm:h-[450px]"
+						}
 					>
 						{/* Step transition wrapper */}
-						<div key={currentStep} className={reducedMotion ? "" : "transition-all duration-500 ease-out transform"}>
+						<div
+							key={currentStep}
+							className={
+								reducedMotion
+									? ""
+									: "transition-all duration-500 ease-out transform"
+							}
+						>
 							<CurrentStepComponent />
 						</div>
 					</div>
 
 					{/* Footer */}
 					<div
-						className={supportsBackdrop ? "p-4 sm:p-8 bg-background/15 backdrop-blur-xl border-t border-border/30" : "p-4 sm:p-8 bg-card border-t border-border/30"}
+						className={
+							supportsBackdrop
+								? "p-4 sm:p-8 bg-background/15 backdrop-blur-xl border-t border-border/30"
+								: "p-4 sm:p-8 bg-card border-t border-border/30"
+						}
 						style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}
 					>
 						{/* Dots are enough; progress bar removed per feedback */}
@@ -660,7 +710,11 @@ export function TutorialDialog() {
 						<div className="sm:hidden flex flex-col gap-3">
 							<Button
 								onClick={handleNext}
-								className={supportsBackdrop ? "w-full bg-primary/90 backdrop-blur-xs hover:bg-primary rounded-xl shadow-lg hover:shadow-xl transition-shadow" : "w-full bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-shadow"}
+								className={
+									supportsBackdrop
+										? "w-full bg-primary/90 backdrop-blur-xs hover:bg-primary rounded-xl shadow-lg hover:shadow-xl transition-shadow"
+										: "w-full bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-shadow"
+								}
 							>
 								{currentStep === "github" ? "Get Started" : "Next"}
 							</Button>
@@ -670,16 +724,26 @@ export function TutorialDialog() {
 										variant="ghost"
 										size="sm"
 										onClick={handlePrevious}
-										className={supportsBackdrop ? "hover:bg-background/40 backdrop-blur-xs rounded-xl" : "hover:bg-muted rounded-xl"}
+										className={
+											supportsBackdrop
+												? "hover:bg-background/40 backdrop-blur-xs rounded-xl"
+												: "hover:bg-muted rounded-xl"
+										}
 									>
 										Previous
-										</Button>
-								) : <div />}
+									</Button>
+								) : (
+									<div />
+								)}
 								<Button
 									variant="ghost"
 									size="sm"
 									onClick={() => handleSkip(true)}
-									className={supportsBackdrop ? "hover:bg-background/40 backdrop-blur-xs rounded-xl" : "hover:bg-muted rounded-xl"}
+									className={
+										supportsBackdrop
+											? "hover:bg-background/40 backdrop-blur-xs rounded-xl"
+											: "hover:bg-muted rounded-xl"
+									}
 								>
 									Skip Tour
 								</Button>
@@ -700,20 +764,28 @@ export function TutorialDialog() {
 										}
 									>
 										Previous
-										</Button>
+									</Button>
 								)}
 							</div>
 							<div className="flex gap-4">
 								<Button
 									variant="ghost"
 									onClick={() => handleSkip(true)}
-									className={supportsBackdrop ? "hover:bg-background/40 backdrop-blur-xs rounded-xl" : "hover:bg-muted rounded-xl"}
+									className={
+										supportsBackdrop
+											? "hover:bg-background/40 backdrop-blur-xs rounded-xl"
+											: "hover:bg-muted rounded-xl"
+									}
 								>
 									Skip Tour
 								</Button>
 								<Button
 									onClick={handleNext}
-									className={supportsBackdrop ? "bg-primary/90 backdrop-blur-xs hover:bg-primary rounded-xl shadow-lg hover:shadow-xl transition-shadow" : "bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-shadow"}
+									className={
+										supportsBackdrop
+											? "bg-primary/90 backdrop-blur-xs hover:bg-primary rounded-xl shadow-lg hover:shadow-xl transition-shadow"
+											: "bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-shadow"
+									}
 								>
 									{currentStep === "github" ? "Get Started" : "Next"}
 								</Button>

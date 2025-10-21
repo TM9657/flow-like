@@ -344,42 +344,41 @@ interface TableCardProps {
 }
 
 const TableCard: React.FC<TableCardProps> = ({ appId, table, onSelect }) => {
-    const backend = useBackend();
-    const count = useInvoke(backend.dbState.countItems, backend.dbState, [
-        appId,
-        table.name
-    ]);
+	const backend = useBackend();
+	const count = useInvoke(backend.dbState.countItems, backend.dbState, [
+		appId,
+		table.name,
+	]);
 
-    return (
-        <Card className="group cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 hover:bg-accent/50 border">
-            <button
-                onClick={onSelect}
-                className="w-full h-full p-0 text-left"
-                title={`Open table: ${table.name}`}
-            >
-                <CardHeader className="py-2 px-6">
-                    <div className="flex items-start justify-between gap-4 mb-4">
-                        <div className="flex-shrink-0 rounded-xl bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
-                            <Columns className="h-5 w-5 text-primary" />
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground transition-all group-hover:translate-x-1 group-hover:text-primary flex-shrink-0 mt-0.5" />
-                    </div>
+	return (
+		<Card className="group cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 hover:bg-accent/50 border">
+			<button
+				onClick={onSelect}
+				className="w-full h-full p-0 text-left"
+				title={`Open table: ${table.name}`}
+			>
+				<CardHeader className="py-2 px-6">
+					<div className="flex items-start justify-between gap-4 mb-4">
+						<div className="flex-shrink-0 rounded-xl bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
+							<Columns className="h-5 w-5 text-primary" />
+						</div>
+						<ChevronRight className="h-5 w-5 text-muted-foreground transition-all group-hover:translate-x-1 group-hover:text-primary flex-shrink-0 mt-0.5" />
+					</div>
 
-                    <div className="space-y-2">
-                        <CardTitle className="text-base font-semibold leading-tight">
-                            {table.name}
-                        </CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                            {count.data !== undefined
-                                ? `${count.data.toLocaleString()} items`
-                                : "Loading..."
-                            }
-                        </p>
-                    </div>
-                </CardHeader>
-            </button>
-        </Card>
-    );
+					<div className="space-y-2">
+						<CardTitle className="text-base font-semibold leading-tight">
+							{table.name}
+						</CardTitle>
+						<p className="text-sm text-muted-foreground">
+							{count.data !== undefined
+								? `${count.data.toLocaleString()} items`
+								: "Loading..."}
+						</p>
+					</div>
+				</CardHeader>
+			</button>
+		</Card>
+	);
 };
 
 const LoadingState: React.FC = () => (

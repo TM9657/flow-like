@@ -208,6 +208,45 @@ export function EventForm({
 							</SelectContent>
 						</Select>
 					</div>
+
+					{/* Event Type Selector - shown when node has multiple event types */}
+					{formData.node_id && board.data.nodes[formData.node_id] && (() => {
+						const node = board.data.nodes[formData.node_id];
+						const nodeEventConfig = eventConfig[node?.name];
+
+						if (!nodeEventConfig || nodeEventConfig.eventTypes.length <= 1) {
+							return null;
+						}
+
+						return (
+							<div className="space-y-2">
+								<Label htmlFor="event_type">Event Type</Label>
+								<Select
+									value={formData.event_type || nodeEventConfig.defaultEventType}
+									onValueChange={(value) => {
+										handleInputChange("event_type", value);
+										handleInputChange(
+											"config",
+											convertJsonToUint8Array(
+												nodeEventConfig.configs[value] ?? {},
+											) ?? [],
+										);
+									}}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder="Select event type" />
+									</SelectTrigger>
+									<SelectContent>
+										{nodeEventConfig.eventTypes.map((type) => (
+											<SelectItem key={type} value={type}>
+												{type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+						);
+					})()}
 				</div>
 			)}
 

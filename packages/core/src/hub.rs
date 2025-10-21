@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     bit::{Bit, BitTypes},
+    credentials::SharedCredentials,
     profile::Profile,
     utils::{http::HTTPClient, recursion::RecursionGuard},
 };
@@ -210,8 +211,7 @@ impl Hub {
 
         let url = match Url::parse(&url) {
             Ok(url) => url,
-            Err(e) => {
-                println!("Error parsing URL: {:?}", e);
+            Err(_e) => {
                 return Err(flow_like_types::Error::msg("Invalid URL"));
             }
         };
@@ -246,6 +246,48 @@ impl Hub {
             .map_err(|e| flow_like_types::Error::msg(format!("Invalid URL: {}", e)))?;
 
         Ok(url)
+    }
+
+    pub async fn shared_credentials(&self, token: &str, app_id: &str) -> Result<SharedCredentials> {
+        let presign_path = format!("api/v1/apps/{}/invoke/presign", app_id);
+
+        let presign_url = self.construct_url(&presign_path)?;
+
+        let auth_val = if token.starts_with("pat_") {
+            token.to_string()
+        } else if token.starts_with("Bearer ") {
+            token.to_string()
+        } else {
+            format!("Bearer {}", token)
+        };
+
+        let client = self.http_client().client();
+
+        let request = client
+            .get(presign_url.clone())
+            .header("Authorization", &auth_val)
+            .build()
+            .map_err(flow_like_types::Error::from)?;
+
+        let resp = client
+            .execute(request)
+            .await
+            .map_err(flow_like_types::Error::from)?;
+
+        let status = resp.status();
+        let body_text = resp.text().await.map_err(flow_like_types::Error::from)?;
+
+        if !status.is_success() {
+            return Err(flow_like_types::Error::msg(format!(
+                "presign failed: status={} body={}",
+                status, body_text
+            )));
+        }
+
+        let shared_credentials: SharedCredentials = flow_like_types::json::from_str(&body_text)
+            .map_err(|e| flow_like_types::Error::msg(format!("JSON parse error: {}", e)))?;
+
+        Ok(shared_credentials)
     }
 
     pub async fn get_bit(&self, bit_id: &str) -> Result<Bit> {
@@ -312,9 +354,7 @@ impl Hub {
 
     pub async fn get_profiles(&self) -> Result<Vec<Profile>> {
         let profiles_url = self.construct_url("api/v1/info/profiles")?;
-        println!("Requesting profiles from: {}", profiles_url);
         let request = self.http_client().client().get(profiles_url).build()?;
-        println!("Request: {:?}", request);
         let bits = self
             .http_client()
             .hashed_request::<Vec<Profile>>(request)

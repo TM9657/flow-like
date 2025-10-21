@@ -6,7 +6,7 @@ use crate::{
 };
 use axum::{Extension, Json, extract::State};
 use flow_like_types::{anyhow, create_id};
-use sea_orm::{ActiveModelTrait, EntityTrait, sqlx::types::chrono};
+use sea_orm::{ActiveModelTrait, EntityTrait};
 
 /// Sometimes when the user still has an old jwt, the user info is not updated correctly.
 /// In these cases, we want to update the value correctly.

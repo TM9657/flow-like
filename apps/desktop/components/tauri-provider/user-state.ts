@@ -136,4 +136,84 @@ export class UserState implements IUserState {
 			operation,
 		});
 	}
+
+	async createPAT(
+		name: string,
+		validUntil?: Date,
+		permissions?: number,
+	): Promise<{ pat: string; permission: number }> {
+		if (!this.backend.profile || !this.backend.auth) {
+			throw new Error("Profile or auth context not available");
+		}
+
+		const unix = validUntil
+			? Math.floor(validUntil.getTime() / 1000)
+			: undefined;
+
+		const result = await fetcher<{
+			pat: string;
+			permission: number;
+		}>(
+			this.backend.profile,
+			`user/pat`,
+			{
+				method: "PUT",
+				body: JSON.stringify({ name, valid_until: unix, permissions }),
+			},
+			this.backend.auth,
+		);
+
+		return result;
+	}
+
+	async getPATs(): Promise<
+		{
+			id: string;
+			name: string;
+			created_at: string;
+			valid_until: string | null;
+			permission: number;
+		}[]
+	> {
+		if (!this.backend.profile || !this.backend.auth) {
+			throw new Error("Profile or auth context not available");
+		}
+
+		const result = await fetcher<
+			{
+				id: string;
+				name: string;
+				created_at: string;
+				valid_until: string | null;
+				permission: number;
+			}[]
+		>(
+			this.backend.profile,
+			`user/pat`,
+			{
+				method: "GET",
+			},
+			this.backend.auth,
+		);
+
+		return result;
+	}
+
+	async deletePAT(id: string): Promise<void> {
+		if (!this.backend.profile || !this.backend.auth) {
+			throw new Error("Profile or auth context not available");
+		}
+
+		await fetcher(
+			this.backend.profile,
+			`user/pat`,
+			{
+				method: "DELETE",
+				body: JSON.stringify({ id }),
+			},
+			this.backend.auth,
+		);
+
+		return;
+	}
 }

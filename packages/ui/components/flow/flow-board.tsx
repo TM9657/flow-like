@@ -41,9 +41,26 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import {
+	type ReactElement,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { Button, Sheet, SheetContent, SheetHeader, SheetTitle, useLogAggregation, useMobileHeader, viewportDb, viewportKey } from "../..";
+import {
+	Button,
+	Sheet,
+	SheetContent,
+	SheetHeader,
+	SheetTitle,
+	useLogAggregation,
+	useMobileHeader,
+	viewportDb,
+	viewportKey,
+} from "../..";
 import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
@@ -186,69 +203,92 @@ export function FlowBoard({
 	const { update: updateHeader } = useMobileHeader();
 
 	useEffect(() => {
-		const left: ReactElement[] = []
-		const right: ReactElement[] = []
+		const left: ReactElement[] = [];
+		const right: ReactElement[] = [];
 
-		if (typeof parentRegister.boardParents[boardId] === "string" && !currentLayer) {
+		if (
+			typeof parentRegister.boardParents[boardId] === "string" &&
+			!currentLayer
+		) {
 			left.push(
-				<Button variant={"default"} size={"icon"}  onClick={async () => {
-					const urlWithQuery = parentRegister.boardParents[boardId];
-					router.push(urlWithQuery);
-				}}>
+				<Button
+					variant={"default"}
+					size={"icon"}
+					onClick={async () => {
+						const urlWithQuery = parentRegister.boardParents[boardId];
+						router.push(urlWithQuery);
+					}}
+				>
 					<ArrowBigLeftDashIcon />
-				</Button>
-			)
+				</Button>,
+			);
 		}
 
 		right.push(
 			...[
-				<Button variant={"outline"} size={"icon"}  onClick={async () => {
-					toggleVars();
-				}}>
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						toggleVars();
+					}}
+				>
 					<VariableIcon />
 				</Button>,
-				<Button variant={"outline"} size={"icon"}  onClick={async () => {
-					setEditBoard(true);
-				}}>
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						setEditBoard(true);
+					}}
+				>
 					<NotebookPenIcon />
 				</Button>,
-				<Button variant={"outline"} size={"icon"}  onClick={async () => {
-					toggleRunHistory();
-				}}>
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						toggleRunHistory();
+					}}
+				>
 					<HistoryIcon />
-				</Button>
-			]
-		)
+				</Button>,
+			],
+		);
 
 		// Always expose Logs button; it opens the logs sheet (shows empty state when no run is selected)
 		right.push(
-			<Button variant={"outline"} size={"icon"} aria-label="Open logs" onClick={async () => {
-				toggleLogs();
-			}}>
+			<Button
+				variant={"outline"}
+				size={"icon"}
+				aria-label="Open logs"
+				onClick={async () => {
+					toggleLogs();
+				}}
+			>
 				<ScrollIcon />
-			</Button>
-		)
+			</Button>,
+		);
 
-		if(currentLayer) {
+		if (currentLayer) {
 			left.push(
-				<Button variant={"default"} size={"icon"}  onClick={async () => {
-					popLayer();
-				}}>
+				<Button
+					variant={"default"}
+					size={"icon"}
+					onClick={async () => {
+						popLayer();
+					}}
+				>
 					<SquareChevronUpIcon />
-				</Button>
-			)
+				</Button>,
+			);
 		}
 
 		updateHeader({
 			left,
-			right
-		})
-	}, [
-		currentMetadata,
-		currentLayer,
-		parentRegister.boardParents,
-		boardId,
-	])
+			right,
+		});
+	}, [currentMetadata, currentLayer, parentRegister.boardParents, boardId]);
 
 	const pinToNode = useCallback(
 		(pinId: string) => {
@@ -389,7 +429,9 @@ export function FlowBoard({
 	useEffect(() => {
 		if (!logPanelRef.current) return;
 		// Avoid auto-expanding logs on mobile to prevent layout jump
-		const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+		const isMobile =
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches;
 		if (isMobile) return;
 		logPanelRef.current.expand();
 		const size = logPanelRef.current.getSize();
@@ -418,9 +460,29 @@ export function FlowBoard({
 	const [runsOpen, setRunsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
 
+	// Clear selections when version changes
+	useEffect(() => {
+		selected.current.clear();
+		setNodes((nds) =>
+			nds.map((node) => ({
+				...node,
+				selected: false,
+			})),
+		);
+		setEdges((eds) =>
+			eds.map((edge) => ({
+				...edge,
+				selected: false,
+			})),
+		);
+	}, [version, setNodes, setEdges]);
+
 	function toggleVars() {
 		// On mobile use sheet instead of resizable panel
-		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+		if (
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches
+		) {
 			setVarsOpen((v) => !v);
 			return;
 		}
@@ -437,7 +499,10 @@ export function FlowBoard({
 	}
 
 	function toggleRunHistory() {
-		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+		if (
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches
+		) {
 			setRunsOpen((v) => !v);
 			return;
 		}
@@ -456,7 +521,10 @@ export function FlowBoard({
 	}
 
 	function toggleLogs() {
-		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+		if (
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches
+		) {
 			setLogsOpen((v) => !v);
 			return;
 		}
@@ -1094,12 +1162,13 @@ export function FlowBoard({
 			edges,
 			currentLayer,
 			boardRef,
+			version,
 		);
 
 		setNodes(parsed.nodes);
 		setEdges(parsed.edges);
 		setPinCache(new Map(parsed.cache));
-	}, [board.data, currentLayer, currentProfile.data]);
+	}, [board.data, currentLayer, currentProfile.data, version]);
 
 	const nodeTypes = useMemo(
 		() => ({
@@ -1115,6 +1184,11 @@ export function FlowBoard({
 	const onConnect = useCallback(
 		(params: any) =>
 			setEdges((eds) => {
+				// Don't execute commands when viewing an old version
+				if (typeof version !== "undefined") {
+					return eds;
+				}
+
 				const [sourcePin, sourceNode] = pinCache.get(params.sourceHandle) || [];
 				const [targetPin, targetNode] = pinCache.get(params.targetHandle) || [];
 
@@ -1132,7 +1206,7 @@ export function FlowBoard({
 
 				return addEdge(params, eds);
 			}),
-		[setEdges, pinCache, boardId],
+		[setEdges, pinCache, boardId, version, executeCommand],
 	);
 
 	const onConnectEnd = useCallback(
@@ -1182,6 +1256,11 @@ export function FlowBoard({
 					if (!change.selected) selected.current.delete(selectedId);
 				}
 
+				// Don't execute commands when viewing an old version
+				if (typeof version !== "undefined") {
+					return applyNodeChanges(changes, nds);
+				}
+
 				const removeChanges = changes.filter(
 					(change: any) => change.type === "remove",
 				);
@@ -1228,7 +1307,7 @@ export function FlowBoard({
 
 				return applyNodeChanges(changes, nds);
 			}),
-		[setNodes, board.data, boardId, executeCommands],
+		[setNodes, board.data, boardId, executeCommands, version],
 	);
 
 	const onEdgesChange: OnEdgesChange = useCallback(
@@ -1253,6 +1332,11 @@ export function FlowBoard({
 								? { ...edge, animated: !change.selected }
 								: edge,
 						);
+				}
+
+				// Don't execute commands when viewing an old version
+				if (typeof version !== "undefined") {
+					return applyEdgeChanges(changes, eds);
 				}
 
 				const removeChanges = changes.filter(
@@ -1281,7 +1365,7 @@ export function FlowBoard({
 
 				return applyEdgeChanges(changes, eds);
 			}),
-		[setEdges, board.data, boardId, pinCache],
+		[setEdges, board.data, boardId, pinCache, executeCommands, version],
 	);
 
 	const onReconnectStart = useCallback(() => {
@@ -1290,6 +1374,11 @@ export function FlowBoard({
 
 	const onReconnect = useCallback(
 		async (oldEdge: any, newConnection: Connection) => {
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
+			}
+
 			// Check if the edge is actually being moved
 			const new_id = `${newConnection.sourceHandle}-${newConnection.targetHandle}`;
 			if (oldEdge.id === new_id) return;
@@ -1330,11 +1419,16 @@ export function FlowBoard({
 			edgeReconnectSuccessful.current = true;
 			setEdges((els) => reconnectEdge(oldEdge, newConnection, els));
 		},
-		[setEdges, pinToNode, executeCommands],
+		[setEdges, pinToNode, executeCommands, version],
 	);
 
 	const onReconnectEnd = useCallback(
 		async (event: any, edge: any) => {
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
+			}
+
 			if (!edgeReconnectSuccessful.current) {
 				const { source, target, sourceHandle, targetHandle } = edge;
 				const from_node = pinToNode(sourceHandle);
@@ -1352,7 +1446,7 @@ export function FlowBoard({
 
 			edgeReconnectSuccessful.current = true;
 		},
-		[setEdges, pinToNode],
+		[setEdges, pinToNode, version, executeCommand],
 	);
 
 	const onContextMenuCB = useCallback((event: any) => {
@@ -1361,6 +1455,10 @@ export function FlowBoard({
 
 	const onNodeDragStop = useCallback(
 		async (event: any, node: any, nodes: any) => {
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
+			}
 			const commands: IGenericCommand[] = [];
 			for await (const node of nodes) {
 				const command = moveNodeCommand({
@@ -1373,7 +1471,7 @@ export function FlowBoard({
 			}
 			await executeCommands(commands);
 		},
-		[boardId, executeCommands, currentLayer],
+		[boardId, executeCommands, currentLayer, version],
 	);
 
 	const isValidConnectionCB = useCallback(
@@ -1400,6 +1498,11 @@ export function FlowBoard({
 	);
 
 	const onCommentPlace = useCallback(async () => {
+		// Don't execute commands when viewing an old version
+		if (typeof version !== "undefined") {
+			return;
+		}
+
 		const location = screenToFlowPosition({
 			x: clickPosition.x,
 			y: clickPosition.y,
@@ -1422,7 +1525,7 @@ export function FlowBoard({
 		});
 
 		await executeCommand(command);
-	}, [currentLayer, clickPosition, executeCommand]);
+	}, [currentLayer, clickPosition, executeCommand, version]);
 
 	const onNodeDrag = useCallback(
 		(event: any, node: Node, nodes: Node[]) => {
@@ -1490,17 +1593,17 @@ export function FlowBoard({
 					mobileClassName="hidden"
 					items={[
 						...(typeof parentRegister.boardParents[boardId] === "string" &&
-							!currentLayer
+						!currentLayer
 							? [
-								{
-									icon: <ArrowBigLeftDashIcon />,
-									title: "Back",
-									onClick: async () => {
-										const urlWithQuery = parentRegister.boardParents[boardId];
-										router.push(urlWithQuery);
+									{
+										icon: <ArrowBigLeftDashIcon />,
+										title: "Back",
+										onClick: async () => {
+											const urlWithQuery = parentRegister.boardParents[boardId];
+											router.push(urlWithQuery);
+										},
 									},
-								},
-							]
+								]
 							: []),
 						{
 							icon: <VariableIcon />,
@@ -1526,27 +1629,27 @@ export function FlowBoard({
 						},
 						...(currentMetadata
 							? [
-								{
-									icon: <ScrollIcon />,
-									title: "Logs",
-									onClick: async () => {
-										toggleLogs();
+									{
+										icon: <ScrollIcon />,
+										title: "Logs",
+										onClick: async () => {
+											toggleLogs();
+										},
 									},
-								},
-							]
+								]
 							: ([] as any)),
 						...(currentLayer
 							? [
-								{
-									icon: <SquareChevronUpIcon />,
-									title: "Layer Up",
-									separator: "left",
-									highlight: true,
-									onClick: async () => {
-										popLayer();
+									{
+										icon: <SquareChevronUpIcon />,
+										title: "Layer Up",
+										separator: "left",
+										highlight: true,
+										onClick: async () => {
+											popLayer();
+										},
 									},
-								},
-							]
+								]
 							: []),
 					]}
 				/>
@@ -1554,7 +1657,11 @@ export function FlowBoard({
 			<ResizablePanelGroup
 				direction="horizontal"
 				className="flex grow min-h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] md:min-h-dvh md:h-dvh overscroll-contain"
-				style={{ touchAction: "manipulation", WebkitOverflowScrolling: "touch", overflow: "hidden" }}
+				style={{
+					touchAction: "manipulation",
+					WebkitOverflowScrolling: "touch",
+					overflow: "hidden",
+				}}
 			>
 				{/* Desktop/Tablet side panels */}
 				<ResizablePanel
@@ -1594,7 +1701,11 @@ export function FlowBoard({
 								<div
 									className={`w-full h-full relative select-none touch-none ${isOver && "border-green-400 border-2 z-10"}`}
 									ref={setNodeRef}
-									style={{ WebkitUserSelect: "none", WebkitTouchCallout: "none", touchAction: "none" }}
+									style={{
+										WebkitUserSelect: "none",
+										WebkitTouchCallout: "none",
+										touchAction: "none",
+									}}
 									onTouchStart={(e) => {
 										const t = e.touches[0];
 										if (!t) return;
@@ -1605,23 +1716,47 @@ export function FlowBoard({
 										const onMove = (me: TouchEvent) => {
 											const tt = me.touches[0];
 											if (!tt) return;
-											if (Math.hypot(tt.clientX - startX, tt.clientY - startY) > 10) moved = true;
+											if (
+												Math.hypot(tt.clientX - startX, tt.clientY - startY) >
+												10
+											)
+												moved = true;
 										};
 										const timer = setTimeout(() => {
 											if (moved) return;
 											// Synthesize a contextmenu-like event for long-press
-											const evt = new MouseEvent("contextmenu", { clientX: startX, clientY: startY, bubbles: true, cancelable: true });
+											const evt = new MouseEvent("contextmenu", {
+												clientX: startX,
+												clientY: startY,
+												bubbles: true,
+												cancelable: true,
+											});
 											target.dispatchEvent(evt);
 										}, 450);
 										const onEnd = () => {
 											clearTimeout(timer);
-											document.removeEventListener("touchmove", onMove, { capture: true } as any);
-											document.removeEventListener("touchend", onEnd, { capture: true } as any);
-											document.removeEventListener("touchcancel", onEnd, { capture: true } as any);
+											document.removeEventListener("touchmove", onMove, {
+												capture: true,
+											} as any);
+											document.removeEventListener("touchend", onEnd, {
+												capture: true,
+											} as any);
+											document.removeEventListener("touchcancel", onEnd, {
+												capture: true,
+											} as any);
 										};
-										document.addEventListener("touchmove", onMove, { passive: true, capture: true } as any);
-										document.addEventListener("touchend", onEnd, { passive: true, capture: true } as any);
-										document.addEventListener("touchcancel", onEnd, { passive: true, capture: true } as any);
+										document.addEventListener("touchmove", onMove, {
+											passive: true,
+											capture: true,
+										} as any);
+										document.addEventListener("touchend", onEnd, {
+											passive: true,
+											capture: true,
+										} as any);
+										document.addEventListener("touchcancel", onEnd, {
+											passive: true,
+											capture: true,
+										} as any);
 									}}
 								>
 									{currentLayer && (
@@ -1732,8 +1867,8 @@ export function FlowBoard({
 											<Variable
 												variable={active?.data?.current as IVariable}
 												preview
-												onVariableChange={() => { }}
-												onVariableDeleted={() => { }}
+												onVariableChange={() => {}}
+												onVariableDeleted={() => {}}
 											/>
 										)}
 									</DragOverlay>
@@ -1791,7 +1926,10 @@ export function FlowBoard({
 						</SheetHeader>
 						{board.data && (
 							<div className="h-[calc(60dvh-3.5rem)] overflow-y-auto overscroll-contain">
-								<VariablesMenu board={board.data} executeCommand={executeCommand} />
+								<VariablesMenu
+									board={board.data}
+									executeCommand={executeCommand}
+								/>
 							</div>
 						)}
 					</SheetContent>
@@ -1840,7 +1978,7 @@ export function FlowBoard({
 					</SheetContent>
 				</Sheet>
 			</ResizablePanelGroup>
-			<PinEditModal appId={appId} boardId={boardId} />
+			<PinEditModal appId={appId} boardId={boardId} version={version} />
 		</div>
 	);
 }

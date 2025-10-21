@@ -713,12 +713,12 @@ export function StorageSystem({
 												variant="ghost"
 												size="sm"
 												onClick={() => {
-												if (isSmallScreen) {
-													setPreview((p) => ({ ...p, url: "", file: "" }));
-												} else {
-													setIsPreviewMaximized(false);
-												}
-											}}
+													if (isSmallScreen) {
+														setPreview((p) => ({ ...p, url: "", file: "" }));
+													} else {
+														setIsPreviewMaximized(false);
+													}
+												}}
 												className="h-8 w-8 p-0"
 											>
 												{isSmallScreen ? (

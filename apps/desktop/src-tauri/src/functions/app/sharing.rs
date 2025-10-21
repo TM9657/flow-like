@@ -137,15 +137,9 @@ async fn perform_ios_export(
 ) -> Result<(), TauriFunctionError> {
     use flow_like_types::tokio::sync::oneshot;
 
-    let documents_dir = app_handle
-        .path()
-        .document_dir()
-        .map_err(|e| {
-            TauriFunctionError::new(&format!(
-                "Failed to resolve documents directory: {}",
-                e
-            ))
-        })?;
+    let documents_dir = app_handle.path().document_dir().map_err(|e| {
+        TauriFunctionError::new(&format!("Failed to resolve documents directory: {}", e))
+    })?;
 
     let staging_target = documents_dir.join(file_name);
     info!(
@@ -304,10 +298,7 @@ pub async fn import_app_from_file(
 
     println!("Imported app: {:?}", app.id);
 
-    let apps = profile
-        .hub_profile
-        .apps
-        .get_or_insert_with(Vec::new);
+    let apps = profile.hub_profile.apps.get_or_insert_with(Vec::new);
 
     if !apps.iter().any(|a| a.app_id == app.id) {
         apps.push(ProfileApp::new(app.id.clone()));
