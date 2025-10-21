@@ -2,12 +2,10 @@ use flow_like::{
     flow::{
         execution::context::ExecutionContext,
         node::{Node, NodeLogic},
-        pin::PinOptions,
         variable::VariableType,
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::response::Response;
 use flow_like_types::async_trait;
 
 #[derive(Default)]
@@ -38,12 +36,7 @@ impl NodeLogic for ReturnGenericResultNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin(
-            "response",
-            "Result",
-            "Chat Response",
-            VariableType::Struct,
-        );
+        node.add_input_pin("response", "Result", "Chat Response", VariableType::Struct);
 
         println!("{:?}", node);
 
@@ -52,7 +45,9 @@ impl NodeLogic for ReturnGenericResultNode {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let result: flow_like_types::Value = context.evaluate_pin("response").await?;
-        context.stream_response("generic_result", result.clone()).await?;
+        context
+            .stream_response("generic_result", result.clone())
+            .await?;
         context.set_result(result);
 
         return Ok(());

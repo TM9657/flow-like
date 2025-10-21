@@ -106,9 +106,8 @@ impl DeeplinkSink {
 
         let manager = manager_state.0.clone();
         let db = {
-            let manager_guard = flow_like_types::tokio::task::block_in_place(|| {
-                manager.blocking_lock()
-            });
+            let manager_guard =
+                flow_like_types::tokio::task::block_in_place(|| manager.blocking_lock());
             manager_guard.db()
         };
 
@@ -138,22 +137,18 @@ impl DeeplinkSink {
             query_params
         );
 
-        let payload = if query_params.is_null() || (query_params.is_object() && query_params.as_object().unwrap().is_empty()) {
+        let payload = if query_params.is_null()
+            || (query_params.is_object() && query_params.as_object().unwrap().is_empty())
+        {
             None
         } else {
             Some(query_params)
         };
 
-        let manager_guard = flow_like_types::tokio::task::block_in_place(|| {
-            manager.blocking_lock()
-        });
+        let manager_guard =
+            flow_like_types::tokio::task::block_in_place(|| manager.blocking_lock());
 
-        manager_guard.fire_event(
-            app_handle,
-            &event_id,
-            payload,
-            None,
-        )
+        manager_guard.fire_event(app_handle, &event_id, payload, None)
     }
 }
 

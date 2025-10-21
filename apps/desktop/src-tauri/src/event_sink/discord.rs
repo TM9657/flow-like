@@ -5,10 +5,10 @@ use flow_like_types::{intercom::BufferedInterComHandler, sync::Mutex};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serenity::all::{CreateAttachment, CreateMessage, EditMessage, GatewayIntents};
-use tauri::{AppHandle, Manager};
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tauri::{AppHandle, Manager};
 
 use crate::utils::UiEmitTarget;
 
@@ -177,7 +177,8 @@ impl DiscordClientManager {
             self.bots.insert(token.clone(), bot_arc.clone());
 
             // Start the Discord client
-            self.start_bot(app_handle, db, token.clone(), bot_arc).await?;
+            self.start_bot(app_handle, db, token.clone(), bot_arc)
+                .await?;
         }
 
         Ok(())
@@ -201,15 +202,7 @@ impl DiscordClientManager {
         };
 
         let join_handle = flow_like_types::tokio::spawn(async move {
-            if let Err(e) = run_discord_bot(
-                app_handle,
-                db,
-                token,
-                intents,
-                bot_instance,
-            )
-            .await
-            {
+            if let Err(e) = run_discord_bot(app_handle, db, token, intents, bot_instance).await {
                 tracing::error!("Discord bot error: {}", e);
             }
         });
@@ -220,10 +213,7 @@ impl DiscordClientManager {
         Ok(())
     }
 
-    fn remove_handler_from_db(
-        db: &DbConnection,
-        event_id: &str,
-    ) -> Result<String> {
+    fn remove_handler_from_db(db: &DbConnection, event_id: &str) -> Result<String> {
         let conn = db.lock().unwrap();
 
         // Get the bot token before removing
@@ -248,10 +238,7 @@ impl DiscordClientManager {
 
         // If no handlers left, remove bot
         if handler_count == 0 {
-            conn.execute(
-                "DELETE FROM discord_bots WHERE token = ?1",
-                params![&token],
-            )?;
+            conn.execute("DELETE FROM discord_bots WHERE token = ?1", params![&token])?;
         }
 
         Ok(token)
@@ -295,7 +282,11 @@ struct DiscordEventHandler {
 
 #[serenity::async_trait]
 impl serenity::client::EventHandler for DiscordEventHandler {
-    async fn message(&self, ctx: serenity::client::Context, msg: serenity::model::channel::Message) {
+    async fn message(
+        &self,
+        ctx: serenity::client::Context,
+        msg: serenity::model::channel::Message,
+    ) {
         if msg.author.bot {
             return;
         }
@@ -307,7 +298,10 @@ impl serenity::client::EventHandler for DiscordEventHandler {
         for handler in handlers {
             // Check if should process this message
             if !should_process_message(&ctx, &msg, &handler) {
-                println!("Skipping message from channel {} for event {}", msg.channel_id, handler.event_id);
+                println!(
+                    "Skipping message from channel {} for event {}",
+                    msg.channel_id, handler.event_id
+                );
                 continue;
             }
 
@@ -323,7 +317,9 @@ impl serenity::client::EventHandler for DiscordEventHandler {
                 payload,
                 &ctx,
                 &msg,
-            ).await {
+            )
+            .await
+            {
                 eprintln!("Failed to fire Discord event {}: {}", handler.event_id, e);
             }
         }
@@ -336,7 +332,9 @@ impl serenity::client::EventHandler for DiscordEventHandler {
 
 fn is_channel_allowed(channel_id: &str, handler: &EventHandler) -> bool {
     // Check whitelist
-    if !handler.channel_whitelist.is_empty() && !handler.channel_whitelist.contains(&channel_id.to_string()) {
+    if !handler.channel_whitelist.is_empty()
+        && !handler.channel_whitelist.contains(&channel_id.to_string())
+    {
         return false;
     }
 
@@ -358,12 +356,19 @@ fn is_message_targeted(msg: &serenity::model::channel::Message, handler: &EventH
     !msg.mentions.is_empty()
 }
 
-fn should_process_message(ctx: &serenity::client::Context, msg: &serenity::model::channel::Message, handler: &EventHandler) -> bool {
+fn should_process_message(
+    ctx: &serenity::client::Context,
+    msg: &serenity::model::channel::Message,
+    handler: &EventHandler,
+) -> bool {
     let channel_id = msg.channel_id.to_string();
 
     // Check channel whitelist/blacklist
     if !is_channel_allowed(&channel_id, handler) {
-        println!("Channel {} is not allowed for event {}", channel_id, handler.event_id);
+        println!(
+            "Channel {} is not allowed for event {}",
+            channel_id, handler.event_id
+        );
         return false;
     }
 
@@ -378,14 +383,14 @@ fn should_process_message(ctx: &serenity::client::Context, msg: &serenity::model
         return false;
     }
 
-    if let Some(referenced) = msg.referenced_message.as_ref() {
-        if referenced.author.id == me.id {
-            return true;
-        }
+    if let Some(referenced) = msg.referenced_message.as_ref()
+        && referenced.author.id == me.id
+    {
+        return true;
     }
 
     let only_respond_to_mentions = handler.respond_to_mentions;
-    let includes_mention = msg.mentions.iter().find(|u| u.id == me.id).is_some();
+    let includes_mention = msg.mentions.iter().any(|u| u.id == me.id);
 
     if only_respond_to_mentions && !includes_mention {
         return false;
@@ -403,7 +408,10 @@ async fn prepare_message_payload(
 
     // Add text content if present
     if !msg.content.is_empty() {
-        let nickname = msg.author_nick(&ctx.http).await.unwrap_or(msg.author.display_name().to_string());
+        let nickname = msg
+            .author_nick(&ctx.http)
+            .await
+            .unwrap_or(msg.author.display_name().to_string());
         content_parts.push(serde_json::json!({
             "type": "text",
             "text": format!("{}[id: {}]:{}", nickname, msg.author.id, msg.content.clone()),
@@ -413,22 +421,26 @@ async fn prepare_message_payload(
     // Add image attachments as content parts
     for attachment in &msg.attachments {
         // Check if attachment is an image
-        if let Some(content_type) = &attachment.content_type {
-            if content_type.starts_with("image/") {
-                content_parts.push(serde_json::json!({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": attachment.url.clone(),
-                    }
-                }));
-            }
+        if let Some(content_type) = &attachment.content_type
+            && content_type.starts_with("image/")
+        {
+            content_parts.push(serde_json::json!({
+                "type": "image_url",
+                "image_url": {
+                    "url": attachment.url.clone(),
+                }
+            }));
         }
     }
 
     // Fetch previous messages (up to 10) for context
     let mut messages = Vec::new();
 
-    if let Ok(history) = msg.channel_id.messages(&ctx.http, serenity::builder::GetMessages::new().limit(10)).await {
+    if let Ok(history) = msg
+        .channel_id
+        .messages(&ctx.http, serenity::builder::GetMessages::new().limit(10))
+        .await
+    {
         // Reverse to get chronological order
         for hist_msg in history.iter().rev() {
             // Skip messages after the current one
@@ -440,7 +452,10 @@ async fn prepare_message_payload(
             let mut hist_content = Vec::new();
 
             if !hist_msg.content.is_empty() {
-                let nickname = hist_msg.author_nick(&ctx.http).await.unwrap_or(hist_msg.author.display_name().to_string());
+                let nickname = hist_msg
+                    .author_nick(&ctx.http)
+                    .await
+                    .unwrap_or(hist_msg.author.display_name().to_string());
                 hist_content.push(serde_json::json!({
                     "type": "text",
                     "text": format!("{}[id: {}]:{}", nickname, hist_msg.author.id, hist_msg.content.clone()),
@@ -449,15 +464,15 @@ async fn prepare_message_payload(
 
             // Add images from historical message
             for attachment in &hist_msg.attachments {
-                if let Some(content_type) = &attachment.content_type {
-                    if content_type.starts_with("image/") {
-                        hist_content.push(serde_json::json!({
-                            "type": "image_url",
-                            "image_url": {
-                                "url": attachment.url.clone(),
-                            }
-                        }));
-                    }
+                if let Some(content_type) = &attachment.content_type
+                    && content_type.starts_with("image/")
+                {
+                    hist_content.push(serde_json::json!({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": attachment.url.clone(),
+                        }
+                    }));
                 }
             }
 
@@ -480,7 +495,8 @@ async fn prepare_message_payload(
     }));
 
     // Collect non-image attachments separately
-    let other_attachments: Vec<String> = msg.attachments
+    let other_attachments: Vec<String> = msg
+        .attachments
         .iter()
         .filter(|a| {
             a.content_type
@@ -545,7 +561,9 @@ async fn update_discord_message(
 
         let _ = msg.edit(&ctx.http, edit).await;
     } else {
-        let mut reply = CreateMessage::new().content(content).reference_message(message);
+        let mut reply = CreateMessage::new()
+            .content(content)
+            .reference_message(message);
 
         // Add attachments to the initial message
         for attachment in discord_attachments {
@@ -568,22 +586,22 @@ async fn prepare_discord_attachments(attachments: &[Attachment]) -> Vec<CreateAt
         match attachment {
             Attachment::Url(url) => {
                 // Try to fetch and attach the file
-                if let Ok(response) = flow_like_types::reqwest::get(url).await {
-                    if let Ok(bytes) = response.bytes().await {
-                        let filename = url.split('/').last().unwrap_or("attachment");
-                        discord_attachments.push(CreateAttachment::bytes(bytes.to_vec(), filename));
-                    }
+                if let Ok(response) = flow_like_types::reqwest::get(url).await
+                    && let Ok(bytes) = response.bytes().await
+                {
+                    let filename = url.split('/').next_back().unwrap_or("attachment");
+                    discord_attachments.push(CreateAttachment::bytes(bytes.to_vec(), filename));
                 }
             }
             Attachment::Complex(complex) => {
                 // Try to fetch and attach the file from URL
-                if let Ok(response) = flow_like_types::reqwest::get(&complex.url).await {
-                    if let Ok(bytes) = response.bytes().await {
-                        let filename = complex.name.as_deref().unwrap_or_else(|| {
-                            complex.url.split('/').last().unwrap_or("attachment")
-                        });
-                        discord_attachments.push(CreateAttachment::bytes(bytes.to_vec(), filename));
-                    }
+                if let Ok(response) = flow_like_types::reqwest::get(&complex.url).await
+                    && let Ok(bytes) = response.bytes().await
+                {
+                    let filename = complex.name.as_deref().unwrap_or_else(|| {
+                        complex.url.split('/').next_back().unwrap_or("attachment")
+                    });
+                    discord_attachments.push(CreateAttachment::bytes(bytes.to_vec(), filename));
                 }
             }
         }
@@ -629,7 +647,8 @@ async fn fire_discord_event(
 
     let context = Arc::new(Mutex::new(Response::new()));
     let response: Arc<Mutex<Option<serenity::all::Message>>> = Arc::new(Mutex::new(None));
-    let last_edit: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now() - Duration::from_secs(2)));
+    let last_edit: Arc<Mutex<Instant>> =
+        Arc::new(Mutex::new(Instant::now() - Duration::from_secs(2)));
     let collected_attachments: Arc<Mutex<Vec<Attachment>>> = Arc::new(Mutex::new(Vec::new()));
 
     // Clone for final flush
@@ -644,115 +663,125 @@ async fn fire_discord_event(
     let message_clone = message.clone();
 
     let callback = BufferedInterComHandler::new(
-                Arc::new(move |events| {
-                    let app_handle = app_handle_clone.clone();
-                    let cloned_context = context.clone();
-                    let response = response.clone();
-                    let last_edit = last_edit.clone();
-                    let collected_attachments = collected_attachments.clone();
-                    let ctx = ctx_clone.clone();
-                    let message = message_clone.clone();
-                    Box::pin({
-                        async move {
-                            for event in &events {
-                                if event.event_type == "chat_stream_partial" {
-                                    let payload: ChatStreamingResponse = flow_like_types::json::from_value(event.payload.clone())
-                                        .map_err(|e| anyhow::anyhow!("Failed to deserialize chat_stream_partial payload: {}", e))?;
+        Arc::new(move |events| {
+            let app_handle = app_handle_clone.clone();
+            let cloned_context = context.clone();
+            let response = response.clone();
+            let last_edit = last_edit.clone();
+            let collected_attachments = collected_attachments.clone();
+            let ctx = ctx_clone.clone();
+            let message = message_clone.clone();
+            Box::pin({
+                async move {
+                    for event in &events {
+                        if event.event_type == "chat_stream_partial" {
+                            let payload: ChatStreamingResponse = flow_like_types::json::from_value(
+                                event.payload.clone(),
+                            )
+                            .map_err(|e| {
+                                anyhow::anyhow!(
+                                    "Failed to deserialize chat_stream_partial payload: {}",
+                                    e
+                                )
+                            })?;
 
-                                    // Handle chunks
-                                    let mut context = cloned_context.lock().await;
-                                    if let Some(chunk) = &payload.chunk {
-                                        context.push_chunk(chunk.clone());
-                                    }
-                                    drop(context);
+                            // Handle chunks
+                            let mut context = cloned_context.lock().await;
+                            if let Some(chunk) = &payload.chunk {
+                                context.push_chunk(chunk.clone());
+                            }
+                            drop(context);
 
-                                    // Collect attachments
-                                    if !payload.attachments.is_empty() {
-                                        let mut attachments = collected_attachments.lock().await;
-                                        attachments.extend(payload.attachments.clone());
-                                    }
-
-                                    // Update message with rate limiting
-                                    let context = cloned_context.lock().await;
-                                    let last_message = context.last_message();
-                                    if let Some(last_message) = last_message {
-                                        if let Some(content) = &last_message.content {
-                                            let mut resp_lock = response.lock().await;
-                                            let mut last_edit_lock = last_edit.lock().await;
-                                            let attachments = collected_attachments.lock().await;
-
-                                            let _ = update_discord_message(
-                                                &ctx,
-                                                &message,
-                                                &mut *resp_lock,
-                                                content.clone(),
-                                                &attachments,
-                                                &mut *last_edit_lock,
-                                            ).await;
-                                        }
-                                    }
-                                }
-
-                                if event.event_type == "chat_stream" {
-                                    let payload: ChatResponse = flow_like_types::json::from_value(event.payload.clone())
-                                        .map_err(|e| anyhow::anyhow!("Failed to deserialize chat_out payload: {}", e))?;
-
-                                    // Collect final attachments
-                                    if !payload.attachments.is_empty() {
-                                        let mut attachments = collected_attachments.lock().await;
-                                        attachments.extend(payload.attachments.clone());
-                                    }
-
-                                    // Final update (force immediate update)
-                                    let last_message = payload.response.last_message();
-                                    if let Some(last_message) = last_message {
-                                        if let Some(content) = &last_message.content {
-                                            let mut resp_lock = response.lock().await;
-                                            let mut last_edit_lock = last_edit.lock().await;
-                                            *last_edit_lock = Instant::now() - Duration::from_secs(2); // Force update
-                                            let attachments = collected_attachments.lock().await;
-
-                                            let _ = update_discord_message(
-                                                &ctx,
-                                                &message,
-                                                &mut *resp_lock,
-                                                content.clone(),
-                                                &attachments,
-                                                &mut *last_edit_lock,
-                                            ).await;
-                                        }
-                                    }
-                                }
+                            // Collect attachments
+                            if !payload.attachments.is_empty() {
+                                let mut attachments = collected_attachments.lock().await;
+                                attachments.extend(payload.attachments.clone());
                             }
 
-                            let first_event = events.first();
-                            if let Some(first_event) = first_event {
-                                crate::utils::emit_throttled(
-                                    &app_handle,
-                                    UiEmitTarget::All,
-                                    &first_event.event_type,
-                                    events.clone(),
-                                    std::time::Duration::from_millis(150),
-                                );
-                            }
+                            // Update message with rate limiting
+                            let context = cloned_context.lock().await;
+                            let last_message = context.last_message();
+                            if let Some(last_message) = last_message
+                                && let Some(content) = &last_message.content
+                            {
+                                let mut resp_lock = response.lock().await;
+                                let mut last_edit_lock = last_edit.lock().await;
+                                let attachments = collected_attachments.lock().await;
 
-                            Ok(())
+                                let _ = update_discord_message(
+                                    &ctx,
+                                    &message,
+                                    &mut resp_lock,
+                                    content.clone(),
+                                    &attachments,
+                                    &mut last_edit_lock,
+                                )
+                                .await;
+                            }
                         }
-                    })
-                }),
-                Some(100),
-                Some(400),
-                Some(true),
-            );
+
+                        if event.event_type == "chat_stream" {
+                            let payload: ChatResponse = flow_like_types::json::from_value(
+                                event.payload.clone(),
+                            )
+                            .map_err(|e| {
+                                anyhow::anyhow!("Failed to deserialize chat_out payload: {}", e)
+                            })?;
+
+                            // Collect final attachments
+                            if !payload.attachments.is_empty() {
+                                let mut attachments = collected_attachments.lock().await;
+                                attachments.extend(payload.attachments.clone());
+                            }
+
+                            // Final update (force immediate update)
+                            let last_message = payload.response.last_message();
+                            if let Some(last_message) = last_message
+                                && let Some(content) = &last_message.content
+                            {
+                                let mut resp_lock = response.lock().await;
+                                let mut last_edit_lock = last_edit.lock().await;
+                                *last_edit_lock = Instant::now() - Duration::from_secs(2); // Force update
+                                let attachments = collected_attachments.lock().await;
+
+                                let _ = update_discord_message(
+                                    &ctx,
+                                    &message,
+                                    &mut resp_lock,
+                                    content.clone(),
+                                    &attachments,
+                                    &mut last_edit_lock,
+                                )
+                                .await;
+                            }
+                        }
+                    }
+
+                    let first_event = events.first();
+                    if let Some(first_event) = first_event {
+                        crate::utils::emit_throttled(
+                            &app_handle,
+                            UiEmitTarget::All,
+                            &first_event.event_type,
+                            events.clone(),
+                            std::time::Duration::from_millis(150),
+                        );
+                    }
+
+                    Ok(())
+                }
+            })
+        }),
+        Some(100),
+        Some(400),
+        Some(true),
+    );
 
     if let Some(manager_state) = app_handle.try_state::<TauriEventSinkManagerState>() {
         let result = match manager_state.0.try_lock() {
-            Ok(manager) => manager.fire_event(
-                app_handle,
-                event_id,
-                Some(payload),
-                Some(callback.clone()),
-            ),
+            Ok(manager) => {
+                manager.fire_event(app_handle, event_id, Some(payload), Some(callback.clone()))
+            }
             Err(_) => {
                 tracing::error!("EventSinkManager is locked, cannot fire event");
                 return Err(anyhow::anyhow!("EventSinkManager is locked"));
@@ -767,24 +796,25 @@ async fn fire_discord_event(
         // Final flush: ensure last message is sent even if within rate limit window
         let context_lock = context_final.lock().await;
         let last_message = context_lock.last_message();
-        if let Some(last_message) = last_message {
-            if let Some(content) = &last_message.content {
-                let mut resp_lock = response_final.lock().await;
-                let mut last_edit_lock = last_edit_final.lock().await;
-                let attachments = collected_attachments_final.lock().await;
+        if let Some(last_message) = last_message
+            && let Some(content) = &last_message.content
+        {
+            let mut resp_lock = response_final.lock().await;
+            let mut last_edit_lock = last_edit_final.lock().await;
+            let attachments = collected_attachments_final.lock().await;
 
-                // Force final update by resetting the last edit time
-                *last_edit_lock = Instant::now() - Duration::from_secs(2);
+            // Force final update by resetting the last edit time
+            *last_edit_lock = Instant::now() - Duration::from_secs(2);
 
-                let _ = update_discord_message(
-                    &ctx_final,
-                    &message_final,
-                    &mut *resp_lock,
-                    content.clone(),
-                    &attachments,
-                    &mut *last_edit_lock,
-                ).await;
-            }
+            let _ = update_discord_message(
+                &ctx_final,
+                &message_final,
+                &mut resp_lock,
+                content.clone(),
+                &attachments,
+                &mut last_edit_lock,
+            )
+            .await;
         }
     } else {
         return Err(anyhow::anyhow!("EventSinkManager state not available"));
@@ -864,19 +894,19 @@ impl DiscordSink {
         let intents_json = config
             .intents
             .as_ref()
-            .map(|i| serde_json::to_string(i))
+            .map(serde_json::to_string)
             .transpose()?;
 
         let channel_whitelist_json = config
             .channel_whitelist
             .as_ref()
-            .map(|w| serde_json::to_string(w))
+            .map(serde_json::to_string)
             .transpose()?;
 
         let channel_blacklist_json = config
             .channel_blacklist
             .as_ref()
-            .map(|b| serde_json::to_string(b))
+            .map(serde_json::to_string)
             .transpose()?;
 
         conn.execute(
@@ -941,8 +971,10 @@ impl DiscordSink {
         command_prefix: String,
     ) -> DiscordSink {
         let intents = intents_json.and_then(|json| serde_json::from_str(&json).ok());
-        let channel_whitelist = channel_whitelist_json.and_then(|json| serde_json::from_str(&json).ok());
-        let channel_blacklist = channel_blacklist_json.and_then(|json| serde_json::from_str(&json).ok());
+        let channel_whitelist =
+            channel_whitelist_json.and_then(|json| serde_json::from_str(&json).ok());
+        let channel_blacklist =
+            channel_blacklist_json.and_then(|json| serde_json::from_str(&json).ok());
 
         DiscordSink {
             token,
@@ -972,7 +1004,9 @@ impl DiscordSink {
         }
     }
 
-    async fn load_handlers_from_db(db: &DbConnection) -> Result<Vec<(EventRegistration, DiscordSink)>> {
+    async fn load_handlers_from_db(
+        db: &DbConnection,
+    ) -> Result<Vec<(EventRegistration, DiscordSink)>> {
         let conn = db.lock().unwrap();
 
         let mut stmt = conn.prepare(
@@ -980,7 +1014,7 @@ impl DiscordSink {
                     h.channel_whitelist, h.channel_blacklist, h.respond_to_mentions,
                     h.respond_to_dms, h.command_prefix
              FROM discord_handlers h
-             JOIN discord_bots b ON h.bot_token = b.token"
+             JOIN discord_bots b ON h.bot_token = b.token",
         )?;
 
         let results = stmt.query_map([], |row| {
@@ -1001,14 +1035,30 @@ impl DiscordSink {
         let mut handlers = Vec::new();
 
         for result in results {
-            let (event_id, token, bot_name, bot_description, intents_json,
-                 channel_whitelist_json, channel_blacklist_json, respond_to_mentions,
-                 respond_to_dms, command_prefix) = result?;
+            let (
+                event_id,
+                token,
+                bot_name,
+                bot_description,
+                intents_json,
+                channel_whitelist_json,
+                channel_blacklist_json,
+                respond_to_mentions,
+                respond_to_dms,
+                command_prefix,
+            ) = result?;
 
             let config = Self::parse_discord_config(
-                event_id.clone(), token, bot_name, bot_description, intents_json,
-                channel_whitelist_json, channel_blacklist_json, respond_to_mentions,
-                respond_to_dms, command_prefix,
+                event_id.clone(),
+                token,
+                bot_name,
+                bot_description,
+                intents_json,
+                channel_whitelist_json,
+                channel_blacklist_json,
+                respond_to_mentions,
+                respond_to_dms,
+                command_prefix,
             );
 
             let registration = Self::create_event_registration(event_id, config.clone());
@@ -1030,12 +1080,22 @@ impl EventSink for DiscordSink {
         let handlers = Self::load_handlers_from_db(&db).await?;
 
         if !handlers.is_empty() {
-            tracing::info!("📋 Found {} Discord handlers in database, registering...", handlers.len());
+            tracing::info!(
+                "📋 Found {} Discord handlers in database, registering...",
+                handlers.len()
+            );
 
             let mut manager = DISCORD_MANAGER.lock().await;
             for (registration, config) in handlers {
-                if let Err(e) = manager.add_or_update_bot(app_handle, &db, &registration, &config).await {
-                    tracing::error!("Failed to initialize Discord bot for event {}: {}", registration.event_id, e);
+                if let Err(e) = manager
+                    .add_or_update_bot(app_handle, &db, &registration, &config)
+                    .await
+                {
+                    tracing::error!(
+                        "Failed to initialize Discord bot for event {}: {}",
+                        registration.event_id,
+                        e
+                    );
                 }
             }
         }
@@ -1069,7 +1129,9 @@ impl EventSink for DiscordSink {
         Self::add_bot_and_handler(&db, registration, self)?;
 
         let mut manager = DISCORD_MANAGER.lock().await;
-        manager.add_or_update_bot(app_handle, &db, registration, self).await?;
+        manager
+            .add_or_update_bot(app_handle, &db, registration, self)
+            .await?;
 
         tracing::info!(
             "✅ Registered Discord bot: {} -> event {}",
@@ -1089,7 +1151,9 @@ impl EventSink for DiscordSink {
         let token = Self::remove_handler(&db, &registration.event_id)?;
 
         let mut manager = DISCORD_MANAGER.lock().await;
-        manager.remove_handler(&token, &registration.event_id).await?;
+        manager
+            .remove_handler(&token, &registration.event_id)
+            .await?;
 
         tracing::info!("Unregistered Discord handler: {}", registration.event_id);
 

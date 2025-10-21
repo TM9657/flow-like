@@ -56,14 +56,12 @@ impl RSSSink {
         let headers_json = config
             .headers
             .as_ref()
-            .map(|h| serde_json::to_string(h).ok())
-            .flatten();
+            .and_then(|h| serde_json::to_string(h).ok());
 
         let keywords_json = config
             .filter_keywords
             .as_ref()
-            .map(|k| serde_json::to_string(k).ok())
-            .flatten();
+            .and_then(|k| serde_json::to_string(k).ok());
 
         conn.execute(
             "INSERT OR REPLACE INTO rss_feeds
@@ -145,7 +143,7 @@ impl RSSSink {
                         event_id.clone(),
                         offline,
                         None,
-                        None
+                        None,
                     ) {
                         tracing::error!("Failed to push RSS event to EventBus: {}", e);
                     } else {

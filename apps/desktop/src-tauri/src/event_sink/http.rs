@@ -1,8 +1,11 @@
 use anyhow::Result;
-use axum::{
-    body::Body, extract::{Path as AxumPath, State}, response::IntoResponse, Json, Router
-};
 use axum::http::{HeaderMap, StatusCode};
+use axum::{
+    Json, Router,
+    body::Body,
+    extract::{Path as AxumPath, State},
+    response::IntoResponse,
+};
 use flow_like_types::intercom::BufferedInterComHandler;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -65,22 +68,22 @@ impl HttpSink {
             )
             .ok();
 
-        if let Some(existing_event_id) = existing {
-            if existing_event_id != registration.event_id {
-                tracing::warn!(
-                    "Route conflict: {} {} {} already registered to event {}. Overwriting with event {}",
-                    registration.app_id,
-                    config.method,
-                    config.path,
-                    existing_event_id,
-                    registration.event_id
-                );
+        if let Some(existing_event_id) = existing
+            && existing_event_id != registration.event_id
+        {
+            tracing::warn!(
+                "Route conflict: {} {} {} already registered to event {}. Overwriting with event {}",
+                registration.app_id,
+                config.method,
+                config.path,
+                existing_event_id,
+                registration.event_id
+            );
 
-                conn.execute(
-                    "DELETE FROM http_routes WHERE event_id = ?1",
-                    params![existing_event_id],
-                )?;
-            }
+            conn.execute(
+                "DELETE FROM http_routes WHERE event_id = ?1",
+                params![existing_event_id],
+            )?;
         }
 
         conn.execute(
@@ -162,7 +165,8 @@ impl HttpSink {
                 Ok(s) => Some(s),
                 Err(e) => {
                     eprintln!("[HTTP] Invalid UTF-8 in request body: {}", e);
-                    return (StatusCode::BAD_REQUEST, "Invalid UTF-8 in request body").into_response();
+                    return (StatusCode::BAD_REQUEST, "Invalid UTF-8 in request body")
+                        .into_response();
                 }
             }
         } else {
@@ -171,7 +175,9 @@ impl HttpSink {
 
         let method_str = method.as_str();
         let full_path = format!("/{}", path);
-        let path_without_app_id = full_path.strip_prefix(&format!("/{}", app_id)).unwrap_or(&full_path);
+        let path_without_app_id = full_path
+            .strip_prefix(&format!("/{}", app_id))
+            .unwrap_or(&full_path);
 
         println!(
             "[HTTP] Received {} request for /{}{}, path without app_id: {}",
@@ -200,9 +206,10 @@ impl HttpSink {
                 app_id, path_without_app_id, method_str
             );
 
-            let route_result = route_stmt.query_row(params![app_id, path_without_app_id, method_str], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
-            });
+            let route_result = route_stmt
+                .query_row(params![app_id, path_without_app_id, method_str], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+                });
 
             match route_result {
                 Ok(result) => result,
@@ -214,8 +221,10 @@ impl HttpSink {
             // Lock is released here when conn goes out of scope
         };
 
-        println!("[HTTP] Route found: event_id: {}, auth_token: {:?}", event_id, auth_token);
-
+        println!(
+            "[HTTP] Route found: event_id: {}, auth_token: {:?}",
+            event_id, auth_token
+        );
 
         if let Some(auth_token) = auth_token {
             let header_token = headers
@@ -247,7 +256,10 @@ impl HttpSink {
             None
         };
 
-        println!("[HTTP] Triggering event: {}, with body {:?}", event_id, body);
+        println!(
+            "[HTTP] Triggering event: {}, with body {:?}",
+            event_id, body
+        );
 
         let response = Arc::new(Mutex::new(None));
         let (tx, rx) = flow_like_types::tokio::sync::oneshot::channel::<()>();
@@ -256,44 +268,44 @@ impl HttpSink {
         let response_clone = response.clone();
         let tx_clone = tx.clone();
         let callback = BufferedInterComHandler::new(
-                Arc::new(move |events| {
-                    let app_handle = app_handle_clone.clone();
-                    let response = response_clone.clone();
-                    let tx = tx_clone.clone();
-                    Box::pin({
-                        async move {
-                            for event in &events {
-                                if event.event_type == "generic_result" {
-                                    println!("[HTTP] Received generic_result event: {:?}", event);
-                                    let mut resp_lock = response.lock().await;
-                                    *resp_lock = Some(event.payload.clone());
+            Arc::new(move |events| {
+                let app_handle = app_handle_clone.clone();
+                let response = response_clone.clone();
+                let tx = tx_clone.clone();
+                Box::pin({
+                    async move {
+                        for event in &events {
+                            if event.event_type == "generic_result" {
+                                println!("[HTTP] Received generic_result event: {:?}", event);
+                                let mut resp_lock = response.lock().await;
+                                *resp_lock = Some(event.payload.clone());
 
-                                    // Signal that we received a response
-                                    if let Some(sender) = tx.lock().await.take() {
-                                        let _ = sender.send(());
-                                    }
+                                // Signal that we received a response
+                                if let Some(sender) = tx.lock().await.take() {
+                                    let _ = sender.send(());
                                 }
                             }
-
-                            let first_event = events.first();
-                            if let Some(first_event) = first_event {
-                                crate::utils::emit_throttled(
-                                    &app_handle,
-                                    UiEmitTarget::All,
-                                    &first_event.event_type,
-                                    events.clone(),
-                                    std::time::Duration::from_millis(150),
-                                );
-                            }
-
-                            Ok(())
                         }
-                    })
-                }),
-                Some(100),
-                Some(400),
-                Some(true),
-            );
+
+                        let first_event = events.first();
+                        if let Some(first_event) = first_event {
+                            crate::utils::emit_throttled(
+                                &app_handle,
+                                UiEmitTarget::All,
+                                &first_event.event_type,
+                                events.clone(),
+                                std::time::Duration::from_millis(150),
+                            );
+                        }
+
+                        Ok(())
+                    }
+                })
+            }),
+            Some(100),
+            Some(400),
+            Some(true),
+        );
 
         if let Some(manager_state) = app_handle.try_state::<TauriEventSinkManagerState>() {
             let result = match manager_state.0.try_lock() {
@@ -311,30 +323,35 @@ impl HttpSink {
                     "[HTTP] Failed to fire event '{}' for HTTP request: {}",
                     event_id, e
                 );
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to trigger event").into_response();
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to trigger event")
+                    .into_response();
             }
         } else {
             tracing::error!("EventSinkManager state not available for {}", event_id);
         }
 
         // Wait for the callback to receive the response (with timeout)
-        let timeout_result = flow_like_types::tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            rx
-        ).await;
+        let timeout_result =
+            flow_like_types::tokio::time::timeout(std::time::Duration::from_secs(30), rx).await;
 
         match timeout_result {
             Ok(Ok(())) => {
                 // Response received
                 if let Some(resp) = &*response.lock().await {
-                    println!("[HTTP] Returning response for event {}: {:?}", event_id, resp);
+                    println!(
+                        "[HTTP] Returning response for event {}: {:?}",
+                        event_id, resp
+                    );
                     return (StatusCode::OK, Json(resp.clone())).into_response();
                 }
-            },
+            }
             Ok(Err(_)) => {
                 // Channel closed without sending (shouldn't happen)
-                tracing::warn!("[HTTP] Response channel closed without response for event {}", event_id);
-            },
+                tracing::warn!(
+                    "[HTTP] Response channel closed without response for event {}",
+                    event_id
+                );
+            }
             Err(_) => {
                 // Timeout
                 tracing::warn!("[HTTP] Timeout waiting for response for event {}", event_id);

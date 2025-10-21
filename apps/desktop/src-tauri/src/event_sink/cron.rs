@@ -138,7 +138,8 @@ impl CronSink {
                     scheduled_for.time,
                     config.timezone
                 );
-                let ts = scheduled_for.to_utc_timestamp(tz)
+                let ts = scheduled_for
+                    .to_utc_timestamp(tz)
                     .ok_or_else(|| anyhow::anyhow!("Invalid scheduled_for date/time"))?;
                 (None, Some(ts))
             }

@@ -1,22 +1,16 @@
 use crate::{state::TauriSettingsState, utils::UiEmitTarget};
 use flow_like::app::App;
 use flow_like::flow::execution::{InternalRun, LogMeta};
-use flow_like::flow_like_storage::{Path, serde_arrow};
+use flow_like::flow_like_storage::Path;
 use flow_like::hub::Hub;
 use flow_like::state::RunData;
 use flow_like::{flow::execution::RunPayload, state::FlowLikeState};
-use flow_like_types::intercom::InterComCallback;
 use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
 use flow_like_types::tokio_util::sync::CancellationToken;
 use flow_like_types::{Value, sync::mpsc, tokio::sync::Mutex};
-use flow_like_types::{create_id, json, tokio};
-use serde::{Deserialize, Serialize};
-use std::sync::RwLock;
+use flow_like_types::{json, tokio};
 use std::time::Duration;
-use std::{
-    path::PathBuf,
-    sync::{Arc, OnceLock},
-};
+use std::{path::PathBuf, sync::Arc};
 use tauri::AppHandle;
 
 // Maximum number of events to queue. 100,000 should be plenty for local handling.
@@ -52,7 +46,7 @@ impl EventBusEvent {
             payload: self.payload.to_owned(),
         };
 
-        let board_version = loaded_event.board_version.clone();
+        let board_version = loaded_event.board_version;
         let board_id = loaded_event.board_id.clone();
 
         let Ok(board) = app
@@ -63,7 +57,7 @@ impl EventBusEvent {
         };
 
         let board = Arc::new(board.lock().await.clone());
-        let profile = TauriSettingsState::current_profile(&app_handle).await?;
+        let profile = TauriSettingsState::current_profile(app_handle).await?;
 
         let app_handle_clone = app_handle.clone();
         let buffered_sender = if let Some(callback) = &self.callback {
@@ -218,7 +212,7 @@ impl EventBus {
             event_id,
             token,
             offline,
-            callback
+            callback,
         };
 
         self.sender

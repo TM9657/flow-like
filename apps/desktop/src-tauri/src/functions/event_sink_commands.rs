@@ -1,4 +1,4 @@
-use crate::event_sink::{EventRegistration, EventSinkManager};
+use crate::event_sink::EventRegistration;
 use crate::state::TauriEventSinkManagerState;
 use tauri::AppHandle;
 use tracing::instrument;

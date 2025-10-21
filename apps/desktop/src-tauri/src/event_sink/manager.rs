@@ -62,7 +62,7 @@ impl RegistrationStorage {
         let default_payload_json = registration
             .default_payload
             .as_ref()
-            .map(|p| serde_json::to_string(p))
+            .map(serde_json::to_string)
             .transpose()?;
 
         let updated_at = registration
@@ -334,7 +334,7 @@ impl EventSinkManager {
                     event_id.to_string(),
                     offline,
                     Some(token),
-                    callback
+                    callback,
                 )
             } else {
                 event_bus.push_event_with_token(
@@ -343,7 +343,7 @@ impl EventSinkManager {
                     event_id.to_string(),
                     offline,
                     personal_access_token,
-                    callback
+                    callback,
                 )
             };
 
@@ -608,8 +608,7 @@ impl EventSinkManager {
 
         println!(
             "Registering event {}: config parse result: {:?}",
-            event.id,
-            config_result
+            event.id, config_result
         );
 
         match config_result {
@@ -685,7 +684,8 @@ impl EventSinkManager {
             }
             "deeplink" => {
                 let deeplink_config: super::deeplink::DeeplinkSink =
-                    serde_json::from_value(config_json).context("Failed to parse deeplink config")?;
+                    serde_json::from_value(config_json)
+                        .context("Failed to parse deeplink config")?;
                 Ok(EventConfig::Deeplink(deeplink_config))
             }
             // Add more sink types as needed
@@ -929,10 +929,7 @@ impl EventSinkManager {
                         headers: None,
                         filter_keywords: None,
                     };
-                    if let Err(e) = self
-                        .ensure_sink_started("rss", app_handle, &rss_sink)
-                        .await
-                    {
+                    if let Err(e) = self.ensure_sink_started("rss", app_handle, &rss_sink).await {
                         tracing::error!("❌ Failed to start rss sink: {}", e);
                     }
                 }
