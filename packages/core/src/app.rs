@@ -463,7 +463,6 @@ impl App {
         enforce_id: Option<bool>,
     ) -> flow_like_types::Result<Event> {
         let enforce_id = enforce_id.unwrap_or(false);
-        println!("Upserting event: {}", event.id);
         let mut event = event;
 
         event.upsert(self, version_type, enforce_id).await?;

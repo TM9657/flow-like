@@ -62,7 +62,7 @@ const ImportEncryptedDialog: React.FC<ImportEncryptedDialogProps> = ({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-md animate-in fade-in-0 slide-in-from-top-8 rounded-2xl shadow-2xl border-none bg-background/95 backdrop-blur-lg">
+			<DialogContent className="sm:max-w-md animate-in fade-in-0 slide-in-from-top-8 rounded-2xl shadow-2xl border-none bg-background/95 backdrop-blur-lg max-w-screen overflow-hidden">
 				<DialogHeader className="space-y-3">
 					<div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
 						<LockIcon className="h-6 w-6 text-primary" />
@@ -108,11 +108,6 @@ const ImportEncryptedDialog: React.FC<ImportEncryptedDialogProps> = ({
 							</Button>
 						</div>
 					</div>
-					{path && (
-						<p className="text-[11px] text-muted-foreground truncate">
-							File: {path}
-						</p>
-					)}
 				</div>
 
 				<DialogFooter className="flex flex-row gap-1 justify-center pt-2">

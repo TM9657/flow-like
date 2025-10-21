@@ -211,6 +211,7 @@ pub enum ChatAction {
 pub struct User {
     pub sub: String,
     pub name: String,
+    pub bot: Option<bool>
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]

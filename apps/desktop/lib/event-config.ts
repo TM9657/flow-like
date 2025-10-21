@@ -2,6 +2,7 @@ import {
 	ApiConfig,
 	ChatInterface,
 	CronJobConfig,
+	DiscordConfig,
 	type IEventMapping,
 	SimpleChatConfig,
 	UserMailConfig,
@@ -13,6 +14,7 @@ export const EVENT_CONFIG: IEventMapping = {
 	events_chat: {
 		configInterfaces: {
 			simple_chat: SimpleChatConfig,
+			discord: DiscordConfig,
 		},
 		useInterfaces: {
 			simple_chat: ChatInterface,
@@ -26,10 +28,21 @@ export const EVENT_CONFIG: IEventMapping = {
 				default_tools: [],
 				example_messages: [],
 			},
+			discord: {
+				token: "",
+				bot_name: "Flow-Like Bot",
+				bot_description: "",
+				intents: ["Guilds", "GuildMessages", "MessageContent"],
+				channel_whitelist: [],
+				channel_blacklist: [],
+				respond_to_mentions: true,
+				respond_to_dms: true,
+				command_prefix: "!",
+			},
 		},
 		defaultEventType: "simple_chat",
-		eventTypes: ["simple_chat", "advanced_chat"],
-		withSink: [],
+		eventTypes: ["simple_chat", "advanced_chat", "discord"],
+		withSink: ["discord"],
 	},
 	events_mail: {
 		configInterfaces: {

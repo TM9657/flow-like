@@ -5145,6 +5145,7 @@ dependencies = [
  "futures",
  "image",
  "imageproc",
+ "lazy_static",
  "rusqlite",
  "sentry 0.42.0",
  "sentry-tracing 0.42.0",

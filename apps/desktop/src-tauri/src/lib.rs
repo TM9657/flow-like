@@ -483,13 +483,7 @@ pub fn run() {
 
                 while let Some(event) = event_receiver.recv().await {
                     match event.execute(&handle, flow_like_state.clone(), &hub).await {
-                        Ok(meta) => {
-                            if let Some(meta) = meta {
-                                println!("Event executed successfully: {:?}", meta);
-                            } else {
-                                println!("Event executed with no metadata");
-                            }
-                        }
+                        Ok(meta) => _ = meta,
                         Err(e) => {
                             eprintln!("Error executing event: {:?}", e);
                         }

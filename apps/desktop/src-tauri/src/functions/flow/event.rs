@@ -79,15 +79,9 @@ pub async fn upsert_event(
     if let Ok(mut app) = App::load(app_id.clone(), flow_like_state).await {
         let event = app.upsert_event(event, version_type, enforce_id).await?;
 
-        // Debug: Log PAT presence
-        println!("PAT present for event {}: {}", event.id, pat.is_some());
-        tracing::info!("PAT present for event {}: {}", event.id, pat.is_some());
-
         // Automatically register/update the event with the sink manager if applicable
         match crate::state::TauriEventSinkManagerState::construct(&handler).await {
             Ok(event_sink_manager) => {
-                println!("Auto-registering event {} with sink manager", event.id);
-                tracing::info!("Auto-registering event {} with sink manager", event.id);
                 let manager = event_sink_manager.lock().await;
                 if let Err(e) = manager
                     .register_from_flow_event(&handler, &app_id, &event, offline, pat)

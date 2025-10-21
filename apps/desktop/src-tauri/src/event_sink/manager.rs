@@ -600,6 +600,12 @@ impl EventSinkManager {
         // Parse config bytes to determine sink type and configuration
         let config_result = self.parse_event_config(&event.event_type, &event.config);
 
+        println!(
+            "Registering event {}: config parse result: {:?}",
+            event.id,
+            config_result
+        );
+
         match config_result {
             Ok(event_config) => {
                 let registration = EventRegistration {
@@ -665,6 +671,7 @@ impl EventSinkManager {
                 Ok(EventConfig::Rss(rss_config))
             }
             "discord" => {
+                println!("Parsing Discord config: {:?}", config_json);
                 let discord_config: super::discord::DiscordSink =
                     serde_json::from_value(config_json)
                         .context("Failed to parse Discord config")?;
@@ -871,8 +878,14 @@ impl EventSinkManager {
                 "discord" => {
                     let discord_sink = super::discord::DiscordSink {
                         token: String::new(),
-                        channel_id: None,
+                        bot_name: None,
+                        bot_description: None,
                         intents: None,
+                        channel_whitelist: None,
+                        channel_blacklist: None,
+                        respond_to_mentions: true,
+                        respond_to_dms: true,
+                        command_prefix: "!".to_string(),
                     };
                     if let Err(e) = self
                         .ensure_sink_started("discord", app_handle, &discord_sink)
