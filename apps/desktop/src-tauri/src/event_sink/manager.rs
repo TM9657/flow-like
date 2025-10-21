@@ -452,9 +452,11 @@ impl EventSinkManager {
                 sink.on_register(app_handle, &registration, self.db.clone())
                     .await?;
             }
-            EventConfig::Deeplink(_sink) => {
-                tracing::warn!("Deeplink sink not yet implemented");
-                // TODO: Implement DeeplinkSink
+            EventConfig::Deeplink(sink) => {
+                self.ensure_sink_started("deeplink", app_handle, sink)
+                    .await?;
+                sink.on_register(app_handle, &registration, self.db.clone())
+                    .await?;
             }
             EventConfig::Nfc(_sink) => {
                 tracing::warn!("NFC sink not yet implemented");
@@ -541,6 +543,10 @@ impl EventSinkManager {
                     .await?;
             }
             EventConfig::GeoLocation(sink) => {
+                sink.on_unregister(app_handle, &registration, self.db.clone())
+                    .await?;
+            }
+            EventConfig::Deeplink(sink) => {
                 sink.on_unregister(app_handle, &registration, self.db.clone())
                     .await?;
             }
@@ -676,6 +682,11 @@ impl EventSinkManager {
                     serde_json::from_value(config_json)
                         .context("Failed to parse Discord config")?;
                 Ok(EventConfig::Discord(discord_config))
+            }
+            "deeplink" => {
+                let deeplink_config: super::deeplink::DeeplinkSink =
+                    serde_json::from_value(config_json).context("Failed to parse deeplink config")?;
+                Ok(EventConfig::Deeplink(deeplink_config))
             }
             // Add more sink types as needed
             _ => Err(anyhow::anyhow!(
@@ -923,6 +934,17 @@ impl EventSinkManager {
                         .await
                     {
                         tracing::error!("❌ Failed to start rss sink: {}", e);
+                    }
+                }
+                "deeplink" => {
+                    let deeplink_sink = super::deeplink::DeeplinkSink {
+                        path: String::new(),
+                    };
+                    if let Err(e) = self
+                        .ensure_sink_started("deeplink", app_handle, &deeplink_sink)
+                        .await
+                    {
+                        tracing::error!("❌ Failed to start deeplink sink: {}", e);
                     }
                 }
                 _ => {

@@ -2,6 +2,7 @@ import {
 	ApiConfig,
 	ChatInterface,
 	CronJobConfig,
+	DeeplinkConfig,
 	DiscordConfig,
 	type IEventMapping,
 	SimpleChatConfig,
@@ -65,30 +66,38 @@ export const EVENT_CONFIG: IEventMapping = {
 	events_generic: {
 		configInterfaces: {
 			api: ApiConfig,
+			deeplink: DeeplinkConfig,
 		},
 		defaultEventType: "api",
-		eventTypes: ["api"],
+		eventTypes: ["api", "deeplink"],
 		configs: {
 			api: {
 				method: "GET",
 				path: `/${createId()}`,
 				public_endpoint: false,
 			},
+			deeplink: {
+				path: createId(),
+			},
 		},
 		useInterfaces: {},
-		withSink: ["api"],
+		withSink: ["api", "deeplink"],
 	},
 	events_simple: {
 		configInterfaces: {
-			webhook: WebhookConfig,
-			cron: CronJobConfig
+			api: WebhookConfig,
+			cron: CronJobConfig,
+			deeplink: DeeplinkConfig,
 		},
 		defaultEventType: "quick_action",
-		eventTypes: ["quick_action", "webhook", "cron"],
-		withSink: ["cron", "webhook"],
+		eventTypes: ["quick_action", "api", "cron", "deeplink"],
+		withSink: ["cron", "api", "deeplink"],
 		configs: {
 			cron: {
 				expression: "* */1 * * *",
+			},
+			deeplink: {
+				path: createId(),
 			},
 		},
 		useInterfaces: {},
