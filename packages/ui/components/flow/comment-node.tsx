@@ -15,7 +15,7 @@ import {
 	SquarePenIcon,
 	UnlockIcon,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
 	ContextMenu,
