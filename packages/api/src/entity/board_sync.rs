@@ -4,19 +4,18 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
-#[sea_orm(schema_name = "public", table_name = "PAT")]
+#[sea_orm(schema_name = "public", table_name = "BoardSync")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false, column_type = "Text")]
     pub id: String,
-    #[sea_orm(column_type = "Text")]
-    pub name: String,
-    #[sea_orm(column_type = "Text", unique)]
-    pub key: String,
-    pub permissions: i64,
-    #[sea_orm(column_name = "userId", column_type = "Text")]
-    pub user_id: String,
-    #[sea_orm(column_name = "validUntil")]
-    pub valid_until: Option<DateTime>,
+    #[sea_orm(column_name = "appId", column_type = "Text")]
+    pub app_id: String,
+    #[sea_orm(column_name = "boardId", column_type = "Text")]
+    pub board_id: String,
+    #[sea_orm(column_name = "lastSyncedAt")]
+    pub last_synced_at: DateTime,
+    #[sea_orm(column_name = "syncEncryptionKey", column_type = "Text")]
+    pub sync_encryption_key: String,
     #[sea_orm(column_name = "createdAt")]
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]
@@ -26,18 +25,18 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::user::Entity",
-        from = "Column::UserId",
-        to = "super::user::Column::Id",
+        belongs_to = "super::app::Entity",
+        from = "Column::AppId",
+        to = "super::app::Column::Id",
         on_update = "Cascade",
         on_delete = "Cascade"
     )]
-    User,
+    App,
 }
 
-impl Related<super::user::Entity> for Entity {
+impl Related<super::app::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::User.def()
+        Relation::App.def()
     }
 }
 
