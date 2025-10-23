@@ -88,7 +88,6 @@ pub async fn upsert_app(
         let mut app: app::ActiveModel = app.clone().into();
         app.status = sea_orm::ActiveValue::Set(app_updates.status);
         app.changelog = sea_orm::ActiveValue::Set(app_updates.changelog);
-        app.bits = sea_orm::ActiveValue::Set(app_updates.bits);
 
         app.primary_category = sea_orm::ActiveValue::Set(app_updates.primary_category);
         app.secondary_category = sea_orm::ActiveValue::Set(app_updates.secondary_category);
@@ -182,7 +181,7 @@ pub async fn upsert_app(
                     created_at: Set(now),
                     updated_at: Set(now),
                     visibility: Set(Visibility::Private),
-                    bits: Set(app_body.bits),
+                    bits: Set(Some(app_body.bits.unwrap_or_default())),
                     ..Default::default()
                 };
 
