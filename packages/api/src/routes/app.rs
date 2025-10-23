@@ -263,7 +263,7 @@ impl From<app::Model> for flow_like::app::App {
                 }
             },
             authors: vec![],
-            bits: vec![],
+            bits: model.bits.unwrap_or_default(),
             boards: vec![],
             events: vec![],
             templates: vec![],
@@ -330,6 +330,7 @@ impl From<flow_like::app::App> for app::Model {
                     crate::entity::sea_orm_active_enums::Visibility::Offline
                 }
             },
+            bits: Some(app.bits),
             changelog: app.changelog,
             default_role_id: None,
             owner_role_id: None,
