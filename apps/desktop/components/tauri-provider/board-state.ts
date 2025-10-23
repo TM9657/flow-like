@@ -290,6 +290,7 @@ export class BoardState implements IBoardState {
 			{ method: "POST" },
 			this.backend.auth,
 		);
+
 		return access;
 	}
 

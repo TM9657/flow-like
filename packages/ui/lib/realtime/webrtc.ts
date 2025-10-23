@@ -52,15 +52,21 @@ export async function createRealtimeSession(args: {
   jwks?: IJwks;
   name?: string;
   userId?: string;
+  signalingServers?: string[];
 }): Promise<RealtimeSession> {
   const { room, access, jwks, name, userId } = args;
   const doc = new Y.Doc();
+  if(!args.signalingServers){
+    console.warn("No signaling servers provided, using default");
+  } else {
+    console.log("Using signaling servers:", args.signalingServers);
+  }
+
   const provider = new WebrtcProvider(room, doc, {
     password: access.encryption_key,
     maxConns: 20 + Math.floor(Math.random() * 15),
-    signaling: [
-        // TODO: replace with signaling servers from Hub Config
-        'wss://signaling.yjs.dev', 'wss://y-webrtc-signaling-eu.herokuapp.com', 'wss://y-webrtc-signaling-us.herokuapp.com'
+    signaling: args.signalingServers ?? [
+        'wss://signaling.flow-like.com'
     ],
     filterBcConns: true,
     peerOpts: {

@@ -140,6 +140,7 @@ export async function fetcher<T>(
 				auth?.startSilentRenew();
 			}
 			console.error(`Error fetching ${path}:`, response);
+			console.error(await response.text());
 			throw new Error(`Error fetching data: ${response.statusText}`);
 		}
 

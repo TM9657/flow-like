@@ -37,6 +37,8 @@ import {
 	SquareChevronUpIcon,
 	Undo2Icon,
 	VariableIcon,
+	WifiIcon,
+	WifiOffIcon,
 	XIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -56,6 +58,7 @@ import {
 	SheetContent,
 	SheetHeader,
 	SheetTitle,
+	useHub,
 	useLogAggregation,
 	useMobileHeader,
 	viewportDb,
@@ -146,6 +149,7 @@ export function FlowBoard({
 	const router = useRouter();
 	const backend = useBackend();
 	const selected = useRef(new Set<string>());
+	const hub = useHub();
 	const edgeReconnectSuccessful = useRef(true);
 	const { isOver, setNodeRef, active } = useDroppable({ id: "flow" });
 	const parentRegister = useFlowBoardParentState();
@@ -1156,9 +1160,12 @@ export function FlowBoard({
 		let disposed = false;
 		const setup = async () => {
 			try {
+				// Check offline status first
+				const offline = await backend.isOffline(appId);
+				console.log("[FlowBoard] Offline status:", offline, "Version:", version, "Board data:", !!board.data);
+
 				// Only enable realtime on latest/editable versions
 				if (!board.data || typeof version !== "undefined") return;
-				const offline = await backend.isOffline(appId);
 				if (offline) return;
 				const room = `${appId}:${boardId}`;
 				const [access, jwks] = await Promise.all([
@@ -1167,7 +1174,8 @@ export function FlowBoard({
 				]);
 				const name = currentProfile.data?.name || currentProfile.data?.settings?.display_name || "Anonymous";
 				const userId = currentProfile.data?.id;
-				const session = await createRealtimeSession({ room, access, jwks, name, userId });
+
+				const session = await createRealtimeSession({ room, access, jwks, name, userId, signalingServers: hub.hub?.signaling ?? [] });
 				if (disposed) { session.dispose(); return; }
 				sessionRef.current = { dispose: session.dispose };
 				setAwareness(session.awareness);
@@ -1182,7 +1190,7 @@ export function FlowBoard({
 			sessionRef.current = null;
 			setAwareness(undefined);
 		};
-	}, [backend, appId, boardId, board.data, version, currentProfile.data?.id, currentProfile.data?.name]);
+	}, [backend, appId, boardId, board.data, version, currentProfile.data?.id, currentProfile.data?.name, hub.hub]);
 
 	// Broadcast cursor position via awareness
 	useEffect(() => {
@@ -1621,7 +1629,19 @@ export function FlowBoard({
 	);
 
 	return (
-		<div className="w-full flex-1 grow flex-col min-h-0">
+		<div className="w-full flex-1 grow flex-col min-h-0 relative">
+			{/* Realtime connection status indicator */}
+			{awareness ? (
+				<div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[color-mix(in_oklch,var(--background)_90%,transparent)] backdrop-blur-sm border border-[color-mix(in_oklch,var(--primary)_40%,transparent)] shadow-sm">
+					<WifiIcon className="h-3.5 w-3.5 text-primary animate-pulse" />
+					<span className="text-xs font-medium text-primary">Live</span>
+				</div>
+			) :  (
+				<div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[color-mix(in_oklch,var(--background)_90%,transparent)] backdrop-blur-sm border border-[color-mix(in_oklch,var(--muted-foreground)_40%,transparent)] shadow-sm">
+					<WifiOffIcon className="h-3.5 w-3.5 text-muted-foreground" />
+					<span className="text-xs font-medium text-muted-foreground">Offline</span>
+				</div>
+			)}
 			<div className="flex items-center justify-center absolute translate-x-[-50%] mt-5 left-[50dvw] z-40">
 				{board.data && editBoard && (
 					<BoardMeta

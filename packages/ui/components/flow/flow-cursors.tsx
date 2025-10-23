@@ -48,7 +48,6 @@ export const FlowCursors = memo(function FlowCursors({ awareness, className }: {
 
   return (
     <div className={"pointer-events-none absolute inset-0 z-40 " + (className ?? "")}>
-        <div className="size-10 bg-red-500 top-0 right-0 z-10"></div>
       {items.map((p, idx) => (
         <div key={(p.id ?? "") + idx} className="absolute" style={{ transform: `translate(${p.x}px, ${p.y}px)` }}>
           <div className="flex items-center gap-1">
