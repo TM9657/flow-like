@@ -118,6 +118,8 @@ import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowRuns } from "./flow-runs";
 import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
+import { createRealtimeSession } from "../../lib";
+import { FlowCursors } from "./flow-cursors";
 
 function hexToRgba(hex: string, alpha = 0.3): string {
 	let c = hex.replace("#", "");
@@ -1146,6 +1148,48 @@ export function FlowBoard({
 		};
 	}, []);
 
+	// Realtime session
+	const [awareness, setAwareness] = useState<any | undefined>(undefined);
+	const sessionRef = useRef<{ dispose: () => void } | null>(null);
+
+	useEffect(() => {
+		let disposed = false;
+		const setup = async () => {
+			try {
+				// Only enable realtime on latest/editable versions
+				if (!board.data || typeof version !== "undefined") return;
+				const offline = await backend.isOffline(appId);
+				if (offline) return;
+				const room = `${appId}:${boardId}`;
+				const [access, jwks] = await Promise.all([
+					backend.boardState.getRealtimeAccess(appId, boardId),
+					backend.boardState.getRealtimeJwks(appId, boardId).catch(() => undefined as any),
+				]);
+				const name = currentProfile.data?.name || currentProfile.data?.settings?.display_name || "Anonymous";
+				const userId = currentProfile.data?.id;
+				const session = await createRealtimeSession({ room, access, jwks, name, userId });
+				if (disposed) { session.dispose(); return; }
+				sessionRef.current = { dispose: session.dispose };
+				setAwareness(session.awareness);
+			} catch (e) {
+				console.warn("Realtime setup failed:", e);
+			}
+		};
+		void setup();
+		return () => {
+			disposed = true;
+			try { sessionRef.current?.dispose(); } catch {}
+			sessionRef.current = null;
+			setAwareness(undefined);
+		};
+	}, [backend, appId, boardId, board.data, version, currentProfile.data?.id, currentProfile.data?.name]);
+
+	// Broadcast cursor position via awareness
+	useEffect(() => {
+		if (!awareness) return;
+		awareness.setLocalStateField("cursor", { x: mousePosition.x, y: mousePosition.y });
+	}, [mousePosition.x, mousePosition.y, awareness]);
+
 	useEffect(() => {
 		if (!board.data) return;
 		boardRef.current = board.data;
@@ -1857,6 +1901,7 @@ export function FlowBoard({
 											size={1}
 										/>
 									</ReactFlow>
+									{awareness && <FlowCursors awareness={awareness} />}
 									<DragOverlay
 										dropAnimation={{
 											duration: 500,

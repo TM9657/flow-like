@@ -17,8 +17,8 @@ use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use p256::{
     PublicKey as P256PublicKey, elliptic_curve::sec1::ToEncodedPoint, pkcs8::DecodePublicKey,
 };
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use sea_orm::TransactionTrait;
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 

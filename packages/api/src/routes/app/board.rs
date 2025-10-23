@@ -4,10 +4,10 @@ pub mod execute_commands;
 pub mod get_board;
 pub mod get_board_versions;
 pub mod get_boards;
+pub mod realtime;
 pub mod undo_redo_board;
 pub mod upsert_board;
 pub mod version_board;
-pub mod realtime;
 
 use axum::{
     Router,

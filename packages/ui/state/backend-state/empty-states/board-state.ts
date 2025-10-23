@@ -12,6 +12,7 @@ import type {
 	IRunPayload,
 	IVersionType,
 } from "../../../";
+import type { IJwks, IRealtimeAccess } from "../../../";
 
 export class EmptyBoardState implements IBoardState {
 	getBoards(appId: string): Promise<IBoard[]> {
@@ -25,6 +26,12 @@ export class EmptyBoardState implements IBoardState {
 		boardId: string,
 		version?: [number, number, number],
 	): Promise<IBoard> {
+		throw new Error("Method not implemented.");
+	}
+	getRealtimeAccess(appId: string, boardId: string): Promise<IRealtimeAccess> {
+		throw new Error("Method not implemented.");
+	}
+	getRealtimeJwks(appId: string, boardId: string): Promise<IJwks> {
 		throw new Error("Method not implemented.");
 	}
 	createBoardVersion(

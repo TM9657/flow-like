@@ -11,6 +11,7 @@ import type {
 	IRunPayload,
 	IVersionType,
 } from "../../lib";
+import type { IJwks, IRealtimeAccess } from "../../lib";
 
 export interface IBoardState {
 	getBoards(appId: string): Promise<IBoard[]>;
@@ -20,6 +21,13 @@ export interface IBoardState {
 		boardId: string,
 		version?: [number, number, number],
 	): Promise<IBoard>;
+
+	// Realtime collaboration
+	getRealtimeAccess(
+		appId: string,
+		boardId: string,
+	): Promise<IRealtimeAccess>;
+	getRealtimeJwks(appId: string, boardId: string): Promise<IJwks>;
 	createBoardVersion(
 		appId: string,
 		boardId: string,

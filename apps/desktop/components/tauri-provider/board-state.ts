@@ -19,6 +19,7 @@ import {
 import { isObject } from "lodash-es";
 import { toast } from "sonner";
 import { fetcher } from "../../lib/api";
+import type { IJwks, IRealtimeAccess } from "@tm9657/flow-like-ui";
 import type { TauriBackend } from "../tauri-provider";
 
 interface DiffEntry {
@@ -188,8 +189,8 @@ export class BoardState implements IBoardState {
 			!this.backend.auth ||
 			!this.backend.queryClient
 		) {
-			return board;
-		}
+	        return board;
+	    }
 
 		const getOfflineSyncCommands =
 			this.backend.getOfflineSyncCommands.bind(this);
@@ -276,6 +277,37 @@ export class BoardState implements IBoardState {
 
 		return board;
 	}
+
+	async getRealtimeAccess(appId: string, boardId: string): Promise<IRealtimeAccess> {
+		const isOffline = await this.backend.isOffline(appId);
+		if (isOffline) throw new Error("Realtime is unavailable offline");
+		if (!this.backend.profile || !this.backend.auth)
+			throw new Error("Missing auth/profile for realtime access");
+
+		const access = await fetcher<IRealtimeAccess>(
+			this.backend.profile,
+			`apps/${appId}/board/${boardId}/realtime`,
+			{ method: "POST" },
+			this.backend.auth,
+		);
+		return access;
+	}
+
+	async getRealtimeJwks(appId: string, boardId: string): Promise<IJwks> {
+		const isOffline = await this.backend.isOffline(appId);
+		if (isOffline) throw new Error("Realtime is unavailable offline");
+		if (!this.backend.profile || !this.backend.auth)
+			throw new Error("Missing auth/profile for realtime JWKS");
+
+		const jwks = await fetcher<IJwks>(
+			this.backend.profile,
+			`apps/${appId}/board/${boardId}/realtime`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+		return jwks;
+	}
+
 	async createBoardVersion(
 		appId: string,
 		boardId: string,

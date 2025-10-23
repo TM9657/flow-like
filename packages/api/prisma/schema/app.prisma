@@ -93,6 +93,7 @@ model App {
   executionMode ExecutionMode @default(ANY)
 
   syncs BoardSync[]
+  bits String[] @default([])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
