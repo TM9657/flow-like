@@ -7,6 +7,7 @@ pub mod get_boards;
 pub mod undo_redo_board;
 pub mod upsert_board;
 pub mod version_board;
+pub mod realtime;
 
 use axum::{
     Router,
@@ -29,6 +30,10 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/{board_id}/version",
             get(get_board_versions::get_board_versions),
+        )
+        .route(
+            "/{board_id}/realtime",
+            get(realtime::jwks).post(realtime::access),
         )
         .route("/{board_id}/undo", patch(undo_redo_board::undo_board))
         .route("/{board_id}/redo", patch(undo_redo_board::redo_board))

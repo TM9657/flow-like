@@ -1,8 +1,6 @@
-# --- Build sea-orm-cli binary on Debian bookworm to match Bun's glibc ---
 FROM rust:1.90-bookworm as seaorm_builder
 RUN cargo install sea-orm-cli@1.1.16 --locked
 
-# --- Final tools image with Bun + Prisma + psql client ---
 FROM oven/bun:latest
 
 USER root
