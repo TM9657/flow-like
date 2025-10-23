@@ -78,7 +78,6 @@ pub async fn upsert_app(
             bucket_app.secondary_category = app_updates.secondary_category.clone();
             bucket_app.price = app_updates.price;
             bucket_app.updated_at = SystemTime::now();
-            bucket_app.bits = app_updates.bits.clone();
             bucket_app.status = app_updates.status.clone();
             bucket_app.version = app_updates.version.clone();
             bucket_app.save().await?;

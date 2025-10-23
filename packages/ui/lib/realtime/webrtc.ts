@@ -10,6 +10,9 @@ export interface RealtimeSession {
   dispose: () => void;
 }
 
+// Global registry to prevent duplicate Y.Doc instances for the same room
+const roomRegistry = new Map<string, { doc: Y.Doc; provider: any; refCount: number }>();
+
 function pickColor(seed?: string): string {
   // Stable HSL color from seed, fallback random
   let s = 0;
@@ -55,6 +58,38 @@ export async function createRealtimeSession(args: {
   signalingServers?: string[];
 }): Promise<RealtimeSession> {
   const { room, access, jwks, name, userId } = args;
+
+  // Check if a session already exists for this room
+  const existing = roomRegistry.get(room);
+  if (existing) {
+    console.log(`[WebRTC] Reusing existing session for room: ${room}`);
+    existing.refCount++;
+
+    const awareness = existing.provider.awareness;
+    const color = pickColor(userId);
+    awareness.setLocalStateField("user", {
+      name: name ?? "Anonymous",
+      color,
+      token: access.jwt,
+      id: userId,
+    });
+
+    const dispose = () => {
+      existing.refCount--;
+      console.log(`[WebRTC] Decremented refCount for room ${room}: ${existing.refCount}`);
+      if (existing.refCount <= 0) {
+        console.log(`[WebRTC] Destroying session for room: ${room}`);
+        try { existing.provider.destroy(); } catch (e) { console.error("Provider destroy error:", e); }
+        try { existing.doc.destroy(); } catch (e) { console.error("Doc destroy error:", e); }
+        roomRegistry.delete(room);
+      }
+    };
+
+    return { doc: existing.doc, provider: existing.provider, awareness, dispose };
+  }
+
+  // Create a new session
+  console.log(`[WebRTC] Creating new session for room: ${room}`);
   const doc = new Y.Doc();
   if(!args.signalingServers){
     console.warn("No signaling servers provided, using default");
@@ -100,9 +135,21 @@ export async function createRealtimeSession(args: {
     });
   }
 
+  // Register in the global registry
+  roomRegistry.set(room, { doc, provider, refCount: 1 });
+
   const dispose = () => {
-    try { provider.destroy(); } catch {}
-    try { doc.destroy(); } catch {}
+    const entry = roomRegistry.get(room);
+    if (!entry) return;
+
+    entry.refCount--;
+    console.log(`[WebRTC] Decremented refCount for room ${room}: ${entry.refCount}`);
+    if (entry.refCount <= 0) {
+      console.log(`[WebRTC] Destroying session for room: ${room}`);
+      try { provider.destroy(); } catch (e) { console.error("Provider destroy error:", e); }
+      try { doc.destroy(); } catch (e) { console.error("Doc destroy error:", e); }
+      roomRegistry.delete(room);
+    }
   };
 
   return { doc, provider, awareness, dispose };

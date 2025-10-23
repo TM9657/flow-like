@@ -36,6 +36,7 @@ export class AppState implements IAppState {
 				`apps/new`,
 				{
 					meta: metadata,
+					bits: bits,
 				},
 				this.backend.auth,
 			);
