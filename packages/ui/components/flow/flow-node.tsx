@@ -79,6 +79,13 @@ import { FlowPin } from "./flow-pin";
 import { LayerEditMenu } from "./layer-editing-menu";
 import { typeToColor } from "./utils";
 
+export interface RemoteSelectionParticipant {
+	clientId: number;
+	userId?: string;
+	name: string;
+	color: string;
+}
+
 export interface IPinAction {
 	action: "create";
 	pin: IPin;
@@ -96,6 +103,7 @@ export type FlowNode = Node<
 		version?: [number, number, number];
 		onExecute: (node: INode, payload?: object) => Promise<void>;
 		onCopy: () => Promise<void>;
+		remoteSelections?: RemoteSelectionParticipant[];
 	},
 	"node"
 >;
@@ -130,6 +138,12 @@ const FlowNodeInner = memo(
 		const div = useRef<HTMLDivElement>(null);
 		const reactFlow = useReactFlow();
 		const { getNode } = useReactFlow();
+		const remoteSelections = props.data.remoteSelections ?? [];
+		const displayedRemoteSelections = useMemo(
+			() => remoteSelections.slice(0, 3),
+			[remoteSelections],
+		);
+		const extraRemoteSelections = remoteSelections.length - displayedRemoteSelections.length;
 		const [executed, severity] = useMemo(() => {
 			const severity = ILogLevel.Debug;
 
@@ -604,6 +618,28 @@ const FlowNodeInner = memo(
 				onMouseEnter={() => onHover(true)}
 				onMouseLeave={() => onHover(false)}
 			>
+				{remoteSelections.length > 0 && (
+					<div className="pointer-events-none absolute -top-3 left-0 flex flex-col gap-1">
+						{displayedRemoteSelections.map((participant) => (
+							<div
+								key={`${participant.clientId}-${participant.userId ?? participant.name}`}
+								className="flex items-center gap-1 rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm"
+								style={{ borderColor: participant.color }}
+							>
+								<span
+									className="h-1.5 w-1.5 rounded-full"
+									style={{ backgroundColor: participant.color }}
+								/>
+								<span className="font-medium">{participant.name}</span>
+							</div>
+						))}
+						{extraRemoteSelections > 0 && (
+							<div className="rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm">
+								+{extraRemoteSelections}
+							</div>
+						)}
+					</div>
+				)}
 				{playNode}
 				{props.data.node.long_running && (
 					<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(-50%)] left-0 text-center bg-background rounded-full">

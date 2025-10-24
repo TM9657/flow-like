@@ -8,6 +8,8 @@ export interface RealtimeSession {
   provider: any; // WebrtcProvider, typed as any to avoid direct dependency types here
   awareness: any;
   dispose: () => void;
+  onStatusChange?: (status: 'connected' | 'disconnected' | 'reconnecting') => void;
+  reconnect: () => Promise<void>;
 }
 
 // Global registry to prevent duplicate Y.Doc instances for the same room
@@ -56,8 +58,9 @@ export async function createRealtimeSession(args: {
   name?: string;
   userId?: string;
   signalingServers?: string[];
+  onStatusChange?: (status: 'connected' | 'disconnected' | 'reconnecting') => void;
 }): Promise<RealtimeSession> {
-  const { room, access, jwks, name, userId } = args;
+  const { room, access, jwks, name, userId, onStatusChange } = args;
 
   // Check if a session already exists for this room
   const existing = roomRegistry.get(room);
@@ -73,6 +76,7 @@ export async function createRealtimeSession(args: {
       token: access.jwt,
       id: userId,
     });
+    awareness.setLocalStateField("selection", { nodes: [] });
 
     const dispose = () => {
       existing.refCount--;
@@ -85,7 +89,20 @@ export async function createRealtimeSession(args: {
       }
     };
 
-    return { doc: existing.doc, provider: existing.provider, awareness, dispose };
+    const reconnect = async () => {
+      console.log(`[WebRTC] Reconnect called for existing session: ${room}`);
+      if (onStatusChange) onStatusChange('reconnecting');
+      // Provider should auto-reconnect, just reset awareness state
+      awareness.setLocalStateField("user", {
+        name: name ?? "Anonymous",
+        color: pickColor(userId),
+        token: access.jwt,
+        id: userId,
+      });
+      if (onStatusChange) onStatusChange('connected');
+    };
+
+    return { doc: existing.doc, provider: existing.provider, awareness, dispose, reconnect, onStatusChange };
   }
 
   // Create a new session
@@ -117,6 +134,7 @@ export async function createRealtimeSession(args: {
     token: access.jwt,
     id: userId,
   });
+  awareness.setLocalStateField("selection", { nodes: [] });
 
   // Optional: validate peers' JWTs when their state arrives; mark invalid
   const invalidPeers = new Set<number>();
@@ -135,12 +153,74 @@ export async function createRealtimeSession(args: {
     });
   }
 
+  // Monitor connection status
+  let connectedPeers = 0;
+  let statusCheckInterval: NodeJS.Timeout | undefined;
+
+  const checkConnectionStatus = () => {
+    const states = awareness.getStates() as Map<number, any>;
+    const currentPeers = states.size - 1; // Exclude self
+
+    if (currentPeers !== connectedPeers) {
+      connectedPeers = currentPeers;
+      if (connectedPeers > 0 && onStatusChange) {
+        onStatusChange('connected');
+      }
+    }
+
+    // Check for signaling server connection
+    if (provider.room?.webrtcConns) {
+      const hasConnections = Object.keys(provider.room.webrtcConns).length > 0;
+      if (!hasConnections && connectedPeers === 0 && onStatusChange) {
+        console.warn('[WebRTC] No active connections detected');
+        onStatusChange('disconnected');
+      }
+    }
+  };
+
+  // Check status periodically
+  statusCheckInterval = setInterval(checkConnectionStatus, 5000);
+
+  awareness.on("change", () => {
+    checkConnectionStatus();
+  });
+
   // Register in the global registry
   roomRegistry.set(room, { doc, provider, refCount: 1 });
+
+  const reconnect = async () => {
+    console.log(`[WebRTC] Attempting to reconnect for room: ${room}`);
+    if (onStatusChange) onStatusChange('reconnecting');
+
+    try {
+      // Reinitialize awareness state
+      awareness.setLocalStateField("user", {
+        name: name ?? "Anonymous",
+        color: pickColor(userId),
+        token: access.jwt,
+        id: userId,
+      });
+      awareness.setLocalStateField("selection", { nodes: [] });
+      awareness.setLocalStateField("cursor", undefined);
+
+      // Trigger awareness update to broadcast to peers
+      awareness.setLocalStateField("reconnected", Date.now());
+
+      if (onStatusChange) onStatusChange('connected');
+      console.log(`[WebRTC] Reconnected to room: ${room}`);
+    } catch (e) {
+      console.error(`[WebRTC] Reconnection failed:`, e);
+      if (onStatusChange) onStatusChange('disconnected');
+    }
+  };
 
   const dispose = () => {
     const entry = roomRegistry.get(room);
     if (!entry) return;
+
+    if (statusCheckInterval) {
+      clearInterval(statusCheckInterval);
+    }
 
     entry.refCount--;
     console.log(`[WebRTC] Decremented refCount for room ${room}: ${entry.refCount}`);
@@ -152,5 +232,5 @@ export async function createRealtimeSession(args: {
     }
   };
 
-  return { doc, provider, awareness, dispose };
+  return { doc, provider, awareness, dispose, reconnect, onStatusChange };
 }
