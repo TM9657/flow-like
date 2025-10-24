@@ -36,8 +36,8 @@ fn presign_icon(icon: &str) -> Result<String, TauriFunctionError> {
 
 #[instrument(skip_all)]
 #[tauri::command(async)]
-pub async fn get_profiles(app_handle: AppHandle) -> HashMap<String, UserProfile> {
-    let settings = TauriSettingsState::construct(&app_handle).await.unwrap();
+pub async fn get_profiles(app_handle: AppHandle) -> Result<HashMap<String, UserProfile>, TauriFunctionError> {
+    let settings = TauriSettingsState::construct(&app_handle).await?;
 
     let mut profiles = {
         let settings_guard = settings.lock().await;
@@ -54,7 +54,7 @@ pub async fn get_profiles(app_handle: AppHandle) -> HashMap<String, UserProfile>
         }
     }
 
-    profiles
+    Ok(profiles)
 }
 
 #[instrument(skip_all)]

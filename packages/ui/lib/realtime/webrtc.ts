@@ -123,8 +123,8 @@ export async function createRealtimeSession(args: {
   (awareness as any).__invalidPeers = invalidPeers;
   if (jwks) {
     awareness.on("update", async ({ added, updated }: { added: number[]; updated: number[] }) => {
-      const states = awareness.getStates() as Map<number, any>;
-      const toCheck = [...added, ...updated];
+        const states = awareness.getStates() as Map<number, any>;
+        const toCheck = [...added, ...updated];
       for (const clientId of toCheck) {
         const state = states.get(clientId);
         const token = state?.user?.token as string | undefined;
