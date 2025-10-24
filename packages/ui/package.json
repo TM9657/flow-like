@@ -102,6 +102,7 @@
 		"i18next-browser-languagedetector": "^8.0.2",
 		"i18next-http-backend": "^3.0.1",
 		"idb-keyval": "^6.2.1",
+		"jose": "^6.1.0",
 		"lodash-es": "^4.17.21",
 		"lowlight": "^3.3.0",
 		"lucide-react": "^0.525.0",

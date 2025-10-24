@@ -138,7 +138,8 @@ const buildInitialEdits = (
 ): Record<string, PinEdit> => {
 	const out: Record<string, PinEdit> = {};
 	const isNodeMode = "friendly_name" in entity;
-	const isGenericEvent = isNodeMode && (entity as INode).name === "events_generic";
+	const isGenericEvent =
+		isNodeMode && (entity as INode).name === "events_generic";
 
 	for (const pin of Object.values(entity.pins)) {
 		const p: any = pin;
@@ -206,7 +207,8 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 	mode = "layer",
 }) => {
 	const entity = layer ?? node;
-	const isNodeMode = mode === "node" || (node !== undefined && layer === undefined);
+	const isNodeMode =
+		mode === "node" || (node !== undefined && layer === undefined);
 	const isGenericEvent = isNodeMode && node?.name === "events_generic";
 
 	const [edits, setEdits] = useState<Record<string, PinEdit>>(() =>
@@ -306,27 +308,30 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 		});
 	}, []);
 
-	const removePin = useCallback((id: string) => {
-		setEdits((prev) => {
-			const pin = prev[id];
-			if (!pin) return prev;
+	const removePin = useCallback(
+		(id: string) => {
+			setEdits((prev) => {
+				const pin = prev[id];
+				if (!pin) return prev;
 
-			// Prevent removing the "payload" pin on generic_event nodes
-			if (isGenericEvent && pin.name === "payload") {
-				return prev;
-			}
+				// Prevent removing the "payload" pin on generic_event nodes
+				if (isGenericEvent && pin.name === "payload") {
+					return prev;
+				}
 
-			const copy = { ...prev };
-			delete copy[id];
+				const copy = { ...prev };
+				delete copy[id];
 
-			const remaining = Object.values(copy).filter(
-				(p) => p.pin_type === pin.pin_type,
-			);
-			const re = reindex(sortByIndex(remaining));
-			for (const p of re) copy[p.id] = { ...copy[p.id], index: p.index };
-			return copy;
-		});
-	}, [isGenericEvent]);
+				const remaining = Object.values(copy).filter(
+					(p) => p.pin_type === pin.pin_type,
+				);
+				const re = reindex(sortByIndex(remaining));
+				for (const p of re) copy[p.id] = { ...copy[p.id], index: p.index };
+				return copy;
+			});
+		},
+		[isGenericEvent],
+	);
 
 	const reorderByIds = useCallback((orderedIds: string[]) => {
 		setEdits((prev) => {
@@ -400,7 +405,16 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 			};
 			await onApply(updated);
 		}
-	}, [edits, entity, layer, node, onApply, isNodeMode, nodeName, nodeDescription]);
+	}, [
+		edits,
+		entity,
+		layer,
+		node,
+		onApply,
+		isNodeMode,
+		nodeName,
+		nodeDescription,
+	]);
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -419,14 +433,17 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							: `Configure pin properties and ordering for "${layer?.name || "Layer"}".`}
 					</DialogDescription>
 				</DialogHeader>
-
 				<Tabs
 					value={tab}
 					onValueChange={(v) => setTab(v as any)}
 					className="mt-2"
 				>
-					<TabsList className={`grid w-full ${isGenericEvent ? "grid-cols-2" : (isNodeMode ? "grid-cols-1" : "grid-cols-2")}`}>
-						{isGenericEvent && <TabsTrigger value="metadata">Node Info</TabsTrigger>}
+					<TabsList
+						className={`grid w-full ${isGenericEvent ? "grid-cols-2" : isNodeMode ? "grid-cols-1" : "grid-cols-2"}`}
+					>
+						{isGenericEvent && (
+							<TabsTrigger value="metadata">Node Info</TabsTrigger>
+						)}
 						{!isNodeMode && <TabsTrigger value="inputs">Inputs</TabsTrigger>}
 						<TabsTrigger value="outputs">Outputs</TabsTrigger>
 					</TabsList>
@@ -451,8 +468,6 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							</div>
 						</TabsContent>
 					)}
-
-
 					<TabsContent value="inputs" className="mt-3 space-y-2">
 						<div className="flex justify-end">
 							<Button
@@ -473,7 +488,8 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							onReorder={reorderByIds}
 							isGenericEvent={isGenericEvent}
 						/>
-					</TabsContent>					<TabsContent value="outputs" className="mt-3 space-y-2">
+					</TabsContent>{" "}
+					<TabsContent value="outputs" className="mt-3 space-y-2">
 						<div className="flex justify-end">
 							<Button
 								size="sm"
@@ -494,8 +510,8 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							isGenericEvent={isGenericEvent}
 						/>
 					</TabsContent>
-				</Tabs>				<Separator className="my-3" />
-
+				</Tabs>{" "}
+				<Separator className="my-3" />
 				<DialogFooter className="gap-2">
 					<Button variant="secondary" onClick={() => onOpenChange(false)}>
 						Close
@@ -703,7 +719,16 @@ const SortablePinRow: React.FC<{
 	onMoveDown: (id: string) => void;
 	onRemove: (id: string) => void;
 	isGenericEvent?: boolean;
-}> = ({ pin, idx, total, onEdit, onMoveUp, onMoveDown, onRemove, isGenericEvent = false }) => {
+}> = ({
+	pin,
+	idx,
+	total,
+	onEdit,
+	onMoveUp,
+	onMoveDown,
+	onRemove,
+	isGenericEvent = false,
+}) => {
 	const {
 		attributes,
 		listeners,
@@ -756,14 +781,12 @@ const SortablePinRow: React.FC<{
 				>
 					<GripVerticalIcon className="h-4 w-4" />
 				</button>
-
 				<PinValueTypeDropdown
 					value_type={pin.value_type}
 					data_type={pin.data_type}
 					onChange={(vt) => onEdit(pin.id, { value_type: vt })}
 					className="shrink-0"
 				/>
-
 				<button
 					type="button"
 					aria-expanded={expanded}
@@ -773,7 +796,6 @@ const SortablePinRow: React.FC<{
 				>
 					{expanded ? "▾" : "▸"}
 				</button>
-
 				<div className="flex-1 truncate text-sm font-medium">
 					{editingName ? (
 						<Input
@@ -804,7 +826,11 @@ const SortablePinRow: React.FC<{
 									setEditingName(true);
 								}
 							}}
-							title={isGenericEvent && pin.name === "payload" ? "Payload pin cannot be renamed" : "Click to rename"}
+							title={
+								isGenericEvent && pin.name === "payload"
+									? "Payload pin cannot be renamed"
+									: "Click to rename"
+							}
 						>
 							{pin.friendly_name ?? pin.name ?? pin.id}
 						</button>
@@ -812,12 +838,12 @@ const SortablePinRow: React.FC<{
 					<span className="ml-2 text-[10px] text-muted-foreground">
 						({pin.id})
 					</span>
-				</div>				<PinDataTypeSelectInline
+				</div>{" "}
+				<PinDataTypeSelectInline
 					value={pin.data_type}
 					onChange={(dt) => onEdit(pin.id, { data_type: dt })}
 					className="hidden sm:flex"
 				/>
-
 				<Button
 					variant="ghost"
 					size="icon"
@@ -841,7 +867,11 @@ const SortablePinRow: React.FC<{
 					size="icon"
 					onClick={() => onRemove(pin.id)}
 					disabled={isGenericEvent && pin.name === "payload"}
-					title={isGenericEvent && pin.name === "payload" ? "Payload pin cannot be removed" : "Remove pin"}
+					title={
+						isGenericEvent && pin.name === "payload"
+							? "Payload pin cannot be removed"
+							: "Remove pin"
+					}
 				>
 					<Trash2Icon className="h-4 w-4 text-destructive-foreground" />
 				</Button>
@@ -858,7 +888,6 @@ const SortablePinRow: React.FC<{
 					<SlidersHorizontalIcon className="h-4 w-4" />
 				</Button>
 			</div>
-
 			{expanded && (
 				<div className="p-2">
 					<div className="space-y-1.5">
@@ -869,11 +898,16 @@ const SortablePinRow: React.FC<{
 							onChange={(e) => onEdit(pin.id, { description: e.target.value })}
 							placeholder="Optional"
 							disabled={isGenericEvent && pin.name === "payload"}
-							title={isGenericEvent && pin.name === "payload" ? "Payload pin description cannot be edited" : undefined}
+							title={
+								isGenericEvent && pin.name === "payload"
+									? "Payload pin description cannot be edited"
+									: undefined
+							}
 						/>
 					</div>
 				</div>
-			)}			<div className="sr-only">
+			)}{" "}
+			<div className="sr-only">
 				<PinOptionsButton
 					pin={pin}
 					onApply={(opts) => onEdit(pin.id, { options: opts })}

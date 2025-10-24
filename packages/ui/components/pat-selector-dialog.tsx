@@ -32,7 +32,6 @@ import {
 	CopyIcon,
 	KeyRoundIcon,
 	PlusIcon,
-	ShieldCheckIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -76,7 +75,12 @@ export function PatSelectorDialog({
 	description = "Choose an existing token or create a new one for this event sink.",
 }: Readonly<PatSelectorDialogProps>) {
 	const backend = useBackend();
-	const pats = useInvoke(backend.userState.getPATs, backend.userState, [], open);
+	const pats = useInvoke(
+		backend.userState.getPATs,
+		backend.userState,
+		[],
+		open,
+	);
 
 	const [mode, setMode] = useState<"select" | "create">("select");
 	const [selectedPatId, setSelectedPatId] = useState<string>("");
@@ -104,7 +108,8 @@ export function PatSelectorDialog({
 
 	const handleSelectExisting = async () => {
 		// Check if we have a stored PAT
-		const storedPat = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
+		const storedPat =
+			typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
 
 		if (storedPat) {
 			// Use the stored PAT
@@ -198,23 +203,28 @@ export function PatSelectorDialog({
 					</DialogHeader>
 
 					<div className="space-y-6">
-						{typeof window !== "undefined" && localStorage.getItem(STORAGE_KEY) && (
-							<div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-								<div className="flex items-start gap-2">
-									<CheckIcon className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
-									<div className="flex-1">
-										<p className="text-sm font-medium text-green-900 dark:text-green-100">
-											Stored Token Available
-										</p>
-										<p className="text-xs text-green-700 dark:text-green-300 mt-1">
-											You have a previously created token stored. You can use it or create a new one.
-										</p>
+						{typeof window !== "undefined" &&
+							localStorage.getItem(STORAGE_KEY) && (
+								<div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+									<div className="flex items-start gap-2">
+										<CheckIcon className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
+										<div className="flex-1">
+											<p className="text-sm font-medium text-green-900 dark:text-green-100">
+												Stored Token Available
+											</p>
+											<p className="text-xs text-green-700 dark:text-green-300 mt-1">
+												You have a previously created token stored. You can use
+												it or create a new one.
+											</p>
+										</div>
 									</div>
 								</div>
-							</div>
-						)}
+							)}
 
-						<RadioGroup value={mode} onValueChange={(v) => setMode(v as "select" | "create")}>
+						<RadioGroup
+							value={mode}
+							onValueChange={(v) => setMode(v as "select" | "create")}
+						>
 							<div className="flex items-center space-x-2">
 								<RadioGroupItem value="select" id="select" />
 								<Label htmlFor="select" className="cursor-pointer">
@@ -233,16 +243,14 @@ export function PatSelectorDialog({
 
 						{mode === "select" ? (
 							<div className="space-y-4">
-								{typeof window !== "undefined" && !localStorage.getItem(STORAGE_KEY) ? (
+								{typeof window !== "undefined" &&
+								!localStorage.getItem(STORAGE_KEY) ? (
 									<div className="text-center py-8">
 										<KeyRoundIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
 										<p className="text-muted-foreground mb-4">
 											No stored token available. Create a new one to continue.
 										</p>
-										<Button
-											onClick={() => setMode("create")}
-											className="gap-2"
-										>
+										<Button onClick={() => setMode("create")} className="gap-2">
 											<PlusIcon className="h-4 w-4" />
 											Create New Token
 										</Button>
@@ -269,12 +277,13 @@ export function PatSelectorDialog({
 								) : (
 									<>
 										<div className="flex justify-end gap-2">
-											<Button variant="outline" onClick={() => onOpenChange(false)}>
+											<Button
+												variant="outline"
+												onClick={() => onOpenChange(false)}
+											>
 												Cancel
 											</Button>
-											<Button
-												onClick={handleSelectExisting}
-											>
+											<Button onClick={handleSelectExisting}>
 												Use Stored Token
 											</Button>
 										</div>
@@ -295,15 +304,20 @@ export function PatSelectorDialog({
 										className="w-full"
 									/>
 									<p className="text-xs text-muted-foreground">
-										Choose a descriptive name to identify this token&apos;s purpose.
+										Choose a descriptive name to identify this token&apos;s
+										purpose.
 									</p>
 								</div>
 
 								<div className="space-y-2">
-									<Label className="text-sm font-medium">Permission Level *</Label>
+									<Label className="text-sm font-medium">
+										Permission Level *
+									</Label>
 									<Select
 										value={selectedPermission.toString()}
-										onValueChange={(v) => setSelectedPermission(Number.parseInt(v))}
+										onValueChange={(v) =>
+											setSelectedPermission(Number.parseInt(v))
+										}
 									>
 										<SelectTrigger className="w-full">
 											<SelectValue placeholder="Select permission level" />
@@ -400,8 +414,8 @@ export function PatSelectorDialog({
 									Token Created Successfully!
 								</h2>
 								<p className="text-muted-foreground">
-									Your personal access token has been generated. Make sure to copy
-									it now as you won&apos;t be able to see it again.
+									Your personal access token has been generated. Make sure to
+									copy it now as you won&apos;t be able to see it again.
 								</p>
 							</div>
 						</div>
@@ -463,7 +477,10 @@ export function PatSelectorDialog({
 						<Separator />
 
 						<div className="flex justify-end gap-2">
-							<Button variant="outline" onClick={() => setShowTokenDialog(false)}>
+							<Button
+								variant="outline"
+								onClick={() => setShowTokenDialog(false)}
+							>
 								Cancel
 							</Button>
 							<Button onClick={handleUseNewToken} className="gap-2">

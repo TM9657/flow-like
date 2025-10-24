@@ -37,6 +37,7 @@ pub struct Hub {
     pub domain: String,
     pub region: Option<String>,
     pub terms_of_service: String,
+    pub signaling: Option<Vec<String>>,
     pub cdn: Option<String>,
     pub app: Option<String>,
     pub legal_notice: String,

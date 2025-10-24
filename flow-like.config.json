@@ -40,6 +40,7 @@
 	"app": "app.flow-like.com",
 	"provider": "aws",
 	"region": "eu-west-1",
+	"signaling": ["wss://signaling.flow-like.com"],
 	"terms_of_service": "https://great-co.de/eula/",
 	"legal_notice": "https://great-co.de/legal-notice/",
 	"privacy_policy": "https://great-co.de/privacy-policy/",

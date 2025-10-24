@@ -1,18 +1,7 @@
 "use client";
 
-import { Check, Copy, ExternalLink, Info, MessageCircle } from "lucide-react";
+import { ExternalLink, Info } from "lucide-react";
 import { useState } from "react";
-import type { IConfigInterfaceProps } from "../interfaces";
-import { Button } from "../../ui/button";
-import { Label } from "../../ui/label";
-import { Switch } from "../../ui/switch";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "../../ui/select";
 import {
 	Accordion,
 	AccordionContent,
@@ -20,27 +9,107 @@ import {
 	AccordionTrigger,
 } from "../../ui/accordion";
 import { Badge } from "../../ui/badge";
+import { Button } from "../../ui/button";
+import { Label } from "../../ui/label";
+import { Switch } from "../../ui/switch";
+import type { IConfigInterfaceProps } from "../interfaces";
 
 const GATEWAY_INTENTS = [
-	{ value: "Guilds", label: "Guilds", description: "Access to guild information" },
-	{ value: "GuildMembers", label: "Guild Members", description: "Access to member updates (privileged)" },
-	{ value: "GuildModeration", label: "Guild Moderation", description: "Access to ban/unban events" },
-	{ value: "GuildEmojisAndStickers", label: "Emojis & Stickers", description: "Access to emoji/sticker updates" },
-	{ value: "GuildIntegrations", label: "Integrations", description: "Access to integration updates" },
-	{ value: "GuildWebhooks", label: "Webhooks", description: "Access to webhook updates" },
-	{ value: "GuildInvites", label: "Invites", description: "Access to invite events" },
-	{ value: "GuildVoiceStates", label: "Voice States", description: "Access to voice state updates" },
-	{ value: "GuildPresences", label: "Presences", description: "Access to presence updates (privileged)" },
-	{ value: "GuildMessages", label: "Guild Messages", description: "Access to guild message events" },
-	{ value: "GuildMessageReactions", label: "Message Reactions", description: "Access to reaction events" },
-	{ value: "GuildMessageTyping", label: "Message Typing", description: "Access to typing events" },
-	{ value: "DirectMessages", label: "Direct Messages", description: "Access to DM events" },
-	{ value: "DirectMessageReactions", label: "DM Reactions", description: "Access to DM reaction events" },
-	{ value: "DirectMessageTyping", label: "DM Typing", description: "Access to DM typing events" },
-	{ value: "MessageContent", label: "Message Content", description: "Access to message content (privileged)" },
-	{ value: "GuildScheduledEvents", label: "Scheduled Events", description: "Access to scheduled event updates" },
-	{ value: "AutoModerationConfiguration", label: "AutoMod Config", description: "Access to auto-moderation config" },
-	{ value: "AutoModerationExecution", label: "AutoMod Execution", description: "Access to auto-moderation execution" },
+	{
+		value: "Guilds",
+		label: "Guilds",
+		description: "Access to guild information",
+	},
+	{
+		value: "GuildMembers",
+		label: "Guild Members",
+		description: "Access to member updates (privileged)",
+	},
+	{
+		value: "GuildModeration",
+		label: "Guild Moderation",
+		description: "Access to ban/unban events",
+	},
+	{
+		value: "GuildEmojisAndStickers",
+		label: "Emojis & Stickers",
+		description: "Access to emoji/sticker updates",
+	},
+	{
+		value: "GuildIntegrations",
+		label: "Integrations",
+		description: "Access to integration updates",
+	},
+	{
+		value: "GuildWebhooks",
+		label: "Webhooks",
+		description: "Access to webhook updates",
+	},
+	{
+		value: "GuildInvites",
+		label: "Invites",
+		description: "Access to invite events",
+	},
+	{
+		value: "GuildVoiceStates",
+		label: "Voice States",
+		description: "Access to voice state updates",
+	},
+	{
+		value: "GuildPresences",
+		label: "Presences",
+		description: "Access to presence updates (privileged)",
+	},
+	{
+		value: "GuildMessages",
+		label: "Guild Messages",
+		description: "Access to guild message events",
+	},
+	{
+		value: "GuildMessageReactions",
+		label: "Message Reactions",
+		description: "Access to reaction events",
+	},
+	{
+		value: "GuildMessageTyping",
+		label: "Message Typing",
+		description: "Access to typing events",
+	},
+	{
+		value: "DirectMessages",
+		label: "Direct Messages",
+		description: "Access to DM events",
+	},
+	{
+		value: "DirectMessageReactions",
+		label: "DM Reactions",
+		description: "Access to DM reaction events",
+	},
+	{
+		value: "DirectMessageTyping",
+		label: "DM Typing",
+		description: "Access to DM typing events",
+	},
+	{
+		value: "MessageContent",
+		label: "Message Content",
+		description: "Access to message content (privileged)",
+	},
+	{
+		value: "GuildScheduledEvents",
+		label: "Scheduled Events",
+		description: "Access to scheduled event updates",
+	},
+	{
+		value: "AutoModerationConfiguration",
+		label: "AutoMod Config",
+		description: "Access to auto-moderation config",
+	},
+	{
+		value: "AutoModerationExecution",
+		label: "AutoMod Execution",
+		description: "Access to auto-moderation execution",
+	},
 ];
 
 const PRIVILEGED_INTENTS = ["GuildMembers", "GuildPresences", "MessageContent"];
@@ -64,7 +133,11 @@ export function DiscordConfig({
 	const token = config?.token ?? "";
 	const botName = config?.bot_name ?? "My Discord Bot";
 	const botDescription = config?.bot_description ?? "";
-	const selectedIntents: string[] = config?.intents ?? ["Guilds", "GuildMessages", "MessageContent"];
+	const selectedIntents: string[] = config?.intents ?? [
+		"Guilds",
+		"GuildMessages",
+		"MessageContent",
+	];
 	const channelWhitelist: string[] = config?.channel_whitelist ?? [];
 	const channelBlacklist: string[] = config?.channel_blacklist ?? [];
 	const respondToMentions = config?.respond_to_mentions ?? true;
@@ -91,7 +164,10 @@ export function DiscordConfig({
 	};
 
 	const removeFromWhitelist = (channelId: string) => {
-		setValue("channel_whitelist", channelWhitelist.filter(id => id !== channelId));
+		setValue(
+			"channel_whitelist",
+			channelWhitelist.filter((id) => id !== channelId),
+		);
 	};
 
 	const addToBlacklist = (channelId: string) => {
@@ -101,11 +177,14 @@ export function DiscordConfig({
 	};
 
 	const removeFromBlacklist = (channelId: string) => {
-		setValue("channel_blacklist", channelBlacklist.filter(id => id !== channelId));
+		setValue(
+			"channel_blacklist",
+			channelBlacklist.filter((id) => id !== channelId),
+		);
 	};
 
-	const hasPrivilegedIntents = selectedIntents.some(intent =>
-		PRIVILEGED_INTENTS.includes(intent)
+	const hasPrivilegedIntents = selectedIntents.some((intent) =>
+		PRIVILEGED_INTENTS.includes(intent),
 	);
 
 	return (
@@ -198,7 +277,8 @@ export function DiscordConfig({
 				{hasPrivilegedIntents && (
 					<div className="rounded-md bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900 p-3">
 						<p className="text-sm text-yellow-800 dark:text-yellow-200">
-							<strong>Note:</strong> You've selected privileged intents. These must be enabled in your{" "}
+							<strong>Note:</strong> You've selected privileged intents. These
+							must be enabled in your{" "}
 							<a
 								href="https://discord.com/developers/applications"
 								target="_blank"
@@ -206,8 +286,8 @@ export function DiscordConfig({
 								className="underline"
 							>
 								Discord Developer Portal
-							</a>
-							{" "}under Bot → Privileged Gateway Intents.
+							</a>{" "}
+							under Bot → Privileged Gateway Intents.
 						</p>
 					</div>
 				)}
@@ -217,13 +297,17 @@ export function DiscordConfig({
 						<AccordionTrigger>
 							<div className="flex items-center gap-2">
 								<span>Configure Intents</span>
-								<Badge variant="secondary">{selectedIntents.length} selected</Badge>
+								<Badge variant="secondary">
+									{selectedIntents.length} selected
+								</Badge>
 							</div>
 						</AccordionTrigger>
 						<AccordionContent>
 							<div className="space-y-2 max-h-96 overflow-y-auto">
 								{GATEWAY_INTENTS.map((intent) => {
-									const isPrivileged = PRIVILEGED_INTENTS.includes(intent.value);
+									const isPrivileged = PRIVILEGED_INTENTS.includes(
+										intent.value,
+									);
 									const isSelected = selectedIntents.includes(intent.value);
 
 									return (
@@ -246,7 +330,10 @@ export function DiscordConfig({
 											)}
 											<div className="flex-1">
 												<div className="flex items-center gap-2">
-													<Label htmlFor={`intent-${intent.value}`} className="cursor-pointer">
+													<Label
+														htmlFor={`intent-${intent.value}`}
+														className="cursor-pointer"
+													>
 														{intent.label}
 													</Label>
 													{isPrivileged && (
@@ -277,7 +364,9 @@ export function DiscordConfig({
 						<Switch
 							id="respond_to_mentions"
 							checked={respondToMentions}
-							onCheckedChange={(checked) => setValue("respond_to_mentions", checked)}
+							onCheckedChange={(checked) =>
+								setValue("respond_to_mentions", checked)
+							}
 						/>
 					) : (
 						<div
@@ -333,7 +422,8 @@ export function DiscordConfig({
 			<div className="space-y-4 pt-4 border-t">
 				<Label>Channel Filters</Label>
 				<p className="text-sm text-muted-foreground">
-					Control which channels the bot monitors. If whitelist is set, only those channels are monitored.
+					Control which channels the bot monitors. If whitelist is set, only
+					those channels are monitored.
 				</p>
 
 				<Accordion type="single" collapsible className="w-full">
@@ -341,7 +431,9 @@ export function DiscordConfig({
 						<AccordionTrigger>
 							<div className="flex items-center gap-2">
 								<span>Channel Whitelist</span>
-								<Badge variant="secondary">{channelWhitelist.length} channels</Badge>
+								<Badge variant="secondary">
+									{channelWhitelist.length} channels
+								</Badge>
 							</div>
 						</AccordionTrigger>
 						<AccordionContent>
@@ -364,7 +456,9 @@ export function DiscordConfig({
 										<Button
 											type="button"
 											onClick={() => {
-												const input = document.getElementById("whitelist-input") as HTMLInputElement;
+												const input = document.getElementById(
+													"whitelist-input",
+												) as HTMLInputElement;
 												if (input) {
 													addToWhitelist(input.value);
 													input.value = "";
@@ -377,7 +471,9 @@ export function DiscordConfig({
 								)}
 								<div className="space-y-2">
 									{channelWhitelist.length === 0 ? (
-										<p className="text-sm text-muted-foreground">No channels in whitelist (all channels allowed)</p>
+										<p className="text-sm text-muted-foreground">
+											No channels in whitelist (all channels allowed)
+										</p>
 									) : (
 										channelWhitelist.map((channelId) => (
 											<div
@@ -406,7 +502,9 @@ export function DiscordConfig({
 						<AccordionTrigger>
 							<div className="flex items-center gap-2">
 								<span>Channel Blacklist</span>
-								<Badge variant="secondary">{channelBlacklist.length} channels</Badge>
+								<Badge variant="secondary">
+									{channelBlacklist.length} channels
+								</Badge>
 							</div>
 						</AccordionTrigger>
 						<AccordionContent>
@@ -429,7 +527,9 @@ export function DiscordConfig({
 										<Button
 											type="button"
 											onClick={() => {
-												const input = document.getElementById("blacklist-input") as HTMLInputElement;
+												const input = document.getElementById(
+													"blacklist-input",
+												) as HTMLInputElement;
 												if (input) {
 													addToBlacklist(input.value);
 													input.value = "";
@@ -442,7 +542,9 @@ export function DiscordConfig({
 								)}
 								<div className="space-y-2">
 									{channelBlacklist.length === 0 ? (
-										<p className="text-sm text-muted-foreground">No channels in blacklist</p>
+										<p className="text-sm text-muted-foreground">
+											No channels in blacklist
+										</p>
 									) : (
 										channelBlacklist.map((channelId) => (
 											<div
@@ -490,16 +592,34 @@ export function DiscordConfig({
 								</li>
 								<li>Click "New Application" and give it a name</li>
 								<li>Go to the "Bot" section and click "Add Bot"</li>
-								<li>Under "Token", click "Reset Token" to get your bot token</li>
-								<li>Enable the required Privileged Gateway Intents if needed</li>
+								<li>
+									Under "Token", click "Reset Token" to get your bot token
+								</li>
+								<li>
+									Enable the required Privileged Gateway Intents if needed
+								</li>
 								<li>
 									Go to "OAuth2" → "URL Generator"
 									<ul className="list-disc list-inside ml-4 mt-1">
-										<li>Select scope: <code className="bg-muted px-1 rounded">bot</code></li>
-										<li>Select permissions: <code className="bg-muted px-1 rounded">Send Messages</code>, <code className="bg-muted px-1 rounded">Read Messages</code></li>
+										<li>
+											Select scope:{" "}
+											<code className="bg-muted px-1 rounded">bot</code>
+										</li>
+										<li>
+											Select permissions:{" "}
+											<code className="bg-muted px-1 rounded">
+												Send Messages
+											</code>
+											,{" "}
+											<code className="bg-muted px-1 rounded">
+												Read Messages
+											</code>
+										</li>
 									</ul>
 								</li>
-								<li>Copy the generated URL and invite the bot to your server</li>
+								<li>
+									Copy the generated URL and invite the bot to your server
+								</li>
 							</ol>
 						</AccordionContent>
 					</AccordionItem>

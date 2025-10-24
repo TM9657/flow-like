@@ -8,9 +8,9 @@ import { ThemeProvider } from "@tm9657/flow-like-ui/components/theme-provider";
 import { Toaster } from "@tm9657/flow-like-ui/components/ui/sonner";
 import { TooltipProvider } from "@tm9657/flow-like-ui/components/ui/tooltip";
 import "@tm9657/flow-like-ui/global.css";
-import { createIDBPersister } from "@tm9657/flow-like-ui/lib/persister";
-import { useNetworkStatus } from "@tm9657/flow-like-ui/hooks/use-network-status";
 import { NetworkStatusIndicator } from "@tm9657/flow-like-ui/components/ui/network-status-indicator";
+import { useNetworkStatus } from "@tm9657/flow-like-ui/hooks/use-network-status";
+import { createIDBPersister } from "@tm9657/flow-like-ui/lib/persister";
 import {
 	Architects_Daughter,
 	DM_Sans,
@@ -155,11 +155,11 @@ export default function RootLayout({
 							persister,
 						}}
 					>
-					<NetworkAwareProvider>
-						<body className={inter.className}>
-							<NetworkStatusIndicator />
-							<UpdateProvider />
-							<GlobalAnchorHandler />
+						<NetworkAwareProvider>
+							<body className={inter.className}>
+								<NetworkStatusIndicator />
+								<UpdateProvider />
+								<GlobalAnchorHandler />
 								<ThemeProvider
 									attribute="class"
 									defaultTheme="system"
@@ -178,8 +178,8 @@ export default function RootLayout({
 											</DesktopAuthProvider>
 										</TauriProvider>
 									</TooltipProvider>
-							</ThemeProvider>
-						</body>
+								</ThemeProvider>
+							</body>
 						</NetworkAwareProvider>
 					</PersistQueryClientProvider>
 				</ReactFlowProvider>

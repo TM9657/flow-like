@@ -27,8 +27,8 @@ import {
 	useInvoke,
 	useMiniSearch,
 	useMobileHeader,
-	useQueryClient,
 	useNetworkStatus,
+	useQueryClient,
 } from "@tm9657/flow-like-ui";
 import {
 	ArrowUpDown,
@@ -327,7 +327,9 @@ export default function YoursPage() {
 								metadata={meta as IMetadata}
 								variant="extended"
 								onClick={() => handleAppClick(meta.id)}
-								onSettingsClick={() => router.push(`/library/config?id=${meta.id}`)}
+								onSettingsClick={() =>
+									router.push(`/library/config?id=${meta.id}`)
+								}
 								className="w-full"
 							/>
 						</div>

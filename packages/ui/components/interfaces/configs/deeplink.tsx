@@ -1,14 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import {
-	Button,
-	Input,
-	Label,
-	Textarea,
-} from "../../ui";
-import type { IConfigInterfaceProps } from "../interfaces";
 import { Check, Copy, ExternalLink } from "lucide-react";
+import { useState } from "react";
+import { Button, Input, Label } from "../../ui";
+import type { IConfigInterfaceProps } from "../interfaces";
 
 export function DeeplinkConfig({
 	isEditing,
@@ -121,7 +116,8 @@ export function DeeplinkConfig({
 								1. Add an "Open URLs" action in Shortcuts
 							</p>
 							<p className="text-muted-foreground">
-								2. Set the URL to: <code className="font-mono">{deeplinkUrl}</code>
+								2. Set the URL to:{" "}
+								<code className="font-mono">{deeplinkUrl}</code>
 							</p>
 							<p className="text-muted-foreground">
 								3. Add query parameters dynamically using Shortcut variables
@@ -134,13 +130,14 @@ export function DeeplinkConfig({
 						<div className="p-3 bg-muted rounded-md text-sm space-y-2">
 							<p className="text-muted-foreground">From command line:</p>
 							<code className="block mt-1 font-mono text-xs">
-								# macOS<br />
+								# macOS
+								<br />
 								open "{deeplinkUrl}"<br />
+								<br /># Linux
 								<br />
-								# Linux<br />
 								xdg-open "{deeplinkUrl}"<br />
+								<br /># Windows
 								<br />
-								# Windows<br />
 								start "{deeplinkUrl}"
 							</code>
 						</div>

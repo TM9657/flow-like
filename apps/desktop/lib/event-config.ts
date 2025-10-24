@@ -1,3 +1,4 @@
+import { createId } from "@paralleldrive/cuid2";
 import {
 	ApiConfig,
 	ChatInterface,
@@ -9,7 +10,6 @@ import {
 	UserMailConfig,
 	WebhookConfig,
 } from "@tm9657/flow-like-ui";
-import { createId } from "@paralleldrive/cuid2";
 
 export const EVENT_CONFIG: IEventMapping = {
 	events_chat: {

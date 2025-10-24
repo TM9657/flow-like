@@ -14,19 +14,38 @@ export default function Home() {
 	const backend = useBackend();
 	const router = useRouter();
 	const [isCheckingProfiles, setIsCheckingProfiles] = useState(true);
-	const profiles = useTauriInvoke<ISettingsProfile[]>("get_profiles", {});
+	const profiles = useTauriInvoke<Record<string, ISettingsProfile>>(
+		"get_profiles",
+		{},
+	);
 
 	useEffect(() => {
-		if (profiles.isLoading || !profiles.data) return;
+		if (profiles.isLoading) return;
 
-		const profileCount = profiles.data.length;
+		// Handle successful data load
+		if (profiles.data) {
+			const profileCount = Object.keys(profiles.data).length;
 
-		if (profileCount === 0) {
-			router.push("/onboarding");
-		} else {
-			setIsCheckingProfiles(false);
+			if (profileCount === 0) {
+				router.push("/onboarding");
+			} else {
+				setIsCheckingProfiles(false);
+			}
+			return;
 		}
-	}, [profiles.data, profiles.isLoading, router]);
+
+		// Only redirect on actual errors, not on undefined/null data during loading
+		if (profiles.isError) {
+			console.error("Failed to load profiles:", profiles.error);
+			router.push("/onboarding");
+		}
+	}, [
+		profiles.data,
+		profiles.isLoading,
+		profiles.isError,
+		profiles.error,
+		router,
+	]);
 
 	if (profiles.isLoading || isCheckingProfiles) {
 		return (
