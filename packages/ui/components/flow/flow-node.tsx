@@ -27,7 +27,15 @@ import {
 	WorkflowIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+	type RefObject,
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 import { useLogAggregation } from "../..";
 import {
@@ -143,7 +151,8 @@ const FlowNodeInner = memo(
 			() => remoteSelections.slice(0, 3),
 			[remoteSelections],
 		);
-		const extraRemoteSelections = remoteSelections.length - displayedRemoteSelections.length;
+		const extraRemoteSelections =
+			remoteSelections.length - displayedRemoteSelections.length;
 		const [executed, severity] = useMemo(() => {
 			const severity = ILogLevel.Debug;
 
@@ -170,13 +179,13 @@ const FlowNodeInner = memo(
 			() => ({
 				backgroundColor: props.selected
 					? typeToColor(
-						Object.values(props.data.node.pins)?.[0]?.data_type ??
-						IVariableType.Generic,
-					)
+							Object.values(props.data.node.pins)?.[0]?.data_type ??
+								IVariableType.Generic,
+						)
 					: undefined,
 				borderColor: typeToColor(
 					Object.values(props.data.node.pins)?.[0]?.data_type ??
-					IVariableType.Generic,
+						IVariableType.Generic,
 				),
 				borderWidth: "1px",
 				borderStyle: "solid",
@@ -523,7 +532,8 @@ const FlowNodeInner = memo(
 				isReroute,
 				props.data.version,
 			],
-		); const playNode = useMemo(() => {
+		);
+		const playNode = useMemo(() => {
 			if (!props.data.node.start) return null;
 			if (executionState === "done" || executing)
 				return (
@@ -1231,7 +1241,11 @@ function FlowNode(props: NodeProps<FlowNode>) {
 						const command = updateNodeCommand({
 							node: {
 								...updatedNode,
-								coordinates: [currentNode.position.x, currentNode.position.y, 0],
+								coordinates: [
+									currentNode.position.x,
+									currentNode.position.y,
+									0,
+								],
 							},
 						});
 

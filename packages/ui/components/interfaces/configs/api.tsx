@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Copy, ExternalLink, Play } from "lucide-react";
 import { useState } from "react";
 import {
 	Button,
@@ -24,7 +25,6 @@ import {
 	Textarea,
 } from "../../ui";
 import type { IConfigInterfaceProps } from "../interfaces";
-import { Check, Copy, ExternalLink, Play } from "lucide-react";
 
 export function ApiConfig({
 	isEditing,
@@ -90,16 +90,19 @@ export function ApiConfig({
 				`Status: ${response.status}\n\n${text || "No response body"}`,
 			);
 		} catch (error) {
-			setTestResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
+			setTestResult(
+				`Error: ${error instanceof Error ? error.message : String(error)}`,
+			);
 		} finally {
 			setIsTesting(false);
 		}
 	};
 
 	const generateCodeExample = (lang: string) => {
-		const authHeader = !publicEndpoint && authToken
-			? `Authorization: Bearer ${authToken}`
-			: null;
+		const authHeader =
+			!publicEndpoint && authToken
+				? `Authorization: Bearer ${authToken}`
+				: null;
 
 		switch (lang) {
 			case "curl":
@@ -111,12 +114,20 @@ curl -X ${method} "${endpoint}"${authHeader ? ` \\\n  -H "${authHeader}"` : ""}$
 				return `\`\`\`python
 import requests
 
-${authHeader ? `headers = {
+${
+	authHeader
+		? `headers = {
     "Authorization": "${authToken}",
     "Content-Type": "application/json"
 }
-` : ""}${method !== "GET" ? `payload = {"key": "value"}
-` : ""}
+`
+		: ""
+}${
+	method !== "GET"
+		? `payload = {"key": "value"}
+`
+		: ""
+}
 response = requests.${method.toLowerCase()}(
     "${endpoint}"${authHeader ? ",\n    headers=headers" : ""}${method !== "GET" ? ",\n    json=payload" : ""}
 )
@@ -178,7 +189,10 @@ println!("Body: {}", body);
 			<div className="space-y-3">
 				<Label htmlFor="method">HTTP Method</Label>
 				{isEditing ? (
-					<Select value={method} onValueChange={(value) => setValue("method", value)}>
+					<Select
+						value={method}
+						onValueChange={(value) => setValue("method", value)}
+					>
 						<SelectTrigger id="method">
 							<SelectValue placeholder="Select method" />
 						</SelectTrigger>
@@ -271,8 +285,8 @@ println!("Body: {}", body);
 					{endpoint}
 				</div>
 				<p className="text-sm text-muted-foreground">
-					This endpoint is only accessible locally. To expose it to the internet,
-					consider using{" "}
+					This endpoint is only accessible locally. To expose it to the
+					internet, consider using{" "}
 					<a
 						href="https://ngrok.com"
 						target="_blank"

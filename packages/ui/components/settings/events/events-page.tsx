@@ -125,105 +125,140 @@ export default function EventsPage({
 		checkOffline();
 	}, [id, backend]);
 
-	const handleCreateEvent = useCallback(async (newEvent: Partial<IEvent>, selectedPat?: string) => {
-		if (!id) {
-			console.error("App ID is required to create an event");
-			return;
-		}
-
-		const event: IEvent = {
-			id: createId(),
-			name: newEvent.name ?? "New Event",
-			description: newEvent.description ?? "",
-			active: true,
-			board_id: newEvent.board_id ?? "",
-			board_version: newEvent.board_version ?? undefined,
-			config: newEvent.config ?? [],
-			created_at: {
-				secs_since_epoch: Math.floor(Date.now() / 1000),
-				nanos_since_epoch: 0,
-			},
-			updated_at: {
-				secs_since_epoch: Math.floor(Date.now() / 1000),
-				nanos_since_epoch: 0,
-			},
-			event_version: [0, 0, 0],
-			node_id: newEvent.node_id ?? "",
-			variables: newEvent.variables ?? {},
-			event_type: newEvent.event_type ?? "default",
-			priority: events.data?.length ?? 0,
-			canary: null,
-			notes: null,
-		};
-
-		// Check if the event requires a sink and PAT is needed
-		if (event.board_id && event.node_id) {
-			try {
-				const board = await backend.boardState.getBoard(id, event.board_id, event.board_version as [number, number, number] | undefined);
-				const node = board?.nodes?.[event.node_id];
-				if (node?.name) {
-					const requiresSink = eventRequiresSink(eventMapping, event, node.name);
-
-					if (requiresSink && !isOffline && !selectedPat) {
-						// Store the event and show PAT dialog
-						setPendingEvent(event);
-						setShowCreatePatDialog(true);
-						return;
-					}
-				}
-			} catch (error) {
-				console.error("Failed to fetch board for sink check:", error);
+	const handleCreateEvent = useCallback(
+		async (newEvent: Partial<IEvent>, selectedPat?: string) => {
+			if (!id) {
+				console.error("App ID is required to create an event");
+				return;
 			}
-		}
 
-		await backend.eventState.upsertEvent(id, event, undefined, selectedPat);
-		await events.refetch();
-		setIsCreateDialogOpen(false);
-		setShowCreatePatDialog(false);
-		setPendingEvent(null);
-	}, [id, events, backend.eventState, backend.boardState, eventMapping, isOffline]);
+			const event: IEvent = {
+				id: createId(),
+				name: newEvent.name ?? "New Event",
+				description: newEvent.description ?? "",
+				active: true,
+				board_id: newEvent.board_id ?? "",
+				board_version: newEvent.board_version ?? undefined,
+				config: newEvent.config ?? [],
+				created_at: {
+					secs_since_epoch: Math.floor(Date.now() / 1000),
+					nanos_since_epoch: 0,
+				},
+				updated_at: {
+					secs_since_epoch: Math.floor(Date.now() / 1000),
+					nanos_since_epoch: 0,
+				},
+				event_version: [0, 0, 0],
+				node_id: newEvent.node_id ?? "",
+				variables: newEvent.variables ?? {},
+				event_type: newEvent.event_type ?? "default",
+				priority: events.data?.length ?? 0,
+				canary: null,
+				notes: null,
+			};
 
-	const handleDeleteEvent = useCallback(async (eventId: string) => {
-		if (!id) {
-			console.error("App ID is required to delete an event");
-			return;
-		}
-		try {
-			await backend.eventState.deleteEvent(id, eventId);
-		}catch(e) {
-		await events.refetch();
-		}
-		if (editingEvent?.id === eventId) {
-			setEditingEvent(null);
-		}
-		console.log(`Deleted event with ID: ${eventId}`);
-		await events.refetch();
-	}, [id, editingEvent, events, backend.eventState]);
+			// Check if the event requires a sink and PAT is needed
+			if (event.board_id && event.node_id) {
+				try {
+					const board = await backend.boardState.getBoard(
+						id,
+						event.board_id,
+						event.board_version as [number, number, number] | undefined,
+					);
+					const node = board?.nodes?.[event.node_id];
+					if (node?.name) {
+						const requiresSink = eventRequiresSink(
+							eventMapping,
+							event,
+							node.name,
+						);
 
-	const handleEditingEvent = useCallback((event?: IEvent) => {
-		let additionalParams = "";
-		if (event?.id) {
-			additionalParams = `&eventId=${event.id}`;
-		}
+						if (requiresSink && !isOffline && !selectedPat) {
+							// Store the event and show PAT dialog
+							setPendingEvent(event);
+							setShowCreatePatDialog(true);
+							return;
+						}
+					}
+				} catch (error) {
+					console.error("Failed to fetch board for sink check:", error);
+				}
+			}
 
-		router.push(`/library/config/events?id=${id}${additionalParams}`);
-	}, [id, router]);
-
-	const handleNavigateToNode = useCallback((event: IEvent, nodeId: string) => {
-		router.push(
-			`/flow?id=${event.board_id}&app=${id}&node=${nodeId}${event.board_version ? `&version=${event.board_version.join("_")}` : ""}`,
-		);
-	}, [id, router]);
-
-	const handleCreateWithPat = useCallback(async (selectedPat: string) => {
-		if (pendingEvent && id) {
-			await backend.eventState.upsertEvent(id, pendingEvent, undefined, selectedPat);
+			await backend.eventState.upsertEvent(id, event, undefined, selectedPat);
 			await events.refetch();
 			setIsCreateDialogOpen(false);
 			setShowCreatePatDialog(false);
 			setPendingEvent(null);
-		}
-	}, [pendingEvent, id, backend.eventState, events]);
+		},
+		[
+			id,
+			events,
+			backend.eventState,
+			backend.boardState,
+			eventMapping,
+			isOffline,
+		],
+	);
+
+	const handleDeleteEvent = useCallback(
+		async (eventId: string) => {
+			if (!id) {
+				console.error("App ID is required to delete an event");
+				return;
+			}
+			try {
+				await backend.eventState.deleteEvent(id, eventId);
+			} catch (e) {
+				await events.refetch();
+			}
+			if (editingEvent?.id === eventId) {
+				setEditingEvent(null);
+			}
+			console.log(`Deleted event with ID: ${eventId}`);
+			await events.refetch();
+		},
+		[id, editingEvent, events, backend.eventState],
+	);
+
+	const handleEditingEvent = useCallback(
+		(event?: IEvent) => {
+			let additionalParams = "";
+			if (event?.id) {
+				additionalParams = `&eventId=${event.id}`;
+			}
+
+			router.push(`/library/config/events?id=${id}${additionalParams}`);
+		},
+		[id, router],
+	);
+
+	const handleNavigateToNode = useCallback(
+		(event: IEvent, nodeId: string) => {
+			router.push(
+				`/flow?id=${event.board_id}&app=${id}&node=${nodeId}${event.board_version ? `&version=${event.board_version.join("_")}` : ""}`,
+			);
+		},
+		[id, router],
+	);
+
+	const handleCreateWithPat = useCallback(
+		async (selectedPat: string) => {
+			if (pendingEvent && id) {
+				await backend.eventState.upsertEvent(
+					id,
+					pendingEvent,
+					undefined,
+					selectedPat,
+				);
+				await events.refetch();
+				setIsCreateDialogOpen(false);
+				setShowCreatePatDialog(false);
+				setPendingEvent(null);
+			}
+		},
+		[pendingEvent, id, backend.eventState, events],
+	);
 
 	if (id && editingEvent) {
 		return (
@@ -374,7 +409,7 @@ function EventConfiguration({
 		if (!node) return false;
 		const eventTypeConfig = eventMapping[node?.name];
 		return eventTypeConfig?.withSink.includes(formData.event_type);
-	}
+	};
 
 	const handleSave = async (selectedPat?: string) => {
 		const requiresSink = checkRequiresSink();
@@ -386,7 +421,12 @@ function EventConfiguration({
 		}
 
 		// Save the event with the PAT if provided
-		await backend.eventState.upsertEvent(appId, formData, undefined, selectedPat);
+		await backend.eventState.upsertEvent(
+			appId,
+			formData,
+			undefined,
+			selectedPat,
+		);
 		onReload?.();
 		setIsEditing(false);
 		setShowPatDialog(false);
@@ -844,10 +884,10 @@ function EventConfiguration({
 													})}
 											{(!board.data?.variables ||
 												Object.keys(board.data.variables).length === 0) && (
-													<div className="text-center py-8 text-muted-foreground">
-														No board variables available
-													</div>
-												)}
+												<div className="text-center py-8 text-muted-foreground">
+													No board variables available
+												</div>
+											)}
 										</div>
 									</DialogContent>
 								</Dialog>
@@ -897,7 +937,7 @@ function EventConfiguration({
 						</CardHeader>
 						<CardContent className="space-y-4 flex flex-col items-start">
 							<EventTranslation
-							appId={appId}
+								appId={appId}
 								eventType={formData.event_type}
 								eventConfig={eventMapping}
 								editing={isEditing}
@@ -1050,13 +1090,13 @@ function EventsTable({
 	useEffect(() => {
 		const fetchNodeNames = async () => {
 			const nodeNamesMap = new Map<string, string>();
-			const uniqueBoardIds = [...new Set(events.map(e => e.board_id))];
+			const uniqueBoardIds = [...new Set(events.map((e) => e.board_id))];
 
 			for (const boardId of uniqueBoardIds) {
 				try {
 					const board = await backend.boardState.getBoard(appId, boardId);
 					// Map each event to its node name
-					events.forEach(event => {
+					events.forEach((event) => {
 						if (event.board_id === boardId && event.node_id) {
 							const node = board?.nodes?.[event.node_id];
 							if (node?.name) {
@@ -1100,13 +1140,15 @@ function EventsTable({
 	useEffect(() => {
 		const checkSinkStatuses = async () => {
 			const statuses = new Map<string, boolean>();
-			const eventIds = paginatedEvents.map(e => e.id).join(',');
+			const eventIds = paginatedEvents.map((e) => e.id).join(",");
 
 			for (const event of paginatedEvents) {
 				const nodeName = eventNodeNames.get(event.id);
 				if (eventRequiresSink(eventMapping, event, nodeName)) {
 					try {
-						const isActive = await backend.eventState.isEventSinkActive(event.id);
+						const isActive = await backend.eventState.isEventSinkActive(
+							event.id,
+						);
 						statuses.set(event.id, isActive);
 					} catch (error) {
 						console.error(
@@ -1124,7 +1166,11 @@ function EventsTable({
 			checkSinkStatuses();
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [paginatedEvents.map(e => e.id).join(','), eventNodeNames.size, backend.eventState]);
+	}, [
+		paginatedEvents.map((e) => e.id).join(","),
+		eventNodeNames.size,
+		backend.eventState,
+	]);
 
 	const formatRelativeTime = useCallback((timestamp: number) => {
 		const now = Date.now();
@@ -1142,8 +1188,11 @@ function EventsTable({
 		return new Date(eventTime).toLocaleDateString();
 	}, []);
 
-	const truncateText = useCallback((text: string, maxLength = 50) =>
-		text.length > maxLength ? `${text.slice(0, maxLength)}...` : text, []);
+	const truncateText = useCallback(
+		(text: string, maxLength = 50) =>
+			text.length > maxLength ? `${text.slice(0, maxLength)}...` : text,
+		[],
+	);
 
 	useEffect(() => {
 		setCurrentPage(1);
@@ -1160,7 +1209,12 @@ function EventsTable({
 			try {
 				// Ensure the event is set to active before upserting
 				const activeEvent = { ...event, active: true };
-				await backend.eventState.upsertEvent(appId, activeEvent, undefined, pat);
+				await backend.eventState.upsertEvent(
+					appId,
+					activeEvent,
+					undefined,
+					pat,
+				);
 				setShowActivateDialog(false);
 				// Trigger a re-check of sink statuses
 				const checkStatus = async () => {
@@ -1169,10 +1223,15 @@ function EventsTable({
 						const evNodeName = eventNodeNames.get(ev.id);
 						if (eventRequiresSink(eventMapping, ev, evNodeName)) {
 							try {
-								const isActive = await backend.eventState.isEventSinkActive(ev.id);
+								const isActive = await backend.eventState.isEventSinkActive(
+									ev.id,
+								);
 								statuses.set(ev.id, isActive);
 							} catch (error) {
-								console.error(`Failed to check sink status for event ${ev.id}:`, error);
+								console.error(
+									`Failed to check sink status for event ${ev.id}:`,
+									error,
+								);
 								statuses.set(ev.id, false);
 							}
 						}
@@ -1396,7 +1455,11 @@ function EventsTable({
 								<TableBody>
 									{paginatedEvents.map((event) => {
 										const nodeName = eventNodeNames.get(event.id);
-										const requiresSink = eventRequiresSink(eventMapping, event, nodeName);
+										const requiresSink = eventRequiresSink(
+											eventMapping,
+											event,
+											nodeName,
+										);
 										const sinkActive = sinkStatuses.get(event.id);
 
 										return (
@@ -1421,15 +1484,27 @@ function EventsTable({
 																{sinkActive ? "Sink Active" : "Sink Inactive"}
 															</div>
 															{!sinkActive && (
-																<TableActivateSinkButton event={event} appId={appId} onActivated={async () => {
-																	// Refresh sink status after activation
-																	try {
-																		const isActive = await backend.eventState.isEventSinkActive(event.id);
-																		setSinkStatuses(prev => new Map(prev).set(event.id, isActive));
-																	} catch (error) {
-																		console.error("Failed to refresh sink status:", error);
-																	}
-																}} />
+																<TableActivateSinkButton
+																	event={event}
+																	appId={appId}
+																	onActivated={async () => {
+																		// Refresh sink status after activation
+																		try {
+																			const isActive =
+																				await backend.eventState.isEventSinkActive(
+																					event.id,
+																				);
+																			setSinkStatuses((prev) =>
+																				new Map(prev).set(event.id, isActive),
+																			);
+																		} catch (error) {
+																			console.error(
+																				"Failed to refresh sink status:",
+																				error,
+																			);
+																		}
+																	}}
+																/>
 															)}
 														</div>
 													)}

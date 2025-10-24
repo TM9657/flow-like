@@ -23,10 +23,7 @@ export interface IBoardState {
 	): Promise<IBoard>;
 
 	// Realtime collaboration
-	getRealtimeAccess(
-		appId: string,
-		boardId: string,
-	): Promise<IRealtimeAccess>;
+	getRealtimeAccess(appId: string, boardId: string): Promise<IRealtimeAccess>;
 	getRealtimeJwks(appId: string, boardId: string): Promise<IJwks>;
 	createBoardVersion(
 		appId: string,

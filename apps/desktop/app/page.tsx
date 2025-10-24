@@ -39,7 +39,13 @@ export default function Home() {
 			console.error("Failed to load profiles:", profiles.error);
 			router.push("/onboarding");
 		}
-	}, [profiles.data, profiles.isLoading, profiles.isError, profiles.error, router]);
+	}, [
+		profiles.data,
+		profiles.isLoading,
+		profiles.isError,
+		profiles.error,
+		router,
+	]);
 
 	if (profiles.isLoading || isCheckingProfiles) {
 		return (

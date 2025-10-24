@@ -125,7 +125,7 @@ export function EventTranslation({
 			node,
 			nodeId,
 			onUpdate,
-		]
+		],
 	);
 
 	if (!node) {

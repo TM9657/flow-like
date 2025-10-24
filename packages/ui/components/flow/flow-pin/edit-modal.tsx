@@ -21,7 +21,11 @@ export function PinEditModal({
 	appId,
 	boardId,
 	version,
-}: Readonly<{ appId: string; boardId: string; version?: [number, number, number] }>) {
+}: Readonly<{
+	appId: string;
+	boardId: string;
+	version?: [number, number, number];
+}>) {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 	const { pushCommand } = useUndoRedo(appId, boardId);

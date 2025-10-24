@@ -1,5 +1,5 @@
 "use client";
-import { useStore, type Node } from "@xyflow/react";
+import { type Node, useStore } from "@xyflow/react";
 import { memo, useMemo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 
@@ -13,7 +13,12 @@ interface LayerIndicator {
 	nodeId: string;
 	screenX: number;
 	screenY: number;
-	peers: Array<{ name: string; color: string; avatar?: string; userId?: string }>;
+	peers: Array<{
+		name: string;
+		color: string;
+		avatar?: string;
+		userId?: string;
+	}>;
 }
 
 export const FlowLayerIndicators = memo(function FlowLayerIndicators({
@@ -33,10 +38,12 @@ export const FlowLayerIndicators = memo(function FlowLayerIndicators({
 		const peersByLayer = new Map<string, PeerPresence[]>();
 
 		// Normalize currentLayerPath for comparison (treat undefined/root as empty string)
-		const normalizedCurrentPath = !currentLayerPath || currentLayerPath === "root" ? "" : currentLayerPath;
+		const normalizedCurrentPath =
+			!currentLayerPath || currentLayerPath === "root" ? "" : currentLayerPath;
 
 		for (const peer of peers) {
-			const normalizedPeerPath = !peer.layerPath || peer.layerPath === "root" ? "" : peer.layerPath;
+			const normalizedPeerPath =
+				!peer.layerPath || peer.layerPath === "root" ? "" : peer.layerPath;
 			if (normalizedPeerPath === normalizedCurrentPath) continue;
 
 			const existing = peersByLayer.get(peer.layerPath) ?? [];
@@ -64,7 +71,8 @@ export const FlowLayerIndicators = memo(function FlowLayerIndicators({
 
 			for (const [peerLayer, layerPeers] of peersByLayer.entries()) {
 				// Normalize peer layer path
-				const normalizedPeerLayer = !peerLayer || peerLayer === "root" ? "" : peerLayer;
+				const normalizedPeerLayer =
+					!peerLayer || peerLayer === "root" ? "" : peerLayer;
 
 				// Check if peer is in this exact layer
 				if (normalizedPeerLayer === nodePath) {
@@ -82,14 +90,15 @@ export const FlowLayerIndicators = memo(function FlowLayerIndicators({
 			if (matchingPeers.length === 0) continue;
 
 			// Calculate screen position for top-right of the node
-			const nodeScreenX = (node.position.x + (node.measured?.width ?? 0)) * zoom + tx;
+			const nodeScreenX =
+				(node.position.x + (node.measured?.width ?? 0)) * zoom + tx;
 			const nodeScreenY = node.position.y * zoom + ty;
 
 			result.push({
 				nodeId: node.id,
 				screenX: nodeScreenX,
 				screenY: nodeScreenY,
-				peers: matchingPeers.map(p => ({
+				peers: matchingPeers.map((p) => ({
 					name: p.user.name,
 					color: p.user.color,
 					avatar: p.user.avatar,
@@ -128,9 +137,7 @@ export const FlowLayerIndicators = memo(function FlowLayerIndicators({
 							</Avatar>
 						))}
 						{indicator.peers.length > 3 && (
-							<div
-								className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[10px] font-semibold shadow-lg"
-							>
+							<div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[10px] font-semibold shadow-lg">
 								+{indicator.peers.length - 3}
 							</div>
 						)}

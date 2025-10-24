@@ -16,10 +16,10 @@ import {
 	injectDataFunction,
 	isEqual,
 } from "@tm9657/flow-like-ui";
+import type { IJwks, IRealtimeAccess } from "@tm9657/flow-like-ui";
 import { isObject } from "lodash-es";
 import { toast } from "sonner";
 import { fetcher } from "../../lib/api";
-import type { IJwks, IRealtimeAccess } from "@tm9657/flow-like-ui";
 import type { TauriBackend } from "../tauri-provider";
 
 interface DiffEntry {
@@ -189,8 +189,8 @@ export class BoardState implements IBoardState {
 			!this.backend.auth ||
 			!this.backend.queryClient
 		) {
-	        return board;
-	    }
+			return board;
+		}
 
 		const getOfflineSyncCommands =
 			this.backend.getOfflineSyncCommands.bind(this);
@@ -278,7 +278,10 @@ export class BoardState implements IBoardState {
 		return board;
 	}
 
-	async getRealtimeAccess(appId: string, boardId: string): Promise<IRealtimeAccess> {
+	async getRealtimeAccess(
+		appId: string,
+		boardId: string,
+	): Promise<IRealtimeAccess> {
 		const isOffline = await this.backend.isOffline(appId);
 		if (isOffline) throw new Error("Realtime is unavailable offline");
 		if (!this.backend.profile || !this.backend.auth)

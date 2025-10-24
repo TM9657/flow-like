@@ -40,9 +40,7 @@
 	"app": "app.flow-like.com",
 	"provider": "aws",
 	"region": "eu-west-1",
-	"signaling": [
-		"wss://signaling.flow-like.com"
-	],
+	"signaling": ["wss://signaling.flow-like.com"],
 	"terms_of_service": "https://great-co.de/eula/",
 	"legal_notice": "https://great-co.de/legal-notice/",
 	"privacy_policy": "https://great-co.de/privacy-policy/",
@@ -61,9 +59,7 @@
 			"max_total_size": 100000000,
 			"max_llm_cost": 0,
 			"max_llm_calls": 100,
-			"llm_tiers": [
-				"FREE"
-			]
+			"llm_tiers": ["FREE"]
 		},
 		"PREMIUM": {
 			"max_non_visible_projects": 200,
@@ -72,10 +68,7 @@
 			"max_total_size": 1000000000,
 			"max_llm_cost": 300,
 			"max_llm_calls": 1000,
-			"llm_tiers": [
-				"PRO",
-				"FREE"
-			]
+			"llm_tiers": ["PRO", "FREE"]
 		},
 		"PRO": {
 			"max_non_visible_projects": -1,
@@ -84,10 +77,7 @@
 			"max_total_size": 10000000000,
 			"max_llm_cost": 3000,
 			"max_llm_calls": 10000,
-			"llm_tiers": [
-				"PRO",
-				"PREMIUM"
-			]
+			"llm_tiers": ["PRO", "PREMIUM"]
 		},
 		"ENTERPRISE": {
 			"max_non_visible_projects": -1,
@@ -96,11 +86,7 @@
 			"max_total_size": -1,
 			"max_llm_cost": -1,
 			"max_llm_calls": -1,
-			"llm_tiers": [
-				"PRO",
-				"PREMIUM",
-				"ENTERPRISE"
-			]
+			"llm_tiers": ["PRO", "PREMIUM", "ENTERPRISE"]
 		}
 	},
 	"environment": "Staging",

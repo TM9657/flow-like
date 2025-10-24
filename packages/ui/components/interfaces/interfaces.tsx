@@ -44,6 +44,6 @@ export type IEventMapping = Record<
 			string,
 			(props: IConfigInterfaceProps) => JSX.Element | null
 		>;
-		withSink: string[]
+		withSink: string[];
 	}
 >;

@@ -493,10 +493,7 @@ function Checkbox({
 	onCheckedChange,
 }: { checked: boolean; onCheckedChange: () => void }) {
 	return (
-		<div
-			className="relative cursor-pointer"
-			onClick={onCheckedChange}
-		>
+		<div className="relative cursor-pointer" onClick={onCheckedChange}>
 			<motion.div
 				className={`w-5 h-5 rounded border-2 transition-all duration-200 ${
 					checked
