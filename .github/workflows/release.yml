@@ -36,8 +36,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: install bun
-        run: "npm install -g bun"
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.13
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable

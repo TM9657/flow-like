@@ -36,6 +36,7 @@
 		"@platejs/math": "^49.0.0",
 		"@platejs/media": "^49.0.0",
 		"@platejs/mention": "^49.0.0",
+		"@platejs/resizable": "^49.0.0",
 		"@platejs/selection": "^49.0.15",
 		"@platejs/slash-command": "^49.0.0",
 		"@platejs/suggestion": "^49.0.0",
