@@ -271,6 +271,7 @@
         "@platejs/callout": "^49.0.0",
         "@platejs/caption": "^49.0.0",
         "@platejs/code-block": "^49.0.0",
+        "@platejs/combobox": "^49.0.0",
         "@platejs/comment": "^49.0.0",
         "@platejs/date": "^49.0.2",
         "@platejs/dnd": "^49.0.8",
