@@ -25,6 +25,7 @@
 		"@platejs/docx": "^49.0.0",
 		"@platejs/emoji": "^49.0.0",
 		"@platejs/excalidraw": "^49.0.0",
+		"@platejs/floating": "^49.0.0",
 		"@platejs/indent": "^49.0.0",
 		"@platejs/juice": "^49.0.0",
 		"@platejs/layout": "^49.0.0",
