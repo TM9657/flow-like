@@ -53,6 +53,15 @@ tauri-plugin-fs = "2.4.2"
 urlencoding.workspace = true
 tauri-plugin-opener = "2.5.0"
 tracing-oslog = "0.3.0"
+rusqlite = { version = "0.32.0", features = ["bundled-full", "serde_json"] }
+serenity = "0.12.4"
+lazy_static = "1.5.0"
+async-trait = "0.1"
+cron = "0.15.0"
+chrono = "0.4"
+axum = "0.8.6"
+tower = "0.5.2"
+chrono-tz = "0.10.4"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2.3.4", features = ["deep-link"] }

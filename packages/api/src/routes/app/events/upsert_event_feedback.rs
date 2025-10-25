@@ -75,7 +75,7 @@ pub async fn upsert_event_feedback(
         event_id: Some(event_id.clone()),
         context: body.context,
         comment: body.comment,
-        rating: body.rating.clamp(0, 5) as i64,
+        rating: body.rating.clamp(0, 5),
         template_id: None,
         created_at: chrono::Utc::now().naive_utc(),
         updated_at: chrono::Utc::now().naive_utc(),

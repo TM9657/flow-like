@@ -15,6 +15,7 @@ import {
 	type Node,
 	type OnEdgesChange,
 	type OnNodesChange,
+	type OnSelectionChangeFunc,
 	ReactFlow,
 	type ReactFlowInstance,
 	addEdge,
@@ -37,17 +38,40 @@ import {
 	SquareChevronUpIcon,
 	Undo2Icon,
 	VariableIcon,
+	WifiIcon,
+	WifiOffIcon,
 	XIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import {
+	type ReactElement,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { Button, Sheet, SheetContent, SheetHeader, SheetTitle, useLogAggregation, useMobileHeader, viewportDb, viewportKey } from "../..";
+import {
+	Button,
+	Sheet,
+	SheetContent,
+	SheetHeader,
+	SheetTitle,
+	useHub,
+	useLogAggregation,
+	useMobileHeader,
+	viewportDb,
+	viewportKey,
+} from "../..";
 import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
-import { FlowNode } from "../../components/flow/flow-node";
+import {
+	FlowNode,
+	type RemoteSelectionParticipant,
+} from "../../components/flow/flow-node";
 import { Traces } from "../../components/flow/traces";
 import {
 	Variable,
@@ -74,6 +98,7 @@ import {
 	upsertCommentCommand,
 	upsertLayerCommand,
 } from "../../lib";
+import { createRealtimeSession } from "../../lib";
 import {
 	handleCopy,
 	handlePaste,
@@ -96,7 +121,9 @@ import { useBackend, useBackendStore } from "../../state/backend-state";
 import { useFlowBoardParentState } from "../../state/flow-board-parent-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 import { BoardMeta } from "./board-meta";
+import { FlowCursors } from "./flow-cursors";
 import { useUndoRedo } from "./flow-history";
+import { FlowLayerIndicators } from "./flow-layer-indicators";
 import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowRuns } from "./flow-runs";
 import { LayerInnerNode } from "./layer-inner-node";
@@ -110,6 +137,21 @@ function hexToRgba(hex: string, alpha = 0.3): string {
 	const g = (num >> 8) & 255;
 	const b = num & 255;
 	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+interface PeerPresence {
+	clientId: number;
+	cursor?: { x: number; y: number };
+	user: { id?: string; name: string; color: string; avatar?: string };
+	layerPath: string;
+	selection: { nodes: string[] };
+}
+
+function normalizeSelectionNodes(value: unknown): string[] {
+	if (!Array.isArray(value)) return [];
+	return value.filter(
+		(nodeId: unknown): nodeId is string => typeof nodeId === "string",
+	);
 }
 
 export function FlowBoard({
@@ -127,6 +169,7 @@ export function FlowBoard({
 	const router = useRouter();
 	const backend = useBackend();
 	const selected = useRef(new Set<string>());
+	const hub = useHub();
 	const edgeReconnectSuccessful = useRef(true);
 	const { isOver, setNodeRef, active } = useDroppable({ id: "flow" });
 	const parentRegister = useFlowBoardParentState();
@@ -178,6 +221,7 @@ export function FlowBoard({
 	const [editBoard, setEditBoard] = useState(false);
 	const [currentLayer, setCurrentLayer] = useState<string | undefined>();
 	const [layerPath, setLayerPath] = useState<string | undefined>();
+	const [peerStates, setPeerStates] = useState<PeerPresence[]>([]);
 	const colorMode = useMemo(
 		() => (resolvedTheme === "dark" ? "dark" : "light"),
 		[resolvedTheme],
@@ -186,69 +230,92 @@ export function FlowBoard({
 	const { update: updateHeader } = useMobileHeader();
 
 	useEffect(() => {
-		const left: ReactElement[] = []
-		const right: ReactElement[] = []
+		const left: ReactElement[] = [];
+		const right: ReactElement[] = [];
 
-		if (typeof parentRegister.boardParents[boardId] === "string" && !currentLayer) {
+		if (
+			typeof parentRegister.boardParents[boardId] === "string" &&
+			!currentLayer
+		) {
 			left.push(
-				<Button variant={"default"} size={"icon"}  onClick={async () => {
-					const urlWithQuery = parentRegister.boardParents[boardId];
-					router.push(urlWithQuery);
-				}}>
+				<Button
+					variant={"default"}
+					size={"icon"}
+					onClick={async () => {
+						const urlWithQuery = parentRegister.boardParents[boardId];
+						router.push(urlWithQuery);
+					}}
+				>
 					<ArrowBigLeftDashIcon />
-				</Button>
-			)
+				</Button>,
+			);
 		}
 
 		right.push(
 			...[
-				<Button variant={"outline"} size={"icon"}  onClick={async () => {
-					toggleVars();
-				}}>
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						toggleVars();
+					}}
+				>
 					<VariableIcon />
 				</Button>,
-				<Button variant={"outline"} size={"icon"}  onClick={async () => {
-					setEditBoard(true);
-				}}>
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						setEditBoard(true);
+					}}
+				>
 					<NotebookPenIcon />
 				</Button>,
-				<Button variant={"outline"} size={"icon"}  onClick={async () => {
-					toggleRunHistory();
-				}}>
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						toggleRunHistory();
+					}}
+				>
 					<HistoryIcon />
-				</Button>
-			]
-		)
+				</Button>,
+			],
+		);
 
 		// Always expose Logs button; it opens the logs sheet (shows empty state when no run is selected)
 		right.push(
-			<Button variant={"outline"} size={"icon"} aria-label="Open logs" onClick={async () => {
-				toggleLogs();
-			}}>
+			<Button
+				variant={"outline"}
+				size={"icon"}
+				aria-label="Open logs"
+				onClick={async () => {
+					toggleLogs();
+				}}
+			>
 				<ScrollIcon />
-			</Button>
-		)
+			</Button>,
+		);
 
-		if(currentLayer) {
+		if (currentLayer) {
 			left.push(
-				<Button variant={"default"} size={"icon"}  onClick={async () => {
-					popLayer();
-				}}>
+				<Button
+					variant={"default"}
+					size={"icon"}
+					onClick={async () => {
+						popLayer();
+					}}
+				>
 					<SquareChevronUpIcon />
-				</Button>
-			)
+				</Button>,
+			);
 		}
 
 		updateHeader({
 			left,
-			right
-		})
-	}, [
-		currentMetadata,
-		currentLayer,
-		parentRegister.boardParents,
-		boardId,
-	])
+			right,
+		});
+	}, [currentMetadata, currentLayer, parentRegister.boardParents, boardId]);
 
 	const pinToNode = useCallback(
 		(pinId: string) => {
@@ -360,6 +427,12 @@ export function FlowBoard({
 			);
 			await pushCommand(result, append);
 			await board.refetch();
+
+			// Broadcast board update to peers
+			if (awarenessRef.current) {
+				awarenessRef.current.setLocalStateField("boardUpdate", Date.now());
+			}
+
 			return result;
 		},
 		[board.refetch, appId, boardId, pushCommand, version],
@@ -381,6 +454,12 @@ export function FlowBoard({
 			);
 			await pushCommands(result);
 			await board.refetch();
+
+			// Broadcast board update to peers
+			if (awarenessRef.current) {
+				awarenessRef.current.setLocalStateField("boardUpdate", Date.now());
+			}
+
 			return result;
 		},
 		[board.refetch, appId, boardId, pushCommands, version],
@@ -389,7 +468,9 @@ export function FlowBoard({
 	useEffect(() => {
 		if (!logPanelRef.current) return;
 		// Avoid auto-expanding logs on mobile to prevent layout jump
-		const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+		const isMobile =
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches;
 		if (isMobile) return;
 		logPanelRef.current.expand();
 		const size = logPanelRef.current.getSize();
@@ -418,9 +499,29 @@ export function FlowBoard({
 	const [runsOpen, setRunsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
 
+	// Clear selections when version changes
+	useEffect(() => {
+		selected.current.clear();
+		setNodes((nds) =>
+			nds.map((node) => ({
+				...node,
+				selected: false,
+			})),
+		);
+		setEdges((eds) =>
+			eds.map((edge) => ({
+				...edge,
+				selected: false,
+			})),
+		);
+	}, [version, setNodes, setEdges]);
+
 	function toggleVars() {
 		// On mobile use sheet instead of resizable panel
-		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+		if (
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches
+		) {
 			setVarsOpen((v) => !v);
 			return;
 		}
@@ -437,7 +538,10 @@ export function FlowBoard({
 	}
 
 	function toggleRunHistory() {
-		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+		if (
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches
+		) {
 			setRunsOpen((v) => !v);
 			return;
 		}
@@ -456,7 +560,10 @@ export function FlowBoard({
 	}
 
 	function toggleLogs() {
-		if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+		if (
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches
+		) {
 			setLogsOpen((v) => !v);
 			return;
 		}
@@ -1078,6 +1185,307 @@ export function FlowBoard({
 		};
 	}, []);
 
+	// Realtime session
+	const [awareness, setAwareness] = useState<any | undefined>(undefined);
+	const awarenessRef = useRef<any | undefined>(undefined);
+	const [connectionStatus, setConnectionStatus] = useState<
+		"connected" | "disconnected" | "reconnecting"
+	>("disconnected");
+	const sessionRef = useRef<{
+		dispose: () => void;
+		reconnect: () => Promise<void>;
+	} | null>(null);
+	const hasBoardData = !!board.data;
+
+	useEffect(() => {
+		let disposed = false;
+		const setup = async () => {
+			try {
+				// Check offline status first
+				const offline = await backend.isOffline(appId);
+				console.log(
+					"[FlowBoard] Offline status:",
+					offline,
+					"Version:",
+					version,
+					"Board data:",
+					hasBoardData,
+				);
+
+				// Only enable realtime on latest/editable versions
+				if (!hasBoardData || typeof version !== "undefined") return;
+				if (offline) return;
+				const room = `${appId}:${boardId}`;
+				const [access, jwks] = await Promise.all([
+					backend.boardState.getRealtimeAccess(appId, boardId),
+					backend.boardState
+						.getRealtimeJwks(appId, boardId)
+						.catch(() => undefined as any),
+				]);
+				const name =
+					currentProfile.data?.name ||
+					currentProfile.data?.settings?.display_name ||
+					"Anonymous";
+				const userId = currentProfile.data?.id;
+
+				const session = await createRealtimeSession({
+					room,
+					access,
+					jwks,
+					name,
+					userId,
+					signalingServers: hub.hub?.signaling ?? [],
+					onStatusChange: (status) => {
+						console.log(`[FlowBoard] Connection status changed: ${status}`);
+						setConnectionStatus(status);
+					},
+				});
+				if (disposed) {
+					session.dispose();
+					return;
+				}
+				sessionRef.current = {
+					dispose: session.dispose,
+					reconnect: session.reconnect,
+				};
+				awarenessRef.current = session.awareness;
+				setAwareness(session.awareness);
+				setConnectionStatus("connected");
+			} catch (e) {
+				console.warn("Realtime setup failed:", e);
+				setConnectionStatus("disconnected");
+			}
+		};
+		void setup();
+		return () => {
+			disposed = true;
+			try {
+				sessionRef.current?.dispose();
+			} catch {}
+			sessionRef.current = null;
+			awarenessRef.current = undefined;
+			setAwareness(undefined);
+			setConnectionStatus("disconnected");
+		};
+	}, [
+		backend,
+		appId,
+		boardId,
+		hasBoardData,
+		version,
+		currentProfile.data?.id,
+		currentProfile.data?.name,
+		hub.hub,
+	]);
+
+	useEffect(() => {
+		if (!awareness) {
+			setPeerStates([]);
+			return;
+		}
+
+		const updatePeers = () => {
+			const states = awareness.getStates() as Map<number, any>;
+			const invalidPeers: Set<number> | undefined = (awareness as any)
+				?.__invalidPeers;
+			const next: PeerPresence[] = [];
+			states.forEach((state, clientId) => {
+				const isSelf = clientId === awareness.clientID;
+				const isInvalid = invalidPeers?.has(clientId) ?? false;
+				if (isSelf || isInvalid) return;
+				const user = state?.user ?? {};
+				const cursor = state?.cursor;
+				next.push({
+					clientId,
+					cursor: cursor ? { x: cursor.x, y: cursor.y } : undefined,
+					user: {
+						id: user?.id,
+						name: user?.name ?? "User",
+						color: user?.color ?? "#22c55e",
+						avatar: user?.avatar,
+					},
+					layerPath: state?.layerPath ?? "root",
+					selection: {
+						nodes: normalizeSelectionNodes(state?.selection?.nodes),
+					},
+				});
+			});
+			setPeerStates(next);
+		};
+
+		const handleChange = () => updatePeers();
+		awareness.on("change", handleChange);
+		updatePeers();
+		return () => {
+			try {
+				awareness.off("change", handleChange);
+			} catch {}
+		};
+	}, [awareness]);
+
+	// Listen for peer board updates and refetch
+	useEffect(() => {
+		if (!awareness) return;
+
+		const handleBoardUpdate = ({
+			added,
+			updated,
+		}: { added: number[]; updated: number[] }) => {
+			const states = awareness.getStates() as Map<number, any>;
+			const changedPeers = [...added, ...updated];
+
+			for (const clientId of changedPeers) {
+				if (clientId === awareness.clientID) continue;
+				const state = states.get(clientId);
+				if (state?.boardUpdate) {
+					// Peer made a board update, refetch
+					void board.refetch();
+					break;
+				}
+			}
+		};
+
+		awareness.on("update", handleBoardUpdate);
+		return () => {
+			try {
+				awareness.off("update", handleBoardUpdate);
+			} catch {}
+		};
+	}, [awareness, board]);
+
+	// Broadcast cursor position via awareness
+	useEffect(() => {
+		if (!awareness) return;
+		const flowPoint = screenToFlowPosition({
+			x: mousePosition.x,
+			y: mousePosition.y,
+		});
+		awareness.setLocalStateField("cursor", {
+			x: flowPoint.x,
+			y: flowPoint.y,
+		});
+	}, [mousePosition.x, mousePosition.y, awareness, screenToFlowPosition]);
+
+	// Broadcast current layer path via awareness
+	useEffect(() => {
+		if (!awareness) return;
+		awareness.setLocalStateField("layerPath", layerPath ?? "root");
+	}, [awareness, layerPath]);
+
+	useEffect(() => {
+		if (!awareness) return;
+		awareness.setLocalStateField("selection", { nodes: [] });
+	}, [awareness]);
+
+	useEffect(() => {
+		if (!awareness) return;
+		const profileName =
+			currentProfile.data?.name ?? currentProfile.data?.settings?.display_name;
+		if (!profileName && !currentProfile.data?.id) return;
+		const localUser = awareness.getLocalState()?.user ?? {};
+		awareness.setLocalStateField("user", {
+			...localUser,
+			name: profileName ?? localUser.name ?? "Anonymous",
+			id: currentProfile.data?.id ?? localUser.id,
+		});
+	}, [
+		awareness,
+		currentProfile.data?.id,
+		currentProfile.data?.name,
+		currentProfile.data?.settings?.display_name,
+	]);
+
+	// Use ref to track remote selections and update nodes only when necessary
+	const remoteSelectionsRef = useRef<Map<string, RemoteSelectionParticipant[]>>(
+		new Map(),
+	);
+
+	useEffect(() => {
+		const map = new Map<string, RemoteSelectionParticipant[]>();
+		for (const peer of peerStates) {
+			if (!peer.selection.nodes.length) continue;
+			for (const nodeId of peer.selection.nodes) {
+				if (!nodeId) continue;
+				const participant: RemoteSelectionParticipant = {
+					clientId: peer.clientId,
+					userId: peer.user.id,
+					name: peer.user.name,
+					color: peer.user.color,
+				};
+				const existing = map.get(nodeId) ?? [];
+				map.set(nodeId, [...existing, participant]);
+			}
+		}
+		map.forEach((participants, key) => {
+			map.set(
+				key,
+				participants
+					.slice()
+					.sort((a, b) =>
+						a.clientId === b.clientId
+							? a.name.localeCompare(b.name)
+							: a.clientId - b.clientId,
+					),
+			);
+		});
+
+		// Check if selections actually changed
+		let hasChanges = false;
+		if (map.size !== remoteSelectionsRef.current.size) {
+			hasChanges = true;
+		} else {
+			for (const [nodeId, participants] of map.entries()) {
+				const prev = remoteSelectionsRef.current.get(nodeId);
+				if (!prev || prev.length !== participants.length) {
+					hasChanges = true;
+					break;
+				}
+				for (let i = 0; i < participants.length; i++) {
+					const p = participants[i];
+					const prevP = prev[i];
+					if (
+						!prevP ||
+						p.clientId !== prevP.clientId ||
+						p.userId !== prevP.userId ||
+						p.name !== prevP.name ||
+						p.color !== prevP.color
+					) {
+						hasChanges = true;
+						break;
+					}
+				}
+				if (hasChanges) break;
+			}
+		}
+
+		if (!hasChanges) return;
+
+		remoteSelectionsRef.current = map;
+
+		// Only update nodes when selections changed
+		setNodes((nds) => {
+			if (nds.length === 0) return nds;
+			const updated = nds.map((node) => {
+				if (node.type !== "node") return node;
+				const participants = map.get(node.id) ?? [];
+				const hasSelections = participants.length > 0;
+				const hadSelections =
+					!!node.data.remoteSelections && node.data.remoteSelections.length > 0;
+
+				if (!hasSelections && !hadSelections) return node;
+
+				return {
+					...node,
+					data: {
+						...node.data,
+						remoteSelections: hasSelections ? participants : undefined,
+					},
+				};
+			});
+			return updated;
+		});
+	}, [peerStates, setNodes]);
+
 	useEffect(() => {
 		if (!board.data) return;
 		boardRef.current = board.data;
@@ -1094,12 +1502,13 @@ export function FlowBoard({
 			edges,
 			currentLayer,
 			boardRef,
+			version,
 		);
 
 		setNodes(parsed.nodes);
 		setEdges(parsed.edges);
 		setPinCache(new Map(parsed.cache));
-	}, [board.data, currentLayer, currentProfile.data]);
+	}, [board.data, currentLayer, currentProfile.data, version]);
 
 	const nodeTypes = useMemo(
 		() => ({
@@ -1115,6 +1524,11 @@ export function FlowBoard({
 	const onConnect = useCallback(
 		(params: any) =>
 			setEdges((eds) => {
+				// Don't execute commands when viewing an old version
+				if (typeof version !== "undefined") {
+					return eds;
+				}
+
 				const [sourcePin, sourceNode] = pinCache.get(params.sourceHandle) || [];
 				const [targetPin, targetNode] = pinCache.get(params.targetHandle) || [];
 
@@ -1132,7 +1546,18 @@ export function FlowBoard({
 
 				return addEdge(params, eds);
 			}),
-		[setEdges, pinCache, boardId],
+		[setEdges, pinCache, boardId, version, executeCommand],
+	);
+
+	const onSelectionChange = useCallback<OnSelectionChangeFunc<Node, Edge>>(
+		({ nodes: selectedNodes }) => {
+			if (!awareness) return;
+			const nodeIds = selectedNodes
+				.filter((selectedNode) => selectedNode.type === "node")
+				.map((selectedNode) => selectedNode.id);
+			awareness.setLocalStateField("selection", { nodes: nodeIds });
+		},
+		[awareness],
 	);
 
 	const onConnectEnd = useCallback(
@@ -1182,6 +1607,11 @@ export function FlowBoard({
 					if (!change.selected) selected.current.delete(selectedId);
 				}
 
+				// Don't execute commands when viewing an old version
+				if (typeof version !== "undefined") {
+					return applyNodeChanges(changes, nds);
+				}
+
 				const removeChanges = changes.filter(
 					(change: any) => change.type === "remove",
 				);
@@ -1228,7 +1658,7 @@ export function FlowBoard({
 
 				return applyNodeChanges(changes, nds);
 			}),
-		[setNodes, board.data, boardId, executeCommands],
+		[setNodes, board.data, boardId, executeCommands, version],
 	);
 
 	const onEdgesChange: OnEdgesChange = useCallback(
@@ -1253,6 +1683,11 @@ export function FlowBoard({
 								? { ...edge, animated: !change.selected }
 								: edge,
 						);
+				}
+
+				// Don't execute commands when viewing an old version
+				if (typeof version !== "undefined") {
+					return applyEdgeChanges(changes, eds);
 				}
 
 				const removeChanges = changes.filter(
@@ -1281,7 +1716,7 @@ export function FlowBoard({
 
 				return applyEdgeChanges(changes, eds);
 			}),
-		[setEdges, board.data, boardId, pinCache],
+		[setEdges, board.data, boardId, pinCache, executeCommands, version],
 	);
 
 	const onReconnectStart = useCallback(() => {
@@ -1290,6 +1725,11 @@ export function FlowBoard({
 
 	const onReconnect = useCallback(
 		async (oldEdge: any, newConnection: Connection) => {
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
+			}
+
 			// Check if the edge is actually being moved
 			const new_id = `${newConnection.sourceHandle}-${newConnection.targetHandle}`;
 			if (oldEdge.id === new_id) return;
@@ -1330,11 +1770,16 @@ export function FlowBoard({
 			edgeReconnectSuccessful.current = true;
 			setEdges((els) => reconnectEdge(oldEdge, newConnection, els));
 		},
-		[setEdges, pinToNode, executeCommands],
+		[setEdges, pinToNode, executeCommands, version],
 	);
 
 	const onReconnectEnd = useCallback(
 		async (event: any, edge: any) => {
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
+			}
+
 			if (!edgeReconnectSuccessful.current) {
 				const { source, target, sourceHandle, targetHandle } = edge;
 				const from_node = pinToNode(sourceHandle);
@@ -1352,7 +1797,7 @@ export function FlowBoard({
 
 			edgeReconnectSuccessful.current = true;
 		},
-		[setEdges, pinToNode],
+		[setEdges, pinToNode, version, executeCommand],
 	);
 
 	const onContextMenuCB = useCallback((event: any) => {
@@ -1361,6 +1806,10 @@ export function FlowBoard({
 
 	const onNodeDragStop = useCallback(
 		async (event: any, node: any, nodes: any) => {
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
+			}
 			const commands: IGenericCommand[] = [];
 			for await (const node of nodes) {
 				const command = moveNodeCommand({
@@ -1373,7 +1822,7 @@ export function FlowBoard({
 			}
 			await executeCommands(commands);
 		},
-		[boardId, executeCommands, currentLayer],
+		[boardId, executeCommands, currentLayer, version],
 	);
 
 	const isValidConnectionCB = useCallback(
@@ -1400,6 +1849,11 @@ export function FlowBoard({
 	);
 
 	const onCommentPlace = useCallback(async () => {
+		// Don't execute commands when viewing an old version
+		if (typeof version !== "undefined") {
+			return;
+		}
+
 		const location = screenToFlowPosition({
 			x: clickPosition.x,
 			y: clickPosition.y,
@@ -1422,7 +1876,7 @@ export function FlowBoard({
 		});
 
 		await executeCommand(command);
-	}, [currentLayer, clickPosition, executeCommand]);
+	}, [currentLayer, clickPosition, executeCommand, version]);
 
 	const onNodeDrag = useCallback(
 		(event: any, node: Node, nodes: Node[]) => {
@@ -1474,7 +1928,42 @@ export function FlowBoard({
 	);
 
 	return (
-		<div className="w-full flex-1 grow flex-col min-h-0">
+		<div className="w-full flex-1 grow flex-col min-h-0 relative">
+			{/* Realtime connection status indicator */}
+			{awareness && connectionStatus === "connected" && (
+				<div className="fixed right-3 top-16 z-50 flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--primary)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm sm:right-4 sm:top-16 md:right-6 md:top-6">
+					<WifiIcon className="h-3.5 w-3.5 text-primary animate-pulse" />
+					<span className="text-xs font-medium text-primary">Live</span>
+				</div>
+			)}
+			{awareness && connectionStatus === "reconnecting" && (
+				<div className="fixed right-3 top-16 z-50 flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--yellow-500)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm sm:right-4 sm:top-16 md:right-6 md:top-6">
+					<WifiIcon className="h-3.5 w-3.5 text-yellow-500 animate-pulse" />
+					<span className="text-xs font-medium text-yellow-500">
+						Reconnecting...
+					</span>
+				</div>
+			)}
+			{awareness && connectionStatus === "disconnected" && (
+				<button
+					type="button"
+					onClick={() => sessionRef.current?.reconnect()}
+					className="fixed right-3 top-16 z-50 flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--destructive)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm sm:right-4 sm:top-16 md:right-6 md:top-6 hover:bg-[color-mix(in_oklch,var(--background)_85%,transparent)] transition-colors cursor-pointer"
+				>
+					<WifiOffIcon className="h-3.5 w-3.5 text-destructive" />
+					<span className="text-xs font-medium text-destructive">
+						Disconnected - Click to reconnect
+					</span>
+				</button>
+			)}
+			{!awareness && (
+				<div className="fixed right-3 top-16 z-50 flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--muted-foreground)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm sm:right-4 sm:top-16 md:right-6 md:top-6">
+					<WifiOffIcon className="h-3.5 w-3.5 text-muted-foreground" />
+					<span className="text-xs font-medium text-muted-foreground">
+						Offline
+					</span>
+				</div>
+			)}
 			<div className="flex items-center justify-center absolute translate-x-[-50%] mt-5 left-[50dvw] z-40">
 				{board.data && editBoard && (
 					<BoardMeta
@@ -1490,17 +1979,17 @@ export function FlowBoard({
 					mobileClassName="hidden"
 					items={[
 						...(typeof parentRegister.boardParents[boardId] === "string" &&
-							!currentLayer
+						!currentLayer
 							? [
-								{
-									icon: <ArrowBigLeftDashIcon />,
-									title: "Back",
-									onClick: async () => {
-										const urlWithQuery = parentRegister.boardParents[boardId];
-										router.push(urlWithQuery);
+									{
+										icon: <ArrowBigLeftDashIcon />,
+										title: "Back",
+										onClick: async () => {
+											const urlWithQuery = parentRegister.boardParents[boardId];
+											router.push(urlWithQuery);
+										},
 									},
-								},
-							]
+								]
 							: []),
 						{
 							icon: <VariableIcon />,
@@ -1526,27 +2015,27 @@ export function FlowBoard({
 						},
 						...(currentMetadata
 							? [
-								{
-									icon: <ScrollIcon />,
-									title: "Logs",
-									onClick: async () => {
-										toggleLogs();
+									{
+										icon: <ScrollIcon />,
+										title: "Logs",
+										onClick: async () => {
+											toggleLogs();
+										},
 									},
-								},
-							]
+								]
 							: ([] as any)),
 						...(currentLayer
 							? [
-								{
-									icon: <SquareChevronUpIcon />,
-									title: "Layer Up",
-									separator: "left",
-									highlight: true,
-									onClick: async () => {
-										popLayer();
+									{
+										icon: <SquareChevronUpIcon />,
+										title: "Layer Up",
+										separator: "left",
+										highlight: true,
+										onClick: async () => {
+											popLayer();
+										},
 									},
-								},
-							]
+								]
 							: []),
 					]}
 				/>
@@ -1554,7 +2043,11 @@ export function FlowBoard({
 			<ResizablePanelGroup
 				direction="horizontal"
 				className="flex grow min-h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] md:min-h-dvh md:h-dvh overscroll-contain"
-				style={{ touchAction: "manipulation", WebkitOverflowScrolling: "touch", overflow: "hidden" }}
+				style={{
+					touchAction: "manipulation",
+					WebkitOverflowScrolling: "touch",
+					overflow: "hidden",
+				}}
 			>
 				{/* Desktop/Tablet side panels */}
 				<ResizablePanel
@@ -1594,7 +2087,11 @@ export function FlowBoard({
 								<div
 									className={`w-full h-full relative select-none touch-none ${isOver && "border-green-400 border-2 z-10"}`}
 									ref={setNodeRef}
-									style={{ WebkitUserSelect: "none", WebkitTouchCallout: "none", touchAction: "none" }}
+									style={{
+										WebkitUserSelect: "none",
+										WebkitTouchCallout: "none",
+										touchAction: "none",
+									}}
 									onTouchStart={(e) => {
 										const t = e.touches[0];
 										if (!t) return;
@@ -1605,23 +2102,47 @@ export function FlowBoard({
 										const onMove = (me: TouchEvent) => {
 											const tt = me.touches[0];
 											if (!tt) return;
-											if (Math.hypot(tt.clientX - startX, tt.clientY - startY) > 10) moved = true;
+											if (
+												Math.hypot(tt.clientX - startX, tt.clientY - startY) >
+												10
+											)
+												moved = true;
 										};
 										const timer = setTimeout(() => {
 											if (moved) return;
 											// Synthesize a contextmenu-like event for long-press
-											const evt = new MouseEvent("contextmenu", { clientX: startX, clientY: startY, bubbles: true, cancelable: true });
+											const evt = new MouseEvent("contextmenu", {
+												clientX: startX,
+												clientY: startY,
+												bubbles: true,
+												cancelable: true,
+											});
 											target.dispatchEvent(evt);
 										}, 450);
 										const onEnd = () => {
 											clearTimeout(timer);
-											document.removeEventListener("touchmove", onMove, { capture: true } as any);
-											document.removeEventListener("touchend", onEnd, { capture: true } as any);
-											document.removeEventListener("touchcancel", onEnd, { capture: true } as any);
+											document.removeEventListener("touchmove", onMove, {
+												capture: true,
+											} as any);
+											document.removeEventListener("touchend", onEnd, {
+												capture: true,
+											} as any);
+											document.removeEventListener("touchcancel", onEnd, {
+												capture: true,
+											} as any);
 										};
-										document.addEventListener("touchmove", onMove, { passive: true, capture: true } as any);
-										document.addEventListener("touchend", onEnd, { passive: true, capture: true } as any);
-										document.addEventListener("touchcancel", onEnd, { passive: true, capture: true } as any);
+										document.addEventListener("touchmove", onMove, {
+											passive: true,
+											capture: true,
+										} as any);
+										document.addEventListener("touchend", onEnd, {
+											passive: true,
+											capture: true,
+										} as any);
+										document.addEventListener("touchcancel", onEnd, {
+											passive: true,
+											capture: true,
+										} as any);
 									}}
 								>
 									{currentLayer && (
@@ -1654,6 +2175,7 @@ export function FlowBoard({
 										onNodeDrag={onNodeDrag}
 										isValidConnection={isValidConnectionCB}
 										onConnect={onConnect}
+										onSelectionChange={onSelectionChange}
 										onReconnect={onReconnect}
 										onReconnectStart={onReconnectStart}
 										onMoveEnd={onMoveEnd}
@@ -1722,6 +2244,19 @@ export function FlowBoard({
 											size={1}
 										/>
 									</ReactFlow>
+									{peerStates.length > 0 && (
+										<FlowCursors
+											peers={peerStates}
+											currentLayerPath={layerPath ?? "root"}
+										/>
+									)}
+									{peerStates.length > 0 && (
+										<FlowLayerIndicators
+											peers={peerStates}
+											currentLayerPath={layerPath ?? "root"}
+											nodes={nodes}
+										/>
+									)}
 									<DragOverlay
 										dropAnimation={{
 											duration: 500,
@@ -1732,8 +2267,8 @@ export function FlowBoard({
 											<Variable
 												variable={active?.data?.current as IVariable}
 												preview
-												onVariableChange={() => { }}
-												onVariableDeleted={() => { }}
+												onVariableChange={() => {}}
+												onVariableDeleted={() => {}}
 											/>
 										)}
 									</DragOverlay>
@@ -1791,7 +2326,10 @@ export function FlowBoard({
 						</SheetHeader>
 						{board.data && (
 							<div className="h-[calc(60dvh-3.5rem)] overflow-y-auto overscroll-contain">
-								<VariablesMenu board={board.data} executeCommand={executeCommand} />
+								<VariablesMenu
+									board={board.data}
+									executeCommand={executeCommand}
+								/>
 							</div>
 						)}
 					</SheetContent>
@@ -1840,7 +2378,7 @@ export function FlowBoard({
 					</SheetContent>
 				</Sheet>
 			</ResizablePanelGroup>
-			<PinEditModal appId={appId} boardId={boardId} />
+			<PinEditModal appId={appId} boardId={boardId} version={version} />
 		</div>
 	);
 }

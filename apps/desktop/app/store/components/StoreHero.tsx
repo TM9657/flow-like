@@ -1,5 +1,11 @@
-"use client"
-import { Avatar, AvatarFallback, AvatarImage, Badge, IAppVisibility } from "@tm9657/flow-like-ui";
+"use client";
+import {
+	Avatar,
+	AvatarFallback,
+	AvatarImage,
+	Badge,
+	type IAppVisibility,
+} from "@tm9657/flow-like-ui";
 import { Heart, Star } from "lucide-react";
 import { visibilityIcon, visibilityLabel } from "./Visibility";
 
@@ -47,8 +53,14 @@ export function StoreHero({
 				{/* Bottom scrim stronger on mobile for text legibility */}
 				<div className="absolute inset-x-0 bottom-0 h-full bg-gradient-to-t from-background/90 via-background/40 to-background/20 md:from-background/70 md:via-background/50" />
 				{/* Soft ambience */}
-				<div aria-hidden className="absolute -top-10 -left-10 h-48 w-48 bg-primary/25 blur-3xl rounded-full animate-float-slow" />
-				<div aria-hidden className="absolute -bottom-10 -right-10 h-48 w-48 bg-secondary/25 blur-3xl rounded-full animate-float-slow" />
+				<div
+					aria-hidden
+					className="absolute -top-10 -left-10 h-48 w-48 bg-primary/25 blur-3xl rounded-full animate-float-slow"
+				/>
+				<div
+					aria-hidden
+					className="absolute -bottom-10 -right-10 h-48 w-48 bg-secondary/25 blur-3xl rounded-full animate-float-slow"
+				/>
 			</div>
 
 			{/* Foreground content */}
@@ -59,16 +71,22 @@ export function StoreHero({
 				<div className="relative grid grid-cols-1 md:grid-cols-[auto,1fr] items-start md:items-center gap-3 sm:gap-4 md:gap-5 lg:gap-6">
 					<Avatar className="h-16 w-16 md:h-20 md:w-20 lg:h-24 lg:w-24 shadow-lg ring-1 ring-background/40">
 						<AvatarImage src={iconUrl} alt={appName} />
-						<AvatarFallback className="font-bold">{appName.slice(0, 2).toUpperCase()}</AvatarFallback>
+						<AvatarFallback className="font-bold">
+							{appName.slice(0, 2).toUpperCase()}
+						</AvatarFallback>
 					</Avatar>
 
 					<div className="min-w-0 flex flex-col">
 						<div className="flex flex-wrap items-center gap-2 sm:gap-3">
-							<h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight truncate max-w-full">{appName}</h1>
+							<h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight truncate max-w-full">
+								{appName}
+							</h1>
 							<Badge>{category}</Badge>
 							<Badge variant="secondary">{ageRating}</Badge>
 							{isMember ? (
-								<Badge variant="secondary" className="flex items-center gap-1"><Heart className="h-3 w-3" /> Yours</Badge>
+								<Badge variant="secondary" className="flex items-center gap-1">
+									<Heart className="h-3 w-3" /> Yours
+								</Badge>
 							) : (
 								<Badge variant="secondary">{priceLabel}</Badge>
 							)}
@@ -78,15 +96,21 @@ export function StoreHero({
 							<div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-foreground">
 								<Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
 								<span className="text-xs md:text-sm font-medium">
-									{ratingCount > 0 ? `${avgRating.toFixed(1)} (${ratingCount.toLocaleString()})` : "No ratings yet"}
+									{ratingCount > 0
+										? `${avgRating.toFixed(1)} (${ratingCount.toLocaleString()})`
+										: "No ratings yet"}
 								</span>
 							</div>
 							<div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-foreground">
 								{visibilityIcon(visibility)}
-								<span className="text-xs md:text-sm capitalize">{visibilityLabel(visibility)}</span>
+								<span className="text-xs md:text-sm capitalize">
+									{visibilityLabel(visibility)}
+								</span>
 							</div>
 							{authors?.length ? (
-								<div className="text-xs md:text-sm truncate">By {authors.join(", ")}</div>
+								<div className="text-xs md:text-sm truncate">
+									By {authors.join(", ")}
+								</div>
 							) : null}
 						</div>
 					</div>

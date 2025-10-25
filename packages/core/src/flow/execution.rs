@@ -1051,7 +1051,6 @@ async fn step_core(
     } else {
         Some(target.through_pins.clone())
     };
-    print!("Context created!");
 
     if USE_DEPENDENCY_GRAPH {
         if let Err(err) =

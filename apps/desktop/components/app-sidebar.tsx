@@ -66,6 +66,7 @@ import {
 	Edit3Icon,
 	ExternalLinkIcon,
 	HeartIcon,
+	KeyIcon,
 	LayoutDashboardIcon,
 	LibraryIcon,
 	LogInIcon,
@@ -220,16 +221,16 @@ export function AppSidebar({
 
 	return (
 		<SidebarProvider defaultOpen={defaultOpen}>
-            <InnerSidebar />
-            <main className="w-full h-dvh flex flex-col overflow-hidden">
-                <MobileHeaderProvider>
-                    <MobileHeader />
-                    <SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20 flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-                        {children}
-                    </SidebarInset>
-                </MobileHeaderProvider>
-            </main>
-        </SidebarProvider>
+			<InnerSidebar />
+			<main className="w-full h-dvh flex flex-col overflow-hidden">
+				<MobileHeaderProvider>
+					<MobileHeader />
+					<SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20 flex flex-col flex-1 min-h-0 h-full overflow-hidden">
+						{children}
+					</SidebarInset>
+				</MobileHeaderProvider>
+			</main>
+		</SidebarProvider>
 	);
 }
 
@@ -606,9 +607,9 @@ function NavMain({
 											<SidebarMenuButton
 												variant={
 													pathname === item.url ||
-														typeof item.items?.find(
-															(item) => item.url === pathname,
-														) !== "undefined"
+													typeof item.items?.find(
+														(item) => item.url === pathname,
+													) !== "undefined"
 														? "outline"
 														: "default"
 												}
@@ -725,9 +726,9 @@ function NavMain({
 												<SidebarMenuButton
 													variant={
 														pathname === item.url ||
-															typeof item.items?.find(
-																(item) => item.url === pathname,
-															) !== "undefined"
+														typeof item.items?.find(
+															(item) => item.url === pathname,
+														) !== "undefined"
 															? "outline"
 															: "default"
 													}
@@ -930,6 +931,12 @@ export function NavUser({
 												)}
 											</div>
 											Notifications
+										</DropdownMenuItem>
+									</a>
+									<a href="/account/pat">
+										<DropdownMenuItem className="gap-2 p-2">
+											<KeyIcon className="size-4" />
+											Token
 										</DropdownMenuItem>
 									</a>
 								</DropdownMenuGroup>

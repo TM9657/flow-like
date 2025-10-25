@@ -19,6 +19,7 @@ import {
 	MessageSquareIcon,
 	PlayCircleIcon,
 	ScrollTextIcon,
+	SlidersHorizontalIcon,
 	SquareCheckIcon,
 	SquarePenIcon,
 	Trash2Icon,
@@ -26,7 +27,15 @@ import {
 	WorkflowIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type RefObject,
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 import { useLogAggregation } from "../..";
 import {
@@ -52,7 +61,7 @@ import {
 	upsertPinCommand,
 } from "../../lib";
 import { logLevelFromNumber } from "../../lib/log-level";
-import type { IComment, ILayer } from "../../lib/schema/flow/board";
+import type { IBoard, IComment, ILayer } from "../../lib/schema/flow/board";
 import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
 import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IVariableType } from "../../lib/schema/flow/pin";
@@ -75,7 +84,15 @@ import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
 import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
 import { FlowPin } from "./flow-pin";
+import { LayerEditMenu } from "./layer-editing-menu";
 import { typeToColor } from "./utils";
+
+export interface RemoteSelectionParticipant {
+	clientId: number;
+	userId?: string;
+	name: string;
+	color: string;
+}
 
 export interface IPinAction {
 	action: "create";
@@ -90,8 +107,11 @@ export type FlowNode = Node<
 		boardId: string;
 		appId: string;
 		transparent?: boolean;
+		boardRef: RefObject<IBoard | undefined>;
+		version?: [number, number, number];
 		onExecute: (node: INode, payload?: object) => Promise<void>;
 		onCopy: () => Promise<void>;
+		remoteSelections?: RemoteSelectionParticipant[];
 	},
 	"node"
 >;
@@ -126,6 +146,13 @@ const FlowNodeInner = memo(
 		const div = useRef<HTMLDivElement>(null);
 		const reactFlow = useReactFlow();
 		const { getNode } = useReactFlow();
+		const remoteSelections = props.data.remoteSelections ?? [];
+		const displayedRemoteSelections = useMemo(
+			() => remoteSelections.slice(0, 3),
+			[remoteSelections],
+		);
+		const extraRemoteSelections =
+			remoteSelections.length - displayedRemoteSelections.length;
 		const [executed, severity] = useMemo(() => {
 			const severity = ILogLevel.Debug;
 
@@ -224,6 +251,10 @@ const FlowNodeInner = memo(
 
 		const addPin = useCallback(
 			async (node: INode, pin: IPin, index: number) => {
+				if (typeof props.data.version !== "undefined") {
+					return;
+				}
+
 				const backend = useBackendStore.getState().backend;
 				if (!backend) return;
 				const nodeGuard = reactFlow
@@ -294,10 +325,14 @@ const FlowNodeInner = memo(
 					props.data.boardId,
 				]);
 			},
-			[reactFlow, sortPins, pushCommand, invalidate],
+			[reactFlow, sortPins, pushCommand, invalidate, props.data.version],
 		);
 		const pinRemoveCallback = useCallback(
 			async (pinToRemove: IPin) => {
+				if (typeof props.data.version !== "undefined") {
+					return;
+				}
+
 				const backend = useBackendStore.getState().backend;
 				if (!backend) return;
 
@@ -345,7 +380,7 @@ const FlowNodeInner = memo(
 					props.data.boardId,
 				]);
 			},
-			[inputPins, outputPins, getNode],
+			[inputPins, outputPins, getNode, props.data.version],
 		);
 
 		const parsePins = useCallback(
@@ -452,6 +487,7 @@ const FlowNodeInner = memo(
 								pin={pin}
 								onPinRemove={pinRemoveCallback}
 								skipOffset={isReroute}
+								version={props.data.version}
 							/>
 						);
 					}),
@@ -461,6 +497,7 @@ const FlowNodeInner = memo(
 				props.data.boardId,
 				pinRemoveCallback,
 				isReroute,
+				props.data.version,
 			],
 		);
 
@@ -483,6 +520,7 @@ const FlowNodeInner = memo(
 							key={pin.id}
 							onPinRemove={pinRemoveCallback}
 							skipOffset={isReroute}
+							version={props.data.version}
 						/>
 					);
 				}),
@@ -492,9 +530,9 @@ const FlowNodeInner = memo(
 				props.data.boardId,
 				pinRemoveCallback,
 				isReroute,
+				props.data.version,
 			],
 		);
-
 		const playNode = useMemo(() => {
 			if (!props.data.node.start) return null;
 			if (executionState === "done" || executing)
@@ -590,6 +628,28 @@ const FlowNodeInner = memo(
 				onMouseEnter={() => onHover(true)}
 				onMouseLeave={() => onHover(false)}
 			>
+				{remoteSelections.length > 0 && (
+					<div className="pointer-events-none absolute -top-3 left-0 flex flex-col gap-1">
+						{displayedRemoteSelections.map((participant) => (
+							<div
+								key={`${participant.clientId}-${participant.userId ?? participant.name}`}
+								className="flex items-center gap-1 rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm"
+								style={{ borderColor: participant.color }}
+							>
+								<span
+									className="h-1.5 w-1.5 rounded-full"
+									style={{ backgroundColor: participant.color }}
+								/>
+								<span className="font-medium">{participant.name}</span>
+							</div>
+						))}
+						{extraRemoteSelections > 0 && (
+							<div className="rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm">
+								+{extraRemoteSelections}
+							</div>
+						)}
+					</div>
+				)}
 				{playNode}
 				{props.data.node.long_running && (
 					<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(-50%)] left-0 text-center bg-background rounded-full">
@@ -699,6 +759,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	const [isOpen, setIsOpen] = useState(false);
 	const [commentMenu, setCommentMenu] = useState(false);
 	const [renameMenu, setRenameMenu] = useState(false);
+	const [editingMenu, setEditingMenu] = useState(false);
 	const flow = useReactFlow();
 	const { pushCommand, pushCommands } = useUndoRedo(
 		props.data.appId,
@@ -723,6 +784,10 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	}, [flow]);
 
 	const handleError = useCallback(async () => {
+		if (typeof props.data.version !== "undefined") {
+			return;
+		}
+
 		const node = flow.getNodes().find((node) => node.id === props.id);
 		if (!node) return;
 
@@ -823,6 +888,10 @@ function FlowNode(props: NodeProps<FlowNode>) {
 
 	const handleCollapse = useCallback(
 		async (x: number, y: number) => {
+			if (typeof props.data.version !== "undefined") {
+				return;
+			}
+
 			const selectedNodes = flow.getNodes().filter((node) => node.selected);
 			const flowCords = flow.screenToFlowPosition({
 				x: x,
@@ -874,6 +943,10 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	);
 
 	const deleteNodes = useCallback(async () => {
+		if (typeof props.data.version !== "undefined") {
+			return;
+		}
+
 		const nodes = flow.getNodes().filter((node) => node.selected);
 		if (!nodes || nodes.length === 0) return;
 
@@ -900,6 +973,10 @@ function FlowNode(props: NodeProps<FlowNode>) {
 
 	const orderNodes = useCallback(
 		async (type: "align" | "justify", dir: "start" | "end" | "center") => {
+			if (typeof props.data.version !== "undefined") {
+				return;
+			}
+
 			const selectedNodes = flow.getNodes().filter((node) => node.selected);
 			if (selectedNodes.length <= 1) return;
 			let currentLayer: string | undefined = undefined;
@@ -991,6 +1068,15 @@ function FlowNode(props: NodeProps<FlowNode>) {
 								<div className="flex flex-row items-center gap-2 text-nowrap">
 									<SquarePenIcon className="w-4 h-4" />
 									Rename
+								</div>
+							</ContextMenuItem>
+						)}
+					{flow.getNodes().filter((node) => node.selected).length <= 1 &&
+						props.data.node.name === "events_generic" && (
+							<ContextMenuItem onClick={() => setEditingMenu(true)}>
+								<div className="flex flex-row items-center gap-2 text-nowrap">
+									<SlidersHorizontalIcon className="w-4 h-4" />
+									Edit
 								</div>
 							</ContextMenuItem>
 						)}
@@ -1136,6 +1222,47 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					node={props.data.node}
 					open={renameMenu}
 					onOpenChange={(open) => setRenameMenu(open)}
+				/>
+			)}
+			{editingMenu && props.data.node.name === "events_generic" && (
+				<LayerEditMenu
+					open={editingMenu}
+					onOpenChange={setEditingMenu}
+					node={props.data.node}
+					boardRef={props.data.boardRef}
+					onApply={async (updated) => {
+						const backend = useBackendStore.getState().backend;
+						if (!backend) return;
+
+						const currentNode = flow.getNode(props.id);
+						if (!currentNode) return;
+
+						const updatedNode = updated as INode;
+						const command = updateNodeCommand({
+							node: {
+								...updatedNode,
+								coordinates: [
+									currentNode.position.x,
+									currentNode.position.y,
+									0,
+								],
+							},
+						});
+
+						const result = await backend.boardState.executeCommand(
+							props.data.appId,
+							props.data.boardId,
+							command,
+						);
+
+						await pushCommand(result, false);
+						await invalidate(backend.boardState.getBoard, [
+							props.data.appId,
+							props.data.boardId,
+						]);
+						setEditingMenu(false);
+					}}
+					mode="node"
 				/>
 			)}
 			<FlowNodeInner props={props} onHover={setIsHovered} />

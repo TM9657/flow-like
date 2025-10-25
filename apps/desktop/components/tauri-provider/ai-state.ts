@@ -54,7 +54,7 @@ export class AiState implements IAIState {
 	}
 
 	async chatComplete(messages: IHistoryMessage[]): Promise<IResponse> {
-		let token = this.backend.auth?.user?.access_token;
+		const token = this.backend.auth?.user?.access_token;
 		const response = await invoke<IResponse>("chat_completion", {
 			messages: messages,
 			token: token,

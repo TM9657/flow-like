@@ -4,7 +4,6 @@
  * Mobile navbar is better positioned at bottom right.
  **/
 
-import { PanelTopOpen } from "lucide-react";
 import {
 	AnimatePresence,
 	type MotionValue,
@@ -13,6 +12,7 @@ import {
 	useSpring,
 	useTransform,
 } from "framer-motion";
+import { PanelTopOpen } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 
@@ -52,9 +52,9 @@ const FlowDockMobile = memo(
 		className?: string;
 	}) => {
 		const [open, setOpen] = useState(false);
-		const [placement, setPlacement] = useState<"up" | "down" | "left" | "right">(
-			"down",
-		);
+		const [placement, setPlacement] = useState<
+			"up" | "down" | "left" | "right"
+		>("down");
 		const containerRef = useRef<HTMLDivElement>(null);
 
 		const handleToggle = useCallback(() => {
@@ -78,7 +78,8 @@ const FlowDockMobile = memo(
 			// Smaller buttons (h-7 w-7) + gap-1.5
 			const itemSize = 28;
 			const gap = 6;
-			const neededVertical = items.length * itemSize + Math.max(items.length - 1, 0) * gap;
+			const neededVertical =
+				items.length * itemSize + Math.max(items.length - 1, 0) * gap;
 
 			if (availableDown >= Math.min(neededVertical, 120)) {
 				setPlacement("down");
@@ -206,13 +207,29 @@ const MobileItem = memo(
 		const exitByPlacement = useMemo(() => {
 			switch (placement) {
 				case "down":
-					return { opacity: 0, y: -8, transition: { delay: index * 0.04 } } as const;
+					return {
+						opacity: 0,
+						y: -8,
+						transition: { delay: index * 0.04 },
+					} as const;
 				case "up":
-					return { opacity: 0, y: 8, transition: { delay: index * 0.04 } } as const;
+					return {
+						opacity: 0,
+						y: 8,
+						transition: { delay: index * 0.04 },
+					} as const;
 				case "left":
-					return { opacity: 0, x: 8, transition: { delay: index * 0.04 } } as const;
+					return {
+						opacity: 0,
+						x: 8,
+						transition: { delay: index * 0.04 },
+					} as const;
 				case "right":
-					return { opacity: 0, x: -8, transition: { delay: index * 0.04 } } as const;
+					return {
+						opacity: 0,
+						x: -8,
+						transition: { delay: index * 0.04 },
+					} as const;
 				default:
 					return { opacity: 0 } as const;
 			}

@@ -1,10 +1,10 @@
 use crate::{
     ensure_permission, error::ApiError, middleware::jwt::AppUser,
-    permission::role_permission::RolePermissions, routes::PaginationParams, state::AppState,
+    permission::role_permission::RolePermissions, state::AppState,
 };
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
+    extract::{Path, State},
 };
 use flow_like_storage::databases::vector::{VectorStore, lancedb::LanceDBVectorStore};
 

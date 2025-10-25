@@ -20,7 +20,12 @@ import { VariablesMenuEdit } from "../variables/variables-menu-edit";
 export function PinEditModal({
 	appId,
 	boardId,
-}: Readonly<{ appId: string; boardId: string }>) {
+	version,
+}: Readonly<{
+	appId: string;
+	boardId: string;
+	version?: [number, number, number];
+}>) {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 	const { pushCommand } = useUndoRedo(appId, boardId);
@@ -42,6 +47,11 @@ export function PinEditModal({
 	}, [appId, boardId, backend, invalidate]);
 
 	const onChangeDefaultValue = useCallback(async () => {
+		if (typeof version !== "undefined") {
+			stopEditPin();
+			return;
+		}
+
 		if (!editedPin?.node || !currentNode || !editedPin?.pin) {
 			stopEditPin();
 			return;
@@ -93,6 +103,7 @@ export function PinEditModal({
 		backend,
 		boardId,
 		stopEditPin,
+		version,
 	]);
 
 	if (!editedPin?.pin || !currentNode) {

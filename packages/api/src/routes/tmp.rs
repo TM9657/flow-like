@@ -120,5 +120,5 @@ fn sanitize_ext(input: Option<&str>) -> Option<String> {
     if s.is_empty() || s.len() > 16 || !s.chars().all(|c| c.is_ascii_alphanumeric()) {
         return None;
     }
-    Some(s.drain(..).collect())
+    Some(std::mem::take(&mut s))
 }

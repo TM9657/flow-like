@@ -4,9 +4,8 @@
 	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
-		"postinstall": "cargo install sea-orm-cli@1.1.16",
 		"db:push:sync": "bun run db:push && bun run db:sync",
-    	"db:sync": "sea-orm-cli generate entity -o src/entity --max-connections 10 --with-serde both --ignore-tables _prisma_migrations -s public",
+		"db:sync": "docker compose up postgres tools && cd ../.. && cargo fmt --all",
 		"db:push": "bunx prisma db push --schema prisma/schema",
 		"db:migration:create": "bunx prisma migrate dev --name",
 		"db:migration:deploy": "bunx prisma migrate deploy",

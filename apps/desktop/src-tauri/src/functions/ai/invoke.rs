@@ -3,13 +3,13 @@ use std::sync::Arc;
 use flow_like::{
     bit::{Bit, BitModelPreference},
     flow_like_model_provider::{
-        history::{Content, History, HistoryMessage, MessageContent, Role},
+        history::{History, HistoryMessage},
         llm::LLMCallback,
         response::Response,
     },
     flow_like_types::intercom::{BufferedInterComHandler, InterComEvent},
 };
-use tauri::{AppHandle, Emitter, ipc::Channel};
+use tauri::{AppHandle, ipc::Channel};
 
 use crate::{
     functions::TauriFunctionError,

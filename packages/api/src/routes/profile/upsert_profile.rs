@@ -5,9 +5,7 @@ use axum::{
 };
 use flow_like::profile::{ProfileApp, Settings};
 use flow_like_types::{Value, create_id};
-use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, sqlx::types::chrono,
-};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use serde_json::to_value;
 
@@ -99,10 +97,7 @@ pub async fn upsert_profile(
         None
     };
 
-    let apps = match apps {
-        Some(apps) => Some(Value::Array(apps)),
-        None => None,
-    };
+    let apps = apps.map(Value::Array);
 
     let new_profile = profile::ActiveModel {
         id: Set(id),

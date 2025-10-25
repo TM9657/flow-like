@@ -85,7 +85,7 @@ model PAT {
 
     name        String
     key         String @unique
-    permissions BigInt @default(0)
+    permissions BigInt @default(1)
 
     user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
     userId String

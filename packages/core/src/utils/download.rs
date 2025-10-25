@@ -34,7 +34,7 @@ fn global_download_semaphore() -> &'static Semaphore {
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|&n| n > 0)
-            .unwrap_or(5);
+            .unwrap_or(10);
         Semaphore::new(max)
     })
 }
@@ -136,7 +136,7 @@ async fn feed_hasher_with_existing(
         total += n as u64;
 
         // yield occasionally to keep the runtime responsive (Windows)
-        if total % (8 * 1024 * 1024) == 0 {
+        if total.is_multiple_of(8 * 1024 * 1024) {
             yield_now().await;
         }
     }

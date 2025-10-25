@@ -15,14 +15,10 @@ use axum::{
     response::Response,
 };
 use flow_like::hub::UserTier;
-use flow_like_storage::datafusion::common::HashMap;
 use flow_like_types::Result;
 use flow_like_types::anyhow;
 use hyper::header::AUTHORIZATION;
-use sea_orm::{
-    ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait,
-    sqlx::types::chrono,
-};
+use sea_orm::{ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait};
 use serde::de::{self, Unexpected};
 use serde::{Deserialize, Deserializer};
 
@@ -359,6 +355,7 @@ pub async fn jwt_middleware(
     let mut request = request;
     if let Some(auth_header) = request.headers().get(AUTHORIZATION)
         && let Ok(token) = auth_header.to_str()
+        && !token.starts_with("pat_")
     {
         let token = if token.starts_with("Bearer ") {
             &token[7..]
@@ -378,14 +375,41 @@ pub async fn jwt_middleware(
         return Ok(next.run(request).await);
     }
 
-    if let Some(pat_header) = request.headers().get("x-pat")
-        && let Ok(pat_str) = pat_header.to_str()
+    if let Some(auth_header) = request.headers().get(AUTHORIZATION)
+        && let Ok(token) = auth_header.to_str()
+        && token.starts_with("pat_")
     {
+        let pat_str = token.trim();
+        if !pat_str.starts_with("pat_") {
+            return Err(AuthorizationError::from(anyhow!("Invalid PAT format")));
+        }
+        let pat_parts = &pat_str[4..];
+        let parts: Vec<&str> = pat_parts.split('.').collect();
+        if parts.len() != 2 {
+            return Err(AuthorizationError::from(anyhow!("Invalid PAT format")));
+        }
+        let pat_id = parts[0];
+        let pat_secret = parts[1];
+
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(pat_secret.as_bytes());
+        let secret_hash = hasher.finalize().to_hex().to_string().to_lowercase();
+
         let db_pat = Pat::find()
-            .filter(pat::Column::Key.eq(pat_str))
+            .filter(
+                pat::Column::Id
+                    .eq(pat_id)
+                    .and(pat::Column::Key.eq(secret_hash)),
+            )
             .one(&state.db)
             .await?;
         if let Some(pat) = db_pat {
+            if let Some(valid_until) = pat.valid_until {
+                let now = chrono::Utc::now().naive_utc();
+                if valid_until < now {
+                    return Err(AuthorizationError::from(anyhow!("PAT is expired")));
+                }
+            }
             let pat_user = AppUser::PAT(PATUser {
                 pat: pat_str.to_string(),
                 sub: pat.user_id.clone(),

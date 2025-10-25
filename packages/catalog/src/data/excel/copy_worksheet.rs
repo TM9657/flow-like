@@ -239,10 +239,10 @@ fn resolve_sheet_identifier(
     if let Some(ws) = book.get_sheet_by_name(t) {
         // Need index too; find it by iterating
         for i in 0..book.get_sheet_count() {
-            if let Some(s) = book.get_sheet(&i) {
-                if s.get_name() == t {
-                    return Ok((i, t.to_string()));
-                }
+            if let Some(s) = book.get_sheet(&i)
+                && s.get_name() == t
+            {
+                return Ok((i, t.to_string()));
             }
         }
         // Fallback (shouldn't happen)

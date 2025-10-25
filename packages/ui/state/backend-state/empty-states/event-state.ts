@@ -28,6 +28,7 @@ export class EmptyEventState implements IEventState {
 		appId: string,
 		event: IEvent,
 		versionType?: IVersionType,
+		personalAccessToken?: string,
 	): Promise<IEvent> {
 		throw new Error("Method not implemented.");
 	}
@@ -67,5 +68,10 @@ export class EmptyEventState implements IEventState {
 	}
 	cancelExecution(runId: string): Promise<void> {
 		throw new Error("Method not implemented.");
+	}
+
+	isEventSinkActive(eventId: string): Promise<boolean> {
+		// Empty state always returns false - no sinks active in non-Tauri environments
+		return Promise.resolve(false);
 	}
 }

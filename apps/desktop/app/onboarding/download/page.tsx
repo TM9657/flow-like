@@ -177,7 +177,10 @@ export default function ProfileCreation() {
 					</div>
 				</div>
 				<div className="mt-3 sm:mt-4">
-					<ChartContainer className="h-[240px] sm:h-[300px] w-full z-20" config={chartConfig}>
+					<ChartContainer
+						className="h-[240px] sm:h-[300px] w-full z-20"
+						config={chartConfig}
+					>
 						<LineChart
 							accessibilityLayer
 							data={stats}
@@ -223,7 +226,6 @@ export default function ProfileCreation() {
 						</div>
 						<button
 							onClick={() => {
-								localStorage.setItem("onboarding-done", "true");
 								router.push("/");
 							}}
 							className="border p-2 bg-primary text-primary-foreground hover:bg-background hover:text-foreground transition-all"

@@ -31,6 +31,7 @@ bitflags.workspace = true
 futures-util.workspace = true
 moka.workspace = true
 blake3.workspace = true
+p256 = "0.13.2"
 
 # ---- AWS dependencies ----
 aws-config = {workspace = true, optional=true}

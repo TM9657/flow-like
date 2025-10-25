@@ -34,7 +34,7 @@ export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 	appId,
 	boardId,
 	changeDefaultValue,
-	saveDefaultValue
+	saveDefaultValue,
 }: PinEditProps) {
 	const [cachedDefaultValue, setCachedDefaultValue] = useState(defaultValue);
 

@@ -194,12 +194,10 @@ impl NodeLogic for InsertColumnNode {
 
         if adjust_refs {
             book.insert_new_column_by_index(&sheet_name, &insert_index, &num_columns_u32);
+        } else if let Some(ws) = book.get_sheet_by_name_mut(&sheet_name) {
+            ws.insert_new_column_by_index(&insert_index, &num_columns_u32);
         } else {
-            if let Some(ws) = book.get_sheet_by_name_mut(&sheet_name) {
-                ws.insert_new_column_by_index(&insert_index, &num_columns_u32);
-            } else {
-                return Err(anyhow!("Sheet '{}' not found (mut)", sheet_name));
-            }
+            return Err(anyhow!("Sheet '{}' not found (mut)", sheet_name));
         }
 
         let mut out = Cursor::new(Vec::<u8>::new());

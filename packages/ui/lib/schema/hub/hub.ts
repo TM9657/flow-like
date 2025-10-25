@@ -18,6 +18,7 @@ export interface IHub {
 	provider?: null | string;
 	region?: null | string;
 	terms_of_service: string;
+	signaling?: null | string[];
 	thumbnail?: null | string;
 	tiers: { [key: string]: IUserTier };
 	[property: string]: any;

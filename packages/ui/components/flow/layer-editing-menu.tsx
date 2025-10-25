@@ -46,6 +46,7 @@ import {
 	type ILayer,
 	IPinType,
 } from "../../lib/schema/flow/board";
+import type { INode } from "../../lib/schema/flow/node";
 import {
 	Button,
 	Dialog,
@@ -71,6 +72,7 @@ import {
 	TabsContent,
 	TabsList,
 	TabsTrigger,
+	Textarea,
 } from "../ui";
 import { typeToColor } from "./utils";
 import { ValueTypeIcon } from "./variables/variables-menu";
@@ -131,23 +133,42 @@ const useGroupedPins = (edits: Record<string, PinEdit>) => {
 };
 
 const buildInitialEdits = (
-	layer: ILayer,
+	entity: ILayer | INode,
 	boardRef?: RefObject<IBoard | undefined>,
 ): Record<string, PinEdit> => {
 	const out: Record<string, PinEdit> = {};
-	for (const pin of Object.values(layer.pins)) {
+	const isNodeMode = "friendly_name" in entity;
+	const isGenericEvent =
+		isNodeMode && (entity as INode).name === "events_generic";
+
+	for (const pin of Object.values(entity.pins)) {
 		const p: any = pin;
 		const friendly = p?.friendly_name ?? p?.name ?? pin.id;
 		let description = p?.description ?? "";
+		let schema = p?.schema ?? null;
 
-		const ref = boardRef?.current?.refs?.[description];
-		if (ref) {
-			description = ref;
+		// Resolve description ref if it's a hash
+		const descRef = boardRef?.current?.refs?.[description];
+		if (descRef) {
+			description = descRef;
+		}
+
+		// Resolve schema ref if it's a hash
+		if (schema && typeof schema === "string") {
+			const schemaRef = boardRef?.current?.refs?.[schema];
+			if (schemaRef) {
+				schema = schemaRef;
+			}
 		}
 
 		// Hash for empty string, empty string will not be taken into the refs.
 		if (description === "16248035215404677707") {
 			description = "";
+		}
+
+		// Override description for payload pin on generic_event nodes
+		if (isGenericEvent && p?.name === "payload") {
+			description = "(Catch all for additional metadata)";
 		}
 
 		out[pin.id] = {
@@ -157,7 +178,7 @@ const buildInitialEdits = (
 			description: description,
 			data_type: p?.data_type ?? IVariableType.Generic,
 			options: p?.options ?? null,
-			schema: p?.schema ?? null,
+			schema: schema,
 			pin_type: pin.pin_type,
 			index: pin.index ?? 1,
 			value_type: normalizeValueType(p?.value_type ?? p?.valueType),
@@ -169,30 +190,57 @@ const buildInitialEdits = (
 interface LayerEditMenuProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	layer: ILayer;
-	onApply: (updated: ILayer) => Promise<void>;
+	layer?: ILayer;
+	node?: INode;
+	onApply: (updated: ILayer | INode) => Promise<void>;
 	boardRef?: RefObject<IBoard | undefined>;
+	mode?: "layer" | "node";
 }
 
 export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 	open,
 	onOpenChange,
 	layer,
+	node,
 	onApply,
 	boardRef,
+	mode = "layer",
 }) => {
+	const entity = layer ?? node;
+	const isNodeMode =
+		mode === "node" || (node !== undefined && layer === undefined);
+	const isGenericEvent = isNodeMode && node?.name === "events_generic";
+
 	const [edits, setEdits] = useState<Record<string, PinEdit>>(() =>
-		buildInitialEdits(layer, boardRef),
+		entity ? buildInitialEdits(entity, boardRef) : {},
 	);
+	const [nodeName, setNodeName] = useState<string>("");
+	const [nodeDescription, setNodeDescription] = useState<string>("");
 	const { inputs, outputs } = useGroupedPins(edits);
-	const [tab, setTab] = useState<"inputs" | "outputs">("inputs");
+	const [tab, setTab] = useState<"inputs" | "outputs" | "metadata">(
+		isGenericEvent ? "metadata" : "inputs",
+	);
 
 	useEffect(() => {
-		if (open) {
-			setEdits(buildInitialEdits(layer, boardRef));
-			setTab("inputs");
+		if (open && entity) {
+			setEdits(buildInitialEdits(entity, boardRef));
+			setTab(isGenericEvent ? "metadata" : "inputs");
+			if (isNodeMode && node) {
+				setNodeName(node.friendly_name || "");
+				// Resolve node description ref if it's a hash
+				let desc = node.description || "";
+				const descRef = boardRef?.current?.refs?.[desc];
+				if (descRef) {
+					desc = descRef;
+				}
+				// Hash for empty string
+				if (desc === "16248035215404677707") {
+					desc = "";
+				}
+				setNodeDescription(desc);
+			}
 		}
-	}, [open, layer]);
+	}, [open, entity, boardRef, isNodeMode, node, isGenericEvent]);
 
 	const setPin = useCallback((id: string, updater: (p: PinEdit) => PinEdit) => {
 		setEdits((prev) => {
@@ -260,21 +308,30 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 		});
 	}, []);
 
-	const removePin = useCallback((id: string) => {
-		setEdits((prev) => {
-			const pin = prev[id];
-			if (!pin) return prev;
-			const copy = { ...prev };
-			delete copy[id];
+	const removePin = useCallback(
+		(id: string) => {
+			setEdits((prev) => {
+				const pin = prev[id];
+				if (!pin) return prev;
 
-			const remaining = Object.values(copy).filter(
-				(p) => p.pin_type === pin.pin_type,
-			);
-			const re = reindex(sortByIndex(remaining));
-			for (const p of re) copy[p.id] = { ...copy[p.id], index: p.index };
-			return copy;
-		});
-	}, []);
+				// Prevent removing the "payload" pin on generic_event nodes
+				if (isGenericEvent && pin.name === "payload") {
+					return prev;
+				}
+
+				const copy = { ...prev };
+				delete copy[id];
+
+				const remaining = Object.values(copy).filter(
+					(p) => p.pin_type === pin.pin_type,
+				);
+				const re = reindex(sortByIndex(remaining));
+				for (const p of re) copy[p.id] = { ...copy[p.id], index: p.index };
+				return copy;
+			});
+		},
+		[isGenericEvent],
+	);
 
 	const reorderByIds = useCallback((orderedIds: string[]) => {
 		setEdits((prev) => {
@@ -287,7 +344,9 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 	}, []);
 
 	const applyChanges = useCallback(async () => {
-		const original = layer.pins;
+		if (!entity) return;
+
+		const original = entity.pins;
 		const nextPins: Record<string, IPin> = {};
 
 		const zeroIndexed = Object.values(edits).find((p) => p.index <= 0);
@@ -331,13 +390,31 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 		for (const p of nextOutputs)
 			nextPins[p.id] = { ...nextPins[p.id], index: p.index };
 
-		const updated: ILayer = {
-			...layer,
-			pins: nextPins as unknown as ILayer["pins"],
-		};
-
-		await onApply(updated);
-	}, [edits, layer, onApply]);
+		if (isNodeMode && node) {
+			const updated: INode = {
+				...node,
+				pins: nextPins as unknown as INode["pins"],
+				friendly_name: nodeName || node.friendly_name,
+				description: nodeDescription || node.description,
+			};
+			await onApply(updated);
+		} else if (layer) {
+			const updated: ILayer = {
+				...layer,
+				pins: nextPins as unknown as ILayer["pins"],
+			};
+			await onApply(updated);
+		}
+	}, [
+		edits,
+		entity,
+		layer,
+		node,
+		onApply,
+		isNodeMode,
+		nodeName,
+		nodeDescription,
+	]);
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -348,23 +425,49 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2">
 						<SlidersHorizontalIcon className="h-5 w-5 text-primary" />
-						Edit Layer Pins
+						{isNodeMode ? "Edit Node Properties" : "Edit Layer Pins"}
 					</DialogTitle>
 					<DialogDescription>
-						Configure pin properties and ordering for “{layer.name}”.
+						{isNodeMode
+							? `Configure properties and pins for "${node?.friendly_name || "Node"}".`
+							: `Configure pin properties and ordering for "${layer?.name || "Layer"}".`}
 					</DialogDescription>
 				</DialogHeader>
-
 				<Tabs
 					value={tab}
 					onValueChange={(v) => setTab(v as any)}
 					className="mt-2"
 				>
-					<TabsList className="grid grid-cols-2 w-full">
-						<TabsTrigger value="inputs">Inputs</TabsTrigger>
+					<TabsList
+						className={`grid w-full ${isGenericEvent ? "grid-cols-2" : isNodeMode ? "grid-cols-1" : "grid-cols-2"}`}
+					>
+						{isGenericEvent && (
+							<TabsTrigger value="metadata">Node Info</TabsTrigger>
+						)}
+						{!isNodeMode && <TabsTrigger value="inputs">Inputs</TabsTrigger>}
 						<TabsTrigger value="outputs">Outputs</TabsTrigger>
 					</TabsList>
-
+					{isGenericEvent && (
+						<TabsContent value="metadata" className="mt-3 space-y-4">
+							<div className="space-y-2">
+								<label className="text-sm font-medium">Node Name</label>
+								<Input
+									value={nodeName}
+									onChange={(e) => setNodeName(e.target.value)}
+									placeholder="Enter node name"
+								/>
+							</div>
+							<div className="space-y-2">
+								<label className="text-sm font-medium">Node Description</label>
+								<Textarea
+									value={nodeDescription}
+									onChange={(e) => setNodeDescription(e.target.value)}
+									placeholder="Enter node description"
+									rows={4}
+								/>
+							</div>
+						</TabsContent>
+					)}
 					<TabsContent value="inputs" className="mt-3 space-y-2">
 						<div className="flex justify-end">
 							<Button
@@ -383,9 +486,9 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							onMoveDown={(id) => movePin(id, "down")}
 							onRemove={removePin}
 							onReorder={reorderByIds}
+							isGenericEvent={isGenericEvent}
 						/>
-					</TabsContent>
-
+					</TabsContent>{" "}
 					<TabsContent value="outputs" className="mt-3 space-y-2">
 						<div className="flex justify-end">
 							<Button
@@ -404,12 +507,11 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							onMoveDown={(id) => movePin(id, "down")}
 							onRemove={removePin}
 							onReorder={reorderByIds}
+							isGenericEvent={isGenericEvent}
 						/>
 					</TabsContent>
-				</Tabs>
-
+				</Tabs>{" "}
 				<Separator className="my-3" />
-
 				<DialogFooter className="gap-2">
 					<Button variant="secondary" onClick={() => onOpenChange(false)}>
 						Close
@@ -440,6 +542,7 @@ interface PinListProps {
 	onMoveDown: (id: string) => void;
 	onRemove: (id: string) => void;
 	onReorder: (orderedIds: string[]) => void;
+	isGenericEvent?: boolean;
 }
 
 const PinValueTypeDropdown: React.FC<{
@@ -553,6 +656,7 @@ const PinList: React.FC<PinListProps> = ({
 	onMoveDown,
 	onRemove,
 	onReorder,
+	isGenericEvent = false,
 }) => {
 	const sensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -596,6 +700,7 @@ const PinList: React.FC<PinListProps> = ({
 								onMoveUp={onMoveUp}
 								onMoveDown={onMoveDown}
 								onRemove={onRemove}
+								isGenericEvent={isGenericEvent}
 							/>
 						))}
 					</SortableContext>
@@ -613,7 +718,17 @@ const SortablePinRow: React.FC<{
 	onMoveUp: (id: string) => void;
 	onMoveDown: (id: string) => void;
 	onRemove: (id: string) => void;
-}> = ({ pin, idx, total, onEdit, onMoveUp, onMoveDown, onRemove }) => {
+	isGenericEvent?: boolean;
+}> = ({
+	pin,
+	idx,
+	total,
+	onEdit,
+	onMoveUp,
+	onMoveDown,
+	onRemove,
+	isGenericEvent = false,
+}) => {
 	const {
 		attributes,
 		listeners,
@@ -666,14 +781,12 @@ const SortablePinRow: React.FC<{
 				>
 					<GripVerticalIcon className="h-4 w-4" />
 				</button>
-
 				<PinValueTypeDropdown
 					value_type={pin.value_type}
 					data_type={pin.data_type}
 					onChange={(vt) => onEdit(pin.id, { value_type: vt })}
 					className="shrink-0"
 				/>
-
 				<button
 					type="button"
 					aria-expanded={expanded}
@@ -683,7 +796,6 @@ const SortablePinRow: React.FC<{
 				>
 					{expanded ? "▾" : "▸"}
 				</button>
-
 				<div className="flex-1 truncate text-sm font-medium">
 					{editingName ? (
 						<Input
@@ -709,9 +821,16 @@ const SortablePinRow: React.FC<{
 							className="text-left truncate w-full"
 							onClick={(e) => {
 								e.stopPropagation();
-								setEditingName(true);
+								// Prevent editing payload pin name on generic_event nodes
+								if (!(isGenericEvent && pin.name === "payload")) {
+									setEditingName(true);
+								}
 							}}
-							title="Click to rename"
+							title={
+								isGenericEvent && pin.name === "payload"
+									? "Payload pin cannot be renamed"
+									: "Click to rename"
+							}
 						>
 							{pin.friendly_name ?? pin.name ?? pin.id}
 						</button>
@@ -719,14 +838,12 @@ const SortablePinRow: React.FC<{
 					<span className="ml-2 text-[10px] text-muted-foreground">
 						({pin.id})
 					</span>
-				</div>
-
+				</div>{" "}
 				<PinDataTypeSelectInline
 					value={pin.data_type}
 					onChange={(dt) => onEdit(pin.id, { data_type: dt })}
 					className="hidden sm:flex"
 				/>
-
 				<Button
 					variant="ghost"
 					size="icon"
@@ -749,7 +866,12 @@ const SortablePinRow: React.FC<{
 					variant="destructive"
 					size="icon"
 					onClick={() => onRemove(pin.id)}
-					title="Remove pin"
+					disabled={isGenericEvent && pin.name === "payload"}
+					title={
+						isGenericEvent && pin.name === "payload"
+							? "Payload pin cannot be removed"
+							: "Remove pin"
+					}
 				>
 					<Trash2Icon className="h-4 w-4 text-destructive-foreground" />
 				</Button>
@@ -766,7 +888,6 @@ const SortablePinRow: React.FC<{
 					<SlidersHorizontalIcon className="h-4 w-4" />
 				</Button>
 			</div>
-
 			{expanded && (
 				<div className="p-2">
 					<div className="space-y-1.5">
@@ -776,11 +897,16 @@ const SortablePinRow: React.FC<{
 							value={pin.description}
 							onChange={(e) => onEdit(pin.id, { description: e.target.value })}
 							placeholder="Optional"
+							disabled={isGenericEvent && pin.name === "payload"}
+							title={
+								isGenericEvent && pin.name === "payload"
+									? "Payload pin description cannot be edited"
+									: undefined
+							}
 						/>
 					</div>
 				</div>
-			)}
-
+			)}{" "}
 			<div className="sr-only">
 				<PinOptionsButton
 					pin={pin}

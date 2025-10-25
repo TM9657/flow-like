@@ -56,7 +56,7 @@ pub async fn upsert_profile_template(
         return Ok(Json(Profile::from(updated_profile)));
     }
 
-    let apps = apps.map(|apps| Value::Array(apps));
+    let apps = apps.map(Value::Array);
     let new_profile = template_profile::ActiveModel {
         id: Set(create_id()),
         name: Set(profile_data.name),

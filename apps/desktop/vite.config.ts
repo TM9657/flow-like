@@ -1,5 +1,4 @@
 import react from "@vitejs/plugin-react";
-import { internalIpV4 } from "internal-ip";
 import { defineConfig } from "vite";
 
 // @ts-expect-error process is a nodejs global

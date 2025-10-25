@@ -148,7 +148,7 @@ fn normalize_col_letters(input: &str) -> flow_like_types::Result<String> {
     // Otherwise validate letters and uppercase
     let upper = s.to_ascii_uppercase();
     for ch in upper.chars() {
-        if !(('A'..='Z').contains(&ch)) {
+        if !ch.is_ascii_uppercase() {
             return Err(flow_like_types::anyhow!(
                 "Invalid column '{}': only letters A-Z or a positive number are allowed",
                 input

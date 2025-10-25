@@ -16,6 +16,7 @@ import {
 	injectDataFunction,
 	isEqual,
 } from "@tm9657/flow-like-ui";
+import type { IJwks, IRealtimeAccess } from "@tm9657/flow-like-ui";
 import { isObject } from "lodash-es";
 import { toast } from "sonner";
 import { fetcher } from "../../lib/api";
@@ -114,9 +115,10 @@ export class BoardState implements IBoardState {
 			!this.backend.auth ||
 			!this.backend.queryClient
 		) {
-			throw new Error(
-				"Profile, auth or query client not set. Cannot fetch boards.",
+			console.warn(
+				"Profile, auth or query client not set. Returning local boards only.",
 			);
+			return boards;
 		}
 
 		const promise = injectDataFunction(
@@ -275,6 +277,41 @@ export class BoardState implements IBoardState {
 
 		return board;
 	}
+
+	async getRealtimeAccess(
+		appId: string,
+		boardId: string,
+	): Promise<IRealtimeAccess> {
+		const isOffline = await this.backend.isOffline(appId);
+		if (isOffline) throw new Error("Realtime is unavailable offline");
+		if (!this.backend.profile || !this.backend.auth)
+			throw new Error("Missing auth/profile for realtime access");
+
+		const access = await fetcher<IRealtimeAccess>(
+			this.backend.profile,
+			`apps/${appId}/board/${boardId}/realtime`,
+			{ method: "POST" },
+			this.backend.auth,
+		);
+
+		return access;
+	}
+
+	async getRealtimeJwks(appId: string, boardId: string): Promise<IJwks> {
+		const isOffline = await this.backend.isOffline(appId);
+		if (isOffline) throw new Error("Realtime is unavailable offline");
+		if (!this.backend.profile || !this.backend.auth)
+			throw new Error("Missing auth/profile for realtime JWKS");
+
+		const jwks = await fetcher<IJwks>(
+			this.backend.profile,
+			`apps/${appId}/board/${boardId}/realtime`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+		return jwks;
+	}
+
 	async createBoardVersion(
 		appId: string,
 		boardId: string,
@@ -470,13 +507,13 @@ export class BoardState implements IBoardState {
 			if (cb) cb(events);
 		};
 
-		let token = this.backend.auth?.user?.access_token;
+		const token = this.backend.auth?.user?.access_token;
 		console.log("Using token:", token);
 
 		console.dir({
 			id: this.backend.auth?.user?.id_token,
 			access: this.backend.auth?.user?.access_token,
-		})
+		});
 
 		const metadata: ILogMetadata | undefined = await invoke("execute_board", {
 			appId: appId,
@@ -485,7 +522,7 @@ export class BoardState implements IBoardState {
 			events: channel,
 			streamState: streamState,
 			credentials,
-			token
+			token,
 		});
 
 		closed = true;

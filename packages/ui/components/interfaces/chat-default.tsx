@@ -2,7 +2,7 @@
 
 import { createId } from "@paralleldrive/cuid2";
 import { useLiveQuery } from "dexie-react-hooks";
-import { HistoryIcon, SidebarIcon, SquarePenIcon } from "lucide-react";
+import { HistoryIcon, SquarePenIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
@@ -16,7 +16,7 @@ import {
 import { useSetQueryParams } from "../../lib/set-query-params";
 import { parseUint8ArrayToJson } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
-import { Button, HoverCard, HoverCardContent, HoverCardTrigger, useMobileHeader } from "../ui";
+import { Button, HoverCard, HoverCardContent, HoverCardTrigger } from "../ui";
 import { fileToAttachment } from "./chat-default/attachment";
 import { Chat, type IChatRef } from "./chat-default/chat";
 import {

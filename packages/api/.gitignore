@@ -3,3 +3,4 @@
 .env.prod
 api.config.json
 jwks.json
+prisma-postgres-mirror

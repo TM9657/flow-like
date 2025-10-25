@@ -98,7 +98,7 @@ const ProfileContent = ({
 	isAppsLoading: boolean;
 	appsError: Error | null;
 }) => {
-	const router = useRouter()
+	const router = useRouter();
 	const displayName =
 		user.name || user.preferred_username || user.username || "Unknown User";
 	const username = user.preferred_username || user.username;

@@ -1,8 +1,10 @@
 "use client";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import { ArrowRight, ExternalLink } from "lucide-react";
+import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { useRouter } from "next/navigation";
 import { useInvoke } from "../../../hooks";
-import { IAppVisibility, type IApp, type IAppCategory, type IMetadata } from "../../../lib";
+import type { IApp, IAppCategory, IMetadata } from "../../../lib";
 import type { IAppSearchSort } from "../../../lib/schema/app/app-search-query";
 import { type IBackendState, useBackend } from "../../../state/backend-state";
 import {
@@ -14,11 +16,8 @@ import {
 	Skeleton,
 } from "../../ui";
 import { AppCard } from "../../ui/app-card";
-import { useRouter } from "next/navigation";
-import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { toast } from "sonner";
 
-type IAppQuery = UseQueryResult<[IApp, IMetadata | undefined][], Error>
+type IAppQuery = UseQueryResult<[IApp, IMetadata | undefined][], Error>;
 
 export interface ISwimlaneItem {
 	id: string;
@@ -63,7 +62,7 @@ function useSwimlanes() {
 		queryKey: ["swimlanes"],
 		queryFn: async () => {
 			const res = await fetch(swimlanesUrl, {
-				cache: "no-cache"
+				cache: "no-cache",
 			});
 			if (!res.ok) throw new Error("Failed to fetch swimlanes");
 			return res.json();
@@ -82,7 +81,7 @@ function useSwimlanes() {
 export function HomeSwimlanes() {
 	const backend = useBackend();
 	const apps = useInvoke(backend.appState.getApps, backend.appState, []);
-	const router = useRouter()
+	const router = useRouter();
 	const { data, error } = useSwimlanes();
 
 	if (error) {
@@ -149,8 +148,12 @@ export function HomeSwimlanes() {
 function SwimlaneSection({
 	swimlane,
 	apps,
-	router
-}: Readonly<{ swimlane: ISwimlane; apps: IAppQuery; router: AppRouterInstance }>) {
+	router,
+}: Readonly<{
+	swimlane: ISwimlane;
+	apps: IAppQuery;
+	router: AppRouterInstance;
+}>) {
 	const getGridCols = () => {
 		switch (swimlane.size) {
 			case "large":
@@ -196,7 +199,7 @@ function SwimlaneSlot({
 	size,
 	variant,
 	apps,
-	router
+	router,
 }: Readonly<{
 	items: (ISwimlaneItem | ISearchQuery)[];
 	size: "large" | "medium" | "small";
@@ -243,7 +246,7 @@ function SwimlaneItemOrSearch({
 	size,
 	variant,
 	apps,
-	router
+	router,
 }: Readonly<{
 	item: ISwimlaneItem | ISearchQuery;
 	size: "large" | "medium" | "small";
@@ -263,7 +266,15 @@ function SwimlaneItemOrSearch({
 		);
 	}
 
-	return <SwimlaneItem item={item} size={size} variant={variant} apps={apps} router={router} />;
+	return (
+		<SwimlaneItem
+			item={item}
+			size={size}
+			variant={variant}
+			apps={apps}
+			router={router}
+		/>
+	);
 }
 
 function SearchResults({
@@ -271,7 +282,7 @@ function SearchResults({
 	size,
 	variant,
 	apps,
-	router
+	router,
 }: Readonly<{
 	searchQuery: ISearchQuery;
 	size: "large" | "medium" | "small";
@@ -332,7 +343,13 @@ function SearchResults({
 		<div className={scrollClass}>
 			{searchItems.map((item) => (
 				<div key={item.id} className={isHorizontal ? "grow w-full" : ""}>
-					<SwimlaneItem item={item} size={size} variant={variant} apps={apps} router={router} />
+					<SwimlaneItem
+						item={item}
+						size={size}
+						variant={variant}
+						apps={apps}
+						router={router}
+					/>
 				</div>
 			))}
 		</div>
@@ -357,8 +374,14 @@ function SwimlaneHeader({
 				<a
 					href={swimlane.viewAllLink}
 					target={isExternal(swimlane.viewAllLink) ? "_blank" : undefined}
-					rel={isExternal(swimlane.viewAllLink) ? "noopener noreferrer external" : undefined}
-					data-open-external={isExternal(swimlane.viewAllLink) ? "true" : undefined}
+					rel={
+						isExternal(swimlane.viewAllLink)
+							? "noopener noreferrer external"
+							: undefined
+					}
+					data-open-external={
+						isExternal(swimlane.viewAllLink) ? "true" : undefined
+					}
 				>
 					<button
 						type="button"
@@ -378,7 +401,7 @@ function SwimlaneItem({
 	size,
 	variant,
 	apps,
-	router
+	router,
 }: Readonly<{
 	item: ISwimlaneItem;
 	size: "large" | "medium" | "small";
@@ -422,7 +445,8 @@ function StaticCard({
 }>) {
 	const isLarge = size === "large";
 	const cardHeight = isLarge ? "h-[375px]" : "min-h-[200px]";
-	const isExternal = typeof item.link === "string" && /^(https?:|mailto:|tel:)/.test(item.link);
+	const isExternal =
+		typeof item.link === "string" && /^(https?:|mailto:|tel:)/.test(item.link);
 
 	return (
 		<a
@@ -509,7 +533,7 @@ function AppCardLoading({
 	variant,
 	backend,
 	apps,
-	router
+	router,
 }: Readonly<{
 	appId: string;
 	backend: IBackendState;
@@ -538,9 +562,9 @@ function AppCardLoading({
 			variant={variant}
 			className={"w-full max-w-full h-full flex grow"}
 			onClick={async () => {
-				const hasAccess = apps.data?.find((a) => a[0].id === data.id)
-				if(hasAccess) return router.push(`/use?id=${data.id}`)
-				return router.push(`/store?id=${data.id}`)
+				const hasAccess = apps.data?.find((a) => a[0].id === data.id);
+				if (hasAccess) return router.push(`/use?id=${data.id}`);
+				return router.push(`/store?id=${data.id}`);
 			}}
 		/>
 	);

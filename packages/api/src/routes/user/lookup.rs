@@ -8,7 +8,7 @@ use axum::{
 };
 use flow_like::hub::Lookup;
 use flow_like_types::Value;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, sqlx::types::chrono};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -116,6 +116,12 @@ export async function fetcher<T>(
 		headers["Authorization"] = `Bearer ${auth?.user?.access_token}`;
 	}
 
+	// Check network status before attempting request
+	if (typeof navigator !== "undefined" && !navigator.onLine) {
+		console.warn(`Network offline - request will use cache: ${path}`);
+		throw new Error(`Network unavailable: ${path}`);
+	}
+
 	const url = constructUrl(profile, path);
 	try {
 		const response = await tauriFetch(url, {
@@ -134,6 +140,7 @@ export async function fetcher<T>(
 				auth?.startSilentRenew();
 			}
 			console.error(`Error fetching ${path}:`, response);
+			console.error(await response.text());
 			throw new Error(`Error fetching data: ${response.statusText}`);
 		}
 
@@ -146,6 +153,20 @@ export async function fetcher<T>(
 		console.groupCollapsed(`API Request: ${path}`);
 		console.error(`Error fetching ${path}:`, error);
 		console.groupEnd();
+
+		// Better error messages for common network issues
+		if (error instanceof Error) {
+			// Network errors on mobile/desktop
+			if (
+				error.message.includes("Failed to fetch") ||
+				error.message.includes("NetworkError") ||
+				error.message.includes("Network request failed") ||
+				error.message.includes("fetch failed")
+			) {
+				throw new Error(`Network unavailable: ${path}`);
+			}
+		}
+
 		throw new Error(`Error fetching data: ${error}`);
 	}
 }

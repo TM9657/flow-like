@@ -39,6 +39,13 @@ export type {
 } from "./backend-state/types";
 export * from "./backend-state/db-state";
 
+export interface ICapabilities {
+	needsSignIn: boolean;
+	canHostLlamaCPP: boolean;
+	canHostEmbeddings: boolean;
+	canExecuteLocally: boolean;
+}
+
 export interface IBackendState {
 	appState: IAppState;
 	bitState: IBitState;
@@ -52,6 +59,9 @@ export interface IBackendState {
 	eventState: IEventState;
 	aiState: IAIState;
 	dbState: IDatabaseState;
+
+	capabilities(): ICapabilities;
+	isOffline(appId: string): Promise<boolean>;
 }
 
 interface BackendStoreState {

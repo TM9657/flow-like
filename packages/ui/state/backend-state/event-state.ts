@@ -21,6 +21,7 @@ export interface IEventState {
 		appId: string,
 		event: IEvent,
 		versionType?: IVersionType,
+		personalAccessToken?: string,
 	): Promise<IEvent>;
 	deleteEvent(appId: string, eventId: string): Promise<void>;
 	validateEvent(
@@ -50,4 +51,6 @@ export interface IEventState {
 	): Promise<ILogMetadata | undefined>;
 
 	cancelExecution(runId: string): Promise<void>;
+
+	isEventSinkActive(eventId: string): Promise<boolean>;
 }

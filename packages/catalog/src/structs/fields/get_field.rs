@@ -1,3 +1,4 @@
+use super::path_utils::get_value_by_path;
 use flow_like::{
     flow::{
         board::Board,
@@ -8,7 +9,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::async_trait;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct GetStructFieldNode {}
@@ -25,7 +26,7 @@ impl NodeLogic for GetStructFieldNode {
         let mut node = Node::new(
             "struct_get",
             "Get Field",
-            "Fetches a field from a struct",
+            "Fetches a field from a struct (supports dot notation and array access)",
             "Structs/Fields",
         );
         node.add_icon("/flow/icons/struct.svg");
@@ -45,25 +46,30 @@ impl NodeLogic for GetStructFieldNode {
 
         node.add_input_pin("struct", "Struct", "Struct Output", VariableType::Struct);
 
-        node.add_input_pin("field", "Field", "Field to get", VariableType::String);
+        node.add_input_pin(
+            "field",
+            "Field",
+            "Field path (e.g., 'message.content' or 'items[0].name')",
+            VariableType::String,
+        );
 
         return node;
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let struct_value = context
-            .evaluate_pin::<HashMap<String, flow_like_types::Value>>("struct")
+            .evaluate_pin::<flow_like_types::Value>("struct")
             .await?;
         context.log_message(&format!("Got Value: {:?}", struct_value), LogLevel::Debug);
         let field = context.evaluate_pin::<String>("field").await?;
 
-        let value = struct_value.get(&field);
+        let value = get_value_by_path(&struct_value, &field);
         context
             .set_pin_value("found", flow_like_types::json::json!(value.is_some()))
             .await?;
 
         if let Some(value) = value {
-            context.set_pin_value("value", value.clone()).await?;
+            context.set_pin_value("value", value).await?;
             return Ok(());
         }
 

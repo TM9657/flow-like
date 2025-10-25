@@ -146,16 +146,14 @@ fn parse_sse_bytes(accum: &std::sync::Arc<std::sync::Mutex<StreamingAccum>>, byt
             if data == "[DONE]" {
                 continue;
             }
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                if let Some((in_tok, out_tok, cost_micro)) = extract_usage_and_cost_from_json(&json)
-                {
-                    if in_tok.is_some() || out_tok.is_some() || cost_micro.is_some() {
-                        let mut a = accum.lock().unwrap();
-                        a.in_tok = in_tok.or(a.in_tok);
-                        a.out_tok = out_tok.or(a.out_tok);
-                        a.cost_micro = cost_micro.or(a.cost_micro);
-                    }
-                }
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
+                && let Some((in_tok, out_tok, cost_micro)) = extract_usage_and_cost_from_json(&json)
+                && (in_tok.is_some() || out_tok.is_some() || cost_micro.is_some())
+            {
+                let mut a = accum.lock().unwrap();
+                a.in_tok = in_tok.or(a.in_tok);
+                a.out_tok = out_tok.or(a.out_tok);
+                a.cost_micro = cost_micro.or(a.cost_micro);
             }
         }
     }
@@ -258,7 +256,7 @@ async fn handle_streaming(
         user: user_sub,
         model: model_id,
     };
-    let body_stream = tracking_stream.map(|res| res.map(|b| b));
+    let body_stream = tracking_stream.map(|res| res);
     let body = passthrough_byte_stream(body_stream);
     Ok(builder.body(body).unwrap())
 }
