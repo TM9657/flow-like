@@ -836,7 +836,7 @@ impl InternalNode {
 
         let connected = context
             .node
-            .get_error_handled_nodes(&context)
+            .get_error_handled_nodes(context)
             .await
             .map_err(|err| {
                 context.log_message(
@@ -883,7 +883,7 @@ impl InternalNode {
 
             // walk successors of the error handler (still using the same guard)
             let mut stack: Vec<ExecutionTarget> =
-                match handler.get_connected_exec(true, &context).await {
+                match handler.get_connected_exec(true, context).await {
                     Ok(v) => v,
                     Err(err) => {
                         let err_string = format!("{:?}", err);
@@ -940,7 +940,7 @@ impl InternalNode {
                     return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
                 }
 
-                match next.node.get_connected_exec(true, &context).await {
+                match next.node.get_connected_exec(true, context).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);
@@ -1003,7 +1003,7 @@ impl InternalNode {
 
         // successors (DFS; fresh guard per successor to mirror old semantics)
         if with_successors {
-            let successors = match context.node.get_connected_exec(true, &context).await {
+            let successors = match context.node.get_connected_exec(true, context).await {
                 Ok(nodes) => nodes,
                 Err(err) => {
                     let err_string = format!("{:?}", err);
@@ -1055,7 +1055,7 @@ impl InternalNode {
                     return Err(InternalNodeError::ExecutionFailed(node.id));
                 }
 
-                match next.node.get_connected_exec(true, &context).await {
+                match next.node.get_connected_exec(true, context).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);
@@ -1141,7 +1141,7 @@ impl InternalNode {
 
         // 3) Walk successors iteratively (DFS), like your non-recursive `trigger`
         if with_successors {
-            let successors = match context.node.get_connected_exec(true, &context).await {
+            let successors = match context.node.get_connected_exec(true, context).await {
                 Ok(nodes) => nodes,
                 Err(err) => {
                     let err_string = format!("{:?}", err);
@@ -1193,7 +1193,7 @@ impl InternalNode {
                 }
 
                 // Enqueue its successors (DFS)
-                match next.node.get_connected_exec(true, &context).await {
+                match next.node.get_connected_exec(true, context).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);
