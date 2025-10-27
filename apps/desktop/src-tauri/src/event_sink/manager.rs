@@ -948,7 +948,7 @@ impl EventSinkManager {
                     }
                     "deeplink" => {
                         let deeplink_sink = super::deeplink::DeeplinkSink {
-                            path: String::new(),
+                            route: String::new(),
                         };
                         manager
                             .ensure_sink_started("deeplink", &app_handle, &deeplink_sink)

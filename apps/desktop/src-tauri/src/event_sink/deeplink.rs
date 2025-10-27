@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rusqlite::params;
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
@@ -7,8 +7,10 @@ use super::manager::DbConnection;
 use super::{EventRegistration, EventSink};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DeeplinkSink {
-    pub path: String,
+    #[serde(alias = "path")]
+    pub route: String,
 }
 
 impl DeeplinkSink {
@@ -19,17 +21,40 @@ impl DeeplinkSink {
             "CREATE TABLE IF NOT EXISTS deeplink_routes (
                 event_id TEXT PRIMARY KEY,
                 app_id TEXT NOT NULL,
-                path TEXT NOT NULL,
+                route TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
-                UNIQUE(app_id, path)
+                UNIQUE(app_id, route)
             )",
             [],
         )?;
 
+        Self::migrate_legacy_path_column(&conn)?;
+
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_deeplink_app_path ON deeplink_routes(app_id, path)",
+            "CREATE INDEX IF NOT EXISTS idx_deeplink_app_route ON deeplink_routes(app_id, route)",
             [],
         )?;
+
+        Ok(())
+    }
+
+    fn migrate_legacy_path_column(conn: &Connection) -> Result<()> {
+        let mut stmt = conn.prepare("PRAGMA table_info(deeplink_routes)")?;
+        let column_names = stmt
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let has_route = column_names.iter().any(|name| name == "route");
+        let has_path = column_names.iter().any(|name| name == "path");
+
+        if !has_route && has_path {
+            tracing::info!("Migrating legacy deeplink_routes path column to route column");
+            conn.execute(
+                "ALTER TABLE deeplink_routes RENAME COLUMN path TO route",
+                [],
+            )?;
+            conn.execute("DROP INDEX IF EXISTS idx_deeplink_app_path", [])?;
+        }
 
         Ok(())
     }
@@ -47,8 +72,8 @@ impl DeeplinkSink {
 
         let existing = conn
             .query_row(
-                "SELECT event_id FROM deeplink_routes WHERE app_id = ? AND path = ?",
-                params![&registration.app_id, &config.path],
+                "SELECT event_id FROM deeplink_routes WHERE app_id = ? AND route = ?",
+                params![&registration.app_id, &config.route],
                 |row| row.get::<_, String>(0),
             )
             .ok();
@@ -56,8 +81,8 @@ impl DeeplinkSink {
         if let Some(existing_event_id) = existing {
             if existing_event_id != registration.event_id {
                 anyhow::bail!(
-                    "Deeplink path '{}' for app '{}' is already registered to event '{}'",
-                    config.path,
+                    "Deeplink route '{}' for app '{}' is already registered to event '{}'",
+                    config.route,
                     registration.app_id,
                     existing_event_id
                 );
@@ -70,12 +95,12 @@ impl DeeplinkSink {
         }
 
         conn.execute(
-            "INSERT OR REPLACE INTO deeplink_routes (event_id, app_id, path, created_at)
+            "INSERT OR REPLACE INTO deeplink_routes (event_id, app_id, route, created_at)
              VALUES (?, ?, ?, ?)",
             params![
                 &registration.event_id,
                 &registration.app_id,
-                &config.path,
+                &config.route,
                 now
             ],
         )?;
@@ -95,7 +120,7 @@ impl DeeplinkSink {
     pub fn handle_trigger(
         app_handle: &AppHandle,
         app_id: &str,
-        path: &str,
+        route: &str,
         query_params: serde_json::Value,
     ) -> Result<bool> {
         use crate::state::TauriEventSinkManagerState;
@@ -115,34 +140,32 @@ impl DeeplinkSink {
 
         let event_id: String = conn
             .query_row(
-                "SELECT event_id FROM deeplink_routes WHERE app_id = ? AND path = ?",
-                params![app_id, path],
+                "SELECT event_id FROM deeplink_routes WHERE app_id = ? AND route = ?",
+                params![app_id, route],
                 |row| row.get(0),
             )
             .map_err(|_| {
                 anyhow::anyhow!(
-                    "No deeplink route found for app_id='{}' path='{}'",
+                    "No deeplink route found for app_id='{}' route='{}'",
                     app_id,
-                    path
+                    route
                 )
             })?;
 
         drop(conn);
 
         tracing::info!(
-            "Triggering deeplink event '{}' for app '{}' path '{}' with params: {:?}",
+            "Triggering deeplink event '{}' for app '{}' route '{}' with params: {:?}",
             event_id,
             app_id,
-            path,
+            route,
             query_params
         );
 
-        let payload = if query_params.is_null()
-            || (query_params.is_object() && query_params.as_object().unwrap().is_empty())
-        {
-            None
-        } else {
-            Some(query_params)
+        let payload = match query_params {
+            serde_json::Value::Null => Some(serde_json::Value::Object(serde_json::Map::new())),
+            serde_json::Value::Object(obj) => Some(serde_json::Value::Object(obj)),
+            other => Some(other),
         };
 
         let manager_guard =
@@ -172,9 +195,9 @@ impl EventSink for DeeplinkSink {
         db: DbConnection,
     ) -> Result<()> {
         tracing::info!(
-            "Registering deeplink route for event '{}': path '{}'",
+            "Registering deeplink route for event '{}': route '{}'",
             registration.event_id,
-            self.path
+            self.route
         );
 
         Self::add_route(&db, registration, self)?;
@@ -182,7 +205,7 @@ impl EventSink for DeeplinkSink {
         tracing::info!(
             "✅ Deeplink route registered: flow-like://trigger/{}/{}",
             registration.app_id,
-            self.path
+            self.route
         );
 
         Ok(())
