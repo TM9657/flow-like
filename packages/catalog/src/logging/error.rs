@@ -1,5 +1,7 @@
+use flow_like::flow::pin::ValueType;
 use flow_like::{
     flow::{
+        board::Board,
         execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic},
         variable::VariableType,
@@ -7,6 +9,7 @@ use flow_like::{
     state::{FlowLikeState, ToastLevel},
 };
 use flow_like_types::{Value, async_trait};
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct ErrorNode {}
@@ -79,5 +82,9 @@ impl NodeLogic for ErrorNode {
         context.activate_exec_pin_ref(&output).await?;
 
         return Ok(());
+    }
+
+    async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
+        let _ = node.match_type("message", board.clone(), None, Some(ValueType::Normal));
     }
 }

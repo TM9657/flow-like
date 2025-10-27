@@ -9,6 +9,7 @@ pub mod for_each_with_break;
 pub mod gate;
 pub mod gather;
 pub mod par_execution;
+pub mod par_for_each;
 pub mod reroute;
 pub mod sequence;
 pub mod while_loop;
@@ -20,6 +21,7 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
         Arc::new(branch_node::BranchNode::default()),
         Arc::new(for_each::LoopNode::default()),
+        Arc::new(par_for_each::ParLoopNode::default()),
         Arc::new(sequence::SequenceNode::default()),
         Arc::new(par_execution::ParallelExecutionNode),
         Arc::new(delay::DelayNode::default()),

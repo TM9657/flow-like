@@ -232,21 +232,19 @@ impl ExecutionContext {
         self.result = Some(value);
     }
 
-    pub fn override_pin_value(&mut self, node_id: &str, pin_name: &str, value: Value) {
+    pub fn override_pin_value(&mut self, pin_id: &str, value: Value) {
         if self.context_pin_overrides.is_none() {
             self.context_pin_overrides = Some(BTreeMap::new());
         }
 
-        let key = format!("{}.{}", node_id, pin_name);
         if let Some(overrides) = &mut self.context_pin_overrides {
-            overrides.insert(key, value);
+            overrides.insert(pin_id.to_string(), value);
         }
     }
 
-    pub fn clear_pin_override(&mut self, node_id: &str, pin_name: &str) {
+    pub fn clear_pin_override(&mut self, pin_id: &str) {
         if let Some(overrides) = &mut self.context_pin_overrides {
-            let key = format!("{}.{}", node_id, pin_name);
-            overrides.remove(&key);
+            overrides.remove(pin_id);
         }
     }
 
