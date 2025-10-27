@@ -205,6 +205,7 @@ impl NodeLogic for ImapConnectNode {
         {
             let cache = context.cache.read().await;
             if cache.contains_key(&cache_key) {
+                drop(cache);
                 context
                     .set_pin_value("connection", json!(ImapConnection { id: id.clone() }))
                     .await?;
