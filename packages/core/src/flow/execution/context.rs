@@ -422,7 +422,7 @@ impl ExecutionContext {
         name: &str,
     ) -> flow_like_types::Result<T> {
         let pin = self.get_pin_by_name(name).await?;
-        let value = evaluate_pin_value(pin).await?;
+        let value = evaluate_pin_value(pin, &self.context_pin_overrides).await?;
         let value = from_value(value)?;
         Ok(value)
     }
@@ -440,7 +440,7 @@ impl ExecutionContext {
         &self,
         reference: Arc<Mutex<InternalPin>>,
     ) -> flow_like_types::Result<T> {
-        let value = evaluate_pin_value(reference).await?;
+        let value = evaluate_pin_value(reference, &self.context_pin_overrides).await?;
         let value = from_value(value)?;
         Ok(value)
     }

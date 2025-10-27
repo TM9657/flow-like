@@ -195,10 +195,7 @@ impl HTTPClient {
     {
         let request_hash = self.quick_hash(&request);
 
-        if let Some(value) = self
-            .try_cached_value::<T>(&request_hash, &request)
-            .await?
-        {
+        if let Some(value) = self.try_cached_value::<T>(&request_hash, &request).await? {
             return Ok(value);
         }
 
