@@ -69,7 +69,8 @@ Flow-Like is a **visual workflow automation platform** that shows you not just *
 - [Gallery](#-screenshots--gallery)
 - [FAQ](#-frequently-asked-questions)
 - [Community](#-join-the-flow-like-community)
-- [Project Stats](#-project-stats)
+- [Built With](#️-built-with-amazing-open-source)
+- [Project Stats](#-project-stats--analytics)
 
 ---
 
@@ -485,6 +486,47 @@ We'd love your help making Flow-Like the best open-source workflow automation pl
 - 🌟 **Spread the Word** — Star the repo and share Flow-Like with your network
 - 🧩 **Build Integrations** — Create custom workflow nodes and share them
 - 🎨 **Design Themes** — Contribute custom themes and UI improvements
+
+<br>
+
+## 🏗️ Built With Amazing Open Source
+
+Flow-Like stands on the shoulders of incredible open-source projects. We're grateful to these communities:
+
+### Frontend & UI
+- **[@xyflow/react](https://github.com/xyflow/xyflow)** (React Flow) — The backbone of our visual workflow editor, enabling beautiful node-based interfaces
+- **[Radix UI](https://github.com/radix-ui/primitives)** — Accessible, unstyled UI primitives powering our component library
+- **[shadcn/ui](https://github.com/shadcn-ui/ui)** — Beautiful, customizable components built on Radix UI
+- **[Next.js](https://github.com/vercel/next.js)** — React framework for production-grade applications
+- **[Tailwind CSS](https://github.com/tailwindlabs/tailwindcss)** — Utility-first CSS framework for rapid UI development
+- **[Framer Motion](https://github.com/framer/motion)** — Smooth animations and transitions
+
+### Desktop & Native
+- **[Tauri](https://github.com/tauri-apps/tauri)** — Rust-powered framework for building lightweight, secure desktop applications
+- **[Rust](https://github.com/rust-lang/rust)** — Systems programming language providing performance, safety, and fearless concurrency
+
+### AI & Machine Learning
+- **[llama.cpp](https://github.com/ggerganov/llama.cpp)** — Efficient LLM inference enabling local AI model deployment
+- **[Candle](https://github.com/huggingface/candle)** — Minimalist ML framework in Rust for model execution
+- **[ONNX Runtime](https://github.com/microsoft/onnxruntime)** — Cross-platform ML inferencing and training accelerator
+
+### Data & State Management
+- **[Zustand](https://github.com/pmndrs/zustand)** — Lightweight, flexible state management
+- **[TanStack Query](https://github.com/TanStack/query)** — Powerful data synchronization for React
+- **[Dexie.js](https://github.com/dexie/Dexie.js)** — IndexedDB wrapper for client-side storage
+- **[Zod](https://github.com/colinhacks/zod)** — TypeScript-first schema validation
+
+### Backend & Infrastructure
+- **[Axum](https://github.com/tokio-rs/axum)** — Ergonomic, modular web framework for Rust
+- **[SeaORM](https://github.com/SeaQL/sea-orm)** — Async & dynamic ORM for Rust
+- **[Tokio](https://github.com/tokio-rs/tokio)** — Asynchronous runtime for Rust
+
+### Development Tools
+- **[Bun](https://github.com/oven-sh/bun)** — Fast JavaScript runtime, bundler, and package manager
+- **[Vite](https://github.com/vitejs/vite)** — Lightning-fast frontend build tool
+- **[Biome](https://github.com/biomejs/biome)** — Fast formatter and linter for web projects
+
+**Thank you** to all maintainers and contributors of these projects! 🙏
 
 
 <br>
