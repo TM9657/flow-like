@@ -76,14 +76,14 @@ Flow-Like is a **visual workflow automation platform** that shows you not just *
 
 ### Why Choose Flow-Like for Workflow Automation?
 
-🚀 **Fully Typed Workflows** — Type-safe data flows ready for enterprise-scale projects
-🦀 **Built on Rust** — High-performance workflow engine with uncompromising speed and safety
-🎯 **Zero-to-Prod** — The workflow you design is production-ready — no rewrites needed
-🤖 **AI-Powered Automation** — Seamlessly integrate LLMs, ML models, and traditional logic
-🌐 **Deploy Anywhere** — Start offline, go online, deploy to Edge/Cloud/On-prem with one click
-🎨 **Fully Customizable** — White-label ready with custom themes, branding, and SSO
-🏢 **Enterprise Ready** — Role-based access, compliance, audit trails, and process governance
-📜 **Source Available** — BSL license: likely free for your use case
+- 🚀 **Fully Typed Workflows** — Type-safe data flows ready for enterprise-scale projects
+- 🦀 **Built on Rust** — High-performance workflow engine with uncompromising speed and safety
+- 🎯 **Zero-to-Prod** — The workflow you design is production-ready — no rewrites needed
+- 🤖 **AI-Powered Automation** — Seamlessly integrate LLMs, ML models, and traditional logic
+- 🌐 **Deploy Anywhere** — Start offline, go online, deploy to Edge/Cloud/On-prem with one click
+- 🎨 **Fully Customizable** — White-label ready with custom themes, branding, and SSO
+- 🏢 **Enterprise Ready** — Role-based access, compliance, audit trails, and process governance
+- 📜 **Source Available** — BSL license: likely free for your use case
 
 <br>
 
@@ -99,19 +99,19 @@ In Flow-Like, workflows are **fully typed** — they don't just describe *what h
 <tr>
 <td width="33%">
 
-**🔍 Data Origins**
+**Data Origins**
 See exactly where each piece of data came from — the email address, the file, the API response.
 
 </td>
 <td width="33%">
 
-**⚙️ Transformations**
+**Transformations**
 Every validation, enrichment, and reformatting step is visible and traceable.
 
 </td>
 <td width="33%">
 
-**📋 Clear Contracts**
+**Clear Contracts**
 Type-safe input/output definitions prevent runtime surprises and breaking changes.
 
 </td>
@@ -195,12 +195,12 @@ Type-safe input/output definitions prevent runtime surprises and breaking change
 
 ### Customization Features
 
-- 🎭 **Custom Themes** — Pre-built themes (Catppuccin, Cosmic Night, Neo-Brutalism, Soft Pop, Doom) or create your own
-- 🧪 **Design Tokens & CSS Variables** — Map your brand palette with instant dark/light mode support
-- 🏢 **SSO & Identity** — OIDC/JWT integration with scoped secrets per tenant or app
-- 📊 **Usage Metering** — Built-in per-tenant quotas, events tracking, and audit trails
-- 🔌 **SDKs & APIs** — Control workflows programmatically via REST API and SDKs
-- 🖼️ **Your Branding** — Replace logos, customize UI elements, and maintain your brand identity
+- **Custom Themes** — Pre-built themes (Catppuccin, Cosmic Night, Neo-Brutalism, Soft Pop, Doom) or create your own
+- **Design Tokens & CSS Variables** — Map your brand palette with instant dark/light mode support
+- **SSO & Identity** — OIDC/JWT integration with scoped secrets per tenant or app
+- **Usage Metering** — Built-in per-tenant quotas, events tracking, and audit trails
+- **SDKs & APIs** — Control workflows programmatically via REST API and SDKs
+- **Your Branding** — Replace logos, customize UI elements, and maintain your brand identity
 
 **Perfect for:** SaaS platforms, internal tools, client portals, and embedded automation solutions.
 
@@ -226,10 +226,10 @@ Our innovative, **no-code workflow builder IDE** for creating automated workflow
 <p align="center"><img width="800" src="./assets/recording.gif" alt="Visual Studio in Action"></p>
 
 **Features:**
-- 🎯 **Smart Wiring** — Pins know what they accept; miswired connections surface immediately
-- 📊 **Inline Feedback** — See inputs, outputs, and timings at each step
-- 🔄 **Live Validation** — Fix mistakes as you go, before they ship
-- 📸 **Snapshots** — Reproduce issues and compare runs with saved states
+- **Smart Wiring** — Pins know what they accept; miswired connections surface immediately
+- **Inline Feedback** — See inputs, outputs, and timings at each step
+- **Live Validation** — Fix mistakes as you go, before they ship
+- **Snapshots** — Reproduce issues and compare runs with saved states
 
 ---
 
@@ -237,14 +237,14 @@ Our innovative, **no-code workflow builder IDE** for creating automated workflow
 Build automated workflows from **100+ pre-built execution nodes** — from data transformation and database operations to AI models and higher-order agent nodes.
 
 **Workflow Node Categories:**
-- 🔗 **APIs & Webhooks** — Connect to any REST API, GraphQL endpoint, or webhook
-- 🗄️ **Databases & Storage** — SQL, NoSQL, object storage, and more
-- 📁 **Files & Processing** — Excel, CSV, PDF, images, and document processing
-- 🤖 **AI & Computer Vision** — LLMs, image recognition, object detection, embeddings
-- 📨 **Messaging & Queues** — Email, Slack, Discord, Kafka, RabbitMQ
-- 🌐 **Devices & Sensors** — IoT integration and real-time data processing
-- 🔄 **Logic & Control** — Branching, loops, conditions, and error handling
-- 🔐 **Security & Auth** — Authentication, encryption, and access control
+- **APIs & Webhooks** — Connect to any REST API, GraphQL endpoint, or webhook
+- **Databases & Storage** — SQL, NoSQL, object storage, and more
+- **Files & Processing** — Excel, CSV, PDF, images, and document processing
+- **AI & Computer Vision** — LLMs, image recognition, object detection, embeddings
+- **Messaging & Queues** — Email, Slack, Discord, Kafka, RabbitMQ
+- **Devices & Sensors** — IoT integration and real-time data processing
+- **Logic & Control** — Branching, loops, conditions, and error handling
+- **Security & Auth** — Authentication, encryption, and access control
 
 [📄 Explore the Full Node Catalog →](https://docs.flow-like.com/)
 
@@ -274,36 +274,36 @@ Create **shareable workflow applications** with built-in storage and automation 
 
 ### 👨‍💻 For Developers & Engineers
 
-✅ **Type-Safe Development** — Build workflows with type-safe data contracts<br>
-✅ **Extensible Platform** — Create custom nodes and integrations<br>
-✅ **Workflow Templates** — Share and reuse automation patterns<br>
-✅ **Git-Based Version Control** — Track every workflow change<br>
-✅ **Deploy Anywhere** — Edge, Cloud, On-prem, or Local environments<br>
-✅ **Source Available** — Transparent codebase, likely free for your needs
+- **Type-Safe Development** — Build workflows with type-safe data contracts<br>
+- **Extensible Platform** — Create custom nodes and integrations<br>
+- **Workflow Templates** — Share and reuse automation patterns<br>
+- **Git-Based Version Control** — Track every workflow change<br>
+- **Deploy Anywhere** — Edge, Cloud, On-prem, or Local environments<br>
+- **Source Available** — Transparent codebase, likely free for your needs
 
 </td>
 <td width="33%" valign="top">
 
 ### 📊 For Business & Analysts
 
-✅ **No-Code Automation** — Build workflows without programming knowledge<br>
-✅ **Business Process Modeling** — Visualize and automate business logic<br>
-✅ **Multiple Views** — Process, Data, and Technical perspectives<br>
-✅ **Team Collaboration** — Role-based access and approval workflows<br>
-✅ **Change Tracking** — Audit trails for compliance and reviews
+- **No-Code Automation** — Build workflows without programming knowledge<br>
+- **Business Process Modeling** — Visualize and automate business logic<br>
+- **Multiple Views** — Process, Data, and Technical perspectives<br>
+- **Team Collaboration** — Role-based access and approval workflows<br>
+- **Change Tracking** — Audit trails for compliance and reviews
 
 </td>
 <td width="33%" valign="top">
 
 ### 🏢 For IT & Operations Teams
 
-✅ **Enterprise Governance** — Centralized platform for compliance monitoring<br>
-✅ **Role-Based Access Control** — Fine-grained permissions and team management<br>
-✅ **Production-Ready** — Validated workflows from POC to production<br>
-✅ **High Performance** — Rust-based engine for predictable speed<br>
-✅ **Complete Audit Trails** — Every step logged for compliance<br>
-✅ **Process Compliance** — Built-in governance, approvals, and policy enforcement<br>
-✅ **Air-Gap Deployment** — Run fully offline in secure environments
+- **Enterprise Governance** — Centralized platform for compliance monitoring<br>
+- **Role-Based Access Control** — Fine-grained permissions and team management<br>
+- **Production-Ready** — Validated workflows from POC to production<br>
+- **High Performance** — Rust-based engine for predictable speed<br>
+- **Complete Audit Trails** — Every step logged for compliance<br>
+- **Process Compliance** — Built-in governance, approvals, and policy enforcement<br>
+- **Air-Gap Deployment** — Run fully offline in secure environments
 
 </td>
 </tr>
@@ -322,9 +322,9 @@ Flow-Like goes beyond simple task automation — it's built for **end-to-end bus
 </div>
 
 ### Hierarchical Process Modeling
-- 📊 **Executive View** — High-level business processes for stakeholders
-- 🔍 **Technical View** — Detailed implementation one layer below
-- 🌐 **Cross-Team Workflows** — Manage enterprise-wide automation without silos
+- **Executive View** — High-level business processes for stakeholders
+- **Technical View** — Detailed implementation one layer below
+- **Cross-Team Workflows** — Manage enterprise-wide automation without silos
 
 **Result:** Business logic and technical execution stay aligned, from strategy to deployment. Perfect for process mining, business process management (BPM), and workflow orchestration.
 
@@ -334,16 +334,16 @@ Flow-Like goes beyond simple task automation — it's built for **end-to-end bus
 
 Flow-Like powers automation across industries and use cases:
 
-- 📧 **Email Automation** — Smart routing, filtering, and response automation
-- 📊 **Data Integration** — ETL pipelines, data transformation, and synchronization
-- 🤖 **AI Workflows** — Document processing, content generation, image analysis
-- 🏢 **Business Process Automation** — Approval workflows, document routing, compliance
-- 🔄 **API Integration** — Connect multiple services and automate data flows
-- 📈 **Analytics Pipelines** — Data collection, processing, and visualization
-- 🛒 **E-commerce Automation** — Order processing, inventory management, notifications
-- 🎯 **Marketing Automation** — Campaign management, lead scoring, personalization
-- 🔐 **Security & Compliance** — Automated audits, access reviews, incident response
-- 🌐 **IoT & Edge Computing** — Device management, data aggregation, real-time processing
+- **Email Automation** — Smart routing, filtering, and response automation
+- **Data Integration** — ETL pipelines, data transformation, and synchronization
+- **AI Workflows** — Document processing, content generation, image analysis
+- **Business Process Automation** — Approval workflows, document routing, compliance
+- **API Integration** — Connect multiple services and automate data flows
+- **Analytics Pipelines** — Data collection, processing, and visualization
+- **E-commerce Automation** — Order processing, inventory management, notifications
+- **Marketing Automation** — Campaign management, lead scoring, personalization
+- **Security & Compliance** — Automated audits, access reviews, incident response
+- **IoT & Edge Computing** — Device management, data aggregation, real-time processing
 
 <br>
 
@@ -479,13 +479,13 @@ We'd love your help making Flow-Like the best open-source workflow automation pl
 </div>
 
 **Ways to Contribute to Open-Source Workflow Automation:**
-- 🐛 **Report Issues** — Found a bug? Request a feature via [GitHub Issues](https://github.com/TM9657/flow-like/issues)
-- 💻 **Submit Code** — Fork the repo and create pull requests with improvements
-- 💡 **Share Ideas** — Join our [community discussions](https://github.com/TM9657/flow-like/discussions) about workflow automation
-- 📚 **Improve Docs** — Help others by writing tutorials and guides
-- 🌟 **Spread the Word** — Star the repo and share Flow-Like with your network
-- 🧩 **Build Integrations** — Create custom workflow nodes and share them
-- 🎨 **Design Themes** — Contribute custom themes and UI improvements
+- **Report Issues** — Found a bug? Request a feature via [GitHub Issues](https://github.com/TM9657/flow-like/issues)
+- **Submit Code** — Fork the repo and create pull requests with improvements
+- **Share Ideas** — Join our [community discussions](https://github.com/TM9657/flow-like/discussions) about workflow automation
+- **Improve Docs** — Help others by writing tutorials and guides
+- **Spread the Word** — Star the repo and share Flow-Like with your network
+- **Build Integrations** — Create custom workflow nodes and share them
+- **Design Themes** — Contribute custom themes and UI improvements
 
 <br>
 
