@@ -130,9 +130,11 @@ Please also check our [discussions page 💬](https://github.com/TM9657/flow-lik
 Or, contribute your Flows as [templates](#templates) to the community! We'd love to see what you've built!
 
 
-<div style="display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap">
-  <img src="https://repobeats.axiom.co/api/embed/6fe5df31b9a96f584f8898beb4457bd8aa3852f1.svg" alt="Repobeats analytics" width="360">
-  <img src="https://api.star-history.com/svg?repos=TM9657/flow-like&type=date&legend=top-left" alt="Star History Chart" width="360">
-</div>
+<table width="100%">
+  <tr>
+    <td width="50%"><img src="https://repobeats.axiom.co/api/embed/6fe5df31b9a96f584f8898beb4457bd8aa3852f1.svg" alt="Repobeats analytics" width="100%"></td>
+    <td width="50%"><img src="https://api.star-history.com/svg?repos=TM9657/flow-like&type=date&legend=top-left" alt="Star History Chart" width="100%"></td>
+  </tr>
+</table>
 
 <p align="center">Made with ❤️ in Munich, Germany.</p>
