@@ -274,11 +274,11 @@ Create **shareable workflow applications** with built-in storage and automation 
 
 ### 👨‍💻 For Developers & Engineers
 
-✅ **Type-Safe Development** — Build workflows with type-safe data contracts
-✅ **Extensible Platform** — Create custom nodes and integrations
-✅ **Workflow Templates** — Share and reuse automation patterns
-✅ **Git-Based Version Control** — Track every workflow change
-✅ **Deploy Anywhere** — Edge, Cloud, On-prem, or Local environments
+✅ **Type-Safe Development** — Build workflows with type-safe data contracts<br>
+✅ **Extensible Platform** — Create custom nodes and integrations<br>
+✅ **Workflow Templates** — Share and reuse automation patterns<br>
+✅ **Git-Based Version Control** — Track every workflow change<br>
+✅ **Deploy Anywhere** — Edge, Cloud, On-prem, or Local environments<br>
 ✅ **Source Available** — Transparent codebase, likely free for your needs
 
 </td>
@@ -286,10 +286,10 @@ Create **shareable workflow applications** with built-in storage and automation 
 
 ### 📊 For Business & Analysts
 
-✅ **No-Code Automation** — Build workflows without programming knowledge
-✅ **Business Process Modeling** — Visualize and automate business logic
-✅ **Multiple Views** — Process, Data, and Technical perspectives
-✅ **Team Collaboration** — Role-based access and approval workflows
+✅ **No-Code Automation** — Build workflows without programming knowledge<br>
+✅ **Business Process Modeling** — Visualize and automate business logic<br>
+✅ **Multiple Views** — Process, Data, and Technical perspectives<br>
+✅ **Team Collaboration** — Role-based access and approval workflows<br>
 ✅ **Change Tracking** — Audit trails for compliance and reviews
 
 </td>
@@ -297,12 +297,12 @@ Create **shareable workflow applications** with built-in storage and automation 
 
 ### 🏢 For IT & Operations Teams
 
-✅ **Enterprise Governance** — Centralized platform for compliance monitoring
-✅ **Role-Based Access Control** — Fine-grained permissions and team management
-✅ **Production-Ready** — Validated workflows from POC to production
-✅ **High Performance** — Rust-based engine for predictable speed
-✅ **Complete Audit Trails** — Every step logged for compliance
-✅ **Process Compliance** — Built-in governance, approvals, and policy enforcement
+✅ **Enterprise Governance** — Centralized platform for compliance monitoring<br>
+✅ **Role-Based Access Control** — Fine-grained permissions and team management<br>
+✅ **Production-Ready** — Validated workflows from POC to production<br>
+✅ **High Performance** — Rust-based engine for predictable speed<br>
+✅ **Complete Audit Trails** — Every step logged for compliance<br>
+✅ **Process Compliance** — Built-in governance, approvals, and policy enforcement<br>
 ✅ **Air-Gap Deployment** — Run fully offline in secure environments
 
 </td>
