@@ -1070,10 +1070,13 @@ async fn step_core(
 
     let state = context.get_state();
 
-    drop(context);
-
     if state == NodeState::Success {
-        let connected = target.node.get_connected_exec(true).await.unwrap();
+        let connected = target
+            .node
+            .get_connected_exec(true, &context)
+            .await
+            .unwrap();
+        drop(context);
         let mut connected_nodes = Vec::with_capacity(connected.len());
         for connected_node in connected {
             connected_nodes.push(connected_node);

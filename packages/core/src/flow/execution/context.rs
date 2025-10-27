@@ -232,21 +232,19 @@ impl ExecutionContext {
         self.result = Some(value);
     }
 
-    pub fn override_pin_value(&mut self, node_id: &str, pin_name: &str, value: Value) {
+    pub fn override_pin_value(&mut self, pin_id: &str, value: Value) {
         if self.context_pin_overrides.is_none() {
             self.context_pin_overrides = Some(BTreeMap::new());
         }
 
-        let key = format!("{}.{}", node_id, pin_name);
         if let Some(overrides) = &mut self.context_pin_overrides {
-            overrides.insert(key, value);
+            overrides.insert(pin_id.to_string(), value);
         }
     }
 
-    pub fn clear_pin_override(&mut self, node_id: &str, pin_name: &str) {
+    pub fn clear_pin_override(&mut self, pin_id: &str) {
         if let Some(overrides) = &mut self.context_pin_overrides {
-            let key = format!("{}.{}", node_id, pin_name);
-            overrides.remove(&key);
+            overrides.remove(pin_id);
         }
     }
 
@@ -422,7 +420,7 @@ impl ExecutionContext {
         name: &str,
     ) -> flow_like_types::Result<T> {
         let pin = self.get_pin_by_name(name).await?;
-        let value = evaluate_pin_value(pin).await?;
+        let value = evaluate_pin_value(pin, &self.context_pin_overrides).await?;
         let value = from_value(value)?;
         Ok(value)
     }
@@ -440,7 +438,7 @@ impl ExecutionContext {
         &self,
         reference: Arc<Mutex<InternalPin>>,
     ) -> flow_like_types::Result<T> {
-        let value = evaluate_pin_value(reference).await?;
+        let value = evaluate_pin_value(reference, &self.context_pin_overrides).await?;
         let value = from_value(value)?;
         Ok(value)
     }
@@ -462,16 +460,39 @@ impl ExecutionContext {
     }
 
     pub async fn set_pin_ref_value(
-        &self,
+        &mut self,
         pin: &Arc<Mutex<InternalPin>>,
         value: Value,
     ) -> flow_like_types::Result<()> {
-        let pin = pin.lock().await;
-        pin.set_value(value).await;
+        let pin_id = {
+            let pin_guard = pin.lock().await;
+            let pin_meta = pin_guard.pin.lock().await;
+            pin_meta.id.clone()
+        };
+
+        // CRITICAL: If this specific pin was overridden in the context,
+        // we should update the override map instead of the actual pin value
+        // to prevent race conditions in parallel execution
+        if let Some(overrides) = &self.context_pin_overrides {
+            if overrides.contains_key(&pin_id) {
+                // This pin was already overridden, so update the override
+                self.override_pin_value(&pin_id, value);
+                return Ok(());
+            }
+        }
+
+        // For pins that haven't been overridden, set the actual pin value
+        // BUT if we're in an override context, also add it to overrides to maintain isolation
+        if self.context_pin_overrides.is_some() {
+            self.override_pin_value(&pin_id, value.clone());
+        }
+
+        let pin_guard = pin.lock().await;
+        pin_guard.set_value(value).await;
         Ok(())
     }
 
-    pub async fn set_pin_value(&self, pin: &str, value: Value) -> flow_like_types::Result<()> {
+    pub async fn set_pin_value(&mut self, pin: &str, value: Value) -> flow_like_types::Result<()> {
         let pin = self.get_pin_by_name(pin).await?;
         self.set_pin_ref_value(&pin, value).await
     }

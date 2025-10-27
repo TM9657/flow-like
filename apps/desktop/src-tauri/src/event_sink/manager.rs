@@ -5,6 +5,7 @@ use serde_json;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 use crate::event_sink::cron::CronSchedule;
@@ -239,6 +240,16 @@ pub struct EventSinkManager {
     started_sinks: Arc<flow_like_types::tokio::sync::Mutex<HashSet<String>>>,
 }
 
+impl Clone for EventSinkManager {
+    fn clone(&self) -> Self {
+        Self {
+            db: self.db.clone(),
+            storage: Arc::clone(&self.storage),
+            started_sinks: Arc::clone(&self.started_sinks),
+        }
+    }
+}
+
 impl EventSinkManager {
     /// Create a new event sink manager
     pub fn new(db_path: &str) -> Result<Self> {
@@ -259,26 +270,24 @@ impl EventSinkManager {
         app_handle: &AppHandle,
         sink: &dyn EventSink,
     ) -> Result<()> {
-        // Check if already started WITHOUT holding the lock during start()
-        let needs_start = {
-            let started = self.started_sinks.lock().await;
-            !started.contains(sink_type)
-        };
-
-        if needs_start {
-            tracing::info!("🚀 Starting {} sink for the first time", sink_type);
-
-            // Call start() WITHOUT holding the lock!
-            sink.start(app_handle, self.db.clone()).await?;
-
-            // Now acquire lock again to mark as started
-            let mut started = self.started_sinks.lock().await;
-            started.insert(sink_type.to_string());
-            tracing::info!("✅ {} sink started and marked as active", sink_type);
-        } else {
-            tracing::debug!("Sink {} already started, skipping", sink_type);
+        let mut started_guard = self.started_sinks.lock().await;
+        if started_guard.contains(sink_type) {
+            tracing::debug!("Sink {} already started or starting, skipping", sink_type);
+            return Ok(());
         }
 
+        tracing::info!("🚀 Starting {} sink", sink_type);
+        started_guard.insert(sink_type.to_string());
+        drop(started_guard);
+
+        if let Err(err) = sink.start(app_handle, self.db.clone()).await {
+            let mut started_guard = self.started_sinks.lock().await;
+            started_guard.remove(sink_type);
+            tracing::error!("❌ Failed to start {} sink: {}", sink_type, err);
+            return Err(err);
+        }
+
+        tracing::info!("✅ {} sink ready", sink_type);
         Ok(())
     }
 
@@ -851,106 +860,113 @@ impl EventSinkManager {
             sink_types.insert(sink_type);
         }
 
-        // Start each unique sink type
+        // Start each unique sink type without blocking the main initialization path
         tracing::info!("📋 Unique sink types to start: {:?}", sink_types);
 
-        for sink_type in sink_types {
-            tracing::info!("⚙️ Starting {} sink during initialization", sink_type);
+        let default_delay = Duration::from_secs(3);
 
-            match sink_type {
-                "cron" => {
-                    let cron_sink = CronSink {
-                        schedule: CronSchedule::Expression {
-                            expression: "0 0 * * *".to_string(),
-                        },
-                        last_fired: None,
-                        timezone: None,
-                    };
-                    if let Err(e) = self
-                        .ensure_sink_started("cron", app_handle, &cron_sink)
-                        .await
-                    {
-                        tracing::error!("❌ Failed to start cron sink: {}", e);
-                    }
-                }
-                "http" | "api" => {
-                    let http_sink = super::http::HttpSink {
-                        path: String::new(),
-                        method: String::new(),
-                        auth_token: None,
-                    };
-                    if let Err(e) = self
-                        .ensure_sink_started("http", app_handle, &http_sink)
-                        .await
-                    {
-                        tracing::error!("❌ Failed to start http sink: {}", e);
-                    }
-                }
-                "discord" => {
-                    let discord_sink = super::discord::DiscordSink {
-                        token: String::new(),
-                        bot_name: None,
-                        bot_description: None,
-                        intents: None,
-                        channel_whitelist: None,
-                        channel_blacklist: None,
-                        respond_to_mentions: true,
-                        respond_to_dms: true,
-                        command_prefix: "!".to_string(),
-                    };
-                    if let Err(e) = self
-                        .ensure_sink_started("discord", app_handle, &discord_sink)
-                        .await
-                    {
-                        tracing::error!("❌ Failed to start discord sink: {}", e);
-                    }
-                }
-                "email" => {
-                    let email_sink = super::email::EmailSink {
-                        imap_server: String::new(),
-                        imap_port: 993,
-                        username: String::new(),
-                        password: String::new(),
-                        folder: None,
-                        use_tls: true,
-                        last_seen_uid: None,
-                    };
-                    if let Err(e) = self
-                        .ensure_sink_started("email", app_handle, &email_sink)
-                        .await
-                    {
-                        tracing::error!("❌ Failed to start email sink: {}", e);
-                    }
-                }
-                "rss" => {
-                    let rss_sink = super::rss::RSSSink {
-                        feed_url: String::new(),
-                        poll_interval: 300,
-                        headers: None,
-                        filter_keywords: None,
-                    };
-                    if let Err(e) = self.ensure_sink_started("rss", app_handle, &rss_sink).await {
-                        tracing::error!("❌ Failed to start rss sink: {}", e);
-                    }
-                }
-                "deeplink" => {
-                    let deeplink_sink = super::deeplink::DeeplinkSink {
-                        path: String::new(),
-                    };
-                    if let Err(e) = self
-                        .ensure_sink_started("deeplink", app_handle, &deeplink_sink)
-                        .await
-                    {
-                        tracing::error!("❌ Failed to start deeplink sink: {}", e);
-                    }
-                }
-                _ => {
+        for sink_type in sink_types {
+            let sink_type = sink_type.to_string();
+            let manager = self.clone();
+            let app_handle = app_handle.clone();
+
+            flow_like_types::tokio::spawn(async move {
+                if !default_delay.is_zero() {
                     tracing::debug!(
-                        "Sink type {} will be started on first registration",
-                        sink_type
+                        "Delaying {} sink start by {}s during initialization",
+                        sink_type,
+                        default_delay.as_secs()
                     );
+                    flow_like_types::tokio::time::sleep(default_delay).await;
                 }
-            }
+
+                tracing::info!("⚙️ Starting {} sink during initialization", sink_type);
+
+                let start_result = match sink_type.as_str() {
+                    "cron" => {
+                        let cron_sink = CronSink {
+                            schedule: CronSchedule::Expression {
+                                expression: "0 0 * * *".to_string(),
+                            },
+                            last_fired: None,
+                            timezone: None,
+                        };
+                        manager
+                            .ensure_sink_started("cron", &app_handle, &cron_sink)
+                            .await
+                    }
+                    "http" | "api" => {
+                        let http_sink = super::http::HttpSink {
+                            path: String::new(),
+                            method: String::new(),
+                            auth_token: None,
+                        };
+                        manager
+                            .ensure_sink_started("http", &app_handle, &http_sink)
+                            .await
+                    }
+                    "discord" => {
+                        let discord_sink = super::discord::DiscordSink {
+                            token: String::new(),
+                            bot_name: None,
+                            bot_description: None,
+                            intents: None,
+                            channel_whitelist: None,
+                            channel_blacklist: None,
+                            respond_to_mentions: true,
+                            respond_to_dms: true,
+                            command_prefix: "!".to_string(),
+                        };
+                        manager
+                            .ensure_sink_started("discord", &app_handle, &discord_sink)
+                            .await
+                    }
+                    "email" => {
+                        let email_sink = super::email::EmailSink {
+                            imap_server: String::new(),
+                            imap_port: 993,
+                            username: String::new(),
+                            password: String::new(),
+                            folder: None,
+                            use_tls: true,
+                            last_seen_uid: None,
+                        };
+                        manager
+                            .ensure_sink_started("email", &app_handle, &email_sink)
+                            .await
+                    }
+                    "rss" => {
+                        let rss_sink = super::rss::RSSSink {
+                            feed_url: String::new(),
+                            poll_interval: 300,
+                            headers: None,
+                            filter_keywords: None,
+                        };
+                        manager
+                            .ensure_sink_started("rss", &app_handle, &rss_sink)
+                            .await
+                    }
+                    "deeplink" => {
+                        let deeplink_sink = super::deeplink::DeeplinkSink {
+                            route: String::new(),
+                        };
+                        manager
+                            .ensure_sink_started("deeplink", &app_handle, &deeplink_sink)
+                            .await
+                    }
+                    _ => {
+                        tracing::debug!(
+                            "Sink type {} will be started on first registration",
+                            sink_type
+                        );
+                        Ok(())
+                    }
+                };
+
+                if let Err(err) = start_result {
+                    tracing::error!("❌ Failed to start {} sink: {}", sink_type, err);
+                }
+            });
         }
 
         tracing::info!(

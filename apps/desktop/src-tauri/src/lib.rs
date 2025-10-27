@@ -250,6 +250,8 @@ pub fn run() {
 
     let settings_state_for_sink = settings_state.clone();
     let mut builder = tauri::Builder::default()
+        .manage(state::TauriSettingsState(settings_state.clone()))
+        .manage(state::TauriFlowLikeState(state_ref.clone()))
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -496,8 +498,6 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_shell::init())
-        .manage(state::TauriSettingsState(settings_state))
-        .manage(state::TauriFlowLikeState(state_ref.clone()))
         .invoke_handler(tauri::generate_handler![
             update,
             functions::file::get_path_meta,

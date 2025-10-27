@@ -77,7 +77,7 @@ export const EVENT_CONFIG: IEventMapping = {
 				public_endpoint: false,
 			},
 			deeplink: {
-				path: createId(),
+				route: createId(),
 			},
 		},
 		useInterfaces: {},
@@ -97,7 +97,7 @@ export const EVENT_CONFIG: IEventMapping = {
 				expression: "* */1 * * *",
 			},
 			deeplink: {
-				path: createId(),
+				route: createId(),
 			},
 		},
 		useInterfaces: {},

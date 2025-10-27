@@ -40,6 +40,53 @@ export function ApiConfig({
 	const [isTesting, setIsTesting] = useState(false);
 	const [testResult, setTestResult] = useState<string | null>(null);
 
+	// Detect user's platform
+	const getPlatform = (): "mac" | "windows" | "linux" => {
+		if (typeof window === "undefined") return "mac";
+		const userAgent = window.navigator.userAgent.toLowerCase();
+		if (userAgent.includes("win")) return "windows";
+		if (userAgent.includes("linux")) return "linux";
+		return "mac";
+	};
+
+	const platform = getPlatform();
+
+	const getCloudflareInstallCommand = () => {
+		switch (platform) {
+			case "windows":
+				return "winget install --id Cloudflare.cloudflared";
+			case "linux":
+				return "# Debian/Ubuntu\ncurl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb\nsudo dpkg -i cloudflared.deb";
+			case "mac":
+			default:
+				return "brew install cloudflare/cloudflare/cloudflared";
+		}
+	};
+
+	const getNgrokInstallCommand = () => {
+		switch (platform) {
+			case "windows":
+				return "choco install ngrok";
+			case "linux":
+				return "# Download and extract\ncurl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null\necho \"deb https://ngrok-agent.s3.amazonaws.com buster main\" | sudo tee /etc/apt/sources.list.d/ngrok.list\nsudo apt update && sudo apt install ngrok";
+			case "mac":
+			default:
+				return "brew install ngrok";
+		}
+	};
+
+	const getPlatformLabel = () => {
+		switch (platform) {
+			case "windows":
+				return "Windows";
+			case "linux":
+				return "Linux";
+			case "mac":
+			default:
+				return "macOS";
+		}
+	};
+
 	const setValue = (key: string, value: any) => {
 		if (onConfigUpdate) {
 			onConfigUpdate({
@@ -266,7 +313,7 @@ println!("Body: {}", body);
 				</div>
 			)}
 
-			<div className="space-y-3 pt-4 border-t">
+			<div className="space-y-4 pt-4 border-t">
 				<div className="flex items-center justify-between">
 					<Label>API Endpoint</Label>
 					<Button
@@ -284,20 +331,232 @@ println!("Body: {}", body);
 				<div className="p-3 bg-muted rounded-md font-mono text-sm break-all">
 					{endpoint}
 				</div>
-				<p className="text-sm text-muted-foreground">
-					This endpoint is only accessible locally. To expose it to the
-					internet, consider using{" "}
-					<a
-						href="https://ngrok.com"
-						target="_blank"
-						rel="noopener noreferrer"
-						className="text-primary hover:underline inline-flex items-center gap-1"
-					>
-						ngrok
-						<ExternalLink className="h-3 w-3" />
-					</a>{" "}
-					or similar tunneling services.
-				</p>
+				<div className="rounded-lg border border-border bg-card p-4">
+					<p className="text-sm text-muted-foreground">
+						<strong className="text-foreground">Local Only:</strong> This endpoint
+						is only accessible on your machine. Use one of the tunneling solutions
+						below to expose it securely over HTTPS.
+					</p>
+				</div>
+
+				<div className="space-y-3">
+					<Label className="text-base">Expose Your API Securely</Label>
+					<Tabs defaultValue="cloudflare" className="w-full">
+						<TabsList className="grid w-full grid-cols-2">
+							<TabsTrigger value="cloudflare" className="gap-2">
+								Cloudflare Tunnel
+								<span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
+									Recommended
+								</span>
+							</TabsTrigger>
+							<TabsTrigger value="ngrok">ngrok</TabsTrigger>
+						</TabsList>
+
+						<TabsContent value="cloudflare" className="space-y-4 mt-4">
+							<div className="rounded-lg border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/30 p-4">
+								<h4 className="font-semibold text-sm text-green-900 dark:text-green-100 mb-2">
+									Why Cloudflare Tunnel?
+								</h4>
+								<ul className="text-sm text-green-800 dark:text-green-200 space-y-1 list-disc list-inside">
+									<li>
+										<strong>100% Free</strong> - No credit card, no paid plans
+										required
+									</li>
+									<li>
+										<strong>No firewall changes</strong> - Uses outbound
+										connections only
+									</li>
+									<li>
+										<strong>Automatic HTTPS</strong> - TLS certificates managed
+										for you
+									</li>
+									<li>
+										<strong>Fast & reliable</strong> - Cloudflare's global
+										network
+									</li>
+								</ul>
+							</div>
+
+							<div className="space-y-4">
+								<div className="space-y-2">
+									<h4 className="font-semibold text-sm flex items-center gap-2">
+										<span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+											1
+										</span>
+										Install cloudflared
+									</h4>
+									<p className="text-sm text-muted-foreground pl-8">
+										Download and install the Cloudflare Tunnel client for{" "}
+										<strong>{getPlatformLabel()}</strong>:
+									</p>
+									<div className="pl-8">
+										<pre className="p-3 bg-muted rounded-md font-mono text-xs overflow-x-auto whitespace-pre-wrap">
+											{getCloudflareInstallCommand()}
+										</pre>
+										<a
+											href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+											target="_blank"
+											rel="noopener noreferrer"
+											className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-2"
+										>
+											Other platforms or installation methods
+											<ExternalLink className="h-3 w-3" />
+										</a>
+									</div>
+								</div>
+
+								<div className="space-y-2">
+									<h4 className="font-semibold text-sm flex items-center gap-2">
+										<span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+											2
+										</span>
+										Start the tunnel
+									</h4>
+									<p className="text-sm text-muted-foreground pl-8">
+										Run this command to create a free Quick Tunnel:
+									</p>
+									<div className="pl-8 space-y-2">
+										<pre className="p-3 bg-muted rounded-md font-mono text-xs overflow-x-auto">
+											cloudflared tunnel --url http://localhost:9657
+										</pre>
+										<p className="text-xs text-muted-foreground">
+											This generates a random <code>https://*****.trycloudflare.com</code> URL
+										</p>
+									</div>
+								</div>
+
+								<div className="space-y-2">
+									<h4 className="font-semibold text-sm flex items-center gap-2">
+										<span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+											3
+										</span>
+										Use your endpoint
+									</h4>
+									<p className="text-sm text-muted-foreground pl-8">
+										Copy the generated URL and append your path: <code className="text-foreground">{path}</code>
+									</p>
+									<div className="pl-8">
+										<div className="p-3 bg-muted rounded-md text-xs font-mono">
+											https://random-subdomain.trycloudflare.com{path}
+										</div>
+									</div>
+								</div>
+
+								<div className="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 p-4">
+									<h4 className="font-semibold text-sm text-blue-900 dark:text-blue-100 mb-2">
+										💡 Pro Tips
+									</h4>
+									<ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1.5">
+										<li>
+											• Quick Tunnels generate a new random URL each time you
+											restart
+										</li>
+										<li>
+											• For a permanent URL, create a{" "}
+											<a
+												href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/"
+												target="_blank"
+												rel="noopener noreferrer"
+												className="underline hover:no-underline"
+											>
+												named tunnel
+											</a>{" "}
+											(free, requires Cloudflare account)
+										</li>
+										<li>• The tunnel stays active as long as the command runs</li>
+									</ul>
+								</div>
+							</div>
+						</TabsContent>
+
+						<TabsContent value="ngrok" className="space-y-4 mt-4">
+							<div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-4">
+								<h4 className="font-semibold text-sm text-amber-900 dark:text-amber-100 mb-2">
+									⚠️ Note About ngrok
+								</h4>
+								<ul className="text-sm text-amber-800 dark:text-amber-200 space-y-1">
+									<li>
+										• <strong>Free tier requires account</strong> - Sign up at
+										ngrok.com
+									</li>
+									<li>• URL changes on every restart (unless you upgrade)</li>
+									<li>• Good for quick testing and demos</li>
+								</ul>
+							</div>
+
+							<div className="space-y-4">
+								<div className="space-y-2">
+									<h4 className="font-semibold text-sm flex items-center gap-2">
+										<span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+											1
+										</span>
+										Install ngrok
+									</h4>
+									<p className="text-sm text-muted-foreground pl-8">
+										Install ngrok for <strong>{getPlatformLabel()}</strong>:
+									</p>
+									<div className="pl-8 space-y-2">
+										<pre className="p-3 bg-muted rounded-md font-mono text-xs overflow-x-auto whitespace-pre-wrap">
+											{getNgrokInstallCommand()}
+										</pre>
+										<a
+											href="https://dashboard.ngrok.com/get-started/setup"
+											target="_blank"
+											rel="noopener noreferrer"
+											className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+										>
+											Other installation methods
+											<ExternalLink className="h-3 w-3" />
+										</a>
+									</div>
+								</div>
+
+								<div className="space-y-2">
+									<h4 className="font-semibold text-sm flex items-center gap-2">
+										<span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+											2
+										</span>
+										Authenticate with your token
+									</h4>
+									<p className="text-sm text-muted-foreground pl-8">
+										Get your auth token from{" "}
+										<a
+											href="https://dashboard.ngrok.com/get-started/your-authtoken"
+											target="_blank"
+											rel="noopener noreferrer"
+											className="text-primary hover:underline"
+										>
+											ngrok dashboard
+										</a>{" "}
+										and run:
+									</p>
+									<div className="pl-8">
+										<pre className="p-3 bg-muted rounded-md font-mono text-xs overflow-x-auto">
+											ngrok config add-authtoken YOUR_TOKEN_HERE
+										</pre>
+									</div>
+								</div>
+
+								<div className="space-y-2">
+									<h4 className="font-semibold text-sm flex items-center gap-2">
+										<span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+											3
+										</span>
+										Start the tunnel
+									</h4>
+									<div className="pl-8 space-y-2">
+										<pre className="p-3 bg-muted rounded-md font-mono text-xs overflow-x-auto">
+											ngrok http 9657
+										</pre>
+										<p className="text-xs text-muted-foreground">
+											Copy the forwarding URL and append your path: <code className="text-foreground">{path}</code>
+										</p>
+									</div>
+								</div>
+							</div>
+						</TabsContent>
+					</Tabs>
+				</div>
 			</div>
 
 			<div className="space-y-3">

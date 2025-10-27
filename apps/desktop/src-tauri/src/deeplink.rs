@@ -74,19 +74,19 @@ fn handle_auth(app_handle: &AppHandle, url: &str) {
 }
 
 fn handle_trigger(app_handle: &AppHandle, url: &Url) {
-    // Parse URL: flow-like://trigger/{app_id}/{...path}?param1=value1&param2=value2
+    // Parse URL: flow-like://trigger/{app_id}/{...route}?param1=value1&param2=value2
     let path = url.path();
 
     // Remove leading slash and split into parts
     let path_parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
 
     if path_parts.len() < 2 {
-        println!("Invalid trigger URL: expected at least app_id and path");
+        println!("Invalid trigger URL: expected at least app_id and route");
         return;
     }
 
     let app_id = path_parts[0];
-    let trigger_path = path_parts[1..].join("/");
+    let route = path_parts[1..].join("/");
 
     // Parse query parameters using Tauri's URL query method
     let query_params: serde_json::Value = if let Some(query) = url.query() {
@@ -106,15 +106,15 @@ fn handle_trigger(app_handle: &AppHandle, url: &Url) {
     };
 
     println!(
-        "Trigger deep link: app_id='{}', path='{}', params={:?}",
-        app_id, trigger_path, query_params
+        "Trigger deep link: app_id='{}', route='{}', params={:?}",
+        app_id, route, query_params
     );
 
     // Call the deeplink sink handler
     match crate::event_sink::deeplink::DeeplinkSink::handle_trigger(
         app_handle,
         app_id,
-        &trigger_path,
+        &route,
         query_params,
     ) {
         Ok(true) => {

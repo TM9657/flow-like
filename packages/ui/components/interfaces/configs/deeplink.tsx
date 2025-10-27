@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Button, Input, Label } from "../../ui";
 import type { IConfigInterfaceProps } from "../interfaces";
 
+type ConfigPayload = Parameters<IConfigInterfaceProps["onConfigUpdate"]>[0];
+
 export function DeeplinkConfig({
 	isEditing,
 	appId,
@@ -13,17 +15,23 @@ export function DeeplinkConfig({
 }: IConfigInterfaceProps) {
 	const [copied, setCopied] = useState(false);
 
-	const setValue = (key: string, value: any) => {
-		if (onConfigUpdate) {
-			onConfigUpdate({
-				...config,
-				[key]: value,
-			});
+	const setRoute = (value: string) => {
+		if (!onConfigUpdate) {
+			return;
 		}
+
+		const baseConfig = { ...(config as Record<string, unknown>) };
+		delete baseConfig.route;
+		delete baseConfig.path;
+
+		onConfigUpdate({
+			...baseConfig,
+			route: value,
+		} as ConfigPayload);
 	};
 
-	const path = config?.path ?? "";
-	const deeplinkUrl = `flow-like://trigger/${appId}/${path}`;
+	const route = config?.route ?? config?.path ?? "";
+	const deeplinkUrl = `flow-like://trigger/${appId}/${route}`;
 	const exampleWithParams = `${deeplinkUrl}?param1=value1&param2=value2`;
 
 	const copyToClipboard = (text: string) => {
@@ -39,21 +47,21 @@ export function DeeplinkConfig({
 	return (
 		<div className="w-full space-y-6">
 			<div className="space-y-3">
-				<Label htmlFor="path">Deep Link Path</Label>
+				<Label htmlFor="route">Deep Link Route</Label>
 				{isEditing ? (
 					<Input
-						value={path}
-						onChange={(e) => setValue("path", e.target.value)}
-						id="path"
+						value={route}
+						onChange={(e) => setRoute(e.target.value)}
+						id="route"
 						placeholder="my-trigger"
 					/>
 				) : (
 					<div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm">
-						{path}
+						{route}
 					</div>
 				)}
 				<p className="text-sm text-muted-foreground">
-					The path segment that identifies this trigger
+					The route segment that identifies this trigger
 				</p>
 			</div>
 

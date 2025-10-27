@@ -78,11 +78,20 @@ export function BitCard({
 		}
 
 		unsubscribeRef.current = onProgress(bit.hash, (dl) => {
-			const pct = Math.round(dl.progress() * 100);
+			const rawProgress = dl.progress();
+			const pct = Math.round(rawProgress * 100);
 			const now = Date.now();
 			const changed = Math.abs(pct - lastPctRef.current) >= 1;
 			const due = now - lastUpdateRef.current >= 250;
-			if ((changed || due) && mountedRef.current) {
+			const completed = rawProgress >= 0.999 || dl.total().downloaded >= dl.total().max;
+			if (!mountedRef.current) return;
+			if (completed) {
+				setProgress(undefined);
+				lastPctRef.current = 0;
+				lastUpdateRef.current = now;
+				return;
+			}
+			if (changed || due) {
 				setProgress(pct);
 				lastPctRef.current = pct;
 				lastUpdateRef.current = now;
@@ -138,6 +147,11 @@ export function BitCard({
 				await isInstalled.refetch();
 			} finally {
 				// keep subscription; overlay hides when done/unmounted
+				if (mountedRef.current) {
+					setProgress(undefined);
+					lastPctRef.current = 0;
+					lastUpdateRef.current = 0;
+				}
 			}
 		},
 		[download, isInstalled, isVirtualBit],

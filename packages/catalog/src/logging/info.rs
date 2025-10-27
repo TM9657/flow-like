@@ -1,12 +1,15 @@
+use flow_like::flow::pin::ValueType;
 use flow_like::{
     flow::{
+        board::Board,
         execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic},
         variable::VariableType,
     },
     state::{FlowLikeState, ToastLevel},
 };
-use flow_like_types::async_trait;
+use flow_like_types::{Value, async_trait};
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct InfoNode {}
@@ -34,7 +37,7 @@ impl NodeLogic for InfoNode {
             "message",
             "Message",
             "The message to log",
-            VariableType::String,
+            VariableType::Generic,
         )
         .set_default_value(Some(flow_like_types::json::json!("")));
 
@@ -61,15 +64,27 @@ impl NodeLogic for InfoNode {
         context.deactivate_exec_pin_ref(&output).await?;
 
         let should_toast = context.evaluate_pin::<bool>("toast").await?;
-        let message = context.evaluate_pin::<String>("message").await?;
+        let message = context.evaluate_pin::<Value>("message").await?;
+
+        let string_message = match message {
+            Value::String(s) => s,
+            other => flow_like_types::json::to_string(&other)
+                .unwrap_or_else(|_| "<unserializable value>".to_string()),
+        };
 
         if should_toast {
-            context.toast_message(&message, ToastLevel::Info).await?;
+            context
+                .toast_message(&string_message, ToastLevel::Info)
+                .await?;
         }
 
-        context.log_message(&message, LogLevel::Info);
+        context.log_message(&string_message, LogLevel::Info);
         context.activate_exec_pin_ref(&output).await?;
 
         return Ok(());
+    }
+
+    async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
+        let _ = node.match_type("message", board.clone(), None, Some(ValueType::Normal));
     }
 }
