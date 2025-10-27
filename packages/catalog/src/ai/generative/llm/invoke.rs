@@ -123,6 +123,7 @@ impl NodeLogic for InvokeLLM {
                 let mut recursion_guard = AHashSet::new();
                 recursion_guard.insert(parent_node_id.clone());
                 let string_token = input.get_streamed_token().unwrap_or("".to_string());
+                let mut ctx = ctx.clone();
                 ctx.set_pin_value("chunk", json!(input)).await?;
                 callback_count.fetch_add(1, Ordering::SeqCst);
                 for entry in connected_nodes.iter() {

@@ -1,4 +1,7 @@
-use std::sync::{Arc, Weak};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Weak},
+};
 
 use flow_like_types::{Value, sync::Mutex};
 
@@ -70,14 +73,18 @@ pub async fn evaluate_pin_value_reference(
 
 pub async fn evaluate_pin_value_weak(
     pin: &Weak<Mutex<InternalPin>>,
+    overrides: &Option<BTreeMap<String, Value>>,
 ) -> flow_like_types::Result<Value> {
     let pin = pin
         .upgrade()
         .ok_or_else(|| flow_like_types::anyhow!("Pin is not set"))?;
-    evaluate_pin_value(pin).await
+    evaluate_pin_value(pin, overrides).await
 }
 
-pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> flow_like_types::Result<Value> {
+pub async fn evaluate_pin_value(
+    pin: Arc<Mutex<InternalPin>>,
+    overrides: &Option<BTreeMap<String, Value>>,
+) -> flow_like_types::Result<Value> {
     let mut current_pin = pin;
     let mut visited_pins = std::collections::HashSet::with_capacity(8);
 
@@ -100,7 +107,7 @@ pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> flow_like_types
         };
 
         // Check for circular dependencies
-        if !visited_pins.insert(pin_id) {
+        if !visited_pins.insert(pin_id.clone()) {
             return Err(flow_like_types::anyhow!(
                 "Detected circular dependency in pin chain"
             ));
@@ -108,6 +115,9 @@ pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> flow_like_types
 
         // Case 1: Pin has a value - directly return from here
         if let Some(value_arc) = value {
+            if let Some(found_override) = overrides.as_ref().and_then(|map| map.get(&pin_id)) {
+                return Ok(found_override.clone());
+            }
             return Ok(value_arc.lock().await.clone());
         }
 
@@ -121,6 +131,10 @@ pub async fn evaluate_pin_value(pin: Arc<Mutex<InternalPin>>) -> flow_like_types
 
         // Case 3: Use default value if available
         if let Some(default_value) = default_value {
+            if let Some(found_override) = overrides.as_ref().and_then(|map| map.get(&pin_id)) {
+                return Ok(found_override.clone());
+            }
+
             return match flow_like_types::json::from_slice(&default_value) {
                 Ok(value) => Ok(value),
                 Err(e) => Err(flow_like_types::anyhow!(

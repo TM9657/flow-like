@@ -183,6 +183,7 @@ impl NodeLogic for SmtpConnectNode {
         {
             let cache = context.cache.read().await;
             if cache.contains_key(&cache_key) {
+                drop(cache);
                 context
                     .set_pin_value("connection", json!(SmtpConnection { id: id.clone() }))
                     .await?;

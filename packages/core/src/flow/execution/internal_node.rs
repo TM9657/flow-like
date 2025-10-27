@@ -480,6 +480,7 @@ impl InternalNode {
     pub async fn get_connected_exec(
         &self,
         filter_valid: bool,
+        context: &ExecutionContext,
     ) -> flow_like_types::Result<Vec<ExecutionTarget>> {
         // node_ptr -> (node_arc, pins_vec, seen_pin_ptrs)
         let mut groups: AHashMap<
@@ -496,7 +497,7 @@ impl InternalNode {
 
         for pin in self.pins.values() {
             if filter_valid {
-                match evaluate_pin_value(pin.clone()).await {
+                match evaluate_pin_value(pin.clone(), &context.context_pin_overrides).await {
                     Ok(Value::Bool(true)) => {}
                     _ => continue,
                 }
@@ -564,9 +565,12 @@ impl InternalNode {
         Ok(out)
     }
 
-    pub async fn get_error_handled_nodes(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
+    pub async fn get_error_handled_nodes(
+        &self,
+        context: &ExecutionContext,
+    ) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let pin = self.get_pin_by_name("auto_handle_error").await?;
-        let active = evaluate_pin_value(pin.clone()).await?;
+        let active = evaluate_pin_value(pin.clone(), &context.context_pin_overrides).await?;
         let active = match active {
             Value::Bool(b) => b,
             _ => false,
@@ -832,7 +836,7 @@ impl InternalNode {
 
         let connected = context
             .node
-            .get_error_handled_nodes()
+            .get_error_handled_nodes(context)
             .await
             .map_err(|err| {
                 context.log_message(
@@ -878,18 +882,19 @@ impl InternalNode {
             }
 
             // walk successors of the error handler (still using the same guard)
-            let mut stack: Vec<ExecutionTarget> = match handler.get_connected_exec(true).await {
-                Ok(v) => v,
-                Err(err) => {
-                    let err_string = format!("{:?}", err);
-                    let _ = sub
-                        .set_pin_value("auto_handle_error_string", json!(err_string))
-                        .await;
-                    sub.end_trace();
-                    context.push_sub_context(&mut sub);
-                    return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
-                }
-            };
+            let mut stack: Vec<ExecutionTarget> =
+                match handler.get_connected_exec(true, context).await {
+                    Ok(v) => v,
+                    Err(err) => {
+                        let err_string = format!("{:?}", err);
+                        let _ = sub
+                            .set_pin_value("auto_handle_error_string", json!(err_string))
+                            .await;
+                        sub.end_trace();
+                        context.push_sub_context(&mut sub);
+                        return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
+                    }
+                };
 
             let mut seen_exec_ptrs: ahash::AHashSet<usize> =
                 ahash::AHashSet::with_capacity(stack.len().saturating_mul(2));
@@ -935,7 +940,7 @@ impl InternalNode {
                     return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
                 }
 
-                match next.node.get_connected_exec(true).await {
+                match next.node.get_connected_exec(true, context).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);
@@ -998,7 +1003,7 @@ impl InternalNode {
 
         // successors (DFS; fresh guard per successor to mirror old semantics)
         if with_successors {
-            let successors = match context.node.get_connected_exec(true).await {
+            let successors = match context.node.get_connected_exec(true, context).await {
                 Ok(nodes) => nodes,
                 Err(err) => {
                     let err_string = format!("{:?}", err);
@@ -1050,7 +1055,7 @@ impl InternalNode {
                     return Err(InternalNodeError::ExecutionFailed(node.id));
                 }
 
-                match next.node.get_connected_exec(true).await {
+                match next.node.get_connected_exec(true, context).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);
@@ -1136,7 +1141,7 @@ impl InternalNode {
 
         // 3) Walk successors iteratively (DFS), like your non-recursive `trigger`
         if with_successors {
-            let successors = match context.node.get_connected_exec(true).await {
+            let successors = match context.node.get_connected_exec(true, context).await {
                 Ok(nodes) => nodes,
                 Err(err) => {
                     let err_string = format!("{:?}", err);
@@ -1188,7 +1193,7 @@ impl InternalNode {
                 }
 
                 // Enqueue its successors (DFS)
-                match next.node.get_connected_exec(true).await {
+                match next.node.get_connected_exec(true, context).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);
