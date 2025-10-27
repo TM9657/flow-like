@@ -12,7 +12,7 @@
 		"dev:ios:host": "bun run tauri ios dev  --host --force-ip-prompt",
 		"dev:auto": "bun run ./scripts/dev-with-config.ts",
 		"dev:mac:intel": "bun run tauri dev --config src-tauri/configs/tauri.macos.intel.conf.json & bun run --watch ./scripts/translation-server.ts",
-		"dev:mac:arm": "bun run tauri dev --config src-tauri/configs/tauri.macos.arm.conf.json & bun run --watch ./scripts/translation-server.ts",
+		"dev:mac:arm": "bun run tauri dev --config src-tauri/configs/tauri.macos.arm.conf.json",
 		"dev:win:x64": "bun run tauri dev --config src-tauri/configs/tauri.win.x64.conf.json",
 		"dev:win:arm": "bun run tauri dev --config src-tauri/configs/tauri.win.arm.conf.json",
 		"dev:linux:x64": "bun run tauri dev --config src-tauri/configs/tauri.linux.x64.conf.json & bun run --watch ./scripts/translation-server.ts",
