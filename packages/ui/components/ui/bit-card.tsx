@@ -83,7 +83,8 @@ export function BitCard({
 			const now = Date.now();
 			const changed = Math.abs(pct - lastPctRef.current) >= 1;
 			const due = now - lastUpdateRef.current >= 250;
-			const completed = rawProgress >= 0.999 || dl.total().downloaded >= dl.total().max;
+			const completed =
+				rawProgress >= 0.999 || dl.total().downloaded >= dl.total().max;
 			if (!mountedRef.current) return;
 			if (completed) {
 				setProgress(undefined);

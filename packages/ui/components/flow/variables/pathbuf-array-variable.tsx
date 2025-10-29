@@ -10,7 +10,7 @@ import {
 } from "../../../lib/uint8";
 import { cn } from "../../../lib/utils";
 import { useBackend } from "../../../state/backend-state";
-import { Badge, ScrollArea, Separator } from "../../ui";
+import { Badge, Separator } from "../../ui";
 
 export function PathbufArrayVariable({
 	disabled,
@@ -107,33 +107,33 @@ export function PathbufArrayVariable({
 				<>
 					<Separator />
 					<div className="flex flex-col gap-2 rounded-md border p-3">
-							{items.map((path, idx) => (
-								<Badge
-									key={`${variable.name}-${idx}`}
-									variant="secondary"
-									className="group flex items-center gap-2 pr-1 max-w-full justify-between"
+						{items.map((path, idx) => (
+							<Badge
+								key={`${variable.name}-${idx}`}
+								variant="secondary"
+								className="group flex items-center gap-2 pr-1 max-w-full justify-between"
+							>
+								<div className="flex items-center gap-2 min-w-0 flex-1">
+									{!path.split("/").pop()?.includes(".") ? (
+										<FolderIcon className="h-4 w-4 shrink-0" />
+									) : (
+										<FileIcon className="h-4 w-4 shrink-0" />
+									)}
+									<span className="break-all text-xs">
+										{path.split("/").pop()}
+									</span>
+								</div>
+								<Button
+									disabled={disabled}
+									size="icon"
+									variant="ghost"
+									onClick={() => handleRemove(idx)}
+									className="h-4 w-4 shrink-0 rounded-sm hover:bg-destructive hover:text-destructive-foreground"
 								>
-									<div className="flex items-center gap-2 min-w-0 flex-1">
-										{!path.split("/").pop()?.includes(".") ? (
-											<FolderIcon className="h-4 w-4 shrink-0" />
-										) : (
-											<FileIcon className="h-4 w-4 shrink-0" />
-										)}
-										<span className="break-all text-xs">
-											{path.split("/").pop()}
-										</span>
-									</div>
-									<Button
-										disabled={disabled}
-										size="icon"
-										variant="ghost"
-										onClick={() => handleRemove(idx)}
-										className="h-4 w-4 shrink-0 rounded-sm hover:bg-destructive hover:text-destructive-foreground"
-									>
-										<XIcon className="h-3 w-3" />
-									</Button>
-								</Badge>
-							))}
+									<XIcon className="h-3 w-3" />
+								</Button>
+							</Badge>
+						))}
 					</div>
 				</>
 			)}

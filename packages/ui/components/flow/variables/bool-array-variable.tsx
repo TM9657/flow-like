@@ -1,6 +1,5 @@
 import { PlusCircleIcon, XIcon } from "lucide-react";
 import { useState } from "react";
-import { Input } from "../../../components/ui/input";
 import type { IVariable } from "../../../lib/schema/flow/variable";
 import {
 	convertJsonToUint8Array,
@@ -79,20 +78,20 @@ export function BoolArrayVariable({
 								key={`${variable.name}-${idx}`}
 								className="group flex items-center gap-2 rounded-md bg-secondary px-3 py-2"
 							>
-									<Switch
-										disabled={disabled}
-										checked={val}
-										onCheckedChange={(v) => {
-											const updated = currentArray.slice();
-											updated[idx] = v;
-											onChange({
-												...variable,
-												default_value: convertJsonToUint8Array(updated),
-											});
-										}}
-										id={`item-${idx}`}
-										className="scale-75"
-									/>
+								<Switch
+									disabled={disabled}
+									checked={val}
+									onCheckedChange={(v) => {
+										const updated = currentArray.slice();
+										updated[idx] = v;
+										onChange({
+											...variable,
+											default_value: convertJsonToUint8Array(updated),
+										});
+									}}
+									id={`item-${idx}`}
+									className="scale-75"
+								/>
 								<Label
 									htmlFor={`item-${idx}`}
 									className="cursor-pointer text-xs"

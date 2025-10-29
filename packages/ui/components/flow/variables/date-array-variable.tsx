@@ -16,7 +16,6 @@ import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
-	ScrollArea,
 	Separator,
 } from "../../ui";
 
@@ -147,26 +146,26 @@ export function DateArrayVariable({
 				<>
 					<Separator />
 					<div className="flex flex-col gap-2 rounded-md border p-3">
-							{values.map((dt, idx) => (
-								<Badge
-									key={`${dt.toString()}-${idx}`}
-									variant="secondary"
-									className="group inline-flex items-center gap-1.5 pr-1 w-full"
+						{values.map((dt, idx) => (
+							<Badge
+								key={`${dt.toString()}-${idx}`}
+								variant="secondary"
+								className="group inline-flex items-center gap-1.5 pr-1 w-full"
+							>
+								<span className="break-all text-xs flex-1 min-w-0">
+									{format(dt, "PPP")} – {format(dt, "HH:mm")}
+								</span>
+								<Button
+									size="icon"
+									variant="ghost"
+									onClick={() => handleRemove(idx)}
+									disabled={disabled}
+									className="h-4 w-4 shrink-0 rounded-sm hover:bg-destructive hover:text-destructive-foreground"
 								>
-									<span className="break-all text-xs flex-1 min-w-0">
-										{format(dt, "PPP")} – {format(dt, "HH:mm")}
-									</span>
-									<Button
-										size="icon"
-										variant="ghost"
-										onClick={() => handleRemove(idx)}
-										disabled={disabled}
-										className="h-4 w-4 shrink-0 rounded-sm hover:bg-destructive hover:text-destructive-foreground"
-									>
-										<XIcon className="h-3 w-3" />
-									</Button>
-								</Badge>
-							))}
+									<XIcon className="h-3 w-3" />
+								</Button>
+							</Badge>
+						))}
 					</div>
 				</>
 			)}
