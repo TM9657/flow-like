@@ -1,13 +1,12 @@
-import { PlusCircleIcon, Trash2Icon } from "lucide-react";
+import { PlusCircleIcon, XIcon } from "lucide-react";
 import { useState } from "react";
-import { Label } from "../../../components/ui/label";
-import { Switch } from "../../../components/ui/switch";
+import { Input } from "../../../components/ui/input";
 import type { IVariable } from "../../../lib/schema/flow/variable";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,
 } from "../../../lib/uint8";
-import { Button, Separator } from "../../ui";
+import { Button, Label, Separator, Switch } from "../../ui";
 
 export function BoolSetVariable({
 	disabled,
@@ -47,60 +46,75 @@ export function BoolSetVariable({
 	};
 
 	return (
-		<div className="grid w-full max-w-sm items-center gap-1.5">
-			<div className="flex flex-row gap-2 items-center w-full sticky top-0 justify-between">
-				<div className="flex flex-row gap-2 items-center">
+		<div className="flex flex-col gap-3 w-full min-w-0">
+			<div className="flex gap-2 items-center justify-between">
+				<div className="flex gap-2 items-center">
 					<Switch
 						disabled={disabled}
 						checked={newValue}
 						onCheckedChange={setNewValue}
 						id="new_value"
 					/>
-					<Label htmlFor="new_value">New Value</Label>
+					<Label htmlFor="new_value" className="cursor-pointer">
+						{newValue ? "True" : "False"}
+					</Label>
 				</div>
 				<Button
 					disabled={disabled}
 					size="icon"
 					variant="default"
 					onClick={addValue}
+					className="shrink-0"
 				>
 					<PlusCircleIcon className="w-4 h-4" />
 				</Button>
 			</div>
-			<Separator className="my-2" />
-			{currentArray.map((val, idx) => (
-				<div
-					key={`${variable.name}-${idx}`}
-					className="flex flex-row gap-2 items-center w-full justify-between border p-1"
-				>
-					<div className="flex items-center gap-1">
-						<Switch
-							disabled={disabled}
-							checked={val}
-							onCheckedChange={(v) => {
-								const updated = currentArray.slice();
-								updated[idx] = v;
-								onChange({
-									...variable,
-									default_value: convertJsonToUint8Array(
-										Array.from(new Set(updated)),
-									),
-								});
-							}}
-							id={`item-${idx}`}
-						/>
-						<Label htmlFor={`item-${idx}`}>Index {idx}</Label>
+
+			{currentArray.length > 0 && (
+				<>
+					<Separator />
+					<div className="flex flex-col gap-2 rounded-md border p-3">
+						{currentArray.map((val, idx) => (
+							<div
+								key={`${variable.name}-${idx}`}
+								className="group flex items-center gap-2 rounded-md bg-secondary px-3 py-2"
+							>
+									<Switch
+										disabled={disabled}
+										checked={val}
+										onCheckedChange={(v) => {
+											const updated = currentArray.slice();
+											updated[idx] = v;
+											onChange({
+												...variable,
+												default_value: convertJsonToUint8Array(
+													Array.from(new Set(updated)),
+												),
+											});
+										}}
+										id={`item-${idx}`}
+										className="scale-75"
+									/>
+								<Label
+									htmlFor={`item-${idx}`}
+									className="cursor-pointer text-xs"
+								>
+									{val ? "True" : "False"}
+								</Label>
+								<Button
+									size="icon"
+									variant="ghost"
+									onClick={() => removeAt(idx)}
+									disabled={disabled}
+									className="h-5 w-5 shrink-0 rounded-sm hover:bg-destructive hover:text-destructive-foreground ml-auto"
+								>
+									<XIcon className="h-3 w-3" />
+								</Button>
+							</div>
+						))}
 					</div>
-					<Button
-						disabled={disabled}
-						size="icon"
-						variant="destructive"
-						onClick={() => removeAt(idx)}
-					>
-						<Trash2Icon className="w-4 h-4" />
-					</Button>
-				</div>
-			))}
+				</>
+			)}
 		</div>
 	);
 }

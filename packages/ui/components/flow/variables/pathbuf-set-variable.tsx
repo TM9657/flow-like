@@ -1,4 +1,4 @@
-import { FileIcon, FolderIcon, Trash2Icon } from "lucide-react";
+import { FileIcon, FolderIcon, XIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { Label } from "../../../components/ui/label";
@@ -10,7 +10,7 @@ import {
 } from "../../../lib/uint8";
 import { cn } from "../../../lib/utils";
 import { useBackend } from "../../../state/backend-state";
-import { Separator } from "../../ui";
+import { Badge, ScrollArea, Separator } from "../../ui";
 
 export function PathbufSetVariable({
 	disabled,
@@ -69,58 +69,74 @@ export function PathbufSetVariable({
 	);
 
 	return (
-		<div className="grid w-full max-w-full grid-cols-6 gap-2">
-			<div className="flex items-center space-x-2 col-span-2  sticky top-0 bg-background">
-				<Switch
+		<div className="flex flex-col gap-3 w-full min-w-0">
+			<div className="flex gap-2 items-center">
+				<div className="flex items-center gap-2">
+					<Switch
+						disabled={disabled}
+						checked={isFolder}
+						onCheckedChange={setIsFolder}
+						id="is_folder"
+					/>
+					<Label htmlFor="is_folder" className="cursor-pointer">
+						Folder
+					</Label>
+				</div>
+
+				<Button
+					variant="outline"
+					className={cn(
+						"flex-1 justify-start text-left font-normal min-w-0",
+						items.length === 0 && "text-muted-foreground",
+					)}
+					onClick={handleAdd}
 					disabled={disabled}
-					checked={isFolder}
-					onCheckedChange={setIsFolder}
-					id="is_folder"
-				/>
-				<Label htmlFor="is_folder">Folder</Label>
+				>
+					{isFolder ? (
+						<FolderIcon className="mr-2 h-4 w-4 shrink-0" />
+					) : (
+						<FileIcon className="mr-2 h-4 w-4 shrink-0" />
+					)}
+					<span className="truncate">
+						{isFolder ? "Add Folder" : "Add File"}
+					</span>
+				</Button>
 			</div>
 
-			<Button
-				variant="outline"
-				className={cn(
-					"w-full justify-start text-left font-normal col-span-4  sticky top-0 bg-background",
-					items.length === 0 && "text-muted-foreground",
-				)}
-				onClick={handleAdd}
-				disabled={disabled}
-			>
-				{isFolder ? (
-					<FolderIcon className="mr-2 h-4 w-4" />
-				) : (
-					<FileIcon className="mr-2 h-4 w-4" />
-				)}
-				<span>{isFolder ? "Add Folder" : "Add File"}</span>
-			</Button>
-
-			<Separator className="my-2 w-full col-span-6" />
-			<div className="col-span-6 space-y-2">
-				{items.map((path, idx) => (
-					<div
-						key={`${variable.name}-${idx}`}
-						className="flex items-center justify-between border p-1"
-					>
-						{!path.split("/").pop()?.includes(".") ? (
-							<FolderIcon className="mx-2 h-4 w-4" />
-						) : (
-							<FileIcon className="mx-2 h-4 w-4" />
-						)}
-						<span className="flex-1 truncate">{path.split("/").pop()}</span>
-						<Button
-							disabled={disabled}
-							size="icon"
-							variant="destructive"
-							onClick={() => handleRemove(idx)}
-						>
-							<Trash2Icon className="h-4 w-4" />
-						</Button>
+			{items.length > 0 && (
+				<>
+					<Separator />
+					<div className="flex flex-col gap-2 rounded-md border p-3">
+							{items.map((path, idx) => (
+								<Badge
+									key={`${variable.name}-${idx}`}
+									variant="secondary"
+									className="group flex items-center gap-2 pr-1 max-w-full justify-between"
+								>
+									<div className="flex items-center gap-2 min-w-0 flex-1">
+										{!path.split("/").pop()?.includes(".") ? (
+											<FolderIcon className="h-4 w-4 shrink-0" />
+										) : (
+											<FileIcon className="h-4 w-4 shrink-0" />
+										)}
+										<span className="break-all text-xs">
+											{path.split("/").pop()}
+										</span>
+									</div>
+									<Button
+										disabled={disabled}
+										size="icon"
+										variant="ghost"
+										onClick={() => handleRemove(idx)}
+										className="h-4 w-4 shrink-0 rounded-sm hover:bg-destructive hover:text-destructive-foreground"
+									>
+										<XIcon className="h-3 w-3" />
+									</Button>
+								</Badge>
+							))}
 					</div>
-				))}
-			</div>
+				</>
+			)}
 		</div>
 	);
 }

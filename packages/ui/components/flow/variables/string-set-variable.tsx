@@ -1,4 +1,4 @@
-import { PlusCircleIcon, Trash2Icon } from "lucide-react";
+import { PlusCircleIcon, XIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Input } from "../../../components/ui/input";
 import type { IVariable } from "../../../lib/schema/flow/variable";
@@ -19,13 +19,11 @@ export function StringSetVariable({
 }>) {
 	const [newValue, setNewValue] = useState("");
 
-	// parse once per render
 	const values = useMemo<string[]>(() => {
 		const parsed = parseUint8ArrayToJson(variable.default_value);
 		return Array.isArray(parsed) ? parsed : [];
 	}, [variable.default_value]);
 
-	// add a new item
 	const handleAdd = useCallback(() => {
 		if (disabled) return;
 		const trimmed = newValue.trim();
@@ -38,7 +36,6 @@ export function StringSetVariable({
 		setNewValue("");
 	}, [disabled, newValue, values, onChange, variable]);
 
-	// remove an item by index
 	const handleRemove = useCallback(
 		(index: number) => {
 			if (disabled) return;
@@ -52,43 +49,52 @@ export function StringSetVariable({
 	);
 
 	return (
-		<div className="grid w-full items-center gap-1.5">
-			<div className="flex flex-row gap-2 items-center w-full sticky top-0">
+		<div className="flex flex-col gap-3 w-full min-w-0">
+			<div className="flex gap-2 w-full min-w-0">
 				<Input
 					value={newValue}
 					onChange={(e) => setNewValue(e.target.value)}
 					onKeyDown={(e) => e.key === "Enter" && handleAdd()}
 					type={variable.secret ? "password" : "text"}
-					placeholder="Default Value"
+					placeholder="Add unique value..."
+					disabled={disabled}
+					className="flex-1 min-w-0"
 				/>
 				<Button
 					size="icon"
 					variant="default"
 					onClick={handleAdd}
 					disabled={!newValue.trim() || disabled}
+					className="shrink-0"
 				>
 					<PlusCircleIcon className="w-4 h-4" />
 				</Button>
 			</div>
 
-			<Separator className="my-2" />
-
-			{values.map((value, idx) => (
-				<div
-					key={`${variable.name}-${idx}`}
-					className="flex flex-row gap-2 items-center w-full justify-between border p-1"
-				>
-					<p className="px-2 truncate">{value}</p>
-					<Button
-						disabled={disabled}
-						size="icon"
-						variant="destructive"
-						onClick={() => handleRemove(idx)}
-					>
-						<Trash2Icon className="w-4 h-4" />
-					</Button>
-				</div>
-			))}
+			{values.length > 0 && (
+				<>
+					<Separator />
+					<div className="flex flex-col gap-2 rounded-md border p-3">
+						{values.map((value, idx) => (
+							<div
+								key={`${variable.name}-${idx}`}
+								className="group flex items-start gap-2 rounded-md bg-secondary px-3 py-2 text-sm"
+							>
+								<span className="flex-1 wrap-break-word min-w-0">{value}</span>
+								<Button
+									size="icon"
+									variant="ghost"
+									onClick={() => handleRemove(idx)}
+									disabled={disabled}
+									className="h-5 w-5 shrink-0 rounded-sm hover:bg-destructive hover:text-destructive-foreground"
+								>
+									<XIcon className="h-3 w-3" />
+								</Button>
+							</div>
+						))}
+					</div>
+				</>
+			)}
 		</div>
 	);
 }
