@@ -68,7 +68,7 @@ export function ApiConfig({
 			case "windows":
 				return "choco install ngrok";
 			case "linux":
-				return "# Download and extract\ncurl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null\necho \"deb https://ngrok-agent.s3.amazonaws.com buster main\" | sudo tee /etc/apt/sources.list.d/ngrok.list\nsudo apt update && sudo apt install ngrok";
+				return '# Download and extract\ncurl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null\necho "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list\nsudo apt update && sudo apt install ngrok';
 			case "mac":
 			default:
 				return "brew install ngrok";
@@ -333,9 +333,9 @@ println!("Body: {}", body);
 				</div>
 				<div className="rounded-lg border border-border bg-card p-4">
 					<p className="text-sm text-muted-foreground">
-						<strong className="text-foreground">Local Only:</strong> This endpoint
-						is only accessible on your machine. Use one of the tunneling solutions
-						below to expose it securely over HTTPS.
+						<strong className="text-foreground">Local Only:</strong> This
+						endpoint is only accessible on your machine. Use one of the
+						tunneling solutions below to expose it securely over HTTPS.
 					</p>
 				</div>
 
@@ -420,7 +420,8 @@ println!("Body: {}", body);
 											cloudflared tunnel --url http://localhost:9657
 										</pre>
 										<p className="text-xs text-muted-foreground">
-											This generates a random <code>https://*****.trycloudflare.com</code> URL
+											This generates a random{" "}
+											<code>https://*****.trycloudflare.com</code> URL
 										</p>
 									</div>
 								</div>
@@ -433,7 +434,8 @@ println!("Body: {}", body);
 										Use your endpoint
 									</h4>
 									<p className="text-sm text-muted-foreground pl-8">
-										Copy the generated URL and append your path: <code className="text-foreground">{path}</code>
+										Copy the generated URL and append your path:{" "}
+										<code className="text-foreground">{path}</code>
 									</p>
 									<div className="pl-8">
 										<div className="p-3 bg-muted rounded-md text-xs font-mono">
@@ -463,7 +465,9 @@ println!("Body: {}", body);
 											</a>{" "}
 											(free, requires Cloudflare account)
 										</li>
-										<li>• The tunnel stays active as long as the command runs</li>
+										<li>
+											• The tunnel stays active as long as the command runs
+										</li>
 									</ul>
 								</div>
 							</div>
@@ -549,7 +553,8 @@ println!("Body: {}", body);
 											ngrok http 9657
 										</pre>
 										<p className="text-xs text-muted-foreground">
-											Copy the forwarding URL and append your path: <code className="text-foreground">{path}</code>
+											Copy the forwarding URL and append your path:{" "}
+											<code className="text-foreground">{path}</code>
 										</p>
 									</div>
 								</div>

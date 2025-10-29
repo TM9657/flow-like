@@ -28,6 +28,10 @@ If you need more abstract memory, like a thread-handle or database connections y
 - You can abstract inputs using JsonSchemar Structs (and use their schema in the Pin Options) to created typed interactions.
 - Success and Error pins should be offered when we leave the workflow system (e.g API calls, Database Connections, etc.). The workflow offers an explicit way to handle errors and success cases out of the box, which can be used in the other cases.
 
+## Types to Use
+- for Images use: NodeImage
+- for Files use: FlowPath
+
 ## Example Nodes
 <Example Pure Node>
 use flow_like::{

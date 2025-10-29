@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { CalendarIcon, PlusCircleIcon, Trash2Icon } from "lucide-react";
+import { CalendarIcon, PlusCircleIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "../../..";
 import { Calendar } from "../../../components/ui/calendar";
@@ -10,6 +10,7 @@ import {
 	parseUint8ArrayToJson,
 } from "../../../lib/uint8";
 import {
+	Badge,
 	Button,
 	Input,
 	Popover,
@@ -82,31 +83,32 @@ export function DateArrayVariable({
 	);
 
 	return (
-		<div className="flex flex-col gap-2">
-			{/* pick new date + time */}
-			<div className="flex items-center gap-2 sticky top-0 bg-background pb-2">
+		<div className="flex flex-col gap-3 w-full min-w-0">
+			<div className="flex items-center gap-2">
 				<Popover>
 					<PopoverTrigger disabled={disabled} asChild>
 						<Button
 							disabled={disabled}
-							variant={"outline"}
+							variant="outline"
 							className={cn(
-								"w-full pl-3 text-left font-normal",
+								"flex-1 justify-start text-left font-normal min-w-0",
 								!newDate && "text-muted-foreground",
 							)}
 						>
-							{newDate ? (
-								`${format(newDate, "PPP")} - ${newTime}`
-							) : (
-								<span>Pick a date</span>
-							)}
-							<CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+							<CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+							<span className="truncate">
+								{newDate ? (
+									`${format(newDate, "PPP")} - ${newTime}`
+								) : (
+									<span>Pick a date</span>
+								)}
+							</span>
 						</Button>
 					</PopoverTrigger>
 					<PopoverContent className="w-auto p-2">
-						<div className="flex flex-col items-center space-x-2 gap-2">
-							<div className="flex flex-row items-center gap-2">
-								<p className="text-nowrap">Time:</p>
+						<div className="flex flex-col items-center gap-2">
+							<div className="flex items-center gap-2 w-full">
+								<p className="text-nowrap text-sm font-medium">Time:</p>
 								<Input
 									disabled={disabled}
 									type="time"
@@ -134,32 +136,39 @@ export function DateArrayVariable({
 					size="icon"
 					variant="default"
 					onClick={handleAdd}
+					className="shrink-0"
 				>
 					<PlusCircleIcon className="w-4 h-4" />
 				</Button>
 			</div>
 
-			<Separator className="mb-2" />
-
-			{/* existing dates */}
-			{values.map((dt, idx) => (
-				<div
-					key={`${dt.toString()}-${idx}`}
-					className="flex justify-between items-center border p-1"
-				>
-					<span className="px-2">
-						{format(dt, "PPP")} – {format(dt, "HH:mm")}
-					</span>
-					<Button
-						disabled={disabled}
-						size="icon"
-						variant="destructive"
-						onClick={() => handleRemove(idx)}
-					>
-						<Trash2Icon className="w-4 h-4" />
-					</Button>
-				</div>
-			))}
+			{values.length > 0 && (
+				<>
+					<Separator />
+					<div className="flex flex-col gap-2 rounded-md border p-3">
+						{values.map((dt, idx) => (
+							<Badge
+								key={`${dt.toString()}-${idx}`}
+								variant="secondary"
+								className="group inline-flex items-center gap-1.5 pr-1 w-full"
+							>
+								<span className="break-all text-xs flex-1 min-w-0">
+									{format(dt, "PPP")} – {format(dt, "HH:mm")}
+								</span>
+								<Button
+									size="icon"
+									variant="ghost"
+									onClick={() => handleRemove(idx)}
+									disabled={disabled}
+									className="h-4 w-4 shrink-0 rounded-sm hover:bg-destructive hover:text-destructive-foreground"
+								>
+									<XIcon className="h-3 w-3" />
+								</Button>
+							</Badge>
+						))}
+					</div>
+				</>
+			)}
 		</div>
 	);
 }
