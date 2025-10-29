@@ -141,8 +141,14 @@ article > :last-child,
 }
 :where(article, .prose) pre code {
 	display: block;
-	white-space: pre;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	word-break: break-word;
 	line-height: 1.6;
+	background: transparent !important;
+	padding: 0 !important;
+	border: none !important;
+	color: inherit !important;
 }
 :where(article, .prose) :not(pre) > code {
 	padding: 0.15em 0.35em;
@@ -193,7 +199,7 @@ article > :last-child,
 	scroll-margin-top: 6rem;
 }
 
-:where(article, .prose) :is(code) {
+:where(article, .prose) :not(pre) > code {
 	background-color: var(--muted);
 	color: var(--muted-foreground);
 	border: 1px solid var(--border);

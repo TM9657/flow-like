@@ -18,9 +18,12 @@ export default defineConfig({
 		react(),
 		mdx({
 			syntaxHighlight: "shiki",
-			shikiConfig: { theme: "dracula" },
+			shikiConfig: {
+				theme: "dracula",
+				wrap: true
+			},
 			remarkRehype: { footnoteLabel: "Footnotes" },
-			gfm: false,
+			gfm: true,
 		}),
 		sitemap(),
 		(await import("@playform/compress")).default(),

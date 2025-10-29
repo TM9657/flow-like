@@ -1,0 +1,242 @@
+---
+title: "Flow-Like Alpha v0.0.5 — iOS App, Event System, Real-Time Collaboration & More"
+description: "Alpha v0.0.5 brings Flow-Like to iOS, introduces a powerful event system for workflow automation, enables real-time collaboration, and ships remote model services."
+date: 2025-10-29
+tags: ["release", "alpha", "alpha-0-0-5", "ios", "events", "collaboration", "automation"]
+cover: "/images/alpha-0-0-5.jpg"
+draft: false
+---
+
+Alpha **v0.0.5** is our most ambitious release yet. After seven weeks of intense development, we're thrilled to ship **Flow-Like on iOS**, a comprehensive **Event System** for workflow automation, **real-time collaboration**, and a suite of improvements that make building and running flows faster, more powerful, and more accessible.
+
+## Highlights
+
+- **iOS App (Major)** — Native execution on your device, remote LLM access, seamless sync with Desktop (TestFlight coming soon).
+- **Event System (Major)** — Trigger workflows via **Cron**, **HTTP webhooks**, **Discord events**, and more.
+- **Real-Time Collaboration** — See teammates' cursors, efficient syncing, co-edit workflows live.
+- **Personal Access Tokens** — Automate and integrate via API (documentation coming soon).
+- **Remote Model Service** — Free rate-limited models available now; Pro/Premium tiers launching soon.
+- **Node Improvements** — Dot notation for fields, OpenAI node with custom keys, flexible `print`/`warning`/`error` nodes.
+- **Performance & Fetching** — Faster data loading, better execution performance.
+- **Bug Fixes** — Online project creation, interface polish, and stability wins.
+
+---
+
+## Flow-Like on iOS
+
+We're bringing the full Flow-Like experience to **iOS**. Build, execute, and monitor workflows directly on your iPhone or iPad — with the same typed, composable power you know from Desktop.
+
+### What's Included
+
+- **Native Execution** — Runs locally on your device; no cloud dependency for core flows
+- **Remote LLMs** — Access powerful language models through our remote service (OpenAI, Anthropic, and more)
+- **Desktop Sync** — Flows, profiles, and data stay in sync across Desktop and iOS
+- **Mobile-Optimized UI** — Touch-friendly canvas, redesigned for smaller screens without compromising functionality
+
+### TestFlight Access
+
+The iOS app will be available via **TestFlight soon**. We'll publish a dedicated blog post with installation instructions, feature walkthrough, and early-access details. Stay tuned!
+
+---
+
+## Event System — Automate Everything
+
+The new **Event System** transforms Flow-Like into a true automation platform. Trigger workflows on schedules, HTTP requests, Discord messages, and more — all with typed event payloads that flow naturally into your nodes.
+
+### Supported Event Types
+
+#### **Cron Jobs**
+Schedule workflows to run automatically. Perfect for:
+- Daily data syncs
+- Recurring reports
+- Cleanup tasks
+- Periodic ML model retraining
+
+**Example:** `0 9 * * MON` → weekly Monday 9am report generation
+
+#### **HTTP Events**
+Expose workflows as webhooks. Trigger flows from:
+- External services (Stripe, GitHub, Zapier)
+- Custom integrations
+- Internal microservices
+- IoT devices
+
+**Example:** Receive webhook → validate payload → process order → notify team
+
+#### **Discord Events**
+Build Discord bots directly in Flow-Like. React to:
+- Messages
+- Commands
+- Reactions
+- Member joins/leaves
+
+**Use Cases:**
+- AI-powered moderation bots
+- Custom commands with LLM responses
+- Multi-user interactive games/polls
+- Server analytics and reporting
+
+**Example Flow (Sketch):**
+`Discord Message Event` → `LLM (ChatGPT)` → `Discord Reply` → `Log to Database`
+
+#### **Coming Soon**
+- **MQTT** — IoT and sensor data
+- **Email** — Trigger on incoming mail
+- **File System** — Watch folders for changes
+- **Custom Webhooks** — Advanced routing and filtering
+
+> All event payloads are **typed** and flow seamlessly into downstream nodes. No manual JSON parsing required.
+
+---
+
+## Real-Time Collaboration
+
+Work on flows **together**. See your teammates' cursors in real-time, edit nodes simultaneously, and stay in sync with an efficient, conflict-free syncing mechanism.
+
+### Features
+
+- **Live Cursors** — See exactly where collaborators are working
+- **Efficient Sync** — Minimal network overhead; works smoothly even on slower connections
+- **Conflict-Free Editing** — Smart merge strategy ensures changes don't get lost
+- **Instant Updates** — No manual refresh; changes appear as they happen
+
+Perfect for:
+- Pair programming workflows
+- Teaching/demos
+- Distributed team collaboration
+- Live debugging sessions
+
+---
+
+## Personal Access Tokens & API Access
+
+Automate your Flow-Like experience with **Personal Access Tokens**. Trigger workflows, manage projects, and integrate with external systems programmatically.
+
+**API documentation coming soon** — covering endpoints for:
+- Workflow execution
+- Project management
+- Event subscriptions
+- Model service access
+
+Use cases:
+- CI/CD pipelines that trigger flows
+- External dashboards pulling Flow-Like data
+- Scheduled tasks via your own infrastructure
+- Custom integrations with internal tools
+
+---
+
+## Remote Model Service
+
+Access powerful LLMs without managing API keys or infrastructure. Our **Remote Model Service** provides:
+
+### Available Now
+
+- **Free Tier** — Rate-limited access to popular models (requires login)
+
+Perfect for prototyping, learning, and low-volume production.
+
+### Coming Soon
+
+- **Pro Tier** — Higher rate limits, priority access, advanced models
+- **Premium Tier** — Dedicated compute, custom fine-tuning, enterprise SLA
+
+No credit card required for Free tier. Just log in and start building.
+
+---
+
+## Node Improvements
+
+### Dot Notation for Field Access
+Access nested struct fields naturally:
+
+```
+user.profile.name
+data.items[0].price
+response.meta.timestamp
+```
+
+Works across all nodes that accept field selectors — cleaner flows, less manual mapping.
+
+### OpenAI Node with Custom Keys
+Use your **own OpenAI API key** in the OpenAI node. Great for:
+- Teams with existing OpenAI subscriptions
+- Fine-tuned models
+- Dedicated rate limits
+- Cost tracking through your own account
+
+### Flexible Print/Warning/Error Nodes
+`print`, `warning`, and `error` nodes now accept **any generic value** — not just strings.
+
+Pass in:
+- Structs → formatted JSON
+- Arrays → pretty-printed lists
+- Numbers, booleans → direct output
+- Mixed types → intelligent formatting
+
+Faster debugging without manual `toString` conversions.
+
+### Parallel Iteration (Experimental)
+Iterate over arrays with parallel execution where safe. Significant speedups for:
+- Batch LLM calls
+- HTTP requests to multiple endpoints
+- Database upserts
+- File I/O operations
+
+Automatically respects data dependencies and execution order.
+
+---
+
+## Performance & Fetching
+
+### Improved Fetching Strategy
+- **Faster initial loads** — smarter prefetching and caching
+- **Better performance** — reduced memory allocations in execution hot paths
+- **Smoother canvas** — improved rendering for large graphs
+
+**Result:** Noticeably snappier experience, especially on large projects and slower connections.
+
+---
+
+## Bug Fixes & Polish
+
+### Online Project Creation
+Fixed: Creating online projects without a "Bit" (data source) now works correctly.
+
+### Interface Improvements
+- Cleaner node connection visuals
+- Better zoom/pan behavior
+- Fixed edge cases in field mapping UI
+- Improved error message clarity
+
+---
+
+## What's Next
+
+This release sets the stage for:
+- **iOS TestFlight** (separate announcement coming)
+- **API documentation** and integration guides
+- **Pro/Premium model tiers**
+- **More event types** (MQTT, Email, File System)
+
+---
+
+## Community & Thanks
+
+A massive thank you to everyone who's been testing, reporting issues, and sharing ideas. The feedback from the r/selfhosted community continues to shape Flow-Like's direction.
+
+Special thanks to early testers who helped shake out bugs in the iOS build and event system — your input made this release possible.
+
+---
+
+## Links
+
+- **Docs Home:** [https://docs.flow-like.com](https://docs.flow-like.com)
+- **Getting Started:** [https://docs.flow-like.com/start/first-use/](https://docs.flow-like.com/start/first-use/)
+- **Event System Guide:** [Coming Soon]
+- **API Documentation:** [Coming Soon]
+- **iOS TestFlight:** [Announcement Coming Soon]
+
+---
+
+**Download Alpha v0.0.5** and start building automated, collaborative, mobile-ready workflows today.
