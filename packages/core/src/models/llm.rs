@@ -64,6 +64,7 @@ impl ModelFactory {
         app_state: Arc<Mutex<FlowLikeState>>,
         access_token: Option<String>,
     ) -> Result<Arc<dyn ModelLogic>> {
+        let client = rig_core::openai::OpenAIClient::new();
         let provider_config = app_state.lock().await.model_provider_config.clone();
         let settings = self.execution_settings.clone();
         let provider = bit.try_to_provider();

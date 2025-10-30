@@ -67,6 +67,7 @@ base64 = "0.22.1"
 ndarray = "0.16.1"
 dirs-next = "2.0.0"
 regex = "1.11.3"
+rig-core = "0.23.1"
 
 [profile.dev]
 split-debuginfo = "unpacked"

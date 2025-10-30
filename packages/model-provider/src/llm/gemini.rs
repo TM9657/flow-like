@@ -12,37 +12,29 @@ use crate::{
 use flow_like_types::{Cacheable, Result, async_trait, sync::Mutex};
 use rig::client::ProviderClient;
 use text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
-pub struct AnthropicModel {
+pub struct GeminiModel {
     client: Arc<Box<dyn ProviderClient>>,
     provider: ModelProvider,
     default_model: Option<String>,
 }
 
-impl AnthropicModel {
+impl GeminiModel {
     pub async fn new(
         provider: &ModelProvider,
         config: &ModelProviderConfiguration,
     ) -> flow_like_types::Result<Self> {
-        let anthropic_config = random_provider(&config.anthropic_config)?;
-        let api_key = anthropic_config.api_key.clone().unwrap_or_default();
+        let gemini_config = random_provider(&config.gemini_config)?;
+        let api_key = gemini_config.api_key.clone().unwrap_or_default();
         let model_id = provider.model_id.clone();
 
-        let mut builder = rig::providers::anthropic::Client::builder(&api_key);
-        if let Some(endpoint) = anthropic_config.endpoint.as_deref() {
+        let mut builder = rig::providers::gemini::Client::builder(&api_key);
+        if let Some(endpoint) = gemini_config.endpoint.as_deref() {
             builder = builder.base_url(endpoint);
-        }
-
-        if let Some(beta) = anthropic_config.beta.as_deref() {
-            builder = builder.anthropic_beta(beta);
-        }
-
-        if let Some(version) = anthropic_config.version.as_deref() {
-            builder = builder.anthropic_version(version);
         }
 
         let client = builder.build()?.boxed();
 
-        Ok(AnthropicModel {
+        Ok(GeminiModel {
             client: Arc::new(client),
             provider: provider.clone(),
             default_model: model_id,
@@ -58,21 +50,13 @@ impl AnthropicModel {
             .cloned()
             .and_then(|v| v.as_str().map(|s| s.to_string()));
 
-        let mut builder = rig::providers::anthropic::Client::builder(api_key);
+        let mut builder = rig::providers::gemini::Client::builder(api_key);
         if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
             builder = builder.base_url(endpoint);
         }
-        if let Some(beta) = params.get("beta").and_then(|v| v.as_str()) {
-            builder = builder.anthropic_beta(beta);
-        }
-
-        if let Some(version) = params.get("version").and_then(|v| v.as_str()) {
-            builder = builder.anthropic_version(version);
-        }
-
         let client = builder.build()?.boxed();
 
-        Ok(AnthropicModel {
+        Ok(GeminiModel {
             client: Arc::new(client),
             default_model: model_id,
             provider: provider.clone(),
@@ -80,7 +64,7 @@ impl AnthropicModel {
     }
 }
 
-impl Cacheable for AnthropicModel {
+impl Cacheable for GeminiModel {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -91,7 +75,7 @@ impl Cacheable for AnthropicModel {
 }
 
 #[async_trait]
-impl ModelLogic for AnthropicModel {
+impl ModelLogic for GeminiModel {
     async fn provider(&self) -> Result<ModelConstructor> {
         Ok(ModelConstructor {
             inner: self.client.clone(),

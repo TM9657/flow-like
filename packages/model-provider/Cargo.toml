@@ -15,11 +15,11 @@ tokenizers = {version="0.21.4", default-features = false, features = ["onig"]}
 schemars.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
-openai-api-rs = "6.0.3"
 tiktoken-rs = "0.7.0"
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-bedrockruntime = "1.101.0"
 ndarray.workspace = true
+rig-core.workspace = true
 
 [target.'cfg(not(any(target_os = "ios", target_os = "tvos")))'.dependencies]
 # We can enable the standard ort crate again with the next release, when PR: https://github.com/pykeio/ort/pull/430 is merged and released.
