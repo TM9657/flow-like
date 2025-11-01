@@ -26,6 +26,50 @@ impl ResponseChunk {
         let delta = choice.delta.as_ref()?;
         delta.content.clone()
     }
+
+    /// Gets the content delta from the first choice
+    pub fn content_delta(&self) -> Option<String> {
+        self.get_streamed_token()
+    }
+
+    /// Gets the role from the first choice delta
+    pub fn role(&self) -> Option<String> {
+        self.choices
+            .first()
+            .and_then(|c| c.delta.as_ref())
+            .and_then(|d| d.role.clone())
+    }
+
+    /// Checks if this chunk contains a tool call delta
+    pub fn has_tool_call(&self) -> bool {
+        self.choices
+            .first()
+            .and_then(|c| c.delta.as_ref())
+            .and_then(|d| d.tool_calls.as_ref())
+            .map(|tc| !tc.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// Gets tool calls from the first choice delta
+    pub fn tool_calls(&self) -> Option<Vec<DeltaFunctionCall>> {
+        self.choices
+            .first()
+            .and_then(|c| c.delta.as_ref())
+            .and_then(|d| d.tool_calls.clone())
+    }
+
+    /// Checks if the response is finished
+    pub fn is_finished(&self) -> bool {
+        self.choices
+            .first()
+            .and_then(|c| c.finish_reason.as_ref())
+            .is_some()
+    }
+
+    /// Gets the finish reason
+    pub fn finish_reason(&self) -> Option<String> {
+        self.choices.first().and_then(|c| c.finish_reason.clone())
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]

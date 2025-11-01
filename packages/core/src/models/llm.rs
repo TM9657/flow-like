@@ -1,7 +1,13 @@
 pub mod local;
 
 use crate::{bit::Bit, state::FlowLikeState};
-use flow_like_model_provider::llm::{ModelLogic, openai::OpenAIModel};
+use flow_like_model_provider::llm::{
+    ModelLogic, anthropic::AnthropicModel, cohere::CohereModel, deepseek::DeepseekModel,
+    galadriel::GaladrielModel, gemini::GeminiModel, groq::GroqModel, huggingface::HuggingfaceModel,
+    hyperbolic::HyperbolicModel, mira::MiraModel, mistral::MistralModel, moonshot::MoonshotModel,
+    ollama::OllamaModel, openai::OpenAIModel, openrouter::OpenRouterModel,
+    perplexity::PerplexityModel, together::TogetherModel, voyageai::VoyageAIModel, xai::XAIModel,
+};
 use flow_like_types::{Result, sync::Mutex, tokio::time::interval};
 use local::LocalModel;
 use serde::{Deserialize, Serialize};
@@ -64,7 +70,6 @@ impl ModelFactory {
         app_state: Arc<Mutex<FlowLikeState>>,
         access_token: Option<String>,
     ) -> Result<Arc<dyn ModelLogic>> {
-        let client = rig_core::openai::OpenAIClient::new();
         let provider_config = app_state.lock().await.model_provider_config.clone();
         let settings = self.execution_settings.clone();
         let provider = bit.try_to_provider();
@@ -102,6 +107,227 @@ impl ModelFactory {
 
             let model = OpenAIModel::new(&model_provider, &provider_config).await?;
 
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "anthropic" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = AnthropicModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "gemini" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = GeminiModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "huggingface" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = HuggingfaceModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "cohere" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = CohereModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "perplexity" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = PerplexityModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "groq" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = GroqModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "deepseek" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = DeepseekModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "mistral" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = MistralModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "together" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = TogetherModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "openrouter" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = OpenRouterModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "voyageai" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = VoyageAIModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "ollama" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = OllamaModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "hyperbolic" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = HyperbolicModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "moonshot" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = MoonshotModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "galadriel" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = GaladrielModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "mira" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = MiraModel::new(&model_provider, &provider_config).await?;
+            let model = Arc::new(model);
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            self.cached_models.insert(bit.id.clone(), model.clone());
+            return Ok(model);
+        }
+
+        if provider == "xai" {
+            if let Some(model) = self.cached_models.get(&bit.id) {
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                return Ok(model.clone());
+            }
+
+            let model = XAIModel::new(&model_provider, &provider_config).await?;
             let model = Arc::new(model);
             self.ttl_list.insert(bit.id.clone(), SystemTime::now());
             self.cached_models.insert(bit.id.clone(), model.clone());

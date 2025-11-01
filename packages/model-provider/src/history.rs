@@ -8,6 +8,15 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::response::{Annotation, Response};
+use flow_like_types::Result;
+use rig::OneOrMany;
+use rig::completion::Message as RigMessage;
+use rig::message::{
+    AssistantContent as RigAssistantContent, Audio as RigAudio, Document as RigDocument,
+    DocumentSourceKind, Image as RigImage, ImageMediaType, Text as RigText,
+    ToolCall as RigToolCall, ToolFunction as RigToolFunction, UserContent as RigUserContent,
+    Video as RigVideo,
+};
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 pub struct ToolCall {
@@ -129,6 +138,159 @@ impl HistoryMessage {
     }
 }
 
+impl From<RigMessage> for HistoryMessage {
+    fn from(msg: RigMessage) -> Self {
+        match msg {
+            RigMessage::User { content } => {
+                let contents: Vec<Content> = content.iter().map(|c| c.clone().into()).collect();
+
+                HistoryMessage {
+                    role: Role::User,
+                    content: if contents.len() == 1 && matches!(contents[0], Content::Text { .. }) {
+                        if let Content::Text { text, .. } = &contents[0] {
+                            MessageContent::String(text.clone())
+                        } else {
+                            MessageContent::Contents(contents)
+                        }
+                    } else {
+                        MessageContent::Contents(contents)
+                    },
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    annotations: None,
+                }
+            }
+            RigMessage::Assistant { id, content } => {
+                let mut tool_calls = Vec::new();
+                let mut text_content = String::new();
+
+                for item in content.iter() {
+                    match item {
+                        RigAssistantContent::Text(text) => {
+                            if !text_content.is_empty() {
+                                text_content.push('\n');
+                            }
+                            text_content.push_str(&text.text);
+                        }
+                        RigAssistantContent::ToolCall(tool_call) => {
+                            tool_calls.push(ToolCall {
+                                id: tool_call.id.clone(),
+                                r#type: "function".to_string(),
+                                function: ToolCallFunction {
+                                    name: tool_call.function.name.clone(),
+                                    arguments: tool_call.function.arguments.to_string(),
+                                },
+                            });
+                        }
+                        RigAssistantContent::Reasoning(_) => {}
+                    }
+                }
+
+                HistoryMessage {
+                    role: Role::Assistant,
+                    content: MessageContent::String(text_content),
+                    name: id,
+                    tool_calls: if tool_calls.is_empty() {
+                        None
+                    } else {
+                        Some(tool_calls)
+                    },
+                    tool_call_id: None,
+                    annotations: None,
+                }
+            }
+        }
+    }
+}
+
+impl TryFrom<HistoryMessage> for RigMessage {
+    type Error = flow_like_types::Error;
+
+    fn try_from(msg: HistoryMessage) -> Result<Self> {
+        match msg.role {
+            Role::User => {
+                let contents: Vec<RigUserContent> = match msg.content {
+                    MessageContent::String(s) => {
+                        vec![RigUserContent::Text(RigText { text: s })]
+                    }
+                    MessageContent::Contents(contents) => {
+                        contents.into_iter().map(|c| c.into()).collect()
+                    }
+                };
+
+                let content = if contents.is_empty() {
+                    OneOrMany::one(RigUserContent::Text(RigText {
+                        text: String::new(),
+                    }))
+                } else if contents.len() == 1 {
+                    OneOrMany::one(contents.into_iter().next().unwrap())
+                } else {
+                    OneOrMany::many(contents)
+                        .map_err(|e| flow_like_types::Error::msg(e.to_string()))?
+                };
+
+                Ok(RigMessage::User { content })
+            }
+            Role::Assistant => {
+                let mut rig_contents = Vec::new();
+
+                match msg.content {
+                    MessageContent::String(s) if !s.is_empty() => {
+                        rig_contents.push(RigAssistantContent::Text(RigText { text: s }));
+                    }
+                    MessageContent::Contents(contents) => {
+                        for content in contents {
+                            if let Content::Text { text, .. } = content {
+                                if !text.is_empty() {
+                                    rig_contents.push(RigAssistantContent::Text(RigText { text }));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                if let Some(tool_calls) = msg.tool_calls {
+                    for tool_call in tool_calls {
+                        rig_contents.push(RigAssistantContent::ToolCall(RigToolCall {
+                            id: tool_call.id,
+                            call_id: None,
+                            function: RigToolFunction {
+                                name: tool_call.function.name,
+                                arguments: json::from_str(&tool_call.function.arguments)
+                                    .unwrap_or(json::json!({})),
+                            },
+                        }));
+                    }
+                }
+
+                let content = if rig_contents.is_empty() {
+                    OneOrMany::one(RigAssistantContent::Text(RigText {
+                        text: String::new(),
+                    }))
+                } else if rig_contents.len() == 1 {
+                    OneOrMany::one(rig_contents.into_iter().next().unwrap())
+                } else {
+                    OneOrMany::many(rig_contents)
+                        .map_err(|e| flow_like_types::Error::msg(e.to_string()))?
+                };
+
+                Ok(RigMessage::Assistant {
+                    id: msg.name,
+                    content,
+                })
+            }
+            Role::System | Role::Function | Role::Tool => {
+                let text = msg.as_str();
+                Ok(RigMessage::User {
+                    content: OneOrMany::one(RigUserContent::Text(RigText { text })),
+                })
+            }
+        }
+    }
+}
+
 impl fmt::Display for History {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if !self.messages.is_empty() {
@@ -181,6 +343,84 @@ pub enum Content {
         content_type: ContentType,
         image_url: ImageUrl,
     },
+    Audio {
+        #[serde(rename = "type")]
+        content_type: ContentType,
+        audio_url: String,
+    },
+    Video {
+        #[serde(rename = "type")]
+        content_type: ContentType,
+        video_url: String,
+    },
+    Document {
+        #[serde(rename = "type")]
+        content_type: ContentType,
+        document_url: String,
+    },
+}
+
+impl From<RigUserContent> for Content {
+    fn from(rig_content: RigUserContent) -> Self {
+        match rig_content {
+            RigUserContent::Text(text) => Content::Text {
+                content_type: ContentType::Text,
+                text: text.text,
+            },
+            RigUserContent::Image(image) => Content::Image {
+                content_type: ContentType::ImageUrl,
+                image_url: ImageUrl {
+                    url: image.data.to_string(),
+                    detail: image.detail.map(|d| format!("{:?}", d).to_lowercase()),
+                },
+            },
+            RigUserContent::Audio(audio) => Content::Audio {
+                content_type: ContentType::AudioUrl,
+                audio_url: audio.data.to_string(),
+            },
+            RigUserContent::Video(video) => Content::Video {
+                content_type: ContentType::VideoUrl,
+                video_url: video.data.to_string(),
+            },
+            RigUserContent::Document(doc) => Content::Document {
+                content_type: ContentType::DocumentUrl,
+                document_url: doc.data.to_string(),
+            },
+            RigUserContent::ToolResult(_) => Content::Text {
+                content_type: ContentType::Text,
+                text: "[Tool Result]".to_string(),
+            },
+        }
+    }
+}
+
+impl From<Content> for RigUserContent {
+    fn from(content: Content) -> Self {
+        match content {
+            Content::Text { text, .. } => RigUserContent::Text(RigText { text }),
+            Content::Image { image_url, .. } => RigUserContent::Image(RigImage {
+                data: DocumentSourceKind::url(&image_url.url),
+                media_type: Some(ImageMediaType::PNG),
+                detail: None,
+                additional_params: None,
+            }),
+            Content::Audio { audio_url, .. } => RigUserContent::Audio(RigAudio {
+                data: DocumentSourceKind::url(&audio_url),
+                media_type: None,
+                additional_params: None,
+            }),
+            Content::Video { video_url, .. } => RigUserContent::Video(RigVideo {
+                data: DocumentSourceKind::url(&video_url),
+                media_type: None,
+                additional_params: None,
+            }),
+            Content::Document { document_url, .. } => RigUserContent::Document(RigDocument {
+                data: DocumentSourceKind::url(&document_url),
+                media_type: None,
+                additional_params: None,
+            }),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
@@ -189,6 +429,12 @@ pub enum ContentType {
     Text,
     #[serde(rename = "image_url")]
     ImageUrl,
+    #[serde(rename = "audio_url")]
+    AudioUrl,
+    #[serde(rename = "video_url")]
+    VideoUrl,
+    #[serde(rename = "document_url")]
+    DocumentUrl,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -344,6 +590,105 @@ impl History {
 
     pub fn set_stream(&mut self, stream: bool) {
         self.stream = Some(stream);
+    }
+
+    /// Extracts prompt and history messages suitable for rig completion
+    /// Returns (prompt_message, history_messages) where prompt_message is the last user message
+    /// and history_messages are all previous messages
+    ///
+    /// This is the preferred method as it preserves all content types (images, tools, etc.)
+    pub fn extract_prompt_and_history(&self) -> Result<(RigMessage, Vec<RigMessage>)> {
+        let mut messages: Vec<RigMessage> = Vec::new();
+        let mut prompt: Option<RigMessage> = None;
+
+        for (idx, msg) in self.messages.iter().enumerate() {
+            if idx == self.messages.len() - 1 && msg.role == Role::User {
+                prompt = Some(msg.clone().try_into()?);
+            } else {
+                messages.push(msg.clone().try_into()?);
+            }
+        }
+
+        // If no user message at the end, try to pop one from history
+        if prompt.is_none() && !messages.is_empty() {
+            if let Some(last_msg) = messages.last() {
+                if matches!(last_msg, RigMessage::User { .. }) {
+                    prompt = messages.pop();
+                }
+            }
+        }
+
+        // If still no prompt, create a default empty user message
+        let prompt = prompt.unwrap_or_else(|| RigMessage::User {
+            content: OneOrMany::one(RigUserContent::Text(RigText {
+                text: String::new(),
+            })),
+        });
+
+        Ok((prompt, messages))
+    }
+
+    /// Extracts text-only prompt and history messages for simple text completion
+    /// Returns (prompt_text, history_messages) where prompt_text is the text from the last user message
+    ///
+    /// Note: This method only extracts text content and discards images, audio, etc.
+    /// Use `extract_prompt_and_history()` if you need to preserve all content types.
+    pub fn extract_text_prompt_and_history(&self) -> Result<(String, Vec<RigMessage>)> {
+        let (prompt_msg, history) = self.extract_prompt_and_history()?;
+
+        let prompt_text = match prompt_msg {
+            RigMessage::User { content } => {
+                let first = content.first();
+                let rest = content.rest();
+
+                let mut texts = Vec::new();
+                if let RigUserContent::Text(t) = &first {
+                    texts.push(t.text.clone());
+                }
+
+                for c in rest {
+                    if let RigUserContent::Text(t) = c {
+                        texts.push(t.text.clone());
+                    }
+                }
+
+                texts.join("\n")
+            }
+            _ => String::new(),
+        };
+
+        Ok((prompt_text, history))
+    }
+
+    /// Converts to rig messages vector
+    pub fn to_rig_messages(&self) -> Result<Vec<RigMessage>> {
+        self.messages
+            .iter()
+            .map(|msg| msg.clone().try_into())
+            .collect()
+    }
+
+    /// Creates History from rig messages
+    pub fn from_rig_messages(messages: Vec<RigMessage>, model: String) -> Self {
+        let history_messages: Vec<HistoryMessage> =
+            messages.into_iter().map(|m| m.into()).collect();
+        Self::new(model, history_messages)
+    }
+}
+
+impl From<Vec<RigMessage>> for History {
+    fn from(messages: Vec<RigMessage>) -> Self {
+        let history_messages: Vec<HistoryMessage> =
+            messages.into_iter().map(|m| m.into()).collect();
+        Self::new("".to_string(), history_messages)
+    }
+}
+
+impl TryFrom<History> for Vec<RigMessage> {
+    type Error = flow_like_types::Error;
+
+    fn try_from(history: History) -> Result<Self> {
+        history.to_rig_messages()
     }
 }
 

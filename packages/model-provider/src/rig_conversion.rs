@@ -48,6 +48,9 @@ fn extract_text_content(content: &MessageContent) -> String {
                 .filter_map(|c| match c {
                     Content::Text { text, .. } => Some(text.clone()),
                     Content::Image { .. } => None,
+                    Content::Audio { .. } => None,
+                    Content::Video { .. } => None,
+                    Content::Document { .. } => None,
                 })
                 .collect();
             text_parts.join("\n")

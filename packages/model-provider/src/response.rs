@@ -1,7 +1,13 @@
 use super::response_chunk::{Delta, DeltaFunctionCall, ResponseChunk};
 use flow_like_types::{
-    JsonSchema,
-    json::{Deserialize, Serialize},
+    JsonSchema, Result,
+    json::{self, Deserialize, Serialize},
+};
+use rig::OneOrMany;
+use rig::completion::Message as RigMessage;
+use rig::message::{
+    AssistantContent as RigAssistantContent, Text as RigText, ToolCall as RigToolCall,
+    ToolFunction as RigToolFunction,
 };
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -169,6 +175,96 @@ impl ResponseMessage {
     }
 }
 
+impl TryFrom<ResponseMessage> for RigMessage {
+    type Error = flow_like_types::Error;
+
+    fn try_from(msg: ResponseMessage) -> Result<Self> {
+        let mut rig_contents = Vec::new();
+
+        if let Some(content) = msg.content {
+            if !content.is_empty() {
+                rig_contents.push(RigAssistantContent::Text(RigText { text: content }));
+            }
+        }
+
+        for tool_call in msg.tool_calls {
+            rig_contents.push(RigAssistantContent::ToolCall(RigToolCall {
+                id: tool_call.id,
+                call_id: None,
+                function: RigToolFunction {
+                    name: tool_call.function.name,
+                    arguments: json::from_str(&tool_call.function.arguments)
+                        .unwrap_or(json::json!({})),
+                },
+            }));
+        }
+
+        let content = if rig_contents.is_empty() {
+            OneOrMany::one(RigAssistantContent::Text(RigText {
+                text: String::new(),
+            }))
+        } else if rig_contents.len() == 1 {
+            OneOrMany::one(rig_contents.into_iter().next().unwrap())
+        } else {
+            OneOrMany::many(rig_contents).map_err(|e| flow_like_types::Error::msg(e.to_string()))?
+        };
+
+        Ok(RigMessage::Assistant { id: None, content })
+    }
+}
+
+impl TryFrom<RigMessage> for ResponseMessage {
+    type Error = flow_like_types::Error;
+
+    fn try_from(msg: RigMessage) -> Result<Self> {
+        match msg {
+            RigMessage::Assistant { id: _, content } => {
+                let mut text_content = String::new();
+                let mut tool_calls = Vec::new();
+
+                for item in content.iter() {
+                    match item {
+                        RigAssistantContent::Text(text) => {
+                            if !text_content.is_empty() {
+                                text_content.push('\n');
+                            }
+                            text_content.push_str(&text.text);
+                        }
+                        RigAssistantContent::ToolCall(tool_call) => {
+                            tool_calls.push(FunctionCall {
+                                index: None,
+                                id: tool_call.id.clone(),
+                                tool_type: Some("function".to_string()),
+                                function: ResponseFunction {
+                                    name: tool_call.function.name.clone(),
+                                    arguments: tool_call.function.arguments.to_string(),
+                                },
+                            });
+                        }
+                        RigAssistantContent::Reasoning(_) => {}
+                    }
+                }
+
+                Ok(ResponseMessage {
+                    role: "assistant".to_string(),
+                    content: if text_content.is_empty() {
+                        None
+                    } else {
+                        Some(text_content)
+                    },
+                    refusal: None,
+                    annotations: None,
+                    audio: None,
+                    tool_calls,
+                })
+            }
+            _ => Err(flow_like_types::Error::msg(
+                "Can only convert Assistant messages to ResponseMessage",
+            )),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, Default)]
 pub struct Usage {
     pub completion_tokens: u32,
@@ -242,6 +338,40 @@ impl Response {
 
     pub fn last_message(&self) -> Option<&ResponseMessage> {
         self.choices.last().map(|c| &c.message)
+    }
+
+    /// Gets the text content from the first choice
+    pub fn content(&self) -> Option<String> {
+        self.choices.first().and_then(|c| c.message.content.clone())
+    }
+
+    /// Converts to rig message (from the first choice)
+    pub fn to_rig_message(&self) -> Result<RigMessage> {
+        self.last_message()
+            .ok_or_else(|| flow_like_types::Error::msg("No message in response"))?
+            .clone()
+            .try_into()
+    }
+
+    /// Creates Response from rig assistant message
+    pub fn from_rig_message(msg: RigMessage) -> Result<Self> {
+        let response_msg: ResponseMessage = msg.try_into()?;
+
+        Ok(Response {
+            id: None,
+            choices: vec![Choice {
+                index: 0,
+                finish_reason: "stop".to_string(),
+                message: response_msg,
+                logprobs: None,
+            }],
+            created: None,
+            model: None,
+            service_tier: None,
+            system_fingerprint: None,
+            object: None,
+            usage: Usage::default(),
+        })
     }
 
     pub fn push_chunk(&mut self, chunk: ResponseChunk) {
