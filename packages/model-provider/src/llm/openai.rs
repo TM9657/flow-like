@@ -171,29 +171,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_model_no_stream() {
-        dotenv().ok();
-
-        let provider = ModelProvider {
-            model_id: Some("@preset/prod-free".to_string()),
-            version: None,
-            provider_name: "openai".to_string(),
-            params: None,
-        };
-        let endpoint = std::env::var("OPENAI_ENDPOINT").unwrap();
-        let api_key = std::env::var("OPENAI_API_KEY").unwrap();
-        let config = ModelProviderConfiguration {
-            openai_config: vec![OpenAIConfig {
-                api_key: Some(api_key),
-                organization: None,
-                endpoint: Some(endpoint),
-                proxy: None,
-            }],
-            ..Default::default()
-        };
-
+        let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.as_ref().unwrap();
+
         let mut history = History::new(
-            "@preset/prod-free".to_string(),
+            model_name.clone(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage::from_string(Role::User, "Hello"),
@@ -222,8 +205,17 @@ mod tests {
     async fn test_azure_openai_model_no_stream() {
         dotenv().ok();
 
+        // Skip test if Azure LLM deployment is not configured
+        let deployment_name = match std::env::var("AZURE_OPENAI_LLM_DEPLOYMENT") {
+            Ok(name) => name,
+            Err(_) => {
+                println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+                return;
+            }
+        };
+
         let provider = ModelProvider {
-            model_id: Some("gpt-4o-mini".to_string()),
+            model_id: Some(deployment_name.clone()),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
             params: None,
@@ -242,7 +234,7 @@ mod tests {
 
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
         let mut history = History::new(
-            "gpt-4o-mini".to_string(),
+            deployment_name.clone(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage::from_string(Role::User, "Hello"),
@@ -273,7 +265,7 @@ mod tests {
         dotenv().ok();
 
         let provider = ModelProvider {
-            model_id: Some("@preset/prod-free".to_string()),
+            model_id: Some("@preset/testing".to_string()),
             version: None,
             provider_name: "openai".to_string(),
             params: None,
@@ -292,7 +284,7 @@ mod tests {
 
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
         let mut history = History::new(
-            "@preset/prod-free".to_string(),
+            "@preset/testing".to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage::from_string(Role::User, "Hello"),
@@ -340,8 +332,16 @@ mod tests {
     async fn test_azure_openai_model_stream() {
         dotenv().ok();
 
+        let deployment_name = match std::env::var("AZURE_OPENAI_LLM_DEPLOYMENT") {
+            Ok(name) => name,
+            Err(_) => {
+                println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+                return;
+            }
+        };
+
         let provider = ModelProvider {
-            model_id: Some("gpt-4o-mini".to_string()),
+            model_id: Some(deployment_name.clone()),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
             params: None,
@@ -360,7 +360,7 @@ mod tests {
 
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
         let history = History::new(
-            "gpt-4o-mini".to_string(),
+            deployment_name.clone(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage::from_string(Role::User, "Hello"),
@@ -405,16 +405,19 @@ mod tests {
     }
 
     // --- Helpers for new tests ---
-    fn azure_provider_and_config() -> (ModelProvider, ModelProviderConfiguration) {
+    fn azure_provider_and_config() -> Option<(ModelProvider, ModelProviderConfiguration)> {
         dotenv().ok();
+
+        let deployment_name = std::env::var("AZURE_OPENAI_LLM_DEPLOYMENT").ok()?;
+        let api_key = std::env::var("AZURE_OPENAI_API_KEY").ok()?;
+        let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").ok()?;
+
         let provider = ModelProvider {
-            model_id: Some("gpt-4o-mini".to_string()),
+            model_id: Some(deployment_name),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
             params: None,
         };
-        let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap();
-        let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap();
         let config = ModelProviderConfiguration {
             openai_config: vec![OpenAIConfig {
                 api_key: Some(api_key),
@@ -424,7 +427,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        (provider, config)
+        Some((provider, config))
     }
 
     fn new_counter_callback() -> (LLMCallback, Arc<AtomicUsize>) {
@@ -531,8 +534,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_azure_openai_tool_call_no_stream() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.as_ref().unwrap();
 
         let agent = model
             .provider()
@@ -542,7 +549,7 @@ mod tests {
             .as_completion()
             .ok_or(anyhow!("cant create completion model"))
             .unwrap()
-            .agent("gpt-4o-mini")
+            .agent(model_name)
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .build();
@@ -567,8 +574,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_azure_openai_tool_call_stream() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.as_ref().unwrap();
 
         let agent = model
             .provider()
@@ -578,7 +589,7 @@ mod tests {
             .as_completion()
             .ok_or(anyhow!("cant create completion model"))
             .unwrap()
-            .agent("gpt-4o-mini")
+            .agent(model_name)
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .build();
@@ -610,8 +621,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_azure_openai_tool_result_roundtrip() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.as_ref().unwrap();
 
         let agent = model
             .provider()
@@ -621,7 +636,7 @@ mod tests {
             .as_completion()
             .ok_or(anyhow!("cant create completion model"))
             .unwrap()
-            .agent("gpt-4o-mini")
+            .agent(model_name)
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .build();
@@ -645,13 +660,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_azure_openai_vision_no_stream() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.clone().unwrap();
 
         let image_url =
             "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
         let history = History::new(
-            "gpt-4o-mini".to_string(),
+            model_name.clone(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage {
@@ -712,13 +731,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_azure_openai_vision_stream() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.clone().unwrap();
 
         let image_url =
             "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
         let history = History::new(
-            "gpt-4o-mini".to_string(),
+            model_name.clone(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage {
@@ -790,8 +813,19 @@ mod tests {
 
     fn openai_provider_and_config() -> (ModelProvider, ModelProviderConfiguration) {
         dotenv().ok();
+        // Use a specific model that works with OpenRouter instead of @preset/testing
+        // openai/gpt-4o-mini supports tools and is available via OpenRouter
+        let model_id = if std::env::var("OPENAI_ENDPOINT")
+            .unwrap_or_default()
+            .contains("openrouter")
+        {
+            "openai/gpt-4o-mini".to_string()
+        } else {
+            "gpt-3.5-turbo".to_string()
+        };
+
         let provider = ModelProvider {
-            model_id: Some("@preset/prod-free".to_string()),
+            model_id: Some(model_id),
             version: None,
             provider_name: "openai".to_string(),
             params: None,
@@ -826,7 +860,7 @@ mod tests {
             .agent(
                 &model
                     .default_model
-                    .unwrap_or("@preset/prod-free".to_string()),
+                    .unwrap_or("@preset/testing".to_string()),
             )
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
@@ -865,7 +899,7 @@ mod tests {
             .agent(
                 &model
                     .default_model
-                    .unwrap_or("@preset/prod-free".to_string()),
+                    .unwrap_or("@preset/testing".to_string()),
             )
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
@@ -912,7 +946,7 @@ mod tests {
             .agent(
                 &model
                     .default_model
-                    .unwrap_or("@preset/prod-free".to_string()),
+                    .unwrap_or("@preset/testing".to_string()),
             )
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
@@ -938,10 +972,20 @@ mod tests {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
 
+        // Use vision-capable model for OpenRouter, otherwise use default
+        let model_name = if std::env::var("OPENAI_ENDPOINT")
+            .unwrap_or_default()
+            .contains("openrouter")
+        {
+            "openai/gpt-4o-mini"
+        } else {
+            provider.model_id.as_ref().unwrap()
+        };
+
         let image_url =
             "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
         let history = History::new(
-            "@preset/prod-free".to_string(),
+            model_name.to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage {
@@ -1000,10 +1044,20 @@ mod tests {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
 
+        // Use vision-capable model for OpenRouter, otherwise use default
+        let model_name = if std::env::var("OPENAI_ENDPOINT")
+            .unwrap_or_default()
+            .contains("openrouter")
+        {
+            "openai/gpt-4o-mini"
+        } else {
+            provider.model_id.as_ref().unwrap()
+        };
+
         let image_url =
             "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
         let history = History::new(
-            "@preset/prod-free".to_string(),
+            model_name.to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage {
@@ -1076,9 +1130,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_azure_openai_parallel_tool_calls_no_stream() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let model_name = "gpt-4o-mini";
+        let model_name = provider.model_id.as_ref().unwrap();
 
         let agent = model
             .provider()
@@ -1103,8 +1160,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_azure_openai_parallel_tool_calls_stream() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.as_ref().unwrap();
 
         let agent = model
             .provider()
@@ -1114,7 +1175,7 @@ mod tests {
             .as_completion()
             .ok_or(anyhow!("cant create completion model"))
             .unwrap()
-            .agent("gpt-4o-mini")
+            .agent(model_name)
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .tool(ForecastTool)
@@ -1145,7 +1206,7 @@ mod tests {
     async fn test_openai_parallel_tool_calls_no_stream() {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let model_name = "@preset/prod-free";
+        let model_name = provider.model_id.as_ref().unwrap();
 
         let agent = model
             .provider()
@@ -1181,7 +1242,7 @@ mod tests {
             .as_completion()
             .ok_or(anyhow!("cant create completion model"))
             .unwrap()
-            .agent("@preset/prod-free")
+            .agent("@preset/testing")
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .tool(ForecastTool)

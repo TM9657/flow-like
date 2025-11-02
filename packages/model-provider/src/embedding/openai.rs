@@ -40,16 +40,12 @@ impl OpenAIEmbeddingModel {
 
         let client = if provider.provider.provider_name == "azure" {
             let endpoint = openai_config.endpoint.clone().unwrap_or_default();
+            // For Azure, don't include deployments in base URL - it will be added by the embeddings API
             let endpoint = if endpoint.ends_with('/') {
-                endpoint.to_string()
+                endpoint.trim_end_matches('/').to_string()
             } else {
-                format!("{}/", endpoint)
+                endpoint
             };
-            let endpoint = format!(
-                "{}openai/deployments/{}",
-                endpoint,
-                model_id.clone().unwrap_or_default()
-            );
             let auth = rig::providers::azure::AzureOpenAIAuth::ApiKey(api_key.clone());
             let mut builder = rig::providers::azure::Client::builder(auth, &endpoint);
             if let Some(version) = provider.provider.version.as_deref() {
@@ -114,6 +110,8 @@ impl EmbeddingModelLogic for OpenAIEmbeddingModel {
         let embedding_model = self.client.as_embeddings().ok_or(flow_like_types::anyhow!(
             "Client does not support embeddings"
         ))?;
+        // For Azure embeddings, we pass the deployment name as the model
+        // For OpenAI, we pass the model_id
         let embedding_model = embedding_model.embedding_model(&model_id);
         let embeddings = embedding_model.embed_texts(prefixed_array).await?;
         let embeddings: Vec<Vec<f32>> = embeddings
@@ -133,6 +131,8 @@ impl EmbeddingModelLogic for OpenAIEmbeddingModel {
         let embedding_model = self.client.as_embeddings().ok_or(flow_like_types::anyhow!(
             "Client does not support embeddings"
         ))?;
+        // For Azure embeddings, we pass the deployment name as the model
+        // For OpenAI, we pass the model_id
         let embedding_model = embedding_model.embedding_model(&model_id);
         let embeddings = embedding_model.embed_texts(prefixed_array).await?;
         let embeddings: Vec<Vec<f32>> = embeddings
@@ -181,7 +181,7 @@ mod tests {
             pooling: Pooling::None,
             vector_length: 3048,
         };
-        let api_key = std::env::var("OPENAI_API_KEY").unwrap();
+        let api_key = std::env::var("OPENAI_API_EMBEDDING_KEY").unwrap();
         let config = ModelProviderConfiguration {
             openai_config: vec![OpenAIConfig {
                 api_key: Some(api_key),
@@ -216,7 +216,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_openai_chunkung() {
+    async fn test_openai_chunking() {
         dotenv().ok();
 
         let provider = ModelProvider {
@@ -236,7 +236,7 @@ mod tests {
             pooling: Pooling::None,
             vector_length: 3048,
         };
-        let api_key = std::env::var("OPENAI_API_KEY").unwrap();
+        let api_key = std::env::var("OPENAI_API_EMBEDDING_KEY").unwrap();
         let config = ModelProviderConfiguration {
             openai_config: vec![OpenAIConfig {
                 api_key: Some(api_key),
