@@ -90,6 +90,7 @@ impl NodeLogic for ReadCellNode {
         let mut found = false;
 
         let bytes = file.get(ctx, false).await?;
+
         if !bytes.is_empty() {
             let mut wb = open_workbook_auto_from_rs(Cursor::new(bytes))
                 .map_err(|e| flow_like_types::anyhow!("Calamine open failed: {}", e))?;
@@ -101,8 +102,15 @@ impl NodeLogic for ReadCellNode {
                 if let Some(cell) = range.get_value((r0, c0)) {
                     found = !matches!(cell, Data::Empty);
                     out_value = cell.as_string().unwrap_or_default();
+                } else {
+                    ctx.log_message(&format!("Cell not found at row {} col {}", row_str, col_str),
+                        flow_like::flow::execution::LogLevel::Warn);
                 }
+            } else {
+                return Err(flow_like_types::anyhow!("Sheet '{}' not found", sheet));
             }
+        } else {
+            return Err(flow_like_types::anyhow!("Excel file is empty or could not be read"));
         }
 
         ctx.set_pin_value("file_out", json!(file)).await?;

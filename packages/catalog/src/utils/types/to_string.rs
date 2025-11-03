@@ -7,8 +7,10 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{Value, async_trait, json::json};
-use std::sync::Arc;
+use flow_like_types::{Value, async_trait, json::{json, Map}};
+use std::{sync::Arc, collections::BTreeMap};
+
+use crate::utils::types::normalize_json_value;
 
 #[derive(Default)]
 pub struct ToStringNode {}
@@ -56,8 +58,15 @@ impl NodeLogic for ToStringNode {
                 Value::String(inner) => inner.clone(),
                 Value::Bool(b) => b.to_string(),
                 Value::Number(n) => n.to_string(),
-                _ if pretty => flow_like_types::json::to_string_pretty(v)?,
-                _ => flow_like_types::json::to_string(v)?,
+                _ => {
+                    // Normalize the value to ensure consistent key ordering
+                    let normalized_value = normalize_json_value(v.clone());
+                    if pretty {
+                        flow_like_types::json::to_string_pretty(&normalized_value)?
+                    } else {
+                        flow_like_types::json::to_string(&normalized_value)?
+                    }
+                }
             };
             s
         };

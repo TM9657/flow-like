@@ -8,8 +8,11 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{Value, async_trait, json::json};
-use std::sync::Arc;
+use flow_like_types::{Value, async_trait, json::{json, Map}};
+use std::{sync::Arc, collections::BTreeMap};
+
+use crate::utils::types::normalize_json_value;
+
 
 #[derive(Default)]
 pub struct ToBytesNode {}
@@ -49,10 +52,14 @@ impl NodeLogic for ToBytesNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let value: Value = context.evaluate_pin("value").await?;
         let pretty = context.evaluate_pin::<bool>("pretty").await?;
+
+        // Normalize the value to ensure consistent key ordering
+        let normalized_value = normalize_json_value(value);
+
         let bytes: Vec<u8> = if pretty {
-            flow_like_types::json::to_vec_pretty(&value)?
+            flow_like_types::json::to_vec_pretty(&normalized_value)?
         } else {
-            flow_like_types::json::to_vec(&value)?
+            flow_like_types::json::to_vec(&normalized_value)?
         };
         context
             .set_pin_value("bytes", flow_like_types::json::json!(bytes))
