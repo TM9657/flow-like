@@ -7,8 +7,10 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{Value, async_trait, json::from_str};
-use std::sync::Arc;
+use flow_like_types::{Value, async_trait, json::{from_str, Map}};
+use std::{sync::Arc, collections::BTreeMap};
+
+use crate::utils::types::normalize_json_value;
 
 #[derive(Default)]
 pub struct FromStringNode {}
@@ -49,7 +51,8 @@ impl NodeLogic for FromStringNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let string: String = context.evaluate_pin("string").await?;
         let value: Value = from_str(&string)?;
-        context.set_pin_value("value_ref", value).await?;
+        let normalized_value = normalize_json_value(value);
+        context.set_pin_value("value_ref", normalized_value).await?;
         Ok(())
     }
 

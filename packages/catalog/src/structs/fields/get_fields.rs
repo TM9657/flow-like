@@ -47,16 +47,22 @@ impl NodeLogic for ListStructFields {
             .evaluate_pin::<HashMap<String, flow_like_types::Value>>("struct")
             .await?;
 
+        let mut sorted_entries: Vec<_> = struct_value.iter().collect();
+        sorted_entries.sort_by_key(|(key, _)| *key);
+
+        let field_names: Vec<String> = sorted_entries.iter().map(|(key, _)| (*key).clone()).collect();
+        let field_values: Vec<flow_like_types::Value> = sorted_entries.iter().map(|(_, value)| (*value).clone()).collect();
+
         context
             .set_pin_value(
                 "field_names",
-                flow_like_types::json::json!(struct_value.keys().cloned().collect::<Vec<_>>()),
+                flow_like_types::json::json!(field_names),
             )
             .await?;
         context
             .set_pin_value(
                 "fields",
-                flow_like_types::json::json!(struct_value.values().cloned().collect::<Vec<_>>()),
+                flow_like_types::json::json!(field_values),
             )
             .await?;
 
