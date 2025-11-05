@@ -546,6 +546,7 @@ pub fn run() {
             functions::app::tables::db_delete,
             functions::app::tables::db_indices,
             functions::app::tables::db_query,
+            functions::tmp::post_process_local_file,
             functions::bit::get_bit,
             functions::bit::is_bit_installed,
             functions::bit::get_bit_size,

@@ -179,6 +179,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			activeTools?: string[],
 			audioFile?: File,
 		) => {
+			const isOffline = await backend.isOffline(appId);
 			const history_elements =
 				parseUint8ArrayToJson(event.config)?.history_elements ?? 5;
 
@@ -195,14 +196,16 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			const imageAttachments = await fileToAttachment(
 				imageFiles ?? [],
 				backend,
+				isOffline
 			);
 			const otherAttachments = await fileToAttachment(
 				otherFiles ?? [],
 				backend,
+				isOffline
 			);
 			if (audioFile) {
 				otherAttachments.push(
-					...(await fileToAttachment([audioFile], backend)),
+					...(await fileToAttachment([audioFile], backend, isOffline)),
 				);
 			}
 

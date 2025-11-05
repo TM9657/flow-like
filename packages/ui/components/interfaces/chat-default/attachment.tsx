@@ -8,13 +8,14 @@ import type { IAttachment } from "./chat-db";
 export async function fileToAttachment(
 	files: File[],
 	backend: IBackendState,
+	offline: boolean,
 ): Promise<IAttachment[]> {
 	if (!files || files.length === 0) return [];
 
 	const attachments: IAttachment[] = [];
 
 	for (const file of files) {
-		const url = await backend.helperState.fileToUrl(file);
+		const url = await backend.helperState.fileToUrl(file, offline);
 		attachments.push({
 			name: file.name,
 			type: file.type,

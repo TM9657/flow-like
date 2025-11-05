@@ -9,6 +9,7 @@ pub mod file;
 pub mod flow;
 pub mod settings;
 pub mod system;
+pub mod tmp;
 
 #[derive(Debug, Serialize)]
 pub struct TauriFunctionError {

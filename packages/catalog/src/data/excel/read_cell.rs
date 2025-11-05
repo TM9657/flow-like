@@ -103,14 +103,18 @@ impl NodeLogic for ReadCellNode {
                     found = !matches!(cell, Data::Empty);
                     out_value = cell.as_string().unwrap_or_default();
                 } else {
-                    ctx.log_message(&format!("Cell not found at row {} col {}", row_str, col_str),
-                        flow_like::flow::execution::LogLevel::Warn);
+                    ctx.log_message(
+                        &format!("Cell not found at row {} col {}", row_str, col_str),
+                        flow_like::flow::execution::LogLevel::Warn,
+                    );
                 }
             } else {
                 return Err(flow_like_types::anyhow!("Sheet '{}' not found", sheet));
             }
         } else {
-            return Err(flow_like_types::anyhow!("Excel file is empty or could not be read"));
+            return Err(flow_like_types::anyhow!(
+                "Excel file is empty or could not be read"
+            ));
         }
 
         ctx.set_pin_value("file_out", json!(file)).await?;
