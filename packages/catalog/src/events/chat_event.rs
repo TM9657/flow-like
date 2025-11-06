@@ -241,7 +241,7 @@ pub mod url_processing {
                     file_path.display(),
                     e
                 );
-                if let Some(ctx) = context.as_deref_mut() {
+                if let Some(ctx) = context {
                     ctx.log_message(&msg, flow_like::flow::execution::LogLevel::Error);
                 }
                 // Return empty string instead of the Tauri URL to prevent "Unsupported scheme" errors
@@ -473,8 +473,7 @@ impl ComplexAttachment {
         }
 
         if let Some(ref thumbnail) = self.thumbnail_url {
-            let processed_thumbnail =
-                url_processing::process_url(thumbnail, context.as_deref_mut()).await;
+            let processed_thumbnail = url_processing::process_url(thumbnail, context).await;
             // Only set thumbnail if processing succeeded (not empty)
             processed.thumbnail_url = if processed_thumbnail.is_empty() {
                 None

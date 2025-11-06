@@ -1,26 +1,30 @@
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
-import { temporaryFilesDb, type IFileMetadata, type IHelperState } from "@tm9657/flow-like-ui";
-import type { TauriBackend } from "../tauri-provider";
-import { get } from "../../lib/api";
-import { appCacheDir } from "@tauri-apps/api/path";
-import { writeFile, mkdir } from "@tauri-apps/plugin-fs"
 import { createId } from "@paralleldrive/cuid2";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { appCacheDir } from "@tauri-apps/api/path";
+import { open } from "@tauri-apps/plugin-dialog";
+import { mkdir, writeFile } from "@tauri-apps/plugin-fs";
+import {
+	type IFileMetadata,
+	type IHelperState,
+	temporaryFilesDb,
+} from "@tm9657/flow-like-ui";
+import { get } from "../../lib/api";
+import type { TauriBackend } from "../tauri-provider";
 
 interface ITemporaryFileResponse {
-	key: string,
-	contentType: string,
-	uploadUrl: string,
-	uploadExpiresAt: string,
-	downloadUrl: string,
-	downloadExpiresAt: string,
-	headUrl: string,
-	deleteUrl: string,
-	sizeLimitBytes?: number,
+	key: string;
+	contentType: string;
+	uploadUrl: string;
+	uploadExpiresAt: string;
+	downloadUrl: string;
+	downloadExpiresAt: string;
+	headUrl: string;
+	deleteUrl: string;
+	sizeLimitBytes?: number;
 }
 
 export class HelperState implements IHelperState {
-	constructor(private readonly backend: TauriBackend) { }
+	constructor(private readonly backend: TauriBackend) {}
 
 	async getPathMeta(path: string): Promise<IFileMetadata[]> {
 		return await invoke("get_path_meta", {
@@ -41,7 +45,7 @@ export class HelperState implements IHelperState {
 		);
 	}
 
-	async fileToUrl(file: File, offline: boolean = false): Promise<string> {
+	async fileToUrl(file: File, offline = false): Promise<string> {
 		if (!offline) {
 			if (!this.backend.profile || !this.backend.auth) {
 				throw new Error("Profile or auth not set");
@@ -49,7 +53,7 @@ export class HelperState implements IHelperState {
 
 			const response: ITemporaryFileResponse = await get(
 				this.backend.profile,
-				`tmp?extension=${encodeURIComponent(file.name.split('.').pop() || '')}`,
+				`tmp?extension=${encodeURIComponent(file.name.split(".").pop() || "")}`,
 				this.backend.auth,
 			);
 
@@ -68,13 +72,11 @@ export class HelperState implements IHelperState {
 		const cacheDir = await appCacheDir();
 		const fileId = createId();
 
-		const extension = file.name.split('.').pop();
+		const extension = file.name.split(".").pop();
 
 		try {
 			await mkdir(`${cacheDir}/chat`, { recursive: true });
-		}catch(e) {
-
-		}
+		} catch (e) {}
 
 		const tmpPath = `${cacheDir}/chat/${fileId}.${extension}`;
 
@@ -84,7 +86,7 @@ export class HelperState implements IHelperState {
 			file: tmpPath,
 		});
 
-		const hash = postProcessedPath.split('/').pop() || fileId;
+		const hash = postProcessedPath.split("/").pop() || fileId;
 
 		await temporaryFilesDb.temporaryFiles.put({
 			id: fileId,
@@ -92,7 +94,7 @@ export class HelperState implements IHelperState {
 			size: file.size,
 			hash: hash,
 			createdAt: Date.now(),
-		})
+		});
 
 		return convertFileSrc(postProcessedPath);
 	}
@@ -108,7 +110,7 @@ function buildContentDisposition(
 	// - Replace quotes/backslashes
 	let fallback = filename
 		.normalize("NFKD")
-		.replace(/[^\x20-\x7E]+/g, "")   // remove non-ASCII
+		.replace(/[^\x20-\x7E]+/g, "") // remove non-ASCII
 		.replace(/["\\]/g, "_")
 		.trim();
 

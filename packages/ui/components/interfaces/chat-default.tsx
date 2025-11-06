@@ -196,12 +196,12 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			const imageAttachments = await fileToAttachment(
 				imageFiles ?? [],
 				backend,
-				isOffline
+				isOffline,
 			);
 			const otherAttachments = await fileToAttachment(
 				otherFiles ?? [],
 				backend,
-				isOffline
+				isOffline,
 			);
 			if (audioFile) {
 				otherAttachments.push(
