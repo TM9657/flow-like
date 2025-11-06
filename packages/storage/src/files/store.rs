@@ -98,6 +98,7 @@ impl FlowLikeStore {
             "PUT" => reqwest::Method::PUT,
             "POST" => reqwest::Method::POST,
             "DELETE" => reqwest::Method::DELETE,
+            "HEAD" => reqwest::Method::HEAD,
             _ => bail!("Invalid HTTP Method"),
         };
 
