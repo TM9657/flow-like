@@ -473,12 +473,12 @@ impl ExecutionContext {
         // CRITICAL: If this specific pin was overridden in the context,
         // we should update the override map instead of the actual pin value
         // to prevent race conditions in parallel execution
-        if let Some(overrides) = &self.context_pin_overrides {
-            if overrides.contains_key(&pin_id) {
-                // This pin was already overridden, so update the override
-                self.override_pin_value(&pin_id, value);
-                return Ok(());
-            }
+        if let Some(overrides) = &self.context_pin_overrides
+            && overrides.contains_key(&pin_id)
+        {
+            // This pin was already overridden, so update the override
+            self.override_pin_value(&pin_id, value);
+            return Ok(());
         }
 
         // For pins that haven't been overridden, set the actual pin value

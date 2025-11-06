@@ -50,20 +50,20 @@ impl NodeLogic for ListStructFields {
         let mut sorted_entries: Vec<_> = struct_value.iter().collect();
         sorted_entries.sort_by_key(|(key, _)| *key);
 
-        let field_names: Vec<String> = sorted_entries.iter().map(|(key, _)| (*key).clone()).collect();
-        let field_values: Vec<flow_like_types::Value> = sorted_entries.iter().map(|(_, value)| (*value).clone()).collect();
+        let field_names: Vec<String> = sorted_entries
+            .iter()
+            .map(|(key, _)| (*key).clone())
+            .collect();
+        let field_values: Vec<flow_like_types::Value> = sorted_entries
+            .iter()
+            .map(|(_, value)| (*value).clone())
+            .collect();
 
         context
-            .set_pin_value(
-                "field_names",
-                flow_like_types::json::json!(field_names),
-            )
+            .set_pin_value("field_names", flow_like_types::json::json!(field_names))
             .await?;
         context
-            .set_pin_value(
-                "fields",
-                flow_like_types::json::json!(field_values),
-            )
+            .set_pin_value("fields", flow_like_types::json::json!(field_values))
             .await?;
 
         return Ok(());

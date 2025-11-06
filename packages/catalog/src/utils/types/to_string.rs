@@ -7,8 +7,8 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{Value, async_trait, json::{json, Map}};
-use std::{sync::Arc, collections::BTreeMap};
+use flow_like_types::{Value, async_trait, json::json};
+use std::sync::Arc;
 
 use crate::utils::types::normalize_json_value;
 
