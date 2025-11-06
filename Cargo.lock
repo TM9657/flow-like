@@ -5300,6 +5300,7 @@ version = "0.1.0"
 dependencies = [
  "ab_glyph",
  "anyhow",
+ "async-stream",
  "async-trait",
  "base64 0.22.1",
  "bytes",

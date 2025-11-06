@@ -857,11 +857,7 @@ mod tests {
             .as_completion()
             .ok_or(anyhow!("cant create completion model"))
             .unwrap()
-            .agent(
-                &model
-                    .default_model
-                    .unwrap_or("@preset/testing".to_string()),
-            )
+            .agent(&model.default_model.unwrap_or("@preset/testing".to_string()))
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .build();
@@ -896,11 +892,7 @@ mod tests {
             .as_completion()
             .ok_or(anyhow!("cant create completion model"))
             .unwrap()
-            .agent(
-                &model
-                    .default_model
-                    .unwrap_or("@preset/testing".to_string()),
-            )
+            .agent(&model.default_model.unwrap_or("@preset/testing".to_string()))
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .build();
@@ -943,11 +935,7 @@ mod tests {
             .as_completion()
             .ok_or(anyhow!("cant create completion model"))
             .unwrap()
-            .agent(
-                &model
-                    .default_model
-                    .unwrap_or("@preset/testing".to_string()),
-            )
+            .agent(&model.default_model.unwrap_or("@preset/testing".to_string()))
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .build();

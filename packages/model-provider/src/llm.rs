@@ -16,6 +16,7 @@ pub mod gemini;
 pub mod groq;
 pub mod huggingface;
 pub mod hyperbolic;
+pub mod llamacpp;
 pub mod mira;
 pub mod mistral;
 pub mod moonshot;

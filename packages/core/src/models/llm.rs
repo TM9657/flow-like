@@ -340,7 +340,7 @@ impl ModelFactory {
                 return Ok(model.clone());
             }
 
-            let model = OpenAIModel::from_params(&model_provider).await?;
+            let model = OpenAIModel::from_provider(&model_provider).await?;
             let model = Arc::new(model);
             self.ttl_list.insert(bit.id.clone(), SystemTime::now());
             self.cached_models.insert(bit.id.clone(), model.clone());
@@ -365,7 +365,7 @@ impl ModelFactory {
             );
             model_provider.params = Some(params);
             model_provider.model_id = Some(bit.id.clone());
-            let model = OpenAIModel::from_params(&model_provider).await?;
+            let model = OpenAIModel::from_provider(&model_provider).await?;
             let model = Arc::new(model);
             self.ttl_list.insert(bit.id.clone(), SystemTime::now());
             self.cached_models.insert(bit.id.clone(), model.clone());
