@@ -49,7 +49,7 @@ export class HelperState implements IHelperState {
 
 			const response: ITemporaryFileResponse = await get(
 				this.backend.profile,
-				`tmp`,
+				`tmp?extension=${encodeURIComponent(file.name.split('.').pop() || '')}`,
 				this.backend.auth,
 			);
 
