@@ -20,7 +20,7 @@ export default defineConfig({
 			syntaxHighlight: "shiki",
 			shikiConfig: {
 				theme: "dracula",
-				wrap: true
+				wrap: true,
 			},
 			remarkRehype: { footnoteLabel: "Footnotes" },
 			gfm: true,

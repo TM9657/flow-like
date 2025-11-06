@@ -5185,8 +5185,10 @@ dependencies = [
  "serde",
  "strsim",
  "tokio",
+ "tracing",
  "tract-tflite",
  "umya-spreadsheet",
+ "urlencoding",
 ]
 
 [[package]]

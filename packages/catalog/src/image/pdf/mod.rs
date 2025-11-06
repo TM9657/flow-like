@@ -10,9 +10,9 @@ pub mod pdf_to_images;
 
 pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
     vec![
-        Arc::new(page_count::PdfPageCountNode::default()),
-        Arc::new(page_to_image::PdfPageToImageNode::default()),
-        Arc::new(pdf_to_images::PdfToImagesNode::default()),
+        Arc::new(page_count::PdfPageCountNode),
+        Arc::new(page_to_image::PdfPageToImageNode),
+        Arc::new(pdf_to_images::PdfToImagesNode),
     ]
 }
 
