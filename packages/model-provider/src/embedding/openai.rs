@@ -1,14 +1,11 @@
 use std::{any::Any, sync::Arc};
 
-use flow_like_types::{Cacheable, Result, async_trait, sync::Mutex};
+use flow_like_types::{Cacheable, Result, async_trait};
 use rig::client::ProviderClient;
 use text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
 use tiktoken_rs::{CoreBPE, cl100k_base};
 
-use crate::{
-    llm::openai::OpenAIModel,
-    provider::{EmbeddingModelProvider, ModelProviderConfiguration, random_provider},
-};
+use crate::provider::{EmbeddingModelProvider, ModelProviderConfiguration, random_provider};
 
 use super::{EmbeddingModelLogic, GeneralTextSplitter};
 

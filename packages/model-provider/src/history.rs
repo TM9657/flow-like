@@ -241,10 +241,10 @@ impl TryFrom<HistoryMessage> for RigMessage {
                     }
                     MessageContent::Contents(contents) => {
                         for content in contents {
-                            if let Content::Text { text, .. } = content {
-                                if !text.is_empty() {
-                                    rig_contents.push(RigAssistantContent::Text(RigText { text }));
-                                }
+                            if let Content::Text { text, .. } = content
+                                && !text.is_empty()
+                            {
+                                rig_contents.push(RigAssistantContent::Text(RigText { text }));
                             }
                         }
                     }
@@ -408,7 +408,7 @@ impl From<Content> for RigUserContent {
                     detail: None,
                     additional_params: None,
                 })
-            },
+            }
             Content::Audio { audio_url, .. } => RigUserContent::Audio(RigAudio {
                 data: DocumentSourceKind::url(&audio_url),
                 media_type: None,
@@ -431,21 +431,20 @@ impl From<Content> for RigUserContent {
 /// Detects image media type from URL extension or data URL MIME type
 fn detect_image_media_type(url: &str) -> ImageMediaType {
     // Check if it's a data URL with MIME type
-    if url.starts_with("data:") {
-        if let Some(mime_start) = url.strip_prefix("data:") {
-            if let Some(mime_end) = mime_start.find(';') {
-                let mime_type = &mime_start[..mime_end];
-                return match mime_type {
-                    "image/jpeg" | "image/jpg" => ImageMediaType::JPEG,
-                    "image/png" => ImageMediaType::PNG,
-                    "image/gif" => ImageMediaType::GIF,
-                    "image/webp" => ImageMediaType::WEBP,
-                    "image/heic" => ImageMediaType::HEIC,
-                    "image/heif" => ImageMediaType::HEIF,
-                    _ => ImageMediaType::PNG, // default fallback
-                };
-            }
-        }
+    if url.starts_with("data:")
+        && let Some(mime_start) = url.strip_prefix("data:")
+        && let Some(mime_end) = mime_start.find(';')
+    {
+        let mime_type = &mime_start[..mime_end];
+        return match mime_type {
+            "image/jpeg" | "image/jpg" => ImageMediaType::JPEG,
+            "image/png" => ImageMediaType::PNG,
+            "image/gif" => ImageMediaType::GIF,
+            "image/webp" => ImageMediaType::WEBP,
+            "image/heic" => ImageMediaType::HEIC,
+            "image/heif" => ImageMediaType::HEIF,
+            _ => ImageMediaType::PNG, // default fallback
+        };
     }
 
     // Check file extension
@@ -655,12 +654,12 @@ impl History {
         }
 
         // If no user message at the end, try to pop one from history
-        if prompt.is_none() && !messages.is_empty() {
-            if let Some(last_msg) = messages.last() {
-                if matches!(last_msg, RigMessage::User { .. }) {
-                    prompt = messages.pop();
-                }
-            }
+        if prompt.is_none()
+            && !messages.is_empty()
+            && let Some(last_msg) = messages.last()
+            && matches!(last_msg, RigMessage::User { .. })
+        {
+            prompt = messages.pop();
         }
 
         // If still no prompt, create a default empty user message
@@ -770,7 +769,10 @@ impl History {
         }
 
         if let Some(presence_penalty) = self.presence_penalty {
-            map.insert("presence_penalty".to_string(), json::json!(presence_penalty));
+            map.insert(
+                "presence_penalty".to_string(),
+                json::json!(presence_penalty),
+            );
         }
 
         if let Some(frequency_penalty) = self.frequency_penalty {

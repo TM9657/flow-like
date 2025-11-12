@@ -174,10 +174,10 @@ impl TryFrom<ResponseMessage> for RigMessage {
     fn try_from(msg: ResponseMessage) -> Result<Self> {
         let mut rig_contents = Vec::new();
 
-        if let Some(content) = msg.content {
-            if !content.is_empty() {
-                rig_contents.push(RigAssistantContent::Text(RigText { text: content }));
-            }
+        if let Some(content) = msg.content
+            && !content.is_empty()
+        {
+            rig_contents.push(RigAssistantContent::Text(RigText { text: content }));
         }
 
         for tool_call in msg.tool_calls {

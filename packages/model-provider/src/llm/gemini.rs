@@ -3,20 +3,20 @@ use std::{any::Any, sync::Arc};
 use super::{LLMCallback, ModelLogic};
 use crate::provider::random_provider;
 use crate::{
-    embedding::{EmbeddingModelLogic, GeneralTextSplitter},
     history::History,
     llm::ModelConstructor,
     provider::{ModelProvider, ModelProviderConfiguration},
     response::Response,
 };
-use flow_like_types::json::{json, to_value};
-use flow_like_types::{Cacheable, Result, async_trait, sync::Mutex, anyhow};
+use flow_like_types::json::to_value;
+use flow_like_types::{Cacheable, Result, anyhow, async_trait};
 use rig::client::ProviderClient;
-use rig::providers::gemini::completion::gemini_api_types::{AdditionalParameters, GenerationConfig, ThinkingConfig};
 use rig::completion::CompletionModel;
-use rig::message::{DocumentSourceKind, ImageMediaType};
+use rig::message::DocumentSourceKind;
+use rig::providers::gemini::completion::gemini_api_types::{
+    AdditionalParameters, GenerationConfig, ThinkingConfig,
+};
 use rig::{OneOrMany, completion::Message as RigMessage};
-use text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
 pub struct GeminiModel {
     client: Arc<Box<dyn ProviderClient>>,
     provider: ModelProvider,
@@ -70,16 +70,19 @@ impl GeminiModel {
 
     /// Transform RigMessages to convert data URLs to base64 for Gemini
     fn transform_rig_messages(&self, prompt: &mut RigMessage, history: &mut Vec<RigMessage>) {
-        use rig::message::{UserContent as RigUserContent, Image as RigImage};
+        use rig::message::{Image as RigImage, UserContent as RigUserContent};
 
         // Helper to transform a message
         let transform_message = |msg: &mut RigMessage| {
             if let RigMessage::User { content } = msg {
-                let transformed: Vec<RigUserContent> = content.iter().map(|c| {
-                    if let RigUserContent::Image(img) = c {
-                        // Check if it's a data URL
-                        if let DocumentSourceKind::Url(url) = &img.data {
-                            if url.starts_with("data:") {
+                let transformed: Vec<RigUserContent> = content
+                    .iter()
+                    .map(|c| {
+                        if let RigUserContent::Image(img) = c {
+                            // Check if it's a data URL
+                            if let DocumentSourceKind::Url(url) = &img.data
+                                && url.starts_with("data:")
+                            {
                                 // Extract base64 data from data URL
                                 if let Some(comma_pos) = url.find(',') {
                                     let base64_data = &url[comma_pos + 1..];
@@ -92,14 +95,18 @@ impl GeminiModel {
                                 }
                             }
                         }
-                    }
-                    c.clone()
-                }).collect();
+                        c.clone()
+                    })
+                    .collect();
 
                 *content = if transformed.len() == 1 {
                     OneOrMany::one(transformed.into_iter().next().unwrap())
                 } else {
-                    OneOrMany::many(transformed).unwrap_or_else(|_| OneOrMany::one(RigUserContent::Text(rig::message::Text { text: String::new() })))
+                    OneOrMany::many(transformed).unwrap_or_else(|_| {
+                        OneOrMany::one(RigUserContent::Text(rig::message::Text {
+                            text: String::new(),
+                        }))
+                    })
                 };
             }
         };
@@ -141,7 +148,7 @@ impl ModelLogic for GeminiModel {
     }
 
     async fn invoke(&self, history: &History, lambda: Option<LLMCallback>) -> Result<Response> {
-        use crate::llm::{invoke_with_stream, invoke_without_stream, CompletionModelHandle};
+        use crate::llm::{CompletionModelHandle, invoke_with_stream, invoke_without_stream};
 
         let model_name = self
             .default_model()
@@ -192,10 +199,10 @@ impl ModelLogic for GeminiModel {
 
         let model_additional_params = self.additional_params(Some(history.clone()));
 
-        if model_additional_params.is_none() {
-            if let Some(params) = history.build_additional_params()? {
-                builder = builder.additional_params(params);
-            }
+        if model_additional_params.is_none()
+            && let Some(params) = history.build_additional_params()?
+        {
+            builder = builder.additional_params(params);
         }
 
         if let Some(callback) = lambda {
@@ -227,13 +234,13 @@ impl ModelLogic for GeminiModel {
         let mut result = to_value(additional_params).ok()?;
 
         // Merge history params but exclude 'stream' field
-        if let (Some(result_obj), Some(history_params)) = (result.as_object_mut(), history_params) {
-            if let Some(history_obj) = history_params.as_object() {
-                for (key, value) in history_obj {
-                    // Skip 'stream' field - Gemini doesn't support it
-                    if key != "stream" {
-                        result_obj.insert(key.clone(), value.clone());
-                    }
+        if let (Some(result_obj), Some(history_params)) = (result.as_object_mut(), history_params)
+            && let Some(history_obj) = history_params.as_object()
+        {
+            for (key, value) in history_obj {
+                // Skip 'stream' field - Gemini doesn't support it
+                if key != "stream" {
+                    result_obj.insert(key.clone(), value.clone());
                 }
             }
         }

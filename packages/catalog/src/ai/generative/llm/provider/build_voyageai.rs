@@ -1,9 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use flow_like::{
     bit::{Bit, BitModelClassification, VLMParameters},
     flow::{
-        board::Board,
         execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         pin::PinOptions,
@@ -13,7 +12,7 @@ use flow_like::{
 };
 use flow_like_storage::blake3;
 use flow_like_types::{
-    Value, async_trait,
+    async_trait,
     json::{json, to_value},
 };
 

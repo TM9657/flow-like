@@ -22,7 +22,6 @@ use lancedb::{
     query::{ExecutableQuery, QueryBase},
     table::{CompactionOptions, Duration, OptimizeOptions},
 };
-use rig::vector_store::VectorStoreIndex;
 
 use std::{any::Any, path::PathBuf, sync::Arc};
 

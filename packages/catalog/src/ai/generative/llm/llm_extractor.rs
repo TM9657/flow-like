@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use flow_like::{
     bit::Bit,
     flow::{
@@ -9,11 +10,10 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{Value, anyhow};
-use async_trait::async_trait;
 use flow_like_types::json::{self, Deserialize, Serialize};
+use flow_like_types::{Value, anyhow};
 use rig::completion::{Completion, ToolDefinition};
-use rig::message::{AssistantContent, ToolCall, ToolFunction, ToolChoice};
+use rig::message::{AssistantContent, ToolCall, ToolChoice, ToolFunction};
 use rig::tool::Tool;
 use std::{fmt, sync::Arc};
 
@@ -88,8 +88,11 @@ fn prepare_schema(raw: &str) -> flow_like_types::Result<PreparedSchema> {
         return Err(anyhow!("Schema input cannot be empty"));
     }
 
-    let user_json = json::from_str::<Value>(trimmed)
-        .map_err(|e| anyhow!("Schema must be valid JSON (either a JSON Schema or an example JSON). Parse error: {e}"))?;
+    let user_json = json::from_str::<Value>(trimmed).map_err(|e| {
+        anyhow!(
+            "Schema must be valid JSON (either a JSON Schema or an example JSON). Parse error: {e}"
+        )
+    })?;
 
     let inferred = if jsonschema::meta::is_valid(&user_json) {
         user_json
@@ -99,8 +102,7 @@ fn prepare_schema(raw: &str) -> flow_like_types::Result<PreparedSchema> {
         json::from_str(&string)?
     };
 
-    let display = json::to_string_pretty(&inferred)
-        .unwrap_or_else(|_| inferred.to_string());
+    let display = json::to_string_pretty(&inferred).unwrap_or_else(|_| inferred.to_string());
 
     let mode = match inferred.get("type").and_then(|t| t.as_str()) {
         Some("object") => ExtractionMode::Direct,
@@ -213,10 +215,7 @@ impl NodeLogic for LLMExtractNode {
             (default_model, completion)
         };
 
-        context.log_message(
-            &format!("Calling model: {}", model_name),
-            LogLevel::Debug,
-        );
+        context.log_message(&format!("Calling model: {}", model_name), LogLevel::Debug);
 
         let mut agent_builder = completion_client
             .agent(&model_name)
@@ -252,13 +251,14 @@ impl NodeLogic for LLMExtractNode {
         let mut last_args: Option<Value> = None;
         for content in response.choice {
             if let AssistantContent::ToolCall(ToolCall {
-                function: ToolFunction { name, arguments, .. },
+                function: ToolFunction {
+                    name, arguments, ..
+                },
                 ..
             }) = content
+                && name == "submit"
             {
-                if name == "submit" {
-                    last_args = Some(arguments);
-                }
+                last_args = Some(arguments);
             }
         }
 
@@ -274,10 +274,7 @@ impl NodeLogic for LLMExtractNode {
                 .ok_or_else(|| anyhow!("Tool call missing 'value' field in wrapped mode"))?,
         };
 
-        context.log_message(
-            "Successfully extracted structured data",
-            LogLevel::Debug,
-        );
+        context.log_message("Successfully extracted structured data", LogLevel::Debug);
 
         context.set_pin_value("response", extracted).await?;
         context.activate_exec_pin("exec_out").await?;
@@ -305,14 +302,14 @@ impl NodeLogic for LLMExtractNode {
                     Ok(prepared) => {
                         // Check if the original input was a valid meta schema
                         let user_json = json::from_str::<Value>(&raw);
-                        if let Ok(user_json) = user_json {
-                            if !jsonschema::meta::is_valid(&user_json) {
-                                // Input was not a valid schema, update with inferred schema
-                                if let Some(pin) = node.get_pin_mut_by_name("schema") {
-                                    let schema_str = json::to_string_pretty(&prepared.output_schema)
-                                        .unwrap_or_else(|_| prepared.output_schema.to_string());
-                                    let _ = pin.set_default_value(Some(json::json!(schema_str)));
-                                }
+                        if let Ok(user_json) = user_json
+                            && !jsonschema::meta::is_valid(&user_json)
+                        {
+                            // Input was not a valid schema, update with inferred schema
+                            if let Some(pin) = node.get_pin_mut_by_name("schema") {
+                                let schema_str = json::to_string_pretty(&prepared.output_schema)
+                                    .unwrap_or_else(|_| prepared.output_schema.to_string());
+                                let _ = pin.set_default_value(Some(json::json!(schema_str)));
                             }
                         }
                     }

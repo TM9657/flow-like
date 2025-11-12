@@ -179,7 +179,7 @@ impl ResponseChunk {
         });
 
         if let Some(usage) = usage {
-            chunk.usage = Some(Usage::from_rig(usage.clone()));
+            chunk.usage = Some(Usage::from_rig(*usage));
         }
 
         chunk

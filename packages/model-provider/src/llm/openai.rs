@@ -151,10 +151,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        history::{
-            Content, ContentType, History, HistoryMessage, ImageUrl,
-            MessageContent, Role,
-        },
+        history::{Content, ContentType, History, HistoryMessage, ImageUrl, MessageContent, Role},
         provider::{ModelProviderConfiguration, OpenAIConfig},
     };
     use dotenv::dotenv;
@@ -303,9 +300,9 @@ mod tests {
 
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
-                    text,
-                }))) => {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
                     response.push_str(&text);
                     chunks += 1;
                 }
@@ -380,9 +377,9 @@ mod tests {
 
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
-                    text,
-                }))) => {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
                     response.push_str(&text);
                     chunks += 1;
                 }
@@ -588,9 +585,9 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
-                    text,
-                }))) => {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
                     response.push_str(&text);
                 }
                 Ok(_) => {}
@@ -770,9 +767,9 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
-                    text,
-                }))) => {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
                     response.push_str(&text);
                     chunks += 1;
                 }
@@ -891,9 +888,9 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
-                    text,
-                }))) => {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
                     response.push_str(&text);
                 }
                 Ok(_) => {}
@@ -1074,9 +1071,9 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
-                    text,
-                }))) => {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
                     response.push_str(&text);
                     chunks += 1;
                 }
@@ -1159,9 +1156,9 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
-                    text,
-                }))) => {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
                     response.push_str(&text);
                 }
                 Ok(_) => {}
@@ -1226,9 +1223,9 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
-                    text,
-                }))) => {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
                     response.push_str(&text);
                 }
                 Ok(_) => {}

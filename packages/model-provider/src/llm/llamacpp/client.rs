@@ -115,10 +115,10 @@ impl TryFrom<CompletionResponse> for completion::CompletionResponse<CompletionRe
 
         let mut assistant_contents = Vec::new();
 
-        if let Some(content) = &first_choice.message.content {
-            if !content.is_empty() {
-                assistant_contents.push(completion::AssistantContent::text(content));
-            }
+        if let Some(content) = &first_choice.message.content
+            && !content.is_empty()
+        {
+            assistant_contents.push(completion::AssistantContent::text(content));
         }
 
         for tc in &first_choice.message.tool_calls {
@@ -242,15 +242,15 @@ impl CompletionModel {
                 }
 
                 // Check if we need to insert a placeholder
-                if let Some(last) = last_role {
-                    if last == role {
-                        // Same role twice in a row, insert placeholder
-                        let placeholder_role = if role == "user" { "assistant" } else { "user" };
-                        normalized_messages.push(json!({
-                            "role": placeholder_role,
-                            "content": "[Placeholder message for proper alternation]",
-                        }));
-                    }
+                if let Some(last) = last_role
+                    && last == role
+                {
+                    // Same role twice in a row, insert placeholder
+                    let placeholder_role = if role == "user" { "assistant" } else { "user" };
+                    normalized_messages.push(json!({
+                        "role": placeholder_role,
+                        "content": "[Placeholder message for proper alternation]",
+                    }));
                 }
 
                 normalized_messages.push(message.clone());
@@ -292,13 +292,12 @@ impl CompletionModel {
             );
         }
 
-        if let Some(extra) = completion_request.additional_params {
-            if let Some(obj) = request_payload.as_object_mut() {
-                if let Some(extra_obj) = extra.as_object() {
-                    for (k, v) in extra_obj {
-                        obj.insert(k.clone(), v.clone());
-                    }
-                }
+        if let Some(extra) = completion_request.additional_params
+            && let Some(obj) = request_payload.as_object_mut()
+            && let Some(extra_obj) = extra.as_object()
+        {
+            for (k, v) in extra_obj {
+                obj.insert(k.clone(), v.clone());
             }
         }
 
@@ -593,11 +592,10 @@ impl completion::CompletionModel for CompletionModel {
                         if let Some(choice) = chunk.choices.first() {
                             let delta = &choice.delta;
 
-                            if let Some(content) = &delta.content {
-                                if !content.is_empty() {
+                            if let Some(content) = &delta.content
+                                && !content.is_empty() {
                                     yield Ok(streaming::RawStreamingChoice::Message(content.clone()));
                                 }
-                            }
 
                             if !delta.tool_calls.is_empty() {
                                 for tool_call in &delta.tool_calls {
@@ -610,15 +608,14 @@ impl completion::CompletionModel for CompletionModel {
                                             (id, function.name.clone().unwrap(), String::new()),
                                         );
                                     }
-                                    else if function.name.is_none() && !function.arguments.is_empty() {
-                                        if let Some((id, name, args)) = tool_calls.get(&tool_call.index) {
+                                    else if function.name.is_none() && !function.arguments.is_empty()
+                                        && let Some((id, name, args)) = tool_calls.get(&tool_call.index) {
                                             let new_args = format!("{}{}", args, &function.arguments);
                                             tool_calls.insert(
                                                 tool_call.index,
                                                 (id.clone(), name.clone(), new_args),
                                             );
                                         }
-                                    }
                                 }
                             }
                         }

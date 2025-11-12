@@ -1,17 +1,13 @@
 use std::{any::Any, sync::Arc};
 
-use super::{LLMCallback, ModelLogic};
+use super::ModelLogic;
 use crate::provider::random_provider;
 use crate::{
-    embedding::{EmbeddingModelLogic, GeneralTextSplitter},
-    history::History,
     llm::ModelConstructor,
     provider::{ModelProvider, ModelProviderConfiguration},
-    response::Response,
 };
-use flow_like_types::{Cacheable, Result, async_trait, sync::Mutex};
+use flow_like_types::{Cacheable, Result, async_trait};
 use rig::client::ProviderClient;
-use text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
 
 pub struct OllamaModel {
     client: Arc<Box<dyn ProviderClient>>,

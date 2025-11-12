@@ -1,7 +1,7 @@
-use flow_like_types::{anyhow, Result};
 use flow_like_types::async_trait;
+use flow_like_types::{Result, anyhow};
 use futures::StreamExt;
-use rig::client::{completion::CompletionModelHandle, ProviderClient};
+use rig::client::{ProviderClient, completion::CompletionModelHandle};
 use rig::completion::{CompletionModel, CompletionRequestBuilder, Message, Usage as RigUsage};
 use rig::streaming::StreamedAssistantContent;
 use std::{future::Future, pin::Pin, sync::Arc};
@@ -169,14 +169,11 @@ async fn invoke_with_stream<'a>(
         builder
     };
 
-    let mut stream = builder
-        .stream()
-        .await
-        .map_err(|e| {
-            // Extract more detailed error information
-            let error_msg = format!("{:?}", e);
-            anyhow!("Rig streaming error: {} | Details: {}", e, error_msg)
-        })?;
+    let mut stream = builder.stream().await.map_err(|e| {
+        // Extract more detailed error information
+        let error_msg = format!("{:?}", e);
+        anyhow!("Rig streaming error: {} | Details: {}", e, error_msg)
+    })?;
 
     let mut response = Response::new();
     response.model = Some(model_name.to_string());
@@ -212,7 +209,7 @@ async fn invoke_with_stream<'a>(
                 callback(chunk).await?;
             }
             StreamedAssistantContent::Final(final_resp) => {
-                final_usage = final_resp.usage.clone();
+                final_usage = final_resp.usage;
             }
         }
     }
@@ -221,7 +218,7 @@ async fn invoke_with_stream<'a>(
     response.push_chunk(finish_chunk.clone());
     callback(finish_chunk).await?;
 
-    if let Some(usage) = final_usage.clone() {
+    if let Some(usage) = final_usage {
         response.usage = ResponseUsage::from_rig(usage);
     }
 

@@ -78,10 +78,14 @@ impl ModelFactory {
         }
 
         let model: Arc<dyn ModelLogic> = match provider {
-            "azure" | "openai" => Arc::new(OpenAIModel::new(model_provider, provider_config).await?),
+            "azure" | "openai" => {
+                Arc::new(OpenAIModel::new(model_provider, provider_config).await?)
+            }
             "anthropic" => Arc::new(AnthropicModel::new(model_provider, provider_config).await?),
             "gemini" => Arc::new(GeminiModel::new(model_provider, provider_config).await?),
-            "huggingface" => Arc::new(HuggingfaceModel::new(model_provider, provider_config).await?),
+            "huggingface" => {
+                Arc::new(HuggingfaceModel::new(model_provider, provider_config).await?)
+            }
             "cohere" => Arc::new(CohereModel::new(model_provider, provider_config).await?),
             "perplexity" => Arc::new(PerplexityModel::new(model_provider, provider_config).await?),
             "groq" => Arc::new(GroqModel::new(model_provider, provider_config).await?),
@@ -96,7 +100,12 @@ impl ModelFactory {
             "galadriel" => Arc::new(GaladrielModel::new(model_provider, provider_config).await?),
             "mira" => Arc::new(MiraModel::new(model_provider, provider_config).await?),
             "xai" => Arc::new(XAIModel::new(model_provider, provider_config).await?),
-            _ => return Err(flow_like_types::anyhow!("Unsupported standard provider: {}", provider)),
+            _ => {
+                return Err(flow_like_types::anyhow!(
+                    "Unsupported standard provider: {}",
+                    provider
+                ));
+            }
         };
 
         self.ttl_list.insert(bit.id.clone(), SystemTime::now());
@@ -127,7 +136,9 @@ impl ModelFactory {
             "custom:deepseek" => Arc::new(DeepseekModel::from_provider(model_provider).await?),
             "custom:mistral" => Arc::new(MistralModel::from_provider(model_provider).await?),
             "custom:ollama" => Arc::new(OllamaModel::from_provider(model_provider).await?),
-            "custom:huggingface" => Arc::new(HuggingfaceModel::from_provider(model_provider).await?),
+            "custom:huggingface" => {
+                Arc::new(HuggingfaceModel::from_provider(model_provider).await?)
+            }
             "custom:together" => Arc::new(TogetherModel::from_provider(model_provider).await?),
             "custom:openrouter" => Arc::new(OpenRouterModel::from_provider(model_provider).await?),
             "custom:voyageai" => Arc::new(VoyageAIModel::from_provider(model_provider).await?),
@@ -135,7 +146,12 @@ impl ModelFactory {
             "custom:moonshot" => Arc::new(MoonshotModel::from_provider(model_provider).await?),
             "custom:galadriel" => Arc::new(GaladrielModel::from_provider(model_provider).await?),
             "custom:mira" => Arc::new(MiraModel::from_provider(model_provider).await?),
-            _ => return Err(flow_like_types::anyhow!("Unsupported custom provider: {}", provider)),
+            _ => {
+                return Err(flow_like_types::anyhow!(
+                    "Unsupported custom provider: {}",
+                    provider
+                ));
+            }
         };
 
         self.ttl_list.insert(bit.id.clone(), SystemTime::now());
@@ -177,7 +193,9 @@ impl ModelFactory {
         }
 
         if provider.starts_with("custom:") {
-            return self.build_custom_model(bit, &provider, &model_provider).await;
+            return self
+                .build_custom_model(bit, &provider, &model_provider)
+                .await;
         }
 
         if provider.to_lowercase() == "hosted" {
@@ -204,16 +222,15 @@ impl ModelFactory {
 
             let model = OpenRouterModel::from_provider(&model_provider)
                 .await
-                .map_err(|e| {
-                    flow_like_types::anyhow!("Failed to create hosted model: {}", e)
-                })?;
+                .map_err(|e| flow_like_types::anyhow!("Failed to create hosted model: {}", e))?;
             let model = Arc::new(model);
             self.ttl_list.insert(bit.id.clone(), SystemTime::now());
             self.cached_models.insert(bit.id.clone(), model.clone());
             return Ok(model);
         }
 
-        self.build_standard_model(bit, &provider, &model_provider, &provider_config).await
+        self.build_standard_model(bit, &provider, &model_provider, &provider_config)
+            .await
     }
 
     pub fn gc(&mut self) {
