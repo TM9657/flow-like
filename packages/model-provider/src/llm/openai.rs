@@ -1,20 +1,15 @@
 use std::{any::Any, sync::Arc};
 
-use super::{LLMCallback, ModelLogic};
+use super::ModelLogic;
 use crate::provider::random_provider;
 use crate::{
-    embedding::{EmbeddingModelLogic, GeneralTextSplitter},
-    history::History,
     llm::ModelConstructor,
     provider::{ModelProvider, ModelProviderConfiguration},
-    response::Response,
 };
-use flow_like_types::{Cacheable, Result, async_trait, sync::Mutex};
+use flow_like_types::{Cacheable, Result, async_trait};
 use rig::client::ProviderClient;
-use text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
 pub struct OpenAIModel {
     client: Arc<Box<dyn ProviderClient>>,
-    provider: ModelProvider,
     default_model: Option<String>,
 }
 
@@ -54,11 +49,11 @@ impl OpenAIModel {
 
         Ok(OpenAIModel {
             client: Arc::new(client),
-            provider: provider.clone(),
             default_model: model_id,
         })
     }
 
+    #[allow(clippy::cognitive_complexity)]
     pub async fn from_provider(provider: &ModelProvider) -> flow_like_types::Result<Self> {
         let params = provider.params.clone().unwrap_or_default();
         let api_key = params.get("api_key").cloned().unwrap_or_default();
@@ -115,7 +110,6 @@ impl OpenAIModel {
         Ok(OpenAIModel {
             client: Arc::new(client),
             default_model: model_id,
-            provider: provider.clone(),
         })
     }
 }
@@ -145,8 +139,6 @@ impl ModelLogic for OpenAIModel {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
     use flow_like_types::{anyhow, tokio};
     use rig::agent::MultiTurnStreamItem;
     use rig::completion::Chat;
@@ -160,14 +152,12 @@ mod tests {
     use super::*;
     use crate::{
         history::{
-            Content, ContentType, HistoryFunction, HistoryFunctionParameters,
-            HistoryJSONSchemaDefine, HistoryJSONSchemaType, HistoryMessage, ImageUrl,
-            MessageContent, Role, Tool as HistoryTool, ToolChoice, ToolType,
+            Content, ContentType, History, HistoryMessage, ImageUrl,
+            MessageContent, Role,
         },
         provider::{ModelProviderConfiguration, OpenAIConfig},
     };
     use dotenv::dotenv;
-    use std::collections::HashMap;
 
     #[tokio::test]
     async fn test_openai_model_no_stream() {
@@ -202,6 +192,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_azure_openai_model_no_stream() {
         dotenv().ok();
 
@@ -261,6 +252,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_openai_model_stream() {
         dotenv().ok();
 
@@ -283,7 +275,7 @@ mod tests {
         };
 
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let mut history = History::new(
+        let history = History::new(
             "@preset/testing".to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
@@ -311,7 +303,7 @@ mod tests {
 
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Text(Text {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
                     text,
                 }))) => {
                     response.push_str(&text);
@@ -329,6 +321,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_azure_openai_model_stream() {
         dotenv().ok();
 
@@ -387,7 +380,7 @@ mod tests {
 
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Text(Text {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
                     text,
                 }))) => {
                     response.push_str(&text);
@@ -428,16 +421,6 @@ mod tests {
             ..Default::default()
         };
         Some((provider, config))
-    }
-
-    fn new_counter_callback() -> (LLMCallback, Arc<AtomicUsize>) {
-        let counter = Arc::new(AtomicUsize::new(0));
-        let counter_clone = counter.clone();
-        let callback: LLMCallback = Arc::new(move |_response| {
-            counter_clone.fetch_add(1, Ordering::SeqCst);
-            Box::pin(async move { Ok(()) })
-        });
-        (callback, counter)
     }
 
     // ========== Rig Tool Implementations ==========
@@ -605,7 +588,7 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Text(Text {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
                     text,
                 }))) => {
                     response.push_str(&text);
@@ -787,7 +770,7 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Text(Text {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
                     text,
                 }))) => {
                     response.push_str(&text);
@@ -908,7 +891,7 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Text(Text {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
                     text,
                 }))) => {
                     response.push_str(&text);
@@ -1091,7 +1074,7 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Text(Text {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
                     text,
                 }))) => {
                     response.push_str(&text);
@@ -1176,7 +1159,7 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Text(Text {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
                     text,
                 }))) => {
                     response.push_str(&text);
@@ -1243,7 +1226,7 @@ mod tests {
         let mut response = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
-                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Text(Text {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(Text {
                     text,
                 }))) => {
                     response.push_str(&text);
