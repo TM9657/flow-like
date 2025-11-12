@@ -64,6 +64,87 @@ impl ModelFactory {
         self.execution_settings = settings;
     }
 
+    #[allow(clippy::cognitive_complexity)]
+    async fn build_standard_model(
+        &mut self,
+        bit: &Bit,
+        provider: &str,
+        model_provider: &flow_like_model_provider::provider::ModelProvider,
+        provider_config: &flow_like_model_provider::provider::ModelProviderConfiguration,
+    ) -> Result<Arc<dyn ModelLogic>> {
+        if let Some(model) = self.cached_models.get(&bit.id) {
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            return Ok(model.clone());
+        }
+
+        let model: Arc<dyn ModelLogic> = match provider {
+            "azure" | "openai" => Arc::new(OpenAIModel::new(model_provider, provider_config).await?),
+            "anthropic" => Arc::new(AnthropicModel::new(model_provider, provider_config).await?),
+            "gemini" => Arc::new(GeminiModel::new(model_provider, provider_config).await?),
+            "huggingface" => Arc::new(HuggingfaceModel::new(model_provider, provider_config).await?),
+            "cohere" => Arc::new(CohereModel::new(model_provider, provider_config).await?),
+            "perplexity" => Arc::new(PerplexityModel::new(model_provider, provider_config).await?),
+            "groq" => Arc::new(GroqModel::new(model_provider, provider_config).await?),
+            "deepseek" => Arc::new(DeepseekModel::new(model_provider, provider_config).await?),
+            "mistral" => Arc::new(MistralModel::new(model_provider, provider_config).await?),
+            "together" => Arc::new(TogetherModel::new(model_provider, provider_config).await?),
+            "openrouter" => Arc::new(OpenRouterModel::new(model_provider, provider_config).await?),
+            "voyageai" => Arc::new(VoyageAIModel::new(model_provider, provider_config).await?),
+            "ollama" => Arc::new(OllamaModel::new(model_provider, provider_config).await?),
+            "hyperbolic" => Arc::new(HyperbolicModel::new(model_provider, provider_config).await?),
+            "moonshot" => Arc::new(MoonshotModel::new(model_provider, provider_config).await?),
+            "galadriel" => Arc::new(GaladrielModel::new(model_provider, provider_config).await?),
+            "mira" => Arc::new(MiraModel::new(model_provider, provider_config).await?),
+            "xai" => Arc::new(XAIModel::new(model_provider, provider_config).await?),
+            _ => return Err(flow_like_types::anyhow!("Unsupported standard provider: {}", provider)),
+        };
+
+        self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+        self.cached_models.insert(bit.id.clone(), model.clone());
+        Ok(model)
+    }
+
+    #[allow(clippy::cognitive_complexity)]
+    async fn build_custom_model(
+        &mut self,
+        bit: &Bit,
+        provider: &str,
+        model_provider: &flow_like_model_provider::provider::ModelProvider,
+    ) -> Result<Arc<dyn ModelLogic>> {
+        if let Some(model) = self.cached_models.get(&bit.id) {
+            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+            return Ok(model.clone());
+        }
+
+        let model: Arc<dyn ModelLogic> = match provider {
+            "custom:openai" => Arc::new(OpenAIModel::from_provider(model_provider).await?),
+            "custom:anthropic" => Arc::new(AnthropicModel::from_provider(model_provider).await?),
+            "custom:gemini" => Arc::new(GeminiModel::from_provider(model_provider).await?),
+            "custom:groq" => Arc::new(GroqModel::from_provider(model_provider).await?),
+            "custom:cohere" => Arc::new(CohereModel::from_provider(model_provider).await?),
+            "custom:perplexity" => Arc::new(PerplexityModel::from_provider(model_provider).await?),
+            "custom:xai" => Arc::new(XAIModel::from_provider(model_provider).await?),
+            "custom:deepseek" => Arc::new(DeepseekModel::from_provider(model_provider).await?),
+            "custom:mistral" => Arc::new(MistralModel::from_provider(model_provider).await?),
+            "custom:ollama" => Arc::new(OllamaModel::from_provider(model_provider).await?),
+            "custom:huggingface" => Arc::new(HuggingfaceModel::from_provider(model_provider).await?),
+            "custom:together" => Arc::new(TogetherModel::from_provider(model_provider).await?),
+            "custom:openrouter" => Arc::new(OpenRouterModel::from_provider(model_provider).await?),
+            "custom:voyageai" => Arc::new(VoyageAIModel::from_provider(model_provider).await?),
+            "custom:hyperbolic" => Arc::new(HyperbolicModel::from_provider(model_provider).await?),
+            "custom:moonshot" => Arc::new(MoonshotModel::from_provider(model_provider).await?),
+            "custom:galadriel" => Arc::new(GaladrielModel::from_provider(model_provider).await?),
+            "custom:mira" => Arc::new(MiraModel::from_provider(model_provider).await?),
+            _ => return Err(flow_like_types::anyhow!("Unsupported custom provider: {}", provider)),
+        };
+
+        self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+        self.cached_models.insert(bit.id.clone(), model.clone());
+        Ok(model)
+    }
+
+    #[allow(clippy::cognitive_complexity)]
+    #[allow(clippy::too_many_lines)]
     pub async fn build(
         &mut self,
         bit: &Bit,
@@ -87,11 +168,7 @@ impl ModelFactory {
                 return Ok(model.clone());
             }
 
-            let local_model = LocalModel::new(bit, app_state, &settings).await;
-            let local_model = match local_model {
-                Ok(local_model) => local_model,
-                Err(e) => return Err(e),
-            };
+            let local_model = LocalModel::new(bit, app_state, &settings).await?;
             let local_model: Arc<LocalModel> = Arc::new(local_model);
             self.ttl_list.insert(bit.id.clone(), SystemTime::now());
             self.cached_models
@@ -99,255 +176,11 @@ impl ModelFactory {
             return Ok(local_model);
         }
 
-        if provider == "azure" || provider == "openai" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = OpenAIModel::new(&model_provider, &provider_config).await?;
-
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
+        if provider.starts_with("custom:") {
+            return self.build_custom_model(bit, &provider, &model_provider).await;
         }
 
-        if provider == "anthropic" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = AnthropicModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "gemini" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = GeminiModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "huggingface" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = HuggingfaceModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "cohere" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = CohereModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "perplexity" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = PerplexityModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "groq" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = GroqModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "deepseek" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = DeepseekModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "mistral" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = MistralModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "together" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = TogetherModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "openrouter" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = OpenRouterModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "voyageai" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = VoyageAIModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "ollama" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = OllamaModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "hyperbolic" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = HyperbolicModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "moonshot" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = MoonshotModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "galadriel" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = GaladrielModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "mira" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = MiraModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "xai" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = XAIModel::new(&model_provider, &provider_config).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "custom:openai" {
-            if let Some(model) = self.cached_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
-
-            let model = OpenAIModel::from_provider(&model_provider).await?;
-            let model = Arc::new(model);
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_models.insert(bit.id.clone(), model.clone());
-            return Ok(model);
-        }
-
-        if provider == "Hosted" {
+        if provider.to_lowercase() == "hosted" {
             if let Some(model) = self.cached_models.get(&bit.id) {
                 self.ttl_list.insert(bit.id.clone(), SystemTime::now());
                 return Ok(model.clone());
@@ -355,24 +188,32 @@ impl ModelFactory {
 
             let mut model_provider = model_provider.clone();
             let mut params = model_provider.params.clone().unwrap_or_default();
+
             params.insert(
                 "api_key".into(),
-                flow_like_types::Value::String(access_token.unwrap_or_default()),
+                flow_like_types::Value::String(access_token.clone().unwrap_or_default()),
             );
+
             params.insert(
                 "model_id".into(),
                 flow_like_types::Value::String(bit.id.clone()),
             );
-            model_provider.params = Some(params);
+
             model_provider.model_id = Some(bit.id.clone());
-            let model = OpenAIModel::from_provider(&model_provider).await?;
+            model_provider.params = Some(params.clone());
+
+            let model = OpenRouterModel::from_provider(&model_provider)
+                .await
+                .map_err(|e| {
+                    flow_like_types::anyhow!("Failed to create hosted model: {}", e)
+                })?;
             let model = Arc::new(model);
             self.ttl_list.insert(bit.id.clone(), SystemTime::now());
             self.cached_models.insert(bit.id.clone(), model.clone());
             return Ok(model);
         }
 
-        Err(flow_like_types::anyhow!("Model type not supported"))
+        self.build_standard_model(bit, &provider, &model_provider, &provider_config).await
     }
 
     pub fn gc(&mut self) {

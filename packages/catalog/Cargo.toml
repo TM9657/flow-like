@@ -46,6 +46,9 @@ dirs-next.workspace = true
 rayon = "1.11.0"
 once_cell = "1.21.3"
 hayro = {version="0.4.0", features = ["embed-fonts"]}
+rig-core.workspace = true
+async-trait.workspace = true
+jsonschema.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }

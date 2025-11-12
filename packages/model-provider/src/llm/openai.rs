@@ -29,16 +29,13 @@ impl OpenAIModel {
 
         let client = if provider.provider_name == "azure" {
             let endpoint = openai_config.endpoint.clone().unwrap_or_default();
+            // Ensure endpoint ends with /
             let endpoint = if endpoint.ends_with('/') {
                 endpoint.to_string()
             } else {
                 format!("{}/", endpoint)
             };
-            let endpoint = format!(
-                "{}openai/deployments/{}",
-                endpoint,
-                model_id.clone().unwrap_or_default()
-            );
+
             let auth = rig::providers::azure::AzureOpenAIAuth::ApiKey(api_key.clone());
             let mut builder = rig::providers::azure::Client::builder(auth, &endpoint);
             if let Some(version) = provider.version.as_deref() {
@@ -85,19 +82,22 @@ impl OpenAIModel {
             ));
         }
 
+        if is_azure && model_id.is_none() {
+            return Err(flow_like_types::anyhow!(
+                "Azure OpenAI requires a model_id (deployment name)"
+            ));
+        }
+
         let client = if is_azure {
             let endpoint = endpoint.unwrap_or_default();
             let endpoint = endpoint.as_str().unwrap_or_default();
+            // Ensure endpoint ends with /
             let endpoint = if endpoint.ends_with('/') {
                 endpoint.to_string()
             } else {
                 format!("{}/", endpoint)
             };
-            let endpoint = format!(
-                "{}openai/deployments/{}",
-                endpoint,
-                model_id.clone().unwrap_or_default()
-            );
+
             let auth = rig::providers::azure::AzureOpenAIAuth::ApiKey(api_key.to_string());
             let mut builder = rig::providers::azure::Client::builder(auth, &endpoint);
             if let Some(version_str) = params.get("version").and_then(|v| v.as_str()) {

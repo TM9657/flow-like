@@ -4,7 +4,7 @@ use flow_like_types::{
     json::{self, Deserialize, Serialize},
 };
 use rig::OneOrMany;
-use rig::completion::Message as RigMessage;
+use rig::completion::{Message as RigMessage, Usage as RigUsage};
 use rig::message::{
     AssistantContent as RigAssistantContent, Text as RigText, ToolCall as RigToolCall,
     ToolFunction as RigToolFunction,
@@ -20,20 +20,6 @@ pub struct FunctionCall {
     pub tool_type: Option<String>,
     pub function: ResponseFunction,
 }
-
-//impl Default for FunctionCall {
-//    fn default() -> Self {
-//        FunctionCall {
-//            index: None,
-//            id: "".to_string(),
-//            tool_type: None,
-//            function: ResponseFunction {
-//                name: None,
-//                arguments: None,
-//            },
-//        }
-//    }
-//}
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct ResponseFunction {
@@ -95,6 +81,8 @@ pub struct ResponseMessage {
     pub annotations: Option<Vec<Annotation>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio: Option<Audio>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
 
     //#[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Vec<FunctionCall>,
@@ -107,6 +95,7 @@ impl Default for ResponseMessage {
             refusal: None,
             annotations: None,
             audio: None,
+            reasoning: None,
             tool_calls: vec![],
             role: "".to_string(),
         }
@@ -121,6 +110,10 @@ impl ResponseMessage {
 
         if let Some(refusal) = delta.refusal {
             self.refusal = Some(self.refusal.as_deref().unwrap_or("").to_string() + &refusal);
+        }
+
+        if let Some(reasoning) = delta.reasoning {
+            self.reasoning = Some(self.reasoning.as_deref().unwrap_or("").to_string() + &reasoning);
         }
 
         if let Some(role) = delta.role
@@ -255,6 +248,7 @@ impl TryFrom<RigMessage> for ResponseMessage {
                     refusal: None,
                     annotations: None,
                     audio: None,
+                    reasoning: None,
                     tool_calls,
                 })
             }
@@ -277,6 +271,25 @@ pub struct Usage {
     pub completion_tokens_details: Option<CompletionTokenDetails>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub upstream_inference_cost: Option<CostDetails>,
+}
+
+impl Usage {
+    /// Converts from Rig's Usage type
+    pub fn from_rig(usage: RigUsage) -> Self {
+        Self {
+            prompt_tokens: Self::safe_downcast(usage.input_tokens),
+            completion_tokens: Self::safe_downcast(usage.output_tokens),
+            total_tokens: Self::safe_downcast(usage.total_tokens),
+            cost: None,
+            prompt_tokens_details: None,
+            completion_tokens_details: None,
+            upstream_inference_cost: None,
+        }
+    }
+
+    fn safe_downcast(value: u64) -> u32 {
+        u32::try_from(value).unwrap_or(u32::MAX)
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]

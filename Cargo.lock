@@ -5096,7 +5096,7 @@ dependencies = [
  "portpicker",
  "rayon",
  "rig-core",
- "schemars 0.8.22",
+ "schemars 1.1.0",
  "serde",
  "strsim",
  "sysinfo 0.37.2",
@@ -5147,7 +5147,7 @@ dependencies = [
  "flow-like-storage",
  "flow-like-types",
  "futures",
- "schemars 0.8.22",
+ "schemars 1.1.0",
  "serde",
 ]
 
@@ -5159,6 +5159,7 @@ dependencies = [
  "async-imap",
  "async-native-tls",
  "async-smtp",
+ "async-trait",
  "base64 0.22.1",
  "calamine",
  "chrono",
@@ -5174,6 +5175,7 @@ dependencies = [
  "futures",
  "hayro",
  "htmd",
+ "jsonschema",
  "linfa",
  "linfa-clustering",
  "linfa-datasets",
@@ -5187,7 +5189,8 @@ dependencies = [
  "once_cell",
  "rayon",
  "regex",
- "schemars 0.8.22",
+ "rig-core",
+ "schemars 1.1.0",
  "scraper",
  "serde",
  "strsim",
@@ -5259,7 +5262,7 @@ dependencies = [
  "ndarray",
  "ort",
  "rig-core",
- "schemars 0.8.22",
+ "schemars 1.1.0",
  "serde",
  "text-splitter",
  "tiktoken-rs",
@@ -5288,7 +5291,7 @@ dependencies = [
  "polars",
  "polars-arrow",
  "rig-core",
- "schemars 0.8.22",
+ "schemars 1.1.0",
  "serde",
  "serde_arrow",
  "urlencoding",
@@ -5320,7 +5323,7 @@ dependencies = [
  "reqwest 0.12.24",
  "reqwest-eventsource",
  "rxing",
- "schemars 0.8.22",
+ "schemars 1.1.0",
  "serde",
  "serde_json",
  "tokio",
@@ -12270,9 +12273,9 @@ checksum = "0c6a884d2998352bb4daf0183589aec883f16a6da1f4dde84d8e2e9a5409a1ce"
 
 [[package]]
 name = "rig-core"
-version = "0.23.1"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f9cbb51d97b03fb936caf5c1b05a7229cca0ddd569a0d09d9d2e2be41538fc2"
+checksum = "112bd2e51d1fadd16509be2b3d45bfa197725787627f6addcaffe57294f64e18"
 dependencies = [
  "as-any",
  "async-stream",
@@ -12287,7 +12290,7 @@ dependencies = [
  "ordered-float 5.1.0",
  "pin-project-lite",
  "reqwest 0.12.24",
- "schemars 1.0.4",
+ "schemars 1.1.0",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
@@ -12729,7 +12732,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "flow-like",
- "schemars 0.8.22",
+ "schemars 1.1.0",
  "serde",
  "serde_json",
 ]
@@ -12763,13 +12766,13 @@ dependencies = [
 
 [[package]]
 name = "schemars"
-version = "1.0.4"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82d20c4491bc164fa2f6c5d44565947a52ad80b9505d8e36f8d54c27c739fcd0"
+checksum = "9558e172d4e8533736ba97870c4b2cd63f84b382a3d6eb063da41b91cce17289"
 dependencies = [
  "dyn-clone",
  "ref-cast",
- "schemars_derive 1.0.4",
+ "schemars_derive 1.1.0",
  "serde",
  "serde_json",
 ]
@@ -12788,9 +12791,9 @@ dependencies = [
 
 [[package]]
 name = "schemars_derive"
-version = "1.0.4"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33d020396d1d138dc19f1165df7545479dcd58d93810dc5d646a16e55abefa80"
+checksum = "301858a4023d78debd2353c7426dc486001bddc91ae31a76fb1f55132f7e2633"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -13456,6 +13459,7 @@ version = "1.0.145"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
 dependencies = [
+ "indexmap 2.12.0",
  "itoa",
  "memchr",
  "ryu",
@@ -13562,7 +13566,7 @@ dependencies = [
  "indexmap 1.9.3",
  "indexmap 2.12.0",
  "schemars 0.9.0",
- "schemars 1.0.4",
+ "schemars 1.1.0",
  "serde_core",
  "serde_json",
  "serde_with_macros",

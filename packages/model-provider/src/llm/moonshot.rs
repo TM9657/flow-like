@@ -28,7 +28,7 @@ impl MoonshotModel {
         let api_key = moonshot_config.api_key.clone().unwrap_or_default();
         let model_id = provider.model_id.clone();
 
-        let mut builder = rig::providers::openai::Client::builder(&api_key);
+        let mut builder = rig::providers::moonshot::Client::builder(&api_key);
 
         if let Some(endpoint) = moonshot_config.endpoint.as_deref() {
             builder = builder.base_url(endpoint);
@@ -52,7 +52,7 @@ impl MoonshotModel {
             .cloned()
             .and_then(|v| v.as_str().map(|s| s.to_string()));
 
-        let mut builder = rig::providers::openai::Client::builder(api_key);
+        let mut builder = rig::providers::moonshot::Client::builder(api_key);
         if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
             builder = builder.base_url(endpoint);
         }

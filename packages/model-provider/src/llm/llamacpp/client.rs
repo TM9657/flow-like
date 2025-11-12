@@ -229,6 +229,39 @@ impl CompletionModel {
             }
         }
 
+        // Ensure alternation between user and assistant messages
+        let mut normalized_messages = Vec::new();
+        let mut last_role: Option<&str> = None;
+
+        for message in messages.iter() {
+            if let Some(role) = message.get("role").and_then(|r| r.as_str()) {
+                // Skip system messages in alternation check
+                if role == "system" {
+                    normalized_messages.push(message.clone());
+                    continue;
+                }
+
+                // Check if we need to insert a placeholder
+                if let Some(last) = last_role {
+                    if last == role {
+                        // Same role twice in a row, insert placeholder
+                        let placeholder_role = if role == "user" { "assistant" } else { "user" };
+                        normalized_messages.push(json!({
+                            "role": placeholder_role,
+                            "content": "[Placeholder message for proper alternation]",
+                        }));
+                    }
+                }
+
+                normalized_messages.push(message.clone());
+                last_role = Some(role);
+            } else {
+                // Message without role, just add it
+                normalized_messages.push(message.clone());
+            }
+        }
+
+        let messages = normalized_messages;
         let temperature = completion_request.temperature.unwrap_or(0.7);
 
         let mut request_payload = json!({
@@ -272,64 +305,152 @@ impl CompletionModel {
         Ok(request_payload)
     }
 
+    fn process_user_content(
+        &self,
+        content: &[&message::UserContent],
+    ) -> (Vec<Value>, Vec<Value>, bool) {
+        let mut content_parts = Vec::new();
+        let mut tool_results = Vec::new();
+        let mut has_multimodal = false;
+
+        for c in content.iter() {
+            match c {
+                message::UserContent::Text(t) => {
+                    if has_multimodal || content.len() > 1 {
+                        content_parts.push(json!({
+                            "type": "text",
+                            "text": t.text
+                        }));
+                    } else {
+                        content_parts.push(json!(t.text.clone()));
+                    }
+                }
+                message::UserContent::Image(img) => {
+                    has_multimodal = true;
+                    let detail = img
+                        .detail
+                        .as_ref()
+                        .map(|d| format!("{:?}", d).to_lowercase())
+                        .unwrap_or_else(|| "auto".to_string());
+                    content_parts.push(json!({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": img.data.to_string(),
+                            "detail": detail
+                        }
+                    }));
+                }
+                message::UserContent::Audio(audio) => {
+                    has_multimodal = true;
+                    content_parts.push(json!({
+                        "type": "audio_url",
+                        "audio_url": {
+                            "url": audio.data.to_string()
+                        }
+                    }));
+                }
+                message::UserContent::Video(video) => {
+                    has_multimodal = true;
+                    content_parts.push(json!({
+                        "type": "video_url",
+                        "video_url": {
+                            "url": video.data.to_string()
+                        }
+                    }));
+                }
+                message::UserContent::Document(doc) => {
+                    has_multimodal = true;
+                    content_parts.push(json!({
+                        "type": "document_url",
+                        "document_url": {
+                            "url": doc.data.to_string()
+                        }
+                    }));
+                }
+                message::UserContent::ToolResult(tr) => {
+                    let result_texts: Vec<String> = tr
+                        .content
+                        .iter()
+                        .filter_map(|item| match item {
+                            message::ToolResultContent::Text(t) => Some(t.text.clone()),
+                            _ => None,
+                        })
+                        .collect();
+
+                    tool_results.push(json!({
+                        "role": "tool",
+                        "tool_call_id": tr.id,
+                        "content": result_texts.join(" ")
+                    }));
+                }
+            }
+        }
+
+        (content_parts, tool_results, has_multimodal)
+    }
+
+    fn build_user_message(
+        &self,
+        mut content_parts: Vec<Value>,
+        tool_results: Vec<Value>,
+        has_multimodal: bool,
+    ) -> Result<Value, CompletionError> {
+        if has_multimodal {
+            let mut normalized_parts = Vec::new();
+            for part in content_parts {
+                if let Some(text) = part.as_str() {
+                    normalized_parts.push(json!({
+                        "type": "text",
+                        "text": text
+                    }));
+                } else {
+                    normalized_parts.push(part);
+                }
+            }
+            content_parts = normalized_parts;
+        }
+
+        if !tool_results.is_empty() && content_parts.is_empty() {
+            return Ok(json!(tool_results));
+        }
+
+        if !tool_results.is_empty() {
+            let mut result = tool_results;
+            let content_value = if content_parts.len() == 1 && !has_multimodal {
+                content_parts.into_iter().next().unwrap()
+            } else if content_parts.is_empty() {
+                json!("")
+            } else {
+                json!(content_parts)
+            };
+
+            result.push(json!({
+                "role": "user",
+                "content": content_value,
+            }));
+            return Ok(json!(result));
+        }
+
+        let content_value = if content_parts.is_empty() {
+            json!("[No content]")
+        } else if content_parts.len() == 1 && !has_multimodal {
+            content_parts.into_iter().next().unwrap()
+        } else {
+            json!(content_parts)
+        };
+
+        Ok(json!({
+            "role": "user",
+            "content": content_value,
+        }))
+    }
+
     fn convert_message(&self, msg: message::Message) -> Result<Value, CompletionError> {
         match msg {
             message::Message::User { content, .. } => {
-                let mut text_parts = Vec::new();
-                let mut tool_results = Vec::new();
-
-                for c in content.iter() {
-                    match c {
-                        message::UserContent::Text(t) => {
-                            text_parts.push(t.text.clone());
-                        }
-                        message::UserContent::ToolResult(tr) => {
-                            let mut result_texts = Vec::new();
-                            for content_item in tr.content.iter() {
-                                match content_item {
-                                    message::ToolResultContent::Text(t) => {
-                                        result_texts.push(t.text.clone());
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            let result_text = result_texts.join(" ");
-
-                            tool_results.push(json!({
-                                "role": "tool",
-                                "tool_call_id": tr.id,
-                                "content": result_text
-                            }));
-                        }
-                        _ => {}
-                    }
-                }
-
-                let text = text_parts.join(" ");
-
-                if !tool_results.is_empty() && text.is_empty() {
-                    return Ok(json!(tool_results));
-                }
-
-                if !tool_results.is_empty() {
-                    let mut result = tool_results;
-                    result.push(json!({
-                        "role": "user",
-                        "content": text,
-                    }));
-                    return Ok(json!(result));
-                }
-
-                let content_text = if text.is_empty() {
-                    "[No text content]".to_string()
-                } else {
-                    text
-                };
-
-                Ok(json!({
-                    "role": "user",
-                    "content": content_text,
-                }))
+                let (content_parts, tool_results, has_multimodal) =
+                    self.process_user_content(content.iter().collect::<Vec<_>>().as_slice());
+                self.build_user_message(content_parts, tool_results, has_multimodal)
             }
             message::Message::Assistant { content, .. } => {
                 let mut text_parts = Vec::new();
@@ -355,7 +476,6 @@ impl CompletionModel {
                 }
 
                 let text = text_parts.join(" ");
-
                 let mut message = json!({
                     "role": "assistant",
                 });

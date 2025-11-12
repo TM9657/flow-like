@@ -33,7 +33,7 @@ impl NodeLogic for BuildOpenAiNode {
             "ai_generative_build_openai",
             "OpenAI Model",
             "Builds the OpenAI model based on certain selection criteria",
-            "AI/Generative",
+            "AI/Generative/Provider",
         );
         node.add_icon("/flow/icons/find_model.svg");
 

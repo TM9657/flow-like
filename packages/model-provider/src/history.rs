@@ -1,7 +1,7 @@
 // Implementation according to
 // https://modelcontextprotocol.io/docs/concepts/sampling/
 
-use flow_like_types::{Value, json};
+use flow_like_types::{Value, anyhow, json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
@@ -10,12 +10,12 @@ use std::fmt;
 use crate::response::{Annotation, Response};
 use flow_like_types::Result;
 use rig::OneOrMany;
-use rig::completion::Message as RigMessage;
+use rig::completion::{Message as RigMessage, ToolDefinition};
 use rig::message::{
     AssistantContent as RigAssistantContent, Audio as RigAudio, Document as RigDocument,
     DocumentSourceKind, Image as RigImage, ImageMediaType, Text as RigText,
-    ToolCall as RigToolCall, ToolFunction as RigToolFunction, UserContent as RigUserContent,
-    Video as RigVideo,
+    ToolCall as RigToolCall, ToolChoice as RigToolChoice, ToolFunction as RigToolFunction,
+    UserContent as RigUserContent, Video as RigVideo,
 };
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
@@ -398,12 +398,17 @@ impl From<Content> for RigUserContent {
     fn from(content: Content) -> Self {
         match content {
             Content::Text { text, .. } => RigUserContent::Text(RigText { text }),
-            Content::Image { image_url, .. } => RigUserContent::Image(RigImage {
-                data: DocumentSourceKind::url(&image_url.url),
-                media_type: Some(ImageMediaType::PNG),
-                detail: None,
-                additional_params: None,
-            }),
+            Content::Image { image_url, .. } => {
+                // Detect media type from URL or default to PNG
+                let media_type = detect_image_media_type(&image_url.url);
+
+                RigUserContent::Image(RigImage {
+                    data: DocumentSourceKind::url(&image_url.url),
+                    media_type: Some(media_type),
+                    detail: None,
+                    additional_params: None,
+                })
+            },
             Content::Audio { audio_url, .. } => RigUserContent::Audio(RigAudio {
                 data: DocumentSourceKind::url(&audio_url),
                 media_type: None,
@@ -420,6 +425,46 @@ impl From<Content> for RigUserContent {
                 additional_params: None,
             }),
         }
+    }
+}
+
+/// Detects image media type from URL extension or data URL MIME type
+fn detect_image_media_type(url: &str) -> ImageMediaType {
+    // Check if it's a data URL with MIME type
+    if url.starts_with("data:") {
+        if let Some(mime_start) = url.strip_prefix("data:") {
+            if let Some(mime_end) = mime_start.find(';') {
+                let mime_type = &mime_start[..mime_end];
+                return match mime_type {
+                    "image/jpeg" | "image/jpg" => ImageMediaType::JPEG,
+                    "image/png" => ImageMediaType::PNG,
+                    "image/gif" => ImageMediaType::GIF,
+                    "image/webp" => ImageMediaType::WEBP,
+                    "image/heic" => ImageMediaType::HEIC,
+                    "image/heif" => ImageMediaType::HEIF,
+                    _ => ImageMediaType::PNG, // default fallback
+                };
+            }
+        }
+    }
+
+    // Check file extension
+    let lower_url = url.to_lowercase();
+    if lower_url.ends_with(".jpg") || lower_url.ends_with(".jpeg") {
+        ImageMediaType::JPEG
+    } else if lower_url.ends_with(".png") {
+        ImageMediaType::PNG
+    } else if lower_url.ends_with(".gif") {
+        ImageMediaType::GIF
+    } else if lower_url.ends_with(".webp") {
+        ImageMediaType::WEBP
+    } else if lower_url.ends_with(".heic") {
+        ImageMediaType::HEIC
+    } else if lower_url.ends_with(".heif") {
+        ImageMediaType::HEIF
+    } else {
+        // Default to PNG if we can't detect
+        ImageMediaType::PNG
     }
 }
 
@@ -673,6 +718,109 @@ impl History {
         let history_messages: Vec<HistoryMessage> =
             messages.into_iter().map(|m| m.into()).collect();
         Self::new(model, history_messages)
+    }
+
+    /// Converts tools to rig ToolDefinition
+    pub fn tools_to_rig(&self) -> Result<Vec<ToolDefinition>> {
+        let Some(tools) = self.tools.as_ref() else {
+            return Ok(Vec::new());
+        };
+
+        let mut definitions = Vec::with_capacity(tools.len());
+        for tool in tools {
+            let parameters = json::to_value(&tool.function.parameters).map_err(|e| {
+                anyhow!(
+                    "Failed to serialize tool parameters for '{}': {e}",
+                    tool.function.name
+                )
+            })?;
+
+            definitions.push(ToolDefinition {
+                name: tool.function.name.clone(),
+                description: tool.function.description.clone().unwrap_or_default(),
+                parameters,
+            });
+        }
+
+        Ok(definitions)
+    }
+
+    /// Converts tool choice to rig ToolChoice
+    pub fn tool_choice_to_rig(&self) -> Option<RigToolChoice> {
+        self.tool_choice.as_ref().map(|choice| match choice {
+            ToolChoice::None => RigToolChoice::None,
+            ToolChoice::Auto => RigToolChoice::Auto,
+            ToolChoice::Required => RigToolChoice::Required,
+            ToolChoice::Specific { function, .. } => RigToolChoice::Specific {
+                function_names: vec![function.name.clone()],
+            },
+        })
+    }
+
+    /// Builds additional parameters for the request
+    pub fn build_additional_params(&self) -> Result<Option<Value>> {
+        let mut map = json::Map::new();
+
+        if let Some(stream) = self.stream {
+            map.insert("stream".to_string(), Value::Bool(stream));
+        }
+
+        if let Some(top_p) = self.top_p {
+            map.insert("top_p".to_string(), json::json!(top_p));
+        }
+
+        if let Some(presence_penalty) = self.presence_penalty {
+            map.insert("presence_penalty".to_string(), json::json!(presence_penalty));
+        }
+
+        if let Some(frequency_penalty) = self.frequency_penalty {
+            map.insert(
+                "frequency_penalty".to_string(),
+                json::json!(frequency_penalty),
+            );
+        }
+
+        if let Some(stop) = self.stop.as_ref() {
+            map.insert("stop".to_string(), json::json!(stop));
+        }
+
+        if let Some(user) = self.user.as_ref() {
+            map.insert("user".to_string(), json::json!(user));
+        }
+
+        if let Some(seed) = self.seed {
+            map.insert("seed".to_string(), json::json!(seed));
+        }
+
+        if let Some(response_format) = self.response_format.as_ref() {
+            let value = match response_format {
+                ResponseFormat::String(s) => json::json!(s),
+                ResponseFormat::Object(v) => json::to_value(v)?,
+            };
+            map.insert("response_format".to_string(), value);
+        }
+
+        if let Some(n) = self.n {
+            map.insert("n".to_string(), json::json!(n));
+        }
+
+        if let Some(options) = self.stream_options.as_ref() {
+            map.insert("stream_options".to_string(), json::to_value(options)?);
+        }
+
+        if let Some(usage) = self.usage.as_ref() {
+            map.insert("usage".to_string(), json::to_value(usage)?);
+        }
+
+        if let Some(preset) = self.preset.as_ref() {
+            map.insert("preset".to_string(), json::json!(preset));
+        }
+
+        if map.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(Value::Object(map)))
+        }
     }
 }
 

@@ -28,7 +28,7 @@ impl OpenRouterModel {
         let api_key = openrouter_config.api_key.clone().unwrap_or_default();
         let model_id = provider.model_id.clone();
 
-        let mut builder = rig::providers::openai::Client::builder(&api_key);
+        let mut builder = rig::providers::openrouter::Client::builder(&api_key);
 
         if let Some(endpoint) = openrouter_config.endpoint.as_deref() {
             builder = builder.base_url(endpoint);
@@ -52,8 +52,10 @@ impl OpenRouterModel {
             .cloned()
             .and_then(|v| v.as_str().map(|s| s.to_string()));
 
-        let mut builder = rig::providers::openai::Client::builder(api_key);
-        if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
+        let endpoint = params.get("endpoint").and_then(|v| v.as_str());
+
+        let mut builder = rig::providers::openrouter::Client::builder(api_key);
+        if let Some(endpoint) = endpoint {
             builder = builder.base_url(endpoint);
         }
 
@@ -61,7 +63,7 @@ impl OpenRouterModel {
 
         Ok(OpenRouterModel {
             client: Arc::new(client),
-            default_model: model_id,
+            default_model: model_id.clone(),
             provider: provider.clone(),
         })
     }
