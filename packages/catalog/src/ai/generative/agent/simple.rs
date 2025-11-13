@@ -375,7 +375,7 @@ impl NodeLogic for SimpleAgentNode {
                         AssistantContent::Text(text) => Some(text.text.clone()),
                         _ => None,
                     })
-                    .unwrap_or_else(|| String::new());
+                    .unwrap_or_else(String::new);
 
                 context.log_message(
                     &format!("Final response extracted: {} chars", final_response.len()),
@@ -426,7 +426,7 @@ impl NodeLogic for SimpleAgentNode {
             // Prepare history for next iteration by appending assistant message
             let assistant_msg = rig::message::Message::Assistant {
                 id: None,
-                content: response.choice.clone().into(),
+                content: response.choice.clone(),
             };
             current_history.push(assistant_msg.clone());
 

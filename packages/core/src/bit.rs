@@ -15,7 +15,6 @@ use flow_like_types::{Value, anyhow};
 
 use rig::agent::AgentBuilder;
 use rig::client::completion::{CompletionClientDyn, CompletionModelHandle};
-use rig::completion::CompletionModelDyn;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
