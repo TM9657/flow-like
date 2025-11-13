@@ -12,6 +12,7 @@ pub mod par_execution;
 pub mod par_for_each;
 pub mod reroute;
 pub mod sequence;
+pub mod timeout;
 pub mod while_loop;
 
 use flow_like::flow::node::NodeLogic;
@@ -34,5 +35,6 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(flip_flop::FlipFlopNode::default()),
         Arc::new(for_each_with_break::ForEachWithBreakNode::default()),
         Arc::new(gate::GateNode::default()),
+        Arc::new(timeout::TimeoutNode::default()),
     ]
 }
