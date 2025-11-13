@@ -345,9 +345,7 @@ export function FlowContextMenu({
 				}}
 			>
 				<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-				<ContextMenuContent
-					className="w-80 max-h-120 h-120 overflow-y-hidden overflow-x-hidden flex flex-col"
-				>
+				<ContextMenuContent className="w-80 max-h-120 h-120 overflow-y-hidden overflow-x-hidden flex flex-col">
 					<div className="sticky">
 						<div className="flex flex-row w-full items-center justify-between bg-accent text-accent-foreground p-1 mb-1">
 							<small className="font-bold">Actions</small>
