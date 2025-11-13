@@ -56,7 +56,7 @@ tracing-oslog = "0.3.0"
 rusqlite = { version = "0.32.0", features = ["bundled-full", "serde_json"] }
 serenity = "0.12.4"
 lazy_static = "1.5.0"
-async-trait = "0.1"
+async-trait.workspace = true
 cron = "0.15.0"
 chrono = "0.4"
 axum = "0.8.6"

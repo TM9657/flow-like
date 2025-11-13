@@ -60,6 +60,10 @@ pub mod sync {
 }
 
 pub use rand;
+pub mod futures {
+    pub use futures::StreamExt;
+}
+pub use async_stream;
 pub mod intercom;
 pub mod utils;
 pub use ab_glyph;

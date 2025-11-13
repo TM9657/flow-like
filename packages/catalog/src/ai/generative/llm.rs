@@ -1,14 +1,14 @@
 pub mod branch;
-pub mod build_openai;
 pub mod find_llm;
 pub mod history;
 pub mod invoke;
 pub mod invoke_simple;
 pub mod invoke_with_tools;
-pub mod make_schema;
+pub mod llm_extractor;
+pub mod llm_extractor_history;
 pub mod preferences;
+pub mod provider;
 pub mod response;
-pub mod with_structured_output;
 
 use flow_like::flow::node::NodeLogic;
 use std::sync::Arc;
@@ -45,10 +45,27 @@ pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
         Arc::new(history::set_n::SetHistoryNNode::default()),
         Arc::new(history::from_string::HistoryFromStringNode::default()),
         Arc::new(branch::LLMBranchNode::default()),
-        Arc::new(with_structured_output::LLMWithStructuredOutput::default()),
+        Arc::new(llm_extractor::LLMExtractNode::default()),
+        Arc::new(llm_extractor_history::LLMExtractHistoryNode::default()),
         Arc::new(invoke_with_tools::InvokeLLMWithToolsNode::default()),
-        Arc::new(make_schema::LLMMakeSchema::default()),
-        Arc::new(build_openai::BuildOpenAiNode::default()),
+        Arc::new(provider::build_anthropic::BuildAnthropicNode::default()),
+        Arc::new(provider::build_cohere::BuildCohereNode::default()),
+        Arc::new(provider::build_deepseek::BuildDeepseekNode::default()),
+        Arc::new(provider::build_galadriel::BuildGaladrielNode::default()),
+        Arc::new(provider::build_gemini::BuildGeminiNode::default()),
+        Arc::new(provider::build_groq::BuildGroqNode::default()),
+        Arc::new(provider::build_huggingface::BuildHuggingfaceNode::default()),
+        Arc::new(provider::build_hyperbolic::BuildHyperbolicNode::default()),
+        Arc::new(provider::build_mira::BuildMiraNode::default()),
+        Arc::new(provider::build_mistral::BuildMistralNode::default()),
+        Arc::new(provider::build_moonshot::BuildMoonshotNode::default()),
+        Arc::new(provider::build_ollama::BuildOllamaNode::default()),
+        Arc::new(provider::build_openai::BuildOpenAiNode::default()),
+        Arc::new(provider::build_openrouter::BuildOpenRouterNode::default()),
+        Arc::new(provider::build_perplexity::BuildPerplexityNode::default()),
+        Arc::new(provider::build_together::BuildTogetherNode::default()),
+        Arc::new(provider::build_voyageai::BuildVoyageAINode::default()),
+        Arc::new(provider::build_xai::BuildXAINode::default()),
     ];
 
     // Add response nodes

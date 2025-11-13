@@ -820,3 +820,22 @@ mod tests {
         Ok(())
     }
 }
+
+// impl VectorStoreIndex for LanceDBVectorStore {
+//     fn top_n<T: for<'a> serde::Deserialize<'a> + rig::wasm_compat::WasmCompatSend>(
+//             &self,
+//             req: rig::vector_store::VectorSearchRequest<Self::Filter>,
+//         ) -> impl std::future::Future<Output = std::result::Result<Vec<(f64, String, T)>, rig::vector_store::VectorStoreError>>
+//         + rig::wasm_compat::WasmCompatSend {
+//         todo!("Implement top_n_ids")
+//     }
+
+//     fn top_n_ids(
+//             &self,
+//             req: rig::vector_store::VectorSearchRequest<Self::Filter>,
+//         ) -> impl std::future::Future<Output = std::result::Result<Vec<(f64, String)>, rig::vector_store::VectorStoreError>> + rig::wasm_compat::WasmCompatSend {
+//         todo!("Implement top_n_ids")
+//     }
+
+//     type Filter;
+// }

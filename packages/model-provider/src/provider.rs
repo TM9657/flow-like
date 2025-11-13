@@ -8,8 +8,6 @@ use flow_like_types::{
 };
 use schemars::JsonSchema;
 
-pub mod openai;
-
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 pub struct ModelProvider {
     pub provider_name: String,
@@ -52,7 +50,23 @@ pub enum Pooling {
 #[derive(Clone, Default, Debug)]
 pub struct ModelProviderConfiguration {
     pub openai_config: Vec<OpenAIConfig>,
-    pub bedrock_config: Vec<BedrockConfig>,
+    pub anthropic_config: Vec<AnthropicConfig>,
+    pub gemini_config: Vec<GeminiConfig>,
+    pub huggingface_config: Vec<HuggingfaceConfig>,
+    pub cohere_config: Vec<CohereConfig>,
+    pub perplexity_config: Vec<PerplexityConfig>,
+    pub groq_config: Vec<GroqConfig>,
+    pub together_config: Vec<TogetherConfig>,
+    pub openrouter_config: Vec<OpenRouterConfig>,
+    pub deepseek_config: Vec<DeepseekConfig>,
+    pub mistral_config: Vec<MistralConfig>,
+    pub voyageai_config: Vec<VoyageAIConfig>,
+    pub ollama_config: Vec<OllamaConfig>,
+    pub hyperbolic_config: Vec<HyperbolicConfig>,
+    pub moonshot_config: Vec<MoonshotConfig>,
+    pub galadriel_config: Vec<GaladrielConfig>,
+    pub mira_config: Vec<MiraConfig>,
+    pub xai_config: Vec<XAIConfig>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -61,6 +75,110 @@ pub struct OpenAIConfig {
     pub endpoint: Option<String>,
     pub organization: Option<String>,
     pub proxy: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AnthropicConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+    pub beta: Option<String>,
+    pub version: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GeminiConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct HuggingfaceConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+    pub sub_provider: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CohereConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PerplexityConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GroqConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TogetherConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct OpenRouterConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeepseekConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MistralConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct VoyageAIConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct OllamaConfig {
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct HyperbolicConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MoonshotConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GaladrielConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MiraConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct XAIConfig {
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
 }
 
 #[derive(Clone, Debug)]

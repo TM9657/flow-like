@@ -1,17 +1,17 @@
 use std::{any::Any, sync::Arc};
 
-use flow_like_types::{Cacheable, Result, async_trait, sync::Mutex};
-use openai_api_rs::v1::embedding::EmbeddingRequest;
+use flow_like_types::{Cacheable, Result, async_trait};
+use rig::client::ProviderClient;
 use text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
 use tiktoken_rs::{CoreBPE, cl100k_base};
 
-use crate::provider::{EmbeddingModelProvider, ModelProviderConfiguration, openai::OpenAIClient};
+use crate::provider::{EmbeddingModelProvider, ModelProviderConfiguration, random_provider};
 
 use super::{EmbeddingModelLogic, GeneralTextSplitter};
 
 #[derive(Clone)]
 pub struct OpenAIEmbeddingModel {
-    pub client: Arc<Mutex<OpenAIClient>>,
+    client: Arc<Box<dyn ProviderClient>>,
     provider: EmbeddingModelProvider,
     tokenizer: Arc<CoreBPE>,
 }
@@ -31,12 +31,39 @@ impl OpenAIEmbeddingModel {
         provider: &EmbeddingModelProvider,
         config: &ModelProviderConfiguration,
     ) -> flow_like_types::Result<Self> {
-        let client = OpenAIClient::from_config(&provider.provider, config).await?;
+        let openai_config = random_provider(&config.openai_config)?;
+        let api_key = openai_config.api_key.clone().unwrap_or_default();
+        let model_id = provider.provider.model_id.clone();
+
+        let client = if provider.provider.provider_name == "azure" {
+            let endpoint = openai_config.endpoint.clone().unwrap_or_default();
+            // For Azure, don't include deployments in base URL - it will be added by the embeddings API
+            let endpoint = if endpoint.ends_with('/') {
+                endpoint.trim_end_matches('/').to_string()
+            } else {
+                endpoint
+            };
+            let auth = rig::providers::azure::AzureOpenAIAuth::ApiKey(api_key.clone());
+            let mut builder = rig::providers::azure::Client::builder(auth, &endpoint);
+            if let Some(version) = provider.provider.version.as_deref() {
+                builder = builder.api_version(version);
+            }
+
+            builder.build().boxed()
+        } else {
+            let mut builder = rig::providers::openai::Client::builder(&api_key);
+            if let Some(endpoint) = openai_config.endpoint.as_deref() {
+                builder = builder.base_url(endpoint);
+            }
+
+            builder.build().boxed()
+        };
+        let client = Arc::new(client);
         let tokenizer = cl100k_base()?;
 
         Ok(OpenAIEmbeddingModel {
             tokenizer: Arc::new(tokenizer),
-            client: Arc::new(Mutex::new(client)),
+            client,
             provider: provider.clone(),
         })
     }
@@ -77,16 +104,17 @@ impl EmbeddingModelLogic for OpenAIEmbeddingModel {
             .iter()
             .map(|text| format!("{}{}", self.provider.prefix.query, text))
             .collect::<Vec<String>>();
-        let embedding_request = EmbeddingRequest::new(model_id, prefixed_array);
-        let result = {
-            let mut guard = self.client.lock().await;
-            guard.embedding(embedding_request).await?
-        };
-        let embeddings = result
-            .data
+        let embedding_model = self.client.as_embeddings().ok_or(flow_like_types::anyhow!(
+            "Client does not support embeddings"
+        ))?;
+        // For Azure embeddings, we pass the deployment name as the model
+        // For OpenAI, we pass the model_id
+        let embedding_model = embedding_model.embedding_model(&model_id);
+        let embeddings = embedding_model.embed_texts(prefixed_array).await?;
+        let embeddings: Vec<Vec<f32>> = embeddings
             .into_iter()
-            .map(|e| e.embedding)
-            .collect::<Vec<Vec<f32>>>();
+            .map(|e| e.vec.into_iter().map(|x| x as f32).collect())
+            .collect();
         Ok(embeddings)
     }
 
@@ -97,16 +125,17 @@ impl EmbeddingModelLogic for OpenAIEmbeddingModel {
             .iter()
             .map(|text| format!("{}{}", self.provider.prefix.paragraph, text))
             .collect::<Vec<String>>();
-        let embedding_request = EmbeddingRequest::new(model_id, prefixed_array);
-        let result = {
-            let mut guard = self.client.lock().await;
-            guard.embedding(embedding_request).await?
-        };
-        let embeddings = result
-            .data
+        let embedding_model = self.client.as_embeddings().ok_or(flow_like_types::anyhow!(
+            "Client does not support embeddings"
+        ))?;
+        // For Azure embeddings, we pass the deployment name as the model
+        // For OpenAI, we pass the model_id
+        let embedding_model = embedding_model.embedding_model(&model_id);
+        let embeddings = embedding_model.embed_texts(prefixed_array).await?;
+        let embeddings: Vec<Vec<f32>> = embeddings
             .into_iter()
-            .map(|e| e.embedding)
-            .collect::<Vec<Vec<f32>>>();
+            .map(|e| e.vec.into_iter().map(|x| x as f32).collect())
+            .collect();
         Ok(embeddings)
     }
 
@@ -149,7 +178,7 @@ mod tests {
             pooling: Pooling::None,
             vector_length: 3048,
         };
-        let api_key = std::env::var("OPENAI_API_KEY").unwrap();
+        let api_key = std::env::var("OPENAI_API_EMBEDDING_KEY").unwrap();
         let config = ModelProviderConfiguration {
             openai_config: vec![OpenAIConfig {
                 api_key: Some(api_key),
@@ -157,7 +186,7 @@ mod tests {
                 endpoint: None,
                 proxy: None,
             }],
-            bedrock_config: vec![],
+            ..Default::default()
         };
 
         let model = OpenAIEmbeddingModel::new(&provider, &config).await.unwrap();
@@ -184,7 +213,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_openai_chunkung() {
+    async fn test_openai_chunking() {
         dotenv().ok();
 
         let provider = ModelProvider {
@@ -204,7 +233,7 @@ mod tests {
             pooling: Pooling::None,
             vector_length: 3048,
         };
-        let api_key = std::env::var("OPENAI_API_KEY").unwrap();
+        let api_key = std::env::var("OPENAI_API_EMBEDDING_KEY").unwrap();
         let config = ModelProviderConfiguration {
             openai_config: vec![OpenAIConfig {
                 api_key: Some(api_key),
@@ -212,7 +241,7 @@ mod tests {
                 endpoint: None,
                 proxy: None,
             }],
-            bedrock_config: vec![],
+            ..Default::default()
         };
 
         let model = OpenAIEmbeddingModel::new(&provider, &config).await.unwrap();
@@ -241,7 +270,7 @@ mod tests {
                 endpoint: Some(endpoint),
                 proxy: None,
             }],
-            bedrock_config: vec![],
+            ..Default::default()
         };
         let provider = EmbeddingModelProvider {
             provider,

@@ -63,6 +63,7 @@ impl NodeLogic for ChunkFromStringNode {
                 content: Some(message),
                 tool_calls: None,
                 refusal: None,
+                reasoning: None,
             }),
         });
 
