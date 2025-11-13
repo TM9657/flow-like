@@ -1,5 +1,5 @@
 import { MessageCircleDashedIcon, PlayCircleIcon, ZapIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMiniSearch } from "react-minisearch";
 import {
 	ContextMenu,
@@ -49,6 +49,7 @@ export function FlowContextMenu({
 }>) {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const placeholderInputRef = useRef<HTMLInputElement>(null);
+	const menuBlockedRef = useRef(false);
 	const [filter, setFilter] = useState("");
 	const [contextSensitive, setContextSensitive] = useState(true);
 	const [isPlaceholderOpen, setIsPlaceholderOpen] = useState(false);
@@ -67,6 +68,13 @@ export function FlowContextMenu({
 		setIsPlaceholderOpen(false);
 		setPlaceholderName("Placeholder");
 	};
+
+	const handleNodePlace = useCallback(
+		async (node: INode) => {
+			await onNodePlace(node);
+		},
+		[onNodePlace],
+	);
 
 	const sortedNodes = useMemo(() => {
 		if (!nodes) return [];
@@ -324,14 +332,22 @@ export function FlowContextMenu({
 		<>
 			<ContextMenu
 				onOpenChange={(open) => {
-					if (!open && !isPlaceholderOpen) {
+					if (open) {
+						// Block clicks for 200ms after menu opens to prevent accidental triggers
+						menuBlockedRef.current = true;
+						setTimeout(() => {
+							menuBlockedRef.current = false;
+						}, 200);
+					} else if (!isPlaceholderOpen && menuBlockedRef.current === false) {
 						onClose();
 						setFilter("");
 					}
 				}}
 			>
 				<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-				<ContextMenuContent className="w-80 max-h-[30rem] h-[30rem] overflow-y-hidden overflow-x-hidden flex flex-col">
+				<ContextMenuContent
+					className="w-80 max-h-120 h-120 overflow-y-hidden overflow-x-hidden flex flex-col"
+				>
 					<div className="sticky">
 						<div className="flex flex-row w-full items-center justify-between bg-accent text-accent-foreground p-1 mb-1">
 							<small className="font-bold">Actions</small>
@@ -352,14 +368,24 @@ export function FlowContextMenu({
 						</div>
 						<ContextMenuItem
 							className="flex flex-row gap-1 items-center"
-							onClick={() => onCommentPlace()}
+							onSelect={(event) => {
+								if (menuBlockedRef.current) {
+									event.preventDefault();
+									return;
+								}
+								onCommentPlace();
+							}}
 						>
 							<MessageCircleDashedIcon className="w-4 h-4" />
 							Comment
 						</ContextMenuItem>
 						<ContextMenuItem
 							className="flex flex-row gap-1 items-center"
-							onClick={() => {
+							onSelect={(event) => {
+								if (menuBlockedRef.current) {
+									event.preventDefault();
+									return;
+								}
 								const node_ref = sortedNodes.find(
 									(node) => node.name === "events_simple",
 								);
@@ -371,7 +397,13 @@ export function FlowContextMenu({
 						</ContextMenuItem>
 						<ContextMenuItem
 							className="flex flex-row gap-1 items-center"
-							onClick={() => setIsPlaceholderOpen(true)}
+							onSelect={(event) => {
+								if (menuBlockedRef.current) {
+									event.preventDefault();
+									return;
+								}
+								setIsPlaceholderOpen(true);
+							}}
 						>
 							<ZapIcon className="w-4 h-4" />
 							Placeholder
@@ -430,7 +462,8 @@ export function FlowContextMenu({
 												]
 									}
 									filter={filter}
-									onNodePlace={async (node) => onNodePlace(node)}
+									onNodePlace={handleNodePlace}
+									menuBlockedRef={menuBlockedRef}
 								/>
 							)}
 						</ScrollArea>
