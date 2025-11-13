@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use flow_like::flow::board::Board;
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -7,7 +10,6 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::async_trait;
-
 #[derive(Default)]
 pub struct ReturnGenericResultNode {}
 
@@ -36,7 +38,7 @@ impl NodeLogic for ReturnGenericResultNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin("response", "Result", "Chat Response", VariableType::Struct);
+        node.add_input_pin("response", "Result", "Chat Response", VariableType::Generic);
 
         println!("{:?}", node);
 
@@ -51,5 +53,9 @@ impl NodeLogic for ReturnGenericResultNode {
         context.set_result(result);
 
         return Ok(());
+    }
+
+    async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
+        let _ = node.match_type("response", board, None, None);
     }
 }

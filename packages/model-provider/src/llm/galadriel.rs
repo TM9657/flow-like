@@ -11,7 +11,6 @@ use rig::client::ProviderClient;
 
 pub struct GaladrielModel {
     client: Arc<Box<dyn ProviderClient>>,
-    provider: ModelProvider,
     default_model: Option<String>,
 }
 
@@ -34,7 +33,6 @@ impl GaladrielModel {
 
         Ok(GaladrielModel {
             client: Arc::new(client),
-            provider: provider.clone(),
             default_model: model_id,
         })
     }
@@ -58,7 +56,6 @@ impl GaladrielModel {
         Ok(GaladrielModel {
             client: Arc::new(client),
             default_model: model_id,
-            provider: provider.clone(),
         })
     }
 }

@@ -186,7 +186,7 @@ impl NodeLogic for LLMExtractHistoryNode {
 
         let model_bit = context.evaluate_pin::<Bit>("model").await?;
         let schema_str: String = context.evaluate_pin("schema").await?;
-        let mut history: History = context.evaluate_pin("history").await?;
+        let history: History = context.evaluate_pin("history").await?;
 
         let prepared_schema = prepare_schema(&schema_str)?;
 
@@ -197,49 +197,19 @@ impl NodeLogic for LLMExtractHistoryNode {
 
         let preamble = "You are a knowledge extraction assistant. Extract data by calling the 'submit' tool with structured data matching the provided schema.";
 
-        let (model_name, completion_client, model_logic) = {
-            let model_factory = context.app_state.lock().await.model_factory.clone();
-            let model = model_factory
-                .lock()
-                .await
-                .build(&model_bit, context.app_state.clone(), context.token.clone())
-                .await?;
-            let default_model = model
-                .default_model()
-                .await
-                .unwrap_or_else(|| history.model.clone());
-            let provider = model.provider().await?;
-            let client = provider.client();
-            let completion = client
-                .as_completion()
-                .ok_or_else(|| anyhow!("Provider does not support completion"))?;
-            (default_model, completion, model)
-        };
-
-        context.log_message(&format!("Calling model: {}", model_name), LogLevel::Debug);
-
-        model_logic.transform_history(&mut history);
-
         let (prompt, chat_history) = history
             .extract_prompt_and_history()
             .map_err(|e| anyhow!("Failed to convert history into rig messages: {e}"))?;
 
-        let agent_builder = completion_client
-            .agent(&model_name)
+        let agent_builder = model_bit
+            .agent(context, &Some(history))
+            .await?
             .preamble(preamble)
             .tool(DynamicSubmitTool {
                 parameters: prepared_schema.tool_parameters,
                 output_schema: prepared_schema.output_schema.clone(),
             })
             .tool_choice(ToolChoice::Required);
-
-        // Apply additional params if needed
-        let agent_builder =
-            if let Some(additional_params) = model_logic.additional_params(Some(history.clone())) {
-                agent_builder.additional_params(additional_params)
-            } else {
-                agent_builder
-            };
 
         let agent = agent_builder.build();
 

@@ -1,9 +1,8 @@
 /// # Simple Agent Node
 /// This is an LLM-controlled while loop over an arbitrary number of flow-leafes with back-propagation of leaf outputs into the agent.
-/// Recursive LLM-invokes until no more tool calls are made or recursion limit hit.
+/// Uses Rig's agent system with dynamic tools for executing Flow-Like subcontexts.
+/// Recursive agent calls until no more tool calls are made or recursion limit hit.
 /// Effectively, this node allows the LLM to control it's own execution until further human input required.
-use crate::ai::generative::llm::invoke_with_tools::extract_tagged;
-use crate::utils::json::parse_with_schema::tool_call_from_str;
 use flow_like::{
     bit::Bit,
     flow::{
@@ -15,49 +14,18 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::history::ToolCall;
 use flow_like_model_provider::{
-    history::{Content, ContentType, History, HistoryMessage, MessageContent, Role, Tool},
+    history::{History, Tool},
     response::Response,
 };
 
-use flow_like_types::{Error, Value, anyhow, async_trait, json};
+use flow_like_types::{Value, anyhow, async_trait, json};
+use rig::completion::{Completion, ToolDefinition};
+use rig::message::{AssistantContent, ToolCall as RigToolCall};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-
-const SYSTEM_PROMPT_TEMPLATE: &str = r#"
-# Instruction
-You are a helpful assistant with access to the tools below.
-
-# Tools
-Here are the schemas for the tools you *can* use:
-
-## Schemas
-TOOLS_STR
-
-## Tool Use Format
-<tooluse>
-    {
-        "name": "<name of the tool you want to use>",
-        "arguments": "<key: value dict for args as defined by schema of the tool you want to use>"
-    }
-</tooluse>
-
-# Response Format
-Your tool use json data within the <tooluse></tooluse> will be validated by the tool json schemas above.
-
-The tool use data string inside the <tooluse></tooluse> tags *MUST* be compliant with the tool json schemas above.
-
-If you want to use a tool you *MUST* wrap your tool use json data in these xml tags: <tooluse></tooluse>.
-
-Do *NOT* use code blocks.
-
-Wrap every tool use in a pair of xml tags <tooluse></tooluse>.
-
-Once all tool outputs have been gathered, reply back to the original user input.
-"#;
 
 #[derive(Default)]
 pub struct SimpleAgentNode {}
@@ -97,16 +65,6 @@ impl NodeLogic for SimpleAgentNode {
         )
         .set_default_value(Some(json::json!("[]")));
 
-        // future: at some point we could allow for parallel tool execution
-        // for now, we only implement sequential processing in a loop to avoid writing to global variables at the same time
-        //node.add_input_pin("thread_model", "Threads", "Threads", VariableType::String)
-        //    .set_default_value(Some(json::json!("tasks")))
-        //    .set_options(
-        //        PinOptions::new()
-        //            .set_valid_values(vec!["sequential".to_string()])
-        //            .build(),
-        //    );
-
         node.add_input_pin(
             "max_iter",
             "Iter",
@@ -124,6 +82,15 @@ impl NodeLogic for SimpleAgentNode {
             VariableType::Struct,
         )
         .set_schema::<Response>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_output_pin(
+            "history_out",
+            "History Out",
+            "Updated History with all agent interactions",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
@@ -148,259 +115,387 @@ impl NodeLogic for SimpleAgentNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_done").await?;
 
-        // fetch inputs
-        let recursion_limit: u64 = context.evaluate_pin("max_iter").await?;
+        let max_iterations: u64 = context.evaluate_pin("max_iter").await?;
         let model_bit = context.evaluate_pin::<Bit>("model").await?;
         let tools_str: String = context.evaluate_pin("tools").await?;
+        let history = context.evaluate_pin::<History>("history").await?;
 
-        // validate tools + deactivate all function exec output pins
-        let tools: Vec<Tool> = match json::from_str(&tools_str) {
-            Ok(tools) => tools,
-            Err(err) => return Err(anyhow!("Failed to parse tools: {err:?}")),
-        };
+        let tools: Vec<Tool> =
+            json::from_str(&tools_str).map_err(|err| anyhow!("Failed to parse tools: {err:?}"))?;
+
         for tool in &tools {
-            context.deactivate_exec_pin(&tool.function.name).await?
+            context.deactivate_exec_pin(&tool.function.name).await?;
         }
 
-        // log model name
         if let Some(meta) = model_bit.meta.get("en") {
             context.log_message(&format!("Loading model {:?}", meta.name), LogLevel::Debug);
         }
 
-        // render system prompt with add-on for tool definitions
-        let system_prompt_tools = if !tools.is_empty() {
-            SYSTEM_PROMPT_TEMPLATE.replace("TOOLS_STR", &tools_str) // todo: serlialize tools instead?
-        } else {
-            String::from("")
-        };
-        let history = context.evaluate_pin::<History>("history").await?;
-        let system_prompt = match history.get_system_prompt() {
-            Some(system_prompt) => {
-                format!("{}\n\n{}", system_prompt, system_prompt_tools) // handle previously set system prompts
-            }
-            None => system_prompt_tools,
-        };
+        let system_prompt = history
+            .get_system_prompt()
+            .unwrap_or_else(|| "You are a helpful assistant with access to tools.".to_string());
+
+        let agent_builder = model_bit.agent(context, &Some(history.clone())).await?;
+        let agent = agent_builder.preamble(&system_prompt).build();
+
+        let tool_definitions: Vec<ToolDefinition> = tools
+            .iter()
+            .map(|tool| {
+                let parameters =
+                    json::to_value(&tool.function.parameters).unwrap_or_else(|_| json::json!({}));
+                ToolDefinition {
+                    name: tool.function.name.clone(),
+                    description: tool.function.description.clone().unwrap_or_default(),
+                    parameters,
+                }
+            })
+            .collect();
+
+        let (prompt, history_msgs) = history
+            .extract_prompt_and_history()
+            .map_err(|e| anyhow!("Failed to convert history: {e}"))?;
+
         context.log_message(
-            &format!("system prompt: {}", system_prompt),
+            &format!("Initial history_msgs count: {}", history_msgs.len()),
             LogLevel::Debug,
         );
 
-        // Loop until no more tool cals or max recursion limit hit
-        let mut previous_external_history = History::new(history.model.clone(), vec![]);
-        let mut internal_history = History::new(history.model.clone(), vec![]);
-        let mut unanswered_tool_calls: HashMap<String, String> = HashMap::new();
-        for agent_iteration in 0..recursion_limit {
-            context.log_message(
-                &format!("[agent iter {}] agent iteration", agent_iteration),
-                LogLevel::Debug,
-            );
-
-            // re-evaluate history + set system prompt
-            let mut external_history = context.evaluate_pin::<History>("history").await?;
-            external_history.set_system_prompt(system_prompt.to_string());
-            context.log_message(
-                &format!(
-                    "[agent iter {}] previous external history: {}",
-                    agent_iteration, &previous_external_history
-                ),
-                LogLevel::Debug,
-            );
-            context.log_message(
-                &format!(
-                    "[agent iter {}] previous internal history: {}",
-                    agent_iteration, &internal_history
-                ),
-                LogLevel::Debug,
-            );
-
-            // append new messages to internal history
-            // validate whether an incoming tool output message can be associated to a tool call of a previous assistant message
-            // failing to do so can lead to LLMs not seeing results or even bad requests for cloud-model provider
-            let offset = previous_external_history.messages.len();
-            for new_message in external_history.messages.iter().skip(offset) {
-                match new_message.role {
-                    Role::Tool => {
-                        let content_str = if let Some(tool_call_id) = &new_message.tool_call_id {
-                            if let Some(tool_name) = unanswered_tool_calls.remove(tool_call_id) {
-                                format!("[tooloutput] [{}]: {}", tool_name, new_message.as_str())
-                            } else {
-                                context.log_message(&format!("Couldn't link new tool message with id {} to any previous tool call", tool_call_id), LogLevel::Warn);
-                                format!("[tooloutput]: {}", new_message.as_str())
-                            }
-                        } else {
-                            context.log_message(
-                                "New tool message is missing a tool call id",
-                                LogLevel::Warn,
-                            );
-                            format!("[tooloutput]: {}", new_message.as_str())
-                        };
-                        let message = HistoryMessage {
-                            role: Role::User,
-                            content: MessageContent::Contents(vec![Content::Text {
-                                content_type: ContentType::Text,
-                                text: content_str,
-                            }]),
-                            tool_call_id: None,
-                            tool_calls: None,
-                            name: None,
-                            annotations: None,
-                        };
-                        internal_history.messages.push(message);
+        // Use multi-turn loop with completion client
+        // Filter out tool result messages from previous agent runs to avoid confusing Rig
+        let mut current_history: Vec<rig::message::Message> = history_msgs
+            .into_iter()
+            .filter(|msg| {
+                // Keep all messages except User messages with ToolResult content
+                // These are from previous tool executions and should not be included
+                match msg {
+                    rig::message::Message::User { content } => {
+                        // Check if any content is a ToolResult
+                        let has_tool_result = content
+                            .iter()
+                            .any(|c| matches!(c, rig::message::UserContent::ToolResult(_)));
+                        !has_tool_result
                     }
-                    _ => {
-                        // if there are tool calls from a previous iteration not answered by tool outputs we warn the user
-                        if !unanswered_tool_calls.is_empty() {
-                            context.log_message(&format!("There are open tool calls but incoming message hasn't role 'tool' but {:?} - this can lead to non-optimal performance.", new_message.role), LogLevel::Warn);
-                        }
-                        // if there aren't any tool calls (yet) to answer it's fine
-                        internal_history.messages.push(new_message.clone());
-                    }
+                    _ => true,
                 }
+            })
+            .collect();
+
+        context.log_message(
+            &format!(
+                "After filtering, current_history count: {}",
+                current_history.len()
+            ),
+            LogLevel::Debug,
+        );
+
+        let mut full_history = history.clone(); // Track full history including tool results
+        let mut iteration = 0;
+
+        loop {
+            if iteration >= max_iterations {
+                return Err(anyhow!("Max recursion limit ({}) reached", max_iterations));
             }
+
             context.log_message(
                 &format!(
-                    "[agent iter {}] updated  external history: {}",
-                    agent_iteration, &external_history
+                    "[agent iter {}] Starting iteration (current_history: {}, full_history: {})",
+                    iteration,
+                    current_history.len(),
+                    full_history.messages.len()
                 ),
                 LogLevel::Debug,
             );
-            context.log_message(
-                &format!(
-                    "[agent iter {}] updated  internal history: {}",
-                    agent_iteration, &internal_history
-                ),
-                LogLevel::Debug,
-            );
-            previous_external_history = external_history;
 
-            // generate response
-            let response = {
-                // load model
-                let model_factory = context.app_state.lock().await.model_factory.clone();
-                let model = model_factory
-                    .lock()
-                    .await
-                    .build(&model_bit, context.app_state.clone(), context.token.clone())
-                    .await?;
-                model.invoke(&internal_history, None).await?
-            }; // drop model
+            // Make completion request with tools
+            let mut request = agent
+                .completion(prompt.clone(), current_history.clone())
+                .await
+                .map_err(|e| anyhow!("Agent completion failed: {}", e))?;
 
-            // parse response
-            let mut response_string = "".to_string();
-            if let Some(response) = response.last_message() {
-                response_string = response.content.clone().unwrap_or("".to_string());
+            // Add tool definitions to request if we have tools
+            if !tool_definitions.is_empty() {
+                context.log_message(
+                    &format!(
+                        "Adding {} tool definitions to request",
+                        tool_definitions.len()
+                    ),
+                    LogLevel::Debug,
+                );
+                request = request.tools(tool_definitions.clone());
             }
+
+            // Send request
+            let response = request
+                .send()
+                .await
+                .map_err(|e| anyhow!("Failed to send completion request: {}", e))?;
+
             context.log_message(
-                &format!(
-                    "[agent iter {}] llm response: '{}'",
-                    agent_iteration, &response_string
-                ),
+                &format!("Received response with {} choices", response.choice.len()),
                 LogLevel::Debug,
             );
 
-            // parse tool calls (if any)
-            let tool_calls = if response_string.contains("<tooluse>") {
-                let tool_calls_str = extract_tagged(&response_string, "tooluse")?;
-                let tool_calls: Result<Vec<ToolCall>, Error> = tool_calls_str
-                    .iter()
-                    .map(|tool_call_str| tool_call_from_str(&tools, tool_call_str))
-                    .collect();
-                tool_calls?
-            } else {
-                vec![]
-            };
+            // Check for tool calls in response
+            let mut tool_calls_found = false;
+            let mut tool_results: Vec<(String, String, Value)> = Vec::new();
 
-            // LLM wants to make tool calls -> execute subcontexts
-            if !tool_calls.is_empty() {
-                let tool_call_id_pin = context.get_pin_by_name("tool_call_id").await?;
-                let tool_call_args_pin = context.get_pin_by_name("tool_call_args").await?;
-                for tool_call in tool_calls.iter() {
-                    let tool_call_args: Value = json::from_str(&tool_call.function.arguments)?;
+            for content in response.choice.iter() {
+                if let AssistantContent::ToolCall(RigToolCall {
+                    id,
+                    call_id: _,
+                    function:
+                        rig::message::ToolFunction {
+                            name, arguments, ..
+                        },
+                }) = content
+                {
+                    tool_calls_found = true;
                     context.log_message(
                         &format!(
-                            "[agent iter {}] exec tool {}",
-                            agent_iteration, &tool_call.function.name
+                            "[agent iter {}] Found tool call: {} (id: {})",
+                            iteration, name, id
                         ),
                         LogLevel::Debug,
                     );
 
-                    // deactivate all tool exec pins
-                    for tool in &tools {
-                        context.deactivate_exec_pin(&tool.function.name).await?
-                    }
+                    // Set tool call outputs on pins
+                    let tool_call_id_pin = context.get_pin_by_name("tool_call_id").await?;
+                    let tool_call_args_pin = context.get_pin_by_name("tool_call_args").await?;
 
-                    // set tool args + activate tool exec pin
                     tool_call_id_pin
                         .lock()
                         .await
-                        .set_value(json::json!(&tool_call.id))
+                        .set_value(json::json!(id))
                         .await;
                     tool_call_args_pin
                         .lock()
                         .await
-                        .set_value(tool_call_args)
+                        .set_value(arguments.clone())
                         .await;
-                    context.activate_exec_pin(&tool_call.function.name).await?;
 
-                    // execute tool subcontext
-                    let tool_exec_pin = context.get_pin_by_name(&tool_call.function.name).await?;
+                    // Activate the specific tool exec pin
+                    context.activate_exec_pin(name.as_str()).await?;
+
+                    // Execute tool subcontext
+                    let tool_exec_pin = context.get_pin_by_name(name.as_str()).await?;
                     let tool_flow = tool_exec_pin.lock().await.get_connected_nodes().await;
-                    for node in &tool_flow {
+
+                    context.log_message(
+                        &format!("Tool {} has {} connected nodes", name, tool_flow.len()),
+                        LogLevel::Debug,
+                    );
+
+                    for (node_idx, node) in tool_flow.iter().enumerate() {
+                        context.log_message(
+                            &format!(
+                                "Executing tool node {}/{} for tool {}",
+                                node_idx + 1,
+                                tool_flow.len(),
+                                name
+                            ),
+                            LogLevel::Debug,
+                        );
+
                         let mut sub_context = context.create_sub_context(node).await;
                         let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
 
+                        // CRITICAL: Capture result BEFORE end_trace and push_sub_context
+                        // push_sub_context only copies traces, not the result field!
+                        let captured_result = sub_context.result.clone();
+
                         sub_context.end_trace();
                         context.push_sub_context(&mut sub_context);
-                        if run.is_err() {
-                            let error = run.err().unwrap();
-                            context.log_message(
-                                &format!(
-                                    "Error executing tool {}: {:?}",
-                                    &tool_call.function.name, error
-                                ),
-                                LogLevel::Error,
-                            );
-                        }
+
+                        // Prepare tool output message for history
+                        let tool_output_str = match run {
+                            Ok(_) => {
+                                // Use captured result
+                                if let Some(ref result) = captured_result {
+                                    let result_str = json::to_string(&result)
+                                        .unwrap_or_else(|_| result.to_string());
+                                    context.log_message(
+                                        &format!(
+                                            "Tool {} returned result ({} chars)",
+                                            name,
+                                            result_str.len()
+                                        ),
+                                        LogLevel::Debug,
+                                    );
+                                    result_str
+                                } else {
+                                    context.log_message(
+                                        &format!("Tool {} executed successfully (no result)", name),
+                                        LogLevel::Debug,
+                                    );
+                                    "Tool executed successfully".to_string()
+                                }
+                            }
+                            Err(error) => {
+                                context.log_message(
+                                    &format!("Tool {} execution FAILED: {:?}", name, error),
+                                    LogLevel::Error,
+                                );
+                                format!("Error: {:?}", error)
+                            }
+                        };
+
+                        tool_results.push((id.clone(), name.clone(), json::json!(tool_output_str)));
                     }
+
+                    // Deactivate tool exec pin
+                    context.deactivate_exec_pin(name.as_str()).await?;
                 }
-                // deactivate all tool exec pins
-                for tool in &tools {
-                    context.deactivate_exec_pin(&tool.function.name).await?
+            }
+
+            context.log_message(
+                &format!("Tool results collected: {}", tool_results.len()),
+                LogLevel::Debug,
+            );
+
+            // Log all tool results
+            for (idx, (tool_id, tool_name, tool_output)) in tool_results.iter().enumerate() {
+                context.log_message(
+                    &format!("Tool result {}: name={}, id={}", idx, tool_name, tool_id),
+                    LogLevel::Debug,
+                );
+            }
+
+            // If no tool calls, we're done
+            if !tool_calls_found {
+                context.log_message(
+                    &format!("[agent iter {}] No more tool calls, finishing", iteration),
+                    LogLevel::Debug,
+                );
+
+                // Extract final text response
+                let final_response = response
+                    .choice
+                    .iter()
+                    .find_map(|c| match c {
+                        AssistantContent::Text(text) => Some(text.text.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| String::new());
+
+                context.log_message(
+                    &format!("Final response extracted: {} chars", final_response.len()),
+                    LogLevel::Debug,
+                );
+
+                // Create Response object from the final response
+                use rig::OneOrMany;
+                let content = OneOrMany::one(AssistantContent::Text(rig::message::Text {
+                    text: final_response.clone(),
+                }));
+
+                let response_obj = Response::from_rig_message(rig::message::Message::Assistant {
+                    id: None,
+                    content,
+                })
+                .map_err(|e| anyhow!("Failed to create response: {}", e))?;
+
+                // Add final assistant response to full history
+                use flow_like_model_provider::history::{HistoryMessage, MessageContent, Role};
+                let final_assistant_msg = HistoryMessage {
+                    role: Role::Assistant,
+                    content: MessageContent::String(final_response),
+                    name: None,
+                    tool_call_id: None,
+                    tool_calls: None,
+                    annotations: None,
+                };
+                full_history.push_message(final_assistant_msg);
+
+                // Try to set history_out if it exists (may not exist in older node instances)
+                if context.get_pin_by_name("history_out").await.is_ok() {
+                    context
+                        .set_pin_value("history_out", json::json!(full_history))
+                        .await?;
                 }
 
-            // LLM doesn't want to make any tool calls -> return final response
-            } else {
                 context
-                    .set_pin_value("response", json::json!(response))
-                    .await?; // todo: remove prefix from response struct
+                    .set_pin_value("response", json::json!(response_obj))
+                    .await?;
+
                 context.activate_exec_pin("exec_done").await?;
+
+                context.log_message("Agent execution complete", LogLevel::Debug);
                 return Ok(());
             }
 
-            // prep for next iteration
-            // -> track open tool calls
-            for tool_call in tool_calls.iter() {
-                unanswered_tool_calls.insert(tool_call.id.clone(), tool_call.function.name.clone());
+            // Prepare history for next iteration by appending assistant message
+            let assistant_msg = rig::message::Message::Assistant {
+                id: None,
+                content: response.choice.clone().into(),
+            };
+            current_history.push(assistant_msg.clone());
+
+            // Add assistant message with tool calls to full history
+            use flow_like_model_provider::history::{
+                Content, ContentType, HistoryMessage, MessageContent, Role,
+            };
+            let assistant_history_msg: HistoryMessage = assistant_msg.into();
+            full_history.push_message(assistant_history_msg);
+
+            context.log_message(
+                &format!("Adding {} tool results to histories", tool_results.len()),
+                LogLevel::Debug,
+            );
+            // Add tool results directly to current_history as Rig UserContent::ToolResult messages
+            // This is what Rig expects for multi-turn tool execution
+            use rig::OneOrMany;
+            use rig::message::{ToolResult as RigToolResult, ToolResultContent, UserContent};
+
+            for (tool_id, tool_name, tool_output) in &tool_results {
+                let tool_result_str = match tool_output.as_str() {
+                    Some(s) => s.to_string(),
+                    None => json::to_string(tool_output).unwrap_or_default(),
+                };
+
+                context.log_message(
+                    &format!(
+                        "Adding tool result to history: {} (id: {}) -> {} chars",
+                        tool_name,
+                        tool_id,
+                        tool_result_str.len()
+                    ),
+                    LogLevel::Debug,
+                );
+
+                // Create Rig-native tool result message
+                let tool_result_msg = rig::message::Message::User {
+                    content: OneOrMany::one(UserContent::ToolResult(RigToolResult {
+                        id: tool_id.clone(),
+                        call_id: None,
+                        content: OneOrMany::one(ToolResultContent::text(tool_result_str.clone())),
+                    })),
+                };
+                current_history.push(tool_result_msg);
+
+                // Also add to full_history for output tracking
+                let tool_msg = HistoryMessage {
+                    role: Role::Tool,
+                    content: MessageContent::Contents(vec![Content::Text {
+                        content_type: ContentType::Text,
+                        text: tool_result_str,
+                    }]),
+                    name: Some(tool_name.clone()),
+                    tool_call_id: Some(tool_id.clone()),
+                    tool_calls: None,
+                    annotations: None,
+                };
+                full_history.push_message(tool_msg);
             }
 
-            // -> append own response as assistant message to internal history
-            let ai_message = HistoryMessage {
-                role: Role::Assistant,
-                content: MessageContent::Contents(vec![Content::Text {
-                    content_type: ContentType::Text,
-                    text: response_string,
-                }]),
-                name: None,
-                tool_call_id: None,
-                tool_calls: Some(tool_calls),
-                annotations: None,
-            };
-            internal_history.messages.push(ai_message);
+            iteration += 1;
+            context.log_message(
+                &format!("Iteration {} complete, continuing loop", iteration - 1),
+                LogLevel::Debug,
+            );
         }
-        return Err(anyhow!("Max recursion limit hit"));
     }
 
-    async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
+    async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
         let current_tool_exec_pins: Vec<_> = node
             .pins
             .values()

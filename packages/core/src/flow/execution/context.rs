@@ -554,6 +554,9 @@ impl ExecutionContext {
     pub fn push_sub_context(&mut self, context: &mut ExecutionContext) {
         let sub_traces = context.take_traces();
         self.sub_traces.extend(sub_traces);
+        if let Some(result) = &context.result {
+            self.result = Some(result.clone());
+        }
     }
 
     pub fn end_trace(&mut self) {

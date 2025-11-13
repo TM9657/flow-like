@@ -199,44 +199,15 @@ impl NodeLogic for LLMExtractNode {
 
         let preamble = "You are a knowledge extraction assistant. Extract data by calling the 'submit' tool with structured data matching the provided schema.";
 
-        let (model_name, completion_client) = {
-            let model_factory = context.app_state.lock().await.model_factory.clone();
-            let model = model_factory
-                .lock()
-                .await
-                .build(&model_bit, context.app_state.clone(), context.token.clone())
-                .await?;
-            let default_model = model.default_model().await.unwrap_or_default();
-            let provider = model.provider().await?;
-            let client = provider.client();
-            let completion = client
-                .as_completion()
-                .ok_or_else(|| anyhow!("Provider does not support completion"))?;
-            (default_model, completion)
-        };
-
-        context.log_message(&format!("Calling model: {}", model_name), LogLevel::Debug);
-
-        let mut agent_builder = completion_client
-            .agent(&model_name)
+        let agent_builder = model_bit
+            .agent(context, &None)
+            .await?
             .preamble(preamble)
             .tool(DynamicSubmitTool {
                 parameters: prepared_schema.tool_parameters,
                 output_schema: prepared_schema.output_schema.clone(),
             })
             .tool_choice(ToolChoice::Required);
-
-        // Get additional params from the model if needed
-        let model_factory = context.app_state.lock().await.model_factory.clone();
-        let model = model_factory
-            .lock()
-            .await
-            .build(&model_bit, context.app_state.clone(), context.token.clone())
-            .await?;
-
-        if let Some(additional_params) = model.additional_params(None) {
-            agent_builder = agent_builder.additional_params(additional_params);
-        }
 
         let agent = agent_builder.build();
 

@@ -44,7 +44,7 @@ pub type LLMCallback = Arc<
 pub trait ModelLogic: Send + Sync {
     async fn provider(&self) -> Result<ModelConstructor>;
     async fn default_model(&self) -> Option<String>;
-    fn additional_params(&self, _history: Option<History>) -> Option<flow_like_types::Value> {
+    fn additional_params(&self, _history: &Option<History>) -> Option<flow_like_types::Value> {
         None
     }
 
@@ -99,7 +99,7 @@ pub trait ModelLogic: Send + Sync {
         // Some providers (like Gemini) need to filter certain fields from history params
         // So we let the model implementation handle the merging in additional_params()
         // Only add history params here if the model doesn't provide custom params
-        let model_additional_params = self.additional_params(Some(history.clone()));
+        let model_additional_params = self.additional_params(&Some(history.clone()));
 
         if model_additional_params.is_none() {
             // Model doesn't provide custom params, use history params directly

@@ -197,7 +197,7 @@ impl ModelLogic for GeminiModel {
             builder = builder.tool_choice(choice);
         }
 
-        let model_additional_params = self.additional_params(Some(history.clone()));
+        let model_additional_params = self.additional_params(&Some(history.clone()));
 
         if model_additional_params.is_none()
             && let Some(params) = history.build_additional_params()?
@@ -212,7 +212,7 @@ impl ModelLogic for GeminiModel {
         }
     }
 
-    fn additional_params(&self, history: Option<History>) -> Option<flow_like_types::Value> {
+    fn additional_params(&self, history: &Option<History>) -> Option<flow_like_types::Value> {
         // Gemini's AdditionalParameters MUST include generation_config field
         // We need to handle the 'stream' field specially: it comes from History.build_additional_params()
         // but Gemini doesn't accept 'stream' in the request body - it uses different endpoints instead
