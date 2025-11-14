@@ -28,6 +28,7 @@ use std::sync::Arc;
 
 const GAUSSIAN_KERNEL_EPS: f64 = 30.0;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct FitSVMMultiClassNode {}
 

@@ -12,6 +12,7 @@ use flow_like_storage::Path;
 use flow_like_types::{async_trait, json::json};
 use futures::{StreamExt, TryStreamExt};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct DeleteNode {}
 

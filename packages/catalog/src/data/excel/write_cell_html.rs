@@ -19,6 +19,7 @@ use umya_spreadsheet::{self};
 /// Column and Row correspond to the components of an A1 address
 /// (e.g. for "B3": col = "B", row = "3").
 /// The updated (same) `FlowPath` is returned so downstream nodes can re-use the file.
+#[crate::register_node]
 #[derive(Default)]
 pub struct WriteCellHtmlNode {}
 

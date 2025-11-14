@@ -67,6 +67,7 @@ impl Drop for DoclingCacheObject {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct DoclingNode {}
 

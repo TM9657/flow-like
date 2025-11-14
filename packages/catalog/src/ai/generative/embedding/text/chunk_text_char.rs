@@ -10,6 +10,7 @@ use flow_like::{
 use flow_like_model_provider::text_splitter::{ChunkConfig, MarkdownSplitter, TextSplitter};
 use flow_like_types::{async_trait, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ChunkTextChar {}
 

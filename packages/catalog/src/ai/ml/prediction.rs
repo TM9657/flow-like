@@ -25,6 +25,7 @@ use flow_like_types::{Result, Value, anyhow, async_trait, json::json};
 use std::collections::HashSet;
 use std::sync::Arc;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct MLPredictNode {}
 

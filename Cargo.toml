@@ -15,6 +15,7 @@ members = [
     "packages/bits",
     "packages/types",
     "packages/catalog",
+    "packages/catalog-macros",
     "packages/storage",
     "packages/api",
     "apps/utils/board-decoder",
@@ -27,6 +28,7 @@ flow-like-api = { path = "packages/api" }
 flow-like-model-provider = { path = "packages/model-provider" }
 flow-like-bits = { path = "packages/bits" }
 flow-like-catalog = { path = "packages/catalog" }
+flow-like-catalog-macros = { path = "packages/catalog-macros" }
 flow-like-storage = { path = "packages/storage" }
 lambda_http = "0.15.1"
 futures = "0.3.31"

@@ -11,6 +11,7 @@ use flow_like_types::{async_trait, json::json, reqwest};
 
 use super::{HttpRequest, HttpResponse};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct HttpFetchNode {}
 

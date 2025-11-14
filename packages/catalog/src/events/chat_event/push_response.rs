@@ -12,6 +12,7 @@ use flow_like_types::async_trait;
 
 use super::CachedChatResponse;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct PushResponseNode {}
 

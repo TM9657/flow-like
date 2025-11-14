@@ -12,6 +12,7 @@ use flow_like::{
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_types::{Cacheable, async_trait, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct VirtualDirNode {}
 

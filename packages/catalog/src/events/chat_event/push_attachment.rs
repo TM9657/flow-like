@@ -11,6 +11,7 @@ use flow_like_types::async_trait;
 
 use super::{Attachment, CachedChatResponse, ChatStreamingResponse};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct PushAttachmentNode {}
 

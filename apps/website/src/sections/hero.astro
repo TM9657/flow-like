@@ -8,7 +8,7 @@ const docs = "https://docs.flow-like.com";
 <section class="relative py-12 md:py-20 lg:py-24 max-w-screen overflow-hidden">
     <div
         id="hero-connection-layer"
-        class="pointer-events-none absolute inset-0 w-full h-full -z-[1] overflow-hidden [contain:layout_paint]"
+        class="pointer-events-none absolute inset-0 w-full h-full -z-1 overflow-hidden contain-[layout_paint]"
     >
         <!-- contain prevents svg path geometry from affecting page scroll size -->
         <svg
@@ -57,14 +57,14 @@ const docs = "https://docs.flow-like.com";
         </div>
 
         <div
-            class="hero-card relative overflow-hidden rounded-2xl border border-border/80 bg-background/90 backdrop-blur [--ring:theme(colors.primary.DEFAULT/30)]"
+            class="hero-card relative overflow-hidden rounded-2xl border border-border/80 bg-background/90 backdrop-blur [--ring:var(--color-primary)]/3000"
         >
             <div
                 aria-hidden="true"
                 class="pointer-events-none absolute inset-0"
             >
                 <div
-                    class="absolute inset-0 bg-gradient-to-tr from-background/70 via-background/30 to-transparent"
+                    class="absolute inset-0 bg-linear-to-tr from-background/70 via-background/30 to-transparent"
                 >
                 </div>
                 <div class="absolute -inset-0.5 opacity-0 hero-sheen"></div>
@@ -128,7 +128,7 @@ const docs = "https://docs.flow-like.com";
                 </div>
                 <div class="relative min-h-[260px] lg:min-h-[420px] reveal">
                     <div
-                        class="absolute inset-0 bg-gradient-to-tr from-transparent via-background/20 to-background/0"
+                        class="absolute inset-0 bg-linear-to-tr from-transparent via-background/20 to-background/0"
                     >
                     </div>
                     <EmptyBackendProvider data="/board.json" client:idle />

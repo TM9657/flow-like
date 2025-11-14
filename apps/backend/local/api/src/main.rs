@@ -62,7 +62,7 @@ async fn main() {
     let cdn_bucket =
         flow_like_storage::files::store::FlowLikeStore::AWS(Arc::new(cdn_bucket.build().unwrap()));
 
-    let catalog = Arc::new(flow_like_catalog::get_catalog().await);
+    let catalog = Arc::new(flow_like_catalog::get_catalog());
     let state = Arc::new(flow_like_api::state::State::new(catalog, Arc::new(cdn_bucket)).await);
 
     let app = construct_router(state);

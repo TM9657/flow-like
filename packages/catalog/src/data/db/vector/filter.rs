@@ -12,6 +12,7 @@ use flow_like_types::{async_trait, json::json};
 
 use super::NodeDBConnection;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct FilterLocalDatabaseNode {}
 

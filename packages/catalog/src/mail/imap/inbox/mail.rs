@@ -16,6 +16,7 @@ pub mod draft;
 pub mod mark_seen;
 pub mod mv;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct FetchMailNode;
 
@@ -74,6 +75,7 @@ impl NodeLogic for FetchMailNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct EmailHeadersNode;
 
@@ -143,6 +145,7 @@ impl NodeLogic for EmailHeadersNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct EmailContentNode;
 
@@ -189,6 +192,7 @@ impl NodeLogic for EmailContentNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct EmailAttachmentsNode;
 
@@ -234,6 +238,7 @@ impl NodeLogic for EmailAttachmentsNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct MailAddressFieldsNode;
 
@@ -282,6 +287,7 @@ impl NodeLogic for MailAddressFieldsNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct AttachmentFieldsNode;
 
@@ -341,6 +347,7 @@ impl NodeLogic for AttachmentFieldsNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ToMailReferenceNode;
 
@@ -382,24 +389,4 @@ impl NodeLogic for ToMailReferenceNode {
         context.set_pin_value("reference", json!(email_ref)).await?;
         Ok(())
     }
-}
-
-use std::sync::Arc;
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let output = vec![
-        Arc::new(FetchMailNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(EmailHeadersNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(EmailContentNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(EmailAttachmentsNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(MailAddressFieldsNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(AttachmentFieldsNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(ToMailReferenceNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(draft::ImapCreateDraftNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(mv::ImapMoveMailNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(delete::ImapDeleteMailNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(mark_seen::ImapMarkSeenNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(copy::ImapCopyMailNode::new()) as Arc<dyn NodeLogic>,
-    ];
-    output
 }

@@ -1,6 +1,6 @@
 /// # ONNX Nodes
 /// Loading and Inference for ONNX-based Models
-use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
+use flow_like::flow::execution::context::ExecutionContext;
 #[cfg(feature = "local-ml")]
 use flow_like_model_provider::ml::ort::session::Session;
 use flow_like_types::{Cacheable, Result, create_id, sync::Mutex};
@@ -89,14 +89,4 @@ impl NodeOnnxSession {
         let session = session_wrapper.session.clone();
         Ok(session)
     }
-}
-
-/// Add ONNX-related Nodes to Catalog Lib
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let nodes: Vec<Arc<dyn NodeLogic>> = vec![
-        Arc::new(load::LoadOnnxNode::default()),
-        Arc::new(detection::ObjectDetectionNode::default()),
-        Arc::new(classification::ImageClassificationNode::default()),
-    ];
-    nodes
 }

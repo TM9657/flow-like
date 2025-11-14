@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use super::{HttpRequest, HttpResponse, StreamingCallback};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct StreamingHttpFetchNode {}
 

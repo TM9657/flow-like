@@ -13,6 +13,7 @@ use futures::{FutureExt, StreamExt, future::BoxFuture, stream::FuturesUnordered}
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ParallelExecutionNode;
 

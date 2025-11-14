@@ -33,6 +33,7 @@ use crate::data::path::FlowPath;
 /// - `inserted` (Boolean): true when rows were inserted.
 /// - `final_row_index` (Integer): the actual 1-based row index used.
 /// - `total_rows_inserted` (Integer): echo of the `num_rows` actually applied.
+#[crate::register_node]
 #[derive(Default)]
 pub struct InsertRowNode {}
 

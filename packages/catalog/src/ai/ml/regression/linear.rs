@@ -26,6 +26,7 @@ use linfa_linear::{FittedLinearRegression, LinearRegression};
 use std::collections::HashSet;
 use std::sync::Arc;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct FitLinearRegressionNode {}
 

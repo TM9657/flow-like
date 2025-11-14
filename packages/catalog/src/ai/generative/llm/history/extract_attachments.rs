@@ -35,6 +35,7 @@ fn extract_image_urls(history: &History) -> Vec<String> {
         .unwrap_or_default()
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ExtractAttachments {}
 

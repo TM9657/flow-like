@@ -1783,6 +1783,7 @@ fn strip_header_dup_suffix(h: &str) -> String {
     s.to_string()
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ExtractExcelTablesNode {}
 

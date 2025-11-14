@@ -87,6 +87,7 @@ impl Cacheable for SmtpSessionCache {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SmtpConnectNode;
 

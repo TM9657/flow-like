@@ -29,6 +29,7 @@ impl ImapInbox {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ImapInboxNode;
 
@@ -100,6 +101,7 @@ impl NodeLogic for ImapInboxNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ImapListInboxesNode;
 
@@ -189,6 +191,7 @@ impl NodeLogic for ImapListInboxesNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ImapCreateMailboxNode;
 
@@ -288,15 +291,4 @@ impl NodeLogic for ImapCreateMailboxNode {
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
-}
-
-use std::sync::Arc;
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let output = vec![
-        Arc::new(ImapInboxNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(ImapListInboxesNode::new()) as Arc<dyn NodeLogic>,
-        Arc::new(ImapCreateMailboxNode::new()) as Arc<dyn NodeLogic>,
-    ];
-    output
 }

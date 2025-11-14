@@ -12,6 +12,7 @@ use flow_like_types::{async_trait, json::json};
 use std::collections::HashSet;
 use std::sync::Arc;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct MakeSetNode {}
 

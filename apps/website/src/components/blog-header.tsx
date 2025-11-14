@@ -77,7 +77,7 @@ export function BlogHeader() {
 					<button
 						aria-label="Close menu backdrop"
 						onClick={() => setOpen(false)}
-						className="absolute inset-0 w-full h-full bg-black/30 supports-[backdrop-filter]:backdrop-blur-sm"
+						className="absolute inset-0 w-full h-full bg-black/30 supports-backdrop-filter:backdrop-blur-sm"
 					/>
 					{/* Panel */}
 					<div

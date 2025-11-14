@@ -10,6 +10,7 @@ use flow_like::{
 };
 use flow_like_types::{Ok, async_trait, image::GenericImageView, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ImageDimsNode {}
 

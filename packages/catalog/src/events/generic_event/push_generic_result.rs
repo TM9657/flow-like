@@ -10,6 +10,7 @@ use flow_like::{
     state::FlowLikeState,
 };
 use flow_like_types::async_trait;
+#[crate::register_node]
 #[derive(Default)]
 pub struct ReturnGenericResultNode {}
 

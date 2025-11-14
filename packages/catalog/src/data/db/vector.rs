@@ -65,6 +65,7 @@ impl NodeDBConnection {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct CreateLocalDatabaseNode {}
 

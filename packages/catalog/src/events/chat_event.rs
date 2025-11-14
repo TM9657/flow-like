@@ -251,6 +251,7 @@ pub mod url_processing {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ChatEventNode {}
 
@@ -632,20 +633,6 @@ pub struct ChatStreamingResponse {
     pub actions: Vec<ChatAction>,
     pub attachments: Vec<Attachment>,
     pub plan: Option<Reasoning>,
-}
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    vec![
-        Arc::new(ChatEventNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(push_response::PushResponseNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(push_chunk::PushChunkNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(push_attachment::PushAttachmentNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(push_attachments::PushAttachmentsNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(attachment_to_url::AttachmentToUrlNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(attachment_from_url::AttachmentFromUrlNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(push_local_session::PushLocalSessionNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(push_global_session::PushGlobalSessionNode::default()) as Arc<dyn NodeLogic>,
-    ]
 }
 
 #[cfg(test)]

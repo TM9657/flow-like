@@ -1,5 +1,4 @@
 use flow_like::flow::execution::context::ExecutionContext;
-use flow_like::flow::node::NodeLogic;
 use flow_like_types::image::DynamicImage;
 use flow_like_types::sync::Mutex;
 use flow_like_types::{Cacheable, Result, create_id};
@@ -87,14 +86,4 @@ impl NodeImage {
         let image = image_wrapper.image.clone();
         Ok(image)
     }
-}
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let mut nodes: Vec<Arc<dyn NodeLogic>> =
-        vec![Arc::new(metadata::dims::ImageDimsNode::default())];
-    nodes.extend(annotate::register_functions().await);
-    nodes.extend(content::register_functions().await);
-    nodes.extend(pdf::register_functions().await);
-    nodes.extend(transform::register_functions().await);
-    nodes
 }

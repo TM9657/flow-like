@@ -26,6 +26,7 @@ use crate::data::path::FlowPath;
 /// Outputs
 /// - `sheet_names` (Array<String>): ordered list of sheet names as they appear.
 /// - `count` (Integer): number of sheets.
+#[crate::register_node]
 #[derive(Default)]
 pub struct GetSheetNamesNode {}
 

@@ -12,6 +12,7 @@ use flow_like_storage::object_store::PutPayload;
 use flow_like_types::async_trait;
 use futures::StreamExt;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct CopyNode {}
 

@@ -12,6 +12,7 @@ use flow_like_model_provider::history::{History, ResponseFormat};
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SetHistoryResponseFormatNode {}
 

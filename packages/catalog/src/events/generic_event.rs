@@ -11,6 +11,7 @@ use flow_like::{
 use flow_like_types::{async_trait, json::json};
 pub mod push_generic_result;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct GenericEventNode {}
 

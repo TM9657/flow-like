@@ -12,6 +12,7 @@ use flow_like_types::{Value, async_trait};
 
 use super::NodeDBConnection;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct UpsertLocalDatabaseNode {}
 
@@ -72,6 +73,7 @@ impl NodeLogic for UpsertLocalDatabaseNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct BatchUpsertLocalDatabaseNode {}
 

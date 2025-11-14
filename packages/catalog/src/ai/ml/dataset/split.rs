@@ -15,6 +15,7 @@ use flow_like_types::rand::{self, Rng};
 use flow_like_types::{Result, async_trait, json::json};
 use futures::TryStreamExt;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SplitDatasetNode {}
 

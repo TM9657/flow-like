@@ -24,6 +24,7 @@ pub struct ClassPrediction {
     pub label: Option<String>,
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct TeachableMachineNode {}
 
@@ -260,6 +261,7 @@ fn find_tflite_slice(buf: &[u8]) -> Option<&[u8]> {
     None
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct PredictionClassOrLabelNode {}
 
@@ -318,6 +320,7 @@ impl NodeLogic for PredictionClassOrLabelNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct PredictionScoreNode {}
 
@@ -364,13 +367,4 @@ impl NodeLogic for PredictionScoreNode {
             .await?;
         Ok(())
     }
-}
-
-/// Register TFLite-related nodes
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    vec![
-        Arc::new(TeachableMachineNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(PredictionClassOrLabelNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(PredictionScoreNode::default()) as Arc<dyn NodeLogic>,
-    ]
 }

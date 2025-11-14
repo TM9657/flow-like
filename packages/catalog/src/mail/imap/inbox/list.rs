@@ -164,6 +164,7 @@ impl EmailRef {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ListMailsNode;
 

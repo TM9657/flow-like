@@ -13,6 +13,7 @@ use flow_like_types::{
     rand::{self, Rng},
 };
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct RandomBoolNode {}
 

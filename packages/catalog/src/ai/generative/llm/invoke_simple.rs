@@ -29,6 +29,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct InvokeLLMSimpleNode {}
 
