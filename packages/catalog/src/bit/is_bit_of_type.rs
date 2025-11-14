@@ -13,6 +13,7 @@ use flow_like_types::{
     json::{from_str, json},
 };
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct IsBitOfTypeNode {}
 

@@ -3,12 +3,6 @@ use std::sync::Arc;
 
 pub mod extract_links;
 
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let out: Vec<Arc<dyn NodeLogic>> = vec![Arc::new(extract_links::ExtractLinksNode::default())];
-
-    out
-}
-
 // use deno_core::{JsRuntime, RuntimeOptions};
 
 // fn render_dynamic_content(html: &str) -> Result<String, Box<dyn std::error::Error>> {

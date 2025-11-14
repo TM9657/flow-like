@@ -15,6 +15,7 @@ use crate::data::path::FlowPath;
 
 use super::NodeDBConnection;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct InsertLocalDatabaseNode {}
 
@@ -72,6 +73,7 @@ impl NodeLogic for InsertLocalDatabaseNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct BatchInsertLocalDatabaseNode {}
 
@@ -129,6 +131,7 @@ impl NodeLogic for BatchInsertLocalDatabaseNode {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct BatchInsertCSVLocalDatabaseNode {}
 

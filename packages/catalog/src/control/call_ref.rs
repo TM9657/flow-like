@@ -15,6 +15,7 @@ use flow_like::{
 };
 use flow_like_types::{Value, async_trait, json::from_slice};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct CallReferenceNode {}
 

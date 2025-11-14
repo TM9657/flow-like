@@ -18,6 +18,7 @@ use flow_like_types::{Value, async_trait};
 /// - `Open` / `Close` / `Toggle` change the internal open-state and do **not** forward execution.
 /// - `Enter` forwards to `Exit` if the gate is open; otherwise it is blocked.
 /// - The open-state persists by writing to the `is_open` output pin.
+#[crate::register_node]
 #[derive(Default)]
 pub struct GateNode {}
 

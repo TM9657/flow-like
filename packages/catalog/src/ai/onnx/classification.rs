@@ -221,7 +221,7 @@ fn softmax(input_array: ArrayView1<f32>) -> Result<Array1<f32>, Error> {
     Ok(exp_shifted / sum_exp)
 }
 
-/// Image Classification Node
+#[crate::register_node]
 #[derive(Default)]
 pub struct ImageClassificationNode {}
 

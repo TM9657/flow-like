@@ -170,6 +170,7 @@ pub fn tool_call_from_str(tools: &Vec<Tool>, tool_call_function: &str) -> Result
     )))
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ParseWithSchema {}
 

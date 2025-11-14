@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use super::{CachedEmbeddingModel, CachedEmbeddingModelObject};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct LoadModelNode {}
 

@@ -13,6 +13,7 @@ use std::collections::hash_set::Difference;
 use std::hash::RandomState;
 use std::{collections::HashSet, sync::Arc};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct DifferenceSetNode {}
 

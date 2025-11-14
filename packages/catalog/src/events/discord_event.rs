@@ -11,6 +11,7 @@ use flow_like::{
 use flow_like_types::{async_trait, json::json};
 pub mod push_generic_result;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct GenericEventNode {}
 
@@ -93,11 +94,4 @@ impl NodeLogic for GenericEventNode {
 
         return Ok(());
     }
-}
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    vec![
-        Arc::new(GenericEventNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(push_generic_result::ReturnGenericResultNode::default()) as Arc<dyn NodeLogic>,
-    ]
 }

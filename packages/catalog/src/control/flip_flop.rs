@@ -14,6 +14,7 @@ use flow_like_types::{async_trait, json::json};
 /// - Each `exec_in` fires the current side and then toggles to the other.
 /// - Exposes `is_a` (the side that will fire on the **next** trigger) and `tick`
 ///   (how many times it has executed so far).
+#[crate::register_node]
 #[derive(Default)]
 pub struct FlipFlopNode {}
 

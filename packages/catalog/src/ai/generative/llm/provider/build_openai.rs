@@ -17,6 +17,7 @@ use flow_like_types::{
     json::{json, to_value},
 };
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct BuildOpenAiNode {}
 

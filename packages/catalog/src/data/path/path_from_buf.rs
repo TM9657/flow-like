@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 use crate::data::path::FlowPath;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct PathBufToPathNode {}
 

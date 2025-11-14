@@ -20,13 +20,3 @@ pub fn normalize_json_value(value: Value) -> Value {
         other => other,
     }
 }
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    vec![
-        Arc::new(try_transform::TryTransformNode::default()),
-        Arc::new(from_bytes::FromBytesNode::default()),
-        Arc::new(from_string::FromStringNode::default()),
-        Arc::new(to_bytes::ToBytesNode::default()),
-        Arc::new(to_string::ToStringNode::default()),
-    ]
-}

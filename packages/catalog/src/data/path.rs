@@ -488,18 +488,6 @@ impl FlowPathRuntime {
     }
 }
 
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let mut nodes = vec![];
-
-    nodes.extend(content::register_functions().await);
-    nodes.extend(dirs::register_functions().await);
-    nodes.extend(manipulation::register_functions().await);
-    nodes.extend(operations::register_functions().await);
-    nodes.push(Arc::new(path_from_buf::PathBufToPathNode::new()));
-
-    nodes
-}
-
 #[cfg(test)]
 mod tests {
     use flow_like_types::tokio;

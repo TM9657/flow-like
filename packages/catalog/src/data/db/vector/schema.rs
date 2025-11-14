@@ -14,6 +14,7 @@ use super::NodeDBConnection;
 
 /// # Get Database Schema
 /// Retrieves schema from local database as struct
+#[crate::register_node]
 #[derive(Default)]
 pub struct GetSchemaLocalDatabaseNode {}
 

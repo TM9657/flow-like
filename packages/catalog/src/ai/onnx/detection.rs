@@ -394,6 +394,7 @@ fn nms(boxes: &[BoundingBox], iou_threshold: f32) -> Vec<BoundingBox> {
     kept_boxes
 }
 
+#[crate::register_node]
 #[derive(Default)]
 /// # Object Detection Node
 /// Evaluate ONNX-based Object Detection Models for Images

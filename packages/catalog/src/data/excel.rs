@@ -568,22 +568,3 @@ pub fn parse_col_1_based(s: &str) -> flow_like_types::Result<u32> {
 
     Ok(acc)
 }
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let mut nodes: Vec<Arc<dyn NodeLogic>> = vec![];
-    nodes.push(Arc::new(try_extract_tables::ExtractExcelTablesNode::new()));
-    nodes.push(Arc::new(read_cell::ReadCellNode::new()));
-    nodes.push(Arc::new(write_cell::WriteCellNode::new()));
-    nodes.push(Arc::new(write_cell_html::WriteCellHtmlNode::new()));
-    nodes.push(Arc::new(remove_column::RemoveColumnNode::new()));
-    nodes.push(Arc::new(insert_column::InsertColumnNode::new()));
-    nodes.push(Arc::new(remove_row::RemoveRowNode::new()));
-    nodes.push(Arc::new(insert_row::InsertRowNode::new()));
-    nodes.push(Arc::new(new_worksheet::NewWorksheetNode::new()));
-    nodes.push(Arc::new(get_sheet_names::GetSheetNamesNode::new()));
-    nodes.push(Arc::new(copy_worksheet::CopyWorksheetNode::new()));
-    nodes.push(Arc::new(get_row::GetRowByIndexNode::new()));
-    nodes.push(Arc::new(loop_rows::RowLoopNode::new()));
-
-    nodes
-}

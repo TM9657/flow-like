@@ -15,6 +15,7 @@ use flow_like_types::{
 };
 use std::io::Cursor;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ReadImagePathNode {}
 

@@ -27,6 +27,7 @@ use std::{
     sync::Arc,
 };
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SimpleAgentNode {}
 

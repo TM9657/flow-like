@@ -177,6 +177,7 @@ pub fn extract_tagged(text: &str, tag: &str) -> Result<Vec<String>, Error> {
     Ok(out)
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct InvokeLLMWithToolsNode {}
 

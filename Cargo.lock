@@ -5169,12 +5169,14 @@ dependencies = [
  "dirs-next",
  "fasteval",
  "flow-like",
+ "flow-like-catalog-macros",
  "flow-like-model-provider",
  "flow-like-storage",
  "flow-like-types",
  "futures",
  "hayro",
  "htmd",
+ "inventory",
  "jsonschema",
  "linfa",
  "linfa-clustering",
@@ -5199,6 +5201,15 @@ dependencies = [
  "tract-tflite",
  "umya-spreadsheet",
  "urlencoding",
+]
+
+[[package]]
+name = "flow-like-catalog-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.107",
 ]
 
 [[package]]

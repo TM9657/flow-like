@@ -90,13 +90,3 @@ impl NodeOnnxSession {
         Ok(session)
     }
 }
-
-/// Add ONNX-related Nodes to Catalog Lib
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let nodes: Vec<Arc<dyn NodeLogic>> = vec![
-        Arc::new(load::LoadOnnxNode::default()),
-        Arc::new(detection::ObjectDetectionNode::default()),
-        Arc::new(classification::ImageClassificationNode::default()),
-    ];
-    nodes
-}

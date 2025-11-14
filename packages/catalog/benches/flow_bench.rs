@@ -32,7 +32,7 @@ async fn default_state() -> Arc<Mutex<FlowLikeState>> {
     let state = FlowLikeState::new(config, http_client);
     let state_ref = Arc::new(Mutex::new(state));
     let weak_ref = Arc::downgrade(&state_ref);
-    let catalog = flow_like_catalog::get_catalog().await;
+    let catalog = flow_like_catalog::get_catalog();
 
     {
         let state = state_ref.lock().await;

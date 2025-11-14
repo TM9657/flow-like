@@ -16,6 +16,7 @@ use flow_like_types::{
 
 use crate::image::NodeImage;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct WriteImageDataUrlNode {}
 

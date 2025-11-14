@@ -11,6 +11,7 @@ use flow_like_types::{Value, async_trait, json::json};
 
 use super::Attachment;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct AttachmentToUrlNode {}
 

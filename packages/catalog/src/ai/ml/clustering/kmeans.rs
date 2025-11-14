@@ -26,6 +26,7 @@ use linfa_nn::distance::L2Dist;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct FitKMeansNode {}
 

@@ -17,6 +17,7 @@ use rig::message::{AssistantContent, ToolCall, ToolChoice, ToolFunction};
 use rig::tool::Tool;
 use std::{fmt, sync::Arc};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct LLMExtractNode {}
 

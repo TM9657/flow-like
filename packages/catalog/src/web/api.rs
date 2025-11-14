@@ -248,16 +248,3 @@ impl HttpResponse {
         self.body.as_ref().unwrap_or(&vec![]).clone()
     }
 }
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let mut out: Vec<Arc<dyn NodeLogic>> = vec![
-        Arc::new(download::HttpDownloadNode::default()),
-        Arc::new(fetch::HttpFetchNode::default()),
-        Arc::new(streaming_fetch::StreamingHttpFetchNode::default()),
-    ];
-
-    out.extend(request::register_functions().await);
-    out.extend(response::register_functions().await);
-
-    out
-}

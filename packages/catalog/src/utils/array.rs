@@ -13,20 +13,3 @@ pub mod push;
 pub mod remove_index;
 pub mod set;
 pub mod shuffle;
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    vec![
-        Arc::new(extend::ExtendArrayNode::default()),
-        Arc::new(len::ArrayLengthNode::default()),
-        Arc::new(get::GetArrayElementNode::default()),
-        Arc::new(includes::ArrayIncludesNode::default()),
-        Arc::new(make::MakeArrayNode::default()),
-        Arc::new(pop::PopArrayNode::default()),
-        Arc::new(push::PushArrayNode::default()),
-        Arc::new(set::SetIndexArrayNode::default()),
-        Arc::new(remove_index::RemoveArrayIndexNode::default()),
-        Arc::new(clear::ClearArrayNode::default()),
-        Arc::new(find_item::FindItemInArrayNode::default()),
-        Arc::new(shuffle::ShuffleArrayNode::default()),
-    ]
-}

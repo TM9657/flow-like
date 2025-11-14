@@ -20,6 +20,7 @@ use crate::data::path::FlowPath;
 /// Notes
 /// - Currently appends the sheet at the end of the workbook.
 /// - Excel limits: sheet names are max 31 chars and cannot contain: `:/\\?*[]` and cannot end with a single quote `'`.
+#[crate::register_node]
 #[derive(Default)]
 pub struct NewWorksheetNode {}
 

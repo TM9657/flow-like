@@ -12,6 +12,7 @@ use flow_like_types::{Value, async_trait, json::json};
 use futures::stream::{FuturesUnordered, StreamExt};
 use std::sync::Arc;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ParLoopNode {}
 

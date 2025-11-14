@@ -11,6 +11,7 @@ use flow_like::{
 use flow_like_types::{Value, async_trait, json::json};
 use std::{collections::HashSet, sync::Arc};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct InsertSetNode {}
 

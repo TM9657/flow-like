@@ -110,6 +110,7 @@ impl Cacheable for ImapSessionCache {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ImapConnectNode;
 

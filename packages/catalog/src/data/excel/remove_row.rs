@@ -15,6 +15,7 @@ use umya_spreadsheet::{self};
 /// - Works entirely in-memory using `FlowPath` bytes (no local filesystem I/O).
 /// - If the file/sheet doesn't exist yet, a new workbook/sheet is created and the op is a no-op.
 /// - `row` is 1-based.
+#[crate::register_node]
 #[derive(Default)]
 pub struct RemoveRowNode {}
 

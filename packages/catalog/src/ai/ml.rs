@@ -34,21 +34,6 @@ pub mod save;
 /// TODO: block-wise processing, at least for predictions
 pub const MAX_ML_PREDICTION_RECORDS: usize = 20000;
 
-/// Add Machine Learning Nodes to Catalog Lib
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let nodes: Vec<Arc<dyn NodeLogic>> = vec![
-        Arc::new(clustering::kmeans::FitKMeansNode::default()),
-        Arc::new(classification::svm::FitSVMMultiClassNode::default()),
-        Arc::new(regression::linear::FitLinearRegressionNode::default()),
-        Arc::new(prediction::MLPredictNode::default()),
-        Arc::new(save::SaveMLModelNode::default()),
-        Arc::new(load::LoadMLModelNode::default()),
-        Arc::new(load::LoadMLModelNode::default()),
-        Arc::new(dataset::split::SplitDatasetNode::default()),
-    ];
-    nodes
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 struct ClassEntry {
     id: usize,

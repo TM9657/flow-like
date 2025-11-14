@@ -12,6 +12,7 @@ use futures::StreamExt;
 
 use crate::{image::NodeImage, web::api::HttpRequest};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct GrabFrameNode {}
 

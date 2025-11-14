@@ -81,6 +81,7 @@ pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32
     Err(anyhow!("Failed to determine input shape!"))
 }
 
+#[crate::register_node]
 #[derive(Default)]
 /// # Node to Load ONNX Runtime Session
 /// Sets execution context cache

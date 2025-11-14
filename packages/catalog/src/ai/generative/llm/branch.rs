@@ -89,6 +89,7 @@ struct BranchToolCall {
     arguments: BranchToolCallArgs,
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct LLMBranchNode {}
 

@@ -36,6 +36,7 @@ use crate::data::path::FlowPath;
 /// - `final_column_index` (Integer): the actual 1-based column index used.
 /// - `final_column_letter` (String): the Excel letter for the final index.
 /// - `total_columns_inserted` (Integer): echo of the `num_columns` actually applied.
+#[crate::register_node]
 #[derive(Default)]
 pub struct InsertColumnNode {}
 

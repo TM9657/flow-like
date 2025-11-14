@@ -36,6 +36,7 @@ use crate::data::path::FlowPath;
 /// - `copied` (Boolean): whether a new sheet was created.
 /// - `source_name` (String): resolved source sheet name.
 /// - `final_name` (String): the actual name of the new sheet.
+#[crate::register_node]
 #[derive(Default)]
 pub struct CopyWorksheetNode {}
 

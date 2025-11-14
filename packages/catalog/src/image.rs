@@ -88,13 +88,3 @@ impl NodeImage {
         Ok(image)
     }
 }
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let mut nodes: Vec<Arc<dyn NodeLogic>> =
-        vec![Arc::new(metadata::dims::ImageDimsNode::default())];
-    nodes.extend(annotate::register_functions().await);
-    nodes.extend(content::register_functions().await);
-    nodes.extend(pdf::register_functions().await);
-    nodes.extend(transform::register_functions().await);
-    nodes
-}
