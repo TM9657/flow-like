@@ -10,6 +10,3 @@ pub mod set_method;
 pub mod set_string_body;
 pub mod set_struct_body;
 pub mod set_url;
-
-use flow_like::flow::node::NodeLogic;
-use std::sync::Arc;

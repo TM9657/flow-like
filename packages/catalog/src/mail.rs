@@ -1,11 +1,7 @@
 pub mod imap;
 pub mod smtp;
 
-use flow_like::flow::node::NodeLogic;
-use std::{
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 static AVAILABLE_FOOTER_PLAIN: [&str; 3] = [
     "sent via Flow-Like.com - Stop Doing. Start Flowing.",
