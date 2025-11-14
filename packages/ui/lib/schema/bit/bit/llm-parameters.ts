@@ -1,11 +1,11 @@
 export interface ILlmParameters {
 	context_length: number;
-	model_classification: IBitModelClassification;
-	provider: IModelProvider;
+	model_classification: IModelClassification;
+	provider: IProvider;
 	[property: string]: any;
 }
 
-export interface IBitModelClassification {
+export interface IModelClassification {
 	coding: number;
 	cost: number;
 	creativity: number;
@@ -19,8 +19,9 @@ export interface IBitModelClassification {
 	[property: string]: any;
 }
 
-export interface IModelProvider {
+export interface IProvider {
 	model_id?: null | string;
+	params?: { [key: string]: any } | null;
 	provider_name: string;
 	version?: null | string;
 	[property: string]: any;

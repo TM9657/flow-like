@@ -1,21 +1,21 @@
 export interface ILog {
-	end: ISystemTime;
-	log_level: ILogLevel;
+	end: IEnd;
+	log_level: ILogLevelEnum;
 	message: string;
 	node_id?: null | string;
 	operation_id?: null | string;
-	start: ISystemTime;
-	stats?: null | ILogStat;
+	start: IEnd;
+	stats?: null | IStatsObject;
 	[property: string]: any;
 }
 
-export interface ISystemTime {
+export interface IEnd {
 	nanos_since_epoch: number;
 	secs_since_epoch: number;
 	[property: string]: any;
 }
 
-export enum ILogLevel {
+export enum ILogLevelEnum {
 	Debug = "Debug",
 	Error = "Error",
 	Fatal = "Fatal",
@@ -23,7 +23,7 @@ export enum ILogLevel {
 	Warn = "Warn",
 }
 
-export interface ILogStat {
+export interface IStatsObject {
 	bit_ids?: string[] | null;
 	token_in?: number | null;
 	token_out?: number | null;

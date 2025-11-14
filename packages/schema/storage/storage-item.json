@@ -1,8 +1,7 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "StorageItem",
 	"type": "object",
-	"required": ["last_modified", "location", "size"],
 	"properties": {
 		"location": {
 			"type": "string"
@@ -13,13 +12,17 @@
 		"size": {
 			"type": "integer",
 			"format": "uint",
-			"minimum": 0.0
+			"minimum": 0
 		},
 		"e_tag": {
 			"type": ["string", "null"]
 		},
 		"version": {
 			"type": ["string", "null"]
+		},
+		"is_dir": {
+			"type": "boolean"
 		}
-	}
+	},
+	"required": ["location", "last_modified", "size", "is_dir"]
 }

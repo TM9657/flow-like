@@ -1,8 +1,7 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "LogMessage",
 	"type": "object",
-	"required": ["end", "log_level", "message", "start"],
 	"properties": {
 		"message": {
 			"type": "string"
@@ -14,12 +13,12 @@
 			"type": ["string", "null"]
 		},
 		"log_level": {
-			"$ref": "#/definitions/LogLevel"
+			"$ref": "#/$defs/LogLevel"
 		},
 		"stats": {
 			"anyOf": [
 				{
-					"$ref": "#/definitions/LogStat"
+					"$ref": "#/$defs/LogStat"
 				},
 				{
 					"type": "null"
@@ -27,13 +26,14 @@
 			]
 		},
 		"start": {
-			"$ref": "#/definitions/SystemTime"
+			"$ref": "#/$defs/SystemTime"
 		},
 		"end": {
-			"$ref": "#/definitions/SystemTime"
+			"$ref": "#/$defs/SystemTime"
 		}
 	},
-	"definitions": {
+	"required": ["message", "log_level", "start", "end"],
+	"$defs": {
 		"LogLevel": {
 			"type": "string",
 			"enum": ["Debug", "Info", "Warn", "Error", "Fatal"]
@@ -44,12 +44,12 @@
 				"token_in": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0.0
+					"minimum": 0
 				},
 				"token_out": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0.0
+					"minimum": 0
 				},
 				"bit_ids": {
 					"type": ["array", "null"],
@@ -61,19 +61,19 @@
 		},
 		"SystemTime": {
 			"type": "object",
-			"required": ["nanos_since_epoch", "secs_since_epoch"],
 			"properties": {
 				"secs_since_epoch": {
 					"type": "integer",
 					"format": "uint64",
-					"minimum": 0.0
+					"minimum": 0
 				},
 				"nanos_since_epoch": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0.0
+					"minimum": 0
 				}
-			}
+			},
+			"required": ["secs_since_epoch", "nanos_since_epoch"]
 		}
 	}
 }

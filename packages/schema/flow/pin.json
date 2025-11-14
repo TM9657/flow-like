@@ -1,19 +1,7 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "Pin",
 	"type": "object",
-	"required": [
-		"connected_to",
-		"data_type",
-		"depends_on",
-		"description",
-		"friendly_name",
-		"id",
-		"index",
-		"name",
-		"pin_type",
-		"value_type"
-	],
 	"properties": {
 		"id": {
 			"type": "string"
@@ -28,48 +16,50 @@
 			"type": "string"
 		},
 		"pin_type": {
-			"$ref": "#/definitions/PinType"
+			"$ref": "#/$defs/PinType"
 		},
 		"data_type": {
-			"$ref": "#/definitions/VariableType"
+			"$ref": "#/$defs/VariableType"
 		},
 		"schema": {
 			"type": ["string", "null"]
 		},
 		"value_type": {
-			"$ref": "#/definitions/ValueType"
+			"$ref": "#/$defs/ValueType"
 		},
 		"depends_on": {
 			"type": "array",
+			"uniqueItems": true,
 			"items": {
 				"type": "string"
-			},
-			"uniqueItems": true
+			}
 		},
 		"connected_to": {
 			"type": "array",
+			"uniqueItems": true,
 			"items": {
 				"type": "string"
-			},
-			"uniqueItems": true
+			}
 		},
 		"default_value": {
 			"type": ["array", "null"],
 			"items": {
 				"type": "integer",
 				"format": "uint8",
-				"minimum": 0.0
+				"minimum": 0,
+				"maximum": 255
 			}
 		},
 		"index": {
 			"type": "integer",
 			"format": "uint16",
-			"minimum": 0.0
+			"minimum": 0,
+			"maximum": 65535
 		},
 		"options": {
 			"anyOf": [
 				{
-					"$ref": "#/definitions/PinOptions"
+					"$ref": "#/$defs/PinOptions"
 				},
 				{
 					"type": "null"
@@ -77,7 +67,19 @@
 			]
 		}
 	},
-	"definitions": {
+	"required": [
+		"id",
+		"name",
+		"friendly_name",
+		"description",
+		"pin_type",
+		"data_type",
+		"value_type",
+		"depends_on",
+		"connected_to",
+		"index"
+	],
+	"$defs": {
 		"PinType": {
 			"type": "string",
 			"enum": ["Input", "Output"]
@@ -115,7 +117,7 @@
 				},
 				"range": {
 					"type": ["array", "null"],
-					"items": [
+					"prefixItems": [
 						{
 							"type": "number",
 							"format": "double"
@@ -125,8 +127,8 @@
 							"format": "double"
 						}
 					],
-					"maxItems": 2,
-					"minItems": 2
+					"minItems": 2,
+					"maxItems": 2
 				},
 				"step": {
 					"type": ["number", "null"],

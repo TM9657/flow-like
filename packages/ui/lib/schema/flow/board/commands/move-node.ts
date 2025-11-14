@@ -1,7 +1,7 @@
 export interface IMoveNode {
 	current_layer?: null | string;
-	from_coordinates?: number[] | null;
+	from_coordinates?: any[] | null;
 	node_id: string;
-	to_coordinates: number[];
+	to_coordinates: any[];
 	[property: string]: any;
 }

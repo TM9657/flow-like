@@ -1,12 +1,12 @@
 export interface IBitSearchQuery {
-	bit_types?: IBitTypes[] | null;
+	bit_types?: IBitTypeElement[] | null;
 	limit?: number | null;
 	offset?: number | null;
 	search?: null | string;
 	[property: string]: any;
 }
 
-export enum IBitTypes {
+export enum IBitTypeElement {
 	Board = "Board",
 	Config = "Config",
 	Course = "Course",

@@ -1,30 +1,22 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "RemoveNodeCommand",
 	"type": "object",
-	"required": ["connected_nodes", "node"],
 	"properties": {
 		"node": {
-			"$ref": "#/definitions/Node"
+			"$ref": "#/$defs/Node"
 		},
 		"connected_nodes": {
 			"type": "array",
 			"items": {
-				"$ref": "#/definitions/Node"
+				"$ref": "#/$defs/Node"
 			}
 		}
 	},
-	"definitions": {
+	"required": ["node", "connected_nodes"],
+	"$defs": {
 		"Node": {
 			"type": "object",
-			"required": [
-				"category",
-				"description",
-				"friendly_name",
-				"id",
-				"name",
-				"pins"
-			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -40,7 +32,7 @@
 				},
 				"coordinates": {
 					"type": ["array", "null"],
-					"items": [
+					"prefixItems": [
 						{
 							"type": "number",
 							"format": "float"
@@ -54,8 +46,8 @@
 							"format": "float"
 						}
 					],
-					"maxItems": 3,
-					"minItems": 3
+					"minItems": 3,
+					"maxItems": 3
 				},
 				"category": {
 					"type": "string"
@@ -63,7 +55,7 @@
 				"scores": {
 					"anyOf": [
 						{
-							"$ref": "#/definitions/NodeScores"
+							"$ref": "#/$defs/NodeScores"
 						},
 						{
 							"type": "null"
@@ -73,7 +65,7 @@
 				"pins": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/definitions/Pin"
+						"$ref": "#/$defs/Pin"
 					}
 				},
 				"start": {
@@ -103,51 +95,61 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0.0
+					"minimum": 0
+				},
+				"fn_refs": {
+					"anyOf": [
+						{
+							"$ref": "#/$defs/FnRefs"
+						},
+						{
+							"type": "null"
+						}
+					]
 				}
-			}
+			},
+			"required": [
+				"id",
+				"name",
+				"friendly_name",
+				"description",
+				"category",
+				"pins"
+			]
 		},
 		"NodeScores": {
-			"description": "Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores indicate worse performance in each category.\n\n# Score Categories * `privacy` - Measures data protection and confidentiality level * `security` - Assesses resistance against potential attacks * `performance` - Evaluates computational efficiency and speed * `governance` - Indicates compliance with policies and regulations",
+			"description": "Represents quality metrics for a node, with scores ranging from 0 to 10.\nHigher scores indicate worse performance in each category.\n\n# Score Categories\n* `privacy` - Measures data protection and confidentiality level\n* `security` - Assesses resistance against potential attacks\n* `performance` - Evaluates computational efficiency and speed\n* `governance` - Indicates compliance with policies and regulations",
 			"type": "object",
-			"required": ["governance", "performance", "privacy", "security"],
 			"properties": {
 				"privacy": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0.0
+					"minimum": 0,
+					"maximum": 255
 				},
 				"security": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0.0
+					"minimum": 0,
+					"maximum": 255
 				},
 				"performance": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0.0
+					"minimum": 0,
+					"maximum": 255
 				},
 				"governance": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0.0
+					"minimum": 0,
+					"maximum": 255
 				}
-			}
+			},
+			"required": ["privacy", "security", "performance", "governance"]
 		},
 		"Pin": {
 			"type": "object",
-			"required": [
-				"connected_to",
-				"data_type",
-				"depends_on",
-				"description",
-				"friendly_name",
-				"id",
-				"index",
-				"name",
-				"pin_type",
-				"value_type"
-			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -162,55 +164,69 @@
 					"type": "string"
 				},
 				"pin_type": {
-					"$ref": "#/definitions/PinType"
+					"$ref": "#/$defs/PinType"
 				},
 				"data_type": {
-					"$ref": "#/definitions/VariableType"
+					"$ref": "#/$defs/VariableType"
 				},
 				"schema": {
 					"type": ["string", "null"]
 				},
 				"value_type": {
-					"$ref": "#/definitions/ValueType"
+					"$ref": "#/$defs/ValueType"
 				},
 				"depends_on": {
 					"type": "array",
+					"uniqueItems": true,
 					"items": {
 						"type": "string"
-					},
-					"uniqueItems": true
+					}
 				},
 				"connected_to": {
 					"type": "array",
+					"uniqueItems": true,
 					"items": {
 						"type": "string"
-					},
-					"uniqueItems": true
+					}
 				},
 				"default_value": {
 					"type": ["array", "null"],
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0.0
+						"minimum": 0,
+						"maximum": 255
 					}
 				},
 				"index": {
 					"type": "integer",
 					"format": "uint16",
-					"minimum": 0.0
+					"minimum": 0,
+					"maximum": 65535
 				},
 				"options": {
 					"anyOf": [
 						{
-							"$ref": "#/definitions/PinOptions"
+							"$ref": "#/$defs/PinOptions"
 						},
 						{
 							"type": "null"
 						}
 					]
 				}
-			}
+			},
+			"required": [
+				"id",
+				"name",
+				"friendly_name",
+				"description",
+				"pin_type",
+				"data_type",
+				"value_type",
+				"depends_on",
+				"connected_to",
+				"index"
+			]
 		},
 		"PinType": {
 			"type": "string",
@@ -249,7 +265,7 @@
 				},
 				"range": {
 					"type": ["array", "null"],
-					"items": [
+					"prefixItems": [
 						{
 							"type": "number",
 							"format": "double"
@@ -259,8 +275,8 @@
 							"format": "double"
 						}
 					],
-					"maxItems": 2,
-					"minItems": 2
+					"minItems": 2,
+					"maxItems": 2
 				},
 				"step": {
 					"type": ["number", "null"],
@@ -273,6 +289,24 @@
 					"type": ["boolean", "null"]
 				}
 			}
+		},
+		"FnRefs": {
+			"type": "object",
+			"properties": {
+				"fn_refs": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"can_reference_fns": {
+					"type": "boolean"
+				},
+				"can_be_referenced_by_fns": {
+					"type": "boolean"
+				}
+			},
+			"required": ["fn_refs", "can_reference_fns", "can_be_referenced_by_fns"]
 		}
 	}
 }

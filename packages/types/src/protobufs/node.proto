@@ -12,6 +12,12 @@ message NodeScores {
     uint32 governance = 4;
 }
 
+message FnRefs {
+    repeated string fn_refs = 1;
+    bool can_reference_fns = 2;
+    bool can_be_referenced_by_fns = 3;
+}
+
 message Node {
     string id = 1;
     string name = 2;
@@ -32,5 +38,6 @@ message Node {
     optional string layer = 17;
     bool event_callback = 18;
     optional uint64 hash = 19;
+    optional FnRefs fn_refs = 20;
 }
 

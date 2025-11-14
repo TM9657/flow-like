@@ -1,5 +1,5 @@
 export interface IResponse {
-	choices: IChoice[];
+	choices: IChoiceElement[];
 	created?: number | null;
 	id?: null | string;
 	model?: null | string;
@@ -10,52 +10,54 @@ export interface IResponse {
 	[property: string]: any;
 }
 
-export interface IChoice {
+export interface IChoiceElement {
 	finish_reason: string;
 	index: number;
-	logprobs?: null | ILogProbs;
-	message: IResponseMessage;
+	logprobs?: null | ILogprobsObject;
+	message: IMessage;
 	[property: string]: any;
 }
 
-export interface ILogProbs {
-	content?: ITokenLogProbs[] | null;
-	refusal?: ITokenLogProbs[] | null;
+export interface ILogprobsObject {
+	content?: IContentElement[] | null;
+	refusal?: IContentElement[] | null;
 	[property: string]: any;
 }
 
-export interface ITokenLogProbs {
+export interface IContentElement {
 	bytes?: number[] | null;
 	logprob: number;
 	token: string;
-	top_logprobs?: ITopLogProbs[] | null;
+	top_logprobs?: ITopLogprobElement[] | null;
 	[property: string]: any;
 }
 
-export interface ITopLogProbs {
+export interface ITopLogprobElement {
 	bytes?: number[] | null;
 	logprob: number;
 	token: string;
 	[property: string]: any;
 }
 
-export interface IResponseMessage {
-	annotations?: IAnnotation[] | null;
-	audio?: null | IAudio;
+export interface IMessage {
+	annotations?: IAnnotationElement[] | null;
+	audio?: null | IAudioObject;
 	content?: null | string;
+	reasoning?: null | string;
 	refusal?: null | string;
 	role: string;
-	tool_calls?: IFunctionCall[];
+	tool_calls: IToolCallElement[];
 	[property: string]: any;
 }
 
-export interface IAnnotation {
+export interface IAnnotationElement {
 	type: string;
-	url_citation?: null | IURLCitation;
+	url_citation?: null | IURLCitationObject;
 	[property: string]: any;
 }
 
-export interface IURLCitation {
+export interface IURLCitationObject {
+	content?: null | string;
 	end_index: number;
 	start_index: number;
 	title: string;
@@ -63,7 +65,7 @@ export interface IURLCitation {
 	[property: string]: any;
 }
 
-export interface IAudio {
+export interface IAudioObject {
 	data: string;
 	expires_at?: number | null;
 	id: string;
@@ -71,39 +73,46 @@ export interface IAudio {
 	[property: string]: any;
 }
 
-export interface IFunctionCall {
-	function: IResponseFunction;
+export interface IToolCallElement {
+	function: IFunction;
 	id: string;
 	index?: number | null;
 	type?: null | string;
 	[property: string]: any;
 }
 
-export interface IResponseFunction {
-	arguments?: null | string;
-	name?: null | string;
+export interface IFunction {
+	arguments: string;
+	name: string;
 	[property: string]: any;
 }
 
 export interface IUsage {
 	completion_tokens: number;
-	completion_tokens_details?: null | ICompletionTokenDetails;
+	completion_tokens_details?: null | ICompletionTokensDetailsObject;
+	cost?: number | null;
 	prompt_tokens: number;
-	prompt_tokens_details?: null | IPromptTokenDetails;
+	prompt_tokens_details?: null | IPromptTokensDetailsObject;
 	total_tokens: number;
+	upstream_inference_cost?: null | IUpstreamInferenceCostObject;
 	[property: string]: any;
 }
 
-export interface ICompletionTokenDetails {
-	accepted_prediction_tokens: number;
-	audio_tokens: number;
-	reasoning_tokens: number;
-	rejected_prediction_tokens: number;
+export interface ICompletionTokensDetailsObject {
+	accepted_prediction_tokens?: number | null;
+	audio_tokens?: number | null;
+	reasoning_tokens?: number | null;
+	rejected_prediction_tokens?: number | null;
 	[property: string]: any;
 }
 
-export interface IPromptTokenDetails {
-	audio_tokens: number;
-	cached_tokens: number;
+export interface IPromptTokensDetailsObject {
+	audio_tokens?: number | null;
+	cached_tokens?: number | null;
+	[property: string]: any;
+}
+
+export interface IUpstreamInferenceCostObject {
+	upstream_inference_cost?: number | null;
 	[property: string]: any;
 }

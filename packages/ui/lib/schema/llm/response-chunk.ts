@@ -1,85 +1,93 @@
 export interface IResponseChunk {
-	choices: IResponseChunkChoice[];
+	choices: IChoiceElement[];
 	created?: number | null;
 	id: string;
 	model?: null | string;
 	service_tier?: null | string;
 	system_fingerprint?: null | string;
-	usage?: null | IUsage;
+	usage?: null | IUsageObject;
 	x_prefill_progress?: number | null;
 	[property: string]: any;
 }
 
-export interface IResponseChunkChoice {
-	delta?: null | IDelta;
+export interface IChoiceElement {
+	delta?: null | IDeltaObject;
 	finish_reason?: null | string;
 	index: number;
-	logprobs?: null | ILogProbs;
+	logprobs?: null | ILogprobsObject;
 	[property: string]: any;
 }
 
-export interface IDelta {
+export interface IDeltaObject {
 	content?: null | string;
+	reasoning?: null | string;
 	refusal?: null | string;
 	role?: null | string;
-	tool_calls?: IFunctionCall[] | null;
+	tool_calls?: IToolCallElement[] | null;
 	[property: string]: any;
 }
 
-export interface IFunctionCall {
-	function: IResponseFunction;
-	id: string;
+export interface IToolCallElement {
+	function: IFunction;
+	id?: null | string;
 	index?: number | null;
 	type?: null | string;
 	[property: string]: any;
 }
 
-export interface IResponseFunction {
+export interface IFunction {
 	arguments?: null | string;
 	name?: null | string;
 	[property: string]: any;
 }
 
-export interface ILogProbs {
-	content?: ITokenLogProbs[] | null;
-	refusal?: ITokenLogProbs[] | null;
+export interface ILogprobsObject {
+	content?: IContentElement[] | null;
+	refusal?: IContentElement[] | null;
 	[property: string]: any;
 }
 
-export interface ITokenLogProbs {
+export interface IContentElement {
 	bytes?: number[] | null;
 	logprob: number;
 	token: string;
-	top_logprobs?: ITopLogProbs[] | null;
+	top_logprobs?: ITopLogprobElement[] | null;
 	[property: string]: any;
 }
 
-export interface ITopLogProbs {
+export interface ITopLogprobElement {
 	bytes?: number[] | null;
 	logprob: number;
 	token: string;
 	[property: string]: any;
 }
 
-export interface IUsage {
+export interface IUsageObject {
 	completion_tokens: number;
-	completion_tokens_details?: null | ICompletionTokenDetails;
+	completion_tokens_details?: null | ICompletionTokensDetailsObject;
+	cost?: number | null;
 	prompt_tokens: number;
-	prompt_tokens_details?: null | IPromptTokenDetails;
+	prompt_tokens_details?: null | IPromptTokensDetailsObject;
 	total_tokens: number;
+	upstream_inference_cost?: null | IUpstreamInferenceCostObject;
 	[property: string]: any;
 }
 
-export interface ICompletionTokenDetails {
-	accepted_prediction_tokens: number;
-	audio_tokens: number;
-	reasoning_tokens: number;
-	rejected_prediction_tokens: number;
+export interface ICompletionTokensDetailsObject {
+	accepted_prediction_tokens?: number | null;
+	audio_tokens?: number | null;
+	reasoning_tokens?: number | null;
+	rejected_prediction_tokens?: number | null;
 	[property: string]: any;
 }
 
-export interface IPromptTokenDetails {
-	audio_tokens: number;
-	cached_tokens: number;
+export interface IPromptTokensDetailsObject {
+	audio_tokens?: number | null;
+	cached_tokens?: number | null;
+	[property: string]: any;
+}
+
+export interface IUpstreamInferenceCostObject {
+	upstream_inference_cost?: number | null;
 	[property: string]: any;
 }

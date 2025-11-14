@@ -1,12 +1,11 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "Profile",
 	"type": "object",
-	"required": ["bits", "created", "name", "updated"],
 	"properties": {
 		"id": {
-			"default": "pth324nzyianeq2tecovpz6d",
-			"type": "string"
+			"type": "string",
+			"default": "ipopcvt3f7dx433kz79ppvsz"
 		},
 		"name": {
 			"type": "string"
@@ -15,43 +14,43 @@
 			"type": ["string", "null"]
 		},
 		"icon": {
-			"default": null,
-			"type": ["string", "null"]
+			"type": ["string", "null"],
+			"default": null
 		},
 		"thumbnail": {
 			"type": ["string", "null"]
 		},
 		"interests": {
-			"default": [],
 			"type": "array",
 			"items": {
 				"type": "string"
-			}
+			},
+			"default": []
 		},
 		"tags": {
-			"default": [],
 			"type": "array",
 			"items": {
 				"type": "string"
-			}
+			},
+			"default": []
 		},
 		"hub": {
-			"default": "",
-			"type": "string"
+			"type": "string",
+			"default": ""
 		},
 		"hubs": {
-			"default": [],
 			"type": "array",
 			"items": {
 				"type": "string"
-			}
+			},
+			"default": []
 		},
 		"apps": {
-			"default": null,
 			"type": ["array", "null"],
 			"items": {
-				"$ref": "#/definitions/ProfileApp"
-			}
+				"$ref": "#/$defs/ProfileApp"
+			},
+			"default": null
 		},
 		"theme": {
 			"default": null
@@ -63,14 +62,10 @@
 			}
 		},
 		"settings": {
+			"$ref": "#/$defs/Settings",
 			"default": {
 				"connection_mode": "simplebezier"
-			},
-			"allOf": [
-				{
-					"$ref": "#/definitions/Settings"
-				}
-			]
+			}
 		},
 		"updated": {
 			"type": "string"
@@ -79,10 +74,10 @@
 			"type": "string"
 		}
 	},
-	"definitions": {
+	"required": ["name", "bits", "updated", "created"],
+	"$defs": {
 		"ProfileApp": {
 			"type": "object",
-			"required": ["app_id", "favorite", "pinned"],
 			"properties": {
 				"app_id": {
 					"type": "string"
@@ -101,16 +96,17 @@
 					"type": ["integer", "null"],
 					"format": "int32"
 				}
-			}
+			},
+			"required": ["app_id", "favorite", "pinned"]
 		},
 		"Settings": {
 			"type": "object",
-			"required": ["connection_mode"],
 			"properties": {
 				"connection_mode": {
-					"$ref": "#/definitions/ConnectionMode"
+					"$ref": "#/$defs/ConnectionMode"
 				}
-			}
+			},
+			"required": ["connection_mode"]
 		},
 		"ConnectionMode": {
 			"type": "string",

@@ -1,20 +1,7 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "Hub",
 	"type": "object",
-	"required": [
-		"contact",
-		"description",
-		"domain",
-		"environment",
-		"features",
-		"hubs",
-		"legal_notice",
-		"name",
-		"privacy_policy",
-		"terms_of_service",
-		"tiers"
-	],
 	"properties": {
 		"name": {
 			"type": "string"
@@ -31,7 +18,7 @@
 		"authentication": {
 			"anyOf": [
 				{
-					"$ref": "#/definitions/Authentication"
+					"$ref": "#/$defs/Authentication"
 				},
 				{
 					"type": "null"
@@ -39,7 +26,7 @@
 			]
 		},
 		"features": {
-			"$ref": "#/definitions/Features"
+			"$ref": "#/$defs/Features"
 		},
 		"hubs": {
 			"type": "array",
@@ -59,6 +46,12 @@
 		"terms_of_service": {
 			"type": "string"
 		},
+		"signaling": {
+			"type": ["array", "null"],
+			"items": {
+				"type": "string"
+			}
+		},
 		"cdn": {
 			"type": ["string", "null"]
 		},
@@ -72,7 +65,7 @@
 			"type": "string"
 		},
 		"contact": {
-			"$ref": "#/definitions/Contact"
+			"$ref": "#/$defs/Contact"
 		},
 		"max_users_prototype": {
 			"type": ["integer", "null"],
@@ -82,36 +75,44 @@
 			"type": ["string", "null"]
 		},
 		"environment": {
-			"$ref": "#/definitions/Environment"
+			"$ref": "#/$defs/Environment"
 		},
 		"tiers": {
 			"type": "object",
 			"additionalProperties": {
-				"$ref": "#/definitions/UserTier"
+				"$ref": "#/$defs/UserTier"
 			}
 		},
 		"lookup": {
+			"$ref": "#/$defs/Lookup",
 			"default": {
-				"additional_information": true,
-				"avatar": true,
-				"created_at": true,
-				"description": true,
 				"email": false,
 				"name": true,
+				"username": false,
 				"preferred_username": true,
-				"username": false
-			},
-			"allOf": [
-				{
-					"$ref": "#/definitions/Lookup"
-				}
-			]
+				"avatar": true,
+				"additional_information": true,
+				"description": true,
+				"created_at": true
+			}
 		}
 	},
-	"definitions": {
+	"required": [
+		"name",
+		"description",
+		"features",
+		"hubs",
+		"domain",
+		"terms_of_service",
+		"legal_notice",
+		"privacy_policy",
+		"contact",
+		"environment",
+		"tiers"
+	],
+	"$defs": {
 		"Authentication": {
 			"type": "object",
-			"required": ["variant"],
 			"properties": {
 				"variant": {
 					"type": "string"
@@ -119,7 +120,7 @@
 				"openid": {
 					"anyOf": [
 						{
-							"$ref": "#/definitions/OpenIdConfig"
+							"$ref": "#/$defs/OpenIdConfig"
 						},
 						{
 							"type": "null"
@@ -129,18 +130,18 @@
 				"oauth2": {
 					"anyOf": [
 						{
-							"$ref": "#/definitions/OAuth2Config"
+							"$ref": "#/$defs/OAuth2Config"
 						},
 						{
 							"type": "null"
 						}
 					]
 				}
-			}
+			},
+			"required": ["variant"]
 		},
 		"OpenIdConfig": {
 			"type": "object",
-			"required": ["jwks_url"],
 			"properties": {
 				"authority": {
 					"type": ["string", "null"]
@@ -172,7 +173,7 @@
 				"proxy": {
 					"anyOf": [
 						{
-							"$ref": "#/definitions/OpenIdProxy"
+							"$ref": "#/$defs/OpenIdProxy"
 						},
 						{
 							"type": "null"
@@ -182,18 +183,18 @@
 				"cognito": {
 					"anyOf": [
 						{
-							"$ref": "#/definitions/CognitoConfig"
+							"$ref": "#/$defs/CognitoConfig"
 						},
 						{
 							"type": "null"
 						}
 					]
 				}
-			}
+			},
+			"required": ["jwks_url"]
 		},
 		"OpenIdProxy": {
 			"type": "object",
-			"required": ["enabled"],
 			"properties": {
 				"enabled": {
 					"type": "boolean"
@@ -210,20 +211,20 @@
 				"revoke": {
 					"type": ["string", "null"]
 				}
-			}
+			},
+			"required": ["enabled"]
 		},
 		"CognitoConfig": {
 			"type": "object",
-			"required": ["user_pool_id"],
 			"properties": {
 				"user_pool_id": {
 					"type": "string"
 				}
-			}
+			},
+			"required": ["user_pool_id"]
 		},
 		"OAuth2Config": {
 			"type": "object",
-			"required": ["authorization_endpoint", "client_id", "token_endpoint"],
 			"properties": {
 				"authorization_endpoint": {
 					"type": "string"
@@ -234,19 +235,11 @@
 				"client_id": {
 					"type": "string"
 				}
-			}
+			},
+			"required": ["authorization_endpoint", "token_endpoint", "client_id"]
 		},
 		"Features": {
 			"type": "object",
-			"required": [
-				"admin_interface",
-				"ai_act",
-				"flow_hosting",
-				"governance",
-				"model_hosting",
-				"premium",
-				"unauthorized_read"
-			],
 			"properties": {
 				"model_hosting": {
 					"type": "boolean"
@@ -269,11 +262,19 @@
 				"premium": {
 					"type": "boolean"
 				}
-			}
+			},
+			"required": [
+				"model_hosting",
+				"flow_hosting",
+				"governance",
+				"ai_act",
+				"unauthorized_read",
+				"admin_interface",
+				"premium"
+			]
 		},
 		"Contact": {
 			"type": "object",
-			"required": ["email", "name", "url"],
 			"properties": {
 				"name": {
 					"type": "string"
@@ -284,7 +285,8 @@
 				"url": {
 					"type": "string"
 				}
-			}
+			},
+			"required": ["name", "email", "url"]
 		},
 		"Environment": {
 			"type": "string",
@@ -292,15 +294,6 @@
 		},
 		"UserTier": {
 			"type": "object",
-			"required": [
-				"execution_tier",
-				"llm_tiers",
-				"max_llm_cost",
-				"max_llm_calls",
-				"max_non_visible_projects",
-				"max_remote_executions",
-				"max_total_size"
-			],
 			"properties": {
 				"max_non_visible_projects": {
 					"type": "integer",
@@ -322,7 +315,7 @@
 					"format": "int32"
 				},
 				"max_llm_calls": {
-					"type": "integer",
+					"type": ["integer", "null"],
 					"format": "int32"
 				},
 				"llm_tiers": {
@@ -331,20 +324,18 @@
 						"type": "string"
 					}
 				}
-			}
+			},
+			"required": [
+				"max_non_visible_projects",
+				"max_remote_executions",
+				"execution_tier",
+				"max_total_size",
+				"max_llm_cost",
+				"llm_tiers"
+			]
 		},
 		"Lookup": {
 			"type": "object",
-			"required": [
-				"additional_information",
-				"avatar",
-				"created_at",
-				"description",
-				"email",
-				"name",
-				"preferred_username",
-				"username"
-			],
 			"properties": {
 				"email": {
 					"type": "boolean"
@@ -370,7 +361,17 @@
 				"created_at": {
 					"type": "boolean"
 				}
-			}
+			},
+			"required": [
+				"email",
+				"name",
+				"username",
+				"preferred_username",
+				"avatar",
+				"additional_information",
+				"description",
+				"created_at"
+			]
 		}
 	}
 }

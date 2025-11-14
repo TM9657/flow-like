@@ -1,43 +1,30 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "BitPack",
 	"type": "object",
-	"required": ["bits"],
 	"properties": {
 		"bits": {
 			"type": "array",
 			"items": {
-				"$ref": "#/definitions/Bit"
+				"$ref": "#/$defs/Bit"
 			}
 		}
 	},
-	"definitions": {
+	"required": ["bits"],
+	"$defs": {
 		"Bit": {
 			"type": "object",
-			"required": [
-				"authors",
-				"created",
-				"dependencies",
-				"dependency_tree_hash",
-				"hash",
-				"hub",
-				"id",
-				"meta",
-				"parameters",
-				"type",
-				"updated"
-			],
 			"properties": {
 				"id": {
 					"type": "string"
 				},
 				"type": {
-					"$ref": "#/definitions/BitTypes"
+					"$ref": "#/$defs/BitTypes"
 				},
 				"meta": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/definitions/Metadata"
+						"$ref": "#/$defs/Metadata"
 					}
 				},
 				"authors": {
@@ -61,7 +48,7 @@
 				"size": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0.0
+					"minimum": 0
 				},
 				"hub": {
 					"type": "string"
@@ -88,7 +75,20 @@
 				"updated": {
 					"type": "string"
 				}
-			}
+			},
+			"required": [
+				"id",
+				"type",
+				"meta",
+				"authors",
+				"hash",
+				"hub",
+				"parameters",
+				"dependencies",
+				"dependency_tree_hash",
+				"created",
+				"updated"
+			]
 		},
 		"BitTypes": {
 			"type": "string",
@@ -115,14 +115,6 @@
 		},
 		"Metadata": {
 			"type": "object",
-			"required": [
-				"created_at",
-				"description",
-				"name",
-				"preview_media",
-				"tags",
-				"updated_at"
-			],
 			"properties": {
 				"name": {
 					"type": "string"
@@ -175,32 +167,41 @@
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0.0
+						"minimum": 0,
+						"maximum": 255
 					}
 				},
 				"created_at": {
-					"$ref": "#/definitions/SystemTime"
+					"$ref": "#/$defs/SystemTime"
 				},
 				"updated_at": {
-					"$ref": "#/definitions/SystemTime"
+					"$ref": "#/$defs/SystemTime"
 				}
-			}
+			},
+			"required": [
+				"name",
+				"description",
+				"tags",
+				"preview_media",
+				"created_at",
+				"updated_at"
+			]
 		},
 		"SystemTime": {
 			"type": "object",
-			"required": ["nanos_since_epoch", "secs_since_epoch"],
 			"properties": {
 				"secs_since_epoch": {
 					"type": "integer",
 					"format": "uint64",
-					"minimum": 0.0
+					"minimum": 0
 				},
 				"nanos_since_epoch": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0.0
+					"minimum": 0
 				}
-			}
+			},
+			"required": ["secs_since_epoch", "nanos_since_epoch"]
 		}
 	}
 }

@@ -1,6 +1,6 @@
 export interface IPin {
 	connected_to: string[];
-	data_type: IVariableType;
+	data_type: IDataType;
 	default_value?: number[] | null;
 	depends_on: string[];
 	description: string;
@@ -8,14 +8,14 @@ export interface IPin {
 	id: string;
 	index: number;
 	name: string;
-	options?: null | IPinOptions;
-	pin_type: IPinType;
+	options?: null | IOptionsObject;
+	pin_type: IPinTypeEnum;
 	schema?: null | string;
 	value_type: IValueType;
 	[property: string]: any;
 }
 
-export enum IVariableType {
+export enum IDataType {
 	Boolean = "Boolean",
 	Byte = "Byte",
 	Date = "Date",
@@ -28,17 +28,17 @@ export enum IVariableType {
 	Struct = "Struct",
 }
 
-export interface IPinOptions {
+export interface IOptionsObject {
 	enforce_generic_value_type?: boolean | null;
 	enforce_schema?: boolean | null;
-	range?: number[] | null;
+	range?: any[] | null;
 	sensitive?: boolean | null;
 	step?: number | null;
 	valid_values?: string[] | null;
 	[property: string]: any;
 }
 
-export enum IPinType {
+export enum IPinTypeEnum {
 	Input = "Input",
 	Output = "Output",
 }

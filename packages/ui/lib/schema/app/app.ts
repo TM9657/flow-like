@@ -4,45 +4,45 @@ export interface IApp {
 	bits: string[];
 	boards: string[];
 	changelog?: null | string;
-	created_at: ISystemTime;
+	created_at: ICreatedAt;
 	download_count: number;
 	events: string[];
-	execution_mode: IAppExecutionMode;
-	frontend?: null | IFrontendConfiguration;
+	execution_mode: IExecutionMode;
+	frontend?: null | IFrontendObject;
 	id: string;
 	interactions_count: number;
 	price?: number | null;
-	primary_category?: IAppCategory | null;
+	primary_category?: IPrimaryCategoryEnum | null;
 	rating_count: number;
 	rating_sum: number;
 	relevance_score?: number | null;
-	secondary_category?: IAppCategory | null;
-	status: IAppStatus;
+	secondary_category?: IPrimaryCategoryEnum | null;
+	status: IStatus;
 	templates: string[];
-	updated_at: ISystemTime;
+	updated_at: ICreatedAt;
 	version?: null | string;
-	visibility: IAppVisibility;
+	visibility: IVisibility;
 	[property: string]: any;
 }
 
-export interface ISystemTime {
+export interface ICreatedAt {
 	nanos_since_epoch: number;
 	secs_since_epoch: number;
 	[property: string]: any;
 }
 
-export enum IAppExecutionMode {
+export enum IExecutionMode {
 	Any = "Any",
 	Local = "Local",
 	Remote = "Remote",
 }
 
-export interface IFrontendConfiguration {
+export interface IFrontendObject {
 	landing_page?: null | string;
 	[property: string]: any;
 }
 
-export enum IAppCategory {
+export enum IPrimaryCategoryEnum {
 	Anime = "Anime",
 	Business = "Business",
 	Communication = "Communication",
@@ -66,13 +66,13 @@ export enum IAppCategory {
 	Weather = "Weather",
 }
 
-export enum IAppStatus {
+export enum IStatus {
 	Active = "Active",
 	Archived = "Archived",
 	Inactive = "Inactive",
 }
 
-export enum IAppVisibility {
+export enum IVisibility {
 	Offline = "Offline",
 	Private = "Private",
 	Prototype = "Prototype",

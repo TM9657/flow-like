@@ -10,13 +10,13 @@ export interface IComment {
 	color?: null | string;
 	comment_type: ICommentType;
 	content: string;
-	coordinates: number[];
+	coordinates: any[];
 	hash?: number | null;
 	height?: number | null;
 	id: string;
 	is_locked?: boolean | null;
 	layer?: null | string;
-	timestamp: ISystemTime;
+	timestamp: ITimestamp;
 	width?: number | null;
 	z_index?: number | null;
 	[property: string]: any;
@@ -28,7 +28,7 @@ export enum ICommentType {
 	Video = "Video",
 }
 
-export interface ISystemTime {
+export interface ITimestamp {
 	nanos_since_epoch: number;
 	secs_since_epoch: number;
 	[property: string]: any;

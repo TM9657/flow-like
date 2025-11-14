@@ -3,7 +3,7 @@ export interface IEmbeddingModelParameters {
 	languages: string[];
 	pooling: IPooling;
 	prefix: IPrefix;
-	provider: IModelProvider;
+	provider: IProvider;
 	vector_length: number;
 	[property: string]: any;
 }
@@ -20,8 +20,9 @@ export interface IPrefix {
 	[property: string]: any;
 }
 
-export interface IModelProvider {
+export interface IProvider {
 	model_id?: null | string;
+	params?: { [key: string]: any } | null;
 	provider_name: string;
 	version?: null | string;
 	[property: string]: any;

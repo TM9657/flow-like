@@ -1,9 +1,9 @@
 export interface IBitPack {
-	bits: IBit[];
+	bits: IBitElement[];
 	[property: string]: any;
 }
 
-export interface IBit {
+export interface IBitElement {
 	authors: string[];
 	created: string;
 	dependencies: string[];
@@ -14,19 +14,19 @@ export interface IBit {
 	hub: string;
 	id: string;
 	license?: null | string;
-	meta: { [key: string]: IMetadata };
+	meta: { [key: string]: IMetaValue };
 	parameters: any;
 	repository?: null | string;
 	size?: number | null;
-	type: IBitTypes;
+	type: IType;
 	updated: string;
 	version?: null | string;
 	[property: string]: any;
 }
 
-export interface IMetadata {
+export interface IMetaValue {
 	age_rating?: number | null;
-	created_at: ISystemTime;
+	created_at: ICreatedAt;
 	description: string;
 	docs_url?: null | string;
 	icon?: null | string;
@@ -38,19 +38,19 @@ export interface IMetadata {
 	support_url?: null | string;
 	tags: string[];
 	thumbnail?: null | string;
-	updated_at: ISystemTime;
+	updated_at: ICreatedAt;
 	use_case?: null | string;
 	website?: null | string;
 	[property: string]: any;
 }
 
-export interface ISystemTime {
+export interface ICreatedAt {
 	nanos_since_epoch: number;
 	secs_since_epoch: number;
 	[property: string]: any;
 }
 
-export enum IBitTypes {
+export enum IType {
 	Board = "Board",
 	Config = "Config",
 	Course = "Course",

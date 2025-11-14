@@ -1,22 +1,7 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "Event",
 	"type": "object",
-	"required": [
-		"active",
-		"board_id",
-		"config",
-		"created_at",
-		"description",
-		"event_type",
-		"event_version",
-		"id",
-		"name",
-		"node_id",
-		"priority",
-		"updated_at",
-		"variables"
-	],
 	"properties": {
 		"id": {
 			"type": "string"
@@ -32,25 +17,25 @@
 		},
 		"board_version": {
 			"type": ["array", "null"],
-			"items": [
+			"prefixItems": [
 				{
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0.0
+					"minimum": 0
 				},
 				{
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0.0
+					"minimum": 0
 				},
 				{
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0.0
+					"minimum": 0
 				}
 			],
-			"maxItems": 3,
-			"minItems": 3
+			"minItems": 3,
+			"maxItems": 3
 		},
 		"node_id": {
 			"type": "string"
@@ -58,7 +43,7 @@
 		"variables": {
 			"type": "object",
 			"additionalProperties": {
-				"$ref": "#/definitions/Variable"
+				"$ref": "#/$defs/Variable"
 			}
 		},
 		"config": {
@@ -66,7 +51,8 @@
 			"items": {
 				"type": "integer",
 				"format": "uint8",
-				"minimum": 0.0
+				"minimum": 0,
+				"maximum": 255
 			}
 		},
 		"active": {
@@ -75,7 +61,7 @@
 		"canary": {
 			"anyOf": [
 				{
-					"$ref": "#/definitions/CanaryEvent"
+					"$ref": "#/$defs/CanaryEvent"
 				},
 				{
 					"type": "null"
@@ -85,7 +71,7 @@
 		"priority": {
 			"type": "integer",
 			"format": "uint32",
-			"minimum": 0.0
+			"minimum": 0
 		},
 		"event_type": {
 			"type": "string"
@@ -93,7 +79,7 @@
 		"notes": {
 			"anyOf": [
 				{
-					"$ref": "#/definitions/ReleaseNotes"
+					"$ref": "#/$defs/ReleaseNotes"
 				},
 				{
 					"type": "null"
@@ -102,45 +88,51 @@
 		},
 		"event_version": {
 			"type": "array",
-			"items": [
+			"prefixItems": [
 				{
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0.0
+					"minimum": 0
 				},
 				{
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0.0
+					"minimum": 0
 				},
 				{
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0.0
+					"minimum": 0
 				}
 			],
-			"maxItems": 3,
-			"minItems": 3
+			"minItems": 3,
+			"maxItems": 3
 		},
 		"created_at": {
-			"$ref": "#/definitions/SystemTime"
+			"$ref": "#/$defs/SystemTime"
 		},
 		"updated_at": {
-			"$ref": "#/definitions/SystemTime"
+			"$ref": "#/$defs/SystemTime"
 		}
 	},
-	"definitions": {
+	"required": [
+		"id",
+		"name",
+		"description",
+		"board_id",
+		"node_id",
+		"variables",
+		"config",
+		"active",
+		"priority",
+		"event_type",
+		"event_version",
+		"created_at",
+		"updated_at"
+	],
+	"$defs": {
 		"Variable": {
 			"type": "object",
-			"required": [
-				"data_type",
-				"editable",
-				"exposed",
-				"id",
-				"name",
-				"secret",
-				"value_type"
-			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -159,14 +151,15 @@
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0.0
+						"minimum": 0,
+						"maximum": 255
 					}
 				},
 				"data_type": {
-					"$ref": "#/definitions/VariableType"
+					"$ref": "#/$defs/VariableType"
 				},
 				"value_type": {
-					"$ref": "#/definitions/ValueType"
+					"$ref": "#/$defs/ValueType"
 				},
 				"exposed": {
 					"type": "boolean"
@@ -180,9 +173,18 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0.0
+					"minimum": 0
 				}
-			}
+			},
+			"required": [
+				"id",
+				"name",
+				"data_type",
+				"value_type",
+				"exposed",
+				"secret",
+				"editable"
+			]
 		},
 		"VariableType": {
 			"type": "string",
@@ -205,14 +207,6 @@
 		},
 		"CanaryEvent": {
 			"type": "object",
-			"required": [
-				"board_id",
-				"created_at",
-				"node_id",
-				"updated_at",
-				"variables",
-				"weight"
-			],
 			"properties": {
 				"weight": {
 					"type": "number",
@@ -221,7 +215,7 @@
 				"variables": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/definitions/Variable"
+						"$ref": "#/$defs/Variable"
 					}
 				},
 				"board_id": {
@@ -229,73 +223,81 @@
 				},
 				"board_version": {
 					"type": ["array", "null"],
-					"items": [
+					"prefixItems": [
 						{
 							"type": "integer",
 							"format": "uint32",
-							"minimum": 0.0
+							"minimum": 0
 						},
 						{
 							"type": "integer",
 							"format": "uint32",
-							"minimum": 0.0
+							"minimum": 0
 						},
 						{
 							"type": "integer",
 							"format": "uint32",
-							"minimum": 0.0
+							"minimum": 0
 						}
 					],
-					"maxItems": 3,
-					"minItems": 3
+					"minItems": 3,
+					"maxItems": 3
 				},
 				"node_id": {
 					"type": "string"
 				},
 				"created_at": {
-					"$ref": "#/definitions/SystemTime"
+					"$ref": "#/$defs/SystemTime"
 				},
 				"updated_at": {
-					"$ref": "#/definitions/SystemTime"
+					"$ref": "#/$defs/SystemTime"
 				}
-			}
+			},
+			"required": [
+				"weight",
+				"variables",
+				"board_id",
+				"node_id",
+				"created_at",
+				"updated_at"
+			]
 		},
 		"SystemTime": {
 			"type": "object",
-			"required": ["nanos_since_epoch", "secs_since_epoch"],
 			"properties": {
 				"secs_since_epoch": {
 					"type": "integer",
 					"format": "uint64",
-					"minimum": 0.0
+					"minimum": 0
 				},
 				"nanos_since_epoch": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0.0
+					"minimum": 0
 				}
-			}
+			},
+			"required": ["secs_since_epoch", "nanos_since_epoch"]
 		},
 		"ReleaseNotes": {
 			"oneOf": [
 				{
 					"type": "object",
-					"required": ["NOTES"],
 					"properties": {
 						"NOTES": {
 							"type": "string"
 						}
 					},
+					"required": ["NOTES"],
 					"additionalProperties": false
 				},
 				{
 					"type": "object",
-					"required": ["URL"],
 					"properties": {
 						"URL": {
 							"type": "string"
 						}
 					},
+					"required": ["URL"],
 					"additionalProperties": false
 				}
 			]

@@ -1,12 +1,12 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "ChatEventParameters",
 	"type": "object",
 	"properties": {
 		"history_elements": {
 			"type": ["integer", "null"],
 			"format": "uint32",
-			"minimum": 0.0
+			"minimum": 0
 		},
 		"allow_file_upload": {
 			"type": ["boolean", "null"]

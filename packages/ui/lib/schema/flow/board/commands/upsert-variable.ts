@@ -6,7 +6,7 @@ export interface IUpsertVariable {
 
 export interface IVariable {
 	category?: null | string;
-	data_type: IVariableType;
+	data_type: IDataType;
 	default_value?: number[] | null;
 	description?: null | string;
 	editable: boolean;
@@ -19,7 +19,7 @@ export interface IVariable {
 	[property: string]: any;
 }
 
-export enum IVariableType {
+export enum IDataType {
 	Boolean = "Boolean",
 	Byte = "Byte",
 	Date = "Date",

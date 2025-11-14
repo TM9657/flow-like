@@ -1,16 +1,15 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "UpsertVariableCommand",
 	"type": "object",
-	"required": ["variable"],
 	"properties": {
 		"variable": {
-			"$ref": "#/definitions/Variable"
+			"$ref": "#/$defs/Variable"
 		},
 		"old_variable": {
 			"anyOf": [
 				{
-					"$ref": "#/definitions/Variable"
+					"$ref": "#/$defs/Variable"
 				},
 				{
 					"type": "null"
@@ -18,18 +17,10 @@
 			]
 		}
 	},
-	"definitions": {
+	"required": ["variable"],
+	"$defs": {
 		"Variable": {
 			"type": "object",
-			"required": [
-				"data_type",
-				"editable",
-				"exposed",
-				"id",
-				"name",
-				"secret",
-				"value_type"
-			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -48,14 +39,15 @@
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0.0
+						"minimum": 0,
+						"maximum": 255
 					}
 				},
 				"data_type": {
-					"$ref": "#/definitions/VariableType"
+					"$ref": "#/$defs/VariableType"
 				},
 				"value_type": {
-					"$ref": "#/definitions/ValueType"
+					"$ref": "#/$defs/ValueType"
 				},
 				"exposed": {
 					"type": "boolean"
@@ -69,9 +61,18 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0.0
+					"minimum": 0
 				}
-			}
+			},
+			"required": [
+				"id",
+				"name",
+				"data_type",
+				"value_type",
+				"exposed",
+				"secret",
+				"editable"
+			]
 		},
 		"VariableType": {
 			"type": "string",
