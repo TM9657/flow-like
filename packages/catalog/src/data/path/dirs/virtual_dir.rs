@@ -34,26 +34,12 @@ impl NodeLogic for VirtualDirNode {
         node.add_icon("/flow/icons/path.svg");
 
         node.add_input_pin(
-            "exec_in",
-            "Input",
-            "Initiate Execution",
-            VariableType::Execution,
-        );
-
-        node.add_input_pin(
             "name",
             "Name",
             "Virtual directory name",
             VariableType::String,
         )
         .set_default_value(Some(json!("/virtual")));
-
-        node.add_output_pin(
-            "exec_out",
-            "Output",
-            "Done with the Execution",
-            VariableType::Execution,
-        );
 
         node.add_output_pin(
             "path",
@@ -67,8 +53,6 @@ impl NodeLogic for VirtualDirNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        context.deactivate_exec_pin("exec_out").await?;
-
         let name: String = context.evaluate_pin("name").await?;
 
         let cache_path = format!("virtual_dir_{}", name);
@@ -87,8 +71,6 @@ impl NodeLogic for VirtualDirNode {
             cache_store_ref: None,
         };
         context.set_pin_value("path", json!(virtual_path)).await?;
-
-        context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
 }
