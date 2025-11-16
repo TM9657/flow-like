@@ -62,29 +62,50 @@ impl Command for RemoveNodeCommand {
                 continue;
             }
 
+            let mut needs_change = false;
+
+            // Check if this node has pin connections to the deleted node
             for pin in other.pins.values() {
                 if connected_pins.contains(&pin.id) {
-                    connected_nodes.push(other.clone());
-
-                    let mut cloned = other.clone();
-                    cloned.pins.iter_mut().for_each(|(_pin_id, pin)| {
-                        pin.connected_to = pin
-                            .connected_to
-                            .iter()
-                            .filter(|connected_pin_id| !node_pins.contains(connected_pin_id))
-                            .cloned()
-                            .collect();
-                        pin.depends_on = pin
-                            .depends_on
-                            .iter()
-                            .filter(|depends_on_pin_id| !node_pins.contains(depends_on_pin_id))
-                            .cloned()
-                            .collect();
-                    });
-                    changed_nodes.push(cloned);
-
+                    needs_change = true;
                     break;
                 }
+            }
+
+            // Check if this node references the deleted node via fn_refs
+            let has_fn_ref = if let Some(fn_refs) = &other.fn_refs {
+                fn_refs.fn_refs.contains(&self.node.id)
+            } else {
+                false
+            };
+
+            if needs_change || has_fn_ref {
+                connected_nodes.push(other.clone());
+
+                let mut cloned = other.clone();
+
+                // Clean up pin connections
+                cloned.pins.iter_mut().for_each(|(_pin_id, pin)| {
+                    pin.connected_to = pin
+                        .connected_to
+                        .iter()
+                        .filter(|connected_pin_id| !node_pins.contains(connected_pin_id))
+                        .cloned()
+                        .collect();
+                    pin.depends_on = pin
+                        .depends_on
+                        .iter()
+                        .filter(|depends_on_pin_id| !node_pins.contains(depends_on_pin_id))
+                        .cloned()
+                        .collect();
+                });
+
+                // Clean up fn_refs - remove the deleted node's ID
+                if let Some(fn_refs) = &mut cloned.fn_refs {
+                    fn_refs.fn_refs.retain(|node_id| node_id != &self.node.id);
+                }
+
+                changed_nodes.push(cloned);
             }
         }
 

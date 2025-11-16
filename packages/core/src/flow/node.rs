@@ -41,6 +41,13 @@ pub struct NodeScores {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct FnRefs {
+    pub fn_refs: Vec<String>,
+    pub can_reference_fns: bool,
+    pub can_be_referenced_by_fns: bool,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct Node {
     pub id: String,
     pub name: String,
@@ -59,6 +66,7 @@ pub struct Node {
     pub event_callback: Option<bool>,
     pub layer: Option<String>,
     pub hash: Option<u64>,
+    pub fn_refs: Option<FnRefs>,
 }
 
 impl Node {
@@ -81,6 +89,7 @@ impl Node {
             event_callback: None,
             layer: None,
             hash: None,
+            fn_refs: None,
         }
     }
 
@@ -98,6 +107,30 @@ impl Node {
 
     pub fn set_event_callback(&mut self, callback: bool) {
         self.event_callback = Some(callback);
+    }
+
+    pub fn set_can_be_referenced_by_fns(&mut self, can_be_referenced: bool) {
+        if let Some(fn_refs) = &mut self.fn_refs {
+            fn_refs.can_be_referenced_by_fns = can_be_referenced;
+        } else {
+            self.fn_refs = Some(FnRefs {
+                fn_refs: Vec::new(),
+                can_reference_fns: false,
+                can_be_referenced_by_fns: can_be_referenced,
+            });
+        }
+    }
+
+    pub fn set_can_reference_fns(&mut self, can_reference: bool) {
+        if let Some(fn_refs) = &mut self.fn_refs {
+            fn_refs.can_reference_fns = can_reference;
+        } else {
+            self.fn_refs = Some(FnRefs {
+                fn_refs: Vec::new(),
+                can_reference_fns: can_reference,
+                can_be_referenced_by_fns: false,
+            });
+        }
     }
 
     pub fn add_input_pin(

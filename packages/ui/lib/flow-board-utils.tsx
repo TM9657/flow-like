@@ -19,8 +19,25 @@ import {
 	type ILayer,
 } from "./schema/flow/board";
 import { IVariableType } from "./schema/flow/node";
-import type { INode } from "./schema/flow/node";
+import type { IFnRefs, INode } from "./schema/flow/node";
 import { type IPin, IPinType } from "./schema/flow/pin";
+
+export function hexToRgba(hex: string, alpha = 0.3): string {
+	let c = hex.replace("#", "");
+	if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+	const num = Number.parseInt(c, 16);
+	const r = (num >> 16) & 255;
+	const g = (num >> 8) & 255;
+	const b = num & 255;
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function normalizeSelectionNodes(value: unknown): string[] {
+	if (!Array.isArray(value)) return [];
+	return value.filter(
+		(nodeId: unknown): nodeId is string => typeof nodeId === "string",
+	);
+}
 
 interface ISerializedPin {
 	id: string;
@@ -44,6 +61,7 @@ interface ISerializedNode {
 		[key: string]: ISerializedPin;
 	};
 	layer?: string;
+	fn_refs?: IFnRefs;
 }
 
 function serializeNode(node: INode): ISerializedNode {
@@ -74,6 +92,7 @@ function serializeNode(node: INode): ISerializedNode {
 		coordinates: node.coordinates ?? undefined,
 		pins: pins,
 		layer: node.layer ?? undefined,
+		fn_refs: node.fn_refs ?? undefined,
 	};
 }
 
@@ -109,6 +128,7 @@ function deserializeNode(node: ISerializedNode): INode {
 		comment: node.comment ?? "",
 		pins: pins,
 		layer: node.layer ?? "",
+		fn_refs: node.fn_refs ?? undefined,
 	};
 }
 
@@ -117,6 +137,17 @@ export function isValidConnection(
 	cache: Map<string, [IPin, INode | ILayer, boolean]>,
 	refs: { [key: string]: string },
 ) {
+	const refIn =
+		connection.sourceHandle.startsWith("ref_in_") ||
+		connection.targetHandle.startsWith("ref_in_");
+	const refOut =
+		connection.sourceHandle.startsWith("ref_out_") ||
+		connection.targetHandle.startsWith("ref_out_");
+
+	if (refIn || refOut) {
+		return refIn && refOut;
+	}
+
 	const [sourcePin, sourceNode] = cache.get(connection.sourceHandle) || [];
 	const [targetPin, targetNode] = cache.get(connection.targetHandle) || [];
 
@@ -260,8 +291,19 @@ export function parseBoard(
 	const oldNodesMap = new Map<number, any>();
 	const oldEdgesMap = new Map<string, any>();
 
+	// Compute a hash of all fn_refs to detect changes
+	const fnRefsHash = Object.values(board.nodes)
+		.map((n) => `${n.id}:${n.fn_refs?.fn_refs?.join(",") ?? ""}`)
+		.join(";");
+
 	for (const oldNode of oldNodes ?? []) {
 		oldNode.data.boardRef = boardRef;
+		oldNode.data.fnRefsHash = fnRefsHash;
+		// Update the node reference so fn_refs changes are reflected
+		const updatedNode = board.nodes[oldNode.id];
+		if (updatedNode) {
+			oldNode.data.node = updatedNode;
+		}
 		if (oldNode.data?.hash) oldNodesMap.set(oldNode.data?.hash, oldNode);
 	}
 
@@ -291,6 +333,7 @@ export function parseBoard(
 				data: {
 					label: node.name,
 					boardRef: boardRef,
+					fnRefsHash: fnRefsHash,
 					node: node,
 					hash: hash,
 					boardId: board.id,
@@ -560,13 +603,15 @@ export function parseBoard(
 					data: {
 						fromLayer: (node as any).layer,
 						toLayer: (connectedNode as any).layer,
+						pathType: connectionMode,
+						data_type: pin.data_type,
 					},
 					animated: pin.data_type !== "Execution",
 					reconnectable: true,
 					target: targetNodeId,
 					targetHandle: conntectedPin.id,
 					style: { stroke: typeToColor(pin.data_type) },
-					type: connectionMode ?? "default",
+					type: pin.data_type === "Execution" ? "execution" : "data",
 					data_type: pin.data_type,
 					selected: selected.has(`${pin.id}-${connectedTo}`),
 				});
@@ -576,6 +621,54 @@ export function parseBoard(
 		}
 	}
 
+	// Create edges for function references
+	for (const node of Object.values(board.nodes)) {
+		const nodeLayer = (node.layer ?? "") === "" ? undefined : node.layer;
+		if (nodeLayer !== currentLayer) continue;
+
+		if (node.fn_refs?.can_reference_fns && node.fn_refs.fn_refs.length > 0) {
+			for (const refNodeId of node.fn_refs.fn_refs) {
+				const targetNode = board.nodes[refNodeId];
+				if (!targetNode) continue;
+
+				const targetLayer =
+					(targetNode.layer ?? "") === "" ? undefined : targetNode.layer;
+				if (targetLayer !== currentLayer) continue;
+
+				const sourceHandle = `ref_out_${node.id}`;
+				const targetHandle = `ref_in_${refNodeId}`;
+				const edgeId = `${sourceHandle}-${targetHandle}`;
+
+				const existingEdge = oldEdgesMap.get(edgeId);
+
+				if (existingEdge) {
+					edges.push(existingEdge);
+				} else {
+					edges.push({
+						id: edgeId,
+						source: node.id,
+						sourceHandle: sourceHandle,
+						target: refNodeId,
+						targetHandle: targetHandle,
+						zIndex: 18,
+						data: {
+							fromLayer: nodeLayer,
+							toLayer: targetLayer,
+							isFnRef: true,
+							pathType: connectionMode,
+						},
+						animated: true,
+						reconnectable: true,
+						style: {
+							stroke: "var(--pin-fn-ref)",
+						},
+						type: "veil",
+						selected: selected.has(edgeId),
+					});
+				}
+			}
+		}
+	}
 	for (const comment of Object.values(board.comments)) {
 		const commentLayer =
 			(comment.layer ?? "") === "" ? undefined : comment.layer;

@@ -8,6 +8,7 @@ export interface INode {
 	event_callback?: boolean | null;
 	friendly_name: string;
 	hash?: number | null;
+	fn_refs?: IFnRefs | null;
 	icon?: null | string;
 	id: string;
 	layer?: null | string;
@@ -85,5 +86,12 @@ export interface INodeScores {
 	performance: number;
 	privacy: number;
 	security: number;
+	[property: string]: any;
+}
+
+export interface IFnRefs {
+	fn_refs: string[];
+	can_reference_fns: boolean;
+	can_be_referenced_by_fns: boolean;
 	[property: string]: any;
 }

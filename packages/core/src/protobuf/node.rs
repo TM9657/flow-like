@@ -1,7 +1,7 @@
 use flow_like_types::{FromProto, ToProto};
 
 use crate::flow::{
-    node::{Node, NodeScores},
+    node::{FnRefs, Node, NodeScores},
     pin::Pin,
 };
 
@@ -23,6 +23,26 @@ impl FromProto<flow_like_types::proto::NodeScores> for NodeScores {
             security: proto.security as u8,
             performance: proto.performance as u8,
             governance: proto.governance as u8,
+        }
+    }
+}
+
+impl ToProto<flow_like_types::proto::FnRefs> for FnRefs {
+    fn to_proto(&self) -> flow_like_types::proto::FnRefs {
+        flow_like_types::proto::FnRefs {
+            fn_refs: self.fn_refs.clone(),
+            can_reference_fns: self.can_reference_fns,
+            can_be_referenced_by_fns: self.can_be_referenced_by_fns,
+        }
+    }
+}
+
+impl FromProto<flow_like_types::proto::FnRefs> for FnRefs {
+    fn from_proto(proto: flow_like_types::proto::FnRefs) -> Self {
+        FnRefs {
+            fn_refs: proto.fn_refs,
+            can_reference_fns: proto.can_reference_fns,
+            can_be_referenced_by_fns: proto.can_be_referenced_by_fns,
         }
     }
 }
@@ -54,6 +74,7 @@ impl ToProto<flow_like_types::proto::Node> for Node {
             layer: self.layer.clone(),
             event_callback: self.event_callback.unwrap_or(false),
             hash: self.hash,
+            fn_refs: self.fn_refs.as_ref().map(|f| f.to_proto()),
         }
     }
 }
@@ -90,6 +111,7 @@ impl FromProto<flow_like_types::proto::Node> for Node {
             },
             layer: proto.layer,
             hash: proto.hash,
+            fn_refs: proto.fn_refs.map(FnRefs::from_proto),
         }
     }
 }

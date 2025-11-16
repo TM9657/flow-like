@@ -271,6 +271,19 @@ impl Command for CopyPasteCommand {
                     .collect();
             }
 
+            // Remap fn_refs to new node IDs, then validate and deduplicate
+            if let Some(fn_refs) = &mut new_node.fn_refs {
+                // First, remap to new IDs
+                fn_refs.fn_refs = fn_refs
+                    .fn_refs
+                    .iter()
+                    .filter_map(|ref_id| translated_connection.get(ref_id).cloned())
+                    .collect();
+
+                // Then validate and deduplicate - never trust the frontend!
+                super::validate_and_deduplicate_fn_refs(fn_refs, board);
+            }
+
             board.nodes.insert(new_node.id.clone(), new_node.clone());
             self.new_nodes.push(new_node);
         }

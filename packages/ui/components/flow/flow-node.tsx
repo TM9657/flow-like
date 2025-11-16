@@ -1,8 +1,13 @@
 "use client";
-
 import { createId } from "@paralleldrive/cuid2";
 import { useDebounce } from "@uidotdev/usehooks";
-import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
+import {
+	Handle,
+	type Node,
+	type NodeProps,
+	Position,
+	useReactFlow,
+} from "@xyflow/react";
 import {
 	AlignCenterVerticalIcon,
 	AlignEndVerticalIcon,
@@ -108,6 +113,7 @@ export type FlowNode = Node<
 		appId: string;
 		transparent?: boolean;
 		boardRef: RefObject<IBoard | undefined>;
+		fnRefsHash?: string;
 		version?: [number, number, number];
 		onExecute: (node: INode, payload?: object) => Promise<void>;
 		onCopy: () => Promise<void>;
@@ -533,6 +539,104 @@ const FlowNodeInner = memo(
 				props.data.version,
 			],
 		);
+
+		// Compute connection states efficiently - only track the specific fn_refs we care about
+		const refInConnected = useMemo(() => {
+			const board = props.data.boardRef.current;
+			if (!board) return false;
+			const currentNodeId = props.data.node.id;
+			// Only check nodes, return boolean to avoid object reference changes
+			return Object.values(board.nodes || {}).some((node) =>
+				node.fn_refs?.fn_refs?.includes(currentNodeId),
+			);
+		}, [props.data.node.id, props.data.fnRefsHash]);
+
+		const refOutConnected = useMemo(() => {
+			return (props.data.node.fn_refs?.fn_refs?.length ?? 0) > 0;
+		}, [props.data.node.fn_refs?.fn_refs?.length]);
+
+		const renderFnRefInputs = useMemo(() => {
+			const canBeReferencedByFns =
+				props.data.node.fn_refs?.can_be_referenced_by_fns ?? false;
+			if (!canBeReferencedByFns) return null;
+
+			return (
+				<Handle
+					position={Position.Top}
+					type={"target"}
+					className={`relative ml-auto right-0 z-50 mt-2 -mr-1`}
+					id={`ref_in_${props.data.node.id}`}
+					style={{
+						width: 12,
+						height: 12,
+						borderRadius: 2,
+						background: refInConnected
+							? `
+				linear-gradient(
+					135deg,
+					var(--pin-fn-ref) 0%,
+					color-mix(in oklch, var(--pin-fn-ref) 90%, white) 50%,
+					var(--pin-fn-ref) 100%
+				)
+			`
+							: "var(--background)",
+						border: "1px solid var(--pin-fn-ref)",
+						padding: 0,
+						boxShadow: refInConnected
+							? `
+		0 0 6px color-mix(in oklch, var(--pin-fn-ref) 30%, transparent),
+		inset 0 1px 1px color-mix(in oklch, white 15%, transparent)
+	`
+							: "none",
+					}}
+				/>
+			);
+		}, [
+			props.data.node.fn_refs?.can_be_referenced_by_fns,
+			refInConnected,
+			props.data.node.id,
+		]);
+		const renderFnRefOutputs = useMemo(() => {
+			const canBeReferencedByFns =
+				props.data.node.fn_refs?.can_reference_fns ?? false;
+			if (!canBeReferencedByFns) return null;
+
+			return (
+				<Handle
+					position={Position.Bottom}
+					type={"source"}
+					className={`relative z-50`}
+					id={`ref_out_${props.data.node.id}`}
+					style={{
+						width: 12,
+						height: 12,
+						borderRadius: 2,
+						background: refOutConnected
+							? `
+			radial-gradient(
+				circle at 30% 30%,
+				color-mix(in oklch, var(--pin-fn-ref) 100%, white 20%),
+				var(--pin-fn-ref) 70%
+			)
+		`
+							: "var(--background)",
+						border: "1px solid var(--pin-fn-ref)",
+						padding: 0,
+						boxShadow: refOutConnected
+							? `
+			0 0 8px color-mix(in oklch, var(--pin-fn-ref) 40%, transparent),
+			0 1px 2px color-mix(in oklch, black 20%, transparent),
+			inset 0 1px 1px color-mix(in oklch, white 20%, transparent)
+		`
+							: "none",
+					}}
+				/>
+			);
+		}, [
+			props.data.node.fn_refs?.can_reference_fns,
+			refOutConnected,
+			props.data.node.id,
+		]);
 		const playNode = useMemo(() => {
 			if (!props.data.node.start) return null;
 			if (executionState === "done" || executing)
@@ -701,6 +805,8 @@ const FlowNodeInner = memo(
 					</div>
 				)}
 				{renderInputPins}
+				{renderFnRefInputs}
+				{renderFnRefOutputs}
 				{!isReroute && (
 					<div
 						className={`header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b p-1 justify-between rounded-md rounded-b-none bg-card ${props.data.node.event_callback && "bg-linear-to-l  from-card via-primary/50 to-primary"} ${!isExec && "bg-linear-to-r  from-card via-tertiary/50 to-tertiary"} ${props.data.node.start && "bg-linear-to-r  from-card via-primary/50 to-primary"} ${isReroute && "w-6"}`}

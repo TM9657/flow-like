@@ -33,6 +33,11 @@ impl Command for UpdateNodeCommand {
         board: &mut Board,
         _state: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
+        // Validate and deduplicate fn_refs - never trust the frontend!
+        if let Some(fn_refs) = &mut self.node.fn_refs {
+            super::validate_and_deduplicate_fn_refs(fn_refs, board);
+        }
+
         self.old_node = board.nodes.insert(self.node.id.clone(), self.node.clone());
         Ok(())
     }
