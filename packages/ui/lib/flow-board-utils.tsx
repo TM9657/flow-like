@@ -284,6 +284,7 @@ export function parseBoard(
 	currentLayer?: string,
 	boardRef?: RefObject<IBoard | undefined>,
 	version?: [number, number, number],
+	onOpenInfo?: (node: INode) => void,
 ) {
 	const nodes: any[] = [];
 	const edges: any[] = [];
@@ -345,6 +346,7 @@ export function parseBoard(
 					onCopy: async () => {
 						handleCopy();
 					},
+					onOpenInfo: onOpenInfo,
 				},
 				selected: selected.has(node.id),
 			});

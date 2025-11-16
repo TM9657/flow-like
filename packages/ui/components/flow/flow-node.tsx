@@ -1,5 +1,6 @@
 "use client";
 import { createId } from "@paralleldrive/cuid2";
+import { InfoCircledIcon } from "@radix-ui/react-icons";
 import { useDebounce } from "@uidotdev/usehooks";
 import {
 	Handle,
@@ -118,6 +119,7 @@ export type FlowNode = Node<
 		onExecute: (node: INode, payload?: object) => Promise<void>;
 		onCopy: () => Promise<void>;
 		remoteSelections?: RemoteSelectionParticipant[];
+		onOpenInfo?: (node: INode) => void;
 	},
 	"node"
 >;
@@ -1217,6 +1219,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 							Copy
 						</div>
 					</ContextMenuItem>
+
 					{isExec &&
 						flow.getNodes().filter((node) => node.selected).length <= 1 && (
 							<>
@@ -1229,6 +1232,19 @@ function FlowNode(props: NodeProps<FlowNode>) {
 								</ContextMenuItem>
 							</>
 						)}
+					{flow.getNodes().filter((node) => node.selected).length <= 1 && (
+						<>
+							<ContextMenuSeparator />
+							<ContextMenuItem
+								onClick={() => props.data.onOpenInfo?.(props.data.node)}
+							>
+								<div className="flex flex-row items-center gap-2 text-nowrap">
+									<InfoCircledIcon className="w-4 h-4" />
+									Info
+								</div>
+							</ContextMenuItem>
+						</>
+					)}
 					<ContextMenuSeparator />
 					<ContextMenuItem onClick={async () => await deleteNodes()}>
 						<div className="flex flex-row items-center gap-2 text-nowrap">

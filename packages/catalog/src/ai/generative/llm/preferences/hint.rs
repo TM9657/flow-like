@@ -2,7 +2,7 @@ use flow_like::{
     bit::BitModelPreference,
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -26,22 +26,32 @@ impl NodeLogic for SetModelHintNode {
         let mut node = Node::new(
             "ai_generative_set_model_hint",
             "Set Model Hint",
-            "Sets the model hint in BitModelPreference",
+            "Adds a soft preference hint for downstream model selection",
             "AI/Generative/Preferences",
         );
         node.add_icon("/flow/icons/struct.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",
             "Input",
-            "Initiate Execution",
+            "Begin execution when ready to update",
             VariableType::Execution,
         );
 
         node.add_input_pin(
             "preferences_in",
             "Preferences",
-            "Current Preferences",
+            "Current model preference state",
             VariableType::Struct,
         )
         .set_schema::<BitModelPreference>()
@@ -50,21 +60,21 @@ impl NodeLogic for SetModelHintNode {
         node.add_input_pin(
             "model_hint",
             "Model Hint",
-            "Model Hint to set",
+            "Friendly hint describing the desired model family",
             VariableType::String,
         );
 
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Signals completion after updating",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "preferences_out",
             "Preferences",
-            "Updated Preferences",
+            "Preferences with the new hint",
             VariableType::Struct,
         )
         .set_schema::<BitModelPreference>();

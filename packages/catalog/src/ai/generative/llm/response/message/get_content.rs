@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -26,10 +26,20 @@ impl NodeLogic for GetContentNode {
         let mut node = Node::new(
             "ai_generative_llm_response_message_get_content",
             "Get Content",
-            "Extracts the content from a message",
+            "Extracts the text content field from a response message",
             "AI/Generative/Response/Message",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "message",
@@ -59,14 +69,10 @@ impl NodeLogic for GetContentNode {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let message: ResponseMessage = context.evaluate_pin("message").await?;
-
-        if let Some(content) = message.content.as_ref() {
-            context.set_pin_value("content", json!(content)).await?;
-            context.set_pin_value("success", json!(true)).await?;
-        } else {
-            context.set_pin_value("content", json!("")).await?;
-            context.set_pin_value("success", json!(false)).await?;
-        }
+        let content = message.content.unwrap_or_default();
+        let success = !content.is_empty();
+        context.set_pin_value("content", json!(content)).await?;
+        context.set_pin_value("success", json!(success)).await?;
 
         Ok(())
     }

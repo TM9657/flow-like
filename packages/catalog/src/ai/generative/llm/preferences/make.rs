@@ -2,7 +2,7 @@ use flow_like::{
     bit::BitModelPreference,
     flow::{
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         variable::VariableType,
     },
     state::FlowLikeState,
@@ -25,15 +25,25 @@ impl NodeLogic for MakePreferencesNode {
         let mut node = Node::new(
             "ai_generative_make_preferences",
             "Make Preferences",
-            "Creates Model Preferences for model selection",
+            "Creates a BitModelPreference struct used to guide model selection",
             "AI/Generative/Preferences",
         );
         node.add_icon("/flow/icons/struct.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "multimodal",
             "Multimodal",
-            "Should the model be able to handle images?",
+            "True if the target model must handle images",
             VariableType::Boolean,
         )
         .set_default_value(Some(json!(false)));
@@ -41,7 +51,7 @@ impl NodeLogic for MakePreferencesNode {
         node.add_output_pin(
             "preferences",
             "Preferences",
-            "BitModelPreference",
+            "Constructed BitModelPreference struct",
             VariableType::Struct,
         )
         .set_schema::<BitModelPreference>();

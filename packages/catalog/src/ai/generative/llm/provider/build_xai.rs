@@ -4,7 +4,7 @@ use flow_like::{
     bit::{Bit, BitModelClassification, VLMParameters},
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -37,21 +37,62 @@ impl NodeLogic for BuildXAINode {
         );
         node.add_icon("/flow/icons/find_model.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(4)
+                .set_security(5)
+                .set_performance(6)
+                .set_governance(4)
+                .set_reliability(6)
+                .set_cost(5)
+                .build(),
+        );
 
-        node.add_input_pin("endpoint", "Endpoint", "API Endpoint", VariableType::String)
-            .set_default_value(Some(json!("https://api.x.ai")));
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger that builds or refreshes the xAI Bit",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("api_key", "API Key", "API Key", VariableType::String)
-            .set_default_value(Some(json!("")))
-            .set_options(PinOptions::new().set_sensitive(true).build());
+        node.add_input_pin(
+            "endpoint",
+            "Endpoint",
+            "xAI API endpoint or custom proxy",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("https://api.x.ai")));
 
-        node.add_input_pin("model_id", "Model ID", "Model ID", VariableType::String)
-            .set_default_value(Some(json!("grok-2-1212")));
+        node.add_input_pin(
+            "api_key",
+            "API Key",
+            "Token used for authenticating against xAI",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")))
+        .set_options(PinOptions::new().set_sensitive(true).build());
 
-        node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
-        node.add_output_pin("model", "Model", "The selected model", VariableType::Struct)
-            .set_schema::<Bit>();
+        node.add_input_pin(
+            "model_id",
+            "Model ID",
+            "Model identifier or preset slug to request (e.g., grok-2-1212)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("grok-2-1212")));
+
+        node.add_output_pin(
+            "exec_out",
+            "Output",
+            "Activated once the Bit is ready",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "model",
+            "Model",
+            "Structured Bit describing the xAI provider",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>();
 
         node.set_long_running(true);
 

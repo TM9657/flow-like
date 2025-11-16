@@ -4,7 +4,7 @@ use flow_like::{
     bit::{Bit, BitModelClassification, VLMParameters},
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         variable::VariableType,
     },
     state::FlowLikeState,
@@ -36,17 +36,53 @@ impl NodeLogic for BuildOllamaNode {
         );
         node.add_icon("/flow/icons/find_model.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(9)
+                .set_security(8)
+                .set_performance(6)
+                .set_governance(8)
+                .set_reliability(7)
+                .set_cost(9)
+                .build(),
+        );
 
-        node.add_input_pin("endpoint", "Endpoint", "API Endpoint", VariableType::String)
-            .set_default_value(Some(json!("http://localhost:11434")));
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger that builds or refreshes the Ollama Bit",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("model_id", "Model ID", "Model ID", VariableType::String)
-            .set_default_value(Some(json!("llama3.3")));
+        node.add_input_pin(
+            "endpoint",
+            "Endpoint",
+            "Local or remote Ollama HTTP endpoint",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("http://localhost:11434")));
 
-        node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
-        node.add_output_pin("model", "Model", "The selected model", VariableType::Struct)
-            .set_schema::<Bit>();
+        node.add_input_pin(
+            "model_id",
+            "Model ID",
+            "Model identifier/tag to run (must exist on the Ollama host)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("llama3.3")));
+
+        node.add_output_pin(
+            "exec_out",
+            "Output",
+            "Activated once the Bit is ready",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "model",
+            "Model",
+            "Structured Bit describing the Ollama provider",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>();
 
         node.set_long_running(true);
 

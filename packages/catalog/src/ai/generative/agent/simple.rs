@@ -7,7 +7,7 @@ use flow_like::{
     bit::Bit,
     flow::{
         execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::{PinOptions, PinType},
         variable::VariableType,
     },
@@ -164,36 +164,67 @@ impl NodeLogic for SimpleAgentNode {
         let mut node = Node::new(
             "simple_agent",
             "Simple Agent",
-            "Simple Agent Node with Tool Calls",
+            "LLM-driven control loop that repeatedly calls referenced Flow functions as tools until it decides to stop",
             "AI/Agents",
         );
         node.add_icon("/flow/icons/for-each.svg");
         node.set_can_reference_fns(true);
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(3)
+                .set_security(4)
+                .set_performance(6)
+                .set_governance(4)
+                .set_reliability(5)
+                .set_cost(4)
+                .build(),
+        );
 
-        node.add_input_pin("model", "Model", "Model", VariableType::Struct)
-            .set_schema::<Bit>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger for starting the agent loop",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("history", "History", "Chat History", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "model",
+            "Model",
+            "Bit describing the LLM that powers the agent",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin(
+            "history",
+            "History",
+            "Conversation history shared with the agent (used for reasoning context)",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
             "max_iter",
             "Iter",
-            "Maximum Number of Internal Agent Iterations (Recursion Limit)",
+            "Maximum number of internal iterations/tool calls before failing",
             VariableType::Integer,
         )
         .set_default_value(Some(json::json!(15)));
 
-        node.add_output_pin("exec_done", "Done", "Done Pin", VariableType::Execution);
+        node.add_output_pin(
+            "exec_done",
+            "Done",
+            "Fires when the agent stops (successfully or due to error)",
+            VariableType::Execution,
+        );
 
         node.add_output_pin(
             "response",
             "Response",
-            "Final Response (Agent decides to stop execution)",
+            "Final assistant response produced when the agent halts",
             VariableType::Struct,
         )
         .set_schema::<Response>()
@@ -202,7 +233,7 @@ impl NodeLogic for SimpleAgentNode {
         node.add_output_pin(
             "history_out",
             "History Out",
-            "Updated History with all agent interactions",
+            "Conversation history enriched with all agent/tool turns",
             VariableType::Struct,
         )
         .set_schema::<History>()

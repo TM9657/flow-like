@@ -10,6 +10,8 @@ message NodeScores {
     uint32 security = 2;
     uint32 performance = 3;
     uint32 governance = 4;
+    uint32 reliability = 5;
+    uint32 cost = 6;
 }
 
 message FnRefs {

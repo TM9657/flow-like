@@ -65,6 +65,10 @@ import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
 import { FlowNode } from "../../components/flow/flow-node";
+import {
+	FlowNodeInfoOverlay,
+	type FlowNodeInfoOverlayHandle,
+} from "../../components/flow/flow-node/flow-node-info-overlay";
 import { Traces } from "../../components/flow/traces";
 import {
 	Variable,
@@ -163,6 +167,7 @@ export function FlowBoard({
 	const logPanelRef = useRef<ImperativePanelHandle>(null);
 	const varPanelRef = useRef<ImperativePanelHandle>(null);
 	const runsPanelRef = useRef<ImperativePanelHandle>(null);
+	const nodeInfoOverlayRef = useRef<FlowNodeInfoOverlayHandle>(null);
 
 	const shiftPressed = useKeyPress("Shift");
 
@@ -509,6 +514,10 @@ export function FlowBoard({
 		[nodes, mousePosition, board.data, currentLayer],
 	);
 
+	const openNodeInfo = useCallback((node: INode) => {
+		nodeInfoOverlayRef.current?.openNodeInfo(node);
+	}, []);
+
 	const placeNodeShortcut = useCallback(
 		async (node: INode) => {
 			await placeNode(node, {
@@ -666,12 +675,13 @@ export function FlowBoard({
 			currentLayer,
 			boardRef,
 			version,
+			openNodeInfo,
 		);
 
 		setNodes(parsed.nodes);
 		setEdges(parsed.edges);
 		setPinCache(new Map(parsed.cache));
-	}, [board.data, currentLayer, currentProfile.data, version]);
+	}, [board.data, currentLayer, currentProfile.data, version, openNodeInfo]);
 
 	const nodeTypes = useMemo(
 		() => ({
@@ -1599,6 +1609,13 @@ export function FlowBoard({
 				</Sheet>
 			</ResizablePanelGroup>
 			<PinEditModal appId={appId} boardId={boardId} version={version} />
+			<FlowNodeInfoOverlay
+				key={boardId}
+				ref={nodeInfoOverlayRef}
+				refs={board.data?.refs}
+				boardRef={boardRef}
+				onFocusNode={focusNode}
+			/>
 		</div>
 	);
 }

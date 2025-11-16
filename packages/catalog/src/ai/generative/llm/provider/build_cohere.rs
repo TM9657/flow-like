@@ -4,7 +4,7 @@ use flow_like::{
     bit::{Bit, BitModelClassification, VLMParameters},
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -32,26 +32,62 @@ impl NodeLogic for BuildCohereNode {
         let mut node = Node::new(
             "ai_generative_build_cohere",
             "Cohere Model",
-            "Builds the Cohere model based on certain selection criteria",
+            "Prepares a Bit for Cohere's API using the supplied credentials",
             "AI/Generative/Provider",
         );
         node.add_icon("/flow/icons/find_model.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(4)
+                .set_security(5)
+                .set_performance(7)
+                .set_governance(5)
+                .set_reliability(7)
+                .set_cost(4)
+                .build(),
+        );
 
-        node.add_input_pin("endpoint", "Endpoint", "API Endpoint", VariableType::String)
-            .set_default_value(Some(json!("https://api.cohere.ai")));
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger to build/update the provider Bit",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("api_key", "API Key", "API Key", VariableType::String)
+        node.add_input_pin(
+            "endpoint",
+            "Endpoint",
+            "Cohere API endpoint (override for private deployments)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("https://api.cohere.ai")));
+
+        node.add_input_pin("api_key", "API Key", "Cohere API key", VariableType::String)
             .set_default_value(Some(json!("")))
             .set_options(PinOptions::new().set_sensitive(true).build());
 
-        node.add_input_pin("model_id", "Model ID", "Model ID", VariableType::String)
-            .set_default_value(Some(json!("command-r-plus-08-2024")));
+        node.add_input_pin(
+            "model_id",
+            "Model ID",
+            "Cohere model identifier",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("command-r-plus-08-2024")));
 
-        node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
-        node.add_output_pin("model", "Model", "The selected model", VariableType::Struct)
-            .set_schema::<Bit>();
+        node.add_output_pin(
+            "exec_out",
+            "Output",
+            "Fires when the Bit is ready",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "model",
+            "Model",
+            "Bit containing the provider configuration",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>();
 
         node.set_long_running(true);
 

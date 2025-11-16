@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::ValueType,
         variable::VariableType,
     },
@@ -26,8 +26,19 @@ impl NodeLogic for ChunkTextChar {
         let mut node = Node::new(
             "chunk_text_char",
             "Character Chunk Text",
-            "For efficient embedding, chunk the text into smaller pieces",
+            "Splits raw text locally using simple character-based chunking",
             "AI/Preprocessing",
+        );
+
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(9)
+                .set_security(9)
+                .set_performance(9)
+                .set_governance(9)
+                .set_reliability(8)
+                .set_cost(10)
+                .build(),
         );
 
         node.set_long_running(true);
@@ -36,16 +47,21 @@ impl NodeLogic for ChunkTextChar {
         node.add_input_pin(
             "exec_in",
             "Input",
-            "Initiate Execution",
+            "Execution trigger",
             VariableType::Execution,
         );
 
-        node.add_input_pin("text", "Text", "The string to embed", VariableType::String);
+        node.add_input_pin(
+            "text",
+            "Text",
+            "Source string that should be chunked",
+            VariableType::String,
+        );
 
         node.add_input_pin(
             "capacity",
             "Capacity",
-            "Chunk Capacity",
+            "Maximum characters per chunk",
             VariableType::Integer,
         )
         .set_default_value(Some(json!(512)));
@@ -53,7 +69,7 @@ impl NodeLogic for ChunkTextChar {
         node.add_input_pin(
             "overlap",
             "Overlap",
-            "Overlap between Chunks",
+            "Character overlap between adjacent chunks",
             VariableType::Integer,
         )
         .set_default_value(Some(json!(20)));
@@ -61,7 +77,7 @@ impl NodeLogic for ChunkTextChar {
         node.add_input_pin(
             "markdown",
             "Markdown",
-            "Use Markdown Splitter?",
+            "Use Markdown-aware splitting (true) or basic splitter",
             VariableType::Boolean,
         )
         .set_default_value(Some(json!(true)));
@@ -69,14 +85,14 @@ impl NodeLogic for ChunkTextChar {
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Fires when chunking is done",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "chunks",
             "Chunks",
-            "The embedding vector",
+            "Character chunk array",
             VariableType::String,
         )
         .set_value_type(ValueType::Array);

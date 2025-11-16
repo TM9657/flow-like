@@ -5,7 +5,7 @@ use flow_like::{
     flow::{
         board::Board,
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -33,16 +33,32 @@ impl NodeLogic for BuildOpenAiNode {
         let mut node = Node::new(
             "ai_generative_build_openai",
             "OpenAI Model",
-            "Builds the OpenAI model based on certain selection criteria",
+            "Prepares a Bit for OpenAI or Azure OpenAI endpoints with the provided credentials",
             "AI/Generative/Provider",
         );
         node.add_icon("/flow/icons/find_model.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(4)
+                .set_security(5)
+                .set_performance(7)
+                .set_governance(5)
+                .set_reliability(7)
+                .set_cost(4)
+                .build(),
+        );
+
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger to build/update the provider Bit",
+            VariableType::Execution,
+        );
         node.add_input_pin(
             "provider",
             "Provider",
-            "Provider Name",
+            "Choose OpenAI cloud or Azure OpenAI",
             VariableType::String,
         )
         .set_options(
@@ -52,16 +68,36 @@ impl NodeLogic for BuildOpenAiNode {
         )
         .set_default_value(Some(json!("OpenAI")));
 
-        node.add_input_pin("endpoint", "Endpoint", "API Endpoint", VariableType::String)
-            .set_default_value(Some(json!("https://api.openai.com/v1/")));
+        node.add_input_pin(
+            "endpoint",
+            "Endpoint",
+            "Base API endpoint (override for Azure or proxies)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("https://api.openai.com/v1/")));
 
-        node.add_input_pin("api_key", "API Key", "API Key", VariableType::String)
-            .set_default_value(Some(json!("")))
-            .set_options(PinOptions::new().set_sensitive(true).build());
+        node.add_input_pin(
+            "api_key",
+            "API Key",
+            "API key or Azure key used for authentication",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")))
+        .set_options(PinOptions::new().set_sensitive(true).build());
 
-        node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
-        node.add_output_pin("model", "Model", "The selected model", VariableType::Struct)
-            .set_schema::<Bit>();
+        node.add_output_pin(
+            "exec_out",
+            "Output",
+            "Fires when the Bit is ready",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "model",
+            "Model",
+            "Bit containing the provider configuration",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>();
 
         node.set_long_running(true);
 

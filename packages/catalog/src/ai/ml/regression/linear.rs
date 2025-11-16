@@ -12,7 +12,7 @@ use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -47,12 +47,28 @@ impl NodeLogic for FitLinearRegressionNode {
         );
         node.add_icon("/flow/icons/chart-network.svg");
 
-        node.add_input_pin("exec_in", "Input", "Start Fitting", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(6)
+                .set_security(6)
+                .set_performance(6)
+                .set_governance(6)
+                .set_reliability(7)
+                .set_cost(7)
+                .build(),
+        );
+
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger that begins regression training",
+            VariableType::Execution,
+        );
 
         node.add_input_pin(
             "source",
             "Data Source",
-            "Data Source (DB or CSV)",
+            "Choose where training data should be loaded from",
             VariableType::String,
         )
         .set_options(
@@ -65,14 +81,14 @@ impl NodeLogic for FitLinearRegressionNode {
         node.add_output_pin(
             "exec_out",
             "Done",
-            "Done Fitting Model",
+            "Activated once training completes",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "model",
             "Model",
-            "Fitted/Trained Linear Classification Model",
+            "Thread-safe handle to the trained linear regression model",
             VariableType::Struct,
         )
         .set_schema::<NodeMLModel>()

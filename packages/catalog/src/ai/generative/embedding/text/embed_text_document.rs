@@ -2,7 +2,7 @@ use crate::ai::generative::embedding::{CachedEmbeddingModel, CachedEmbeddingMode
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::{PinOptions, ValueType},
         variable::VariableType,
     },
@@ -26,8 +26,19 @@ impl NodeLogic for EmbedDocumentNode {
         let mut node = Node::new(
             "embed_document",
             "Embed Document",
-            "Embeds a document string using a loaded model",
+            "Creates an embedding vector for a document string using a cached embedding model",
             "AI/Embedding",
+        );
+
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(6)
+                .set_security(6)
+                .set_performance(7)
+                .set_governance(6)
+                .set_reliability(7)
+                .set_cost(6)
+                .build(),
         );
 
         node.set_long_running(true);
@@ -36,21 +47,21 @@ impl NodeLogic for EmbedDocumentNode {
         node.add_input_pin(
             "exec_in",
             "Input",
-            "Initiate Execution",
+            "Execution trigger",
             VariableType::Execution,
         );
 
         node.add_input_pin(
             "query_string",
             "Query String",
-            "The string to embed",
+            "Document text that should be embedded",
             VariableType::String,
         );
 
         node.add_input_pin(
             "model",
             "Model",
-            "The embedding model",
+            "Cached embedding Bit containing the provider",
             VariableType::Struct,
         )
         .set_schema::<CachedEmbeddingModel>()
@@ -59,14 +70,14 @@ impl NodeLogic for EmbedDocumentNode {
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Fires when embedding completes",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "vector",
             "Vector",
-            "The embedding vector",
+            "Embedding vector returned by the model",
             VariableType::Float,
         )
         .set_value_type(ValueType::Array);

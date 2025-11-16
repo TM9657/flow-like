@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -26,19 +26,34 @@ impl NodeLogic for GetSystemPromptNode {
         let mut node = Node::new(
             "ai_generative_get_system_prompt",
             "Get System Prompt",
-            "Gets the system prompt from a ChatHistory",
+            "Extracts the first system-level message from a chat history for downstream use",
             "AI/Generative/History",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
-        node.add_input_pin("history", "History", "ChatHistory", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "history",
+            "History",
+            "Chat history that contains the system prompt",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "system_prompt",
             "System Prompt",
-            "System Prompt",
+            "Extracted system-level message",
             VariableType::Struct,
         )
         .set_schema::<HistoryMessage>();
@@ -46,7 +61,7 @@ impl NodeLogic for GetSystemPromptNode {
         node.add_output_pin(
             "success",
             "Found",
-            "System Prompt Found",
+            "True when a system message was located",
             VariableType::Boolean,
         );
 
