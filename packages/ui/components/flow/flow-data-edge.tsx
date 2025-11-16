@@ -7,7 +7,7 @@ import {
 } from "@xyflow/react";
 import { useMemo } from "react";
 
-export function FlowVeilEdge(props: EdgeProps) {
+export function FlowDataEdge(props: EdgeProps) {
 	const {
 		id,
 		sourceX,
@@ -22,9 +22,9 @@ export function FlowVeilEdge(props: EdgeProps) {
 		data,
 	} = props;
 
-	// Determine path type based on connection mode or default to bezier
+	// Determine path type
 	const pathType = data?.pathType || "default";
-	const [edgePath, labelX, labelY] = useMemo(() => {
+	const [edgePath] = useMemo(() => {
 		if (pathType === "straight") {
 			return getStraightPath({
 				sourceX,
@@ -61,58 +61,47 @@ export function FlowVeilEdge(props: EdgeProps) {
 		targetPosition,
 	]);
 
-	const baseColor = style.stroke || "var(--pin-fn-ref)";
+	const baseColor = style.stroke || "var(--foreground)";
 	const isSelected = selected ?? false;
 
-	// Calculate unique animation delays for particle variety
+	// Particle configurations for flowing data packets
 	const particleConfigs = useMemo(
 		() => [
-			{ delay: 0, key: "p0" },
-			{ delay: 0.4, key: "p1" },
-			{ delay: 0.8, key: "p2" },
+			{ delay: 0, key: "d0" },
+			{ delay: 0.5, key: "d1" },
+			{ delay: 1, key: "d2" },
+			{ delay: 1.5, key: "d3" },
 		],
 		[],
 	);
 
 	return (
 		<>
-			{/* Subtle outer glow layer - no animation */}
+			{/* Dotted base line - round dots */}
 			<BaseEdge
-				id={`${id}-glow`}
+				id={`${id}-base`}
 				path={edgePath}
-				style={{
-					stroke: baseColor,
-					strokeWidth: isSelected ? 8 : 5,
-					opacity: isSelected ? 0.08 : 0.04,
-					strokeLinecap: "round",
-					strokeLinejoin: "round",
-					transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-				}}
-			/>
-
-			{/* Core solid line */}
-			<BaseEdge
-				id={`${id}-core`}
-				path={edgePath}
-				markerEnd={markerEnd}
 				style={{
 					stroke: baseColor,
 					strokeWidth: isSelected ? 2.5 : 1.5,
-					opacity: isSelected ? 0.5 : 0.3,
+					opacity: isSelected ? 0.5 : 0.35,
+					strokeDasharray: "1.5,4",
 					strokeLinecap: "round",
 					strokeLinejoin: "round",
 					transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
 				}}
 			/>
 
-			{/* Top highlight line - no animation */}
+			{/* Bright highlight line - round dots */}
 			<BaseEdge
 				id={`${id}-highlight`}
 				path={edgePath}
+				markerEnd={markerEnd}
 				style={{
-					stroke: `color-mix(in oklch, ${baseColor} 80%, white 20%)`,
-					strokeWidth: isSelected ? 1.2 : 0.8,
-					opacity: isSelected ? 0.7 : 0.4,
+					stroke: `color-mix(in oklch, ${baseColor} 70%, white 30%)`,
+					strokeWidth: isSelected ? 1.5 : 1,
+					opacity: isSelected ? 0.8 : 0.5,
+					strokeDasharray: "1.5,4",
 					strokeLinecap: "round",
 					strokeLinejoin: "round",
 					transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",

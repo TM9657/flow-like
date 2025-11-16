@@ -574,13 +574,15 @@ export function parseBoard(
 					data: {
 						fromLayer: (node as any).layer,
 						toLayer: (connectedNode as any).layer,
+						pathType: connectionMode,
+						data_type: pin.data_type,
 					},
 					animated: pin.data_type !== "Execution",
 					reconnectable: true,
 					target: targetNodeId,
 					targetHandle: conntectedPin.id,
 					style: { stroke: typeToColor(pin.data_type) },
-					type: connectionMode ?? "default",
+					type: pin.data_type === "Execution" ? "execution" : "data",
 					data_type: pin.data_type,
 					selected: selected.has(`${pin.id}-${connectedTo}`),
 				});

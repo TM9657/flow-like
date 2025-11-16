@@ -7,7 +7,7 @@ import {
 } from "@xyflow/react";
 import { useMemo } from "react";
 
-export function FlowVeilEdge(props: EdgeProps) {
+export function FlowExecutionEdge(props: EdgeProps) {
 	const {
 		id,
 		sourceX,
@@ -22,9 +22,9 @@ export function FlowVeilEdge(props: EdgeProps) {
 		data,
 	} = props;
 
-	// Determine path type based on connection mode or default to bezier
+	// Determine path type
 	const pathType = data?.pathType || "default";
-	const [edgePath, labelX, labelY] = useMemo(() => {
+	const [edgePath] = useMemo(() => {
 		if (pathType === "straight") {
 			return getStraightPath({
 				sourceX,
@@ -61,35 +61,11 @@ export function FlowVeilEdge(props: EdgeProps) {
 		targetPosition,
 	]);
 
-	const baseColor = style.stroke || "var(--pin-fn-ref)";
+	const baseColor = style.stroke || "var(--foreground)";
 	const isSelected = selected ?? false;
-
-	// Calculate unique animation delays for particle variety
-	const particleConfigs = useMemo(
-		() => [
-			{ delay: 0, key: "p0" },
-			{ delay: 0.4, key: "p1" },
-			{ delay: 0.8, key: "p2" },
-		],
-		[],
-	);
 
 	return (
 		<>
-			{/* Subtle outer glow layer - no animation */}
-			<BaseEdge
-				id={`${id}-glow`}
-				path={edgePath}
-				style={{
-					stroke: baseColor,
-					strokeWidth: isSelected ? 8 : 5,
-					opacity: isSelected ? 0.08 : 0.04,
-					strokeLinecap: "round",
-					strokeLinejoin: "round",
-					transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-				}}
-			/>
-
 			{/* Core solid line */}
 			<BaseEdge
 				id={`${id}-core`}
@@ -97,24 +73,25 @@ export function FlowVeilEdge(props: EdgeProps) {
 				markerEnd={markerEnd}
 				style={{
 					stroke: baseColor,
-					strokeWidth: isSelected ? 2.5 : 1.5,
-					opacity: isSelected ? 0.5 : 0.3,
+					strokeWidth: isSelected ? 3 : 2,
+					opacity: isSelected ? 0.9 : 0.7,
 					strokeLinecap: "round",
 					strokeLinejoin: "round",
 					transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
 				}}
 			/>
 
-			{/* Top highlight line - no animation */}
+			{/* Animated energy pulse traveling along the edge */}
 			<BaseEdge
-				id={`${id}-highlight`}
+				id={`${id}-energy`}
 				path={edgePath}
 				style={{
-					stroke: `color-mix(in oklch, ${baseColor} 80%, white 20%)`,
-					strokeWidth: isSelected ? 1.2 : 0.8,
-					opacity: isSelected ? 0.7 : 0.4,
+					stroke: `color-mix(in oklch, ${baseColor} 70%, white 30%)`,
+					strokeWidth: isSelected ? 4 : 3,
+					opacity: 0,
 					strokeLinecap: "round",
 					strokeLinejoin: "round",
+					animation: "exec-energy 3s ease-in-out infinite",
 					transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
 				}}
 			/>
