@@ -20,6 +20,10 @@ Optionally you can add an on_update function that runs on every board parse even
 
 If you need more abstract memory, like a thread-handle or database connections you can use the contexts cache with Any.
 
+## Documentation
+- Add a nice node and pin description, so the user understands what the node does.
+- Add scores to the node rating: privacy, security, performance, governance, reliability, cost. 0 - 10 (low - high)
+
 ## Tipps and Tricks
 - Log out warnings, errors etc.
 - Multiple Pins with the same name are allowed, they will offer the user to add more pins of this same type to the node.
