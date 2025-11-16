@@ -7,7 +7,7 @@ export interface ILogMetadata {
 	log_level: number;
 	logs?: number | null;
 	node_id: string;
-	nodes?: Array<any[]> | null;
+	nodes?: Array<Array<number | string>> | null;
 	payload: number[];
 	run_id: string;
 	start: number;

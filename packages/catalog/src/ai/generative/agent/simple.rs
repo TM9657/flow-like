@@ -47,6 +47,7 @@ impl NodeLogic for SimpleAgentNode {
             "AI/Agents",
         );
         node.add_icon("/flow/icons/for-each.svg");
+        node.set_can_reference_fns(true);
 
         node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
 

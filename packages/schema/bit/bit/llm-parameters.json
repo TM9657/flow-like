@@ -1,24 +1,25 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "LLMParameters",
 	"type": "object",
+	"required": ["context_length", "model_classification", "provider"],
 	"properties": {
 		"context_length": {
 			"type": "integer",
 			"format": "uint32",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"provider": {
-			"$ref": "#/$defs/ModelProvider"
+			"$ref": "#/definitions/ModelProvider"
 		},
 		"model_classification": {
-			"$ref": "#/$defs/BitModelClassification"
+			"$ref": "#/definitions/BitModelClassification"
 		}
 	},
-	"required": ["context_length", "provider", "model_classification"],
-	"$defs": {
+	"definitions": {
 		"ModelProvider": {
 			"type": "object",
+			"required": ["provider_name"],
 			"properties": {
 				"provider_name": {
 					"type": "string"
@@ -28,16 +29,23 @@
 				},
 				"version": {
 					"type": ["string", "null"]
-				},
-				"params": {
-					"type": ["object", "null"],
-					"additionalProperties": true
 				}
-			},
-			"required": ["provider_name"]
+			}
 		},
 		"BitModelClassification": {
 			"type": "object",
+			"required": [
+				"coding",
+				"cost",
+				"creativity",
+				"factuality",
+				"function_calling",
+				"multilinguality",
+				"openness",
+				"reasoning",
+				"safety",
+				"speed"
+			],
 			"properties": {
 				"cost": {
 					"type": "number",
@@ -79,19 +87,7 @@
 					"type": "number",
 					"format": "float"
 				}
-			},
-			"required": [
-				"cost",
-				"speed",
-				"reasoning",
-				"creativity",
-				"factuality",
-				"function_calling",
-				"safety",
-				"openness",
-				"multilinguality",
-				"coding"
-			]
+			}
 		}
 	}
 }

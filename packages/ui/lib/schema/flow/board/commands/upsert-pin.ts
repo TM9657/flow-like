@@ -7,7 +7,7 @@ export interface IUpsertPin {
 
 export interface IPin {
 	connected_to: string[];
-	data_type: IDataType;
+	data_type: IVariableType;
 	default_value?: number[] | null;
 	depends_on: string[];
 	description: string;
@@ -15,14 +15,14 @@ export interface IPin {
 	id: string;
 	index: number;
 	name: string;
-	options?: null | IOptionsObject;
+	options?: null | IPinOptions;
 	pin_type: IPinType;
 	schema?: null | string;
 	value_type: IValueType;
 	[property: string]: any;
 }
 
-export enum IDataType {
+export enum IVariableType {
 	Boolean = "Boolean",
 	Byte = "Byte",
 	Date = "Date",
@@ -35,10 +35,10 @@ export enum IDataType {
 	Struct = "Struct",
 }
 
-export interface IOptionsObject {
+export interface IPinOptions {
 	enforce_generic_value_type?: boolean | null;
 	enforce_schema?: boolean | null;
-	range?: any[] | null;
+	range?: number[] | null;
 	sensitive?: boolean | null;
 	step?: number | null;
 	valid_values?: string[] | null;

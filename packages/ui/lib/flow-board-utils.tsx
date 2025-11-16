@@ -117,6 +117,17 @@ export function isValidConnection(
 	cache: Map<string, [IPin, INode | ILayer, boolean]>,
 	refs: { [key: string]: string },
 ) {
+	const refIn =
+		connection.sourceHandle.startsWith("ref_in_") ||
+		connection.targetHandle.startsWith("ref_in_");
+	const refOut =
+		connection.sourceHandle.startsWith("ref_out_") ||
+		connection.targetHandle.startsWith("ref_out_");
+
+	if (refIn || refOut) {
+		return refIn && refOut;
+	}
+
 	const [sourcePin, sourceNode] = cache.get(connection.sourceHandle) || [];
 	const [targetPin, targetNode] = cache.get(connection.targetHandle) || [];
 

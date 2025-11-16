@@ -1,16 +1,33 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "App",
 	"type": "object",
+	"required": [
+		"authors",
+		"bits",
+		"boards",
+		"created_at",
+		"download_count",
+		"events",
+		"execution_mode",
+		"id",
+		"interactions_count",
+		"rating_count",
+		"rating_sum",
+		"status",
+		"templates",
+		"updated_at",
+		"visibility"
+	],
 	"properties": {
 		"id": {
 			"type": "string"
 		},
 		"status": {
-			"$ref": "#/$defs/AppStatus"
+			"$ref": "#/definitions/AppStatus"
 		},
 		"visibility": {
-			"$ref": "#/$defs/AppVisibility"
+			"$ref": "#/definitions/AppVisibility"
 		},
 		"authors": {
 			"type": "array",
@@ -48,7 +65,7 @@
 		"primary_category": {
 			"anyOf": [
 				{
-					"$ref": "#/$defs/AppCategory"
+					"$ref": "#/definitions/AppCategory"
 				},
 				{
 					"type": "null"
@@ -58,7 +75,7 @@
 		"secondary_category": {
 			"anyOf": [
 				{
-					"$ref": "#/$defs/AppCategory"
+					"$ref": "#/definitions/AppCategory"
 				},
 				{
 					"type": "null"
@@ -68,22 +85,22 @@
 		"rating_sum": {
 			"type": "integer",
 			"format": "uint64",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"rating_count": {
 			"type": "integer",
 			"format": "uint64",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"download_count": {
 			"type": "integer",
 			"format": "uint64",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"interactions_count": {
 			"type": "integer",
 			"format": "uint64",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"avg_rating": {
 			"type": ["number", "null"],
@@ -94,13 +111,13 @@
 			"format": "double"
 		},
 		"execution_mode": {
-			"$ref": "#/$defs/AppExecutionMode"
+			"$ref": "#/definitions/AppExecutionMode"
 		},
 		"updated_at": {
-			"$ref": "#/$defs/SystemTime"
+			"$ref": "#/definitions/SystemTime"
 		},
 		"created_at": {
-			"$ref": "#/$defs/SystemTime"
+			"$ref": "#/definitions/SystemTime"
 		},
 		"version": {
 			"type": ["string", "null"]
@@ -108,7 +125,7 @@
 		"frontend": {
 			"anyOf": [
 				{
-					"$ref": "#/$defs/FrontendConfiguration"
+					"$ref": "#/definitions/FrontendConfiguration"
 				},
 				{
 					"type": "null"
@@ -118,27 +135,10 @@
 		"price": {
 			"type": ["integer", "null"],
 			"format": "uint32",
-			"minimum": 0
+			"minimum": 0.0
 		}
 	},
-	"required": [
-		"id",
-		"status",
-		"visibility",
-		"authors",
-		"bits",
-		"boards",
-		"events",
-		"templates",
-		"rating_sum",
-		"rating_count",
-		"download_count",
-		"interactions_count",
-		"execution_mode",
-		"updated_at",
-		"created_at"
-	],
-	"$defs": {
+	"definitions": {
 		"AppStatus": {
 			"type": "string",
 			"enum": ["Active", "Inactive", "Archived"]
@@ -185,19 +185,19 @@
 		},
 		"SystemTime": {
 			"type": "object",
+			"required": ["nanos_since_epoch", "secs_since_epoch"],
 			"properties": {
 				"secs_since_epoch": {
 					"type": "integer",
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"nanos_since_epoch": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				}
-			},
-			"required": ["secs_since_epoch", "nanos_since_epoch"]
+			}
 		},
 		"FrontendConfiguration": {
 			"type": "object",

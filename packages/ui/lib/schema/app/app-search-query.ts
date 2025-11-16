@@ -1,17 +1,17 @@
 export interface IAppSearchQuery {
 	author?: null | string;
-	category?: ICategoryEnum | null;
+	category?: IAppCategory | null;
 	id?: null | string;
 	language?: null | string;
 	limit?: number | null;
 	offset?: number | null;
 	query?: null | string;
-	sort?: ISortEnum | null;
+	sort?: IAppSearchSort | null;
 	tag?: null | string;
 	[property: string]: any;
 }
 
-export enum ICategoryEnum {
+export enum IAppCategory {
 	Anime = "Anime",
 	Business = "Business",
 	Communication = "Communication",
@@ -35,7 +35,7 @@ export enum ICategoryEnum {
 	Weather = "Weather",
 }
 
-export enum ISortEnum {
+export enum IAppSearchSort {
 	BestRated = "BestRated",
 	LeastPopular = "LeastPopular",
 	LeastRelevant = "LeastRelevant",

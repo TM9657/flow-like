@@ -1,7 +1,23 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "Board",
 	"type": "object",
+	"required": [
+		"comments",
+		"created_at",
+		"description",
+		"id",
+		"layers",
+		"log_level",
+		"name",
+		"nodes",
+		"refs",
+		"stage",
+		"updated_at",
+		"variables",
+		"version",
+		"viewport"
+	],
 	"properties": {
 		"id": {
 			"type": "string"
@@ -15,24 +31,24 @@
 		"nodes": {
 			"type": "object",
 			"additionalProperties": {
-				"$ref": "#/$defs/Node"
+				"$ref": "#/definitions/Node"
 			}
 		},
 		"variables": {
 			"type": "object",
 			"additionalProperties": {
-				"$ref": "#/$defs/Variable"
+				"$ref": "#/definitions/Variable"
 			}
 		},
 		"comments": {
 			"type": "object",
 			"additionalProperties": {
-				"$ref": "#/$defs/Comment"
+				"$ref": "#/definitions/Comment"
 			}
 		},
 		"viewport": {
 			"type": "array",
-			"prefixItems": [
+			"items": [
 				{
 					"type": "number",
 					"format": "float"
@@ -46,36 +62,36 @@
 					"format": "float"
 				}
 			],
-			"minItems": 3,
-			"maxItems": 3
+			"maxItems": 3,
+			"minItems": 3
 		},
 		"version": {
 			"type": "array",
-			"prefixItems": [
+			"items": [
 				{
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				{
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				{
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				}
 			],
-			"minItems": 3,
-			"maxItems": 3
+			"maxItems": 3,
+			"minItems": 3
 		},
 		"stage": {
-			"$ref": "#/$defs/ExecutionStage"
+			"$ref": "#/definitions/ExecutionStage"
 		},
 		"log_level": {
-			"$ref": "#/$defs/LogLevel"
+			"$ref": "#/definitions/LogLevel"
 		},
 		"refs": {
 			"type": "object",
@@ -86,35 +102,27 @@
 		"layers": {
 			"type": "object",
 			"additionalProperties": {
-				"$ref": "#/$defs/Layer"
+				"$ref": "#/definitions/Layer"
 			}
 		},
 		"created_at": {
-			"$ref": "#/$defs/SystemTime"
+			"$ref": "#/definitions/SystemTime"
 		},
 		"updated_at": {
-			"$ref": "#/$defs/SystemTime"
+			"$ref": "#/definitions/SystemTime"
 		}
 	},
-	"required": [
-		"id",
-		"name",
-		"description",
-		"nodes",
-		"variables",
-		"comments",
-		"viewport",
-		"version",
-		"stage",
-		"log_level",
-		"refs",
-		"layers",
-		"created_at",
-		"updated_at"
-	],
-	"$defs": {
+	"definitions": {
 		"Node": {
 			"type": "object",
+			"required": [
+				"category",
+				"description",
+				"friendly_name",
+				"id",
+				"name",
+				"pins"
+			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -130,7 +138,7 @@
 				},
 				"coordinates": {
 					"type": ["array", "null"],
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "float"
@@ -144,8 +152,8 @@
 							"format": "float"
 						}
 					],
-					"minItems": 3,
-					"maxItems": 3
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"category": {
 					"type": "string"
@@ -153,7 +161,7 @@
 				"scores": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/NodeScores"
+							"$ref": "#/definitions/NodeScores"
 						},
 						{
 							"type": "null"
@@ -163,7 +171,7 @@
 				"pins": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/$defs/Pin"
+						"$ref": "#/definitions/Pin"
 					}
 				},
 				"start": {
@@ -193,61 +201,51 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0
-				},
-				"fn_refs": {
-					"anyOf": [
-						{
-							"$ref": "#/$defs/FnRefs"
-						},
-						{
-							"type": "null"
-						}
-					]
+					"minimum": 0.0
 				}
-			},
-			"required": [
-				"id",
-				"name",
-				"friendly_name",
-				"description",
-				"category",
-				"pins"
-			]
+			}
 		},
 		"NodeScores": {
-			"description": "Represents quality metrics for a node, with scores ranging from 0 to 10.\nHigher scores indicate worse performance in each category.\n\n# Score Categories\n* `privacy` - Measures data protection and confidentiality level\n* `security` - Assesses resistance against potential attacks\n* `performance` - Evaluates computational efficiency and speed\n* `governance` - Indicates compliance with policies and regulations",
+			"description": "Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores indicate worse performance in each category.\n\n# Score Categories * `privacy` - Measures data protection and confidentiality level * `security` - Assesses resistance against potential attacks * `performance` - Evaluates computational efficiency and speed * `governance` - Indicates compliance with policies and regulations",
 			"type": "object",
+			"required": ["governance", "performance", "privacy", "security"],
 			"properties": {
 				"privacy": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0,
-					"maximum": 255
+					"minimum": 0.0
 				},
 				"security": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0,
-					"maximum": 255
+					"minimum": 0.0
 				},
 				"performance": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0,
-					"maximum": 255
+					"minimum": 0.0
 				},
 				"governance": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0,
-					"maximum": 255
+					"minimum": 0.0
 				}
-			},
-			"required": ["privacy", "security", "performance", "governance"]
+			}
 		},
 		"Pin": {
 			"type": "object",
+			"required": [
+				"connected_to",
+				"data_type",
+				"depends_on",
+				"description",
+				"friendly_name",
+				"id",
+				"index",
+				"name",
+				"pin_type",
+				"value_type"
+			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -262,69 +260,55 @@
 					"type": "string"
 				},
 				"pin_type": {
-					"$ref": "#/$defs/PinType"
+					"$ref": "#/definitions/PinType"
 				},
 				"data_type": {
-					"$ref": "#/$defs/VariableType"
+					"$ref": "#/definitions/VariableType"
 				},
 				"schema": {
 					"type": ["string", "null"]
 				},
 				"value_type": {
-					"$ref": "#/$defs/ValueType"
+					"$ref": "#/definitions/ValueType"
 				},
 				"depends_on": {
 					"type": "array",
-					"uniqueItems": true,
 					"items": {
 						"type": "string"
-					}
+					},
+					"uniqueItems": true
 				},
 				"connected_to": {
 					"type": "array",
-					"uniqueItems": true,
 					"items": {
 						"type": "string"
-					}
+					},
+					"uniqueItems": true
 				},
 				"default_value": {
 					"type": ["array", "null"],
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0,
-						"maximum": 255
+						"minimum": 0.0
 					}
 				},
 				"index": {
 					"type": "integer",
 					"format": "uint16",
-					"minimum": 0,
-					"maximum": 65535
+					"minimum": 0.0
 				},
 				"options": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/PinOptions"
+							"$ref": "#/definitions/PinOptions"
 						},
 						{
 							"type": "null"
 						}
 					]
 				}
-			},
-			"required": [
-				"id",
-				"name",
-				"friendly_name",
-				"description",
-				"pin_type",
-				"data_type",
-				"value_type",
-				"depends_on",
-				"connected_to",
-				"index"
-			]
+			}
 		},
 		"PinType": {
 			"type": "string",
@@ -363,7 +347,7 @@
 				},
 				"range": {
 					"type": ["array", "null"],
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "double"
@@ -373,8 +357,8 @@
 							"format": "double"
 						}
 					],
-					"minItems": 2,
-					"maxItems": 2
+					"maxItems": 2,
+					"minItems": 2
 				},
 				"step": {
 					"type": ["number", "null"],
@@ -388,26 +372,17 @@
 				}
 			}
 		},
-		"FnRefs": {
-			"type": "object",
-			"properties": {
-				"fn_refs": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					}
-				},
-				"can_reference_fns": {
-					"type": "boolean"
-				},
-				"can_be_referenced_by_fns": {
-					"type": "boolean"
-				}
-			},
-			"required": ["fn_refs", "can_reference_fns", "can_be_referenced_by_fns"]
-		},
 		"Variable": {
 			"type": "object",
+			"required": [
+				"data_type",
+				"editable",
+				"exposed",
+				"id",
+				"name",
+				"secret",
+				"value_type"
+			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -426,15 +401,14 @@
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0,
-						"maximum": 255
+						"minimum": 0.0
 					}
 				},
 				"data_type": {
-					"$ref": "#/$defs/VariableType"
+					"$ref": "#/definitions/VariableType"
 				},
 				"value_type": {
-					"$ref": "#/$defs/ValueType"
+					"$ref": "#/definitions/ValueType"
 				},
 				"exposed": {
 					"type": "boolean"
@@ -448,21 +422,13 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				}
-			},
-			"required": [
-				"id",
-				"name",
-				"data_type",
-				"value_type",
-				"exposed",
-				"secret",
-				"editable"
-			]
+			}
 		},
 		"Comment": {
 			"type": "object",
+			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -474,14 +440,14 @@
 					"type": "string"
 				},
 				"comment_type": {
-					"$ref": "#/$defs/CommentType"
+					"$ref": "#/definitions/CommentType"
 				},
 				"timestamp": {
-					"$ref": "#/$defs/SystemTime"
+					"$ref": "#/definitions/SystemTime"
 				},
 				"coordinates": {
 					"type": "array",
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "float"
@@ -495,8 +461,8 @@
 							"format": "float"
 						}
 					],
-					"minItems": 3,
-					"maxItems": 3
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"width": {
 					"type": ["number", "null"],
@@ -519,13 +485,12 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"is_locked": {
 					"type": ["boolean", "null"]
 				}
-			},
-			"required": ["id", "content", "comment_type", "timestamp", "coordinates"]
+			}
 		},
 		"CommentType": {
 			"type": "string",
@@ -533,19 +498,19 @@
 		},
 		"SystemTime": {
 			"type": "object",
+			"required": ["nanos_since_epoch", "secs_since_epoch"],
 			"properties": {
 				"secs_since_epoch": {
 					"type": "integer",
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"nanos_since_epoch": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				}
-			},
-			"required": ["secs_since_epoch", "nanos_since_epoch"]
+			}
 		},
 		"ExecutionStage": {
 			"type": "string",
@@ -557,6 +522,16 @@
 		},
 		"Layer": {
 			"type": "object",
+			"required": [
+				"comments",
+				"coordinates",
+				"id",
+				"name",
+				"nodes",
+				"pins",
+				"type",
+				"variables"
+			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -568,29 +543,29 @@
 					"type": "string"
 				},
 				"type": {
-					"$ref": "#/$defs/LayerType"
+					"$ref": "#/definitions/LayerType"
 				},
 				"nodes": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/$defs/Node"
+						"$ref": "#/definitions/Node"
 					}
 				},
 				"variables": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/$defs/Variable"
+						"$ref": "#/definitions/Variable"
 					}
 				},
 				"comments": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/$defs/Comment"
+						"$ref": "#/definitions/Comment"
 					}
 				},
 				"coordinates": {
 					"type": "array",
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "float"
@@ -604,12 +579,12 @@
 							"format": "float"
 						}
 					],
-					"minItems": 3,
-					"maxItems": 3
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"in_coordinates": {
 					"type": ["array", "null"],
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "float"
@@ -623,12 +598,12 @@
 							"format": "float"
 						}
 					],
-					"minItems": 3,
-					"maxItems": 3
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"out_coordinates": {
 					"type": ["array", "null"],
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "float"
@@ -642,13 +617,13 @@
 							"format": "float"
 						}
 					],
-					"minItems": 3,
-					"maxItems": 3
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"pins": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/$defs/Pin"
+						"$ref": "#/definitions/Pin"
 					}
 				},
 				"comment": {
@@ -663,19 +638,9 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				}
-			},
-			"required": [
-				"id",
-				"name",
-				"type",
-				"nodes",
-				"variables",
-				"comments",
-				"coordinates",
-				"pins"
-			]
+			}
 		},
 		"LayerType": {
 			"type": "string",

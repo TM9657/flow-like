@@ -1,5 +1,5 @@
 export interface IProfile {
-	apps?: IAppElement[] | null;
+	apps?: IProfileApp[] | null;
 	bits: string[];
 	created: string;
 	description?: null | string;
@@ -17,7 +17,7 @@ export interface IProfile {
 	[property: string]: any;
 }
 
-export interface IAppElement {
+export interface IProfileApp {
 	app_id: string;
 	favorite: boolean;
 	favorite_order?: number | null;

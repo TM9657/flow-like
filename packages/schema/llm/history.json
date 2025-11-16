@@ -1,7 +1,8 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "History",
 	"type": "object",
+	"required": ["messages", "model"],
 	"properties": {
 		"model": {
 			"type": "string"
@@ -9,11 +10,8 @@
 		"messages": {
 			"type": "array",
 			"items": {
-				"$ref": "#/$defs/HistoryMessage"
+				"$ref": "#/definitions/HistoryMessage"
 			}
-		},
-		"preset": {
-			"type": ["string", "null"]
 		},
 		"stream": {
 			"type": ["boolean", "null"]
@@ -21,7 +19,7 @@
 		"stream_options": {
 			"anyOf": [
 				{
-					"$ref": "#/$defs/StreamOptions"
+					"$ref": "#/definitions/StreamOptions"
 				},
 				{
 					"type": "null"
@@ -31,7 +29,7 @@
 		"max_completion_tokens": {
 			"type": ["integer", "null"],
 			"format": "uint32",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"top_p": {
 			"type": ["number", "null"],
@@ -44,7 +42,7 @@
 		"seed": {
 			"type": ["integer", "null"],
 			"format": "uint32",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"presence_penalty": {
 			"type": ["number", "null"],
@@ -66,7 +64,7 @@
 		"response_format": {
 			"anyOf": [
 				{
-					"$ref": "#/$defs/ResponseFormat"
+					"$ref": "#/definitions/ResponseFormat"
 				},
 				{
 					"type": "null"
@@ -76,28 +74,18 @@
 		"n": {
 			"type": ["integer", "null"],
 			"format": "uint32",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"tools": {
 			"type": ["array", "null"],
 			"items": {
-				"$ref": "#/$defs/Tool"
+				"$ref": "#/definitions/Tool"
 			}
 		},
 		"tool_choice": {
 			"anyOf": [
 				{
-					"$ref": "#/$defs/ToolChoice"
-				},
-				{
-					"type": "null"
-				}
-			]
-		},
-		"usage": {
-			"anyOf": [
-				{
-					"$ref": "#/$defs/Usage"
+					"$ref": "#/definitions/ToolChoice"
 				},
 				{
 					"type": "null"
@@ -105,16 +93,16 @@
 			]
 		}
 	},
-	"required": ["model", "messages"],
-	"$defs": {
+	"definitions": {
 		"HistoryMessage": {
 			"type": "object",
+			"required": ["content", "role"],
 			"properties": {
 				"role": {
-					"$ref": "#/$defs/Role"
+					"$ref": "#/definitions/Role"
 				},
 				"content": {
-					"$ref": "#/$defs/MessageContent"
+					"$ref": "#/definitions/MessageContent"
 				},
 				"name": {
 					"type": ["string", "null"]
@@ -122,20 +110,13 @@
 				"tool_calls": {
 					"type": ["array", "null"],
 					"items": {
-						"$ref": "#/$defs/ToolCall"
+						"$ref": "#/definitions/ToolCall"
 					}
 				},
 				"tool_call_id": {
 					"type": ["string", "null"]
-				},
-				"annotations": {
-					"type": ["array", "null"],
-					"items": {
-						"$ref": "#/$defs/Annotation"
-					}
 				}
-			},
-			"required": ["role", "content"]
+			}
 		},
 		"Role": {
 			"type": "string",
@@ -149,7 +130,7 @@
 				{
 					"type": "array",
 					"items": {
-						"$ref": "#/$defs/Content"
+						"$ref": "#/definitions/Content"
 					}
 				}
 			]
@@ -158,72 +139,37 @@
 			"anyOf": [
 				{
 					"type": "object",
+					"required": ["text", "type"],
 					"properties": {
 						"type": {
-							"$ref": "#/$defs/ContentType"
+							"$ref": "#/definitions/ContentType"
 						},
 						"text": {
 							"type": "string"
 						}
-					},
-					"required": ["type", "text"]
+					}
 				},
 				{
 					"type": "object",
+					"required": ["image_url", "type"],
 					"properties": {
 						"type": {
-							"$ref": "#/$defs/ContentType"
+							"$ref": "#/definitions/ContentType"
 						},
 						"image_url": {
-							"$ref": "#/$defs/ImageUrl"
+							"$ref": "#/definitions/ImageUrl"
 						}
-					},
-					"required": ["type", "image_url"]
-				},
-				{
-					"type": "object",
-					"properties": {
-						"type": {
-							"$ref": "#/$defs/ContentType"
-						},
-						"audio_url": {
-							"type": "string"
-						}
-					},
-					"required": ["type", "audio_url"]
-				},
-				{
-					"type": "object",
-					"properties": {
-						"type": {
-							"$ref": "#/$defs/ContentType"
-						},
-						"video_url": {
-							"type": "string"
-						}
-					},
-					"required": ["type", "video_url"]
-				},
-				{
-					"type": "object",
-					"properties": {
-						"type": {
-							"$ref": "#/$defs/ContentType"
-						},
-						"document_url": {
-							"type": "string"
-						}
-					},
-					"required": ["type", "document_url"]
+					}
 				}
 			]
 		},
 		"ContentType": {
 			"type": "string",
-			"enum": ["text", "image_url", "audio_url", "video_url", "document_url"]
+			"enum": ["text", "image_url"]
 		},
 		"ImageUrl": {
 			"type": "object",
+			"required": ["url"],
 			"properties": {
 				"url": {
 					"type": "string"
@@ -231,11 +177,11 @@
 				"detail": {
 					"type": ["string", "null"]
 				}
-			},
-			"required": ["url"]
+			}
 		},
 		"ToolCall": {
 			"type": "object",
+			"required": ["function", "id", "type"],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -244,75 +190,29 @@
 					"type": "string"
 				},
 				"function": {
-					"$ref": "#/$defs/ToolCallFunction"
+					"$ref": "#/definitions/ToolCallFunction"
 				}
-			},
-			"required": ["id", "type", "function"]
+			}
 		},
 		"ToolCallFunction": {
 			"type": "object",
 			"properties": {
 				"name": {
-					"type": "string"
+					"type": ["string", "null"]
 				},
 				"arguments": {
-					"type": "string"
-				}
-			},
-			"required": ["name", "arguments"]
-		},
-		"Annotation": {
-			"type": "object",
-			"properties": {
-				"type": {
-					"type": "string"
-				},
-				"url_citation": {
-					"anyOf": [
-						{
-							"$ref": "#/$defs/UrlCitation"
-						},
-						{
-							"type": "null"
-						}
-					]
-				}
-			},
-			"required": ["type"]
-		},
-		"UrlCitation": {
-			"type": "object",
-			"properties": {
-				"end_index": {
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0
-				},
-				"start_index": {
-					"type": "integer",
-					"format": "uint32",
-					"minimum": 0
-				},
-				"title": {
-					"type": "string"
-				},
-				"url": {
-					"type": "string"
-				},
-				"content": {
 					"type": ["string", "null"]
 				}
-			},
-			"required": ["end_index", "start_index", "title", "url"]
+			}
 		},
 		"StreamOptions": {
 			"type": "object",
+			"required": ["include_usage"],
 			"properties": {
 				"include_usage": {
 					"type": "boolean"
 				}
-			},
-			"required": ["include_usage"]
+			}
 		},
 		"ResponseFormat": {
 			"anyOf": [
@@ -324,15 +224,15 @@
 		},
 		"Tool": {
 			"type": "object",
+			"required": ["function", "type"],
 			"properties": {
 				"type": {
-					"$ref": "#/$defs/ToolType"
+					"$ref": "#/definitions/ToolType"
 				},
 				"function": {
-					"$ref": "#/$defs/HistoryFunction"
+					"$ref": "#/definitions/HistoryFunction"
 				}
-			},
-			"required": ["type", "function"]
+			}
 		},
 		"ToolType": {
 			"type": "string",
@@ -340,6 +240,7 @@
 		},
 		"HistoryFunction": {
 			"type": "object",
+			"required": ["name", "parameters"],
 			"properties": {
 				"name": {
 					"type": "string"
@@ -348,21 +249,21 @@
 					"type": ["string", "null"]
 				},
 				"parameters": {
-					"$ref": "#/$defs/HistoryFunctionParameters"
+					"$ref": "#/definitions/HistoryFunctionParameters"
 				}
-			},
-			"required": ["name", "parameters"]
+			}
 		},
 		"HistoryFunctionParameters": {
 			"type": "object",
+			"required": ["type"],
 			"properties": {
 				"type": {
-					"$ref": "#/$defs/HistoryJSONSchemaType"
+					"$ref": "#/definitions/HistoryJSONSchemaType"
 				},
 				"properties": {
 					"type": ["object", "null"],
 					"additionalProperties": {
-						"$ref": "#/$defs/HistoryJSONSchemaDefine"
+						"$ref": "#/definitions/HistoryJSONSchemaDefine"
 					}
 				},
 				"required": {
@@ -371,8 +272,7 @@
 						"type": "string"
 					}
 				}
-			},
-			"required": ["type"]
+			}
 		},
 		"HistoryJSONSchemaType": {
 			"type": "string",
@@ -384,7 +284,7 @@
 				"type": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/HistoryJSONSchemaType"
+							"$ref": "#/definitions/HistoryJSONSchemaType"
 						},
 						{
 							"type": "null"
@@ -394,7 +294,7 @@
 				"description": {
 					"type": ["string", "null"]
 				},
-				"enum": {
+				"enum_values": {
 					"type": ["array", "null"],
 					"items": {
 						"type": "string"
@@ -403,7 +303,7 @@
 				"properties": {
 					"type": ["object", "null"],
 					"additionalProperties": {
-						"$ref": "#/$defs/HistoryJSONSchemaDefine"
+						"$ref": "#/definitions/HistoryJSONSchemaDefine"
 					}
 				},
 				"required": {
@@ -415,7 +315,7 @@
 				"items": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/HistoryJSONSchemaDefine"
+							"$ref": "#/definitions/HistoryJSONSchemaDefine"
 						},
 						{
 							"type": "null"
@@ -437,26 +337,17 @@
 				},
 				{
 					"type": "object",
+					"required": ["function", "type"],
 					"properties": {
 						"type": {
-							"$ref": "#/$defs/ToolType"
+							"$ref": "#/definitions/ToolType"
 						},
 						"function": {
-							"$ref": "#/$defs/HistoryFunction"
+							"$ref": "#/definitions/HistoryFunction"
 						}
-					},
-					"required": ["type", "function"]
+					}
 				}
 			]
-		},
-		"Usage": {
-			"type": "object",
-			"properties": {
-				"include": {
-					"type": "boolean"
-				}
-			},
-			"required": ["include"]
 		}
 	}
 }

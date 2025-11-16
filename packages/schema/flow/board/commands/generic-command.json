@@ -1,184 +1,121 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "GenericCommand",
 	"oneOf": [
 		{
 			"type": "object",
+			"required": ["command_type", "comment"],
 			"properties": {
 				"command_type": {
 					"type": "string",
-					"const": "RemoveComment"
-				}
-			},
-			"$ref": "#/$defs/RemoveCommentCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "UpsertComment"
-				}
-			},
-			"$ref": "#/$defs/UpsertCommentCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "AddNode"
-				}
-			},
-			"$ref": "#/$defs/AddNodeCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "CopyPaste"
-				}
-			},
-			"$ref": "#/$defs/CopyPasteCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "MoveNode"
-				}
-			},
-			"$ref": "#/$defs/MoveNodeCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "RemoveNode"
-				}
-			},
-			"$ref": "#/$defs/RemoveNodeCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "UpdateNode"
-				}
-			},
-			"$ref": "#/$defs/UpdateNodeCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "DisconnectPin"
-				}
-			},
-			"$ref": "#/$defs/DisconnectPinsCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "ConnectPin"
-				}
-			},
-			"$ref": "#/$defs/ConnectPinsCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "UpsertPin"
-				}
-			},
-			"$ref": "#/$defs/UpsertPinCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "RemoveVariable"
-				}
-			},
-			"$ref": "#/$defs/RemoveVariableCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "UpsertVariable"
-				}
-			},
-			"$ref": "#/$defs/UpsertVariableCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "UpsertLayer"
-				}
-			},
-			"$ref": "#/$defs/UpsertLayerCommand",
-			"required": ["command_type"]
-		},
-		{
-			"type": "object",
-			"properties": {
-				"command_type": {
-					"type": "string",
-					"const": "RemoveLayer"
-				}
-			},
-			"$ref": "#/$defs/RemoveLayerCommand",
-			"required": ["command_type"]
-		}
-	],
-	"$defs": {
-		"Comment": {
-			"type": "object",
-			"properties": {
-				"id": {
-					"type": "string"
+					"enum": ["RemoveComment"]
 				},
-				"author": {
+				"comment": {
+					"$ref": "#/definitions/Comment"
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": ["command_type", "comment"],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["UpsertComment"]
+				},
+				"comment": {
+					"$ref": "#/definitions/Comment"
+				},
+				"old_comment": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/Comment"
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"current_layer": {
+					"type": ["string", "null"]
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": ["command_type", "node"],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["AddNode"]
+				},
+				"node": {
+					"$ref": "#/definitions/Node"
+				},
+				"current_layer": {
+					"type": ["string", "null"]
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": [
+				"command_type",
+				"new_comments",
+				"new_layers",
+				"new_nodes",
+				"offset",
+				"original_comments",
+				"original_layers",
+				"original_nodes"
+			],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["CopyPaste"]
+				},
+				"original_nodes": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Node"
+					}
+				},
+				"original_comments": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Comment"
+					}
+				},
+				"original_layers": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Layer"
+					}
+				},
+				"new_comments": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Comment"
+					}
+				},
+				"new_nodes": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Node"
+					}
+				},
+				"new_layers": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Layer"
+					}
+				},
+				"current_layer": {
 					"type": ["string", "null"]
 				},
-				"content": {
-					"type": "string"
-				},
-				"comment_type": {
-					"$ref": "#/$defs/CommentType"
-				},
-				"timestamp": {
-					"$ref": "#/$defs/SystemTime"
-				},
-				"coordinates": {
-					"type": "array",
-					"prefixItems": [
+				"old_mouse": {
+					"type": ["array", "null"],
+					"items": [
 						{
 							"type": "number",
 							"format": "float"
@@ -192,8 +129,365 @@
 							"format": "float"
 						}
 					],
-					"minItems": 3,
-					"maxItems": 3
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"offset": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": ["command_type", "node_id", "to_coordinates"],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["MoveNode"]
+				},
+				"node_id": {
+					"type": "string"
+				},
+				"from_coordinates": {
+					"type": ["array", "null"],
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"to_coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
+				},
+				"current_layer": {
+					"type": ["string", "null"]
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": ["command_type", "connected_nodes", "node"],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["RemoveNode"]
+				},
+				"node": {
+					"$ref": "#/definitions/Node"
+				},
+				"connected_nodes": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Node"
+					}
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": ["command_type", "node"],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["UpdateNode"]
+				},
+				"old_node": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/Node"
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"node": {
+					"$ref": "#/definitions/Node"
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": [
+				"command_type",
+				"from_node",
+				"from_pin",
+				"to_node",
+				"to_pin"
+			],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["DisconnectPin"]
+				},
+				"from_pin": {
+					"type": "string"
+				},
+				"to_pin": {
+					"type": "string"
+				},
+				"from_node": {
+					"type": "string"
+				},
+				"to_node": {
+					"type": "string"
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": [
+				"command_type",
+				"from_node",
+				"from_pin",
+				"to_node",
+				"to_pin"
+			],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["ConnectPin"]
+				},
+				"from_pin": {
+					"type": "string"
+				},
+				"to_pin": {
+					"type": "string"
+				},
+				"from_node": {
+					"type": "string"
+				},
+				"to_node": {
+					"type": "string"
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": ["command_type", "node_id", "pin"],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["UpsertPin"]
+				},
+				"node_id": {
+					"type": "string"
+				},
+				"pin": {
+					"$ref": "#/definitions/Pin"
+				},
+				"old_pin": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/Pin"
+						},
+						{
+							"type": "null"
+						}
+					]
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": ["command_type", "variable"],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["RemoveVariable"]
+				},
+				"variable": {
+					"$ref": "#/definitions/Variable"
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": ["command_type", "variable"],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["UpsertVariable"]
+				},
+				"variable": {
+					"$ref": "#/definitions/Variable"
+				},
+				"old_variable": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/Variable"
+						},
+						{
+							"type": "null"
+						}
+					]
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": ["command_type", "layer", "node_ids"],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["UpsertLayer"]
+				},
+				"old_layer": {
+					"anyOf": [
+						{
+							"$ref": "#/definitions/Layer"
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"layer": {
+					"$ref": "#/definitions/Layer"
+				},
+				"node_ids": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"current_layer": {
+					"type": ["string", "null"]
+				}
+			}
+		},
+		{
+			"type": "object",
+			"required": [
+				"child_layers",
+				"command_type",
+				"layer",
+				"layer_nodes",
+				"layers",
+				"nodes",
+				"preserve_nodes"
+			],
+			"properties": {
+				"command_type": {
+					"type": "string",
+					"enum": ["RemoveLayer"]
+				},
+				"layer": {
+					"$ref": "#/definitions/Layer"
+				},
+				"layer_nodes": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
+				},
+				"child_layers": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"uniqueItems": true
+				},
+				"layers": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Layer"
+					}
+				},
+				"nodes": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/Node"
+					}
+				},
+				"preserve_nodes": {
+					"type": "boolean"
+				}
+			}
+		}
+	],
+	"definitions": {
+		"Comment": {
+			"type": "object",
+			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"author": {
+					"type": ["string", "null"]
+				},
+				"content": {
+					"type": "string"
+				},
+				"comment_type": {
+					"$ref": "#/definitions/CommentType"
+				},
+				"timestamp": {
+					"$ref": "#/definitions/SystemTime"
+				},
+				"coordinates": {
+					"type": "array",
+					"items": [
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						},
+						{
+							"type": "number",
+							"format": "float"
+						}
+					],
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"width": {
 					"type": ["number", "null"],
@@ -216,13 +510,12 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"is_locked": {
 					"type": ["boolean", "null"]
 				}
-			},
-			"required": ["id", "content", "comment_type", "timestamp", "coordinates"]
+			}
 		},
 		"CommentType": {
 			"type": "string",
@@ -230,53 +523,30 @@
 		},
 		"SystemTime": {
 			"type": "object",
+			"required": ["nanos_since_epoch", "secs_since_epoch"],
 			"properties": {
 				"secs_since_epoch": {
 					"type": "integer",
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"nanos_since_epoch": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				}
-			},
-			"required": ["secs_since_epoch", "nanos_since_epoch"]
-		},
-		"RemoveCommentCommand": {
-			"type": "object",
-			"properties": {
-				"comment": {
-					"$ref": "#/$defs/Comment"
-				}
-			},
-			"required": ["comment"]
-		},
-		"UpsertCommentCommand": {
-			"type": "object",
-			"properties": {
-				"comment": {
-					"$ref": "#/$defs/Comment"
-				},
-				"old_comment": {
-					"anyOf": [
-						{
-							"$ref": "#/$defs/Comment"
-						},
-						{
-							"type": "null"
-						}
-					]
-				},
-				"current_layer": {
-					"type": ["string", "null"]
-				}
-			},
-			"required": ["comment"]
+			}
 		},
 		"Node": {
 			"type": "object",
+			"required": [
+				"category",
+				"description",
+				"friendly_name",
+				"id",
+				"name",
+				"pins"
+			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -292,7 +562,7 @@
 				},
 				"coordinates": {
 					"type": ["array", "null"],
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "float"
@@ -306,8 +576,8 @@
 							"format": "float"
 						}
 					],
-					"minItems": 3,
-					"maxItems": 3
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"category": {
 					"type": "string"
@@ -315,7 +585,7 @@
 				"scores": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/NodeScores"
+							"$ref": "#/definitions/NodeScores"
 						},
 						{
 							"type": "null"
@@ -325,7 +595,7 @@
 				"pins": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/$defs/Pin"
+						"$ref": "#/definitions/Pin"
 					}
 				},
 				"start": {
@@ -355,61 +625,51 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0
-				},
-				"fn_refs": {
-					"anyOf": [
-						{
-							"$ref": "#/$defs/FnRefs"
-						},
-						{
-							"type": "null"
-						}
-					]
+					"minimum": 0.0
 				}
-			},
-			"required": [
-				"id",
-				"name",
-				"friendly_name",
-				"description",
-				"category",
-				"pins"
-			]
+			}
 		},
 		"NodeScores": {
-			"description": "Represents quality metrics for a node, with scores ranging from 0 to 10.\nHigher scores indicate worse performance in each category.\n\n# Score Categories\n* `privacy` - Measures data protection and confidentiality level\n* `security` - Assesses resistance against potential attacks\n* `performance` - Evaluates computational efficiency and speed\n* `governance` - Indicates compliance with policies and regulations",
+			"description": "Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores indicate worse performance in each category.\n\n# Score Categories * `privacy` - Measures data protection and confidentiality level * `security` - Assesses resistance against potential attacks * `performance` - Evaluates computational efficiency and speed * `governance` - Indicates compliance with policies and regulations",
 			"type": "object",
+			"required": ["governance", "performance", "privacy", "security"],
 			"properties": {
 				"privacy": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0,
-					"maximum": 255
+					"minimum": 0.0
 				},
 				"security": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0,
-					"maximum": 255
+					"minimum": 0.0
 				},
 				"performance": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0,
-					"maximum": 255
+					"minimum": 0.0
 				},
 				"governance": {
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0,
-					"maximum": 255
+					"minimum": 0.0
 				}
-			},
-			"required": ["privacy", "security", "performance", "governance"]
+			}
 		},
 		"Pin": {
 			"type": "object",
+			"required": [
+				"connected_to",
+				"data_type",
+				"depends_on",
+				"description",
+				"friendly_name",
+				"id",
+				"index",
+				"name",
+				"pin_type",
+				"value_type"
+			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -424,69 +684,55 @@
 					"type": "string"
 				},
 				"pin_type": {
-					"$ref": "#/$defs/PinType"
+					"$ref": "#/definitions/PinType"
 				},
 				"data_type": {
-					"$ref": "#/$defs/VariableType"
+					"$ref": "#/definitions/VariableType"
 				},
 				"schema": {
 					"type": ["string", "null"]
 				},
 				"value_type": {
-					"$ref": "#/$defs/ValueType"
+					"$ref": "#/definitions/ValueType"
 				},
 				"depends_on": {
 					"type": "array",
-					"uniqueItems": true,
 					"items": {
 						"type": "string"
-					}
+					},
+					"uniqueItems": true
 				},
 				"connected_to": {
 					"type": "array",
-					"uniqueItems": true,
 					"items": {
 						"type": "string"
-					}
+					},
+					"uniqueItems": true
 				},
 				"default_value": {
 					"type": ["array", "null"],
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0,
-						"maximum": 255
+						"minimum": 0.0
 					}
 				},
 				"index": {
 					"type": "integer",
 					"format": "uint16",
-					"minimum": 0,
-					"maximum": 65535
+					"minimum": 0.0
 				},
 				"options": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/PinOptions"
+							"$ref": "#/definitions/PinOptions"
 						},
 						{
 							"type": "null"
 						}
 					]
 				}
-			},
-			"required": [
-				"id",
-				"name",
-				"friendly_name",
-				"description",
-				"pin_type",
-				"data_type",
-				"value_type",
-				"depends_on",
-				"connected_to",
-				"index"
-			]
+			}
 		},
 		"PinType": {
 			"type": "string",
@@ -525,7 +771,7 @@
 				},
 				"range": {
 					"type": ["array", "null"],
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "double"
@@ -535,8 +781,8 @@
 							"format": "double"
 						}
 					],
-					"minItems": 2,
-					"maxItems": 2
+					"maxItems": 2,
+					"minItems": 2
 				},
 				"step": {
 					"type": ["number", "null"],
@@ -550,38 +796,18 @@
 				}
 			}
 		},
-		"FnRefs": {
-			"type": "object",
-			"properties": {
-				"fn_refs": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					}
-				},
-				"can_reference_fns": {
-					"type": "boolean"
-				},
-				"can_be_referenced_by_fns": {
-					"type": "boolean"
-				}
-			},
-			"required": ["fn_refs", "can_reference_fns", "can_be_referenced_by_fns"]
-		},
-		"AddNodeCommand": {
-			"type": "object",
-			"properties": {
-				"node": {
-					"$ref": "#/$defs/Node"
-				},
-				"current_layer": {
-					"type": ["string", "null"]
-				}
-			},
-			"required": ["node"]
-		},
 		"Layer": {
 			"type": "object",
+			"required": [
+				"comments",
+				"coordinates",
+				"id",
+				"name",
+				"nodes",
+				"pins",
+				"type",
+				"variables"
+			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -593,29 +819,29 @@
 					"type": "string"
 				},
 				"type": {
-					"$ref": "#/$defs/LayerType"
+					"$ref": "#/definitions/LayerType"
 				},
 				"nodes": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/$defs/Node"
+						"$ref": "#/definitions/Node"
 					}
 				},
 				"variables": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/$defs/Variable"
+						"$ref": "#/definitions/Variable"
 					}
 				},
 				"comments": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/$defs/Comment"
+						"$ref": "#/definitions/Comment"
 					}
 				},
 				"coordinates": {
 					"type": "array",
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "float"
@@ -629,12 +855,12 @@
 							"format": "float"
 						}
 					],
-					"minItems": 3,
-					"maxItems": 3
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"in_coordinates": {
 					"type": ["array", "null"],
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "float"
@@ -648,12 +874,12 @@
 							"format": "float"
 						}
 					],
-					"minItems": 3,
-					"maxItems": 3
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"out_coordinates": {
 					"type": ["array", "null"],
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "float"
@@ -667,13 +893,13 @@
 							"format": "float"
 						}
 					],
-					"minItems": 3,
-					"maxItems": 3
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"pins": {
 					"type": "object",
 					"additionalProperties": {
-						"$ref": "#/$defs/Pin"
+						"$ref": "#/definitions/Pin"
 					}
 				},
 				"comment": {
@@ -688,19 +914,9 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				}
-			},
-			"required": [
-				"id",
-				"name",
-				"type",
-				"nodes",
-				"variables",
-				"comments",
-				"coordinates",
-				"pins"
-			]
+			}
 		},
 		"LayerType": {
 			"type": "string",
@@ -708,6 +924,15 @@
 		},
 		"Variable": {
 			"type": "object",
+			"required": [
+				"data_type",
+				"editable",
+				"exposed",
+				"id",
+				"name",
+				"secret",
+				"value_type"
+			],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -726,15 +951,14 @@
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0,
-						"maximum": 255
+						"minimum": 0.0
 					}
 				},
 				"data_type": {
-					"$ref": "#/$defs/VariableType"
+					"$ref": "#/definitions/VariableType"
 				},
 				"value_type": {
-					"$ref": "#/$defs/ValueType"
+					"$ref": "#/definitions/ValueType"
 				},
 				"exposed": {
 					"type": "boolean"
@@ -748,352 +972,9 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				}
-			},
-			"required": [
-				"id",
-				"name",
-				"data_type",
-				"value_type",
-				"exposed",
-				"secret",
-				"editable"
-			]
-		},
-		"CopyPasteCommand": {
-			"type": "object",
-			"properties": {
-				"original_nodes": {
-					"type": "array",
-					"items": {
-						"$ref": "#/$defs/Node"
-					}
-				},
-				"original_comments": {
-					"type": "array",
-					"items": {
-						"$ref": "#/$defs/Comment"
-					}
-				},
-				"original_layers": {
-					"type": "array",
-					"items": {
-						"$ref": "#/$defs/Layer"
-					}
-				},
-				"new_comments": {
-					"type": "array",
-					"items": {
-						"$ref": "#/$defs/Comment"
-					}
-				},
-				"new_nodes": {
-					"type": "array",
-					"items": {
-						"$ref": "#/$defs/Node"
-					}
-				},
-				"new_layers": {
-					"type": "array",
-					"items": {
-						"$ref": "#/$defs/Layer"
-					}
-				},
-				"current_layer": {
-					"type": ["string", "null"]
-				},
-				"old_mouse": {
-					"type": ["array", "null"],
-					"prefixItems": [
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						}
-					],
-					"minItems": 3,
-					"maxItems": 3
-				},
-				"offset": {
-					"type": "array",
-					"prefixItems": [
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						}
-					],
-					"minItems": 3,
-					"maxItems": 3
-				}
-			},
-			"required": [
-				"original_nodes",
-				"original_comments",
-				"original_layers",
-				"new_comments",
-				"new_nodes",
-				"new_layers",
-				"offset"
-			]
-		},
-		"MoveNodeCommand": {
-			"type": "object",
-			"properties": {
-				"node_id": {
-					"type": "string"
-				},
-				"from_coordinates": {
-					"type": ["array", "null"],
-					"prefixItems": [
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						}
-					],
-					"minItems": 3,
-					"maxItems": 3
-				},
-				"to_coordinates": {
-					"type": "array",
-					"prefixItems": [
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						},
-						{
-							"type": "number",
-							"format": "float"
-						}
-					],
-					"minItems": 3,
-					"maxItems": 3
-				},
-				"current_layer": {
-					"type": ["string", "null"]
-				}
-			},
-			"required": ["node_id", "to_coordinates"]
-		},
-		"RemoveNodeCommand": {
-			"type": "object",
-			"properties": {
-				"node": {
-					"$ref": "#/$defs/Node"
-				},
-				"connected_nodes": {
-					"type": "array",
-					"items": {
-						"$ref": "#/$defs/Node"
-					}
-				}
-			},
-			"required": ["node", "connected_nodes"]
-		},
-		"UpdateNodeCommand": {
-			"type": "object",
-			"properties": {
-				"old_node": {
-					"anyOf": [
-						{
-							"$ref": "#/$defs/Node"
-						},
-						{
-							"type": "null"
-						}
-					]
-				},
-				"node": {
-					"$ref": "#/$defs/Node"
-				}
-			},
-			"required": ["node"]
-		},
-		"DisconnectPinsCommand": {
-			"type": "object",
-			"properties": {
-				"from_pin": {
-					"type": "string"
-				},
-				"to_pin": {
-					"type": "string"
-				},
-				"from_node": {
-					"type": "string"
-				},
-				"to_node": {
-					"type": "string"
-				}
-			},
-			"required": ["from_pin", "to_pin", "from_node", "to_node"]
-		},
-		"ConnectPinsCommand": {
-			"type": "object",
-			"properties": {
-				"from_pin": {
-					"type": "string"
-				},
-				"to_pin": {
-					"type": "string"
-				},
-				"from_node": {
-					"type": "string"
-				},
-				"to_node": {
-					"type": "string"
-				}
-			},
-			"required": ["from_pin", "to_pin", "from_node", "to_node"]
-		},
-		"UpsertPinCommand": {
-			"type": "object",
-			"properties": {
-				"node_id": {
-					"type": "string"
-				},
-				"pin": {
-					"$ref": "#/$defs/Pin"
-				},
-				"old_pin": {
-					"anyOf": [
-						{
-							"$ref": "#/$defs/Pin"
-						},
-						{
-							"type": "null"
-						}
-					]
-				}
-			},
-			"required": ["node_id", "pin"]
-		},
-		"RemoveVariableCommand": {
-			"type": "object",
-			"properties": {
-				"variable": {
-					"$ref": "#/$defs/Variable"
-				}
-			},
-			"required": ["variable"]
-		},
-		"UpsertVariableCommand": {
-			"type": "object",
-			"properties": {
-				"variable": {
-					"$ref": "#/$defs/Variable"
-				},
-				"old_variable": {
-					"anyOf": [
-						{
-							"$ref": "#/$defs/Variable"
-						},
-						{
-							"type": "null"
-						}
-					]
-				}
-			},
-			"required": ["variable"]
-		},
-		"UpsertLayerCommand": {
-			"type": "object",
-			"properties": {
-				"old_layer": {
-					"anyOf": [
-						{
-							"$ref": "#/$defs/Layer"
-						},
-						{
-							"type": "null"
-						}
-					]
-				},
-				"layer": {
-					"$ref": "#/$defs/Layer"
-				},
-				"node_ids": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					}
-				},
-				"current_layer": {
-					"type": ["string", "null"]
-				}
-			},
-			"required": ["layer", "node_ids"]
-		},
-		"RemoveLayerCommand": {
-			"type": "object",
-			"properties": {
-				"layer": {
-					"$ref": "#/$defs/Layer"
-				},
-				"layer_nodes": {
-					"type": "array",
-					"uniqueItems": true,
-					"items": {
-						"type": "string"
-					}
-				},
-				"child_layers": {
-					"type": "array",
-					"uniqueItems": true,
-					"items": {
-						"type": "string"
-					}
-				},
-				"layers": {
-					"type": "array",
-					"items": {
-						"$ref": "#/$defs/Layer"
-					}
-				},
-				"nodes": {
-					"type": "array",
-					"items": {
-						"$ref": "#/$defs/Node"
-					}
-				},
-				"preserve_nodes": {
-					"type": "boolean"
-				}
-			},
-			"required": [
-				"layer",
-				"layer_nodes",
-				"child_layers",
-				"layers",
-				"nodes",
-				"preserve_nodes"
-			]
+			}
 		}
 	}
 }

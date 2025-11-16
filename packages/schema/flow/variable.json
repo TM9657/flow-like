@@ -1,7 +1,16 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "Variable",
 	"type": "object",
+	"required": [
+		"data_type",
+		"editable",
+		"exposed",
+		"id",
+		"name",
+		"secret",
+		"value_type"
+	],
 	"properties": {
 		"id": {
 			"type": "string"
@@ -20,15 +29,14 @@
 			"items": {
 				"type": "integer",
 				"format": "uint8",
-				"minimum": 0,
-				"maximum": 255
+				"minimum": 0.0
 			}
 		},
 		"data_type": {
-			"$ref": "#/$defs/VariableType"
+			"$ref": "#/definitions/VariableType"
 		},
 		"value_type": {
-			"$ref": "#/$defs/ValueType"
+			"$ref": "#/definitions/ValueType"
 		},
 		"exposed": {
 			"type": "boolean"
@@ -42,19 +50,10 @@
 		"hash": {
 			"type": ["integer", "null"],
 			"format": "uint64",
-			"minimum": 0
+			"minimum": 0.0
 		}
 	},
-	"required": [
-		"id",
-		"name",
-		"data_type",
-		"value_type",
-		"exposed",
-		"secret",
-		"editable"
-	],
-	"$defs": {
+	"definitions": {
 		"VariableType": {
 			"type": "string",
 			"enum": [

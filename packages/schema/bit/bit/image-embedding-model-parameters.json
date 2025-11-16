@@ -1,7 +1,8 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "ImageEmbeddingModelProvider",
 	"type": "object",
+	"required": ["languages", "pooling", "provider", "vector_length"],
 	"properties": {
 		"languages": {
 			"type": "array",
@@ -12,23 +13,23 @@
 		"vector_length": {
 			"type": "integer",
 			"format": "uint32",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"pooling": {
-			"$ref": "#/$defs/Pooling"
+			"$ref": "#/definitions/Pooling"
 		},
 		"provider": {
-			"$ref": "#/$defs/ModelProvider"
+			"$ref": "#/definitions/ModelProvider"
 		}
 	},
-	"required": ["languages", "vector_length", "pooling", "provider"],
-	"$defs": {
+	"definitions": {
 		"Pooling": {
 			"type": "string",
 			"enum": ["CLS", "Mean", "None"]
 		},
 		"ModelProvider": {
 			"type": "object",
+			"required": ["provider_name"],
 			"properties": {
 				"provider_name": {
 					"type": "string"
@@ -38,13 +39,8 @@
 				},
 				"version": {
 					"type": ["string", "null"]
-				},
-				"params": {
-					"type": ["object", "null"],
-					"additionalProperties": true
 				}
-			},
-			"required": ["provider_name"]
+			}
 		}
 	}
 }

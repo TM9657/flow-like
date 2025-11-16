@@ -1,15 +1,16 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "UpsertCommentCommand",
 	"type": "object",
+	"required": ["comment"],
 	"properties": {
 		"comment": {
-			"$ref": "#/$defs/Comment"
+			"$ref": "#/definitions/Comment"
 		},
 		"old_comment": {
 			"anyOf": [
 				{
-					"$ref": "#/$defs/Comment"
+					"$ref": "#/definitions/Comment"
 				},
 				{
 					"type": "null"
@@ -20,10 +21,10 @@
 			"type": ["string", "null"]
 		}
 	},
-	"required": ["comment"],
-	"$defs": {
+	"definitions": {
 		"Comment": {
 			"type": "object",
+			"required": ["comment_type", "content", "coordinates", "id", "timestamp"],
 			"properties": {
 				"id": {
 					"type": "string"
@@ -35,14 +36,14 @@
 					"type": "string"
 				},
 				"comment_type": {
-					"$ref": "#/$defs/CommentType"
+					"$ref": "#/definitions/CommentType"
 				},
 				"timestamp": {
-					"$ref": "#/$defs/SystemTime"
+					"$ref": "#/definitions/SystemTime"
 				},
 				"coordinates": {
 					"type": "array",
-					"prefixItems": [
+					"items": [
 						{
 							"type": "number",
 							"format": "float"
@@ -56,8 +57,8 @@
 							"format": "float"
 						}
 					],
-					"minItems": 3,
-					"maxItems": 3
+					"maxItems": 3,
+					"minItems": 3
 				},
 				"width": {
 					"type": ["number", "null"],
@@ -80,13 +81,12 @@
 				"hash": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"is_locked": {
 					"type": ["boolean", "null"]
 				}
-			},
-			"required": ["id", "content", "comment_type", "timestamp", "coordinates"]
+			}
 		},
 		"CommentType": {
 			"type": "string",
@@ -94,19 +94,19 @@
 		},
 		"SystemTime": {
 			"type": "object",
+			"required": ["nanos_since_epoch", "secs_since_epoch"],
 			"properties": {
 				"secs_since_epoch": {
 					"type": "integer",
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"nanos_since_epoch": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				}
-			},
-			"required": ["secs_since_epoch", "nanos_since_epoch"]
+			}
 		}
 	}
 }

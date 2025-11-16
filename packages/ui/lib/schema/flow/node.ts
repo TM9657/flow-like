@@ -1,35 +1,28 @@
 export interface INode {
 	category: string;
 	comment?: null | string;
-	coordinates?: any[] | null;
+	coordinates?: number[] | null;
 	description: string;
 	docs?: null | string;
 	error?: null | string;
 	event_callback?: boolean | null;
-	fn_refs?: null | IFnRefsObject;
 	friendly_name: string;
 	hash?: number | null;
+	fn_refs?: IFnRefs | null;
 	icon?: null | string;
 	id: string;
 	layer?: null | string;
 	long_running?: boolean | null;
 	name: string;
-	pins: { [key: string]: IPinValue };
-	scores?: null | IScoresObject;
+	pins: { [key: string]: IPin };
+	scores?: null | INodeScores;
 	start?: boolean | null;
 	[property: string]: any;
 }
 
-export interface IFnRefsObject {
-	can_be_referenced_by_fns: boolean;
-	can_reference_fns: boolean;
-	fn_refs: string[];
-	[property: string]: any;
-}
-
-export interface IPinValue {
+export interface IPin {
 	connected_to: string[];
-	data_type: IDataType;
+	data_type: IVariableType;
 	default_value?: number[] | null;
 	depends_on: string[];
 	description: string;
@@ -37,14 +30,14 @@ export interface IPinValue {
 	id: string;
 	index: number;
 	name: string;
-	options?: null | IOptionsObject;
+	options?: null | IPinOptions;
 	pin_type: IPinType;
 	schema?: null | string;
 	value_type: IValueType;
 	[property: string]: any;
 }
 
-export enum IDataType {
+export enum IVariableType {
 	Boolean = "Boolean",
 	Byte = "Byte",
 	Date = "Date",
@@ -57,10 +50,10 @@ export enum IDataType {
 	Struct = "Struct",
 }
 
-export interface IOptionsObject {
+export interface IPinOptions {
 	enforce_generic_value_type?: boolean | null;
 	enforce_schema?: boolean | null;
-	range?: any[] | null;
+	range?: number[] | null;
 	sensitive?: boolean | null;
 	step?: number | null;
 	valid_values?: string[] | null;
@@ -80,19 +73,25 @@ export enum IValueType {
 }
 
 /**
- * Represents quality metrics for a node, with scores ranging from 0 to 10.
- * Higher scores indicate worse performance in each category.
+ * Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores
+ * indicate worse performance in each category.
  *
- * # Score Categories
- * * `privacy` - Measures data protection and confidentiality level
- * * `security` - Assesses resistance against potential attacks
- * * `performance` - Evaluates computational efficiency and speed
- * * `governance` - Indicates compliance with policies and regulations
+ * # Score Categories * `privacy` - Measures data protection and confidentiality level *
+ * `security` - Assesses resistance against potential attacks * `performance` - Evaluates
+ * computational efficiency and speed * `governance` - Indicates compliance with policies
+ * and regulations
  */
-export interface IScoresObject {
+export interface INodeScores {
 	governance: number;
 	performance: number;
 	privacy: number;
 	security: number;
+	[property: string]: any;
+}
+
+export interface IFnRefs {
+	fn_refs: string[];
+	can_reference_fns: boolean;
+	can_be_referenced_by_fns: boolean;
 	[property: string]: any;
 }

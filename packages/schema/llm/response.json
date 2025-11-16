@@ -1,7 +1,8 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "Response",
 	"type": "object",
+	"required": ["choices", "usage"],
 	"properties": {
 		"id": {
 			"type": ["string", "null"]
@@ -9,13 +10,13 @@
 		"choices": {
 			"type": "array",
 			"items": {
-				"$ref": "#/$defs/Choice"
+				"$ref": "#/definitions/Choice"
 			}
 		},
 		"created": {
 			"type": ["integer", "null"],
 			"format": "uint64",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"model": {
 			"type": ["string", "null"]
@@ -30,13 +31,13 @@
 			"type": ["string", "null"]
 		},
 		"usage": {
-			"$ref": "#/$defs/Usage"
+			"$ref": "#/definitions/Usage"
 		}
 	},
-	"required": ["choices", "usage"],
-	"$defs": {
+	"definitions": {
 		"Choice": {
 			"type": "object",
+			"required": ["finish_reason", "index", "message"],
 			"properties": {
 				"index": {
 					"type": "integer",
@@ -46,23 +47,23 @@
 					"type": "string"
 				},
 				"message": {
-					"$ref": "#/$defs/ResponseMessage"
+					"$ref": "#/definitions/ResponseMessage"
 				},
 				"logprobs": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/LogProbs"
+							"$ref": "#/definitions/LogProbs"
 						},
 						{
 							"type": "null"
 						}
 					]
 				}
-			},
-			"required": ["index", "finish_reason", "message"]
+			}
 		},
 		"ResponseMessage": {
 			"type": "object",
+			"required": ["role"],
 			"properties": {
 				"role": {
 					"type": "string"
@@ -76,33 +77,31 @@
 				"annotations": {
 					"type": ["array", "null"],
 					"items": {
-						"$ref": "#/$defs/Annotation"
+						"$ref": "#/definitions/Annotation"
 					}
 				},
 				"audio": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/Audio"
+							"$ref": "#/definitions/Audio"
 						},
 						{
 							"type": "null"
 						}
 					]
 				},
-				"reasoning": {
-					"type": ["string", "null"]
-				},
 				"tool_calls": {
+					"default": [],
 					"type": "array",
 					"items": {
-						"$ref": "#/$defs/FunctionCall"
+						"$ref": "#/definitions/FunctionCall"
 					}
 				}
-			},
-			"required": ["role", "tool_calls"]
+			}
 		},
 		"Annotation": {
 			"type": "object",
+			"required": ["type"],
 			"properties": {
 				"type": {
 					"type": "string"
@@ -110,43 +109,40 @@
 				"url_citation": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/UrlCitation"
+							"$ref": "#/definitions/UrlCitation"
 						},
 						{
 							"type": "null"
 						}
 					]
 				}
-			},
-			"required": ["type"]
+			}
 		},
 		"UrlCitation": {
 			"type": "object",
+			"required": ["end_index", "start_index", "title", "url"],
 			"properties": {
 				"end_index": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"start_index": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"title": {
 					"type": "string"
 				},
 				"url": {
 					"type": "string"
-				},
-				"content": {
-					"type": ["string", "null"]
 				}
-			},
-			"required": ["end_index", "start_index", "title", "url"]
+			}
 		},
 		"Audio": {
 			"type": "object",
+			"required": ["data", "id"],
 			"properties": {
 				"data": {
 					"type": "string"
@@ -154,7 +150,7 @@
 				"expires_at": {
 					"type": ["integer", "null"],
 					"format": "uint64",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"id": {
 					"type": "string"
@@ -162,11 +158,11 @@
 				"transcript": {
 					"type": ["string", "null"]
 				}
-			},
-			"required": ["data", "id"]
+			}
 		},
 		"FunctionCall": {
 			"type": "object",
+			"required": ["function", "id"],
 			"properties": {
 				"index": {
 					"type": ["integer", "null"],
@@ -179,22 +175,20 @@
 					"type": ["string", "null"]
 				},
 				"function": {
-					"$ref": "#/$defs/ResponseFunction"
+					"$ref": "#/definitions/ResponseFunction"
 				}
-			},
-			"required": ["id", "function"]
+			}
 		},
 		"ResponseFunction": {
 			"type": "object",
 			"properties": {
 				"name": {
-					"type": "string"
+					"type": ["string", "null"]
 				},
 				"arguments": {
-					"type": "string"
+					"type": ["string", "null"]
 				}
-			},
-			"required": ["name", "arguments"]
+			}
 		},
 		"LogProbs": {
 			"type": "object",
@@ -202,19 +196,20 @@
 				"content": {
 					"type": ["array", "null"],
 					"items": {
-						"$ref": "#/$defs/TokenLogProbs"
+						"$ref": "#/definitions/TokenLogProbs"
 					}
 				},
 				"refusal": {
 					"type": ["array", "null"],
 					"items": {
-						"$ref": "#/$defs/TokenLogProbs"
+						"$ref": "#/definitions/TokenLogProbs"
 					}
 				}
 			}
 		},
 		"TokenLogProbs": {
 			"type": "object",
+			"required": ["logprob", "token"],
 			"properties": {
 				"token": {
 					"type": "string"
@@ -228,21 +223,20 @@
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0,
-						"maximum": 255
+						"minimum": 0.0
 					}
 				},
 				"top_logprobs": {
 					"type": ["array", "null"],
 					"items": {
-						"$ref": "#/$defs/TopLogProbs"
+						"$ref": "#/definitions/TopLogProbs"
 					}
 				}
-			},
-			"required": ["token", "logprob"]
+			}
 		},
 		"TopLogProbs": {
 			"type": "object",
+			"required": ["logprob", "token"],
 			"properties": {
 				"token": {
 					"type": "string"
@@ -256,39 +250,34 @@
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0,
-						"maximum": 255
+						"minimum": 0.0
 					}
 				}
-			},
-			"required": ["token", "logprob"]
+			}
 		},
 		"Usage": {
 			"type": "object",
+			"required": ["completion_tokens", "prompt_tokens", "total_tokens"],
 			"properties": {
 				"completion_tokens": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"prompt_tokens": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"total_tokens": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
-				},
-				"cost": {
-					"type": ["number", "null"],
-					"format": "double"
+					"minimum": 0.0
 				},
 				"prompt_tokens_details": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/PromptTokenDetails"
+							"$ref": "#/definitions/PromptTokenDetails"
 						},
 						{
 							"type": "null"
@@ -298,73 +287,59 @@
 				"completion_tokens_details": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/CompletionTokenDetails"
-						},
-						{
-							"type": "null"
-						}
-					]
-				},
-				"upstream_inference_cost": {
-					"anyOf": [
-						{
-							"$ref": "#/$defs/CostDetails"
+							"$ref": "#/definitions/CompletionTokenDetails"
 						},
 						{
 							"type": "null"
 						}
 					]
 				}
-			},
-			"required": ["completion_tokens", "prompt_tokens", "total_tokens"]
+			}
 		},
 		"PromptTokenDetails": {
 			"type": "object",
+			"required": ["audio_tokens", "cached_tokens"],
 			"properties": {
 				"cached_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"audio_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				}
 			}
 		},
 		"CompletionTokenDetails": {
 			"type": "object",
+			"required": [
+				"accepted_prediction_tokens",
+				"audio_tokens",
+				"reasoning_tokens",
+				"rejected_prediction_tokens"
+			],
 			"properties": {
 				"accepted_prediction_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"audio_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"reasoning_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"rejected_prediction_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
-				}
-			}
-		},
-		"CostDetails": {
-			"type": "object",
-			"properties": {
-				"upstream_inference_cost": {
-					"type": ["integer", "null"],
-					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				}
 			}
 		}

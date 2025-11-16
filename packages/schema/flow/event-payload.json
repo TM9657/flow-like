@@ -1,15 +1,15 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "EventPayload",
 	"anyOf": [
 		{
-			"$ref": "#/$defs/ChatEventParameters"
+			"$ref": "#/definitions/ChatEventParameters"
 		},
 		{
-			"$ref": "#/$defs/EmailEventParameters"
+			"$ref": "#/definitions/EmailEventParameters"
 		},
 		{
-			"$ref": "#/$defs/ApiEventParameters"
+			"$ref": "#/definitions/ApiEventParameters"
 		},
 		{
 			"type": "object",
@@ -19,14 +19,14 @@
 			"type": "null"
 		}
 	],
-	"$defs": {
+	"definitions": {
 		"ChatEventParameters": {
 			"type": "object",
 			"properties": {
 				"history_elements": {
 					"type": ["integer", "null"],
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"allow_file_upload": {
 					"type": ["boolean", "null"]
@@ -72,8 +72,7 @@
 				"smtp_port": {
 					"type": ["integer", "null"],
 					"format": "uint16",
-					"minimum": 0,
-					"maximum": 65535
+					"minimum": 0.0
 				},
 				"smtp_username": {
 					"type": ["string", "null"]
@@ -87,8 +86,7 @@
 				"imap_port": {
 					"type": ["integer", "null"],
 					"format": "uint16",
-					"minimum": 0,
-					"maximum": 65535
+					"minimum": 0.0
 				},
 				"imap_username": {
 					"type": ["string", "null"]

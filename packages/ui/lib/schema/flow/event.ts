@@ -1,43 +1,43 @@
 export interface IEvent {
 	active: boolean;
 	board_id: string;
-	board_version?: any[] | null;
-	canary?: null | ICanaryObject;
+	board_version?: number[] | null;
+	canary?: null | ICanaryEvent;
 	config: number[];
-	created_at: ICreatedAt;
+	created_at: ISystemTime;
 	description: string;
 	event_type: string;
-	event_version: any[];
+	event_version: number[];
 	id: string;
 	name: string;
 	node_id: string;
-	notes?: INotesClass | null;
+	notes?: IReleaseNotes | null;
 	priority: number;
-	updated_at: ICreatedAt;
-	variables: { [key: string]: IVariableValue };
+	updated_at: ISystemTime;
+	variables: { [key: string]: IVariable };
 	[property: string]: any;
 }
 
-export interface ICanaryObject {
+export interface ICanaryEvent {
 	board_id: string;
-	board_version?: any[] | null;
-	created_at: ICreatedAt;
+	board_version?: number[] | null;
+	created_at: ISystemTime;
 	node_id: string;
-	updated_at: ICreatedAt;
-	variables: { [key: string]: IVariableValue };
+	updated_at: ISystemTime;
+	variables: { [key: string]: IVariable };
 	weight: number;
 	[property: string]: any;
 }
 
-export interface ICreatedAt {
+export interface ISystemTime {
 	nanos_since_epoch: number;
 	secs_since_epoch: number;
 	[property: string]: any;
 }
 
-export interface IVariableValue {
+export interface IVariable {
 	category?: null | string;
-	data_type: IDataType;
+	data_type: IVariableType;
 	default_value?: number[] | null;
 	description?: null | string;
 	editable: boolean;
@@ -50,7 +50,7 @@ export interface IVariableValue {
 	[property: string]: any;
 }
 
-export enum IDataType {
+export enum IVariableType {
 	Boolean = "Boolean",
 	Byte = "Byte",
 	Date = "Date",
@@ -70,7 +70,7 @@ export enum IValueType {
 	Normal = "Normal",
 }
 
-export interface INotesClass {
+export interface IReleaseNotes {
 	NOTES?: string;
 	URL?: string;
 }

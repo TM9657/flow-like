@@ -1,6 +1,6 @@
 export interface IVariable {
 	category?: null | string;
-	data_type: IDataType;
+	data_type: IVariableType;
 	default_value?: number[] | null;
 	description?: null | string;
 	editable: boolean;
@@ -13,7 +13,7 @@ export interface IVariable {
 	[property: string]: any;
 }
 
-export enum IDataType {
+export enum IVariableType {
 	Boolean = "Boolean",
 	Byte = "Byte",
 	Date = "Date",

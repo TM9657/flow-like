@@ -2,11 +2,11 @@ export interface IIntercomEvent {
 	event_id: string;
 	event_type: string;
 	payload: any;
-	timestamp: ITimestamp;
+	timestamp: ISystemTime;
 	[property: string]: any;
 }
 
-export interface ITimestamp {
+export interface ISystemTime {
 	nanos_since_epoch: number;
 	secs_since_epoch: number;
 	[property: string]: any;

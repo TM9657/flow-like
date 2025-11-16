@@ -1,7 +1,8 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "ConnectPinsCommand",
 	"type": "object",
+	"required": ["from_node", "from_pin", "to_node", "to_pin"],
 	"properties": {
 		"from_pin": {
 			"type": "string"
@@ -15,6 +16,5 @@
 		"to_node": {
 			"type": "string"
 		}
-	},
-	"required": ["from_pin", "to_pin", "from_node", "to_node"]
+	}
 }

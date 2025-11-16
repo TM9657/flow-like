@@ -1,7 +1,15 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "EmbeddingModelProvider",
 	"type": "object",
+	"required": [
+		"input_length",
+		"languages",
+		"pooling",
+		"prefix",
+		"provider",
+		"vector_length"
+	],
 	"properties": {
 		"languages": {
 			"type": "array",
@@ -12,34 +20,27 @@
 		"vector_length": {
 			"type": "integer",
 			"format": "uint32",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"input_length": {
 			"type": "integer",
 			"format": "uint32",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"prefix": {
-			"$ref": "#/$defs/Prefix"
+			"$ref": "#/definitions/Prefix"
 		},
 		"pooling": {
-			"$ref": "#/$defs/Pooling"
+			"$ref": "#/definitions/Pooling"
 		},
 		"provider": {
-			"$ref": "#/$defs/ModelProvider"
+			"$ref": "#/definitions/ModelProvider"
 		}
 	},
-	"required": [
-		"languages",
-		"vector_length",
-		"input_length",
-		"prefix",
-		"pooling",
-		"provider"
-	],
-	"$defs": {
+	"definitions": {
 		"Prefix": {
 			"type": "object",
+			"required": ["paragraph", "query"],
 			"properties": {
 				"query": {
 					"type": "string"
@@ -47,8 +48,7 @@
 				"paragraph": {
 					"type": "string"
 				}
-			},
-			"required": ["query", "paragraph"]
+			}
 		},
 		"Pooling": {
 			"type": "string",
@@ -56,6 +56,7 @@
 		},
 		"ModelProvider": {
 			"type": "object",
+			"required": ["provider_name"],
 			"properties": {
 				"provider_name": {
 					"type": "string"
@@ -65,13 +66,8 @@
 				},
 				"version": {
 					"type": ["string", "null"]
-				},
-				"params": {
-					"type": ["object", "null"],
-					"additionalProperties": true
 				}
-			},
-			"required": ["provider_name"]
+			}
 		}
 	}
 }

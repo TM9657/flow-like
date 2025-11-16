@@ -1,6 +1,6 @@
 export interface IHub {
 	app?: null | string;
-	authentication?: null | IAuthenticationObject;
+	authentication?: null | IAuthentication;
 	cdn?: null | string;
 	contact: IContact;
 	default_user_plan?: null | string;
@@ -17,48 +17,48 @@ export interface IHub {
 	privacy_policy: string;
 	provider?: null | string;
 	region?: null | string;
-	signaling?: string[] | null;
 	terms_of_service: string;
+	signaling?: null | string[];
 	thumbnail?: null | string;
-	tiers: { [key: string]: ITierValue };
+	tiers: { [key: string]: IUserTier };
 	[property: string]: any;
 }
 
-export interface IAuthenticationObject {
-	oauth2?: null | IOauth2Object;
-	openid?: null | IOpenidObject;
+export interface IAuthentication {
+	oauth2?: null | IOAuth2Config;
+	openid?: null | IOpenIDConfig;
 	variant: string;
 	[property: string]: any;
 }
 
-export interface IOauth2Object {
+export interface IOAuth2Config {
 	authorization_endpoint: string;
 	client_id: string;
 	token_endpoint: string;
 	[property: string]: any;
 }
 
-export interface IOpenidObject {
+export interface IOpenIDConfig {
 	authority?: null | string;
 	client_id?: null | string;
-	cognito?: null | ICognitoObject;
+	cognito?: null | ICognitoConfig;
 	discovery_url?: null | string;
+	user_info_url?: null | string;
 	jwks_url: string;
 	post_logout_redirect_uri?: null | string;
-	proxy?: null | IProxyObject;
+	proxy?: null | IOpenIDProxy;
 	redirect_uri?: null | string;
 	response_type?: null | string;
 	scope?: null | string;
-	user_info_url?: null | string;
 	[property: string]: any;
 }
 
-export interface ICognitoObject {
+export interface ICognitoConfig {
 	user_pool_id: string;
 	[property: string]: any;
 }
 
-export interface IProxyObject {
+export interface IOpenIDProxy {
 	authorize?: null | string;
 	enabled: boolean;
 	revoke?: null | string;
@@ -103,11 +103,11 @@ export interface ILookup {
 	[property: string]: any;
 }
 
-export interface ITierValue {
+export interface IUserTier {
 	execution_tier: string;
 	llm_tiers: string[];
-	max_llm_calls?: number | null;
 	max_llm_cost: number;
+	max_llm_calls?: number;
 	max_non_visible_projects: number;
 	max_remote_executions: number;
 	max_total_size: number;

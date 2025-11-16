@@ -1,14 +1,15 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "MoveNodeCommand",
 	"type": "object",
+	"required": ["node_id", "to_coordinates"],
 	"properties": {
 		"node_id": {
 			"type": "string"
 		},
 		"from_coordinates": {
 			"type": ["array", "null"],
-			"prefixItems": [
+			"items": [
 				{
 					"type": "number",
 					"format": "float"
@@ -22,12 +23,12 @@
 					"format": "float"
 				}
 			],
-			"minItems": 3,
-			"maxItems": 3
+			"maxItems": 3,
+			"minItems": 3
 		},
 		"to_coordinates": {
 			"type": "array",
-			"prefixItems": [
+			"items": [
 				{
 					"type": "number",
 					"format": "float"
@@ -41,12 +42,11 @@
 					"format": "float"
 				}
 			],
-			"minItems": 3,
-			"maxItems": 3
+			"maxItems": 3,
+			"minItems": 3
 		},
 		"current_layer": {
 			"type": ["string", "null"]
 		}
-	},
-	"required": ["node_id", "to_coordinates"]
+	}
 }

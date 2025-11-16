@@ -9,7 +9,6 @@ import type { ILayer } from "../../lib/schema/flow/board";
 import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IPinType, IValueType } from "../../lib/schema/flow/pin";
 import { useBackendStore } from "../../state/backend-state";
-import { DynamicImage } from "../ui/dynamic-image";
 import { useUndoRedo } from "./flow-history";
 import { PinEdit } from "./flow-pin/pin-edit";
 import { typeToColor } from "./utils";
@@ -19,6 +18,7 @@ const SmallDotHandle = memo(function SmallDotHandle({
 	dotColor,
 	showBorderWhenTransparent = true,
 	dotSize = 5,
+	isExecution = false,
 	...props
 }: Omit<React.ComponentProps<typeof Handle>, "children"> & {
 	/** Visual color of the inner dot. Use transparent to hide fill. */
@@ -27,11 +27,14 @@ const SmallDotHandle = memo(function SmallDotHandle({
 	showBorderWhenTransparent?: boolean;
 	/** Visual size of the inner dot (defaults to 5). */
 	dotSize?: number;
+	/** Is this an execution pin? */
+	isExecution?: boolean;
 } & { children?: React.ReactNode }) {
 	const { className, style, children } = props as any;
 
 	const size = dotSize;
 	const isTransparent = dotColor === "transparent";
+	const visualSize = 7; // Data pins size
 
 	return (
 		<Handle
@@ -47,16 +50,29 @@ const SmallDotHandle = memo(function SmallDotHandle({
 			}}
 		>
 			{/* centered visual dot that doesn't catch the mouse */}
-			<span
-				className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-				style={{
-					width: size,
-					height: size,
-					background: isTransparent ? "transparent" : dotColor,
-					border: "none",
-					boxShadow: isTransparent ? "none" : "0 0 0 1px rgba(0,0,0,0.08)",
-				}}
-			/>
+			{!isExecution && (
+				<span
+					className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+					style={{
+						width: visualSize,
+						height: visualSize,
+						background: isTransparent
+							? "transparent"
+							: `
+								radial-gradient(
+									circle at 35% 35%,
+									color-mix(in oklch, ${dotColor} 100%, white 25%),
+									${dotColor} 70%
+								)
+							`,
+						border: `1px solid ${dotColor}`,
+						boxShadow: `
+							0 0 4px color-mix(in oklch, ${dotColor} 25%, transparent),
+							inset 0 0.5px 1px color-mix(in oklch, white 20%, transparent)
+						`,
+					}}
+				/>
+			)}
 			{children}
 		</Handle>
 	);
@@ -137,7 +153,7 @@ function FlowPinInnerComponent({
 	const pinEditContainerClassName = useMemo(
 		() =>
 			`flex flex-row items-center gap-1 max-w-1/2 ${
-				pin.pin_type === "Input" ? "ml-2" : "translate-x-[calc(-100%-0.25rem)]"
+				pin.pin_type === "Input" ? "ml-2.5" : "translate-x-[calc(-100%-0.5rem)]"
 			}`,
 		[pin.pin_type],
 	);
@@ -207,13 +223,25 @@ function FlowPinInnerComponent({
 		() => (
 			<>
 				{pin.data_type === "Execution" && node?.name !== "reroute" && (
-					<DynamicImage
-						url="/flow/pin.svg"
-						className={`w-2 h-2 absolute left-0 right-0 -translate-x-[50%] pointer-events-none bg-foreground`}
+					<div
+						className="absolute left-1/2 top-1/2 pointer-events-none"
 						style={{
-							marginLeft: pin.pin_type === IPinType.Input ? "0.4rem" : "0.4rem",
-							height: 9,
-							width: 9,
+							width: 8,
+							height: 8,
+							transform: "translate(-50%, -50%) rotate(45deg)",
+							background: `
+								linear-gradient(
+									135deg,
+									color-mix(in oklch, var(--foreground) 100%, white 15%),
+									var(--foreground) 70%
+								)
+							`,
+							border: "1.5px solid var(--foreground)",
+							borderRadius: "1.5px",
+							boxShadow: `
+								0 0 5px color-mix(in oklch, var(--foreground) 25%, transparent),
+								inset 0 0.5px 1px color-mix(in oklch, white 15%, transparent)
+							`,
 						}}
 					/>
 				)}
@@ -243,6 +271,11 @@ function FlowPinInnerComponent({
 		[pin.data_type, pin.value_type, iconStyle, node?.name, pin.pin_type],
 	);
 
+	const isExecution = useMemo(
+		() => pin.data_type === "Execution",
+		[pin.data_type],
+	);
+
 	return (
 		<SmallDotHandle
 			type={pinTypeProps.type as HandleType}
@@ -252,6 +285,7 @@ function FlowPinInnerComponent({
 			className="flex flex-row items-center gap-1 group"
 			dotColor={dotColor}
 			showBorderWhenTransparent
+			isExecution={isExecution}
 		>
 			{pinIcons}
 			{shouldRenderPinEdit && (
@@ -281,7 +315,9 @@ function FlowPinInnerComponent({
 			{!shouldRenderPinEdit && onPinRemove && pin.dynamic && (
 				<button
 					className={`opacity-0 bg-background border p-0.5 rounded-full group-hover:opacity-100 hover:text-primary ${
-						pin.pin_type === IPinType.Input ? "ml-2" : "mr-2 right-0 absolute"
+						pin.pin_type === IPinType.Input
+							? "ml-2.5"
+							: "mr-2.5 right-0 absolute"
 					}`}
 					title="Delete Pin"
 					onClick={() => onPinRemove(pin)}

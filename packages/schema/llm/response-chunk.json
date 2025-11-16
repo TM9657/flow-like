@@ -1,7 +1,8 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "ResponseChunk",
 	"type": "object",
+	"required": ["choices", "id"],
 	"properties": {
 		"id": {
 			"type": "string"
@@ -9,13 +10,13 @@
 		"choices": {
 			"type": "array",
 			"items": {
-				"$ref": "#/$defs/ResponseChunkChoice"
+				"$ref": "#/definitions/ResponseChunkChoice"
 			}
 		},
 		"created": {
 			"type": ["integer", "null"],
 			"format": "uint64",
-			"minimum": 0
+			"minimum": 0.0
 		},
 		"model": {
 			"type": ["string", "null"]
@@ -29,7 +30,7 @@
 		"usage": {
 			"anyOf": [
 				{
-					"$ref": "#/$defs/Usage"
+					"$ref": "#/definitions/Usage"
 				},
 				{
 					"type": "null"
@@ -41,10 +42,10 @@
 			"format": "float"
 		}
 	},
-	"required": ["id", "choices"],
-	"$defs": {
+	"definitions": {
 		"ResponseChunkChoice": {
 			"type": "object",
+			"required": ["index"],
 			"properties": {
 				"index": {
 					"type": "integer",
@@ -53,7 +54,7 @@
 				"delta": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/Delta"
+							"$ref": "#/definitions/Delta"
 						},
 						{
 							"type": "null"
@@ -66,15 +67,14 @@
 				"logprobs": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/LogProbs"
+							"$ref": "#/definitions/LogProbs"
 						},
 						{
 							"type": "null"
 						}
 					]
 				}
-			},
-			"required": ["index"]
+			}
 		},
 		"Delta": {
 			"type": "object",
@@ -88,37 +88,34 @@
 				"tool_calls": {
 					"type": ["array", "null"],
 					"items": {
-						"$ref": "#/$defs/DeltaFunctionCall"
+						"$ref": "#/definitions/FunctionCall"
 					}
 				},
 				"refusal": {
 					"type": ["string", "null"]
-				},
-				"reasoning": {
-					"type": ["string", "null"]
 				}
 			}
 		},
-		"DeltaFunctionCall": {
+		"FunctionCall": {
 			"type": "object",
+			"required": ["function", "id"],
 			"properties": {
 				"index": {
 					"type": ["integer", "null"],
 					"format": "int32"
 				},
 				"id": {
-					"type": ["string", "null"]
+					"type": "string"
 				},
 				"type": {
 					"type": ["string", "null"]
 				},
 				"function": {
-					"$ref": "#/$defs/DeltaResponseFunction"
+					"$ref": "#/definitions/ResponseFunction"
 				}
-			},
-			"required": ["function"]
+			}
 		},
-		"DeltaResponseFunction": {
+		"ResponseFunction": {
 			"type": "object",
 			"properties": {
 				"name": {
@@ -135,19 +132,20 @@
 				"content": {
 					"type": ["array", "null"],
 					"items": {
-						"$ref": "#/$defs/TokenLogProbs"
+						"$ref": "#/definitions/TokenLogProbs"
 					}
 				},
 				"refusal": {
 					"type": ["array", "null"],
 					"items": {
-						"$ref": "#/$defs/TokenLogProbs"
+						"$ref": "#/definitions/TokenLogProbs"
 					}
 				}
 			}
 		},
 		"TokenLogProbs": {
 			"type": "object",
+			"required": ["logprob", "token"],
 			"properties": {
 				"token": {
 					"type": "string"
@@ -161,21 +159,20 @@
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0,
-						"maximum": 255
+						"minimum": 0.0
 					}
 				},
 				"top_logprobs": {
 					"type": ["array", "null"],
 					"items": {
-						"$ref": "#/$defs/TopLogProbs"
+						"$ref": "#/definitions/TopLogProbs"
 					}
 				}
-			},
-			"required": ["token", "logprob"]
+			}
 		},
 		"TopLogProbs": {
 			"type": "object",
+			"required": ["logprob", "token"],
 			"properties": {
 				"token": {
 					"type": "string"
@@ -189,39 +186,34 @@
 					"items": {
 						"type": "integer",
 						"format": "uint8",
-						"minimum": 0,
-						"maximum": 255
+						"minimum": 0.0
 					}
 				}
-			},
-			"required": ["token", "logprob"]
+			}
 		},
 		"Usage": {
 			"type": "object",
+			"required": ["completion_tokens", "prompt_tokens", "total_tokens"],
 			"properties": {
 				"completion_tokens": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"prompt_tokens": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"total_tokens": {
 					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
-				},
-				"cost": {
-					"type": ["number", "null"],
-					"format": "double"
+					"minimum": 0.0
 				},
 				"prompt_tokens_details": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/PromptTokenDetails"
+							"$ref": "#/definitions/PromptTokenDetails"
 						},
 						{
 							"type": "null"
@@ -231,73 +223,59 @@
 				"completion_tokens_details": {
 					"anyOf": [
 						{
-							"$ref": "#/$defs/CompletionTokenDetails"
-						},
-						{
-							"type": "null"
-						}
-					]
-				},
-				"upstream_inference_cost": {
-					"anyOf": [
-						{
-							"$ref": "#/$defs/CostDetails"
+							"$ref": "#/definitions/CompletionTokenDetails"
 						},
 						{
 							"type": "null"
 						}
 					]
 				}
-			},
-			"required": ["completion_tokens", "prompt_tokens", "total_tokens"]
+			}
 		},
 		"PromptTokenDetails": {
 			"type": "object",
+			"required": ["audio_tokens", "cached_tokens"],
 			"properties": {
 				"cached_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"audio_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				}
 			}
 		},
 		"CompletionTokenDetails": {
 			"type": "object",
+			"required": [
+				"accepted_prediction_tokens",
+				"audio_tokens",
+				"reasoning_tokens",
+				"rejected_prediction_tokens"
+			],
 			"properties": {
 				"accepted_prediction_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"audio_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"reasoning_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				},
 				"rejected_prediction_tokens": {
-					"type": ["integer", "null"],
+					"type": "integer",
 					"format": "uint32",
-					"minimum": 0
-				}
-			}
-		},
-		"CostDetails": {
-			"type": "object",
-			"properties": {
-				"upstream_inference_cost": {
-					"type": ["integer", "null"],
-					"format": "uint32",
-					"minimum": 0
+					"minimum": 0.0
 				}
 			}
 		}
