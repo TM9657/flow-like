@@ -6,7 +6,6 @@
 use flow_like::{
     bit::Bit,
     flow::{
-        board::Board,
         execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
         node::{Node, NodeLogic},
         pin::{PinOptions, PinType},
@@ -22,10 +21,7 @@ use flow_like_model_provider::{
 use flow_like_types::{Value, anyhow, async_trait, json};
 use rig::completion::{Completion, ToolDefinition};
 use rig::message::{AssistantContent, ToolCall as RigToolCall};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 #[crate::register_node]
 #[derive(Default)]
@@ -34,6 +30,131 @@ pub struct SimpleAgentNode {}
 impl SimpleAgentNode {
     pub fn new() -> Self {
         SimpleAgentNode {}
+    }
+
+    /// Generate OpenAI function call schema from a referenced function node.
+    /// Returns a Tool definition with function name, description, and parameter schema.
+    async fn generate_tool_from_function(
+        referenced_node: &Arc<InternalNode>,
+    ) -> flow_like_types::Result<Tool> {
+        use flow_like_model_provider::history::{
+            HistoryFunction, HistoryFunctionParameters, HistoryJSONSchemaDefine,
+            HistoryJSONSchemaType, ToolType,
+        };
+        use std::collections::HashMap;
+
+        let node = referenced_node.node.lock().await;
+        // Use friendly_name (user-customizable) and convert to snake_case for LLM
+        let function_name = node
+            .friendly_name
+            .to_lowercase()
+            .replace(' ', "_")
+            .replace('-', "_");
+        let description = node.description.clone();
+
+        // Collect all non-execution output pins to build parameter schema
+        let mut properties: HashMap<String, Box<HistoryJSONSchemaDefine>> = HashMap::new();
+        let mut has_data_pins = false;
+        let mut payload_pin = None;
+
+        for (_pin_id, pin) in node.pins.iter() {
+            // Skip execution pins and input pins
+            if pin.data_type == VariableType::Execution || pin.pin_type != PinType::Output {
+                continue;
+            }
+
+            // Track the payload pin separately
+            if pin.name == "payload" {
+                payload_pin = Some(pin);
+                continue;
+            }
+
+            has_data_pins = true;
+
+            // Map VariableType to JSONSchemaType
+            let schema_type = match pin.data_type {
+                VariableType::String => HistoryJSONSchemaType::String,
+                VariableType::Integer => HistoryJSONSchemaType::Number,
+                VariableType::Float => HistoryJSONSchemaType::Number,
+                VariableType::Boolean => HistoryJSONSchemaType::Boolean,
+                VariableType::Struct | VariableType::Generic => HistoryJSONSchemaType::Object,
+                VariableType::Date | VariableType::PathBuf | VariableType::Byte => {
+                    HistoryJSONSchemaType::String
+                }
+                VariableType::Execution => continue, // Already filtered above
+            };
+
+            let property_def = HistoryJSONSchemaDefine {
+                schema_type: Some(schema_type),
+                description: if pin.description.is_empty() {
+                    None
+                } else {
+                    Some(pin.description.clone())
+                },
+                enum_values: None,
+                properties: None,
+                required: None,
+                items: None,
+            };
+
+            properties.insert(pin.name.clone(), Box::new(property_def));
+        }
+
+        // If no data pins exist AND the event has a payload pin defined, add it to the schema
+        if !has_data_pins {
+            if let Some(payload) = payload_pin {
+                let schema_type = match payload.data_type {
+                    VariableType::String => HistoryJSONSchemaType::String,
+                    VariableType::Integer => HistoryJSONSchemaType::Number,
+                    VariableType::Float => HistoryJSONSchemaType::Number,
+                    VariableType::Boolean => HistoryJSONSchemaType::Boolean,
+                    VariableType::Struct | VariableType::Generic => HistoryJSONSchemaType::Object,
+                    VariableType::Date | VariableType::PathBuf | VariableType::Byte => {
+                        HistoryJSONSchemaType::String
+                    }
+                    VariableType::Execution => HistoryJSONSchemaType::Object, // Fallback
+                };
+
+                let payload_def = HistoryJSONSchemaDefine {
+                    schema_type: Some(schema_type),
+                    description: if payload.description.is_empty() {
+                        None
+                    } else {
+                        Some(payload.description.clone())
+                    },
+                    enum_values: None,
+                    properties: None,
+                    required: None,
+                    items: None,
+                };
+                properties.insert("payload".to_string(), Box::new(payload_def));
+            }
+        }
+
+        let parameters = HistoryFunctionParameters {
+            schema_type: HistoryJSONSchemaType::Object,
+            properties: if properties.is_empty() {
+                None
+            } else {
+                Some(properties)
+            },
+            required: None,
+        };
+
+        let function = HistoryFunction {
+            name: function_name,
+            description: if description.is_empty() {
+                None
+            } else {
+                Some(description)
+            },
+            parameters,
+        };
+
+        Ok(Tool {
+            tool_type: ToolType::Function,
+            function,
+        })
     }
 }
 
@@ -58,14 +179,6 @@ impl NodeLogic for SimpleAgentNode {
         node.add_input_pin("history", "History", "Chat History", VariableType::Struct)
             .set_schema::<History>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
-
-        node.add_input_pin(
-            "tools",
-            "Tools",
-            "JSON or OpenAI Function Definitions",
-            VariableType::String,
-        )
-        .set_default_value(Some(json::json!("[]")));
 
         node.add_input_pin(
             "max_iter",
@@ -95,20 +208,6 @@ impl NodeLogic for SimpleAgentNode {
         .set_schema::<History>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin(
-            "tool_call_id",
-            "Tool Call Id",
-            "Tool Call Identifier",
-            VariableType::String,
-        );
-
-        node.add_output_pin(
-            "tool_call_args",
-            "Tool Call Args",
-            "Tool Call Arguments",
-            VariableType::Struct,
-        );
-
         node.set_long_running(true);
 
         node
@@ -119,14 +218,19 @@ impl NodeLogic for SimpleAgentNode {
 
         let max_iterations: u64 = context.evaluate_pin("max_iter").await?;
         let model_bit = context.evaluate_pin::<Bit>("model").await?;
-        let tools_str: String = context.evaluate_pin("tools").await?;
         let history = context.evaluate_pin::<History>("history").await?;
 
-        let tools: Vec<Tool> =
-            json::from_str(&tools_str).map_err(|err| anyhow!("Failed to parse tools: {err:?}"))?;
+        // Get referenced functions and generate tool schemas
+        let referenced_functions = context.get_referenced_functions().await?;
 
-        for tool in &tools {
-            context.deactivate_exec_pin(&tool.function.name).await?;
+        let mut tools = Vec::with_capacity(referenced_functions.len());
+        let mut tool_name_to_node = HashMap::with_capacity(referenced_functions.len());
+
+        for referenced_node in referenced_functions {
+            let tool = Self::generate_tool_from_function(&referenced_node).await?;
+            let tool_name = tool.function.name.clone();
+            tools.push(tool);
+            tool_name_to_node.insert(tool_name, referenced_node);
         }
 
         if let Some(meta) = model_bit.meta.get("en") {
@@ -260,92 +364,92 @@ impl NodeLogic for SimpleAgentNode {
                         LogLevel::Debug,
                     );
 
-                    // Set tool call outputs on pins
-                    let tool_call_id_pin = context.get_pin_by_name("tool_call_id").await?;
-                    let tool_call_args_pin = context.get_pin_by_name("tool_call_args").await?;
-
-                    tool_call_id_pin
-                        .lock()
-                        .await
-                        .set_value(json::json!(id))
-                        .await;
-                    tool_call_args_pin
-                        .lock()
-                        .await
-                        .set_value(arguments.clone())
-                        .await;
-
-                    // Activate the specific tool exec pin
-                    context.activate_exec_pin(name.as_str()).await?;
-
-                    // Execute tool subcontext
-                    let tool_exec_pin = context.get_pin_by_name(name.as_str()).await?;
-                    let tool_flow = tool_exec_pin.lock().await.get_connected_nodes().await;
+                    // Get the referenced node for this tool
+                    let referenced_node = tool_name_to_node.get(name).ok_or_else(|| {
+                        anyhow!("Tool '{}' not found in referenced functions", name)
+                    })?;
 
                     context.log_message(
-                        &format!("Tool {} has {} connected nodes", name, tool_flow.len()),
+                        &format!("Executing referenced function for tool {}", name),
                         LogLevel::Debug,
                     );
 
-                    for (node_idx, node) in tool_flow.iter().enumerate() {
-                        context.log_message(
-                            &format!(
-                                "Executing tool node {}/{} for tool {}",
-                                node_idx + 1,
-                                tool_flow.len(),
-                                name
-                            ),
-                            LogLevel::Debug,
-                        );
+                    // Set the arguments as pin values on the referenced node
+                    let args_obj = arguments.as_object().ok_or_else(|| {
+                        anyhow!("Tool call arguments for '{}' are not an object", name)
+                    })?;
 
-                        let mut sub_context = context.create_sub_context(node).await;
-                        let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
-
-                        // CRITICAL: Capture result BEFORE end_trace and push_sub_context
-                        // push_sub_context only copies traces, not the result field!
-                        let captured_result = sub_context.result.clone();
-
-                        sub_context.end_trace();
-                        context.push_sub_context(&mut sub_context);
-
-                        // Prepare tool output message for history
-                        let tool_output_str = match run {
-                            Ok(_) => {
-                                // Use captured result
-                                if let Some(ref result) = captured_result {
-                                    let result_str = json::to_string(&result)
-                                        .unwrap_or_else(|_| result.to_string());
-                                    context.log_message(
-                                        &format!(
-                                            "Tool {} returned result ({} chars)",
-                                            name,
-                                            result_str.len()
-                                        ),
-                                        LogLevel::Debug,
-                                    );
-                                    result_str
-                                } else {
-                                    context.log_message(
-                                        &format!("Tool {} executed successfully (no result)", name),
-                                        LogLevel::Debug,
-                                    );
-                                    "Tool executed successfully".to_string()
-                                }
-                            }
-                            Err(error) => {
-                                context.log_message(
-                                    &format!("Tool {} execution FAILED: {:?}", name, error),
-                                    LogLevel::Error,
-                                );
-                                format!("Error: {:?}", error)
-                            }
+                    // Set values on the referenced function's OUTPUT pins (matching call_ref.rs logic)
+                    let pins = referenced_node.pins.clone();
+                    for (_id, pin) in pins {
+                        let guard = pin.lock().await;
+                        let (pin_type, data_type, pin_name) = {
+                            let pin_meta = guard.pin.lock().await;
+                            (
+                                pin_meta.pin_type.clone(),
+                                pin_meta.data_type.clone(),
+                                pin_meta.name.clone(),
+                            )
                         };
 
-                        tool_results.push((id.clone(), name.clone(), json::json!(tool_output_str)));
+                        // Skip input pins and execution pins
+                        if pin_type == PinType::Input || data_type == VariableType::Execution {
+                            continue;
+                        }
+
+                        // Set value if we have an argument for this pin
+                        if let Some(value) = args_obj.get(&pin_name) {
+                            guard.set_value(value.clone()).await;
+                        }
                     }
 
-                    // Deactivate tool exec pin
-                    context.deactivate_exec_pin(name.as_str()).await?;
+                    // Create a sub-context with the referenced node
+                    let mut sub_context = context.create_sub_context(referenced_node).await;
+                    sub_context.delegated = true;
+
+                    let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;
+
+                    // CRITICAL: Capture result BEFORE end_trace and push_sub_context
+                    // push_sub_context only copies traces, not the result field!
+                    let captured_result = sub_context.result.clone();
+
+                    sub_context.end_trace();
+                    context.push_sub_context(&mut sub_context);
+
+                    // Prepare tool output message for history
+                    let tool_output_str = match run {
+                        Ok(_) => {
+                            // Use captured result
+                            if let Some(ref result) = captured_result {
+                                let result_str =
+                                    json::to_string(&result).unwrap_or_else(|_| result.to_string());
+                                context.log_message(
+                                    &format!(
+                                        "Tool {} returned result ({} chars)",
+                                        name,
+                                        result_str.len()
+                                    ),
+                                    LogLevel::Debug,
+                                );
+                                result_str
+                            } else {
+                                context.log_message(
+                                    &format!("Tool {} executed successfully (no result)", name),
+                                    LogLevel::Debug,
+                                );
+                                "Tool executed successfully".to_string()
+                            }
+                        }
+                        Err(error) => {
+                            context.log_message(
+                                &format!("Tool {} execution FAILED: {:?}", name, error),
+                                LogLevel::Error,
+                            );
+                            format!("Error: {:?}", error)
+                        }
+                    };
+
+                    tool_results.push((id.clone(), name.clone(), json::json!(tool_output_str)));
                 }
             }
 
@@ -355,7 +459,7 @@ impl NodeLogic for SimpleAgentNode {
             );
 
             // Log all tool results
-            for (idx, (tool_id, tool_name, tool_output)) in tool_results.iter().enumerate() {
+            for (idx, (tool_id, tool_name, _tool_output)) in tool_results.iter().enumerate() {
                 context.log_message(
                     &format!("Tool result {}: name={}, id={}", idx, tool_name, tool_id),
                     LogLevel::Debug,
@@ -493,70 +597,6 @@ impl NodeLogic for SimpleAgentNode {
             context.log_message(
                 &format!("Iteration {} complete, continuing loop", iteration - 1),
                 LogLevel::Debug,
-            );
-        }
-    }
-
-    async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
-        let current_tool_exec_pins: Vec<_> = node
-            .pins
-            .values()
-            .filter(|p| {
-                p.pin_type == PinType::Output
-                    && (p.name != "exec_done"
-                        && p.name != "response"
-                        && p.name != "tool_call_id"
-                        && p.name != "tool_call_args") // p.description == "Tool Exec" doesn't seem to work as filter cond
-            })
-            .collect();
-
-        let tools_str: String = node
-            .get_pin_by_name("tools")
-            .and_then(|pin| pin.default_value.clone())
-            .and_then(|bytes| flow_like_types::json::from_slice::<Value>(&bytes).ok())
-            .and_then(|json| json.as_str().map(ToOwned::to_owned))
-            .unwrap_or_default();
-
-        let mut current_tool_exec_refs = current_tool_exec_pins
-            .iter()
-            .map(|p| (p.name.clone(), *p))
-            .collect::<HashMap<_, _>>();
-
-        let update_tools: Vec<Tool> = match json::from_str(&tools_str) {
-            Ok(tools) => tools,
-            Err(err) => {
-                node.error = Some(format!("Failed to parse tools: {err:?}").to_string());
-                return;
-            }
-        };
-
-        let mut all_tool_exec_refs = HashSet::new();
-        let mut missing_tool_exec_refs = HashSet::new();
-
-        for update_tool in update_tools {
-            all_tool_exec_refs.insert(update_tool.function.name.clone());
-            if current_tool_exec_refs
-                .remove(&update_tool.function.name)
-                .is_none()
-            {
-                missing_tool_exec_refs.insert(update_tool.function.name.clone());
-            }
-        }
-
-        let ids_to_remove = current_tool_exec_refs
-            .values()
-            .map(|p| p.id.clone())
-            .collect::<Vec<_>>();
-        ids_to_remove.iter().for_each(|id| {
-            node.pins.remove(id);
-        });
-
-        for missing_tool_ref in missing_tool_exec_refs {
-            node.add_output_pin(
-                &missing_tool_ref,
-                &missing_tool_ref,
-                "Tool Exec",
-                VariableType::Execution,
             );
         }
     }

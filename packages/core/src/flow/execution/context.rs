@@ -584,6 +584,40 @@ impl ExecutionContext {
         node.clone()
     }
 
+    /// Get all referenced functions for this node.
+    /// Returns an error if the node doesn't support function references.
+    pub async fn get_referenced_functions(
+        &self,
+    ) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
+        let node = self.node.node.lock().await;
+
+        let fn_refs = node
+            .fn_refs
+            .as_ref()
+            .ok_or_else(|| flow_like_types::anyhow!("Node does not support function references"))?;
+
+        if !fn_refs.can_reference_fns {
+            return Err(flow_like_types::anyhow!(
+                "Node is not configured to reference functions"
+            ));
+        }
+
+        let mut referenced_nodes = Vec::with_capacity(fn_refs.fn_refs.len());
+
+        for fn_ref in &fn_refs.fn_refs {
+            let referenced_node = self
+                .nodes
+                .get(fn_ref)
+                .ok_or_else(|| {
+                    flow_like_types::anyhow!("Referenced function '{}' not found", fn_ref)
+                })?
+                .clone();
+            referenced_nodes.push(referenced_node);
+        }
+
+        Ok(referenced_nodes)
+    }
+
     pub async fn toast_message(
         &mut self,
         message: &str,
