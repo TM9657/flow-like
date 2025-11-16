@@ -95,6 +95,7 @@ import {
 	removeCommentCommand,
 	removeLayerCommand,
 	removeNodeCommand,
+	updateNodeCommand,
 	upsertCommentCommand,
 	upsertLayerCommand,
 } from "../../lib";
@@ -126,6 +127,7 @@ import { useUndoRedo } from "./flow-history";
 import { FlowLayerIndicators } from "./flow-layer-indicators";
 import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowRuns } from "./flow-runs";
+import { FlowVeilEdge } from "./flow-veil-edge";
 import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
 
@@ -859,62 +861,127 @@ export function FlowBoard({
 			const new_node = result.node;
 
 			if (droppedPin) {
-				const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
-				const pinValueType = droppedPin.value_type;
-				const pinDataType = droppedPin.data_type;
-				const schema = refs?.[droppedPin.schema ?? ""] ?? droppedPin.schema;
-				const options = droppedPin.options;
+				const isRefInHandle = droppedPin.id.startsWith("ref_in_");
+				const isRefOutHandle = droppedPin.id.startsWith("ref_out_");
 
-				const pin = Object.values(new_node.pins).find((pin) => {
-					if (typeof schema === "string" || typeof pin.schema === "string") {
-						const pinSchema = refs?.[pin.schema ?? ""] ?? pin.schema;
-						if (
-							(pin.options?.enforce_schema || options?.enforce_schema) &&
-							schema !== pinSchema &&
-							pin.data_type !== IVariableType.Generic &&
-							droppedPin.data_type !== IVariableType.Generic
-						)
-							return false;
+				if (isRefInHandle || isRefOutHandle) {
+					// Handle function reference connection
+					const sourceNodeId = isRefOutHandle
+						? droppedPin.id.replace("ref_out_", "")
+						: droppedPin.id.replace("ref_in_", "");
+
+					const sourceNode = board.data?.nodes[sourceNodeId];
+
+					if (sourceNode) {
+						if (isRefOutHandle) {
+							// ref_out was dropped: source node references the new node
+							const currentRefs = sourceNode.fn_refs?.fn_refs ?? [];
+							const updatedRefs = Array.from(
+								new Set([...currentRefs, new_node.id]),
+							);
+
+							const updatedNode = {
+								...sourceNode,
+								fn_refs: {
+									...sourceNode.fn_refs,
+									fn_refs: updatedRefs,
+									can_reference_fns:
+										sourceNode.fn_refs?.can_reference_fns ?? false,
+									can_be_referenced_by_fns:
+										sourceNode.fn_refs?.can_be_referenced_by_fns ?? false,
+								},
+							};
+
+							const command = updateNodeCommand({
+								node: updatedNode,
+							});
+
+							await executeCommand(command);
+						} else {
+							// ref_in was dropped: new node references the source node
+							const currentRefs = new_node.fn_refs?.fn_refs ?? [];
+							const updatedRefs = Array.from(
+								new Set([...currentRefs, sourceNodeId]),
+							);
+
+							const updatedNode = {
+								...new_node,
+								fn_refs: {
+									...new_node.fn_refs,
+									fn_refs: updatedRefs,
+									can_reference_fns:
+										new_node.fn_refs?.can_reference_fns ?? false,
+									can_be_referenced_by_fns:
+										new_node.fn_refs?.can_be_referenced_by_fns ?? false,
+								},
+							};
+
+							const command = updateNodeCommand({
+								node: updatedNode,
+							});
+
+							await executeCommand(command);
+						}
 					}
-					if (pin.pin_type !== pinType) return false;
-					if (pin.value_type !== pinValueType) {
-						if (
-							pinDataType !== IVariableType.Generic &&
-							pin.data_type !== IVariableType.Generic
-						)
-							return false;
-						if (
-							(options?.enforce_generic_value_type ?? false) ||
-							(pin.options?.enforce_generic_value_type ?? false)
-						)
-							return false;
-					}
-					if (
-						pin.data_type === IVariableType.Generic &&
-						pinDataType !== IVariableType.Execution
-					)
-						return true;
-					if (
-						pinDataType === IVariableType.Generic &&
-						pin.data_type !== IVariableType.Execution
-					)
-						return true;
-					return pin.data_type === pinDataType;
-				});
-				const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
-				if (!sourcePin || !sourceNode) return;
-				if (!pin) return;
+				} else {
+					// Handle regular pin connection
+					const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
+					const pinValueType = droppedPin.value_type;
+					const pinDataType = droppedPin.data_type;
+					const schema = refs?.[droppedPin.schema ?? ""] ?? droppedPin.schema;
+					const options = droppedPin.options;
 
-				const command = connectPinsCommand({
-					from_node:
-						droppedPin.pin_type === "Output" ? sourceNode.id : new_node.id,
-					from_pin: droppedPin.pin_type === "Output" ? sourcePin.id : pin?.id,
-					to_node:
-						droppedPin.pin_type === "Input" ? sourceNode.id : new_node.id,
-					to_pin: droppedPin.pin_type === "Input" ? sourcePin.id : pin?.id,
-				});
+					const pin = Object.values(new_node.pins).find((pin) => {
+						if (typeof schema === "string" || typeof pin.schema === "string") {
+							const pinSchema = refs?.[pin.schema ?? ""] ?? pin.schema;
+							if (
+								(pin.options?.enforce_schema || options?.enforce_schema) &&
+								schema !== pinSchema &&
+								pin.data_type !== IVariableType.Generic &&
+								droppedPin.data_type !== IVariableType.Generic
+							)
+								return false;
+						}
+						if (pin.pin_type !== pinType) return false;
+						if (pin.value_type !== pinValueType) {
+							if (
+								pinDataType !== IVariableType.Generic &&
+								pin.data_type !== IVariableType.Generic
+							)
+								return false;
+							if (
+								(options?.enforce_generic_value_type ?? false) ||
+								(pin.options?.enforce_generic_value_type ?? false)
+							)
+								return false;
+						}
+						if (
+							pin.data_type === IVariableType.Generic &&
+							pinDataType !== IVariableType.Execution
+						)
+							return true;
+						if (
+							pinDataType === IVariableType.Generic &&
+							pin.data_type !== IVariableType.Execution
+						)
+							return true;
+						return pin.data_type === pinDataType;
+					});
+					const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
+					if (!sourcePin || !sourceNode) return;
+					if (!pin) return;
 
-				await executeCommand(command);
+					const command = connectPinsCommand({
+						from_node:
+							droppedPin.pin_type === "Output" ? sourceNode.id : new_node.id,
+						from_pin: droppedPin.pin_type === "Output" ? sourcePin.id : pin?.id,
+						to_node:
+							droppedPin.pin_type === "Input" ? sourceNode.id : new_node.id,
+						to_pin: droppedPin.pin_type === "Input" ? sourcePin.id : pin?.id,
+					});
+
+					await executeCommand(command);
+				}
 			}
 		},
 		[
@@ -1521,12 +1588,68 @@ export function FlowBoard({
 		[],
 	);
 
+	const edgeTypes = useMemo(
+		() => ({
+			veil: FlowVeilEdge,
+		}),
+		[],
+	);
+
 	const onConnect = useCallback(
 		(params: any) =>
 			setEdges((eds) => {
 				// Don't execute commands when viewing an old version
 				if (typeof version !== "undefined") {
 					return eds;
+				}
+
+				const isRefInConnection =
+					params.sourceHandle?.startsWith("ref_in_") ||
+					params.targetHandle?.startsWith("ref_in_");
+				const isRefOutConnection =
+					params.sourceHandle?.startsWith("ref_out_") ||
+					params.targetHandle?.startsWith("ref_out_");
+
+				if (isRefInConnection && isRefOutConnection) {
+					// Handle function reference connection
+					const refOutHandle = params.sourceHandle?.startsWith("ref_out_")
+						? params.sourceHandle
+						: params.targetHandle;
+					const refInHandle = params.sourceHandle?.startsWith("ref_in_")
+						? params.sourceHandle
+						: params.targetHandle;
+
+					const refOutNodeId = refOutHandle.replace("ref_out_", "");
+					const refInNodeId = refInHandle.replace("ref_in_", "");
+
+					const refOutNode = board.data?.nodes[refOutNodeId];
+
+					if (refOutNode) {
+						const currentRefs = refOutNode.fn_refs?.fn_refs ?? [];
+						const updatedRefs = Array.from(
+							new Set([...currentRefs, refInNodeId]),
+						);
+
+						const updatedNode = {
+							...refOutNode,
+							fn_refs: {
+								...refOutNode.fn_refs,
+								fn_refs: updatedRefs,
+								can_reference_fns:
+									refOutNode.fn_refs?.can_reference_fns ?? false,
+								can_be_referenced_by_fns:
+									refOutNode.fn_refs?.can_be_referenced_by_fns ?? false,
+							},
+						};
+
+						const command = updateNodeCommand({
+							node: updatedNode,
+						});
+
+						executeCommand(command);
+					}
+
+					return addEdge(params, eds);
 				}
 
 				const [sourcePin, sourceNode] = pinCache.get(params.sourceHandle) || [];
@@ -1546,7 +1669,7 @@ export function FlowBoard({
 
 				return addEdge(params, eds);
 			}),
-		[setEdges, pinCache, boardId, version, executeCommand],
+		[setEdges, pinCache, boardId, version, executeCommand, board.data?.nodes],
 	);
 
 	const onSelectionChange = useCallback<OnSelectionChangeFunc<Node, Edge>>(
@@ -1574,8 +1697,34 @@ export function FlowBoard({
 
 				const handle = connectionState.fromHandle;
 				if (handle?.id) {
-					const [pin, _node] = pinCache.get(handle.id) || [];
-					setDroppedPin(pin);
+					// Check if this is a function reference handle
+					if (
+						handle.id.startsWith("ref_in_") ||
+						handle.id.startsWith("ref_out_")
+					) {
+						// Create a synthetic pin object for ref handles
+						const syntheticPin: IPin = {
+							id: handle.id,
+							name: handle.id.startsWith("ref_in_") ? "ref_in" : "ref_out",
+							friendly_name: handle.id.startsWith("ref_in_")
+								? "Function Reference In"
+								: "Function Reference Out",
+							pin_type: handle.id.startsWith("ref_in_")
+								? IPinType.Input
+								: IPinType.Output,
+							data_type: IVariableType.Generic,
+							value_type: IValueType.Normal,
+							depends_on: [],
+							connected_to: [],
+							index: 0,
+							description: "",
+							schema: "",
+						};
+						setDroppedPin(syntheticPin);
+					} else {
+						const [pin, _node] = pinCache.get(handle.id) || [];
+						setDroppedPin(pin);
+					}
 				}
 
 				const contextMenuEvent = new MouseEvent("contextmenu", {
@@ -1698,6 +1847,52 @@ export function FlowBoard({
 						.map((change: any) => {
 							const selectedId = change.id;
 							const [fromPinId, toPinId] = selectedId.split("-");
+
+							const isRefInConnection =
+								fromPinId?.startsWith("ref_in_") ||
+								toPinId?.startsWith("ref_in_");
+							const isRefOutConnection =
+								fromPinId?.startsWith("ref_out_") ||
+								toPinId?.startsWith("ref_out_");
+
+							if (isRefInConnection && isRefOutConnection) {
+								const refOutHandle = fromPinId?.startsWith("ref_out_")
+									? fromPinId
+									: toPinId;
+								const refInHandle = fromPinId?.startsWith("ref_in_")
+									? fromPinId
+									: toPinId;
+
+								const refOutNodeId = refOutHandle.replace("ref_out_", "");
+								const refInNodeId = refInHandle.replace("ref_in_", "");
+
+								const refOutNode = board.data?.nodes[refOutNodeId];
+
+								if (refOutNode) {
+									const currentRefs = refOutNode.fn_refs?.fn_refs ?? [];
+									const updatedRefs = currentRefs.filter(
+										(ref: string) => ref !== refInNodeId,
+									);
+
+									const updatedNode = {
+										...refOutNode,
+										fn_refs: {
+											...refOutNode.fn_refs,
+											fn_refs: updatedRefs,
+											can_reference_fns:
+												refOutNode.fn_refs?.can_reference_fns ?? false,
+											can_be_referenced_by_fns:
+												refOutNode.fn_refs?.can_be_referenced_by_fns ?? false,
+										},
+									};
+
+									return updateNodeCommand({
+										node: updatedNode,
+									});
+								}
+								return undefined;
+							}
+
 							const [fromPin, fromNode] = pinCache.get(fromPinId) || [];
 							const [toPin, toNode] = pinCache.get(toPinId) || [];
 
@@ -2166,6 +2361,7 @@ export function FlowBoard({
 										nodes={nodes}
 										nodeTypes={nodeTypes}
 										edges={edges}
+										edgeTypes={edgeTypes}
 										maxZoom={3}
 										minZoom={0.1}
 										onNodeDoubleClick={onNodeDoubleClick}

@@ -215,6 +215,7 @@
 	--animate-ai-bounce: ai-bounce 0.4s infinite;
 	--animate-popover: popover 100ms ease-in;
 	--animate-pulse: pulse var(--duration) ease-out infinite;
+	--animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
 	--animate-shimmer: shimmer 1s linear infinite;
 	--animate-zoom: zoom 100ms ease-in;
 
@@ -252,6 +253,17 @@
 		}
 	}
 
+	@keyframes pulse-soft {
+		0%,
+		100% {
+			opacity: 1;
+		}
+
+		50% {
+			opacity: 0.7;
+		}
+	}
+
 	@keyframes shimmer {
 		0% {
 			transform: translateX(-150%);
@@ -259,6 +271,16 @@
 
 		100% {
 			transform: translateX(150%);
+		}
+	}
+
+	@keyframes dash-flow {
+		0% {
+			stroke-dashoffset: 0;
+		}
+
+		100% {
+			stroke-dashoffset: 400;
 		}
 	}
 

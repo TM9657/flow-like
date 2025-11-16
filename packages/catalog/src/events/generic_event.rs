@@ -168,10 +168,3 @@ impl NodeLogic for GenericEventNode {
         Ok(())
     }
 }
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    vec![
-        Arc::new(GenericEventNode::default()) as Arc<dyn NodeLogic>,
-        Arc::new(push_generic_result::ReturnGenericResultNode::default()) as Arc<dyn NodeLogic>,
-    ]
-}

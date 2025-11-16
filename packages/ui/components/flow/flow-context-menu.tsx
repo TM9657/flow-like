@@ -445,6 +445,25 @@ export function FlowContextMenu({
 														? sortedNodes
 														: (searchResults ?? [])
 													).filter((node) => {
+														// Check if the dropped pin is a function reference handle
+														const isRefInHandle =
+															droppedPin.id.startsWith("ref_in_");
+														const isRefOutHandle =
+															droppedPin.id.startsWith("ref_out_");
+
+														if (isRefInHandle) {
+															// For ref_in, only show nodes with can_reference_fns
+															return node.fn_refs?.can_reference_fns ?? false;
+														}
+
+														if (isRefOutHandle) {
+															// For ref_out, only show nodes with can_be_referenced_by_fns
+															return (
+																node.fn_refs?.can_be_referenced_by_fns ?? false
+															);
+														}
+
+														// Regular pin matching logic
 														const pins = Object.values(node.pins);
 														return pins.some((pin) => {
 															if (pin.pin_type === droppedPin.pin_type)
