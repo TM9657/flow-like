@@ -548,7 +548,7 @@ const FlowNodeInner = memo(
 				<Handle
 					position={Position.Top}
 					type={"target"}
-					className={`relative ml-auto right-0 z-50`}
+					className={`relative ml-auto right-0 z-50 mt-2 -mr-1`}
 					id={`ref_in_${props.data.node.id}`}
 					style={{
 						width: 12,

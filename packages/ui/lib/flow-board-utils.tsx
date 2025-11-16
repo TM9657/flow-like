@@ -22,6 +22,23 @@ import { IVariableType } from "./schema/flow/node";
 import type { IFnRefs, INode } from "./schema/flow/node";
 import { type IPin, IPinType } from "./schema/flow/pin";
 
+export function hexToRgba(hex: string, alpha = 0.3): string {
+	let c = hex.replace("#", "");
+	if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+	const num = Number.parseInt(c, 16);
+	const r = (num >> 16) & 255;
+	const g = (num >> 8) & 255;
+	const b = num & 255;
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function normalizeSelectionNodes(value: unknown): string[] {
+	if (!Array.isArray(value)) return [];
+	return value.filter(
+		(nodeId: unknown): nodeId is string => typeof nodeId === "string",
+	);
+}
+
 interface ISerializedPin {
 	id: string;
 	name: string;
