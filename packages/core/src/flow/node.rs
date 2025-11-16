@@ -81,6 +81,9 @@ impl NodeScores {
         self.cost = score;
         self
     }
+    pub fn build(&self) -> Self {
+        self.clone()
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -272,7 +275,7 @@ impl Node {
         self.scores.as_mut().unwrap()
     }
 
-    pub fn put_scores(&mut self, scores: NodeScores) {
+    pub fn set_scores(&mut self, scores: NodeScores) {
         self.scores = Some(scores);
     }
 

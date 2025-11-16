@@ -4,7 +4,7 @@ use flow_like::{
     bit::{Bit, BitModelClassification, VLMParameters},
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -37,21 +37,62 @@ impl NodeLogic for BuildMistralNode {
         );
         node.add_icon("/flow/icons/find_model.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(5)
+                .set_security(6)
+                .set_performance(7)
+                .set_governance(5)
+                .set_reliability(7)
+                .set_cost(5)
+                .build(),
+        );
 
-        node.add_input_pin("endpoint", "Endpoint", "API Endpoint", VariableType::String)
-            .set_default_value(Some(json!("https://api.mistral.ai")));
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger that builds or refreshes the Mistral Bit",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("api_key", "API Key", "API Key", VariableType::String)
-            .set_default_value(Some(json!("")))
-            .set_options(PinOptions::new().set_sensitive(true).build());
+        node.add_input_pin(
+            "endpoint",
+            "Endpoint",
+            "Public Mistral endpoint or private deployment URL",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("https://api.mistral.ai")));
 
-        node.add_input_pin("model_id", "Model ID", "Model ID", VariableType::String)
-            .set_default_value(Some(json!("mistral-large-latest")));
+        node.add_input_pin(
+            "api_key",
+            "API Key",
+            "Token used for authenticating against Mistral",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")))
+        .set_options(PinOptions::new().set_sensitive(true).build());
 
-        node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
-        node.add_output_pin("model", "Model", "The selected model", VariableType::Struct)
-            .set_schema::<Bit>();
+        node.add_input_pin(
+            "model_id",
+            "Model ID",
+            "Model identifier or preset slug to load",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("mistral-large-latest")));
+
+        node.add_output_pin(
+            "exec_out",
+            "Output",
+            "Activated once the Bit is ready",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "model",
+            "Model",
+            "Structured Bit describing the Mistral provider",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>();
 
         node.set_long_running(true);
 

@@ -7,7 +7,7 @@ use crate::data::path::FlowPath;
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -36,12 +36,28 @@ impl NodeLogic for SaveMLModelNode {
         );
         node.add_icon("/flow/icons/chart-network.svg");
 
-        node.add_input_pin("exec_in", "Input", "Start Saving", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(8)
+                .set_security(7)
+                .set_performance(5)
+                .set_governance(7)
+                .set_reliability(8)
+                .set_cost(8)
+                .build(),
+        );
+
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger that begins serialization",
+            VariableType::Execution,
+        );
 
         node.add_input_pin(
             "model",
             "Model",
-            "Trained KMeans Clustering Model",
+            "Any trained ML model handle to persist",
             VariableType::Struct,
         )
         .set_schema::<NodeMLModel>()
@@ -50,7 +66,7 @@ impl NodeLogic for SaveMLModelNode {
         node.add_input_pin(
             "path",
             "Path JSON",
-            "Path to Save Model to (JSON)",
+            "Destination path where the model JSON should be written",
             VariableType::Struct,
         )
         .set_schema::<FlowPath>()
@@ -59,7 +75,7 @@ impl NodeLogic for SaveMLModelNode {
         node.add_output_pin(
             "exec_out",
             "Done",
-            "Done Saving Model",
+            "Activated once the model file is written",
             VariableType::Execution,
         );
 

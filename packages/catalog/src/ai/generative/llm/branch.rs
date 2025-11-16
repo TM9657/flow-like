@@ -7,7 +7,7 @@ use flow_like::{
     bit::Bit,
     flow::{
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -105,34 +105,49 @@ impl NodeLogic for LLMBranchNode {
         let mut node = Node::new(
             "llm_branch",
             "LLM Branch",
-            "LLM If-Else Router",
+            "Routes execution based on an LLM-evaluated yes/no decision",
             "AI/Generative",
         );
         node.add_icon("/flow/icons/split.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(5)
+                .set_security(5)
+                .set_performance(7)
+                .set_reliability(6)
+                .set_governance(5)
+                .set_cost(5)
+                .build(),
+        );
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.add_input_pin("exec_in", "Input", "Trigger pin", VariableType::Execution);
 
-        node.add_input_pin("model", "Model", "Model", VariableType::Struct)
-            .set_schema::<Bit>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "model",
+            "Model",
+            "Bit representing the LLM to query",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
             "prompt",
             "Prompt",
-            "A statement that can be answered with yes or no.",
+            "Statement/question that should result in a yes/no decision",
             VariableType::String,
         );
 
         node.add_output_pin(
             "true",
             "True",
-            "The flow to follow if the condition is true",
+            "Flow to follow if the model returns true",
             VariableType::Execution,
         );
         node.add_output_pin(
             "false",
             "False",
-            "The flow to follow if the condition is false",
+            "Flow to follow if the model returns false",
             VariableType::Execution,
         );
 

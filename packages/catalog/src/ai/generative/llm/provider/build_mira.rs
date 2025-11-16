@@ -4,7 +4,7 @@ use flow_like::{
     bit::{Bit, BitModelClassification, VLMParameters},
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -37,21 +37,62 @@ impl NodeLogic for BuildMiraNode {
         );
         node.add_icon("/flow/icons/find_model.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(6)
+                .set_security(5)
+                .set_performance(5)
+                .set_governance(4)
+                .set_reliability(5)
+                .set_cost(6)
+                .build(),
+        );
 
-        node.add_input_pin("endpoint", "Endpoint", "API Endpoint", VariableType::String)
-            .set_default_value(Some(json!("https://api.mira.network")));
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger that builds or refreshes the Mira Bit",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("api_key", "API Key", "API Key", VariableType::String)
-            .set_default_value(Some(json!("")))
-            .set_options(PinOptions::new().set_sensitive(true).build());
+        node.add_input_pin(
+            "endpoint",
+            "Endpoint",
+            "Public Mira API endpoint or private gateway override",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("https://api.mira.network")));
 
-        node.add_input_pin("model_id", "Model ID", "Model ID", VariableType::String)
-            .set_default_value(Some(json!("mira-v1")));
+        node.add_input_pin(
+            "api_key",
+            "API Key",
+            "Token used for authenticating against Mira",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")))
+        .set_options(PinOptions::new().set_sensitive(true).build());
 
-        node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
-        node.add_output_pin("model", "Model", "The selected model", VariableType::Struct)
-            .set_schema::<Bit>();
+        node.add_input_pin(
+            "model_id",
+            "Model ID",
+            "Model identifier or preset slug to deploy",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("mira-v1")));
+
+        node.add_output_pin(
+            "exec_out",
+            "Output",
+            "Activated once the Bit is ready",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "model",
+            "Model",
+            "Structured Bit describing the Mira provider",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>();
 
         node.set_long_running(true);
 

@@ -8,7 +8,7 @@ use flow_like::{
             internal_node::InternalNode,
             log::{LogMessage, LogStat},
         },
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -43,10 +43,23 @@ impl NodeLogic for InvokeLLM {
         let mut node = Node::new(
             "ai_generative_invoke",
             "Invoke Model",
-            "Invokes the Model",
+            "Invokes the configured model with the provided chat history and streams back chunks.",
             "AI/Generative",
         );
         node.add_icon("/flow/icons/bot-invoke.svg");
+
+        // Generic model invocation node. The actual provider can be local or cloud,
+        // so we assign balanced default scores.
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(5)
+                .set_security(5)
+                .set_performance(7)
+                .set_governance(5)
+                .set_reliability(6)
+                .set_cost(5)
+                .build(),
+        );
 
         node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
 

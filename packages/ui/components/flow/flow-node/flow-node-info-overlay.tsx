@@ -336,37 +336,42 @@ const ScoreCard = memo(
 		description: string;
 		icon: React.ComponentType<{ className?: string }>;
 	}) => {
-		const isUnrated = score === 0;
+		// (optional) clamp to 0–10 so styling doesn't break on out-of-range values
+		const clamped = Math.max(0, Math.min(10, score));
+		const isUnrated = clamped === 0;
 
 		const { color, bgColor, textColor, statusText } = useMemo(() => {
-			if (isUnrated)
+			if (isUnrated) {
 				return {
 					color: "text-muted-foreground",
 					bgColor: "bg-muted/30",
 					textColor: "text-muted-foreground",
 					statusText: "Not Rated",
 				};
-			if (score <= 3)
+			}
+			if (clamped <= 3) {
 				return {
-					color: "text-emerald-500",
-					bgColor: "bg-emerald-500/10",
-					textColor: "text-emerald-700 dark:text-emerald-400",
-					statusText: "Good",
+					color: "text-rose-500",
+					bgColor: "bg-rose-500/10",
+					textColor: "text-rose-700 dark:text-rose-400",
+					statusText: "Bad",
 				};
-			if (score <= 6)
+			}
+			if (clamped <= 7) {
 				return {
 					color: "text-amber-500",
 					bgColor: "bg-amber-500/10",
 					textColor: "text-amber-700 dark:text-amber-400",
 					statusText: "Moderate",
 				};
+			}
 			return {
-				color: "text-rose-500",
-				bgColor: "bg-rose-500/10",
-				textColor: "text-rose-700 dark:text-rose-400",
-				statusText: "Needs Attention",
+				color: "text-emerald-500",
+				bgColor: "bg-emerald-500/10",
+				textColor: "text-emerald-700 dark:text-emerald-400",
+				statusText: "Good",
 			};
-		}, [score, isUnrated]);
+		}, [clamped, isUnrated]);
 
 		return (
 			<Tooltip>
@@ -391,7 +396,7 @@ const ScoreCard = memo(
 										color,
 									)}
 								>
-									{score}
+									{clamped}
 								</span>
 							)}
 						</div>

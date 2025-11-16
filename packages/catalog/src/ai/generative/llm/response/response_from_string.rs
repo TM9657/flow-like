@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -26,15 +26,37 @@ impl NodeLogic for ResponseFromStringNode {
         let mut node = Node::new(
             "ai_generative_llm_response_from_string",
             "Response From String",
-            "",
+            "Wraps a plain string into a synthetic LLM response object for downstream tooling.",
             "AI/Generative/Response",
         );
         node.add_icon("/flow/icons/history.svg");
 
-        node.add_input_pin("content", "Content", "Content", VariableType::String)
-            .set_default_value(Some(json!("")));
+        // Local synthetic helper, no external calls: very good privacy, security and reliability, low cost.
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_governance(10)
+                .set_reliability(10)
+                .set_cost(10)
+                .build(),
+        );
 
-        node.add_output_pin("response", "Response", "", VariableType::Struct)
+        node.add_input_pin(
+            "content",
+            "Content",
+            "Plain assistant text that should be wrapped into a Response object.",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
+
+        node.add_output_pin(
+            "response",
+            "Response",
+            "LLM-style Response struct containing the provided content as a single assistant message.",
+            VariableType::Struct,
+        )
             .set_schema::<Response>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 

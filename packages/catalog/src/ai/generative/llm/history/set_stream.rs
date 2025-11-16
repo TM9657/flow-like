@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -25,10 +25,20 @@ impl NodeLogic for SetHistoryStreamNode {
         let mut node = Node::new(
             "ai_generative_set_history_stream",
             "Set Stream",
-            "Sets the stream attribute in a ChatHistory",
+            "Stores whether downstream LLM invocations should stream tokens",
             "AI/Generative/History",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",
@@ -37,24 +47,34 @@ impl NodeLogic for SetHistoryStreamNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin("history", "History", "ChatHistory", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "history",
+            "History",
+            "Existing chat history to update",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("stream", "Stream", "Stream Value", VariableType::Boolean)
-            .set_default_value(Some(json!(true)));
+        node.add_input_pin(
+            "stream",
+            "Stream",
+            "Whether streaming tokens should be requested",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(true)));
 
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Signals completion after storing the stream flag",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "history_out",
             "History",
-            "Updated ChatHistory",
+            "History updated with the stream setting",
             VariableType::Struct,
         )
         .set_schema::<History>();

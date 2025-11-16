@@ -4,7 +4,7 @@ use flow_like::{
     bit::{Bit, BitModelClassification, VLMParameters},
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -37,21 +37,62 @@ impl NodeLogic for BuildHyperbolicNode {
         );
         node.add_icon("/flow/icons/find_model.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(5)
+                .set_security(5)
+                .set_performance(6)
+                .set_governance(4)
+                .set_reliability(6)
+                .set_cost(5)
+                .build(),
+        );
 
-        node.add_input_pin("endpoint", "Endpoint", "API Endpoint", VariableType::String)
-            .set_default_value(Some(json!("https://api.hyperbolic.xyz")));
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger that builds or refreshes the Hyperbolic Bit",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("api_key", "API Key", "API Key", VariableType::String)
-            .set_default_value(Some(json!("")))
-            .set_options(PinOptions::new().set_sensitive(true).build());
+        node.add_input_pin(
+            "endpoint",
+            "Endpoint",
+            "Public API endpoint or custom proxy to reach Hyperbolic",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("https://api.hyperbolic.xyz")));
 
-        node.add_input_pin("model_id", "Model ID", "Model ID", VariableType::String)
-            .set_default_value(Some(json!("meta-llama/Meta-Llama-3.1-70B-Instruct")));
+        node.add_input_pin(
+            "api_key",
+            "API Key",
+            "Token used for authenticating against Hyperbolic",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")))
+        .set_options(PinOptions::new().set_sensitive(true).build());
 
-        node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
-        node.add_output_pin("model", "Model", "The selected model", VariableType::Struct)
-            .set_schema::<Bit>();
+        node.add_input_pin(
+            "model_id",
+            "Model ID",
+            "Repository slug or model identifier to load",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("meta-llama/Meta-Llama-3.1-70B-Instruct")));
+
+        node.add_output_pin(
+            "exec_out",
+            "Output",
+            "Activated once the Bit is ready",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "model",
+            "Model",
+            "Structured Bit describing the Hyperbolic provider",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>();
 
         node.set_long_running(true);
 

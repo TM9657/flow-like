@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -26,33 +26,48 @@ impl NodeLogic for PopHistoryMessageNode {
         let mut node = Node::new(
             "ai_generative_pop_history_message",
             "Pop Message from History",
-            "Removes and returns the last message from a ChatHistory",
+            "Removes and returns the last message in a chat history",
             "AI/Generative/History",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",
             "Input",
-            "Initiate Execution",
+            "Trigger when ready to pop",
             VariableType::Execution,
         );
 
-        node.add_input_pin("history", "History", "ChatHistory", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "history",
+            "History",
+            "History to remove the message from",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Fires when a message was popped",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "history_out",
             "History",
-            "Updated ChatHistory",
+            "History after removing the message",
             VariableType::Struct,
         )
         .set_schema::<History>();
@@ -60,7 +75,7 @@ impl NodeLogic for PopHistoryMessageNode {
         node.add_output_pin(
             "message",
             "Message",
-            "Removed Message",
+            "Removed message",
             VariableType::Struct,
         )
         .set_schema::<HistoryMessage>();
@@ -68,7 +83,7 @@ impl NodeLogic for PopHistoryMessageNode {
         node.add_output_pin(
             "empty",
             "Empty",
-            "History was empty",
+            "Fires when no message was available",
             VariableType::Execution,
         );
 

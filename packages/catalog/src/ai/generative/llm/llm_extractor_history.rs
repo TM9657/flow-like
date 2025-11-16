@@ -4,7 +4,7 @@ use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -136,28 +136,49 @@ impl NodeLogic for LLMExtractHistoryNode {
         let mut node = Node::new(
             "llm_extractor_history",
             "AI Extractor from History",
-            "Extracts structured data from LLM responses using a conversation history",
+            "Extracts structured data by replaying an entire chat history through an LLM",
             "AI/Generative",
         );
         node.add_icon("/flow/icons/bot-invoke.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(4)
+                .set_security(4)
+                .set_performance(6)
+                .set_governance(5)
+                .set_reliability(6)
+                .set_cost(4)
+                .build(),
+        );
 
-        node.add_input_pin("model", "Model", "Model", VariableType::Struct)
-            .set_schema::<Bit>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger to start the extraction",
+            VariableType::Execution,
+        );
+
+        node.add_input_pin(
+            "model",
+            "Model",
+            "Bit pointing to the LLM that will perform the extraction",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
             "schema",
             "Schema",
-            "Tool Definition / JSON Schema for Structured Response, you can also paste an example JSON",
+            "JSON Schema (or example JSON) describing the structure to extract",
             VariableType::String,
         );
 
         node.add_input_pin(
             "history",
             "History",
-            "Conversation history to be processed by the LLM",
+            "Chat history to replay when extracting data",
             VariableType::Struct,
         )
         .set_schema::<History>()
@@ -166,14 +187,14 @@ impl NodeLogic for LLMExtractHistoryNode {
         node.add_output_pin(
             "exec_out",
             "Execution Output",
-            "Execution Output",
+            "Executes after extraction succeeds",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "response",
             "Response",
-            "Structured Response",
+            "Structured JSON value that matches the schema",
             VariableType::Struct,
         );
 

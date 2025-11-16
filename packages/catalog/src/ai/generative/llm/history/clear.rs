@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -30,6 +30,16 @@ impl NodeLogic for ClearHistoryNode {
             "AI/Generative/History",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_governance(8)
+                .set_reliability(10)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",

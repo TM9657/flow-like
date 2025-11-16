@@ -12,7 +12,7 @@ use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic, remove_pin_by_name},
+        node::{Node, NodeLogic, NodeScores, remove_pin_by_name},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -46,12 +46,28 @@ impl NodeLogic for MLPredictNode {
         );
         node.add_icon("/flow/icons/chart-network.svg");
 
-        node.add_input_pin("exec_in", "Input", "Start Fitting", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(5)
+                .set_security(6)
+                .set_performance(6)
+                .set_governance(6)
+                .set_reliability(7)
+                .set_cost(6)
+                .build(),
+        );
+
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger that starts prediction",
+            VariableType::Execution,
+        );
 
         node.add_input_pin(
             "model",
             "Model",
-            "Trained KMeans Clustering Model",
+            "Trained ML model to use for inference",
             VariableType::Struct,
         )
         .set_schema::<NodeMLModel>()
@@ -60,7 +76,7 @@ impl NodeLogic for MLPredictNode {
         node.add_input_pin(
             "source",
             "Data Source",
-            "Data Source (DB, Vector, CSV, ...)",
+            "Choose the input type for prediction (database rows or raw vector)",
             VariableType::String,
         )
         .set_options(
@@ -73,7 +89,7 @@ impl NodeLogic for MLPredictNode {
         node.add_output_pin(
             "exec_out",
             "Done",
-            "Done Fitting Model",
+            "Activated once predictions are written or returned",
             VariableType::Execution,
         );
 

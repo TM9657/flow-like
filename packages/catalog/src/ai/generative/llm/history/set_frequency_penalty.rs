@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -26,10 +26,20 @@ impl NodeLogic for SetHistoryFrequencyPenaltyNode {
         let mut node = Node::new(
             "ai_generative_set_history_frequency_penalty",
             "Set History Frequency Penalty",
-            "Sets the frequency_penalty attribute in a ChatHistory",
+            "Stores the frequency penalty parameter used by LLM sampling",
             "AI/Generative/History",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",
@@ -38,14 +48,19 @@ impl NodeLogic for SetHistoryFrequencyPenaltyNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin("history", "History", "ChatHistory", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "history",
+            "History",
+            "Existing chat history to update",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
             "frequency_penalty",
             "Frequency Penalty",
-            "Frequency Penalty Value",
+            "Penalty applied when token frequency increases",
             VariableType::Float,
         )
         .set_options(PinOptions::new().set_range((0.0, 1.0)).build());
@@ -53,14 +68,14 @@ impl NodeLogic for SetHistoryFrequencyPenaltyNode {
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Signals completion once stored",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "history_out",
             "History",
-            "Updated ChatHistory",
+            "History updated with frequency penalty",
             VariableType::Struct,
         )
         .set_schema::<History>();

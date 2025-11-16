@@ -8,7 +8,7 @@ use crate::data::path::FlowPath;
 use flow_like::{
     flow::{
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -37,12 +37,28 @@ impl NodeLogic for LoadMLModelNode {
         );
         node.add_icon("/flow/icons/chart-network.svg");
 
-        node.add_input_pin("exec_in", "Input", "Start Loading", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(8)
+                .set_security(7)
+                .set_performance(5)
+                .set_governance(7)
+                .set_reliability(8)
+                .set_cost(8)
+                .build(),
+        );
+
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger that starts loading the model JSON",
+            VariableType::Execution,
+        );
 
         node.add_input_pin(
             "path",
             "Path JSON",
-            "Path to Load the Model from (JSON)",
+            "Filesystem or storage path pointing at the serialized model JSON",
             VariableType::Struct,
         )
         .set_schema::<FlowPath>()
@@ -51,14 +67,14 @@ impl NodeLogic for LoadMLModelNode {
         node.add_output_pin(
             "exec_out",
             "Done",
-            "Done Saving Model",
+            "Activated once the model is loaded",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "model",
             "Model",
-            "Loaded Machine Learning Model",
+            "Handle to the loaded machine learning model",
             VariableType::Struct,
         )
         .set_schema::<NodeMLModel>()

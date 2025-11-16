@@ -4,7 +4,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -29,18 +29,33 @@ impl NodeLogic for ChunkFromStringNode {
         let mut node = Node::new(
             "ai_generative_llm_chunk_from_string",
             "Chunk From String",
-            "Make New Chunk Object From String Input",
+            "Wraps an arbitrary string in a synthetic streaming chunk",
             "AI/Generative/Response",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
-        node.add_input_pin("content", "Content", "Content", VariableType::String)
-            .set_default_value(Some(json!("")));
+        node.add_input_pin(
+            "content",
+            "Content",
+            "Plain text that should stream to clients",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
 
         node.add_output_pin(
             "chunk",
             "Chunk",
-            "Chunk from Input String",
+            "Response chunk built from the provided text",
             VariableType::Struct,
         )
         .set_schema::<ResponseChunk>()

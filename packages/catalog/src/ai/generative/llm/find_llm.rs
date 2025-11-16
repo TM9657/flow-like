@@ -2,7 +2,7 @@ use flow_like::{
     bit::{Bit, BitModelPreference},
     flow::{
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -30,21 +30,41 @@ impl NodeLogic for FindLLMNode {
             "AI/Generative",
         );
         node.add_icon("/flow/icons/find_model.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(9)
+                .set_security(9)
+                .set_performance(8)
+                .set_reliability(8)
+                .set_governance(8)
+                .set_cost(9)
+                .build(),
+        );
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.add_input_pin("exec_in", "Input", "Trigger pin", VariableType::Execution);
         node.add_input_pin(
             "preferences",
             "Preferences",
-            "Preferences for the model",
+            "Weights and requirements that guide model selection",
             VariableType::Struct,
         )
         .set_default_value(Some(json!(BitModelPreference::default())))
         .set_schema::<BitModelPreference>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
-        node.add_output_pin("model", "Model", "The selected model", VariableType::Struct)
-            .set_schema::<Bit>();
+        node.add_output_pin(
+            "exec_out",
+            "Output",
+            "Signals completion",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "model",
+            "Model",
+            "Bit describing the best-match model",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>();
 
         node.set_long_running(true);
 
