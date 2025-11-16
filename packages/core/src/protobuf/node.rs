@@ -12,6 +12,8 @@ impl ToProto<flow_like_types::proto::NodeScores> for NodeScores {
             security: self.security as u32,
             performance: self.performance as u32,
             governance: self.governance as u32,
+            reliability: self.reliability as u32,
+            cost: self.cost as u32,
         }
     }
 }
@@ -23,6 +25,8 @@ impl FromProto<flow_like_types::proto::NodeScores> for NodeScores {
             security: proto.security as u8,
             performance: proto.performance as u8,
             governance: proto.governance as u8,
+            reliability: proto.reliability as u8,
+            cost: proto.cost as u8,
         }
     }
 }

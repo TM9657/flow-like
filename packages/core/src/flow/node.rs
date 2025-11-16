@@ -38,6 +38,8 @@ pub struct NodeScores {
     pub security: u8,
     pub performance: u8,
     pub governance: u8,
+    pub reliability: u8,
+    pub cost: u8,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
