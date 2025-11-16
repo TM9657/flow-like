@@ -291,8 +291,19 @@ export function parseBoard(
 	const oldNodesMap = new Map<number, any>();
 	const oldEdgesMap = new Map<string, any>();
 
+	// Compute a hash of all fn_refs to detect changes
+	const fnRefsHash = Object.values(board.nodes)
+		.map((n) => `${n.id}:${n.fn_refs?.fn_refs?.join(",") ?? ""}`)
+		.join(";");
+
 	for (const oldNode of oldNodes ?? []) {
 		oldNode.data.boardRef = boardRef;
+		oldNode.data.fnRefsHash = fnRefsHash;
+		// Update the node reference so fn_refs changes are reflected
+		const updatedNode = board.nodes[oldNode.id];
+		if (updatedNode) {
+			oldNode.data.node = updatedNode;
+		}
 		if (oldNode.data?.hash) oldNodesMap.set(oldNode.data?.hash, oldNode);
 	}
 
@@ -322,6 +333,7 @@ export function parseBoard(
 				data: {
 					label: node.name,
 					boardRef: boardRef,
+					fnRefsHash: fnRefsHash,
 					node: node,
 					hash: hash,
 					boardId: board.id,

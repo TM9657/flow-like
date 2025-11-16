@@ -87,17 +87,19 @@ import {
 	type ILogMetadata,
 	IPinType,
 	IValueType,
-	addNodeCommand,
 	connectPinsCommand,
 	disconnectPinsCommand,
 	moveNodeCommand,
-	removeCommentCommand,
-	removeLayerCommand,
-	removeNodeCommand,
 	updateNodeCommand,
 	upsertCommentCommand,
-	upsertLayerCommand,
 } from "../../lib";
+import {
+	handleConnection,
+	handleEdgesChange,
+	handleNodesChange,
+	handlePlaceNode,
+	handlePlacePlaceholder,
+} from "../../lib/flow-board-helpers";
 import {
 	handleCopy,
 	handlePaste,
@@ -112,7 +114,6 @@ import {
 	ICommentType,
 	type IVariable,
 } from "../../lib/schema/flow/board";
-import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
 import { type INode, IVariableType } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
 import type { ILayer } from "../../lib/schema/flow/run";
@@ -520,347 +521,64 @@ export function FlowBoard({
 
 	const placeNode = useCallback(
 		async (node: INode, position?: { x: number; y: number }) => {
-			const refs = board.data?.refs ?? {};
 			const location = screenToFlowPosition({
 				x: position?.x ?? clickPosition.x,
 				y: position?.y ?? clickPosition.y,
 			});
 
-			const result = addNodeCommand({
-				node: { ...node, coordinates: [location.x, location.y, 0] },
-				current_layer: currentLayer,
+			await handlePlaceNode({
+				node,
+				position: location,
+				droppedPin,
+				currentLayer,
+				refs: board.data?.refs ?? {},
+				boardNodes: board.data?.nodes ?? {},
+				pinCache,
+				executeCommand,
 			});
-
-			await executeCommand(result.command);
-			const new_node = result.node;
-
-			if (droppedPin) {
-				const isRefInHandle = droppedPin.id.startsWith("ref_in_");
-				const isRefOutHandle = droppedPin.id.startsWith("ref_out_");
-
-				if (isRefInHandle || isRefOutHandle) {
-					// Handle function reference connection
-					const sourceNodeId = isRefOutHandle
-						? droppedPin.id.replace("ref_out_", "")
-						: droppedPin.id.replace("ref_in_", "");
-
-					const sourceNode = board.data?.nodes[sourceNodeId];
-
-					if (sourceNode) {
-						if (isRefOutHandle) {
-							// ref_out was dropped: source node references the new node
-							const currentRefs = sourceNode.fn_refs?.fn_refs ?? [];
-							const updatedRefs = Array.from(
-								new Set([...currentRefs, new_node.id]),
-							);
-
-							const updatedNode = {
-								...sourceNode,
-								fn_refs: {
-									...sourceNode.fn_refs,
-									fn_refs: updatedRefs,
-									can_reference_fns:
-										sourceNode.fn_refs?.can_reference_fns ?? false,
-									can_be_referenced_by_fns:
-										sourceNode.fn_refs?.can_be_referenced_by_fns ?? false,
-								},
-							};
-
-							const command = updateNodeCommand({
-								node: updatedNode,
-							});
-
-							await executeCommand(command);
-						} else {
-							// ref_in was dropped: new node references the source node
-							const currentRefs = new_node.fn_refs?.fn_refs ?? [];
-							const updatedRefs = Array.from(
-								new Set([...currentRefs, sourceNodeId]),
-							);
-
-							const updatedNode = {
-								...new_node,
-								fn_refs: {
-									...new_node.fn_refs,
-									fn_refs: updatedRefs,
-									can_reference_fns:
-										new_node.fn_refs?.can_reference_fns ?? false,
-									can_be_referenced_by_fns:
-										new_node.fn_refs?.can_be_referenced_by_fns ?? false,
-								},
-							};
-
-							const command = updateNodeCommand({
-								node: updatedNode,
-							});
-
-							await executeCommand(command);
-						}
-					}
-				} else {
-					// Handle regular pin connection
-					const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
-					const pinValueType = droppedPin.value_type;
-					const pinDataType = droppedPin.data_type;
-					const schema = refs?.[droppedPin.schema ?? ""] ?? droppedPin.schema;
-					const options = droppedPin.options;
-
-					const pin = Object.values(new_node.pins).find((pin) => {
-						if (typeof schema === "string" || typeof pin.schema === "string") {
-							const pinSchema = refs?.[pin.schema ?? ""] ?? pin.schema;
-							if (
-								(pin.options?.enforce_schema || options?.enforce_schema) &&
-								schema !== pinSchema &&
-								pin.data_type !== IVariableType.Generic &&
-								droppedPin.data_type !== IVariableType.Generic
-							)
-								return false;
-						}
-						if (pin.pin_type !== pinType) return false;
-						if (pin.value_type !== pinValueType) {
-							if (
-								pinDataType !== IVariableType.Generic &&
-								pin.data_type !== IVariableType.Generic
-							)
-								return false;
-							if (
-								(options?.enforce_generic_value_type ?? false) ||
-								(pin.options?.enforce_generic_value_type ?? false)
-							)
-								return false;
-						}
-						if (
-							pin.data_type === IVariableType.Generic &&
-							pinDataType !== IVariableType.Execution
-						)
-							return true;
-						if (
-							pinDataType === IVariableType.Generic &&
-							pin.data_type !== IVariableType.Execution
-						)
-							return true;
-						return pin.data_type === pinDataType;
-					});
-					const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
-					if (!sourcePin || !sourceNode) return;
-					if (!pin) return;
-
-					const command = connectPinsCommand({
-						from_node:
-							droppedPin.pin_type === "Output" ? sourceNode.id : new_node.id,
-						from_pin: droppedPin.pin_type === "Output" ? sourcePin.id : pin?.id,
-						to_node:
-							droppedPin.pin_type === "Input" ? sourceNode.id : new_node.id,
-						to_pin: droppedPin.pin_type === "Input" ? sourcePin.id : pin?.id,
-					});
-
-					await executeCommand(command);
-				}
-			}
 		},
 		[
 			clickPosition,
-			boardId,
 			droppedPin,
 			board.data?.refs,
+			board.data?.nodes,
 			currentLayer,
 			screenToFlowPosition,
+			pinCache,
+			executeCommand,
 		],
 	);
 
 	const placePlaceholder = useCallback(
 		async (name: string, position?: { x: number; y: number }) => {
 			const delayNode = catalog.data?.find((node) => node.name === "delay");
-
-			const refs = board.data?.refs ?? {};
 			const location = screenToFlowPosition({
 				x: position?.x ?? clickPosition.x,
 				y: position?.y ?? clickPosition.y,
 			});
 
-			const layerId = createId();
-
-			const execInPin: IPin = {
-				id: createId(),
-				name: "exec_in",
-				friendly_name: "Exec In",
-				connected_to: [],
-				depends_on: [],
-				description: "",
-				index: 1,
-				pin_type: IPinType.Input,
-				value_type: IValueType.Normal,
-				data_type: IVariableType.Execution,
-				default_value: null,
-			};
-
-			const execOutPin: IPin = {
-				...execInPin,
-				id: createId(),
-				pin_type: IPinType.Output,
-				name: "exec_out",
-				friendly_name: "Exec Out",
-				index: 1,
-			};
-
-			let dataPin: IPin | undefined;
-			let connectToPinId: string | undefined;
-
-			if (droppedPin) {
-				const oppositeType =
-					droppedPin.pin_type === "Input" ? IPinType.Output : IPinType.Input;
-
-				if (droppedPin.data_type === IVariableType.Execution) {
-					connectToPinId =
-						oppositeType === IPinType.Input ? execInPin.id : execOutPin.id;
-				} else {
-					const resolvedSchema =
-						typeof droppedPin.schema === "string"
-							? (refs?.[droppedPin.schema] ?? droppedPin.schema)
-							: droppedPin.schema;
-
-					dataPin = {
-						id: createId(),
-						name: oppositeType === IPinType.Input ? "in" : "out",
-						friendly_name: oppositeType === IPinType.Input ? "In" : "Out",
-						connected_to: [],
-						depends_on: [],
-						description: "",
-						index: 2,
-						pin_type: oppositeType,
-						value_type: droppedPin.value_type,
-						data_type: droppedPin.data_type,
-						default_value: null,
-						...(resolvedSchema ? { schema: resolvedSchema } : {}),
-						...(droppedPin.options ? { options: droppedPin.options } : {}),
-					};
-
-					connectToPinId = dataPin.id;
-				}
-			}
-
-			const pins: Record<string, IPin> = {
-				[execInPin.id]: execInPin,
-				[execOutPin.id]: execOutPin,
-				...(dataPin ? { [dataPin.id]: dataPin } : {}),
-			};
-
-			const newLayerCommand = upsertLayerCommand({
-				current_layer: currentLayer,
-				layer: {
-					comments: {},
-					coordinates: [location.x, location.y, 0],
-					id: layerId,
-					name,
-					nodes: {},
-					pins,
-					type: ILayerType.Collapsed,
-					variables: {},
-					parent_id: currentLayer,
-				},
-				node_ids: [],
+			await handlePlacePlaceholder({
+				name,
+				position: location,
+				droppedPin,
+				currentLayer,
+				refs: board.data?.refs ?? {},
+				pinCache,
+				delayNode,
+				executeCommand,
+				executeCommands,
 			});
-
-			const newLayerResult = await executeCommand(newLayerCommand, false);
-			const newLayer: ILayer = newLayerResult.layer;
-
-			if (delayNode) {
-				const placeDelayCommand = addNodeCommand({
-					node: delayNode,
-					current_layer: newLayer.id,
-				});
-
-				const placedNode = await executeCommand(placeDelayCommand.command);
-				const newNode: INode = placedNode.node;
-				const newNodeInPin = Object.values(newNode.pins).find(
-					(pin) =>
-						pin.pin_type === IPinType.Input &&
-						pin.data_type === IVariableType.Execution,
-				);
-				const newNodeOutPin = Object.values(newNode.pins).find(
-					(pin) =>
-						pin.pin_type === IPinType.Output &&
-						pin.data_type === IVariableType.Execution,
-				);
-
-				const connectOutput = connectPinsCommand({
-					from_node: newNode.id,
-					from_pin: newNodeOutPin!.id,
-					to_node: newLayer.id,
-					to_pin: execOutPin.id,
-				});
-
-				const connectInput = connectPinsCommand({
-					to_node: newNode.id,
-					to_pin: newNodeInPin!.id,
-					from_node: newLayer.id,
-					from_pin: execInPin.id,
-				});
-
-				await executeCommands([connectOutput, connectInput]);
-			}
-
-			if (!droppedPin) {
-				return;
-			}
-			const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
-			const pinValueType = droppedPin.value_type;
-			const pinDataType = droppedPin.data_type;
-			const options = droppedPin.options;
-
-			const pin = Object.values(newLayer.pins).find((pin) => {
-				if (pin.pin_type !== pinType) false;
-				if (pin.value_type !== pinValueType) {
-					if (
-						pinDataType !== IVariableType.Generic &&
-						pin.data_type !== IVariableType.Generic
-					)
-						return false;
-					if (
-						(options?.enforce_generic_value_type ?? false) ||
-						(pin.options?.enforce_generic_value_type ?? false)
-					)
-						return false;
-				}
-				if (
-					pin.data_type === IVariableType.Generic &&
-					pinDataType !== IVariableType.Execution
-				)
-					return true;
-				if (
-					pinDataType === IVariableType.Generic &&
-					pin.data_type !== IVariableType.Execution
-				)
-					return true;
-				return pin.data_type === pinDataType;
-			});
-			const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
-			if (!sourcePin || !sourceNode) {
-				return;
-			}
-			if (!pin) {
-				return;
-			}
-
-			const command = connectPinsCommand({
-				from_node:
-					droppedPin.pin_type === "Output" ? sourceNode.id : newLayer.id,
-				from_pin: droppedPin.pin_type === "Output" ? sourcePin.id : pin?.id,
-				to_node: droppedPin.pin_type === "Input" ? sourceNode.id : newLayer.id,
-				to_pin: droppedPin.pin_type === "Input" ? sourcePin.id : pin?.id,
-			});
-
-			await executeCommand(command);
 		},
 		[
 			clickPosition,
-			boardId,
 			droppedPin,
 			board.data?.refs,
 			executeCommand,
+			executeCommands,
 			pinCache,
 			currentLayer,
 			screenToFlowPosition,
+			catalog.data,
 		],
 	);
 
@@ -977,79 +695,18 @@ export function FlowBoard({
 
 	const onConnect = useCallback(
 		(params: any) =>
-			setEdges((eds) => {
-				// Don't execute commands when viewing an old version
-				if (typeof version !== "undefined") {
-					return eds;
-				}
-
-				const isRefInConnection =
-					params.sourceHandle?.startsWith("ref_in_") ||
-					params.targetHandle?.startsWith("ref_in_");
-				const isRefOutConnection =
-					params.sourceHandle?.startsWith("ref_out_") ||
-					params.targetHandle?.startsWith("ref_out_");
-
-				if (isRefInConnection && isRefOutConnection) {
-					// Handle function reference connection
-					const refOutHandle = params.sourceHandle?.startsWith("ref_out_")
-						? params.sourceHandle
-						: params.targetHandle;
-					const refInHandle = params.sourceHandle?.startsWith("ref_in_")
-						? params.sourceHandle
-						: params.targetHandle;
-
-					const refOutNodeId = refOutHandle.replace("ref_out_", "");
-					const refInNodeId = refInHandle.replace("ref_in_", "");
-
-					const refOutNode = board.data?.nodes[refOutNodeId];
-
-					if (refOutNode) {
-						const currentRefs = refOutNode.fn_refs?.fn_refs ?? [];
-						const updatedRefs = Array.from(
-							new Set([...currentRefs, refInNodeId]),
-						);
-
-						const updatedNode = {
-							...refOutNode,
-							fn_refs: {
-								...refOutNode.fn_refs,
-								fn_refs: updatedRefs,
-								can_reference_fns:
-									refOutNode.fn_refs?.can_reference_fns ?? false,
-								can_be_referenced_by_fns:
-									refOutNode.fn_refs?.can_be_referenced_by_fns ?? false,
-							},
-						};
-
-						const command = updateNodeCommand({
-							node: updatedNode,
-						});
-
-						executeCommand(command);
-					}
-
-					return addEdge(params, eds);
-				}
-
-				const [sourcePin, sourceNode] = pinCache.get(params.sourceHandle) || [];
-				const [targetPin, targetNode] = pinCache.get(params.targetHandle) || [];
-
-				if (!sourcePin || !targetPin) return eds;
-				if (!sourceNode || !targetNode) return eds;
-
-				const command = connectPinsCommand({
-					from_node: sourceNode.id,
-					from_pin: sourcePin.id,
-					to_node: targetNode.id,
-					to_pin: targetPin.id,
-				});
-
-				executeCommand(command);
-
-				return addEdge(params, eds);
-			}),
-		[setEdges, pinCache, boardId, version, executeCommand, board.data?.nodes],
+			setEdges((eds) =>
+				handleConnection({
+					params,
+					version,
+					boardNodes: board.data?.nodes ?? {},
+					pinCache,
+					executeCommand,
+					addEdge: (p: any, e: any[]) => addEdge(p, e),
+					currentEdges: eds,
+				}),
+			),
+		[setEdges, pinCache, version, executeCommand, board.data?.nodes],
 	);
 
 	const onSelectionChange = useCallback<OnSelectionChangeFunc<Node, Edge>>(
@@ -1123,216 +780,37 @@ export function FlowBoard({
 
 	const onNodesChangeIntercept: OnNodesChange = useCallback(
 		(changes: any[]) =>
-			setNodes((nds) => {
-				if (!changes) return applyNodeChanges(changes, nds);
-
-				const selectChanges = changes.filter(
-					(change: any) => change.type === "select",
-				);
-				for (const change of selectChanges) {
-					const selectedId = change.id;
-
-					if (change.selected) selected.current.add(selectedId);
-					if (!change.selected) selected.current.delete(selectedId);
-				}
-
-				// Don't execute commands when viewing an old version
-				if (typeof version !== "undefined") {
-					return applyNodeChanges(changes, nds);
-				}
-
-				const removeChanges = changes.filter(
-					(change: any) => change.type === "remove",
-				);
-
-				// Track nodes being deleted so edge handler can skip veil edge commands
-				if (removeChanges.length > 0) {
-					for (const change of removeChanges) {
-						const foundNode = Object.values(board.data?.nodes || {}).find(
-							(node) => node.id === change.id,
-						);
-						if (foundNode) {
-							deletingNodesRef.current.add(foundNode.id);
-						}
-					}
-				}
-
-				// Execute remove commands - don't apply changes immediately
-				// The board will update after backend completes
-				if (removeChanges.length > 0) {
-					executeCommands(
-						removeChanges
-							.map((change) => {
-								const foundNode = Object.values(board.data?.nodes || {}).find(
-									(node) => node.id === change.id,
-								);
-								if (foundNode) {
-									return removeNodeCommand({
-										node: foundNode,
-										connected_nodes: [],
-									});
-								}
-								const foundComment = Object.values(
-									board.data?.comments || {},
-								).find((comment) => comment.id === change.id);
-								if (foundComment) {
-									return removeCommentCommand({
-										comment: foundComment,
-									});
-								}
-
-								const foundLayer = Object.values(board.data?.layers || {}).find(
-									(layer) => layer.id === change.id,
-								);
-
-								if (foundLayer) {
-									return removeLayerCommand({
-										child_layers: [],
-										layer: foundLayer,
-										layer_nodes: [],
-										layers: [],
-										nodes: [],
-										preserve_nodes: false,
-									});
-								}
-
-								return undefined;
-							})
-							.filter((command) => command !== undefined) as any[],
-					).finally(() => {
-						// Clear the deleting nodes tracker
-						deletingNodesRef.current.clear();
-					});
-				}
-
-				// Apply non-remove changes immediately (select, position, etc.)
-				const nonRemoveChanges = changes.filter(
-					(change: any) => change.type !== "remove",
-				);
-				return applyNodeChanges(nonRemoveChanges, nds);
-			}),
-		[setNodes, board.data, boardId, executeCommands, version],
+			setNodes((nds) =>
+				handleNodesChange({
+					changes,
+					currentNodes: nds,
+					selected,
+					version,
+					boardData: board.data,
+					deletingNodesRef,
+					executeCommands,
+					applyNodeChanges,
+				}),
+			),
+		[setNodes, board.data, executeCommands, version],
 	);
 
 	const onEdgesChange: OnEdgesChange = useCallback(
 		(changes: any[]) =>
-			setEdges((eds) => {
-				if (!changes || changes.length === 0)
-					return applyEdgeChanges(changes, eds);
-
-				const selectChanges = changes.filter(
-					(change: any) => change.type === "select",
-				);
-				for (const change of selectChanges) {
-					const selectedId = change.id;
-					const selectedEdge: any = eds.find((edge) => edge.id === selectedId);
-
-					if (change.selected) selected.current.add(selectedId);
-					if (!change.selected) selected.current.delete(selectedId);
-
-					if (selectedEdge.data_type !== "Execution")
-						eds = eds.map((edge) =>
-							edge.id === selectedId
-								? { ...edge, animated: !change.selected }
-								: edge,
-						);
-				}
-
-				// Don't execute commands when viewing an old version
-				if (typeof version !== "undefined") {
-					return applyEdgeChanges(changes, eds);
-				}
-
-				const removeChanges = changes.filter(
-					(change: any) => change.type === "remove",
-				);
-
-				// Execute remove commands - don't apply changes immediately
-				// The board will update after backend completes
-				if (removeChanges.length > 0) {
-					executeCommands(
-						removeChanges
-							.map((change: any) => {
-								const selectedId = change.id;
-								const [fromPinId, toPinId] = selectedId.split("-");
-
-								const isRefInConnection =
-									fromPinId?.startsWith("ref_in_") ||
-									toPinId?.startsWith("ref_in_");
-								const isRefOutConnection =
-									fromPinId?.startsWith("ref_out_") ||
-									toPinId?.startsWith("ref_out_");
-
-								if (isRefInConnection && isRefOutConnection) {
-									const refOutHandle = fromPinId?.startsWith("ref_out_")
-										? fromPinId
-										: toPinId;
-									const refInHandle = fromPinId?.startsWith("ref_in_")
-										? fromPinId
-										: toPinId;
-
-									const refOutNodeId = refOutHandle.replace("ref_out_", "");
-									const refInNodeId = refInHandle.replace("ref_in_", "");
-
-									// If either node is being deleted, skip - RemoveNodeCommand will handle cleanup
-									if (
-										deletingNodesRef.current.has(refOutNodeId) ||
-										deletingNodesRef.current.has(refInNodeId)
-									) {
-										return undefined;
-									}
-
-									// Manual veil edge deletion - update source node's fn_refs
-									const refOutNode = board.data?.nodes[refOutNodeId];
-									if (refOutNode) {
-										const currentRefs = refOutNode.fn_refs?.fn_refs ?? [];
-										const updatedRefs = currentRefs.filter(
-											(ref: string) => ref !== refInNodeId,
-										);
-
-										const updatedNode = {
-											...refOutNode,
-											fn_refs: {
-												...refOutNode.fn_refs,
-												fn_refs: updatedRefs,
-												can_reference_fns:
-													refOutNode.fn_refs?.can_reference_fns ?? false,
-												can_be_referenced_by_fns:
-													refOutNode.fn_refs?.can_be_referenced_by_fns ?? false,
-											},
-										};
-
-										return updateNodeCommand({
-											node: updatedNode,
-										});
-									}
-									return undefined;
-								}
-
-								const [fromPin, fromNode] = pinCache.get(fromPinId) || [];
-								const [toPin, toNode] = pinCache.get(toPinId) || [];
-
-								if (!fromPin || !toPin) return undefined;
-								if (!fromNode || !toNode) return undefined;
-
-								return disconnectPinsCommand({
-									from_node: fromNode.id,
-									from_pin: fromPin.id,
-									to_node: toNode.id,
-									to_pin: toPin.id,
-								});
-							})
-							.filter((command: any) => command !== undefined) as any[],
-					);
-				}
-
-				// Apply non-remove changes immediately (select, reset, etc.)
-				const nonRemoveChanges = changes.filter(
-					(change: any) => change.type !== "remove",
-				);
-				return applyEdgeChanges(nonRemoveChanges, eds);
-			}),
-		[setEdges, board.data, boardId, pinCache, executeCommands, version],
+			setEdges((eds) =>
+				handleEdgesChange({
+					changes,
+					currentEdges: eds,
+					selected,
+					version,
+					boardData: board.data,
+					pinCache,
+					deletingNodesRef,
+					executeCommands,
+					applyEdgeChanges,
+				}),
+			),
+		[setEdges, board.data, pinCache, executeCommands, version],
 	);
 
 	const onReconnectStart = useCallback(() => {

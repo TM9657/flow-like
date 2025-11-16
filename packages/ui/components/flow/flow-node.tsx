@@ -113,6 +113,7 @@ export type FlowNode = Node<
 		appId: string;
 		transparent?: boolean;
 		boardRef: RefObject<IBoard | undefined>;
+		fnRefsHash?: string;
 		version?: [number, number, number];
 		onExecute: (node: INode, payload?: object) => Promise<void>;
 		onCopy: () => Promise<void>;
@@ -539,6 +540,21 @@ const FlowNodeInner = memo(
 			],
 		);
 
+		// Compute connection states efficiently - only track the specific fn_refs we care about
+		const refInConnected = useMemo(() => {
+			const board = props.data.boardRef.current;
+			if (!board) return false;
+			const currentNodeId = props.data.node.id;
+			// Only check nodes, return boolean to avoid object reference changes
+			return Object.values(board.nodes || {}).some((node) =>
+				node.fn_refs?.fn_refs?.includes(currentNodeId),
+			);
+		}, [props.data.node.id, props.data.fnRefsHash]);
+
+		const refOutConnected = useMemo(() => {
+			return (props.data.node.fn_refs?.fn_refs?.length ?? 0) > 0;
+		}, [props.data.node.fn_refs?.fn_refs?.length]);
+
 		const renderFnRefInputs = useMemo(() => {
 			const canBeReferencedByFns =
 				props.data.node.fn_refs?.can_be_referenced_by_fns ?? false;
@@ -554,25 +570,32 @@ const FlowNodeInner = memo(
 						width: 12,
 						height: 12,
 						borderRadius: 2,
-						background: `
-					linear-gradient(
-						135deg,
-						var(--pin-fn-ref) 0%,
-						color-mix(in oklch, var(--pin-fn-ref) 90%, white) 50%,
-						var(--pin-fn-ref) 100%
-					)
-				`,
+						background: refInConnected
+							? `
+				linear-gradient(
+					135deg,
+					var(--pin-fn-ref) 0%,
+					color-mix(in oklch, var(--pin-fn-ref) 90%, white) 50%,
+					var(--pin-fn-ref) 100%
+				)
+			`
+							: "var(--background)",
 						border: "1px solid var(--pin-fn-ref)",
 						padding: 0,
-						boxShadow: `
-			0 0 6px color-mix(in oklch, var(--pin-fn-ref) 30%, transparent),
-			inset 0 1px 1px color-mix(in oklch, white 15%, transparent)
-		`,
+						boxShadow: refInConnected
+							? `
+		0 0 6px color-mix(in oklch, var(--pin-fn-ref) 30%, transparent),
+		inset 0 1px 1px color-mix(in oklch, white 15%, transparent)
+	`
+							: "none",
 					}}
 				/>
 			);
-		}, [props.data.node]);
-
+		}, [
+			props.data.node.fn_refs?.can_be_referenced_by_fns,
+			refInConnected,
+			props.data.node.id,
+		]);
 		const renderFnRefOutputs = useMemo(() => {
 			const canBeReferencedByFns =
 				props.data.node.fn_refs?.can_reference_fns ?? false;
@@ -588,24 +611,32 @@ const FlowNodeInner = memo(
 						width: 12,
 						height: 12,
 						borderRadius: 2,
-						background: `
-				radial-gradient(
-					circle at 30% 30%,
-					color-mix(in oklch, var(--pin-fn-ref) 100%, white 20%),
-					var(--pin-fn-ref) 70%
-				)
-			`,
+						background: refOutConnected
+							? `
+			radial-gradient(
+				circle at 30% 30%,
+				color-mix(in oklch, var(--pin-fn-ref) 100%, white 20%),
+				var(--pin-fn-ref) 70%
+			)
+		`
+							: "var(--background)",
 						border: "1px solid var(--pin-fn-ref)",
 						padding: 0,
-						boxShadow: `
-				0 0 8px color-mix(in oklch, var(--pin-fn-ref) 40%, transparent),
-				0 1px 2px color-mix(in oklch, black 20%, transparent),
-				inset 0 1px 1px color-mix(in oklch, white 20%, transparent)
-			`,
+						boxShadow: refOutConnected
+							? `
+			0 0 8px color-mix(in oklch, var(--pin-fn-ref) 40%, transparent),
+			0 1px 2px color-mix(in oklch, black 20%, transparent),
+			inset 0 1px 1px color-mix(in oklch, white 20%, transparent)
+		`
+							: "none",
 					}}
 				/>
 			);
-		}, [props.data.node]);
+		}, [
+			props.data.node.fn_refs?.can_reference_fns,
+			refOutConnected,
+			props.data.node.id,
+		]);
 		const playNode = useMemo(() => {
 			if (!props.data.node.start) return null;
 			if (executionState === "done" || executing)
