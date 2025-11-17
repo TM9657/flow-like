@@ -6,7 +6,7 @@ use flow_like::{
     flow::{
         board::Board,
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -17,12 +17,83 @@ use flow_like_model_provider::history::{
 };
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
+#[crate::register_node]
 #[derive(Default)]
 pub struct MakeHistoryMessageNode {}
 
 impl MakeHistoryMessageNode {
     pub fn new() -> Self {
         MakeHistoryMessageNode {}
+    }
+
+    fn add_role_pin(node: &mut Node) {
+        node.add_input_pin("role", "Role", "Author role", VariableType::String)
+            .set_options(
+                PinOptions::new()
+                    .set_valid_values(vec![
+                        "Assistant".to_string(),
+                        "System".to_string(),
+                        "User".to_string(),
+                        "Tool".to_string(),
+                    ])
+                    .build(),
+            )
+            .set_default_value(Some(json!("User")));
+    }
+
+    fn add_type_pin(node: &mut Node) {
+        node.add_input_pin("type", "Type", "Message content type", VariableType::String)
+            .set_options(
+                PinOptions::new()
+                    .set_valid_values(vec!["Text".to_string(), "Image".to_string()])
+                    .build(),
+            )
+            .set_default_value(Some(json!("Text")));
+    }
+
+    fn parse_role(role: &str) -> Role {
+        match role {
+            "Assistant" => Role::Assistant,
+            "System" => Role::System,
+            "Tool" => Role::Tool,
+            _ => Role::User,
+        }
+    }
+
+    async fn read_tool_call_id(
+        role: &Role,
+        context: &mut ExecutionContext,
+    ) -> flow_like_types::Result<Option<String>> {
+        if matches!(role, Role::Tool) {
+            context.evaluate_pin("tool_call_id").await.map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn build_content(
+        message_type: &str,
+        context: &mut ExecutionContext,
+    ) -> flow_like_types::Result<MessageContent> {
+        match message_type {
+            "Image" => {
+                let image_pin: String = context.evaluate_pin("image").await?;
+                Ok(MessageContent::Contents(vec![Content::Image {
+                    content_type: ContentType::ImageUrl,
+                    image_url: ImageUrl {
+                        url: image_pin,
+                        detail: None,
+                    },
+                }]))
+            }
+            _ => {
+                let text_pin: String = context.evaluate_pin("text").await?;
+                Ok(MessageContent::Contents(vec![Content::Text {
+                    content_type: ContentType::Text,
+                    text: text_pin,
+                }]))
+            }
+        }
     }
 }
 
@@ -32,70 +103,43 @@ impl NodeLogic for MakeHistoryMessageNode {
         let mut node = Node::new(
             "ai_generative_make_history_message",
             "Make Message",
-            "Creates a ChatHistory struct",
+            "Creates a chat message with text or image content and optional tool metadata",
             "AI/Generative/History/Message",
         );
         node.add_icon("/flow/icons/message.svg");
-
-        node.add_input_pin(
-            "role",
-            "Role",
-            "The Role of the Message Author",
-            VariableType::String,
-        )
-        .set_options(
-            PinOptions::new()
-                .set_valid_values(vec![
-                    "Assistant".to_string(),
-                    "System".to_string(),
-                    "User".to_string(),
-                    "Tool".to_string(),
-                ])
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
                 .build(),
-        )
-        .set_default_value(Some(json!("User")));
-
-        node.add_input_pin("type", "Type", "Message Type", VariableType::String)
-            .set_options(
-                PinOptions::new()
-                    .set_valid_values(vec!["Text".to_string(), "Image".to_string()])
-                    .build(),
-            )
-            .set_default_value(Some(json!("Text")));
+        );
+        Self::add_role_pin(&mut node);
+        Self::add_type_pin(&mut node);
 
         node.add_output_pin(
             "message",
             "Message",
-            "Constructed Message",
+            "Newly constructed chat message",
             VariableType::Struct,
         )
         .set_schema::<HistoryMessage>();
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        let role: String = context.evaluate_pin("role").await?;
+        let role_input: String = context.evaluate_pin("role").await?;
         let message_type: String = context.evaluate_pin("type").await?;
+        let role = Self::parse_role(&role_input);
+        let tool_call_id = Self::read_tool_call_id(&role, context).await?;
+        let content = Self::build_content(&message_type, context).await?;
 
-        let role: Role = match role.as_str() {
-            "Assistant" => Role::Assistant,
-            "System" => Role::System,
-            "User" => Role::User,
-            "Tool" => Role::Tool,
-            _ => Role::User,
-        };
-
-        let tool_call_id = match role {
-            Role::Tool => {
-                let tool_call_id: String = context.evaluate_pin("tool_call_id").await?;
-                Some(tool_call_id)
-            }
-            _ => None,
-        };
-
-        let mut message: HistoryMessage = HistoryMessage {
-            content: MessageContent::Contents(vec![]),
+        let message = HistoryMessage {
+            content,
             role,
             name: None,
             tool_call_id,
@@ -103,29 +147,7 @@ impl NodeLogic for MakeHistoryMessageNode {
             annotations: None,
         };
 
-        match message_type.as_str() {
-            "Text" => {
-                let text_pin: String = context.evaluate_pin("text").await?;
-                message.content = MessageContent::Contents(vec![Content::Text {
-                    content_type: ContentType::Text,
-                    text: text_pin,
-                }]);
-            }
-            "Image" => {
-                let image_pin: String = context.evaluate_pin("image").await?;
-                message.content = MessageContent::Contents(vec![Content::Image {
-                    content_type: ContentType::ImageUrl,
-                    image_url: ImageUrl {
-                        url: image_pin,
-                        detail: None,
-                    },
-                }]);
-            }
-            _ => {}
-        }
-
         context.set_pin_value("message", json!(message)).await?;
-
         Ok(())
     }
 

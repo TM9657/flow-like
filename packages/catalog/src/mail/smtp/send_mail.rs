@@ -17,6 +17,7 @@ use crate::{
     mail::{generate_mail_footer_html, generate_mail_footer_plain},
 };
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SmtpSendMailNode;
 

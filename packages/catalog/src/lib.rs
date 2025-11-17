@@ -2,6 +2,10 @@ use std::sync::Arc;
 
 use flow_like::flow::node::NodeLogic;
 
+// Re-export for use in the macro
+pub use flow_like_catalog_macros::register_node;
+pub use inventory;
+
 pub mod ai;
 pub mod bit;
 pub mod control;
@@ -17,24 +21,25 @@ pub mod utils;
 pub mod variables;
 pub mod web;
 
-pub async fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {
-    let catalog: Vec<Arc<dyn NodeLogic>> = vec![
-        ai::register_functions().await,
-        control::register_functions().await,
-        logging::register_functions().await,
-        events::register_functions().await,
-        utils::register_functions().await,
-        structs::register_functions().await,
-        data::register_functions().await,
-        bit::register_functions().await,
-        image::register_functions().await,
-        variables::register_functions().await,
-        web::register_functions().await,
-        mail::register_functions().await,
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
+/// A node constructor function type
+pub struct NodeConstructor {
+    constructor: fn() -> Arc<dyn NodeLogic>,
+}
 
-    catalog
+impl NodeConstructor {
+    pub const fn new(constructor: fn() -> Arc<dyn NodeLogic>) -> Self {
+        Self { constructor }
+    }
+
+    pub fn construct(&self) -> Arc<dyn NodeLogic> {
+        (self.constructor)()
+    }
+}
+
+inventory::collect!(NodeConstructor);
+
+pub fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {
+    inventory::iter::<NodeConstructor>()
+        .map(|nc| nc.construct())
+        .collect()
 }

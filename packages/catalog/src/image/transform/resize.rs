@@ -14,6 +14,7 @@ use flow_like_types::{
     json::json,
 };
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ResizeImageNode {}
 

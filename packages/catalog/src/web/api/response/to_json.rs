@@ -11,6 +11,7 @@ use flow_like_types::async_trait;
 
 use crate::web::api::HttpResponse;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ToJsonNode {}
 

@@ -24,20 +24,73 @@ pub enum NodeState {
     Error,
 }
 
-/// Represents quality metrics for a node, with scores ranging from 0 to 10.
-/// Higher scores indicate worse performance in each category.
+/// Represents quality metrics for a node, with scores ranging from 0 to 10 (low - high).
+/// Higher values indicate higher risk/impact in the given category. Use 0 for "none/low"
+/// and 10 for "very high".
 ///
 /// # Score Categories
-/// * `privacy` - Measures data protection and confidentiality level
-/// * `security` - Assesses resistance against potential attacks
-/// * `performance` - Evaluates computational efficiency and speed
-/// * `governance` - Indicates compliance with policies and regulations
+/// * `privacy` - Measures data protection and confidentiality (0 low - 10 high).
+/// * `security` - Assesses resistance against potential attacks and exposure (0 low - 10 high).
+/// * `performance` - Evaluates computational efficiency and speed. Higher means worse performance.
+/// * `governance` - Indicates compliance and auditability with policies and regulations.
+/// * `reliability` - Measures stability, error rates and recoverability.
+/// * `cost` - Represents resource/cost impact for running this node.
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct NodeScores {
     pub privacy: u8,
     pub security: u8,
     pub performance: u8,
     pub governance: u8,
+    pub reliability: u8,
+    pub cost: u8,
+}
+
+impl NodeScores {
+    pub fn new() -> Self {
+        NodeScores {
+            privacy: 0,
+            security: 0,
+            performance: 0,
+            governance: 0,
+            reliability: 0,
+            cost: 0,
+        }
+    }
+
+    pub fn set_privacy(&mut self, score: u8) -> &mut Self {
+        self.privacy = score;
+        self
+    }
+    pub fn set_security(&mut self, score: u8) -> &mut Self {
+        self.security = score;
+        self
+    }
+    pub fn set_performance(&mut self, score: u8) -> &mut Self {
+        self.performance = score;
+        self
+    }
+    pub fn set_governance(&mut self, score: u8) -> &mut Self {
+        self.governance = score;
+        self
+    }
+    pub fn set_reliability(&mut self, score: u8) -> &mut Self {
+        self.reliability = score;
+        self
+    }
+    pub fn set_cost(&mut self, score: u8) -> &mut Self {
+        self.cost = score;
+        self
+    }
+    pub fn build(&self) -> Self {
+        self.clone()
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct FnRefs {
+    pub fn_refs: Vec<String>,
+    pub can_reference_fns: bool,
+    pub can_be_referenced_by_fns: bool,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -59,6 +112,7 @@ pub struct Node {
     pub event_callback: Option<bool>,
     pub layer: Option<String>,
     pub hash: Option<u64>,
+    pub fn_refs: Option<FnRefs>,
 }
 
 impl Node {
@@ -81,6 +135,7 @@ impl Node {
             event_callback: None,
             layer: None,
             hash: None,
+            fn_refs: None,
         }
     }
 
@@ -98,6 +153,30 @@ impl Node {
 
     pub fn set_event_callback(&mut self, callback: bool) {
         self.event_callback = Some(callback);
+    }
+
+    pub fn set_can_be_referenced_by_fns(&mut self, can_be_referenced: bool) {
+        if let Some(fn_refs) = &mut self.fn_refs {
+            fn_refs.can_be_referenced_by_fns = can_be_referenced;
+        } else {
+            self.fn_refs = Some(FnRefs {
+                fn_refs: Vec::new(),
+                can_reference_fns: false,
+                can_be_referenced_by_fns: can_be_referenced,
+            });
+        }
+    }
+
+    pub fn set_can_reference_fns(&mut self, can_reference: bool) {
+        if let Some(fn_refs) = &mut self.fn_refs {
+            fn_refs.can_reference_fns = can_reference;
+        } else {
+            self.fn_refs = Some(FnRefs {
+                fn_refs: Vec::new(),
+                can_reference_fns: can_reference,
+                can_be_referenced_by_fns: false,
+            });
+        }
     }
 
     pub fn add_input_pin(
@@ -194,6 +273,10 @@ impl Node {
 
     pub fn mut_scores(&mut self) -> &mut NodeScores {
         self.scores.as_mut().unwrap()
+    }
+
+    pub fn set_scores(&mut self, scores: NodeScores) {
+        self.scores = Some(scores);
     }
 
     pub fn harmonize_schema(&mut self, pins: Vec<&str>) -> Option<String> {
@@ -314,6 +397,8 @@ impl Node {
                 scores.security,
                 scores.performance,
                 scores.governance,
+                scores.reliability,
+                scores.cost,
             ]);
         }
 
@@ -447,5 +532,32 @@ mod tests {
             super::Node::from_proto(flow_like_types::proto::Node::decode(&buf[..]).unwrap());
 
         assert_eq!(node.id, deser_node.id);
+    }
+
+    #[test]
+    fn node_hash_changes_with_scores() {
+        use super::NodeScores;
+
+        let mut node = super::Node::new("test_node", "Test", "desc", "Cat");
+        node.scores = Some(NodeScores {
+            privacy: 0,
+            security: 0,
+            performance: 0,
+            governance: 0,
+            reliability: 0,
+            cost: 0,
+        });
+        node.hash();
+        let first = node.hash.unwrap();
+
+        // change reliability and cost only
+        if let Some(scores) = &mut node.scores {
+            scores.reliability = 9;
+            scores.cost = 3;
+        }
+        node.hash();
+        let second = node.hash.unwrap();
+
+        assert_ne!(first, second, "Node hash should change when scores change");
     }
 }

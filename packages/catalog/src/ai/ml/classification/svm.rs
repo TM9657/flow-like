@@ -12,7 +12,7 @@ use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -28,6 +28,7 @@ use std::sync::Arc;
 
 const GAUSSIAN_KERNEL_EPS: f64 = 30.0;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct FitSVMMultiClassNode {}
 
@@ -48,12 +49,28 @@ impl NodeLogic for FitSVMMultiClassNode {
         );
         node.add_icon("/flow/icons/chart-network.svg");
 
-        node.add_input_pin("exec_in", "Input", "Start Fitting", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(6)
+                .set_security(6)
+                .set_performance(6)
+                .set_governance(6)
+                .set_reliability(7)
+                .set_cost(7)
+                .build(),
+        );
+
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger that begins SVM training",
+            VariableType::Execution,
+        );
 
         node.add_input_pin(
             "source",
             "Data Source",
-            "Data Source (DB or CSV)",
+            "Choose which backend supplies the training data",
             VariableType::String,
         )
         .set_options(
@@ -66,14 +83,14 @@ impl NodeLogic for FitSVMMultiClassNode {
         node.add_output_pin(
             "exec_out",
             "Done",
-            "Done Fitting Model",
+            "Activated once training completes",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "model",
             "Model",
-            "Fitted/Trained SVM Classification Model",
+            "Thread-safe handle to the trained SVM classifier",
             VariableType::Struct,
         )
         .set_schema::<NodeMLModel>()

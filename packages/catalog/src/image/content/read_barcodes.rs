@@ -55,6 +55,7 @@ impl From<RXingResult> for Barcode {
 }
 
 /// # Detect and Decode (Bar)codes in Images
+#[crate::register_node]
 #[derive(Default)]
 pub struct ReadBarcodesNode {}
 

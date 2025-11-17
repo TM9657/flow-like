@@ -15,6 +15,7 @@ use flow_like::{
 };
 use flow_like_types::{Value, async_trait, json::from_slice};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct CallReferenceNode {}
 
@@ -107,13 +108,17 @@ impl NodeLogic for CallReferenceNode {
         sub_context.end_trace();
         context.push_sub_context(&mut sub_context);
 
-        if run.is_err() {
+        if let Err(error) = run {
             let node_name = node_ref.lock().await.friendly_name.clone();
-            let error = run.err().unwrap();
             context.log_message(
                 &format!("Error: {:?} calling function {}", error, node_name),
                 LogLevel::Error,
             );
+            return Err(flow_like_types::anyhow!(
+                "Failed to execute function {}: {:?}",
+                node_name,
+                error
+            ));
         }
 
         context.activate_exec_pin("exec_out").await?;

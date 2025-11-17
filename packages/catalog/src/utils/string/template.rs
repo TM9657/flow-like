@@ -15,6 +15,7 @@ use std::{
 };
 
 #[derive(Default)]
+#[crate::register_node]
 #[doc = "Render jinja templates based on a template string and dynamic placeholder inputs."]
 pub struct TemplateStringNode {}
 

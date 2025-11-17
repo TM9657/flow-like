@@ -136,19 +136,18 @@ export enum IValueType {
 }
 
 /**
- * Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores
- * indicate worse performance in each category.
+ * Represents quality metrics for a node. Scores range from 0 to 10 (low - high).
+ * A higher score indicates a larger issue or resource impact in the category.
  *
- * # Score Categories * `privacy` - Measures data protection and confidentiality level *
- * `security` - Assesses resistance against potential attacks * `performance` - Evaluates
- * computational efficiency and speed * `governance` - Indicates compliance with policies
- * and regulations
+ * Score Categories (brief): privacy, security, performance, governance, reliability, cost.
  */
 export interface INodeScores {
 	governance: number;
 	performance: number;
 	privacy: number;
 	security: number;
+	reliability: number;
+	cost: number;
 	[property: string]: any;
 }
 

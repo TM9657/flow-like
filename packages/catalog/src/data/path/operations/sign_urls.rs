@@ -11,6 +11,7 @@ use flow_like::{
 use flow_like_types::{async_trait, bail, json::json};
 use std::time::Duration;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SignUrlsNode {}
 

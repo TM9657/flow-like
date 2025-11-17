@@ -2,7 +2,7 @@ use crate::data::path::FlowPath;
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -67,6 +67,7 @@ impl Drop for DoclingCacheObject {
     }
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct DoclingNode {}
 
@@ -82,21 +83,44 @@ impl NodeLogic for DoclingNode {
         let mut node = Node::new(
             "ai_generative_processing_docling",
             "Docling Parse",
-            "Parses the input text using Docling",
+            "Runs a local Docling service to convert PDF and document files into markdown text.",
             "AI/Processing",
         );
         node.add_icon("/flow/icons/bot-invoke.svg");
 
-        node.add_input_pin("exec_in", "Input", "", VariableType::Execution);
+        // Local document parsing (Docling) running on the same host.
+        // Very good privacy & security (no cloud). Performance and reliability are medium, cost is low.
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(9)
+                .set_security(9)
+                .set_performance(5)
+                .set_governance(8)
+                .set_reliability(6)
+                .set_cost(8)
+                .build(),
+        );
 
-        node.add_input_pin("file", "File", "The file to process", VariableType::Struct)
-            .set_schema::<FlowPath>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger to start parsing the file with Docling.",
+            VariableType::Execution,
+        );
+
+        node.add_input_pin(
+            "file",
+            "File",
+            "Document file to parse (e.g. PDF).",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
             "image_export_mode",
             "Image Export Mode",
-            "How to handle images (EMBEDDED, REFERENCED, etc.)",
+            "How embedded images in the document should be exported (embedded, placeholder, referenced).",
             VariableType::String,
         )
         .set_default_value(Some(json!("embedded")))
@@ -113,7 +137,7 @@ impl NodeLogic for DoclingNode {
         node.add_input_pin(
             "force_ocr",
             "Force OCR",
-            "Force OCR processing",
+            "Always run OCR even when text is already available in the document.",
             VariableType::Boolean,
         )
         .set_default_value(Some(json!(false)));
@@ -121,7 +145,7 @@ impl NodeLogic for DoclingNode {
         node.add_input_pin(
             "ocr_lang",
             "OCR Language",
-            "Language for OCR processing",
+            "Language hint for OCR processing (e.g. 'en', 'de').",
             VariableType::String,
         )
         .set_default_value(Some(json!("")));
@@ -129,7 +153,7 @@ impl NodeLogic for DoclingNode {
         node.add_input_pin(
             "pdf_backend",
             "PDF Backend",
-            "PDF processing backend",
+            "PDF parsing backend implementation to use.",
             VariableType::String,
         )
         .set_default_value(Some(json!("dlparse_v4")))
@@ -147,7 +171,7 @@ impl NodeLogic for DoclingNode {
         node.add_input_pin(
             "table_mode",
             "Table Mode",
-            "Enable table processing",
+            "Enable enhanced table detection and extraction.",
             VariableType::Boolean,
         )
         .set_default_value(Some(json!(false)));
@@ -155,14 +179,14 @@ impl NodeLogic for DoclingNode {
         node.add_output_pin(
             "exec_out",
             "Output",
-            "The parsed output",
+            "Execution output pin triggered after parsing completed successfully.",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "markdown",
             "Markdown",
-            "The parsed output",
+            "Markdown representation of the parsed document.",
             VariableType::String,
         );
 

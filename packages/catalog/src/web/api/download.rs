@@ -13,6 +13,7 @@ use crate::data::path::FlowPath;
 
 use super::HttpRequest;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct HttpDownloadNode {}
 

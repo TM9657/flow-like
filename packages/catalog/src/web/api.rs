@@ -1,4 +1,4 @@
-use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
+use flow_like::flow::execution::context::ExecutionContext;
 use flow_like_storage::object_store::PutPayload;
 use flow_like_types::{Value, reqwest};
 use futures::StreamExt;
@@ -247,17 +247,4 @@ impl HttpResponse {
     pub fn to_bytes(&self) -> Vec<u8> {
         self.body.as_ref().unwrap_or(&vec![]).clone()
     }
-}
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let mut out: Vec<Arc<dyn NodeLogic>> = vec![
-        Arc::new(download::HttpDownloadNode::default()),
-        Arc::new(fetch::HttpFetchNode::default()),
-        Arc::new(streaming_fetch::StreamingHttpFetchNode::default()),
-    ];
-
-    out.extend(request::register_functions().await);
-    out.extend(response::register_functions().await);
-
-    out
 }

@@ -1,5 +1,5 @@
 use crate::data::path::FlowPath;
-use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
+use flow_like::flow::execution::context::ExecutionContext;
 use flow_like_types::image::{DynamicImage, ImageBuffer, Rgba};
 use hayro::{Pdf, Pixmap};
 use std::sync::Arc;
@@ -7,14 +7,6 @@ use std::sync::Arc;
 pub mod page_count;
 pub mod page_to_image;
 pub mod pdf_to_images;
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    vec![
-        Arc::new(page_count::PdfPageCountNode),
-        Arc::new(page_to_image::PdfPageToImageNode),
-        Arc::new(pdf_to_images::PdfToImagesNode),
-    ]
-}
 
 pub(super) async fn load_pdf_from_flowpath(
     context: &mut ExecutionContext,

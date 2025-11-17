@@ -9,6 +9,7 @@ use flow_like::{
 };
 use flow_like_types::{async_trait, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct PathFromStorageDirNode {}
 
@@ -29,20 +30,6 @@ impl NodeLogic for PathFromStorageDirNode {
         );
         node.add_icon("/flow/icons/path.svg");
 
-        node.add_input_pin(
-            "exec_in",
-            "Input",
-            "Initiate Execution",
-            VariableType::Execution,
-        );
-
-        node.add_output_pin(
-            "exec_out",
-            "Output",
-            "Done with the Execution",
-            VariableType::Execution,
-        );
-
         node.add_output_pin("path", "Path", "Output Path", VariableType::Struct)
             .set_schema::<FlowPath>();
 
@@ -58,14 +45,10 @@ impl NodeLogic for PathFromStorageDirNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        context.deactivate_exec_pin("exec_out").await?;
-
         let node_scope: bool = context.evaluate_pin("node_scope").await?;
 
         let path = FlowPath::from_storage_dir(context, node_scope).await?;
         context.set_pin_value("path", json!(path)).await?;
-
-        context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
 }

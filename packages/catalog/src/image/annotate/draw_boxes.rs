@@ -81,6 +81,7 @@ pub fn draw_bboxes(
     Ok(img)
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct DrawBoxesNode {}
 

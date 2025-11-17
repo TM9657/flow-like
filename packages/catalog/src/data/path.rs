@@ -1,8 +1,5 @@
 use flow_like::{
-    flow::{
-        execution::context::{ExecutionContext, ExecutionContextCache},
-        node::NodeLogic,
-    },
+    flow::execution::context::{ExecutionContext, ExecutionContextCache},
     utils::hash::hash_string_non_cryptographic,
 };
 use flow_like_storage::{
@@ -486,18 +483,6 @@ impl FlowPathRuntime {
             cache_store_ref: self.cache_hash.clone(),
         }
     }
-}
-
-pub async fn register_functions() -> Vec<Arc<dyn NodeLogic>> {
-    let mut nodes = vec![];
-
-    nodes.extend(content::register_functions().await);
-    nodes.extend(dirs::register_functions().await);
-    nodes.extend(manipulation::register_functions().await);
-    nodes.extend(operations::register_functions().await);
-    nodes.push(Arc::new(path_from_buf::PathBufToPathNode::new()));
-
-    nodes
 }
 
 #[cfg(test)]

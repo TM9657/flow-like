@@ -2,7 +2,7 @@ use crate::data::db::vector::NodeDBConnection;
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -15,6 +15,7 @@ use flow_like_types::rand::{self, Rng};
 use flow_like_types::{Result, async_trait, json::json};
 use futures::TryStreamExt;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SplitDatasetNode {}
 
@@ -35,17 +36,28 @@ impl NodeLogic for SplitDatasetNode {
         );
         node.add_icon("/flow/icons/chart-network.svg");
 
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(5)
+                .set_security(6)
+                .set_performance(6)
+                .set_governance(6)
+                .set_reliability(7)
+                .set_cost(6)
+                .build(),
+        );
+
         node.add_input_pin(
             "exec_in",
             "Input",
-            "Start Splitting",
+            "Execution trigger that starts the split",
             VariableType::Execution,
         );
 
         node.add_input_pin(
             "split",
             "Split",
-            "Split Ratio (Train/Test)",
+            "Ratio used for assigning rows to the training set (rest goes to test)",
             VariableType::Float,
         )
         .set_options(PinOptions::new().set_range((0.0, 1.0)).build())
@@ -63,7 +75,7 @@ impl NodeLogic for SplitDatasetNode {
         node.add_input_pin(
             "train",
             "Training Database",
-            "Training Data",
+            "Destination database connection that receives the training rows",
             VariableType::Struct,
         )
         .set_schema::<NodeDBConnection>()
@@ -72,7 +84,7 @@ impl NodeLogic for SplitDatasetNode {
         node.add_input_pin(
             "test",
             "Test Database",
-            "Testing Data",
+            "Destination database connection that receives the testing rows",
             VariableType::Struct,
         )
         .set_schema::<NodeDBConnection>()
@@ -81,7 +93,7 @@ impl NodeLogic for SplitDatasetNode {
         node.add_output_pin(
             "exec_out",
             "Done",
-            "Done Fitting Model",
+            "Activated once the split has finished",
             VariableType::Execution,
         );
 

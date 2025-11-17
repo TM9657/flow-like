@@ -2,7 +2,7 @@ use flow_like::{
     bit::BitModelPreference,
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -10,6 +10,7 @@ use flow_like::{
 };
 use flow_like_types::{async_trait, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SetWeightNode {}
 
@@ -25,22 +26,32 @@ impl NodeLogic for SetWeightNode {
         let mut node = Node::new(
             "ai_generative_set_preference_weight",
             "Set Preference Weight",
-            "Sets the given weight in the Model Preferences",
+            "Adjusts the relative weight for a specific capability preference",
             "AI/Generative/Preferences",
         );
         node.add_icon("/flow/icons/struct.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",
             "Input",
-            "Initiate Execution",
+            "Begin execution when ready to adjust",
             VariableType::Execution,
         );
 
         node.add_input_pin(
             "preferences_in",
             "Preferences",
-            "Current Preferences",
+            "Current preference struct",
             VariableType::Struct,
         )
         .set_schema::<BitModelPreference>()
@@ -49,7 +60,7 @@ impl NodeLogic for SetWeightNode {
         node.add_input_pin(
             "preferences_key",
             "Preferences",
-            "The Preferences you want to set",
+            "Which capability weight to change",
             VariableType::String,
         )
         .set_options(
@@ -76,14 +87,14 @@ impl NodeLogic for SetWeightNode {
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Signals completion after updating",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "preferences_out",
             "Preferences",
-            "Updated Preferences",
+            "Preferences carrying the new weight",
             VariableType::Struct,
         )
         .set_schema::<BitModelPreference>();

@@ -19,6 +19,7 @@ use flow_like_types::{
 };
 use scraper::{Html, Selector};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ExtractLinksNode {}
 

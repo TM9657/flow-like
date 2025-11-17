@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use crate::utils::types::normalize_json_value;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct FromStringNode {}
 

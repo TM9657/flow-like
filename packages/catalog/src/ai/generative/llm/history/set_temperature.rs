@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -10,6 +10,7 @@ use flow_like::{
 use flow_like_model_provider::history::History;
 use flow_like_types::{async_trait, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SetHistoryTemperatureNode {}
 
@@ -25,10 +26,20 @@ impl NodeLogic for SetHistoryTemperatureNode {
         let mut node = Node::new(
             "ai_generative_set_history_temperature",
             "Set History Temperature",
-            "Sets the temperature attribute in a ChatHistory",
+            "Stores the sampling temperature used for later LLM invocations",
             "AI/Generative/History",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",
@@ -37,14 +48,19 @@ impl NodeLogic for SetHistoryTemperatureNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin("history", "History", "ChatHistory", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "history",
+            "History",
+            "Existing chat history to update",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
             "temperature",
             "Temperature",
-            "Temperature Value",
+            "Sampling temperature (0-2)",
             VariableType::Float,
         )
         .set_options(PinOptions::new().set_range((0.0, 2.0)).build());
@@ -52,14 +68,14 @@ impl NodeLogic for SetHistoryTemperatureNode {
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Signals completion once temperature is stored",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "history_out",
             "History",
-            "Updated ChatHistory",
+            "History including the temperature setting",
             VariableType::Struct,
         )
         .set_schema::<History>();

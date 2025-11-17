@@ -19,6 +19,7 @@ use crate::data::excel::{CSVTable, Cell};
 /// Drives control flow like the generic `For Each` node, but iterates **rows** of a `CSVTable`.
 /// Emits one tick per row on `exec_out`, setting `value` (the current row as an object) and `index` (0-based),
 /// then finally fires `done`.
+#[crate::register_node]
 #[derive(Default)]
 pub struct RowLoopNode {}
 

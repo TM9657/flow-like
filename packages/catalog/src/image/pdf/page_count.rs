@@ -7,6 +7,7 @@ use flow_like::flow::variable::VariableType;
 use flow_like::state::FlowLikeState;
 use flow_like_types::{async_trait, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct PdfPageCountNode;
 

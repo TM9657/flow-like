@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::{PinOptions, ValueType},
         variable::VariableType,
     },
@@ -9,6 +9,7 @@ use flow_like::{
 };
 use flow_like_model_provider::history::History;
 use flow_like_types::{async_trait, json::json};
+#[crate::register_node]
 #[derive(Default)]
 pub struct SetHistoryStopWordsNode {}
 
@@ -24,10 +25,20 @@ impl NodeLogic for SetHistoryStopWordsNode {
         let mut node = Node::new(
             "ai_generative_set_history_stop_words",
             "Set Stop Words",
-            "Sets the stop_words attribute in a ChatHistory",
+            "Stores one or more stop sequences to truncate future completions",
             "AI/Generative/History",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",
@@ -36,14 +47,19 @@ impl NodeLogic for SetHistoryStopWordsNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin("history", "History", "ChatHistory", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "history",
+            "History",
+            "Existing chat history to update",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
             "stop_words",
             "Stop Words",
-            "Stop Words Value",
+            "Strings that should stop generation",
             VariableType::String,
         )
         .set_value_type(ValueType::Array);
@@ -51,14 +67,14 @@ impl NodeLogic for SetHistoryStopWordsNode {
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Signals completion after storing stop words",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "history_out",
             "History",
-            "Updated ChatHistory",
+            "History updated with stop sequences",
             VariableType::Struct,
         )
         .set_schema::<History>();

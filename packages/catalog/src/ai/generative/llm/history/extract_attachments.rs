@@ -4,7 +4,7 @@ use crate::{data::path::FlowPath, events::chat_event::Attachment};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -35,6 +35,7 @@ fn extract_image_urls(history: &History) -> Vec<String> {
         .unwrap_or_default()
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ExtractAttachments {}
 
@@ -50,22 +51,32 @@ impl NodeLogic for ExtractAttachments {
         let mut node = Node::new(
             "ai_gen_llm_history_extract_attachments",
             "Extract Attachments",
-            "Extracts attachments from the chat",
+            "Pulls down image attachments referenced in the latest chat message",
             "Events/Chat",
         );
         node.add_icon("/flow/icons/paperclip.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(7)
+                .set_security(7)
+                .set_performance(7)
+                .set_reliability(8)
+                .set_governance(7)
+                .set_cost(9)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",
             "Input",
-            "Initiate Execution",
+            "Begin execution to sync attachments",
             VariableType::Execution,
         );
 
         node.add_input_pin(
             "history",
             "History",
-            "History of the Chat",
+            "Chat history whose final message may contain image parts",
             VariableType::Struct,
         )
         .set_schema::<History>()
@@ -74,7 +85,7 @@ impl NodeLogic for ExtractAttachments {
         node.add_input_pin(
             "attachments",
             "Attachments",
-            "Attachments from the Chat",
+            "Existing attachments to merge with new downloads",
             VariableType::Struct,
         )
         .set_schema::<Attachment>()
@@ -85,14 +96,14 @@ impl NodeLogic for ExtractAttachments {
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Signals completion once attachments are cached",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "paths",
             "Paths",
-            "Extracted Attachment Paths",
+            "Virtual file paths pointing to cached attachments",
             VariableType::Struct,
         )
         .set_schema::<FlowPath>()

@@ -8,7 +8,7 @@ use flow_like::{
             internal_node::InternalNode,
             log::{LogMessage, LogStat},
         },
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -29,6 +29,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct InvokeLLMSimpleNode {}
 
@@ -44,37 +45,79 @@ impl NodeLogic for InvokeLLMSimpleNode {
         let mut node = Node::new(
             "ai_generative_invoke_simple",
             "Invoke Simple",
-            "Invokes the Model",
+            "Invokes an LLM with a single system prompt + user prompt and streams back tokens.",
             "AI/Generative",
         );
         node.add_icon("/flow/icons/bot-invoke.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        // Generic cloud/local model invocation: balanced defaults with light perf bias.
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(5)
+                .set_security(5)
+                .set_performance(7)
+                .set_governance(5)
+                .set_reliability(6)
+                .set_cost(5)
+                .build(),
+        );
 
-        node.add_input_pin("model", "Model", "Model", VariableType::Struct)
-            .set_schema::<Bit>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger to start the invocation",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("system_prompt", "System Prompt", "", VariableType::String)
-            .set_default_value(Some(json!("")));
-        node.add_input_pin("prompt", "Prompt", "", VariableType::String)
-            .set_default_value(Some(json!("")));
+        node.add_input_pin(
+            "model",
+            "Model",
+            "Bit describing the provider/model to execute",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin(
+            "system_prompt",
+            "System Prompt",
+            "Optional system instructions to prime the assistant",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
+        node.add_input_pin(
+            "prompt",
+            "Prompt",
+            "User message that will be sent to the model",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
 
         node.add_output_pin(
             "on_stream",
             "On Stream",
-            "Triggers on Streaming Output",
+            "Executes for every streamed token chunk",
             VariableType::Execution,
         );
 
-        node.add_output_pin("token", "Token", "Token", VariableType::String);
+        node.add_output_pin(
+            "token",
+            "Token",
+            "Most recently streamed token or chunk",
+            VariableType::String,
+        );
 
-        node.add_output_pin("done", "Done", "Done", VariableType::Execution);
+        node.add_output_pin(
+            "done",
+            "Done",
+            "Signals when the invocation finished",
+            VariableType::Execution,
+        );
 
         node.add_output_pin(
             "result",
             "Result",
-            "Resulting Model Output",
+            "Final assistant message extracted from the response",
             VariableType::String,
         );
 

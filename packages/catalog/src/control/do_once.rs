@@ -12,6 +12,8 @@ use flow_like_types::{async_trait, json::json};
 ///
 /// and then blocks until it receives a **Reset** trigger. Supports an optional
 /// `Start Closed` flag that begins in the blocked state.
+
+#[crate::register_node]
 #[derive(Default)]
 pub struct DoOnceNode {}
 

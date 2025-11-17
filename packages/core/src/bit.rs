@@ -1,16 +1,20 @@
+use crate::flow::execution::context::ExecutionContext;
 use crate::state::FlowLikeState;
 use crate::utils::compression::{compress_to_file_json, from_compressed_json};
 use crate::utils::download::download_bit;
+use flow_like_model_provider::history::History;
 use flow_like_model_provider::provider::{
     EmbeddingModelProvider, ImageEmbeddingModelProvider, ModelProvider,
 };
 use flow_like_storage::Path;
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::files::store::local_store::LocalObjectStore;
-use flow_like_types::Value;
 use flow_like_types::intercom::InterComCallback;
 use flow_like_types::sync::Mutex;
+use flow_like_types::{Value, anyhow};
 
+use rig::agent::AgentBuilder;
+use rig::client::completion::{CompletionClientDyn, CompletionModelHandle};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -698,6 +702,51 @@ impl Bit {
         let bit_path = Path::from(self.hash.clone()).child(file_name);
         let path = file_system.path_to_filesystem(&bit_path).ok()?;
         Some(path)
+    }
+
+    pub async fn agent<'a>(
+        &self,
+        context: &mut ExecutionContext,
+        history: &Option<History>,
+    ) -> flow_like_types::Result<AgentBuilder<CompletionModelHandle<'a>>> {
+        let (model_name, additional_params, completion_client) =
+            self.completion_model(context, history).await?;
+        let mut agent_builder = completion_client.agent(&model_name);
+
+        if let Some(additional_params) = additional_params {
+            agent_builder = agent_builder.additional_params(additional_params);
+        }
+
+        Ok(agent_builder)
+    }
+
+    pub async fn completion_model<'a>(
+        &self,
+        context: &mut ExecutionContext,
+        history: &Option<History>,
+    ) -> flow_like_types::Result<(
+        String,
+        Option<flow_like_types::Value>,
+        Box<dyn CompletionClientDyn + 'a>,
+    )> {
+        let (model_name, additional_params, completion_client) = {
+            let model_factory = context.app_state.lock().await.model_factory.clone();
+            let model = model_factory
+                .lock()
+                .await
+                .build(self, context.app_state.clone(), context.token.clone())
+                .await?;
+            let additional_params = model.additional_params(history);
+            let default_model = model.default_model().await.unwrap_or_default();
+            let provider = model.provider().await?;
+            let client = provider.client();
+            let completion = client
+                .as_completion()
+                .ok_or_else(|| anyhow!("Provider does not support completion"))?;
+            (default_model, additional_params, completion)
+        };
+
+        Ok((model_name, additional_params, completion_client))
     }
 }
 

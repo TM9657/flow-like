@@ -18,6 +18,19 @@ In the following we have a look at the "**Branch**" Node for Boolean Control Flo
 
 A Node always has Pins attached to it. There are multiple Pins you can use.
 
+### Helpful descriptions & quality scores
+When you create a node or a pin, add clear descriptions for both the node
+and each pin. These descriptions surface in the UI and make it easier for users to
+understand the purpose of the node or what a pin expects. If you omit the pin
+description the runtime now auto-generates a helpful default based on the pin
+type (for example _Trigger pin_, _Input Integer_ or _Emits execution to the next
+node(s)_).
+
+Nodes also expose a `scores` object that lets you assign quality metrics in the
+following categories: `privacy`, `security`, `performance`, `governance`,
+`reliability` and `cost`. Each score ranges from `0` (low, bad) to `10` (high, good), and
+is visible in the node info overlay to help users discover trade-offs at-a-glance.
+
 ```rust title="Branch Node"
 #[async_trait]
 impl NodeLogic for BranchNode {

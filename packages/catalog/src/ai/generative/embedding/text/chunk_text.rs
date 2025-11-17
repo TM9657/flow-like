@@ -2,7 +2,7 @@ use crate::ai::generative::embedding::{CachedEmbeddingModel, CachedEmbeddingMode
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::{PinOptions, ValueType},
         variable::VariableType,
     },
@@ -10,6 +10,7 @@ use flow_like::{
 };
 use flow_like_types::{anyhow, async_trait, bail, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ChunkText {}
 
@@ -25,8 +26,19 @@ impl NodeLogic for ChunkText {
         let mut node = Node::new(
             "chunk_text",
             "Chunk Text",
-            "For efficient embedding, chunk the text into smaller pieces",
+            "Splits long text into sized/overlapping chunks using the cached embedding model's splitter",
             "AI/Preprocessing",
+        );
+
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(9)
+                .set_security(9)
+                .set_performance(8)
+                .set_governance(9)
+                .set_reliability(8)
+                .set_cost(10)
+                .build(),
         );
 
         node.set_long_running(true);
@@ -35,16 +47,21 @@ impl NodeLogic for ChunkText {
         node.add_input_pin(
             "exec_in",
             "Input",
-            "Initiate Execution",
+            "Execution trigger",
             VariableType::Execution,
         );
 
-        node.add_input_pin("text", "Text", "The string to embed", VariableType::String);
+        node.add_input_pin(
+            "text",
+            "Text",
+            "Source string that needs chunking",
+            VariableType::String,
+        );
 
         node.add_input_pin(
             "model",
             "Model",
-            "The embedding model",
+            "Cached embedding Bit providing the tokenizer/splitter",
             VariableType::Struct,
         )
         .set_schema::<CachedEmbeddingModel>()
@@ -53,7 +70,7 @@ impl NodeLogic for ChunkText {
         node.add_input_pin(
             "capacity",
             "Capacity",
-            "Chunk Capacity",
+            "Max characters/tokens in each chunk",
             VariableType::Integer,
         )
         .set_default_value(Some(json!(512)));
@@ -61,7 +78,7 @@ impl NodeLogic for ChunkText {
         node.add_input_pin(
             "overlap",
             "Overlap",
-            "Overlap between Chunks",
+            "How many characters/tokens overlap between consecutive chunks",
             VariableType::Integer,
         )
         .set_default_value(Some(json!(20)));
@@ -69,7 +86,7 @@ impl NodeLogic for ChunkText {
         node.add_input_pin(
             "markdown",
             "Markdown",
-            "Use Markdown Splitter?",
+            "Use a Markdown-aware splitter (true) or the plain splitter",
             VariableType::Boolean,
         )
         .set_default_value(Some(json!(true)));
@@ -77,14 +94,14 @@ impl NodeLogic for ChunkText {
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Fires once chunking completes",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "chunks",
             "Chunks",
-            "The embedding vector",
+            "Array of chunked text segments",
             VariableType::String,
         )
         .set_value_type(ValueType::Array);

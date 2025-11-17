@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -10,6 +10,7 @@ use flow_like::{
 use flow_like_model_provider::history::History;
 use flow_like_types::{async_trait, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SetHistorySeedNode {}
 
@@ -25,10 +26,20 @@ impl NodeLogic for SetHistorySeedNode {
         let mut node = Node::new(
             "ai_generative_set_history_seed",
             "Set Seed",
-            "Sets the seed attribute in a ChatHistory",
+            "Stores an optional randomness seed alongside the chat history",
             "AI/Generative/History",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",
@@ -37,23 +48,33 @@ impl NodeLogic for SetHistorySeedNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin("history", "History", "ChatHistory", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "history",
+            "History",
+            "Existing chat history to update",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("seed", "Seed", "Seed Value", VariableType::Integer);
+        node.add_input_pin(
+            "seed",
+            "Seed",
+            "Deterministic seed value (u32)",
+            VariableType::Integer,
+        );
 
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Signals completion after the seed is saved",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "history_out",
             "History",
-            "Updated ChatHistory",
+            "History including the new seed",
             VariableType::Struct,
         )
         .set_schema::<History>();

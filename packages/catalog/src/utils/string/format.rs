@@ -15,6 +15,7 @@ use std::{
     sync::Arc,
 };
 
+#[crate::register_node]
 pub struct FormatStringNode {
     regex: Regex,
 }

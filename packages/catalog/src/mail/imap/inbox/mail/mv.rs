@@ -12,6 +12,7 @@ use futures::TryStreamExt;
 
 use crate::mail::imap::inbox::list::EmailRef;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct ImapMoveMailNode;
 

@@ -996,6 +996,10 @@ impl InternalNode {
         // this node
         if let Err(e) = run_node_logic_only(context, recursion_guard).await {
             let err_string = format!("{:?}", e);
+            context.log_message(
+                &format!("Failed to execute node: {}", err_string),
+                LogLevel::Error,
+            );
             InternalNode::handle_error(context, &err_string, recursion_guard).await?;
             let node = context.read_node().await;
             return Err(InternalNodeError::ExecutionFailed(node.id));

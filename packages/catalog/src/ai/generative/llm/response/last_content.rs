@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -10,6 +10,7 @@ use flow_like::{
 use flow_like_model_provider::response::Response;
 use flow_like_types::{async_trait, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct LastContentNode {}
 
@@ -25,15 +26,25 @@ impl NodeLogic for LastContentNode {
         let mut node = Node::new(
             "ai_generative_llm_response_last_content",
             "Last Content",
-            "Extracts the content from the last message of a Response (combines Last Message and Get Content nodes)",
+            "Extracts the content string from the last assistant message in a response",
             "AI/Generative/Response",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "response",
             "Response",
-            "Response to extract from",
+            "LLM response to extract from",
             VariableType::Struct,
         )
         .set_schema::<Response>()
@@ -58,19 +69,14 @@ impl NodeLogic for LastContentNode {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let response: Response = context.evaluate_pin("response").await?;
+        let content = response
+            .last_message()
+            .and_then(|message| message.content.clone())
+            .unwrap_or_default();
 
-        if let Some(message) = response.last_message() {
-            if let Some(content) = message.content.as_ref() {
-                context.set_pin_value("content", json!(content)).await?;
-                context.set_pin_value("success", json!(true)).await?;
-            } else {
-                context.set_pin_value("content", json!("")).await?;
-                context.set_pin_value("success", json!(false)).await?;
-            }
-        } else {
-            context.set_pin_value("content", json!("")).await?;
-            context.set_pin_value("success", json!(false)).await?;
-        }
+        let success = !content.is_empty();
+        context.set_pin_value("content", json!(content)).await?;
+        context.set_pin_value("success", json!(success)).await?;
 
         Ok(())
     }

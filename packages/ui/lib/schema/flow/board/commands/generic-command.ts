@@ -169,6 +169,8 @@ export interface INodeScores {
 	performance: number;
 	privacy: number;
 	security: number;
+	reliability: number;
+	cost: number;
 	[property: string]: any;
 }
 

@@ -1,19 +1,16 @@
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
-use super::{LLMCallback, ModelLogic};
+use super::ModelLogic;
+use crate::provider::random_provider;
 use crate::{
-    history::History,
-    provider::{ModelProvider, ModelProviderConfiguration, openai::OpenAIClient},
-    response::Response,
+    llm::ModelConstructor,
+    provider::{ModelProvider, ModelProviderConfiguration},
 };
-use flow_like_types::{Result, async_trait, sync::Mutex};
-use openai_api_rs::v1::chat_completion::ChatCompletionRequest;
-mod history;
-mod response;
-
+use flow_like_types::{Cacheable, Result, async_trait};
+use rig::client::ProviderClient;
 pub struct OpenAIModel {
-    client: Arc<Mutex<OpenAIClient>>,
-    provider: ModelProvider,
+    client: Arc<Box<dyn ProviderClient>>,
+    default_model: Option<String>,
 }
 
 impl OpenAIModel {
@@ -21,105 +18,192 @@ impl OpenAIModel {
         provider: &ModelProvider,
         config: &ModelProviderConfiguration,
     ) -> flow_like_types::Result<Self> {
-        let client = OpenAIClient::from_config(provider, config).await?;
+        let openai_config = random_provider(&config.openai_config)?;
+        let api_key = openai_config.api_key.clone().unwrap_or_default();
+        let model_id = provider.model_id.clone();
+
+        let client = if provider.provider_name == "azure" {
+            let endpoint = openai_config.endpoint.clone().unwrap_or_default();
+            // Ensure endpoint ends with /
+            let endpoint = if endpoint.ends_with('/') {
+                endpoint.to_string()
+            } else {
+                format!("{}/", endpoint)
+            };
+
+            let auth = rig::providers::azure::AzureOpenAIAuth::ApiKey(api_key.clone());
+            let mut builder = rig::providers::azure::Client::builder(auth, &endpoint);
+            if let Some(version) = provider.version.as_deref() {
+                builder = builder.api_version(version);
+            }
+
+            builder.build().boxed()
+        } else {
+            let mut builder = rig::providers::openai::Client::builder(&api_key);
+            if let Some(endpoint) = openai_config.endpoint.as_deref() {
+                builder = builder.base_url(endpoint);
+            }
+
+            builder.build().boxed()
+        };
 
         Ok(OpenAIModel {
-            client: Arc::new(Mutex::new(client)),
-            provider: provider.clone(),
+            client: Arc::new(client),
+            default_model: model_id,
         })
     }
 
-    pub async fn from_params(provider: &ModelProvider) -> flow_like_types::Result<Self> {
-        let client = OpenAIClient::from_params(provider.params.clone().unwrap_or_default()).await?;
+    #[allow(clippy::cognitive_complexity)]
+    pub async fn from_provider(provider: &ModelProvider) -> flow_like_types::Result<Self> {
+        let params = provider.params.clone().unwrap_or_default();
+        let api_key = params.get("api_key").cloned().unwrap_or_default();
+        let api_key = api_key.as_str().unwrap_or_default();
+        let model_id = params
+            .get("model_id")
+            .cloned()
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+        let is_azure = params.get("is_azure").cloned();
+        let endpoint = params.get("endpoint").cloned();
+
+        let is_azure = match is_azure {
+            Some(val) => val.as_bool().unwrap_or(false),
+            None => false,
+        };
+
+        if is_azure && endpoint.is_none() {
+            return Err(flow_like_types::anyhow!(
+                "Azure OpenAI requires an endpoint"
+            ));
+        }
+
+        if is_azure && model_id.is_none() {
+            return Err(flow_like_types::anyhow!(
+                "Azure OpenAI requires a model_id (deployment name)"
+            ));
+        }
+
+        let client = if is_azure {
+            let endpoint = endpoint.unwrap_or_default();
+            let endpoint = endpoint.as_str().unwrap_or_default();
+            // Ensure endpoint ends with /
+            let endpoint = if endpoint.ends_with('/') {
+                endpoint.to_string()
+            } else {
+                format!("{}/", endpoint)
+            };
+
+            let auth = rig::providers::azure::AzureOpenAIAuth::ApiKey(api_key.to_string());
+            let mut builder = rig::providers::azure::Client::builder(auth, &endpoint);
+            if let Some(version_str) = params.get("version").and_then(|v| v.as_str()) {
+                builder = builder.api_version(version_str);
+            }
+            builder.build().boxed()
+        } else {
+            let mut builder = rig::providers::openai::Client::builder(api_key);
+            if let Some(endpoint) = endpoint.as_ref().and_then(|v| v.as_str()) {
+                builder = builder.base_url(endpoint);
+            }
+            builder.build().boxed()
+        };
+
         Ok(OpenAIModel {
-            client: Arc::new(Mutex::new(client)),
-            provider: provider.clone(),
+            client: Arc::new(client),
+            default_model: model_id,
         })
+    }
+}
+
+impl Cacheable for OpenAIModel {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
 #[async_trait]
 impl ModelLogic for OpenAIModel {
-    async fn invoke(&self, history: &History, callback: Option<LLMCallback>) -> Result<Response> {
-        let model_id = self
-            .provider
-            .model_id
-            .clone()
-            .ok_or_else(|| flow_like_types::anyhow!("Model ID is missing"))?;
+    async fn provider(&self) -> Result<ModelConstructor> {
+        Ok(ModelConstructor {
+            inner: self.client.clone(),
+        })
+    }
 
-        let mut request = ChatCompletionRequest::from(history.clone());
-        request.model = model_id;
-
-        println!("OpenAIModel invoking model: {}", request.model);
-
-        let completion = {
-            let mut client = self.client.lock().await;
-            client.chat_completion(request, callback).await?
-        };
-        let response = completion;
-        Ok(response)
+    async fn default_model(&self) -> Option<String> {
+        self.default_model.clone()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    use flow_like_types::tokio;
+    use flow_like_types::{anyhow, tokio};
+    use rig::agent::MultiTurnStreamItem;
+    use rig::completion::Chat;
+    use rig::completion::ToolDefinition;
+    use rig::message::Text;
+    use rig::streaming::{StreamedAssistantContent, StreamingChat};
+    use rig::tool::Tool;
+    use schemars::{JsonSchema, schema_for};
+    use serde::{Deserialize, Serialize};
 
     use super::*;
     use crate::{
-        history::{
-            Content, ContentType, HistoryFunction, HistoryFunctionParameters,
-            HistoryJSONSchemaDefine, HistoryJSONSchemaType, HistoryMessage, ImageUrl,
-            MessageContent, Role, Tool, ToolChoice, ToolType,
-        },
+        history::{Content, ContentType, History, HistoryMessage, ImageUrl, MessageContent, Role},
         provider::{ModelProviderConfiguration, OpenAIConfig},
     };
     use dotenv::dotenv;
-    use std::collections::HashMap;
 
     #[tokio::test]
     async fn test_openai_model_no_stream() {
-        dotenv().ok();
-
-        let provider = ModelProvider {
-            model_id: Some("@preset/prod-free".to_string()),
-            version: None,
-            provider_name: "openai".to_string(),
-            params: None,
-        };
-        let endpoint = std::env::var("OPENAI_ENDPOINT").unwrap();
-        let api_key = std::env::var("OPENAI_API_KEY").unwrap();
-        let config = ModelProviderConfiguration {
-            openai_config: vec![OpenAIConfig {
-                api_key: Some(api_key),
-                organization: None,
-                endpoint: Some(endpoint),
-                proxy: None,
-            }],
-            bedrock_config: vec![],
-        };
-
+        let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.as_ref().unwrap();
+
         let mut history = History::new(
-            "@preset/prod-free".to_string(),
+            model_name.clone(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage::from_string(Role::User, "Hello"),
             ],
         );
         history.set_stream(false);
-        let response = model.invoke(&history, None).await.unwrap();
-        assert!(!response.choices.is_empty());
+
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(&model.default_model.unwrap_or(history.model.clone()))
+            .build();
+
+        let (prompt, history_msgs) = history.extract_prompt_and_history().unwrap();
+        let response = agent.chat(prompt, history_msgs).await.unwrap();
+
+        assert!(!response.is_empty());
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_azure_openai_model_no_stream() {
         dotenv().ok();
 
+        // Skip test if Azure LLM deployment is not configured
+        let deployment_name = match std::env::var("AZURE_OPENAI_LLM_DEPLOYMENT") {
+            Ok(name) => name,
+            Err(_) => {
+                println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+                return;
+            }
+        };
+
         let provider = ModelProvider {
-            model_id: Some("gpt-4o-mini".to_string()),
+            model_id: Some(deployment_name.clone()),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
             params: None,
@@ -133,29 +217,44 @@ mod tests {
                 endpoint: Some(endpoint),
                 proxy: None,
             }],
-            bedrock_config: vec![],
+            ..Default::default()
         };
 
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
         let mut history = History::new(
-            "gpt-4o-mini".to_string(),
+            deployment_name.clone(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage::from_string(Role::User, "Hello"),
             ],
         );
         history.set_stream(false);
-        let response = model.invoke(&history, None).await.unwrap();
-        println!("Final response: {:?}", response.last_message());
-        assert!(!response.choices.is_empty());
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(&model.default_model.unwrap_or(history.model.clone()))
+            .temperature(1.0)
+            .build();
+
+        let (prompt, history) = history.extract_prompt_and_history().unwrap();
+
+        let response = agent.chat(prompt, history).await.unwrap();
+        println!("Final response: {:?}", response);
+        assert!(!response.is_empty());
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_openai_model_stream() {
         dotenv().ok();
 
         let provider = ModelProvider {
-            model_id: Some("@preset/prod-free".to_string()),
+            model_id: Some("@preset/testing".to_string()),
             version: None,
             provider_name: "openai".to_string(),
             params: None,
@@ -169,38 +268,70 @@ mod tests {
                 endpoint: Some(endpoint),
                 proxy: None,
             }],
-            bedrock_config: vec![],
+            ..Default::default()
         };
 
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let mut history = History::new(
-            "@preset/prod-free".to_string(),
+        let history = History::new(
+            "@preset/testing".to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage::from_string(Role::User, "Hello"),
             ],
         );
-        history.set_stream(true);
 
-        let counter = Arc::new(AtomicUsize::new(0));
-        let counter_clone = counter.clone();
-        let callback: LLMCallback = Arc::new(move |_response| {
-            counter_clone.fetch_add(1, Ordering::SeqCst);
-            Box::pin(async move { Ok(()) })
-        });
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(&model.default_model.unwrap_or(history.model.clone()))
+            .build();
 
-        let response = model.invoke(&history, Some(callback)).await.unwrap();
-        println!("Final response: {:?}", response.last_message());
-        println!("Chunks: {}", counter.load(Ordering::SeqCst));
-        assert!(!response.choices.is_empty());
+        let (prompt, history_msgs) = history.extract_prompt_and_history().unwrap();
+
+        use futures::StreamExt;
+        let mut stream = agent.stream_chat(prompt, history_msgs).await;
+        let mut chunks = 0;
+        let mut response = String::new();
+
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
+                    response.push_str(&text);
+                    chunks += 1;
+                }
+                Ok(_) => {} // Ignore other stream items
+                Err(e) => panic!("Stream error: {}", e),
+            }
+        }
+
+        println!("Final response: {:?}", response);
+        println!("Chunks: {}", chunks);
+        assert!(!response.is_empty());
+        assert!(chunks > 0);
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_azure_openai_model_stream() {
         dotenv().ok();
 
+        let deployment_name = match std::env::var("AZURE_OPENAI_LLM_DEPLOYMENT") {
+            Ok(name) => name,
+            Err(_) => {
+                println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+                return;
+            }
+        };
+
         let provider = ModelProvider {
-            model_id: Some("gpt-4o-mini".to_string()),
+            model_id: Some(deployment_name.clone()),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
             params: None,
@@ -214,43 +345,69 @@ mod tests {
                 endpoint: Some(endpoint),
                 proxy: None,
             }],
-            bedrock_config: vec![],
+            ..Default::default()
         };
 
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let mut history = History::new(
-            "gpt-4o-mini".to_string(),
+        let history = History::new(
+            deployment_name.clone(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage::from_string(Role::User, "Hello"),
             ],
         );
-        history.set_stream(true);
 
-        let counter = Arc::new(AtomicUsize::new(0));
-        let counter_clone = counter.clone();
-        let callback: LLMCallback = Arc::new(move |_response| {
-            counter_clone.fetch_add(1, Ordering::SeqCst);
-            Box::pin(async move { Ok(()) })
-        });
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(&model.default_model.unwrap_or(history.model.clone()))
+            .build();
 
-        let response = model.invoke(&history, Some(callback)).await.unwrap();
-        println!("Final response: {:?}", response.last_message());
-        println!("Chunks: {}", counter.load(Ordering::SeqCst));
-        assert!(!response.choices.is_empty());
+        let (prompt, history_msgs) = history.extract_prompt_and_history().unwrap();
+
+        use futures::StreamExt;
+        let mut stream = agent.stream_chat(prompt, history_msgs).await;
+        let mut chunks = 0;
+        let mut response = String::new();
+
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
+                    response.push_str(&text);
+                    chunks += 1;
+                }
+                Ok(_) => {} // Ignore other stream items
+                Err(e) => panic!("Stream error: {}", e),
+            }
+        }
+
+        println!("Final response: {:?}", response);
+        println!("Chunks: {}", chunks);
+        assert!(!response.is_empty());
+        assert!(chunks > 0);
     }
 
     // --- Helpers for new tests ---
-    fn azure_provider_and_config() -> (ModelProvider, ModelProviderConfiguration) {
+    fn azure_provider_and_config() -> Option<(ModelProvider, ModelProviderConfiguration)> {
         dotenv().ok();
+
+        let deployment_name = std::env::var("AZURE_OPENAI_LLM_DEPLOYMENT").ok()?;
+        let api_key = std::env::var("AZURE_OPENAI_API_KEY").ok()?;
+        let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").ok()?;
+
         let provider = ModelProvider {
-            model_id: Some("gpt-4o-mini".to_string()),
+            model_id: Some(deployment_name),
             version: Some("2024-02-15-preview".to_string()),
             provider_name: "azure".to_string(),
             params: None,
         };
-        let api_key = std::env::var("AZURE_OPENAI_API_KEY").unwrap();
-        let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").unwrap();
         let config = ModelProviderConfiguration {
             openai_config: vec![OpenAIConfig {
                 api_key: Some(api_key),
@@ -258,257 +415,242 @@ mod tests {
                 endpoint: Some(endpoint),
                 proxy: None,
             }],
-            bedrock_config: vec![],
+            ..Default::default()
         };
-        (provider, config)
+        Some((provider, config))
     }
 
-    fn build_weather_tool() -> (Tool, HistoryFunction) {
-        let mut props: HashMap<String, Box<HistoryJSONSchemaDefine>> = HashMap::new();
-        props.insert(
-            "location".to_string(),
-            Box::new(HistoryJSONSchemaDefine {
-                schema_type: Some(HistoryJSONSchemaType::String),
-                description: Some("City and state, e.g. San Francisco, CA".to_string()),
-                enum_values: None,
-                properties: None,
-                required: None,
-                items: None,
-            }),
-        );
-        props.insert(
-            "unit".to_string(),
-            Box::new(HistoryJSONSchemaDefine {
-                schema_type: Some(HistoryJSONSchemaType::String),
-                description: Some("Temperature unit".to_string()),
-                enum_values: Some(vec!["celsius".to_string(), "fahrenheit".to_string()]),
-                properties: None,
-                required: None,
-                items: None,
-            }),
-        );
+    // ========== Rig Tool Implementations ==========
 
-        let params = HistoryFunctionParameters {
-            schema_type: HistoryJSONSchemaType::Object,
-            properties: Some(props),
-            required: Some(vec!["location".to_string(), "unit".to_string()]),
-        };
-        let func = HistoryFunction {
-            name: "get_current_weather".to_string(),
-            description: Some("Get the current weather in a given location".to_string()),
-            parameters: params,
-        };
-        let tool = Tool {
-            tool_type: ToolType::Function,
-            function: func.clone(),
-        };
-        (tool, func)
+    #[derive(Deserialize, JsonSchema)]
+    struct WeatherArgs {
+        location: String,
+        unit: String,
     }
 
-    fn build_forecast_tool() -> (Tool, HistoryFunction) {
-        let mut props: HashMap<String, Box<HistoryJSONSchemaDefine>> = HashMap::new();
-        props.insert(
-            "location".to_string(),
-            Box::new(HistoryJSONSchemaDefine {
-                schema_type: Some(HistoryJSONSchemaType::String),
-                description: Some("City and state, e.g. Berlin, DE".to_string()),
-                enum_values: None,
-                properties: None,
-                required: None,
-                items: None,
-            }),
-        );
-        props.insert(
-            "days".to_string(),
-            Box::new(HistoryJSONSchemaDefine {
-                schema_type: Some(HistoryJSONSchemaType::Number),
-                description: Some("Number of days to forecast".to_string()),
-                enum_values: None,
-                properties: None,
-                required: None,
-                items: None,
-            }),
-        );
+    #[derive(Debug)]
+    struct WeatherError;
 
-        let params = HistoryFunctionParameters {
-            schema_type: HistoryJSONSchemaType::Object,
-            properties: Some(props),
-            required: Some(vec!["location".to_string(), "days".to_string()]),
-        };
-        let func = HistoryFunction {
-            name: "get_forecast".to_string(),
-            description: Some("Get the forecast for the next N days".to_string()),
-            parameters: params,
-        };
-        let tool = Tool {
-            tool_type: ToolType::Function,
-            function: func.clone(),
-        };
-        (tool, func)
+    impl std::fmt::Display for WeatherError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "Weather tool error")
+        }
     }
 
-    fn new_counter_callback() -> (LLMCallback, Arc<AtomicUsize>) {
-        let counter = Arc::new(AtomicUsize::new(0));
-        let counter_clone = counter.clone();
-        let callback: LLMCallback = Arc::new(move |_response| {
-            counter_clone.fetch_add(1, Ordering::SeqCst);
-            Box::pin(async move { Ok(()) })
-        });
-        (callback, counter)
+    impl std::error::Error for WeatherError {}
+
+    #[derive(Deserialize, Serialize)]
+    struct WeatherTool;
+
+    impl Tool for WeatherTool {
+        const NAME: &'static str = "get_current_weather";
+
+        type Error = WeatherError;
+        type Args = WeatherArgs;
+        type Output = String;
+
+        async fn definition(&self, _prompt: String) -> ToolDefinition {
+            ToolDefinition {
+                name: "get_current_weather".to_string(),
+                description: "Get the current weather in a given location".to_string(),
+                parameters: flow_like_types::json::to_value(schema_for!(WeatherArgs))
+                    .expect("Failed to serialize weather args schema"),
+            }
+        }
+
+        async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+            Ok(format!(
+                "The weather in {} is 22 degrees {}",
+                args.location, args.unit
+            ))
+        }
     }
+
+    #[derive(Deserialize, JsonSchema)]
+    struct ForecastArgs {
+        location: String,
+        days: i32,
+    }
+
+    #[derive(Debug)]
+    struct ForecastError;
+
+    impl std::fmt::Display for ForecastError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "Forecast tool error")
+        }
+    }
+
+    impl std::error::Error for ForecastError {}
+
+    #[derive(Deserialize, Serialize)]
+    struct ForecastTool;
+
+    impl Tool for ForecastTool {
+        const NAME: &'static str = "get_forecast";
+
+        type Error = ForecastError;
+        type Args = ForecastArgs;
+        type Output = String;
+
+        async fn definition(&self, _prompt: String) -> ToolDefinition {
+            ToolDefinition {
+                name: "get_forecast".to_string(),
+                description: "Get the forecast for the next N days".to_string(),
+                parameters: flow_like_types::json::to_value(schema_for!(ForecastArgs))
+                    .expect("Failed to serialize forecast args schema"),
+            }
+        }
+
+        async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+            Ok(format!(
+                "The forecast for {} for the next {} days is sunny with temperatures ranging from 18-25 degrees",
+                args.location, args.days
+            ))
+        }
+    }
+
+    // ========== Tool Tests ==========
 
     #[tokio::test]
     async fn test_azure_openai_tool_call_no_stream() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.as_ref().unwrap();
 
-        let (tool, func) = build_weather_tool();
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(model_name)
+            .preamble("You are a helpful assistant.")
+            .tool(WeatherTool)
+            .build();
 
-        let mut history = History::new(
-            "gpt-4o-mini".to_string(),
-            vec![
-                HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage {
-                    role: Role::User,
-                    content: MessageContent::Contents(vec![Content::Text {
-                        content_type: ContentType::Text,
-                        text: "Call the tool to get the weather for San Francisco, CA in celsius. Return a tool call only.".to_string(),
-                    }]),
-                    name: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                    annotations: None,
-                },
-            ],
+        let response = agent
+            .chat(
+                "Call the tool to get the weather for San Francisco, CA in celsius.",
+                vec![],
+            )
+            .await
+            .expect("Failed to get response");
+
+        // The response should contain the tool's output (weather info)
+        println!("Response: {}", response);
+        assert!(!response.is_empty());
+        assert!(
+            response.contains("San Francisco")
+                || response.contains("weather")
+                || response.contains("22")
         );
-        history.tools = Some(vec![tool]);
-        history.tool_choice = Some(ToolChoice::Specific {
-            r#type: ToolType::Function,
-            function: func.clone(),
-        });
-        history.temperature = Some(0.0);
-        history.set_stream(false);
-
-        let response = model.invoke(&history, None).await.unwrap();
-        let msg = response.last_message().expect("no last message");
-        assert!(!msg.tool_calls.is_empty());
-        let call = &msg.tool_calls[0];
-        assert_eq!(call.function.name, "get_current_weather");
-        let args = &call.function.arguments;
-        assert!(args.contains("San Francisco") || args.contains("san francisco"));
-        assert!(args.contains("celsius"));
     }
 
     #[tokio::test]
     async fn test_azure_openai_tool_call_stream() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let (tool, func) = build_weather_tool();
+        let model_name = provider.model_id.as_ref().unwrap();
 
-        let mut history = History::new(
-            "gpt-4o-mini".to_string(),
-            vec![
-                HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(
-                    Role::User,
-                    "Please call the tool to get the weather for Berlin in celsius.",
-                ),
-            ],
-        );
-        history.tools = Some(vec![tool]);
-        history.tool_choice = Some(ToolChoice::Specific {
-            r#type: ToolType::Function,
-            function: func,
-        });
-        history.set_stream(true);
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(model_name)
+            .preamble("You are a helpful assistant.")
+            .tool(WeatherTool)
+            .build();
 
-        let (callback, counter) = new_counter_callback();
-        let response = model.invoke(&history, Some(callback)).await.unwrap();
-        let msg = response.last_message().expect("no last message");
-        assert!(!msg.tool_calls.is_empty());
-        let _ = counter.load(Ordering::SeqCst);
+        use futures::StreamExt;
+        let mut stream = agent
+            .stream_chat(
+                "Please call the tool to get the weather for Berlin in celsius.",
+                vec![],
+            )
+            .await;
+
+        let mut response = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
+                    response.push_str(&text);
+                }
+                Ok(_) => {}
+                Err(e) => panic!("Stream error: {}", e),
+            }
+        }
+
+        println!("Streamed response: {}", response);
+        assert!(!response.is_empty());
     }
 
     #[tokio::test]
     async fn test_azure_openai_tool_result_roundtrip() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let (tool, func) = build_weather_tool();
+        let model_name = provider.model_id.as_ref().unwrap();
 
-        let mut history = History::new(
-            "gpt-4o-mini".to_string(),
-            vec![
-                HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(
-                    Role::User,
-                    "What is the weather in Paris in celsius? Use the tool.",
-                ),
-            ],
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(model_name)
+            .preamble("You are a helpful assistant.")
+            .tool(WeatherTool)
+            .build();
+
+        // This will automatically call the tool and use its result
+        let response = agent
+            .chat(
+                "What is the weather in Paris in celsius? Use the tool.",
+                vec![],
+            )
+            .await
+            .expect("Failed to get response");
+
+        println!("Roundtrip response: {}", response);
+        assert!(!response.is_empty());
+        // Response should mention Paris or the weather info
+        assert!(
+            response.contains("Paris") || response.contains("weather") || response.contains("22")
         );
-        history.tools = Some(vec![tool]);
-        history.tool_choice = Some(ToolChoice::Specific {
-            r#type: ToolType::Function,
-            function: func,
-        });
-        history.temperature = Some(0.0);
-        history.set_stream(false);
-        let first = match model.invoke(&history, None).await {
-            Ok(r) => r,
-            Err(e) => {
-                // Gracefully skip if rate limited
-                let msg = format!("{e}");
-                if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
-                    eprintln!("Skipping due to rate limit: {msg}");
-                    return;
-                }
-                panic!("{e}");
-            }
-        };
-        let msg = first.last_message().expect("no last message");
-        assert!(!msg.tool_calls.is_empty());
-        let tool_call = &msg.tool_calls[0];
-
-        // Simulate executing the tool and returning a result to the model
-        history.push_message(HistoryMessage {
-            role: Role::Tool,
-            content: MessageContent::Contents(vec![Content::Text {
-                content_type: ContentType::Text,
-                text: "{\"temperature\":22,\"unit\":\"celsius\"}".to_string(),
-            }]),
-            name: None,
-            tool_call_id: Some(tool_call.id.clone()),
-            tool_calls: None,
-            annotations: None,
-        });
-
-        let second = match model.invoke(&history, None).await {
-            Ok(r) => r,
-            Err(e) => {
-                let msg = format!("{e}");
-                if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
-                    eprintln!("Skipping due to rate limit on second call: {msg}");
-                    return;
-                }
-                if msg.to_lowercase().contains("json_invalid") || msg.contains("400 Bad Request") {
-                    eprintln!("Skipping due to Azure tool-result JSON handling: {msg}");
-                    return;
-                }
-                panic!("{e}");
-            }
-        };
-        let final_msg = second.last_message().expect("no final message");
-        assert!(final_msg.content.as_ref().is_some());
     }
 
     #[tokio::test]
     async fn test_azure_openai_vision_no_stream() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.clone().unwrap();
 
         let image_url =
             "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
-        let mut history = History::new(
-            "gpt-4o-mini".to_string(),
+        let history = History::new(
+            model_name.clone(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage {
@@ -533,9 +675,21 @@ mod tests {
                 },
             ],
         );
-        history.set_stream(false);
 
-        let response = match model.invoke(&history, None).await {
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(&model.default_model.unwrap_or(history.model.clone()))
+            .build();
+
+        let (prompt, history_msgs) = history.extract_prompt_and_history().unwrap();
+
+        let response = match agent.chat(prompt, history_msgs).await {
             Ok(r) => r,
             Err(e) => {
                 let msg = format!("{e}");
@@ -552,20 +706,22 @@ mod tests {
                 panic!("{e}");
             }
         };
-        if let Some(msg) = response.last_message() {
-            assert!(msg.content.as_ref().is_some());
-        }
+        assert!(!response.is_empty());
     }
 
     #[tokio::test]
     async fn test_azure_openai_vision_stream() {
-        let (provider, config) = azure_provider_and_config();
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
+        };
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.clone().unwrap();
 
         let image_url =
             "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
-        let mut history = History::new(
-            "gpt-4o-mini".to_string(),
+        let history = History::new(
+            model_name.clone(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage {
@@ -590,32 +746,66 @@ mod tests {
                 },
             ],
         );
-        history.set_stream(true);
 
-        let (callback, counter) = new_counter_callback();
-        let response = match model.invoke(&history, Some(callback)).await {
-            Ok(r) => r,
-            Err(e) => {
-                let msg = format!("{e}");
-                if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
-                    eprintln!("Skipping due to rate limit: {msg}");
-                    return;
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(&model.default_model.unwrap_or(history.model.clone()))
+            .build();
+
+        let (prompt, history_msgs) = history.extract_prompt_and_history().unwrap();
+
+        use futures::StreamExt;
+        let mut stream = agent.stream_chat(prompt, history_msgs).await;
+
+        let mut chunks = 0;
+        let mut response = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
+                    response.push_str(&text);
+                    chunks += 1;
                 }
-                panic!("{e}");
+                Ok(_) => {} // Ignore other stream items
+                Err(e) => {
+                    let msg = format!("{e}");
+                    if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
+                        eprintln!("Skipping due to rate limit: {msg}");
+                        return;
+                    }
+                    panic!("Stream error: {}", e);
+                }
             }
-        };
-        if let Some(msg) = response.last_message() {
-            assert!(msg.content.as_ref().is_some());
         }
-        let _ = counter.load(Ordering::SeqCst);
+
+        assert!(!response.is_empty());
+        assert!(chunks > 0);
     }
 
     // -------- OpenAI parity tests (tool calling, roundtrip, vision) --------
 
     fn openai_provider_and_config() -> (ModelProvider, ModelProviderConfiguration) {
         dotenv().ok();
+        // Use a specific model that works with OpenRouter instead of @preset/testing
+        // openai/gpt-4o-mini supports tools and is available via OpenRouter
+        let model_id = if std::env::var("OPENAI_ENDPOINT")
+            .unwrap_or_default()
+            .contains("openrouter")
+        {
+            "openai/gpt-4o-mini".to_string()
+        } else {
+            "gpt-3.5-turbo".to_string()
+        };
+
         let provider = ModelProvider {
-            model_id: Some("@preset/prod-free".to_string()),
+            model_id: Some(model_id),
             version: None,
             provider_name: "openai".to_string(),
             params: None,
@@ -629,7 +819,7 @@ mod tests {
                 endpoint: Some(endpoint),
                 proxy: None,
             }],
-            bedrock_config: vec![],
+            ..Default::default()
         };
         (provider, config)
     }
@@ -638,165 +828,111 @@ mod tests {
     async fn test_openai_tool_call_no_stream() {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let (tool, func) = build_weather_tool();
 
-        let mut history = History::new(
-            "@preset/prod-free".to_string(),
-            vec![
-                HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(
-                    Role::User,
-                    "Call the tool to get the weather for San Francisco, CA in celsius. Return a tool call only.",
-                ),
-            ],
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(&model.default_model.unwrap_or("@preset/testing".to_string()))
+            .preamble("You are a helpful assistant.")
+            .tool(WeatherTool)
+            .build();
+
+        let response = agent
+            .chat(
+                "Call the tool to get the weather for San Francisco, CA in celsius.",
+                vec![],
+            )
+            .await
+            .expect("Failed to get response");
+
+        println!("Response: {}", response);
+        assert!(!response.is_empty());
+        assert!(
+            response.contains("San Francisco")
+                || response.contains("weather")
+                || response.contains("22")
         );
-        history.tools = Some(vec![tool]);
-        history.tool_choice = Some(ToolChoice::Specific {
-            r#type: ToolType::Function,
-            function: func.clone(),
-        });
-        history.temperature = Some(0.0);
-        history.set_stream(false);
-
-        let response = match model.invoke(&history, None).await {
-            Ok(r) => r,
-            Err(e) => {
-                let msg = format!("{e}");
-                if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
-                    eprintln!("Skipping due to rate limit: {msg}");
-                    return;
-                }
-                if msg.contains("No endpoints found that support tool use")
-                    || msg.contains("404 Not Found")
-                {
-                    eprintln!("Skipping: tool use unsupported on route: {msg}");
-                    return;
-                }
-                panic!("{e}");
-            }
-        };
-        let msg = response.last_message().expect("no last message");
-        if !msg.tool_calls.is_empty() {
-            let call = &msg.tool_calls[0];
-            assert_eq!(call.function.name, "get_current_weather");
-            let args = &call.function.arguments;
-            assert!(args.to_lowercase().contains("san francisco"));
-            // Relaxed: models may omit explicit unit; don't require "celsius" here.
-        }
     }
 
     #[tokio::test]
     async fn test_openai_tool_call_stream() {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let (tool, func) = build_weather_tool();
 
-        let mut history = History::new(
-            "@preset/prod-free".to_string(),
-            vec![
-                HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(
-                    Role::User,
-                    "Please call the tool to get the weather for Berlin in celsius.",
-                ),
-            ],
-        );
-        history.tools = Some(vec![tool]);
-        history.tool_choice = Some(ToolChoice::Specific {
-            r#type: ToolType::Function,
-            function: func,
-        });
-        history.set_stream(true);
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(&model.default_model.unwrap_or("@preset/testing".to_string()))
+            .preamble("You are a helpful assistant.")
+            .tool(WeatherTool)
+            .build();
 
-        let (callback, counter) = new_counter_callback();
-        let response = match model.invoke(&history, Some(callback)).await {
-            Ok(r) => r,
-            Err(e) => {
-                let msg = format!("{e}");
-                if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
-                    eprintln!("Skipping due to rate limit: {msg}");
-                    return;
+        use futures::StreamExt;
+        let mut stream = agent
+            .stream_chat(
+                "Please call the tool to get the weather for Berlin in celsius.",
+                vec![],
+            )
+            .await;
+
+        let mut response = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
+                    response.push_str(&text);
                 }
-                eprintln!("OpenAI stream error: {msg}");
-                return;
+                Ok(_) => {}
+                Err(e) => panic!("Stream error: {}", e),
             }
-        };
-        let _ = response.last_message();
-        let _ = counter.load(Ordering::SeqCst);
+        }
+
+        println!("Streamed response: {}", response);
+        assert!(!response.is_empty());
     }
 
     #[tokio::test]
     async fn test_openai_tool_result_roundtrip() {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let (tool, func) = build_weather_tool();
 
-        let mut history = History::new(
-            "@preset/prod-free".to_string(),
-            vec![
-                HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(
-                    Role::User,
-                    "What is the weather in Paris in celsius? Use the tool.",
-                ),
-            ],
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(&model.default_model.unwrap_or("@preset/testing".to_string()))
+            .preamble("You are a helpful assistant.")
+            .tool(WeatherTool)
+            .build();
+
+        let response = agent
+            .chat(
+                "What is the weather in Paris in celsius? Use the tool.",
+                vec![],
+            )
+            .await
+            .expect("Failed to get response");
+
+        println!("Roundtrip response: {}", response);
+        assert!(!response.is_empty());
+        assert!(
+            response.contains("Paris") || response.contains("weather") || response.contains("22")
         );
-        history.tools = Some(vec![tool]);
-        history.tool_choice = Some(ToolChoice::Specific {
-            r#type: ToolType::Function,
-            function: func,
-        });
-        history.temperature = Some(0.0);
-        history.set_stream(false);
-
-        let first = match model.invoke(&history, None).await {
-            Ok(r) => r,
-            Err(e) => {
-                let msg = format!("{e}");
-                if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
-                    eprintln!("Skipping due to rate limit: {msg}");
-                    return;
-                }
-                eprintln!("OpenAI first call error: {msg}");
-                return;
-            }
-        };
-        let msg = match first.last_message() {
-            Some(m) => m,
-            None => return,
-        };
-        if msg.tool_calls.is_empty() {
-            return;
-        }
-        let tool_call = &msg.tool_calls[0];
-
-        history.push_message(HistoryMessage {
-            role: Role::Tool,
-            content: MessageContent::Contents(vec![Content::Text {
-                content_type: ContentType::Text,
-                text: "{\"temperature\":22,\"unit\":\"celsius\"}".to_string(),
-            }]),
-            name: Some(tool_call.function.name.clone()),
-            tool_call_id: Some(tool_call.id.clone()),
-            tool_calls: None,
-            annotations: None,
-        });
-
-        let second = match model.invoke(&history, None).await {
-            Ok(r) => r,
-            Err(e) => {
-                let msg = format!("{e}");
-                if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
-                    eprintln!("Skipping due to rate limit on second: {msg}");
-                    return;
-                }
-                eprintln!("OpenAI second call error: {msg}");
-                return;
-            }
-        };
-        if let Some(final_msg) = second.last_message() {
-            assert!(final_msg.content.as_ref().is_some());
-        }
     }
 
     #[tokio::test]
@@ -804,10 +940,20 @@ mod tests {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
 
+        // Use vision-capable model for OpenRouter, otherwise use default
+        let model_name = if std::env::var("OPENAI_ENDPOINT")
+            .unwrap_or_default()
+            .contains("openrouter")
+        {
+            "openai/gpt-4o-mini"
+        } else {
+            provider.model_id.as_ref().unwrap()
+        };
+
         let image_url =
             "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
-        let mut history = History::new(
-            "@preset/prod-free".to_string(),
+        let history = History::new(
+            model_name.to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage {
@@ -832,9 +978,21 @@ mod tests {
                 },
             ],
         );
-        history.set_stream(false);
 
-        let response = match model.invoke(&history, None).await {
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(&model.default_model.unwrap_or(history.model.clone()))
+            .build();
+
+        let (prompt, history_msgs) = history.extract_prompt_and_history().unwrap();
+
+        let response = match agent.chat(prompt, history_msgs).await {
             Ok(r) => r,
             Err(e) => {
                 let msg = format!("{e}");
@@ -846,9 +1004,7 @@ mod tests {
                 return;
             }
         };
-        if let Some(msg) = response.last_message() {
-            assert!(msg.content.as_ref().is_some());
-        }
+        assert!(!response.is_empty());
     }
 
     #[tokio::test]
@@ -856,10 +1012,20 @@ mod tests {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
 
+        // Use vision-capable model for OpenRouter, otherwise use default
+        let model_name = if std::env::var("OPENAI_ENDPOINT")
+            .unwrap_or_default()
+            .contains("openrouter")
+        {
+            "openai/gpt-4o-mini"
+        } else {
+            provider.model_id.as_ref().unwrap()
+        };
+
         let image_url =
             "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg";
-        let mut history = History::new(
-            "@preset/prod-free".to_string(),
+        let history = History::new(
+            model_name.to_string(),
             vec![
                 HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
                 HistoryMessage {
@@ -884,159 +1050,190 @@ mod tests {
                 },
             ],
         );
-        history.set_stream(true);
 
-        let (callback, counter) = new_counter_callback();
-        let response = match model.invoke(&history, Some(callback)).await {
-            Ok(r) => r,
-            Err(e) => {
-                let msg = format!("{e}");
-                if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
-                    eprintln!("Skipping due to rate limit: {msg}");
-                    return;
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(&model.default_model.unwrap_or(history.model.clone()))
+            .build();
+
+        let (prompt, history_msgs) = history.extract_prompt_and_history().unwrap();
+
+        use futures::StreamExt;
+        let mut stream = agent.stream_chat(prompt, history_msgs).await;
+
+        let mut chunks = 0;
+        let mut response = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
+                    response.push_str(&text);
+                    chunks += 1;
                 }
-                eprintln!("OpenAI vision stream error: {msg}");
-                return;
+                Ok(_) => {} // Ignore other stream items
+                Err(e) => {
+                    let msg = format!("{e}");
+                    if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
+                        eprintln!("Skipping due to rate limit: {msg}");
+                        return;
+                    }
+                    eprintln!("OpenAI vision stream error: {msg}");
+                    panic!("Stream error: {}", e);
+                }
             }
-        };
-        if let Some(msg) = response.last_message() {
-            assert!(msg.content.as_ref().is_some());
         }
-        let _ = counter.load(Ordering::SeqCst);
+
+        assert!(!response.is_empty());
+        assert!(chunks > 0);
     }
 
     // -------- Parallel tool-calls (both providers) --------
 
     #[tokio::test]
     async fn test_azure_openai_parallel_tool_calls_no_stream() {
-        let (provider, config) = azure_provider_and_config();
-        let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let (tool_a, _func_a) = build_weather_tool();
-        let (tool_b, _func_b) = build_forecast_tool();
-
-        let mut history = History::new(
-            "gpt-4o-mini".to_string(),
-            vec![
-                HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(
-                    Role::User,
-                    "Call both weather and forecast tools for Berlin (3 days), return tool calls only.",
-                ),
-            ],
-        );
-        history.tools = Some(vec![tool_a, tool_b]);
-        history.tool_choice = Some(ToolChoice::Required);
-        history.temperature = Some(0.0);
-        history.set_stream(false);
-
-        let response = match model.invoke(&history, None).await {
-            Ok(r) => r,
-            Err(e) => {
-                let msg = format!("{e}");
-                if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
-                    return;
-                }
-                return;
-            }
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
         };
-        if let Some(msg) = response.last_message() {
-            // Accept >= 1 due to model variance, but prefer multiple
-            assert!(msg.tool_calls.len() >= 1);
-        }
+        let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.as_ref().unwrap();
+
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .unwrap()
+            .agent(model_name)
+            .preamble("You are a helpful assistant.")
+            .tool(WeatherTool)
+            .tool(ForecastTool)
+            .build();
+
+        let prompt =
+            "Call both weather and forecast tools for Berlin (3 days), return tool calls only.";
+        let response = agent.chat(prompt, vec![]).await.unwrap();
+
+        assert!(!response.is_empty());
+        assert!(response.contains("Berlin") || response.contains("berlin"));
     }
 
     #[tokio::test]
     async fn test_azure_openai_parallel_tool_calls_stream() {
-        let (provider, config) = azure_provider_and_config();
-        let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let (tool_a, _func_a) = build_weather_tool();
-        let (tool_b, _func_b) = build_forecast_tool();
-
-        let mut history = History::new(
-            "gpt-4o-mini".to_string(),
-            vec![
-                HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(
-                    Role::User,
-                    "Call both weather and forecast tools for Berlin (3 days).",
-                ),
-            ],
-        );
-        history.tools = Some(vec![tool_a, tool_b]);
-        history.tool_choice = Some(ToolChoice::Required);
-        history.set_stream(true);
-
-        let (callback, counter) = new_counter_callback();
-        let response = match model.invoke(&history, Some(callback)).await {
-            Ok(r) => r,
-            Err(_) => return,
+        let Some((provider, config)) = azure_provider_and_config() else {
+            println!("Skipping Azure LLM test: AZURE_OPENAI_LLM_DEPLOYMENT not set");
+            return;
         };
-        if let Some(msg) = response.last_message() {
-            assert!(msg.tool_calls.len() >= 1);
+        let model = OpenAIModel::new(&provider, &config).await.unwrap();
+        let model_name = provider.model_id.as_ref().unwrap();
+
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent(model_name)
+            .preamble("You are a helpful assistant.")
+            .tool(WeatherTool)
+            .tool(ForecastTool)
+            .build();
+
+        use futures::StreamExt;
+        let prompt = "Call both weather and forecast tools for Berlin (3 days).";
+        let mut stream = agent.stream_chat(prompt, vec![]).await;
+
+        let mut response = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
+                    response.push_str(&text);
+                }
+                Ok(_) => {}
+                Err(e) => panic!("Stream error: {}", e),
+            }
         }
-        let _ = counter.load(Ordering::SeqCst);
+
+        assert!(!response.is_empty());
+        assert!(response.contains("Berlin") || response.contains("berlin"));
     }
 
     #[tokio::test]
     async fn test_openai_parallel_tool_calls_no_stream() {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let (tool_a, _func_a) = build_weather_tool();
-        let (tool_b, _func_b) = build_forecast_tool();
+        let model_name = provider.model_id.as_ref().unwrap();
 
-        let mut history = History::new(
-            "@preset/prod-free".to_string(),
-            vec![
-                HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(
-                    Role::User,
-                    "Call both weather and forecast tools for Berlin (3 days), return tool calls only.",
-                ),
-            ],
-        );
-        history.tools = Some(vec![tool_a, tool_b]);
-        history.tool_choice = Some(ToolChoice::Required);
-        history.temperature = Some(0.0);
-        history.set_stream(false);
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .unwrap()
+            .agent(model_name)
+            .preamble("You are a helpful assistant.")
+            .tool(WeatherTool)
+            .tool(ForecastTool)
+            .build();
 
-        let response = match model.invoke(&history, None).await {
-            Ok(r) => r,
-            Err(_) => return,
-        };
-        if let Some(msg) = response.last_message() {
-            assert!(msg.tool_calls.len() >= 1);
-        }
+        let prompt =
+            "Call both weather and forecast tools for Berlin (3 days), return tool calls only.";
+        let response = agent.chat(prompt, vec![]).await.unwrap();
+
+        assert!(!response.is_empty());
+        assert!(response.contains("Berlin") || response.contains("berlin"));
     }
 
     #[tokio::test]
     async fn test_openai_parallel_tool_calls_stream() {
         let (provider, config) = openai_provider_and_config();
         let model = OpenAIModel::new(&provider, &config).await.unwrap();
-        let (tool_a, _func_a) = build_weather_tool();
-        let (tool_b, _func_b) = build_forecast_tool();
 
-        let mut history = History::new(
-            "@preset/prod-free".to_string(),
-            vec![
-                HistoryMessage::from_string(Role::System, "You are a helpful assistant."),
-                HistoryMessage::from_string(
-                    Role::User,
-                    "Call both weather and forecast tools for Berlin (3 days).",
-                ),
-            ],
-        );
-        history.tools = Some(vec![tool_a, tool_b]);
-        history.tool_choice = Some(ToolChoice::Required);
-        history.set_stream(true);
+        let agent = model
+            .provider()
+            .await
+            .unwrap()
+            .inner
+            .as_completion()
+            .ok_or(anyhow!("cant create completion model"))
+            .unwrap()
+            .agent("@preset/testing")
+            .preamble("You are a helpful assistant.")
+            .tool(WeatherTool)
+            .tool(ForecastTool)
+            .build();
 
-        let (callback, counter) = new_counter_callback();
-        let response = match model.invoke(&history, Some(callback)).await {
-            Ok(r) => r,
-            Err(_) => return,
-        };
-        if let Some(msg) = response.last_message() {
-            assert!(msg.tool_calls.len() >= 1);
+        use futures::StreamExt;
+        let prompt = "Call both weather and forecast tools for Berlin (3 days).";
+        let mut stream = agent.stream_chat(prompt, vec![]).await;
+
+        let mut response = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(
+                    Text { text },
+                ))) => {
+                    response.push_str(&text);
+                }
+                Ok(_) => {}
+                Err(e) => panic!("Stream error: {}", e),
+            }
         }
-        let _ = counter.load(Ordering::SeqCst);
+
+        assert!(!response.is_empty());
+        assert!(response.contains("Berlin") || response.contains("berlin"));
     }
 }

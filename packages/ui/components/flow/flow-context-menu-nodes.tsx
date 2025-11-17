@@ -1,5 +1,6 @@
 "use client";
 import { ChevronRightIcon, WorkflowIcon } from "lucide-react";
+import type { RefObject } from "react";
 import { useMemo } from "react";
 import {
 	ContextMenuItem,
@@ -16,11 +17,13 @@ export function FlowContextMenuNodes({
 	filter,
 	pin,
 	onNodePlace,
+	menuBlockedRef,
 }: Readonly<{
 	items: INode[];
 	filter: string;
 	pin?: IPin;
 	onNodePlace: (node: INode) => Promise<void>;
+	menuBlockedRef?: RefObject<boolean>;
 }>) {
 	const nodeState = useMemo(() => {
 		const leafs: INode[] = [];
@@ -54,7 +57,13 @@ export function FlowContextMenuNodes({
 					<ContextMenuItem
 						key={node.id}
 						id={node.id}
-						onClick={() => onNodePlace(node)}
+						onSelect={(event) => {
+							if (menuBlockedRef?.current) {
+								event.preventDefault();
+								return;
+							}
+							onNodePlace(node);
+						}}
 					>
 						{node.icon ? (
 							<DynamicImage
@@ -88,6 +97,7 @@ export function FlowContextMenuNodes({
 									filter={filter}
 									pin={pin}
 									onNodePlace={onNodePlace}
+									menuBlockedRef={menuBlockedRef}
 								/>
 							</div>
 						</ContextMenuSubContent>
@@ -97,7 +107,13 @@ export function FlowContextMenuNodes({
 				<ContextMenuItem
 					key={`context${node.id}`}
 					id={node.id}
-					onClick={async () => onNodePlace(node)}
+					onSelect={async (event) => {
+						if (menuBlockedRef?.current) {
+							event.preventDefault();
+							return;
+						}
+						await onNodePlace(node);
+					}}
 				>
 					{node.icon ? (
 						<DynamicImage

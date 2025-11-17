@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -10,6 +10,7 @@ use flow_like::{
 use flow_like_model_provider::history::History;
 use flow_like_types::{async_trait, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SetHistoryTopPNode {}
 
@@ -25,10 +26,20 @@ impl NodeLogic for SetHistoryTopPNode {
         let mut node = Node::new(
             "ai_generative_set_history_top_p",
             "Set History Top P",
-            "Sets the top_p attribute in a ChatHistory",
+            "Stores the nucleus sampling (top-p) parameter alongside the chat history",
             "AI/Generative/History",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",
@@ -37,23 +48,33 @@ impl NodeLogic for SetHistoryTopPNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin("history", "History", "ChatHistory", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "history",
+            "History",
+            "Existing chat history to update",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("top_p", "Top P", "Top P Value", VariableType::Float);
+        node.add_input_pin(
+            "top_p",
+            "Top P",
+            "Nucleus sampling probability mass (0-1)",
+            VariableType::Float,
+        );
 
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Signals completion after storing top-p",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "history_out",
             "History",
-            "Updated ChatHistory",
+            "History including the top-p value",
             VariableType::Struct,
         )
         .set_schema::<History>();

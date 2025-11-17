@@ -18,6 +18,7 @@ use std::io::Cursor;
 /// - Does **not** touch the local filesystem; reads from bytes and returns the raw string value.
 /// - If the file, sheet or cell is missing, `value` is set to "" and `found` is false.
 /// - Row/Col are 1-based; column can be letters (A, AA, ...) or a 1-based number.
+#[crate::register_node]
 #[derive(Default)]
 pub struct ReadCellNode {}
 

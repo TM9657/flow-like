@@ -174,7 +174,7 @@ pub fn run() {
         flow_like_types::tokio::time::sleep(Duration::from_millis(800)).await;
 
         let weak_ref = Arc::downgrade(&initialized_state);
-        let catalog = flow_like_catalog::get_catalog().await;
+        let catalog = flow_like_catalog::get_catalog();
         let state = initialized_state.lock().await;
         let registry_guard = state.node_registry.clone();
         drop(state);

@@ -11,6 +11,7 @@ use flow_like_types::{Value, async_trait, json::json};
 
 use crate::web::api::{HttpBody, HttpRequest};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SetStructBodyNode {}
 

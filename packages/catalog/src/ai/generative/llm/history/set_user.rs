@@ -1,7 +1,7 @@
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
         variable::VariableType,
     },
@@ -10,6 +10,7 @@ use flow_like::{
 use flow_like_model_provider::history::History;
 use flow_like_types::{async_trait, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct SetHistoryUserNode {}
 
@@ -25,35 +26,55 @@ impl NodeLogic for SetHistoryUserNode {
         let mut node = Node::new(
             "ai_generative_set_history_user",
             "Set History User",
-            "Sets the user attribute in a ChatHistory",
+            "Updates the user identifier stored alongside the chat history",
             "AI/Generative/History",
         );
         node.add_icon("/flow/icons/history.svg");
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(10)
+                .set_security(10)
+                .set_performance(9)
+                .set_reliability(10)
+                .set_governance(9)
+                .set_cost(10)
+                .build(),
+        );
 
         node.add_input_pin(
             "exec_in",
             "Input",
-            "Initiate Execution",
+            "Begin execution when the update should occur",
             VariableType::Execution,
         );
 
-        node.add_input_pin("history", "History", "ChatHistory", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "history",
+            "History",
+            "Existing chat history to update",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("user", "User", "User Value", VariableType::String);
+        node.add_input_pin(
+            "user",
+            "User",
+            "User identifier or label to attach",
+            VariableType::String,
+        );
 
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Done with the Execution",
+            "Signals completion once the user is stored",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "history_out",
             "History",
-            "Updated ChatHistory",
+            "History reflecting the new user metadata",
             VariableType::Struct,
         )
         .set_schema::<History>();

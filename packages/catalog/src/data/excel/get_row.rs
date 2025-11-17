@@ -25,6 +25,7 @@ use crate::data::excel::{CSVTable, Cell};
 /// Outputs
 /// - `row` (Struct): the row as `{ header: value, ... }`.
 /// - `row_index` (Integer): echo of the requested index.
+#[crate::register_node]
 #[derive(Default)]
 pub struct GetRowByIndexNode {}
 

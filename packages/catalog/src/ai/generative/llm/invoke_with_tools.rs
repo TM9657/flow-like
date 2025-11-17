@@ -3,7 +3,7 @@ use flow_like::{
     flow::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
-        node::{Node, NodeLogic},
+        node::{Node, NodeLogic, NodeScores},
         pin::{PinOptions, PinType},
         variable::VariableType,
     },
@@ -177,6 +177,7 @@ pub fn extract_tagged(text: &str, tag: &str) -> Result<Vec<String>, Error> {
     Ok(out)
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct InvokeLLMWithToolsNode {}
 
@@ -192,25 +193,51 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         let mut node = Node::new(
             "invoke_llm_with_tools",
             "Invoke with Tools",
-            "Invoke LLM with Tool Calls",
+            "Invokes an LLM that can call Flow tools/functions and routes each call to execution pins.",
             "AI/Generative",
         );
         node.add_icon("/flow/icons/bot-invoke.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(4)
+                .set_security(5)
+                .set_performance(7)
+                .set_governance(5)
+                .set_reliability(6)
+                .set_cost(4)
+                .build(),
+        );
 
-        node.add_input_pin("model", "Model", "Model", VariableType::Struct)
-            .set_schema::<Bit>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger to start the tool-enabled invocation",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("history", "History", "Chat History", VariableType::Struct)
-            .set_schema::<History>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "model",
+            "Model",
+            "Bit describing the provider/model to execute",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin(
+            "history",
+            "History",
+            "Conversation history the model should continue from",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
             "tools",
             "Tools",
-            "JSON or OpenAI Function Definitions",
+            "JSON array of tool/function definitions (OpenAI format)",
             VariableType::String,
         )
         .set_default_value(Some(json::json!("[]")));
@@ -218,7 +245,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         node.add_input_pin(
             "tool_choice",
             "Tool Choice",
-            "Tool Choice Mode",
+            "Controls whether the model must, may, or must not call tools",
             VariableType::String,
         )
         .set_options(
@@ -232,12 +259,17 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         )
         .set_default_value(Some(json::json!("Auto")));
 
-        node.add_output_pin("exec_done", "Done", "Done Pin", VariableType::Execution);
+        node.add_output_pin(
+            "exec_done",
+            "Done",
+            "Signals when the invocation and tool routing finished",
+            VariableType::Execution,
+        );
 
         node.add_output_pin(
             "response",
             "Response",
-            "Final response if not tool call made",
+            "LLM response if the model answered directly without tool calls",
             VariableType::Struct,
         )
         .set_schema::<Response>()
@@ -246,7 +278,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
         node.add_output_pin(
             "tool_call_args",
             "Tool Call Args",
-            "Tool Call Arguments",
+            "Parsed JSON arguments for the latest tool call",
             VariableType::Struct,
         );
 
@@ -479,7 +511,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
             node.add_output_pin(
                 &missing_tool_ref,
                 &missing_tool_ref,
-                "Tool Exec",
+                "Executes when the LLM requests this tool",
                 VariableType::Execution,
             );
         }
