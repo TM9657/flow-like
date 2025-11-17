@@ -3,6 +3,7 @@
 /// Uses Rig's agent system with dynamic tools for executing Flow-Like subcontexts.
 /// Recursive agent calls until no more tool calls are made or recursion limit hit.
 /// Effectively, this node allows the LLM to control it's own execution until further human input required.
+use ahash::AHashSet;
 use flow_like::{
     bit::Bit,
     flow::{
@@ -15,12 +16,19 @@ use flow_like::{
 };
 use flow_like_model_provider::{
     history::{History, Tool},
-    response::Response,
+    response::{Response, Usage as ResponseUsage},
+    response_chunk::ResponseChunk,
 };
 
-use flow_like_types::{Value, anyhow, async_trait, json};
-use rig::completion::{Completion, ToolDefinition};
+use flow_like_types::{
+    Value, anyhow, async_trait, json,
+    sync::{DashMap, Mutex},
+};
+use futures::StreamExt;
+use rig::OneOrMany;
+use rig::completion::{Completion, ToolDefinition, Usage as RigUsage};
 use rig::message::{AssistantContent, ToolCall as RigToolCall};
+use rig::streaming::StreamedAssistantContent;
 use std::{collections::HashMap, sync::Arc};
 
 #[crate::register_node]
@@ -156,95 +164,12 @@ impl SimpleAgentNode {
             function,
         })
     }
-}
 
-#[async_trait]
-impl NodeLogic for SimpleAgentNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
-        let mut node = Node::new(
-            "simple_agent",
-            "Simple Agent",
-            "LLM-driven control loop that repeatedly calls referenced Flow functions as tools until it decides to stop",
-            "AI/Agents",
-        );
-        node.add_icon("/flow/icons/for-each.svg");
-        node.set_can_reference_fns(true);
-
-        node.set_scores(
-            NodeScores::new()
-                .set_privacy(3)
-                .set_security(4)
-                .set_performance(6)
-                .set_governance(4)
-                .set_reliability(5)
-                .set_cost(4)
-                .build(),
-        );
-
-        node.add_input_pin(
-            "exec_in",
-            "Input",
-            "Execution trigger for starting the agent loop",
-            VariableType::Execution,
-        );
-
-        node.add_input_pin(
-            "model",
-            "Model",
-            "Bit describing the LLM that powers the agent",
-            VariableType::Struct,
-        )
-        .set_schema::<Bit>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
-
-        node.add_input_pin(
-            "history",
-            "History",
-            "Conversation history shared with the agent (used for reasoning context)",
-            VariableType::Struct,
-        )
-        .set_schema::<History>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
-
-        node.add_input_pin(
-            "max_iter",
-            "Iter",
-            "Maximum number of internal iterations/tool calls before failing",
-            VariableType::Integer,
-        )
-        .set_default_value(Some(json::json!(15)));
-
-        node.add_output_pin(
-            "exec_done",
-            "Done",
-            "Fires when the agent stops (successfully or due to error)",
-            VariableType::Execution,
-        );
-
-        node.add_output_pin(
-            "response",
-            "Response",
-            "Final assistant response produced when the agent halts",
-            VariableType::Struct,
-        )
-        .set_schema::<Response>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
-
-        node.add_output_pin(
-            "history_out",
-            "History Out",
-            "Conversation history enriched with all agent/tool turns",
-            VariableType::Struct,
-        )
-        .set_schema::<History>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
-
-        node.set_long_running(true);
-
-        node
-    }
-
-    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    async fn run_internal(
+        &self,
+        context: &mut ExecutionContext,
+        stream_state: &AgentStreamState,
+    ) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_done").await?;
 
         let max_iterations: u64 = context.evaluate_pin("max_iter").await?;
@@ -264,7 +189,9 @@ impl NodeLogic for SimpleAgentNode {
             tool_name_to_node.insert(tool_name, referenced_node);
         }
 
+        let mut model_display_name = model_bit.id.clone();
         if let Some(meta) = model_bit.meta.get("en") {
+            model_display_name = meta.name.clone();
             context.log_message(&format!("Loading model {:?}", meta.name), LogLevel::Debug);
         }
 
@@ -301,19 +228,11 @@ impl NodeLogic for SimpleAgentNode {
         // Filter out tool result messages from previous agent runs to avoid confusing Rig
         let mut current_history: Vec<rig::message::Message> = history_msgs
             .into_iter()
-            .filter(|msg| {
-                // Keep all messages except User messages with ToolResult content
-                // These are from previous tool executions and should not be included
-                match msg {
-                    rig::message::Message::User { content } => {
-                        // Check if any content is a ToolResult
-                        let has_tool_result = content
-                            .iter()
-                            .any(|c| matches!(c, rig::message::UserContent::ToolResult(_)));
-                        !has_tool_result
-                    }
-                    _ => true,
-                }
+            .filter(|msg| match msg {
+                rig::message::Message::User { content } => !content
+                    .iter()
+                    .any(|c| matches!(c, rig::message::UserContent::ToolResult(_))),
+                _ => true,
             })
             .collect();
 
@@ -361,22 +280,91 @@ impl NodeLogic for SimpleAgentNode {
                 request = request.tools(tool_definitions.clone());
             }
 
-            // Send request
-            let response = request
-                .send()
+            // Stream the response and emit chunks in real-time
+            let mut stream = request
+                .stream()
                 .await
-                .map_err(|e| anyhow!("Failed to send completion request: {}", e))?;
+                .map_err(|e| anyhow!("Failed to start completion stream: {}", e))?;
+
+            let mut response_contents: Vec<AssistantContent> = Vec::new();
+            let mut final_usage: Option<RigUsage> = None;
+            let mut response_obj = Response::new();
+            response_obj.model = Some(model_display_name.clone());
 
             context.log_message(
-                &format!("Received response with {} choices", response.choice.len()),
+                &format!("[agent iter {}] Streaming response...", iteration),
                 LogLevel::Debug,
             );
+
+            while let Some(item) = stream.next().await {
+                let content = item.map_err(|e| anyhow!("Streaming error: {}", e))?;
+
+                match content {
+                    StreamedAssistantContent::Text(text) => {
+                        let chunk = ResponseChunk::from_text(&text.text, &model_display_name);
+                        response_obj.push_chunk(chunk.clone());
+                        stream_state.emit_chunk(context, &chunk).await?;
+                        response_contents.push(AssistantContent::Text(text));
+                    }
+                    StreamedAssistantContent::ToolCall(tool_call) => {
+                        let chunk = ResponseChunk::from_tool_call(&tool_call, &model_display_name);
+                        response_obj.push_chunk(chunk.clone());
+                        stream_state.emit_chunk(context, &chunk).await?;
+                        response_contents.push(AssistantContent::ToolCall(tool_call));
+                    }
+                    StreamedAssistantContent::ToolCallDelta { id, delta } => {
+                        let chunk =
+                            ResponseChunk::from_tool_call_delta(&id, &delta, &model_display_name);
+                        response_obj.push_chunk(chunk.clone());
+                        stream_state.emit_chunk(context, &chunk).await?;
+                        // Tool call deltas are accumulated into ToolCall by Rig
+                    }
+                    StreamedAssistantContent::Reasoning(reasoning) => {
+                        let reasoning_text = reasoning.reasoning.join("\n");
+                        let chunk =
+                            ResponseChunk::from_reasoning(&reasoning_text, &model_display_name);
+                        response_obj.push_chunk(chunk.clone());
+                        stream_state.emit_chunk(context, &chunk).await?;
+                        // Reasoning doesn't go into response_contents
+                    }
+                    StreamedAssistantContent::Final(final_resp) => {
+                        final_usage = final_resp.usage;
+                    }
+                }
+            }
+
+            // Emit finish chunk
+            let finish_chunk = ResponseChunk::finish(&model_display_name, final_usage.as_ref());
+            response_obj.push_chunk(finish_chunk.clone());
+            stream_state.emit_chunk(context, &finish_chunk).await?;
+
+            // Set usage if available
+            if let Some(usage) = final_usage {
+                response_obj.usage = ResponseUsage::from_rig(usage);
+            }
+
+            context.log_message(
+                &format!(
+                    "Received response with {} content blocks",
+                    response_contents.len()
+                ),
+                LogLevel::Debug,
+            );
+
+            let assistant_msg = rig::message::Message::Assistant {
+                id: None,
+                content: OneOrMany::many(response_contents.clone()).unwrap_or_else(|_| {
+                    OneOrMany::one(AssistantContent::Text(rig::message::Text {
+                        text: String::new(),
+                    }))
+                }),
+            };
 
             // Check for tool calls in response
             let mut tool_calls_found = false;
             let mut tool_results: Vec<(String, String, Value)> = Vec::new();
 
-            for content in response.choice.iter() {
+            for content in response_contents.iter() {
                 if let AssistantContent::ToolCall(RigToolCall {
                     id,
                     call_id: _,
@@ -504,38 +492,18 @@ impl NodeLogic for SimpleAgentNode {
                     LogLevel::Debug,
                 );
 
-                // Extract final text response
-                let final_response = response
-                    .choice
-                    .iter()
-                    .find_map(|c| match c {
-                        AssistantContent::Text(text) => Some(text.text.clone()),
-                        _ => None,
-                    })
-                    .unwrap_or_else(String::new);
+                let final_response = response_obj.content().unwrap_or_default();
 
                 context.log_message(
                     &format!("Final response extracted: {} chars", final_response.len()),
                     LogLevel::Debug,
                 );
 
-                // Create Response object from the final response
-                use rig::OneOrMany;
-                let content = OneOrMany::one(AssistantContent::Text(rig::message::Text {
-                    text: final_response.clone(),
-                }));
-
-                let response_obj = Response::from_rig_message(rig::message::Message::Assistant {
-                    id: None,
-                    content,
-                })
-                .map_err(|e| anyhow!("Failed to create response: {}", e))?;
-
                 // Add final assistant response to full history
                 use flow_like_model_provider::history::{HistoryMessage, MessageContent, Role};
                 let final_assistant_msg = HistoryMessage {
                     role: Role::Assistant,
-                    content: MessageContent::String(final_response),
+                    content: MessageContent::String(final_response.clone()),
                     name: None,
                     tool_call_id: None,
                     tool_calls: None,
@@ -561,17 +529,14 @@ impl NodeLogic for SimpleAgentNode {
             }
 
             // Prepare history for next iteration by appending assistant message
-            let assistant_msg = rig::message::Message::Assistant {
-                id: None,
-                content: response.choice.clone(),
-            };
-            current_history.push(assistant_msg.clone());
+            let assistant_clone = assistant_msg.clone();
+            current_history.push(assistant_clone.clone());
 
             // Add assistant message with tool calls to full history
             use flow_like_model_provider::history::{
                 Content, ContentType, HistoryMessage, MessageContent, Role,
             };
-            let assistant_history_msg: HistoryMessage = assistant_msg.into();
+            let assistant_history_msg: HistoryMessage = assistant_clone.into();
             full_history.push_message(assistant_history_msg);
 
             context.log_message(
@@ -630,5 +595,217 @@ impl NodeLogic for SimpleAgentNode {
                 LogLevel::Debug,
             );
         }
+    }
+}
+
+#[async_trait]
+impl NodeLogic for SimpleAgentNode {
+    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+        let mut node = Node::new(
+            "simple_agent",
+            "Simple Agent",
+            "LLM-driven control loop that repeatedly calls referenced Flow functions as tools until it decides to stop",
+            "AI/Agents",
+        );
+        node.add_icon("/flow/icons/for-each.svg");
+        node.set_can_reference_fns(true);
+
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(3)
+                .set_security(4)
+                .set_performance(6)
+                .set_governance(4)
+                .set_reliability(5)
+                .set_cost(4)
+                .build(),
+        );
+
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Execution trigger for starting the agent loop",
+            VariableType::Execution,
+        );
+
+        node.add_input_pin(
+            "model",
+            "Model",
+            "Bit describing the LLM that powers the agent",
+            VariableType::Struct,
+        )
+        .set_schema::<Bit>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin(
+            "history",
+            "History",
+            "Conversation history shared with the agent (used for reasoning context)",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin(
+            "max_iter",
+            "Iter",
+            "Maximum number of internal iterations/tool calls before failing",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json::json!(15)));
+
+        node.add_output_pin(
+            "on_stream",
+            "On Stream",
+            "Triggers whenever the agent streams its final response",
+            VariableType::Execution,
+        );
+
+        node.add_output_pin(
+            "chunk",
+            "Chunk",
+            "Latest streamed agent chunk (final response)",
+            VariableType::Struct,
+        )
+        .set_schema::<ResponseChunk>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_output_pin(
+            "exec_done",
+            "Done",
+            "Fires when the agent stops (successfully or due to error)",
+            VariableType::Execution,
+        );
+
+        node.add_output_pin(
+            "response",
+            "Response",
+            "Final assistant response produced when the agent halts",
+            VariableType::Struct,
+        )
+        .set_schema::<Response>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_output_pin(
+            "history_out",
+            "History Out",
+            "Conversation history enriched with all agent/tool turns",
+            VariableType::Struct,
+        )
+        .set_schema::<History>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.set_long_running(true);
+
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        let stream_state = AgentStreamState::new(context).await?;
+        let run_result = self.run_internal(context, &stream_state).await;
+        let finalize_result = stream_state.finalize(context).await;
+
+        if let Err(finalize_err) = finalize_result {
+            if run_result.is_ok() {
+                return Err(finalize_err);
+            }
+        }
+
+        run_result
+    }
+}
+
+struct AgentStreamState {
+    parent_node_id: String,
+    chunk_pin_available: bool,
+    on_stream_exists: bool,
+    connected_nodes: Option<Arc<DashMap<String, Arc<Mutex<ExecutionContext>>>>>,
+}
+
+impl AgentStreamState {
+    async fn new(context: &mut ExecutionContext) -> flow_like_types::Result<Self> {
+        let parent_node_id = context.node.node.lock().await.id.clone();
+        let chunk_pin_available = context.get_pin_by_name("chunk").await.is_ok();
+
+        let mut on_stream_exists = false;
+        let mut connected_nodes = None;
+
+        if let Ok(on_stream_pin) = context.get_pin_by_name("on_stream").await {
+            on_stream_exists = true;
+            context.activate_exec_pin_ref(&on_stream_pin).await?;
+            let connected = on_stream_pin.lock().await.get_connected_nodes().await;
+            if !connected.is_empty() {
+                let map = Arc::new(DashMap::new());
+                for node in connected {
+                    let sub_context = context.create_sub_context(&node).await;
+                    map.insert(
+                        node.node.lock().await.id.clone(),
+                        Arc::new(Mutex::new(sub_context)),
+                    );
+                }
+                connected_nodes = Some(map);
+            }
+        }
+
+        Ok(Self {
+            parent_node_id,
+            chunk_pin_available,
+            on_stream_exists,
+            connected_nodes,
+        })
+    }
+
+    async fn emit_chunk(
+        &self,
+        context: &mut ExecutionContext,
+        chunk: &ResponseChunk,
+    ) -> flow_like_types::Result<()> {
+        if !self.chunk_pin_available && self.connected_nodes.is_none() {
+            return Ok(());
+        }
+
+        if self.chunk_pin_available {
+            context
+                .set_pin_value("chunk", json::json!(chunk.clone()))
+                .await?;
+        }
+
+        if let Some(nodes) = &self.connected_nodes {
+            let mut recursion_guard = AHashSet::new();
+            recursion_guard.insert(self.parent_node_id.clone());
+
+            for entry in nodes.iter() {
+                let (id, sub_context) = entry.pair();
+                let mut sub_context = sub_context.lock().await;
+                let mut guard = Some(recursion_guard.clone());
+                let run = InternalNode::trigger(&mut sub_context, &mut guard, true).await;
+                sub_context.end_trace();
+                if let Err(err) = run {
+                    context.log_message(
+                        &format!("Stream-connected node {} failed: {:?}", id, err),
+                        LogLevel::Error,
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn finalize(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        if self.on_stream_exists {
+            context.deactivate_exec_pin("on_stream").await?;
+        }
+
+        if let Some(nodes) = &self.connected_nodes {
+            for entry in nodes.iter() {
+                let (_, sub_context) = entry.pair();
+                let mut sub_context = sub_context.lock().await;
+                sub_context.end_trace();
+                context.push_sub_context(&mut sub_context);
+            }
+        }
+
+        Ok(())
     }
 }
