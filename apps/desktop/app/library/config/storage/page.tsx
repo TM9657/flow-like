@@ -22,18 +22,16 @@ export default function Page() {
 	);
 
 	return (
-		<main className="flex flex-col gap-2 h-full max-h-full w-full flex-grow overflow-hidden">
-			<StorageSystem
-				appId={id ?? ""}
-				prefix={decodeURIComponent(prefix)}
-				fileToUrl={fileToUrl}
-				updatePrefix={(prefix) => {
-					router.push(
-						`/library/config/storage?id=${id}&prefix=${encodeURIComponent(prefix)}`,
-					);
-				}}
-				key={`${id}-${prefix}`}
-			/>
-		</main>
+		<StorageSystem
+			appId={id ?? ""}
+			prefix={decodeURIComponent(prefix)}
+			fileToUrl={fileToUrl}
+			updatePrefix={(prefix) => {
+				router.push(
+					`/library/config/storage?id=${id}&prefix=${encodeURIComponent(prefix)}`,
+				);
+			}}
+			key={`${id}-${prefix}`}
+		/>
 	);
 }
