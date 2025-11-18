@@ -1,0 +1,95 @@
+---
+title: "Meet the New Agent Interface: Pin-First, Schema-Free (coming in v0.0.6)"
+description: "No more manual schemas: define pins on your functions and the agent interface does the rest. Reuse functions for deterministic calls, MCP tools supported, more built-ins coming."
+date: 2025-11-18
+tags: ["announcement", "agents", "agent-builder", "workflow", "mcp", "release-notes"]
+cover: "/images/simple-agent.jpg"
+draft: false
+---
+
+# Meet the New Flow-Like Agent Interface
+
+*Build complex agents without babysitting schemas — and keep your workflows clean, typed, and reusable.*
+
+> **Heads-up:** This ships with **v0.0.6** — it’s not live yet, but landing very soon.
+
+We’ve just shipped a big upgrade to how you build and run agents in Flow-Like. The headline: **no more manual schema definitions**. You write your function, define the pins you want, and the **agent interface** handles the rest — parsing, shaping, and wiring data so your function calls just work.
+
+If you want something quick: drop in a **Simple Agent** and go from zero to helpful in minutes. If you’re building a larger system: use the new **Agent Builder node** to visually compose multi-step, multi-tool agents that coordinate across your workspace.
+
+---
+
+## Why this matters
+
+![Agent Interface](/images/simple-agent.jpg)
+
+**Less boilerplate, more shipping.**
+Schemas used to be the tax you paid for structured automation. Now, your **pins are the contract**. The agent reads them, infers what it needs, and keeps the data flowing correctly.
+
+**Deterministic when you want it.**
+Agents can orchestrate tools automatically — but the same functions can be called **directly and deterministically** inside any workflow step. Flip between autonomous orchestration and precise control without duplicating code. **Maximum reusability, zero ceremony.**
+
+**Bring your tools.**
+We support **MCP tools** out of the box, and we’re rolling out a growing set of **built-in agent tools**. Point the agent at your function/toolbox, and it’ll route requests intelligently.
+
+---
+
+## Building: Simple vs. Builder
+
+* **Simple Agent**
+  One node, minimal config, automatic function discovery via pins. Perfect for quick automations or augmenting existing flows with an AI helper.
+
+* **Agent Builder Node**
+  A visual canvas for **bigger agent systems**: chain reasoning steps, add guardrails, swap models, register callbacks, and compose multiple tools/functions. It’s everything you loved about Flow-Like — typed, local-first, and inspectable — now for agents.
+
+---
+
+## The three connection types (at a glance)
+
+1. **Solid line (non-dotted): Execution flow**
+   The *order* things run. Think of it as your control path from one node to the next.
+
+2. **Dotted, colorful lines (horizontal): Data flow**
+   The *payloads* moving between nodes. These show how inputs/outputs and pins connect so you always see the complete data picture.
+
+3. **Orange vertical flow: Function references (New)**
+   A special link that says, “this agent can **call that function**,” or “this node exposes a **callback** the agent can trigger.” It’s not data, it’s not control — it’s a **capability reference**. Agents use it to discover and invoke your functions; you can also wire the same reference for direct, deterministic calls.
+
+If you’ve ever built logic graphs, this will feel familiar: execution, data, and reference links live side-by-side so you can reason about runtime, state, and capabilities at a glance.
+
+---
+
+## How it plays in real workflows
+
+* **Prototype fast, harden later.** Start with a Simple Agent orchestrating your functions. When a path stabilizes, **swap in direct calls** for the critical steps to make them deterministic and testable.
+* **Mix & match autonomy.** Let the agent pick tools for fuzzy tasks (summaries, enrichment), and keep strict steps (validation, pricing, compliance) as **pinned function calls**.
+* **Keep everything typed.** Pins define types; the agent respects them. You get structured I/O, safer refactors, and easier debugging.
+
+---
+
+## Under the hood (without the headache)
+
+* **Pins as truth.** Your pin definitions become the schema. No separate JSON walls to maintain.
+* **Tool discovery.** MCP tools and built-ins register as callable capabilities via **orange function references**.
+* **Orchestration + determinism.** The same function can be auto-invoked by an agent *or* called directly in the workflow — one implementation, two modes.
+
+---
+
+## Availability
+
+This feature is **coming with v0.0.6**. It’s not live today, but it’s right around the corner. We’ll post full notes with examples and templates when it drops.
+
+---
+
+## TL;DR
+
+* **No schemas to hand-craft.** Define your pins, done.
+* **Simple Agent** for speed. **Agent Builder** for scale.
+* **Three lines, three truths:**
+
+  * Solid = execution
+  * Dotted color = data
+  * Orange vertical = function reference / callbacks
+* **Same function, two modes:** autonomous **agent calls** or deterministic **direct calls**.
+* **MCP supported**, more built-in tools landing soon.
+* **Shipping in 0.0.6.**

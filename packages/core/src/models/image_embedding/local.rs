@@ -1,7 +1,7 @@
 #![cfg(feature = "local-ml")]
 use crate::{
     bit::{Bit, BitTypes},
-    models::embedding_factory::EmbeddingFactory,
+    models::{embedding_factory::EmbeddingFactory, local_utils::ensure_local_weights},
     state::FlowLikeState,
 };
 use flow_like_model_provider::fastembed::{
@@ -48,7 +48,7 @@ impl LocalImageEmbeddingModel {
         };
 
         let pack = bit.pack(app_state.clone()).await?;
-        pack.download(app_state.clone(), None).await?;
+        ensure_local_weights(&pack, &app_state, bit.id.as_str(), "image embedding model").await?;
         let embedding_model = pack
             .bits
             .iter()
