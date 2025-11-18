@@ -862,6 +862,8 @@ export function FlowBoard({
 				const sourceChanged = oldSource !== newSource;
 				const targetChanged = oldTarget !== newTarget;
 
+				const commands: IGenericCommand[] = [];
+
 				if (sourceChanged) {
 					// Source (ref_out) was reconnected - update both old and new source nodes
 					const oldRefOutNodeId = oldSource?.replace("ref_out_", "") || "";
@@ -890,7 +892,7 @@ export function FlowBoard({
 							},
 						};
 
-						await executeCommand(updateNodeCommand({ node: updatedOldNode }));
+						commands.push(updateNodeCommand({ node: updatedOldNode }));
 					}
 
 					// Add ref to new source node
@@ -914,7 +916,7 @@ export function FlowBoard({
 							},
 						};
 
-						await executeCommand(updateNodeCommand({ node: updatedNewNode }));
+						commands.push(updateNodeCommand({ node: updatedNewNode }));
 					}
 				} else if (targetChanged) {
 					// Target (ref_in) was reconnected - update the source node's refs
@@ -948,8 +950,12 @@ export function FlowBoard({
 							},
 						};
 
-						await executeCommand(updateNodeCommand({ node: updatedNode }));
+						commands.push(updateNodeCommand({ node: updatedNode }));
 					}
+				}
+
+				if (commands.length > 0) {
+					await executeCommands(commands);
 				}
 			} else {
 				// Regular pin connection reconnection - need to look up nodes

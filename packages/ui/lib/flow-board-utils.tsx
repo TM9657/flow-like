@@ -696,12 +696,12 @@ export function parseBoard(
 				hash: hash,
 				boardRef: boardRef,
 				comment: { ...comment, is_locked: comment.is_locked ?? false },
-				onUpsert: (comment: IComment) => {
+				onUpsert: async (comment: IComment) => {
 					const command = upsertCommentCommand({
 						comment: comment,
 						current_layer: currentLayer,
 					});
-					executeCommand(command, false);
+					await executeCommand(command, false);
 				},
 			},
 			selected: selected.has(comment.id),
