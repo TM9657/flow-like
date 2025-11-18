@@ -46,6 +46,8 @@ export function useKeyboardShortcuts({
 
 	const shortcutHandler = useCallback(
 		async (event: KeyboardEvent) => {
+			if (event.repeat) return;
+
 			const target = event.target as HTMLElement;
 			if (
 				target.tagName === "INPUT" ||
