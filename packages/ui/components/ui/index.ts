@@ -33,6 +33,7 @@ export * from "./label";
 export * from "./lance-viewer";
 export * from "./loading-screen";
 export * from "./mobile-header";
+export * from "./monaco-file-editor";
 export * from "./popover";
 export * from "./progress";
 export * from "./radio-group";

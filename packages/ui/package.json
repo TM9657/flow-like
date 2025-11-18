@@ -10,6 +10,7 @@
 		"@emoji-mart/data": "^1.2.1",
 		"@faker-js/faker": "^9.9.0",
 		"@floating-ui/react": "^0.27.3",
+		"@monaco-editor/react": "^4.7.0",
 		"@paralleldrive/cuid2": "^2.2.2",
 		"@platejs/ai": "^49.1.6",
 		"@platejs/autoformat": "^49.0.0",

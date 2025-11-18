@@ -35,6 +35,8 @@ import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
+	isCode,
+	isText,
 } from "../ui";
 import { StorageBreadcrumbs } from "./storage-breadcrumbs";
 import { FileOrFolder } from "./storage-file-or-folder";
@@ -288,6 +290,38 @@ export function StorageSystem({
 		},
 		[appId, preview],
 	);
+
+	const saveFile = useCallback(
+		async (fileContent: string) => {
+			if (!preview.file) {
+				toast.error("No file selected");
+				return;
+			}
+
+			try {
+				const blob = new Blob([fileContent], { type: "text/plain" });
+				const fileName = preview.file.split("/").pop() || "file";
+				const file = new File([blob], fileName, { type: "text/plain" });
+
+				await backend.storageState.uploadStorageItems(
+					appId,
+					prefix,
+					[file],
+					undefined,
+				);
+
+				await files.refetch();
+			} catch (error) {
+				console.error("Failed to save file:", error);
+				throw error;
+			}
+		},
+		[appId, prefix, preview.file, backend.storageState, files],
+	);
+
+	const isFileEditable = useCallback((fileUrl: string) => {
+		return isCode(fileUrl) || isText(fileUrl);
+	}, []);
 
 	const downloadFile = useCallback(
 		async (file: string) => {
@@ -729,7 +763,12 @@ export function StorageSystem({
 											</Button>
 										</div>
 										<div className="flex-1 min-h-0 overflow-auto">
-											<FilePreviewer url={preview.url} page={2} />
+											<FilePreviewer
+												url={preview.url}
+												page={2}
+												editable={isFileEditable(preview.url)}
+												onSave={saveFile}
+											/>
 										</div>
 									</div>
 								</div>
@@ -833,7 +872,12 @@ export function StorageSystem({
 												</Button>
 											</div>
 											<div className="flex-1 min-h-0 overflow-auto">
-												<FilePreviewer url={preview.url} page={2} />
+												<FilePreviewer
+													url={preview.url}
+													page={2}
+													editable={isFileEditable(preview.url)}
+													onSave={saveFile}
+												/>
 											</div>
 										</div>
 									</ResizablePanel>
