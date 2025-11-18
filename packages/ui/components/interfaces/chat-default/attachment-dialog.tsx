@@ -740,7 +740,9 @@ export function FileDialogPreview({ file }: Readonly<FileDialogPreviewProps>) {
 					}
 				>
 					<Music className="w-16 h-16 text-muted-foreground" />
-					<p className="text-lg font-medium text-center">{getDisplayFileName(file.name)}</p>
+					<p className="text-lg font-medium text-center">
+						{getDisplayFileName(file.name)}
+					</p>
 					<audio controls className="w-full max-w-md">
 						<source src={file.url} />
 						Your browser does not support the audio tag.

@@ -922,9 +922,10 @@ export function StorageSystem({
 											}}
 											shareFile={async (file) => {
 												const downloadLinks =
-													await backend.storageState.downloadStorageItems(appId, [
-														file,
-													]);
+													await backend.storageState.downloadStorageItems(
+														appId,
+														[file],
+													);
 												if (downloadLinks.length === 0) {
 													return;
 												}

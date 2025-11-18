@@ -470,7 +470,12 @@ export function MessageComponent({
 		const hiddenImages = imageFiles.slice(4);
 		const hiddenVideo = videoFiles.slice(1);
 
-		return hiddenAudio.length + hiddenImages.length + hiddenVideo.length + otherFiles.length;
+		return (
+			hiddenAudio.length +
+			hiddenImages.length +
+			hiddenVideo.length +
+			otherFiles.length
+		);
 	}, [processedAttachments]);
 
 	useEffect(() => {
@@ -671,9 +676,7 @@ export function MessageComponent({
 					open={!!fullscreenFile}
 					onOpenChange={() => setFullscreenFile(null)}
 				>
-					<DialogContent
-						className="w-screen h-screen max-w-none! max-h-none! p-0 bg-black border-0 rounded-none top-[50%]! left-[50%]! translate-x-[-50%]! translate-y-[-50%]!"
-					>
+					<DialogContent className="w-screen h-screen max-w-none! max-h-none! p-0 bg-black border-0 rounded-none top-[50%]! left-[50%]! translate-x-[-50%]! translate-y-[-50%]!">
 						<div className="relative w-full h-full flex flex-col">
 							<div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-start p-4 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
 								<p className="text-white text-sm font-medium truncate">

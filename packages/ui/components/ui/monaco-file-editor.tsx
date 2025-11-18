@@ -116,11 +116,14 @@ export function MonacoFileEditor({
 		setHasChanges(false);
 	}, [initialContent, fileName]);
 
-	const handleEditorMount = useCallback((monaco: Monaco) => {
-		monacoRef.current = monaco;
-		defineFlowLikeTheme(monaco, resolvedTheme === "dark");
-		setIsMonacoReady(true);
-	}, [resolvedTheme]);
+	const handleEditorMount = useCallback(
+		(monaco: Monaco) => {
+			monacoRef.current = monaco;
+			defineFlowLikeTheme(monaco, resolvedTheme === "dark");
+			setIsMonacoReady(true);
+		},
+		[resolvedTheme],
+	);
 
 	useEffect(() => {
 		if (monacoRef.current && isMonacoReady) {
@@ -128,11 +131,14 @@ export function MonacoFileEditor({
 		}
 	}, [resolvedTheme, isMonacoReady]);
 
-	const handleEditorChange = useCallback((value: string | undefined) => {
-		const newContent = value ?? "";
-		setContent(newContent);
-		setHasChanges(newContent !== initialContent);
-	}, [initialContent]);
+	const handleEditorChange = useCallback(
+		(value: string | undefined) => {
+			const newContent = value ?? "";
+			setContent(newContent);
+			setHasChanges(newContent !== initialContent);
+		},
+		[initialContent],
+	);
 
 	const handleSave = useCallback(async () => {
 		if (!onSave || !hasChanges) return;
@@ -199,7 +205,11 @@ export function MonacoFileEditor({
 			)}
 			<div className="flex-1 min-h-0">
 				{isPreviewMode && isMarkdown ? (
-					<TextEditor initialContent={content} isMarkdown={true} editable={false} />
+					<TextEditor
+						initialContent={content}
+						isMarkdown={true}
+						editable={false}
+					/>
 				) : (
 					<Editor
 						height="100%"
