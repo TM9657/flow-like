@@ -151,7 +151,7 @@ fn base_node() -> Node {
 fn add_agent_pin(node: &mut Node) {
     node.add_input_pin(
         "agent_in",
-        "Agent In",
+        "Agent",
         "Agent object to add MCP tools to",
         VariableType::Struct,
     )
@@ -186,7 +186,7 @@ fn add_mode_pin(node: &mut Node) {
 fn add_agent_out_pin(node: &mut Node) {
     node.add_output_pin(
         "agent_out",
-        "Agent Out",
+        "Agent",
         "Agent object with registered MCP tools",
         VariableType::Struct,
     )

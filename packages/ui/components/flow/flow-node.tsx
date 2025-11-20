@@ -544,7 +544,7 @@ const FlowNodeInner = memo(
 
 		// Compute connection states efficiently - only track the specific fn_refs we care about
 		const refInConnected = useMemo(() => {
-			const board = props.data.boardRef.current;
+			const board = props.data.boardRef?.current;
 			if (!board) return false;
 			const currentNodeId = props.data.node.id;
 			// Only check nodes, return boolean to avoid object reference changes

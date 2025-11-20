@@ -50,7 +50,7 @@ impl NodeLogic for SetAgentSystemPromptNode {
 
         node.add_input_pin(
             "agent_in",
-            "Agent In",
+            "Agent",
             "Agent object to enable thinking on",
             VariableType::Struct,
         )
@@ -67,7 +67,7 @@ impl NodeLogic for SetAgentSystemPromptNode {
 
         node.add_output_pin(
             "agent_out",
-            "Agent Out",
+            "Agent",
             "Agent object with thinking tool enabled",
             VariableType::Struct,
         )

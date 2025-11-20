@@ -11,17 +11,15 @@ draft: false
 
 *Build complex agents without babysitting schemas — and keep your workflows clean, typed, and reusable.*
 
-> **Heads-up:** This ships with **v0.0.6** — it’s not live yet, but landing very soon.
+> **Heads-up:** This ships with **v0.0.6** — it's not live yet, but landing very soon.
 
-We’ve just shipped a big upgrade to how you build and run agents in Flow-Like. The headline: **no more manual schema definitions**. You write your function, define the pins you want, and the **agent interface** handles the rest — parsing, shaping, and wiring data so your function calls just work.
+We've just shipped a big upgrade to how you build and run agents in Flow-Like. The headline: **no more manual schema definitions**. You write your function, define the pins you want, and the **agent interface** handles the rest — parsing, shaping, and wiring data so your function calls just work.
 
-If you want something quick: drop in a **Simple Agent** and go from zero to helpful in minutes. If you’re building a larger system: use the new **Agent Builder node** to visually compose multi-step, multi-tool agents that coordinate across your workspace.
+If you want something quick: drop in a **Simple Agent** and go from zero to helpful in minutes. If you're building a larger system: use the new **Agent Builder node** to visually compose multi-step, multi-tool agents that coordinate across your workspace.
 
 ---
 
 ## Why this matters
-
-![Agent Interface](/images/simple-agent.jpg)
 
 **Less boilerplate, more shipping.**
 Schemas used to be the tax you paid for structured automation. Now, your **pins are the contract**. The agent reads them, infers what it needs, and keeps the data flowing correctly.
@@ -30,7 +28,7 @@ Schemas used to be the tax you paid for structured automation. Now, your **pins 
 Agents can orchestrate tools automatically — but the same functions can be called **directly and deterministically** inside any workflow step. Flip between autonomous orchestration and precise control without duplicating code. **Maximum reusability, zero ceremony.**
 
 **Bring your tools.**
-We support **MCP tools** out of the box, and we’re rolling out a growing set of **built-in agent tools**. Point the agent at your function/toolbox, and it’ll route requests intelligently.
+We support **MCP tools** out of the box, and we're rolling out a growing set of **built-in agent tools**. Point the agent at your function/toolbox, and it'll route requests intelligently.
 
 ---
 
@@ -39,8 +37,12 @@ We support **MCP tools** out of the box, and we’re rolling out a growing set o
 * **Simple Agent**
   One node, minimal config, automatic function discovery via pins. Perfect for quick automations or augmenting existing flows with an AI helper.
 
+![Agent Interface](/posts/agent-builder/simple-agent.png)
+
 * **Agent Builder Node**
-  A visual canvas for **bigger agent systems**: chain reasoning steps, add guardrails, swap models, register callbacks, and compose multiple tools/functions. It’s everything you loved about Flow-Like — typed, local-first, and inspectable — now for agents.
+  A visual canvas for **bigger agent systems**: chain reasoning steps, add guardrails, swap models, register callbacks, and compose multiple tools/functions. It's everything you loved about Flow-Like — typed, local-first, and inspectable — now for agents.
+
+![Agent Builder](/posts/agent-builder/agent-builder.png)
 
 ---
 
@@ -53,9 +55,9 @@ We support **MCP tools** out of the box, and we’re rolling out a growing set o
    The *payloads* moving between nodes. These show how inputs/outputs and pins connect so you always see the complete data picture.
 
 3. **Orange vertical flow: Function references (New)**
-   A special link that says, “this agent can **call that function**,” or “this node exposes a **callback** the agent can trigger.” It’s not data, it’s not control — it’s a **capability reference**. Agents use it to discover and invoke your functions; you can also wire the same reference for direct, deterministic calls.
+   A special link that says, “this agent can **call that function**,” or “this node exposes a **callback** the agent can trigger.” It's not data, it's not control — it's a **capability reference**. Agents use it to discover and invoke your functions; you can also wire the same reference for direct, deterministic calls.
 
-If you’ve ever built logic graphs, this will feel familiar: execution, data, and reference links live side-by-side so you can reason about runtime, state, and capabilities at a glance.
+If you've ever built logic graphs, this will feel familiar: execution, data, and reference links live side-by-side so you can reason about runtime, state, and capabilities at a glance.
 
 ---
 
@@ -77,7 +79,7 @@ If you’ve ever built logic graphs, this will feel familiar: execution, data, a
 
 ## Availability
 
-This feature is **coming with v0.0.6**. It’s not live today, but it’s right around the corner. We’ll post full notes with examples and templates when it drops.
+This feature is **coming with v0.0.6**. It's not live today, but it's right around the corner. We'll post full notes with examples and templates when it drops.
 
 ---
 

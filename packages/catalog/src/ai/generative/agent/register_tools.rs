@@ -48,7 +48,7 @@ impl NodeLogic for RegisterFunctionToolsNode {
 
         node.add_input_pin(
             "agent_in",
-            "Agent In",
+            "Agent",
             "Agent object to add function references to",
             VariableType::Struct,
         )
@@ -57,7 +57,7 @@ impl NodeLogic for RegisterFunctionToolsNode {
 
         node.add_output_pin(
             "agent_out",
-            "Agent Out",
+            "Agent",
             "Agent object with registered function tool references",
             VariableType::Struct,
         )

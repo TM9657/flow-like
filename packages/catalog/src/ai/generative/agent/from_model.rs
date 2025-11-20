@@ -65,7 +65,7 @@ impl NodeLogic for AgentFromModelNode {
 
         node.add_output_pin(
             "agent_out",
-            "Agent Out",
+            "Agent",
             "Configured Agent object ready for tool registration and execution",
             VariableType::Struct,
         )
