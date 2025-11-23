@@ -4,6 +4,7 @@ import { remarkMdx, remarkMention } from "@platejs/markdown";
 import { PlateStatic, type Value, createSlateEditor } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 import { memo, useMemo } from "react";
+import remarkBreaks from "remark-breaks";
 import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -121,7 +122,7 @@ function TextEditorInner({
 	isMarkdown?: boolean;
 }>) {
 	const remarkPlugins = useMemo(
-		() => [remarkMath, remarkGfm, remarkMdx, remarkMention, remarkEmoji as any],
+		() => [remarkMath, remarkGfm, remarkBreaks, remarkMdx, remarkMention, remarkEmoji as any],
 		[],
 	);
 
@@ -171,7 +172,7 @@ function TextEditorStatic({
 	isMarkdown?: boolean;
 }>) {
 	const remarkPlugins = useMemo(
-		() => [remarkMath, remarkGfm, remarkMdx, remarkMention, remarkEmoji as any],
+		() => [remarkMath, remarkGfm, remarkBreaks, remarkMdx, remarkMention, remarkEmoji as any],
 		[],
 	);
 

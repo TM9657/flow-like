@@ -4,6 +4,7 @@ import { Activity, Loader2, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useExecutionEngine } from "../state/execution-engine-context";
+import { SimpleMarkdown } from "./simple-markdown";
 import { Badge } from "./ui/badge";
 import { Card } from "./ui/card";
 
@@ -77,9 +78,9 @@ export function RunningTasksIndicator() {
 								</Badge>
 							</div>
 							{task.preview && (
-								<p className="text-xs text-muted-foreground line-clamp-2 font-mono bg-muted/50 p-1 rounded">
+								<SimpleMarkdown className="text-xs text-muted-foreground line-clamp-2 font-mono bg-muted/50 p-1 rounded prose prose-sm [&>p]:m-0">
 									{task.preview}
-								</p>
+								</SimpleMarkdown>
 							)}
 						</div>
 					</div>

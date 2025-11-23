@@ -11,6 +11,7 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
+	useState,
 } from "react";
 import { toast } from "sonner";
 import {
@@ -232,6 +233,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	const setQueryParams = useSetQueryParams();
 	const chatRef = useRef<IChatRef>(null);
 	const activeSubscriptions = useRef<string[]>([]);
+	const [isSendingFromWelcome, setIsSendingFromWelcome] = useState(false);
 
 	useEffect(() => {
 		if (!sessionIdParameter || sessionIdParameter === "") {
@@ -442,7 +444,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		};
 	}, [sessionIdParameter, appId, event.id, event.name, executionEngine]);
 
-	const handleSendMessage: ISendMessageFunction = useCallback(
+		const handleSendMessage: ISendMessageFunction = useCallback(
 		async (
 			content,
 			filesAttached,
@@ -458,120 +460,133 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 				return;
 			}
 
-			const { imageAttachments, otherAttachments } = await prepareAttachments(
-				filesAttached,
-				audioFile,
-				backend,
-				isOffline,
-			);
+			// Show loading state if sending from welcome screen
+			const hasFiles = (filesAttached && filesAttached.length > 0) || audioFile;
+			if (hasFiles && (!messages || messages.length === 0)) {
+				setIsSendingFromWelcome(true);
+			}
 
-			const historyMessage = createHistoryMessage(content, imageAttachments);
+			try {
+				const { imageAttachments, otherAttachments } = await prepareAttachments(
+					filesAttached,
+					audioFile,
+					backend,
+					isOffline,
+				);
 
-			const userMessage = createUserMessage(
-				sessionIdParameter,
-				appId,
-				otherAttachments,
-				historyMessage,
-				activeTools ?? [],
-			);
+				const historyMessage = createHistoryMessage(content, imageAttachments);
 
-			await updateSession(sessionIdParameter, appId, content);
-			await chatDb.messages.add(userMessage);
+				const userMessage = createUserMessage(
+					sessionIdParameter,
+					appId,
+					otherAttachments,
+					historyMessage,
+					activeTools ?? [],
+				);
 
-			const lastMessages = messages?.slice(-history_elements) ?? [];
+				await updateSession(sessionIdParameter, appId, content);
+				await chatDb.messages.add(userMessage);
 
-			const payload = createPayload(
-				userMessage,
-				lastMessages,
-				historyMessage,
-				localState,
-				globalState,
-				activeTools ?? [],
-				otherAttachments,
-			);
+				const lastMessages = messages?.slice(-history_elements) ?? [];
 
-			const responseMessage = createResponseMessage(
-				sessionIdParameter,
-				appId,
-				event.name,
-			);
+				const payload = createPayload(
+					userMessage,
+					lastMessages,
+					historyMessage,
+					localState,
+					globalState,
+					activeTools ?? [],
+					otherAttachments,
+				);
 
-			chatRef.current?.pushCurrentMessageUpdate({ ...responseMessage });
-			chatRef.current?.scrollToBottom();
+				const responseMessage = createResponseMessage(
+					sessionIdParameter,
+					appId,
+					event.name,
+				);
 
-			let intermediateResponse = Response.default();
-			let tmpLocalState = localState;
-			let tmpGlobalState = globalState;
-			let done = false;
-			const attachments: Map<string, IAttachment> = new Map();
+				chatRef.current?.pushCurrentMessageUpdate({ ...responseMessage });
+				chatRef.current?.scrollToBottom();
 
-			const streamId = sessionIdParameter;
-			const subscriberId = `chat-${responseMessage.id}`;
-			activeSubscriptions.current.push(subscriberId);
+				let intermediateResponse = Response.default();
+				let tmpLocalState = localState;
+				let tmpGlobalState = globalState;
+				let done = false;
+				const attachments: Map<string, IAttachment> = new Map();
 
-			// Start execution first to reset the stream state
-			const executionPromise = executionEngine.executeEvent(streamId, {
-				appId,
-				eventId: event.id,
-				payload: {
-					id: event.node_id,
-					payload: payload,
-				},
-				streamState: false,
-				onExecutionStart: (execution_id: string) => {},
-				path: pathname,
-				title: event.name || "Chat",
-				interfaceType: "chat",
-			});
+				const streamId = sessionIdParameter;
+				const subscriberId = `chat-${responseMessage.id}`;
+				activeSubscriptions.current.push(subscriberId);
 
-			executionEngine.subscribeToEventStream(
-				streamId,
-				subscriberId,
-				(events) => {
-					const result = processChatEvents(events, {
-						intermediateResponse,
-						responseMessage,
-						attachments,
-						tmpLocalState,
-						tmpGlobalState,
-						done,
-						appId,
-						eventId: event.id,
-						sessionId: sessionIdParameter,
-					});
+				// Start execution first to reset the stream state
+				const executionPromise = executionEngine.executeEvent(streamId, {
+					appId,
+					eventId: event.id,
+					payload: {
+						id: event.node_id,
+						payload: payload,
+					},
+					streamState: false,
+					onExecutionStart: (execution_id: string) => {},
+					path: pathname,
+					title: event.name || "Chat",
+					interfaceType: "chat",
+				});
 
-					intermediateResponse = result.intermediateResponse;
-					tmpLocalState = result.tmpLocalState;
-					tmpGlobalState = result.tmpGlobalState;
-					done = result.done;
-
-					if (result.shouldUpdate) {
-						chatRef.current?.pushCurrentMessageUpdate({
-							...result.responseMessage,
-						});
-						chatRef.current?.scrollToBottom();
-					}
-				},
-				async (events) => {
-					try {
-						await handleStreamCompletion(
+				executionEngine.subscribeToEventStream(
+					streamId,
+					subscriberId,
+					(events) => {
+						const result = processChatEvents(events, {
+							intermediateResponse,
 							responseMessage,
-							chatRef,
-							executionEngine,
-							streamId,
-							subscriberId,
+							attachments,
 							tmpLocalState,
 							tmpGlobalState,
-						);
-					} finally {
-						activeSubscriptions.current = activeSubscriptions.current.filter(
-							(id) => id !== subscriberId,
-						);
-					}
-				},
-			);
+							done,
+							appId,
+							eventId: event.id,
+							sessionId: sessionIdParameter,
+						});
 
-			await executionPromise;
+						intermediateResponse = result.intermediateResponse;
+						tmpLocalState = result.tmpLocalState;
+						tmpGlobalState = result.tmpGlobalState;
+						done = result.done;
+
+						if (result.shouldUpdate) {
+							chatRef.current?.pushCurrentMessageUpdate({
+								...result.responseMessage,
+							});
+							chatRef.current?.scrollToBottom();
+						}
+					},
+					async (events) => {
+						try {
+							await handleStreamCompletion(
+								responseMessage,
+								chatRef,
+								executionEngine,
+								streamId,
+								subscriberId,
+								tmpLocalState,
+								tmpGlobalState,
+							);
+						} finally {
+							activeSubscriptions.current = activeSubscriptions.current.filter(
+								(id) => id !== subscriberId,
+							);
+						}
+					},
+				);
+
+				await executionPromise;
+			} catch (error) {
+				console.error("Error sending message:", error);
+				toast.error("Failed to send message. Please try again.");
+			} finally {
+				setIsSendingFromWelcome(false);
+			}
 		},
 		[
 			backend,
@@ -614,6 +629,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					onSendMessage={handleSendMessage}
 					event={event}
 					config={config}
+					isSending={isSendingFromWelcome}
 				/>
 			) : (
 				<Chat

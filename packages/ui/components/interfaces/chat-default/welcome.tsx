@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import PuffLoader from "react-spinners/PuffLoader";
+import { useTheme } from "next-themes";
 import type { IEvent, IEventPayloadChat } from "../../../lib";
 import { ChatBox, type ChatBoxRef, type ISendMessageFunction } from "./chatbox";
 
@@ -8,6 +10,7 @@ interface ChatWelcomeProps {
 	onSendMessage: ISendMessageFunction;
 	event: IEvent;
 	config?: Partial<IEventPayloadChat>;
+	isSending?: boolean;
 }
 
 const defaultExamples: string[] = [
@@ -25,9 +28,11 @@ export function ChatWelcome({
 	onSendMessage,
 	event,
 	config = {},
+	isSending = false,
 }: Readonly<ChatWelcomeProps>) {
 	const [currentMessage, setCurrentMessage] = useState("");
 	const chatBox = useRef<ChatBoxRef>(null);
+	const { resolvedTheme } = useTheme();
 
 	// Fuzzy search function
 	const fuzzyScore = (text: string, searchTerm: string): number => {
@@ -158,7 +163,58 @@ export function ChatWelcome({
 	};
 
 	return (
-		<div className="flex flex-col h-full flex-grow bg-background">
+		<div className="flex flex-col h-full flex-grow bg-background relative">
+			{/* Loading Overlay */}
+			{isSending && (
+				<div className="absolute inset-0 bg-gradient-to-br from-background via-background/95 to-background/90 backdrop-blur-md z-50 flex items-center justify-center overflow-hidden">
+					{/* Animated background elements */}
+					<div className="absolute inset-0 overflow-hidden">
+						<div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse" />
+						<div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl animate-pulse delay-150" />
+						<div className="absolute top-1/3 right-1/3 w-72 h-72 bg-purple-500/5 rounded-full blur-3xl animate-pulse delay-300" />
+					</div>
+
+					{/* Main loading content */}
+					<div className="relative z-10 flex flex-col items-center gap-8 px-8 max-w-md">
+						{/* Spinning rings with gradient */}
+						<div className="relative w-32 h-32">
+							{/* Outer ring */}
+							<div className="absolute inset-0 rounded-full border-4 border-transparent border-t-primary border-r-primary/50 animate-spin" />
+							{/* Middle ring */}
+							<div className="absolute inset-3 rounded-full border-4 border-transparent border-b-blue-500 border-l-blue-500/50 animate-spin-slow" />
+							{/* Inner ring */}
+							<div className="absolute inset-6 rounded-full border-4 border-transparent border-t-purple-500 border-r-purple-500/50 animate-spin-reverse" />
+							{/* Center glow */}
+							<div className="absolute inset-0 flex items-center justify-center">
+								<div className="w-12 h-12 bg-gradient-to-br from-primary via-blue-500 to-purple-500 rounded-full animate-pulse blur-sm" />
+								<div className="absolute w-8 h-8 bg-gradient-to-br from-primary via-blue-500 to-purple-500 rounded-full animate-pulse" />
+							</div>
+						</div>
+
+						{/* Text content with animations */}
+						<div className="text-center space-y-4">
+							<h3 className="text-2xl font-bold bg-gradient-to-r from-primary via-blue-500 to-purple-500 bg-clip-text text-transparent animate-pulse">
+								Processing Your Message
+							</h3>
+							<div className="space-y-2">
+								<div className="flex items-center justify-center gap-2">
+									<div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
+									<div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce delay-75" />
+									<div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce delay-150" />
+								</div>
+								<p className="text-sm text-muted-foreground animate-pulse">
+									Uploading files and preparing attachments
+								</p>
+							</div>
+						</div>
+
+						{/* Progress bar */}
+						<div className="w-full h-1 bg-muted/30 rounded-full overflow-hidden">
+							<div className="h-full bg-gradient-to-r from-primary via-blue-500 to-purple-500 animate-progress rounded-full" />
+						</div>
+					</div>
+				</div>
+			)}
 			{/* Welcome Content */}
 			<div className="flex-1 flex items-center justify-center p-8">
 				<div className="max-w-2xl w-full space-y-8">
