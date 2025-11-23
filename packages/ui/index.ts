@@ -7,6 +7,7 @@ export * from "./state/download-manager";
 export * from "./state/flow-board-parent-state";
 export * from "./state/run-execution-state";
 export * from "./state/log-aggregation-state";
+export * from "./state/execution-engine-context";
 export type { IRunUpdateEvent } from "./state/run-execution-state";
 export * from "./types";
 export * from "./db/index";

@@ -3,8 +3,15 @@
 import { createId } from "@paralleldrive/cuid2";
 import { useLiveQuery } from "dexie-react-hooks";
 import { HistoryIcon, SquarePenIcon } from "lucide-react";
-import { useSearchParams } from "next/navigation";
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import {
+	type RefObject,
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+} from "react";
 import { toast } from "sonner";
 import {
 	type IContent,
@@ -16,6 +23,7 @@ import {
 import { useSetQueryParams } from "../../lib/set-query-params";
 import { parseUint8ArrayToJson } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
+import { useExecutionEngine } from "../../state/execution-engine-context";
 import { Button, HoverCard, HoverCardContent, HoverCardTrigger } from "../ui";
 import { fileToAttachment } from "./chat-default/attachment";
 import { Chat, type IChatRef } from "./chat-default/chat";
@@ -25,9 +33,189 @@ import {
 	chatDb,
 } from "./chat-default/chat-db";
 import type { ISendMessageFunction } from "./chat-default/chatbox";
+import { processChatEvents } from "./chat-default/event-processor";
 import { ChatHistory } from "./chat-default/history";
 import { ChatWelcome } from "./chat-default/welcome";
 import type { IUseInterfaceProps } from "./interfaces";
+
+async function prepareAttachments(
+	filesAttached: File[] | undefined,
+	audioFile: File | undefined,
+	backend: any,
+	isOffline: boolean,
+) {
+	const imageFiles =
+		filesAttached?.filter((file) => file.type.startsWith("image/")) ?? [];
+	const otherFiles =
+		filesAttached?.filter((file) => !file.type.startsWith("image/")) ?? [];
+	const imageAttachments = await fileToAttachment(
+		imageFiles ?? [],
+		backend,
+		isOffline,
+	);
+	const otherAttachments = await fileToAttachment(
+		otherFiles ?? [],
+		backend,
+		isOffline,
+	);
+	if (audioFile) {
+		otherAttachments.push(
+			...(await fileToAttachment([audioFile], backend, isOffline)),
+		);
+	}
+	return { imageAttachments, otherAttachments };
+}
+
+function createHistoryMessage(
+	content: string,
+	imageAttachments: IAttachment[],
+) {
+	const historyMessage: IHistoryMessage = {
+		content: [
+			{
+				type: IContentType.Text,
+				text: content,
+			},
+		],
+		role: IRole.User,
+	};
+
+	for (const image of imageAttachments) {
+		const url = typeof image === "string" ? image : image.url;
+		(historyMessage.content as IContent[]).push({
+			type: IContentType.IImageURL,
+			image_url: {
+				url: url,
+			},
+		});
+	}
+	return historyMessage;
+}
+
+async function updateSession(
+	sessionId: string,
+	appId: string,
+	content: string,
+) {
+	const sessionExists = await chatDb.sessions
+		.where("id")
+		.equals(sessionId)
+		.count();
+
+	if (sessionExists <= 0) {
+		await chatDb.sessions.add({
+			id: sessionId,
+			appId,
+			summarization: content,
+			createdAt: Date.now(),
+			updatedAt: Date.now(),
+		});
+	} else {
+		await chatDb.sessions.update(sessionId, {
+			updatedAt: Date.now(),
+		});
+	}
+}
+
+function createUserMessage(
+	sessionId: string,
+	appId: string,
+	otherAttachments: IAttachment[],
+	historyMessage: IHistoryMessage,
+	activeTools: string[],
+): IMessage {
+	return {
+		id: createId(),
+		sessionId: sessionId,
+		appId,
+		files: otherAttachments,
+		inner: historyMessage,
+		timestamp: Date.now(),
+		tools: activeTools ?? [],
+		actions: [],
+	};
+}
+
+function createPayload(
+	userMessage: IMessage,
+	lastMessages: IMessage[],
+	historyMessage: IHistoryMessage,
+	localState: any,
+	globalState: any,
+	activeTools: string[],
+	otherAttachments: IAttachment[],
+) {
+	return {
+		chat_id: userMessage.sessionId,
+		messages: [
+			...lastMessages.map((msg) => ({
+				role: msg.inner.role,
+				content:
+					typeof msg.inner.content === "string"
+						? msg.inner.content
+						: msg.inner.content?.map((c) => ({
+								type: c.type,
+								text: c.text,
+								image_url: c.image_url,
+							})),
+			})),
+			historyMessage,
+		],
+		local_session: localState?.localState ?? {},
+		global_session: globalState?.globalState ?? {},
+		actions: [],
+		tools: activeTools ?? [],
+		attachments: otherAttachments,
+	};
+}
+
+function createResponseMessage(
+	sessionId: string,
+	appId: string,
+	eventName: string,
+): IMessage {
+	return {
+		id: createId(),
+		sessionId: sessionId,
+		appId,
+		files: [],
+		inner: {
+			role: IRole.Assistant,
+			content: "",
+		},
+		explicit_name: eventName,
+		timestamp: Date.now(),
+		tools: [],
+		actions: [],
+	};
+}
+
+async function handleStreamCompletion(
+	responseMessage: IMessage,
+	chatRef: RefObject<IChatRef | null>,
+	executionEngine: any,
+	streamId: string,
+	subscriberId: string,
+	tmpLocalState?: any,
+	tmpGlobalState?: any,
+) {
+	if (tmpLocalState) {
+		await chatDb.localStage.put(tmpLocalState);
+	}
+
+	if (tmpGlobalState) {
+		await chatDb.globalState.put(tmpGlobalState);
+	}
+
+	await chatDb.messages.put(responseMessage);
+
+	// Wait for the message to appear in the UI before clearing the temporary one
+	await new Promise((resolve) => setTimeout(resolve, 200));
+	chatRef.current?.clearCurrentMessageUpdate();
+	chatRef.current?.scrollToBottom();
+
+	executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
+}
 
 export const ChatInterfaceMemoized = memo(function ChatInterface({
 	appId,
@@ -37,10 +225,13 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	sidebarRef,
 }: Readonly<IUseInterfaceProps>) {
 	const backend = useBackend();
+	const executionEngine = useExecutionEngine();
 	const searchParams = useSearchParams();
+	const pathname = usePathname();
 	const sessionIdParameter = searchParams.get("sessionId") ?? "";
 	const setQueryParams = useSetQueryParams();
 	const chatRef = useRef<IChatRef>(null);
+	const activeSubscriptions = useRef<string[]>([]);
 
 	useEffect(() => {
 		if (!sessionIdParameter || sessionIdParameter === "") {
@@ -48,6 +239,16 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			setQueryParams("sessionId", newSessionId);
 		}
 	}, [sessionIdParameter, setQueryParams]);
+
+	// Cleanup active subscriptions on unmount or session change
+	useEffect(() => {
+		return () => {
+			activeSubscriptions.current.forEach((subId) => {
+				executionEngine.unsubscribeFromEventStream(sessionIdParameter, subId);
+			});
+			activeSubscriptions.current = [];
+		};
+	}, [sessionIdParameter, executionEngine]);
 
 	const messages = useLiveQuery(
 		() =>
@@ -117,7 +318,6 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					align="center"
 					className="w-auto p-2 bg-popover border shadow-lg"
 					onClick={() => {
-						// Handle chat history toggle
 						console.log("Open chat history");
 					}}
 				>
@@ -172,6 +372,76 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		sidebarRef?.current?.pushSidebar(sidebarContent);
 	}, [toolbarElements, sidebarContent, toolbarRef, sidebarRef]);
 
+	// Reconnect to active stream when component mounts or session changes
+	useEffect(() => {
+		if (!sessionIdParameter) return;
+
+		const streamId = sessionIdParameter;
+
+		// Check if there's an active stream for this session
+		if (!executionEngine.isStreamActive(streamId)) return;
+
+		const subscriberId = `chat-reconnect-${sessionIdParameter}`;
+
+		const responseMessage: IMessage = {
+			id: createId(),
+			sessionId: sessionIdParameter,
+			appId,
+			files: [],
+			inner: {
+				role: IRole.Assistant,
+				content: "",
+			},
+			explicit_name: event.name,
+			timestamp: Date.now(),
+			tools: [],
+			actions: [],
+		};
+
+		let intermediateResponse = Response.default();
+		const attachments: Map<string, IAttachment> = new Map();
+
+		executionEngine.subscribeToEventStream(
+			streamId,
+			subscriberId,
+			(events) => {
+				const result = processChatEvents(events, {
+					intermediateResponse,
+					responseMessage,
+					attachments,
+					tmpLocalState: null,
+					tmpGlobalState: null,
+					done: false,
+					appId,
+					eventId: event.id,
+					sessionId: sessionIdParameter,
+				});
+
+				intermediateResponse = result.intermediateResponse;
+
+				if (result.shouldUpdate) {
+					chatRef.current?.pushCurrentMessageUpdate({
+						...result.responseMessage,
+					});
+					chatRef.current?.scrollToBottom();
+				}
+			},
+			async (events) => {
+				await handleStreamCompletion(
+					responseMessage,
+					chatRef,
+					executionEngine,
+					streamId,
+					subscriberId,
+				);
+			},
+		);
+
+		return () => {
+			executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
+		};
+	}, [sessionIdParameter, appId, event.id, event.name, executionEngine]);
+
 	const handleSendMessage: ISendMessageFunction = useCallback(
 		async (
 			content,
@@ -183,279 +453,139 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			const history_elements =
 				parseUint8ArrayToJson(event.config)?.history_elements ?? 5;
 
-			const lastMessages = messages?.slice(-history_elements) ?? [];
-
 			if (!sessionIdParameter || sessionIdParameter === "") {
 				toast.error("Session ID is not set. Please start a new chat.");
 				return;
 			}
-			const imageFiles =
-				filesAttached?.filter((file) => file.type.startsWith("image/")) ?? [];
-			const otherFiles =
-				filesAttached?.filter((file) => !file.type.startsWith("image/")) ?? [];
-			const imageAttachments = await fileToAttachment(
-				imageFiles ?? [],
+
+			const { imageAttachments, otherAttachments } = await prepareAttachments(
+				filesAttached,
+				audioFile,
 				backend,
 				isOffline,
 			);
-			const otherAttachments = await fileToAttachment(
-				otherFiles ?? [],
-				backend,
-				isOffline,
-			);
-			if (audioFile) {
-				otherAttachments.push(
-					...(await fileToAttachment([audioFile], backend, isOffline)),
-				);
-			}
 
-			const historyMessage: IHistoryMessage = {
-				content: [
-					{
-						type: IContentType.Text,
-						text: content,
-					},
-				],
-				role: IRole.User,
-			};
+			const historyMessage = createHistoryMessage(content, imageAttachments);
 
-			for (const image of imageAttachments) {
-				const url = typeof image === "string" ? image : image.url;
-				(historyMessage.content as IContent[]).push({
-					type: IContentType.IImageURL,
-					image_url: {
-						url: url,
-					},
-				});
-			}
-
-			const userMessage: IMessage = {
-				id: createId(),
-				sessionId: sessionIdParameter,
+			const userMessage = createUserMessage(
+				sessionIdParameter,
 				appId,
-				files: otherAttachments,
-				inner: historyMessage,
-				timestamp: Date.now(),
-				tools: activeTools ?? [],
-				actions: [],
-			};
+				otherAttachments,
+				historyMessage,
+				activeTools ?? [],
+			);
 
-			const sessionExists = await chatDb.sessions
-				.where("id")
-				.equals(sessionIdParameter)
-				.count();
-
-			if (sessionExists <= 0) {
-				await chatDb.sessions.add({
-					id: sessionIdParameter,
-					appId,
-					summarization: content,
-					createdAt: Date.now(),
-					updatedAt: Date.now(),
-				});
-			} else {
-				await chatDb.sessions.update(sessionIdParameter, {
-					updatedAt: Date.now(),
-				});
-			}
-
+			await updateSession(sessionIdParameter, appId, content);
 			await chatDb.messages.add(userMessage);
 
-			let intermediateResponse = Response.default();
+			const lastMessages = messages?.slice(-history_elements) ?? [];
 
-			const payload = {
-				chat_id: userMessage.sessionId,
-				messages: [
-					...lastMessages.map((msg) => ({
-						role: msg.inner.role,
-						content:
-							typeof msg.inner.content === "string"
-								? msg.inner.content
-								: msg.inner.content?.map((c) => ({
-										type: c.type,
-										text: c.text,
-										image_url: c.image_url,
-									})),
-					})),
-					historyMessage,
-				],
-				local_session: localState?.localState ?? {},
-				global_session: globalState?.globalState ?? {},
-				actions: [],
-				tools: activeTools ?? [],
-				attachments: otherAttachments,
-			};
+			const payload = createPayload(
+				userMessage,
+				lastMessages,
+				historyMessage,
+				localState,
+				globalState,
+				activeTools ?? [],
+				otherAttachments,
+			);
 
-			const responseMessage: IMessage = {
-				id: createId(),
-				sessionId: sessionIdParameter,
+			const responseMessage = createResponseMessage(
+				sessionIdParameter,
 				appId,
-				files: [],
-				inner: {
-					role: IRole.Assistant,
-					content: "",
-				},
-				explicit_name: event.name,
-				timestamp: Date.now(),
-				tools: [],
-				actions: [],
-			};
+				event.name,
+			);
 
-			let done = false;
-			responseMessage.inner.content = "";
 			chatRef.current?.pushCurrentMessageUpdate({ ...responseMessage });
 			chatRef.current?.scrollToBottom();
 
+			let intermediateResponse = Response.default();
 			let tmpLocalState = localState;
 			let tmpGlobalState = globalState;
-
+			let done = false;
 			const attachments: Map<string, IAttachment> = new Map();
 
-			const addAttachments = (newAttachments: IAttachment[]) => {
-				for (const attachment of newAttachments) {
-					if (typeof attachment === "string" && !attachments.has(attachment)) {
-						attachments.set(attachment, attachment);
-					}
+			const streamId = sessionIdParameter;
+			const subscriberId = `chat-${responseMessage.id}`;
+			activeSubscriptions.current.push(subscriberId);
 
-					if (
-						typeof attachment !== "string" &&
-						!attachments.has(attachment.url)
-					) {
-						attachments.set(attachment.url, attachment);
-					}
-				}
-
-				responseMessage.files = Array.from(attachments.values());
-
-				chatRef.current?.pushCurrentMessageUpdate({
-					...responseMessage,
-				});
-
-				chatRef.current?.scrollToBottom();
-			};
-
-			await backend.eventState.executeEvent(
+			// Start execution first to reset the stream state
+			const executionPromise = executionEngine.executeEvent(streamId, {
 				appId,
-				event.id,
-				{
+				eventId: event.id,
+				payload: {
 					id: event.node_id,
 					payload: payload,
 				},
-				false,
-				(execution_id: string) => {},
+				streamState: false,
+				onExecutionStart: (execution_id: string) => {},
+				path: pathname,
+				title: event.name || "Chat",
+				interfaceType: "chat",
+			});
+
+			executionEngine.subscribeToEventStream(
+				streamId,
+				subscriberId,
 				(events) => {
-					for (const ev of events) {
-						if (ev.event_type === "chat_stream_partial") {
-							if (done) continue;
-							if (ev.payload.chunk)
-								intermediateResponse.pushChunk(ev.payload.chunk);
-							const lastMessage = intermediateResponse.lastMessageOfRole(
-								IRole.Assistant,
-							);
-							if (lastMessage) {
-								responseMessage.inner.content = lastMessage.content ?? "";
-								chatRef.current?.pushCurrentMessageUpdate({
-									...responseMessage,
-								});
-								chatRef.current?.scrollToBottom();
-							}
-							if (ev.payload.attachments) {
-								addAttachments(ev.payload.attachments);
-							}
-							continue;
-						}
-						if (ev.event_type === "chat_stream") {
-							if (done) continue;
-							if (ev.payload.response) {
-								intermediateResponse = Response.fromObject(ev.payload.response);
-								const lastMessage = intermediateResponse.lastMessageOfRole(
-									IRole.Assistant,
-								);
-								if (lastMessage) {
-									responseMessage.inner.content = lastMessage.content ?? "";
-									chatRef.current?.pushCurrentMessageUpdate({
-										...responseMessage,
-									});
-									chatRef.current?.scrollToBottom();
-								}
-								continue;
-							}
-						}
-						if (ev.event_type === "chat_out") {
-							done = true;
-							if (ev.payload.response) {
-								intermediateResponse = Response.fromObject(ev.payload.response);
-							}
+					const result = processChatEvents(events, {
+						intermediateResponse,
+						responseMessage,
+						attachments,
+						tmpLocalState,
+						tmpGlobalState,
+						done,
+						appId,
+						eventId: event.id,
+						sessionId: sessionIdParameter,
+					});
 
-							if (ev.payload.attachments) {
-								addAttachments(ev.payload.attachments);
-							}
-						}
+					intermediateResponse = result.intermediateResponse;
+					tmpLocalState = result.tmpLocalState;
+					tmpGlobalState = result.tmpGlobalState;
+					done = result.done;
 
-						if (ev.event_type === "chat_local_session") {
-							if (tmpLocalState) {
-								tmpLocalState = {
-									...tmpLocalState,
-									localState: ev.payload,
-								};
-							} else {
-								tmpLocalState = {
-									id: createId(),
-									appId,
-									eventId: event.id,
-									sessionId: sessionIdParameter,
-									localState: ev.payload,
-								};
-							}
-						}
-
-						if (ev.event_type === "chat_global_session") {
-							if (tmpGlobalState) {
-								tmpGlobalState = {
-									...tmpGlobalState,
-									globalState: ev.payload,
-								};
-							} else {
-								tmpGlobalState = {
-									id: createId(),
-									appId,
-									eventId: event.id,
-									globalState: ev.payload,
-								};
-							}
-						}
-						console.log("Event received:", ev);
+					if (result.shouldUpdate) {
+						chatRef.current?.pushCurrentMessageUpdate({
+							...result.responseMessage,
+						});
+						chatRef.current?.scrollToBottom();
+					}
+				},
+				async (events) => {
+					try {
+						await handleStreamCompletion(
+							responseMessage,
+							chatRef,
+							executionEngine,
+							streamId,
+							subscriberId,
+							tmpLocalState,
+							tmpGlobalState,
+						);
+					} finally {
+						activeSubscriptions.current = activeSubscriptions.current.filter(
+							(id) => id !== subscriberId,
+						);
 					}
 				},
 			);
 
-			if (tmpLocalState) {
-				await chatDb.localStage.put(tmpLocalState);
-			}
-
-			if (tmpGlobalState) {
-				await chatDb.globalState.put(tmpGlobalState);
-			}
-
-			const lastMessage = intermediateResponse.lastMessageOfRole(
-				IRole.Assistant,
-			);
-			if (lastMessage) {
-				responseMessage.inner.content = lastMessage.content ?? "";
-			}
-			await chatDb.messages.add(responseMessage);
-			chatRef.current?.clearCurrentMessageUpdate();
-			await new Promise((resolve) => setTimeout(resolve, 100));
-			chatRef.current?.scrollToBottom();
+			await executionPromise;
 		},
 		[
 			backend,
+			executionEngine,
 			sessionIdParameter,
 			appId,
+			event.id,
 			event.name,
+			event.node_id,
+			event.config,
 			messages,
 			localState,
 			globalState,
+			pathname,
 		],
 	);
 
