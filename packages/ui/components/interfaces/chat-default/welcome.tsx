@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import PuffLoader from "react-spinners/PuffLoader";
 import { useTheme } from "next-themes";
+import { useMemo, useRef, useState } from "react";
 import type { IEvent, IEventPayloadChat } from "../../../lib";
 import { ChatBox, type ChatBoxRef, type ISendMessageFunction } from "./chatbox";
 

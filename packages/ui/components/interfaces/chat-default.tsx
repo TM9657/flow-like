@@ -444,7 +444,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		};
 	}, [sessionIdParameter, appId, event.id, event.name, executionEngine]);
 
-		const handleSendMessage: ISendMessageFunction = useCallback(
+	const handleSendMessage: ISendMessageFunction = useCallback(
 		async (
 			content,
 			filesAttached,
@@ -528,11 +528,10 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					},
 					streamState: false,
 					onExecutionStart: (execution_id: string) => {},
-					path: pathname,
+					path: `${pathname}?id=${appId}&eventId=${event.id}&sessionId=${sessionIdParameter}`,
 					title: event.name || "Chat",
 					interfaceType: "chat",
 				});
-
 				executionEngine.subscribeToEventStream(
 					streamId,
 					subscriberId,

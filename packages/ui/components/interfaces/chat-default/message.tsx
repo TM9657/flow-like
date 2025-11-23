@@ -31,6 +31,7 @@ import { FilePreview, type ProcessedAttachment } from "./attachment";
 import { FileDialog, FileDialogPreview } from "./attachment-dialog";
 import type { IAttachment, IMessage } from "./chat-db";
 import { useProcessedAttachments } from "./hooks/use-processed-attachments";
+import { PlanSteps } from "./plan-steps";
 
 interface MessageProps {
 	message: IMessage;
@@ -603,6 +604,12 @@ export function MessageComponent({
 							: "bg-background text-foreground max-w-full w-full pb-0",
 					)}
 				>
+					{!isUser && message.plan_steps && message.plan_steps.length > 0 && (
+						<PlanSteps
+							steps={message.plan_steps}
+							currentStepId={message.current_step_id}
+						/>
+					)}
 					<div
 						ref={contentRef}
 						className={cn(
@@ -624,8 +631,7 @@ export function MessageComponent({
 							isMarkdown={true}
 							editable={false}
 						/>
-					</div>
-
+					</div>{" "}
 					{isUser && showToggle && (
 						<Button
 							variant="ghost"
@@ -646,13 +652,11 @@ export function MessageComponent({
 							)}
 						</Button>
 					)}
-
 					<AttachmentSection
 						files={processedAttachments}
 						onFileClick={handleFileClick}
 						onFullscreen={setFullscreenFile}
 					/>
-
 					{!loading && (
 						<MessageActions
 							isUser={isUser}
@@ -669,8 +673,7 @@ export function MessageComponent({
 						/>
 					)}
 				</div>
-			</div>
-
+			</div>{" "}
 			{fullscreenFile && (
 				<Dialog
 					open={!!fullscreenFile}
@@ -678,7 +681,7 @@ export function MessageComponent({
 				>
 					<DialogContent className="w-screen h-screen max-w-none! max-h-none! p-0 bg-black border-0 rounded-none top-[50%]! left-[50%]! translate-x-[-50%]! translate-y-[-50%]!">
 						<div className="relative w-full h-full flex flex-col">
-							<div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-start p-4 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+							<div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-start p-4 bg-linear-to-b from-black/80 to-transparent pointer-events-none">
 								<p className="text-white text-sm font-medium truncate">
 									{getDisplayFileName(fullscreenFile.name)}
 								</p>
@@ -690,14 +693,12 @@ export function MessageComponent({
 					</DialogContent>
 				</Dialog>
 			)}
-
 			<FullscreenEditDialog
 				open={showEditDialog}
 				onOpenChange={setShowEditDialog}
 				content={messageContent.text}
 				onSave={handleEditSave}
 			/>
-
 			<FeedbackDialog
 				open={showFeedbackDialog}
 				onOpenChange={setShowFeedbackDialog}

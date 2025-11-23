@@ -30,7 +30,11 @@ pub mod push_attachments;
 pub mod push_chunk;
 pub mod push_global_session;
 pub mod push_local_session;
+pub mod push_reasoning;
 pub mod push_response;
+pub mod push_step;
+pub mod push_text_to_step;
+pub mod remove_step;
 
 /// URL processing utilities for converting Tauri local file URLs to base64 data URLs
 pub mod url_processing {

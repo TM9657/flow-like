@@ -35,11 +35,11 @@ import { parseTimespan } from "../../lib/date";
 import { logLevelToNumber } from "../../lib/log-level";
 import { ILogLevel, type ILogMessage } from "../../lib/schema/flow/run";
 import { useLogAggregation } from "../../state/log-aggregation-state";
-import { SimpleMarkdown } from "../simple-markdown";
 import { DynamicImage, EmptyState } from "../ui";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { TextEditor } from "../ui/text-editor";
 
 interface IEnrichedLogMessage extends ILogMessage {
 	node_id: string;
@@ -189,7 +189,14 @@ export function Traces({
 				/>
 			);
 		},
-		[messages, hasNextPage, isFetchingNextPage, fetchNextPage, board, onFocusNode],
+		[
+			messages,
+			hasNextPage,
+			isFetchingNextPage,
+			fetchNextPage,
+			board,
+			onFocusNode,
+		],
 	);
 
 	useEffect(() => {
@@ -329,9 +336,14 @@ const LogMessage = memo(function LogMessage({
 			>
 				<div className="flex p-1 px-2  flex-row items-center gap-2 w-full">
 					<LogIndicator logLevel={log.log_level} />
-					<SimpleMarkdown className="text-start text-wrap break-all prose prose-sm max-w-none [&>p]:m-0 [&>p]:leading-relaxed">
-						{log.message}
-					</SimpleMarkdown>
+					<div className="text-start text-wrap break-all">
+						<TextEditor
+							initialContent={log.message}
+							isMarkdown={true}
+							editable={false}
+							minimal={true}
+						/>
+					</div>
 				</div>
 				<div className="flex flex-row items-center gap-1 w-full px-2 py-1 border-t justify-between">
 					{log.start.nanos_since_epoch !== log.end.nanos_since_epoch ? (

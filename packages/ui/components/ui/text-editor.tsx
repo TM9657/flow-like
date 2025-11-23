@@ -122,7 +122,14 @@ function TextEditorInner({
 	isMarkdown?: boolean;
 }>) {
 	const remarkPlugins = useMemo(
-		() => [remarkMath, remarkGfm, remarkBreaks, remarkMdx, remarkMention, remarkEmoji as any],
+		() => [
+			remarkMath,
+			remarkGfm,
+			remarkBreaks,
+			remarkMdx,
+			remarkMention,
+			remarkEmoji as any,
+		],
 		[],
 	);
 
@@ -167,31 +174,81 @@ function TextEditorInner({
 function TextEditorStatic({
 	initialContent,
 	isMarkdown,
+	minimal = false,
 }: Readonly<{
 	initialContent: string;
 	isMarkdown?: boolean;
+	minimal?: boolean;
 }>) {
 	const remarkPlugins = useMemo(
-		() => [remarkMath, remarkGfm, remarkBreaks, remarkMdx, remarkMention, remarkEmoji as any],
-		[],
+		() =>
+			minimal
+				? [remarkGfm, remarkBreaks]
+				: [
+						remarkMath,
+						remarkGfm,
+						remarkBreaks,
+						remarkMdx,
+						remarkMention,
+						remarkEmoji as any,
+					],
+		[minimal],
+	);
+
+	// Use minimal plugin set for better performance in read-only contexts
+	const plugins = useMemo(
+		() =>
+			minimal
+				? [
+						...BaseEditorKit.filter((plugin) => {
+							// Only include essential plugins for markdown rendering
+							const pluginId =
+								(plugin as any).key || (plugin as any).name || "";
+							return (
+								pluginId.includes("paragraph") ||
+								pluginId.includes("heading") ||
+								pluginId.includes("code") ||
+								pluginId.includes("list") ||
+								pluginId.includes("link") ||
+								pluginId.includes("bold") ||
+								pluginId.includes("italic") ||
+								pluginId.includes("blockquote") ||
+								pluginId.includes("markdown")
+							);
+						}),
+					]
+				: BaseEditorKit,
+		[minimal],
 	);
 
 	// The value is memoized to avoid re-creating the editor on every render.
 	const value = useMemo(() => {
-		const tempEditor = createSlateEditor({ plugins: [...BaseEditorKit] });
+		// For large content, truncate to prevent performance issues
+		const MAX_LENGTH = 50000; // ~50KB
+		const contentToRender =
+			initialContent.length > MAX_LENGTH
+				? initialContent.slice(0, MAX_LENGTH) +
+					"\\n\\n... (content truncated for performance)"
+				: initialContent;
+
+		const tempEditor = createSlateEditor({ plugins });
 		return safeDeserialize(
 			tempEditor,
-			initialContent,
+			contentToRender,
 			isMarkdown ?? false,
 			remarkPlugins,
 		);
-	}, [initialContent, isMarkdown, remarkPlugins]);
+	}, [initialContent, isMarkdown, remarkPlugins, plugins]);
 
-	const editor = createSlateEditor({
-		id: "static-rendered-editor",
-		plugins: BaseEditorKit,
-		value,
-	});
+	const editor = useMemo(
+		() =>
+			createSlateEditor({
+				id: "static-rendered-editor",
+				plugins,
+				value,
+			}),
+		[plugins, value],
+	);
 
 	return <PlateStatic editor={editor} className="py-0" />;
 }
@@ -201,6 +258,7 @@ type TextEditorProps = {
 	onChange?: (content: string) => void;
 	isMarkdown?: boolean;
 	editable?: boolean;
+	minimal?: boolean;
 };
 
 export const TextEditor = memo(function TextEditor({
@@ -208,6 +266,7 @@ export const TextEditor = memo(function TextEditor({
 	onChange,
 	isMarkdown,
 	editable = false,
+	minimal = false,
 }: Readonly<TextEditorProps>) {
 	if (editable && onChange) {
 		return (
@@ -221,6 +280,10 @@ export const TextEditor = memo(function TextEditor({
 		);
 	}
 	return (
-		<TextEditorStatic initialContent={initialContent} isMarkdown={isMarkdown} />
+		<TextEditorStatic
+			initialContent={initialContent}
+			isMarkdown={isMarkdown}
+			minimal={minimal}
+		/>
 	);
 });

@@ -270,7 +270,9 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 						{isSending && (
 							<div className="w-full max-w-screen-lg px-4 flex flex-col items-end space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
 								<div className="bg-muted dark:bg-muted/30 text-foreground px-4 py-2 rounded-xl rounded-tr-sm max-w-3xl shadow-sm">
-									<p className="whitespace-pre-wrap text-sm">{sendingContent}</p>
+									<p className="whitespace-pre-wrap text-sm">
+										{sendingContent}
+									</p>
 								</div>
 								<div className="flex items-center gap-2 pr-1">
 									<PuffLoader
