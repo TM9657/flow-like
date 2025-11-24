@@ -152,8 +152,8 @@ function FlowPinInnerComponent({
 
 	const pinEditContainerClassName = useMemo(
 		() =>
-			`flex flex-row items-center gap-1 max-w-1/2 ${
-				pin.pin_type === "Input" ? "ml-2.5" : "translate-x-[calc(-100%-0.5rem)]"
+			`flex flex-row items-center gap-1 max-w-[10rem] ${
+				pin.pin_type === "Input" ? "ml-2.5" : "translate-x-[calc(-100%+0.2rem)]"
 			}`,
 		[pin.pin_type],
 	);

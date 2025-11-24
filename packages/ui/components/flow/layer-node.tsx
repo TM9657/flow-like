@@ -38,6 +38,7 @@ import { logLevelFromNumber } from "../../lib/log-level";
 import { type ILayer, ILogLevel, IPinType } from "../../lib/schema/flow/board";
 import { useLogAggregation } from "../../state/log-aggregation-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
+import { AutoResizeText } from "./auto-resize-text";
 import { CommentDialog } from "./comment-dialog";
 import { FlowPin } from "./flow-pin";
 import { LayerEditMenu } from "./layer-editing-menu";
@@ -267,13 +268,13 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 							</div>
 						)}
 						<div className="header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b bg-accent text-accent-foreground p-1 justify-between rounded-t-md">
-							<div className="flex flex-row items-center gap-1">
-								<ZapIcon className="w-2 h-2" />
-								<small className="font-medium leading-none">
-									{props.data.layer.name}
+							<div className="flex flex-row items-center gap-1 min-w-0">
+								<ZapIcon className="w-2 h-2 shrink-0" />
+								<small className="font-medium leading-none truncate">
+									<AutoResizeText text={props.data.layer.name} maxChars={30} />
 								</small>
 							</div>
-							<div className="flex flex-row items-center gap-1">
+							<div className="flex flex-row items-center gap-1 shrink-0">
 								{executed && (
 									<ScrollTextIcon
 										// onClick={() => props.data.openTrace(props.data.traces)}
