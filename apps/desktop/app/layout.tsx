@@ -1,5 +1,6 @@
 "use client";
 import {
+	ExecutionEngineProviderComponent,
 	PersistQueryClientProvider,
 	QueryClient,
 	ReactFlowProvider,
@@ -172,9 +173,11 @@ export default function RootLayout({
 										<ToastProvider />
 										<TauriProvider>
 											<DesktopAuthProvider>
-												<PostHogPageView />
-												<ThemeLoader />
-												<AppSidebar>{children}</AppSidebar>
+												<ExecutionEngineProviderComponent>
+													<PostHogPageView />
+													<ThemeLoader />
+													<AppSidebar>{children}</AppSidebar>
+												</ExecutionEngineProviderComponent>
 											</DesktopAuthProvider>
 										</TauriProvider>
 									</TooltipProvider>

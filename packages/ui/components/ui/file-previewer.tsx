@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MonacoFileEditor } from "./monaco-file-editor";
 import { TextEditor } from "./text-editor";
 
 function rawFileName(url: string) {
@@ -67,7 +68,14 @@ export function canPreview(file: string) {
 export function FilePreviewer({
 	url,
 	page,
-}: Readonly<{ url: string; page?: number }>) {
+	editable = false,
+	onSave,
+}: Readonly<{
+	url: string;
+	page?: number;
+	editable?: boolean;
+	onSave?: (content: string) => Promise<void>;
+}>) {
 	const [content, setContent] = useState<string>("");
 	const [pdfKey, setPdfKey] = useState(0);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -172,6 +180,16 @@ export function FilePreviewer({
 	}
 
 	if (isCode(url)) {
+		if (editable && onSave) {
+			return (
+				<MonacoFileEditor
+					fileName={rawFileName(url)}
+					initialContent={content}
+					editable={true}
+					onSave={onSave}
+				/>
+			);
+		}
 		return (
 			<TextEditor
 				initialContent={`\n\`\`\`${getCodeLanguage(url)}\n${content}\n\`\`\`\n`}
@@ -182,6 +200,16 @@ export function FilePreviewer({
 	}
 
 	if (isText(url)) {
+		if (editable && onSave) {
+			return (
+				<MonacoFileEditor
+					fileName={rawFileName(url)}
+					initialContent={content}
+					editable={true}
+					onSave={onSave}
+				/>
+			);
+		}
 		return (
 			<TextEditor initialContent={content} isMarkdown={true} editable={false} />
 		);

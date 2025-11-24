@@ -39,6 +39,7 @@ import { DynamicImage, EmptyState } from "../ui";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { TextEditor } from "../ui/text-editor";
 
 interface IEnrichedLogMessage extends ILogMessage {
 	node_id: string;
@@ -178,7 +179,7 @@ export function Traces({
 			const log = messages[index];
 			return (
 				<LogMessage
-					key={index}
+					key={`${log.run_id}-${log.start.nanos_since_epoch}-${index}`}
 					log={log}
 					index={index}
 					style={style}
@@ -188,7 +189,14 @@ export function Traces({
 				/>
 			);
 		},
-		[messages, hasNextPage, isFetchingNextPage, fetchNextPage],
+		[
+			messages,
+			hasNextPage,
+			isFetchingNextPage,
+			fetchNextPage,
+			board,
+			onFocusNode,
+		],
 	);
 
 	useEffect(() => {
@@ -314,7 +322,7 @@ const LogMessage = memo(function LogMessage({
 		if (rowRef.current) {
 			onSetHeight(index, rowRef.current.clientHeight);
 		}
-	}, [rowRef]);
+	}, [rowRef, index, onSetHeight, log.message]);
 
 	return (
 		<button
@@ -328,7 +336,14 @@ const LogMessage = memo(function LogMessage({
 			>
 				<div className="flex p-1 px-2  flex-row items-center gap-2 w-full">
 					<LogIndicator logLevel={log.log_level} />
-					<p className="text-start text-wrap break-all">{log.message}</p>
+					<div className="text-start text-wrap break-all">
+						<TextEditor
+							initialContent={log.message}
+							isMarkdown={true}
+							editable={false}
+							minimal={true}
+						/>
+					</div>
 				</div>
 				<div className="flex flex-row items-center gap-1 w-full px-2 py-1 border-t justify-between">
 					{log.start.nanos_since_epoch !== log.end.nanos_since_epoch ? (
@@ -396,22 +411,22 @@ const LogMessage = memo(function LogMessage({
 });
 
 function logLevelToColor(logLevel: ILogLevel, icon = false) {
-	switch (logLevel) {
-		case ILogLevel.Debug:
-			return !icon
-				? "bg-muted/20 text-muted-foreground"
-				: "bg-muted-foreground";
-		case ILogLevel.Info:
-			return !icon ? "bg-background/20" : "bg-foreground";
-		case ILogLevel.Warn:
-			return !icon ? "bg-yellow-400/20" : "bg-yellow-400";
-		case ILogLevel.Error:
-			return icon ? "bg-rose-400/20" : "bg-rose-400";
-		case ILogLevel.Fatal:
-			return !icon ? "bg-pink-400/30" : "bg-pink-400";
-	}
+	const colors: Record<number, { base: string; icon: string }> = {
+		[ILogLevel.Debug]: {
+			base: "bg-muted/20 text-muted-foreground",
+			icon: "bg-muted-foreground",
+		},
+		[ILogLevel.Info]: { base: "bg-background/20", icon: "bg-foreground" },
+		[ILogLevel.Warn]: { base: "bg-yellow-400/20", icon: "bg-yellow-400" },
+		[ILogLevel.Error]: { base: "bg-rose-400", icon: "bg-rose-400/20" },
+		[ILogLevel.Fatal]: { base: "bg-pink-400/30", icon: "bg-pink-400" },
+	};
 
-	return icon ? "bg-foreground" : "bg-background";
+	const entry = colors[logLevel];
+	if (!entry) {
+		return icon ? "bg-foreground" : "bg-background";
+	}
+	return icon ? entry.icon : entry.base;
 }
 
 function LogIndicator({ logLevel }: Readonly<{ logLevel: ILogLevel }>) {

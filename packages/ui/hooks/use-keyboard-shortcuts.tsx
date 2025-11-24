@@ -46,6 +46,8 @@ export function useKeyboardShortcuts({
 
 	const shortcutHandler = useCallback(
 		async (event: KeyboardEvent) => {
+			if (event.repeat) return;
+
 			const target = event.target as HTMLElement;
 			if (
 				target.tagName === "INPUT" ||
@@ -68,9 +70,17 @@ export function useKeyboardShortcuts({
 					return;
 				}
 				const stack = await undo();
-				if (stack) await backend.boardState.undoBoard(appId, boardId, stack);
-				toastSuccess("Undo", <Undo2Icon className="w-4 h-4" />);
-				await board.refetch();
+				if (stack) {
+					try {
+						await backend.boardState.undoBoard(appId, boardId, stack);
+						await board.refetch();
+						toastSuccess("Undo", <Undo2Icon className="w-4 h-4" />);
+					} catch (error) {
+						console.error("Undo failed:", error);
+						toastError("Undo failed", <XIcon />);
+						await board.refetch();
+					}
+				}
 				return;
 			}
 
@@ -83,9 +93,17 @@ export function useKeyboardShortcuts({
 					return;
 				}
 				const stack = await redo();
-				if (stack) await backend.boardState.redoBoard(appId, boardId, stack);
-				toastSuccess("Redo", <Redo2Icon className="w-4 h-4" />);
-				await board.refetch();
+				if (stack) {
+					try {
+						await backend.boardState.redoBoard(appId, boardId, stack);
+						await board.refetch();
+						toastSuccess("Redo", <Redo2Icon className="w-4 h-4" />);
+					} catch (error) {
+						console.error("Redo failed:", error);
+						toastError("Redo failed", <XIcon />);
+						await board.refetch();
+					}
+				}
 				return;
 			}
 

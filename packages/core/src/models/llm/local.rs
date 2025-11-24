@@ -1,6 +1,6 @@
 use crate::{
     bit::{Bit, BitTypes},
-    models::ModelMeta,
+    models::{ModelMeta, local_utils::ensure_local_weights},
     state::FlowLikeState,
 };
 use flow_like_model_provider::llm::{ModelLogic, llamacpp::LlamaCppModel};
@@ -75,7 +75,7 @@ impl LocalModel {
             .to_path(&bit_store)
             .ok_or(flow_like_types::anyhow!("No model path"))?;
         let pack = bit.pack(app_state.clone()).await?;
-        pack.download(app_state, None).await?;
+        ensure_local_weights(&pack, &app_state, bit.id.as_str(), "local model").await?;
 
         let projection_bit = pack
             .bits

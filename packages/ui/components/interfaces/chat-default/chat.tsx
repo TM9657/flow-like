@@ -52,6 +52,8 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 		const chatBox = useRef<ChatBoxRef>(null);
 		const isScrollingProgrammatically = useRef(false);
 		const [defaultActiveTools, setDefaultActiveTools] = useState<string[]>();
+		const [isSending, setIsSending] = useState(false);
+		const [sendingContent, setSendingContent] = useState("");
 
 		// Sync external messages with local state
 		useEffect(() => {
@@ -146,7 +148,20 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 				audioFile?: File,
 			) => {
 				setShouldAutoScroll(true);
-				await onSendMessage(content, filesAttached, activeTools, audioFile);
+				setIsSending(true);
+				setSendingContent(content);
+
+				// Scroll immediately to show the optimistic message
+				setTimeout(() => {
+					scrollToBottom();
+				}, 50);
+
+				try {
+					await onSendMessage(content, filesAttached, activeTools, audioFile);
+				} finally {
+					setIsSending(false);
+					setSendingContent("");
+				}
 				// Scroll after a brief delay to ensure the message is rendered
 				setTimeout(() => {
 					scrollToBottom();
@@ -252,6 +267,24 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 								/>
 							</div>
 						))}
+						{isSending && (
+							<div className="w-full max-w-screen-lg px-4 flex flex-col items-end space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+								<div className="bg-muted dark:bg-muted/30 text-foreground px-4 py-2 rounded-xl rounded-tr-sm max-w-3xl shadow-sm">
+									<p className="whitespace-pre-wrap text-sm">
+										{sendingContent}
+									</p>
+								</div>
+								<div className="flex items-center gap-2 pr-1">
+									<PuffLoader
+										size={16}
+										color={resolvedTheme === "dark" ? "white" : "black"}
+									/>
+									<span className="text-xs text-muted-foreground">
+										Processing...
+									</span>
+								</div>
+							</div>
+						)}
 						{currentMessage && (
 							<div
 								className="w-full max-w-screen-lg px-4 relative"

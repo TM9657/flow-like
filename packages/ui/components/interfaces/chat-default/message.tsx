@@ -9,7 +9,6 @@ import {
 	MessageSquareIcon,
 	ThumbsDownIcon,
 	ThumbsUpIcon,
-	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -32,6 +31,7 @@ import { FilePreview, type ProcessedAttachment } from "./attachment";
 import { FileDialog, FileDialogPreview } from "./attachment-dialog";
 import type { IAttachment, IMessage } from "./chat-db";
 import { useProcessedAttachments } from "./hooks/use-processed-attachments";
+import { PlanSteps } from "./plan-steps";
 
 interface MessageProps {
 	message: IMessage;
@@ -281,6 +281,9 @@ const MessageActions = ({
 	onFeedbackClick,
 	onEdit,
 	onCopy,
+	allFiles,
+	hiddenFilesCount,
+	onFileClick,
 }: {
 	isUser: boolean;
 	rating: number;
@@ -290,6 +293,9 @@ const MessageActions = ({
 	onFeedbackClick: () => void;
 	onEdit: () => void;
 	onCopy: () => void;
+	allFiles: ProcessedAttachment[];
+	hiddenFilesCount: number;
+	onFileClick: (file: ProcessedAttachment) => void;
 }) => (
 	<div
 		className={cn(
@@ -317,6 +323,9 @@ const MessageActions = ({
 				</Badge>
 			</button>
 		)}
+		{hiddenFilesCount > 0 && (
+			<FileDialog files={allFiles} handleFileClick={onFileClick} />
+		)}
 		{!isUser && (
 			<MessageActionButton onClick={onEdit} title="Edit message">
 				<EditIcon className="w-4 h-4" />
@@ -337,27 +346,17 @@ const AttachmentSection = ({
 	onFileClick: (file: ProcessedAttachment) => void;
 	onFullscreen?: (file: ProcessedAttachment) => void;
 }) => {
-	const { visibleAudio, visibleImages, visibleVideo, allHiddenFiles } =
-		useMemo(() => {
-			const audioFiles = files.filter((file) => file.type === "audio");
-			const imageFiles = files.filter((file) => file.type === "image");
-			const videoFiles = files.filter((file) => file.type === "video");
-			const otherFiles = files.filter(
-				(file) => !["audio", "image", "video"].includes(file.type),
-			);
+	const { visibleAudio, visibleImages, visibleVideo } = useMemo(() => {
+		const audioFiles = files.filter((file) => file.type === "audio");
+		const imageFiles = files.filter((file) => file.type === "image");
+		const videoFiles = files.filter((file) => file.type === "video");
 
-			return {
-				visibleAudio: audioFiles.slice(0, 1),
-				visibleImages: imageFiles.slice(0, 4),
-				visibleVideo: videoFiles.slice(0, 1),
-				allHiddenFiles: [
-					...audioFiles.slice(1),
-					...imageFiles.slice(4),
-					...videoFiles.slice(1),
-					...otherFiles,
-				],
-			};
-		}, [files]);
+		return {
+			visibleAudio: audioFiles.slice(0, 1),
+			visibleImages: imageFiles.slice(0, 4),
+			visibleVideo: videoFiles.slice(0, 1),
+		};
+	}, [files]);
 
 	const getImageGridClassName = useCallback((count: number) => {
 		if (count === 1) return "grid-cols-1";
@@ -401,10 +400,6 @@ const AttachmentSection = ({
 					))}
 				</div>
 			)}
-
-			{allHiddenFiles.length > 0 && (
-				<FileDialog files={files} handleFileClick={onFileClick} />
-			)}
 		</>
 	);
 };
@@ -424,6 +419,16 @@ export function MessageComponent({
 	const contentRef = useRef<HTMLDivElement>(null);
 
 	const maxCollapsedHeight = "4rem";
+
+	const getDisplayFileName = useCallback((name: string) => {
+		try {
+			const decoded = decodeURIComponent(name);
+			const parts = decoded.split(/[/\\]/);
+			return parts[parts.length - 1];
+		} catch {
+			return name;
+		}
+	}, []);
 
 	const messageContent = useMemo(() => {
 		if (typeof message.inner.content === "string") {
@@ -447,6 +452,32 @@ export function MessageComponent({
 	const processedAttachments = useProcessedAttachments(
 		messageContent.attachments,
 	);
+
+	const hiddenFilesCount = useMemo(() => {
+		const audioFiles = processedAttachments.filter(
+			(file) => file.type === "audio",
+		);
+		const imageFiles = processedAttachments.filter(
+			(file) => file.type === "image",
+		);
+		const videoFiles = processedAttachments.filter(
+			(file) => file.type === "video",
+		);
+		const otherFiles = processedAttachments.filter(
+			(file) => !["audio", "image", "video"].includes(file.type),
+		);
+
+		const hiddenAudio = audioFiles.slice(1);
+		const hiddenImages = imageFiles.slice(4);
+		const hiddenVideo = videoFiles.slice(1);
+
+		return (
+			hiddenAudio.length +
+			hiddenImages.length +
+			hiddenVideo.length +
+			otherFiles.length
+		);
+	}, [processedAttachments]);
 
 	useEffect(() => {
 		if (isUser && contentRef.current) {
@@ -561,7 +592,7 @@ export function MessageComponent({
 		<>
 			<div
 				className={cn(
-					"max-w-screen-lg flex gap-1 flex-col transition-all duration-300 ease-in-out",
+					"max-w-5xl flex gap-1 flex-col transition-all duration-300 ease-in-out",
 					isUser ? "items-end" : "items-start",
 				)}
 			>
@@ -569,10 +600,16 @@ export function MessageComponent({
 					className={cn(
 						"rounded-xl rounded-tr-sm p-4 pt-2 whitespace-break-spaces transition-all duration-300 ease-in-out",
 						isUser
-							? "bg-muted dark:bg-muted/30 text-foreground max-w-screen-md"
+							? "bg-muted dark:bg-muted/30 text-foreground max-w-3xl"
 							: "bg-background text-foreground max-w-full w-full pb-0",
 					)}
 				>
+					{!isUser && message.plan_steps && message.plan_steps.length > 0 && (
+						<PlanSteps
+							steps={message.plan_steps}
+							currentStepId={message.current_step_id}
+						/>
+					)}
 					<div
 						ref={contentRef}
 						className={cn(
@@ -594,8 +631,7 @@ export function MessageComponent({
 							isMarkdown={true}
 							editable={false}
 						/>
-					</div>
-
+					</div>{" "}
 					{isUser && showToggle && (
 						<Button
 							variant="ghost"
@@ -616,13 +652,11 @@ export function MessageComponent({
 							)}
 						</Button>
 					)}
-
 					<AttachmentSection
 						files={processedAttachments}
 						onFileClick={handleFileClick}
 						onFullscreen={setFullscreenFile}
 					/>
-
 					{!loading && (
 						<MessageActions
 							isUser={isUser}
@@ -633,46 +667,38 @@ export function MessageComponent({
 							onFeedbackClick={() => setShowFeedbackDialog(true)}
 							onEdit={() => setShowEditDialog(true)}
 							onCopy={copyToClipboard}
+							allFiles={processedAttachments}
+							hiddenFilesCount={hiddenFilesCount}
+							onFileClick={handleFileClick}
 						/>
 					)}
 				</div>
-			</div>
-
+			</div>{" "}
 			{fullscreenFile && (
 				<Dialog
 					open={!!fullscreenFile}
 					onOpenChange={() => setFullscreenFile(null)}
 				>
-					<DialogContent className="max-w-[90vw] max-h-[90vh] p-0 bg-black">
-						<div className="relative h-full">
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => setFullscreenFile(null)}
-								className="absolute top-4 right-4 z-10 bg-black/50 text-white hover:bg-black/70 rounded-full h-8 w-8 p-0"
-							>
-								<X className="w-4 h-4" />
-							</Button>
-							<div className="p-4">
-								<FileDialogPreview file={fullscreenFile} />
-							</div>
-							<div className="absolute bottom-4 left-4 right-4 text-center">
-								<p className="text-white text-sm bg-black/50 rounded px-2 py-1 inline-block">
-									{fullscreenFile.name}
+					<DialogContent className="w-screen h-screen max-w-none! max-h-none! p-0 bg-black border-0 rounded-none top-[50%]! left-[50%]! translate-x-[-50%]! translate-y-[-50%]!">
+						<div className="relative w-full h-full flex flex-col">
+							<div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-start p-4 bg-linear-to-b from-black/80 to-transparent pointer-events-none">
+								<p className="text-white text-sm font-medium truncate">
+									{getDisplayFileName(fullscreenFile.name)}
 								</p>
+							</div>
+							<div className="flex-1 flex items-center justify-center w-full h-full">
+								<FileDialogPreview file={fullscreenFile} />
 							</div>
 						</div>
 					</DialogContent>
 				</Dialog>
 			)}
-
 			<FullscreenEditDialog
 				open={showEditDialog}
 				onOpenChange={setShowEditDialog}
 				content={messageContent.text}
 				onSave={handleEditSave}
 			/>
-
 			<FeedbackDialog
 				open={showFeedbackDialog}
 				onOpenChange={setShowFeedbackDialog}

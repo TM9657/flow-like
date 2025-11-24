@@ -1,4 +1,5 @@
 "use client";
+import process from "node:process";
 /** @type {import('next').NextConfig} */
 import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig = {
@@ -8,14 +9,13 @@ const nextConfig = {
 		unoptimized: true,
 	},
 	staticPageGenerationTimeout: 120,
+	reactCompiler: true,
 	missingSuspenseWithCSRBailout: false,
 	experimental: {
-		missingSuspenseWithCSRBailout: false,
 		serverComponentsHmrCache: true,
 		webpackMemoryOptimizations: true,
-		webpackBuildWorkers: true,
 		preloadEntriesOnStart: false,
-		reactCompiler: true,
+		turbopackFileSystemCacheForDev: true,
 	},
 	devIndicators: {
 		appIsrStatus: false,

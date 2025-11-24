@@ -1,6 +1,7 @@
 #![cfg(feature = "local-ml")]
 use crate::{
     bit::{Bit, BitPack, BitTypes},
+    models::local_utils::ensure_local_weights,
     state::FlowLikeState,
 };
 use flow_like_model_provider::{
@@ -44,7 +45,7 @@ impl LocalEmbeddingModel {
         };
 
         let pack = bit.pack(app_state.clone()).await?;
-        pack.download(app_state.clone(), None).await?;
+        ensure_local_weights(&pack, &app_state, bit.id.as_str(), "embedding model").await?;
 
         let model_path = bit.to_path(&bit_store).ok_or(anyhow!("No model path"))?;
         let loaded_model = std::fs::read(model_path)?;

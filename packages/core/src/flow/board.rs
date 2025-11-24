@@ -302,7 +302,7 @@ impl Board {
         state: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
         let mut commands = commands;
-        for command in commands.iter_mut().rev() {
+        for command in commands.iter_mut() {
             command.execute(self, state.clone()).await?;
         }
         self.cleanup();
