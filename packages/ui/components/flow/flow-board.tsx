@@ -126,6 +126,7 @@ import { useBackend } from "../../state/backend-state";
 import { useFlowBoardParentState } from "../../state/flow-board-parent-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 import { BoardMeta } from "./board-meta";
+import { FlowCopilot } from "./flow-copilot";
 import { FlowCursors } from "./flow-cursors";
 import { FlowDataEdge } from "./flow-data-edge";
 import { FlowExecutionEdge } from "./flow-execution-edge";
@@ -1162,8 +1163,25 @@ export function FlowBoard({
 		[shiftPressed],
 	);
 
+	const onAcceptSuggestion = useCallback(
+		async (suggestion: any) => {
+			const node = catalog.data?.find((n) => n.name === suggestion.node_type);
+			if (node) {
+				await placeNode(node);
+			} else {
+				toastError(`Node type ${suggestion.node_type} not found`, <XIcon />);
+			}
+		},
+		[catalog.data, placeNode],
+	);
+
 	return (
 		<div className="w-full flex-1 grow flex-col min-h-0 relative">
+			<FlowCopilot
+				board={board.data}
+				selectedNodeIds={Array.from(selected.current)}
+				onAcceptSuggestion={onAcceptSuggestion}
+			/>
 			{/* Realtime connection status indicator */}
 			{awareness && connectionStatus === "connected" && (
 				<div className="fixed right-3 top-16 z-50 flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--primary)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm sm:right-4 sm:top-16 md:right-6 md:top-6">

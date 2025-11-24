@@ -100,4 +100,13 @@ export interface IBoardState {
 		boardId: string,
 		commands: IGenericCommand[],
 	): Promise<IGenericCommand[]>;
+
+	autocomplete(
+		board: IBoard,
+		selectedNodeIds: string[],
+		userPrompt?: string,
+		onToken?: (token: string) => void,
+		modelId?: string,
+		token?: string,
+	): Promise<any[]>;
 }

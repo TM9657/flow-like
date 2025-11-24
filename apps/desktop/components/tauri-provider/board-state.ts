@@ -791,4 +791,29 @@ export class BoardState implements IBoardState {
 
 		return returnValue;
 	}
+
+	async autocomplete(
+		board: IBoard,
+		selectedNodeIds: string[],
+		userPrompt?: string,
+		onToken?: (token: string) => void,
+		modelId?: string,
+		token?: string,
+	): Promise<any[]> {
+		const channel = new Channel<string>();
+		if (onToken) {
+			channel.onmessage = onToken;
+		}
+
+		const actualToken = token ?? this.backend.auth?.user?.access_token;
+
+		return await invoke("autocomplete", {
+			board,
+			selectedNodeIds,
+			userPrompt,
+			modelId,
+			channel,
+			token: actualToken,
+		});
+	}
 }
