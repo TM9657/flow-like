@@ -1,4 +1,8 @@
 import type {
+	ChatMessage,
+	CopilotResponse,
+} from "../../components/flow/flow-copilot";
+import type {
 	IBoard,
 	IConnectionMode,
 	IExecutionStage,
@@ -101,12 +105,13 @@ export interface IBoardState {
 		commands: IGenericCommand[],
 	): Promise<IGenericCommand[]>;
 
-	autocomplete(
+	flowpilot_chat(
 		board: IBoard,
 		selectedNodeIds: string[],
-		userPrompt?: string,
+		userPrompt: string,
+		history: ChatMessage[],
 		onToken?: (token: string) => void,
 		modelId?: string,
 		token?: string,
-	): Promise<any[]>;
+	): Promise<CopilotResponse>;
 }

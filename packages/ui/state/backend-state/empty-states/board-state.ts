@@ -13,6 +13,10 @@ import type {
 	IVersionType,
 } from "../../../";
 import type { IJwks, IRealtimeAccess } from "../../../";
+import type {
+	ChatMessage,
+	CopilotResponse,
+} from "../../../components/flow/flow-copilot";
 
 export class EmptyBoardState implements IBoardState {
 	getBoards(appId: string): Promise<IBoard[]> {
@@ -127,6 +131,18 @@ export class EmptyBoardState implements IBoardState {
 		boardId: string,
 		commands: IGenericCommand[],
 	): Promise<IGenericCommand[]> {
+		throw new Error("Method not implemented.");
+	}
+
+	flowpilot_chat(
+		board: IBoard,
+		selectedNodeIds: string[],
+		userPrompt: string,
+		history: ChatMessage[],
+		onToken?: (token: string) => void,
+		modelId?: string,
+		token?: string,
+	): Promise<CopilotResponse> {
 		throw new Error("Method not implemented.");
 	}
 }

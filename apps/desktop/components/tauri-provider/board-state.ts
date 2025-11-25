@@ -1,5 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import {
+	type ChatMessage,
+	type CopilotResponse,
 	type IBoard,
 	type IBoardState,
 	IConnectionMode,
@@ -792,14 +794,15 @@ export class BoardState implements IBoardState {
 		return returnValue;
 	}
 
-	async autocomplete(
+	async flowpilot_chat(
 		board: IBoard,
 		selectedNodeIds: string[],
-		userPrompt?: string,
+		userPrompt: string,
+		history: ChatMessage[],
 		onToken?: (token: string) => void,
 		modelId?: string,
 		token?: string,
-	): Promise<any[]> {
+	): Promise<CopilotResponse> {
 		const channel = new Channel<string>();
 		if (onToken) {
 			channel.onmessage = onToken;
@@ -807,10 +810,11 @@ export class BoardState implements IBoardState {
 
 		const actualToken = token ?? this.backend.auth?.user?.access_token;
 
-		return await invoke("autocomplete", {
+		return await invoke("flowpilot_chat", {
 			board,
 			selectedNodeIds,
 			userPrompt,
+			history,
 			modelId,
 			channel,
 			token: actualToken,

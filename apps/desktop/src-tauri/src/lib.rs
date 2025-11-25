@@ -591,7 +591,7 @@ pub fn run() {
             functions::flow::template::delete_template,
             functions::flow::template::get_template_meta,
             functions::flow::template::push_template_meta,
-            functions::flow::copilot::autocomplete,
+            functions::flow::copilot::flowpilot_chat,
             functions::event_sink_commands::add_event_sink,
             functions::event_sink_commands::remove_event_sink,
             functions::event_sink_commands::get_event_sink,
