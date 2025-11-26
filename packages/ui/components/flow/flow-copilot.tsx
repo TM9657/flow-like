@@ -2,13 +2,19 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import {
+	ArrowDownIcon,
+	BotIcon,
 	BrainCircuitIcon,
 	CheckCircle2Icon,
 	ChevronDown,
 	CircleDashedIcon,
 	CircleDotIcon,
+	ClockIcon,
+	CpuIcon,
 	EditIcon,
+	LayersIcon,
 	LinkIcon,
+	ListChecksIcon,
 	LoaderCircleIcon,
 	MessageSquareIcon,
 	MoveIcon,
@@ -19,13 +25,15 @@ import {
 	SendIcon,
 	SparklesIcon,
 	SquarePenIcon,
+	TargetIcon,
 	Unlink2Icon,
 	Wand2Icon,
 	WrenchIcon,
 	XCircleIcon,
 	XIcon,
+	ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Input, ScrollArea, TextEditor } from "../..";
 import { useInvoke } from "../../hooks";
 import { IBitTypes, type IBoard } from "../../lib";
@@ -42,136 +50,39 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "../ui/select";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "../ui/tooltip";
 
-export interface Suggestion {
-	node_type: string;
-	reason: string;
-	connection_description: string;
-	position?: { x: number; y: number };
-	connections: Array<{
-		from_node_id: string;
-		from_pin: string;
-		to_pin: string;
-	}>;
-}
+// Re-export types from the shared schema file for backwards compatibility
+export type {
+	Suggestion,
+	AgentType,
+	ChatRole,
+	ChatMessage,
+	BoardCommand,
+	CopilotResponse,
+	PlanStep,
+} from "../../lib/schema/flow/copilot";
 
-/// Agent types for the multi-agent system
-export type AgentType = "Explain" | "Edit";
+import type {
+	Suggestion,
+	AgentType,
+	ChatMessage,
+	BoardCommand,
+	CopilotResponse,
+	PlanStep,
+} from "../../lib/schema/flow/copilot";
 
-/// Role in the chat conversation
-export type ChatRole = "User" | "Assistant";
-
-/// A message in the chat history
-export interface ChatMessage {
-	role: ChatRole;
-	content: string;
-}
-
-/// Commands that can be executed on the board
-export type BoardCommand =
-	| {
-			command_type: "AddNode";
-			node_type: string;
-			ref_id?: string; // Reference ID for this node (e.g., "$0", "$1") used in connections
-			position?: { x: number; y: number };
-			friendly_name?: string;
-			summary?: string;
-	  }
-	| { command_type: "RemoveNode"; node_id: string; summary?: string }
-	| {
-			command_type: "ConnectPins";
-			from_node: string;
-			from_pin: string;
-			to_node: string;
-			to_pin: string;
-			summary?: string;
-	  }
-	| {
-			command_type: "DisconnectPins";
-			from_node: string;
-			from_pin: string;
-			to_node: string;
-			to_pin: string;
-			summary?: string;
-	  }
-	| {
-			command_type: "UpdateNodePin";
-			node_id: string;
-			pin_id: string;
-			value: unknown;
-			summary?: string;
-	  }
-	| {
-			command_type: "MoveNode";
-			node_id: string;
-			position: { x: number; y: number };
-			summary?: string;
-	  }
-	| {
-			command_type: "CreateVariable";
-			name: string;
-			data_type: string;
-			value_type?: string;
-			default_value?: unknown;
-			description?: string;
-			summary?: string;
-	  }
-	| {
-			command_type: "UpdateVariable";
-			variable_id: string;
-			value: unknown;
-			summary?: string;
-	  }
-	| { command_type: "DeleteVariable"; variable_id: string; summary?: string }
-	| {
-			command_type: "CreateComment";
-			content: string;
-			position?: { x: number; y: number };
-			color?: string;
-			summary?: string;
-	  }
-	| {
-			command_type: "UpdateComment";
-			comment_id: string;
-			content?: string;
-			color?: string;
-			summary?: string;
-	  }
-	| { command_type: "DeleteComment"; comment_id: string; summary?: string }
-	| {
-			command_type: "CreateLayer";
-			name: string;
-			color?: string;
-			node_ids?: string[];
-			summary?: string;
-	  }
-	| {
-			command_type: "AddNodesToLayer";
-			layer_id: string;
-			node_ids: string[];
-			summary?: string;
-	  }
-	| {
-			command_type: "RemoveNodesFromLayer";
-			layer_id: string;
-			node_ids: string[];
-			summary?: string;
-	  };
-
-/// Response from the copilot
-export interface CopilotResponse {
-	agent_type: AgentType;
-	message: string;
-	commands: BoardCommand[];
-	suggestions: Suggestion[];
-}
-
-interface PlanStep {
-	id: string;
-	description: string;
-	status: "Pending" | "InProgress" | "Completed" | "Failed";
-	tool_name?: string;
-}
+type LoadingPhase =
+	| "initializing"
+	| "analyzing"
+	| "searching"
+	| "reasoning"
+	| "generating"
+	| "finalizing";
 
 interface FlowCopilotProps {
 	board: IBoard | undefined;
@@ -183,6 +94,37 @@ interface FlowCopilotProps {
 }
 
 type Mode = "chat" | "autocomplete";
+
+const LOADING_PHASES: Record<LoadingPhase, { label: string; icon: React.ReactNode; color: string }> = {
+	initializing: { label: "Initializing...", icon: <CpuIcon className="w-3.5 h-3.5" />, color: "text-blue-500" },
+	analyzing: { label: "Analyzing your flow...", icon: <SearchIcon className="w-3.5 h-3.5" />, color: "text-violet-500" },
+	searching: { label: "Searching catalog...", icon: <SearchIcon className="w-3.5 h-3.5" />, color: "text-cyan-500" },
+	reasoning: { label: "Thinking...", icon: <BrainCircuitIcon className="w-3.5 h-3.5" />, color: "text-amber-500" },
+	generating: { label: "Generating response...", icon: <SparklesIcon className="w-3.5 h-3.5" />, color: "text-pink-500" },
+	finalizing: { label: "Finalizing...", icon: <CheckCircle2Icon className="w-3.5 h-3.5" />, color: "text-green-500" },
+};
+
+function StatusPill({ phase, elapsed }: { phase: LoadingPhase; elapsed: number }) {
+	const phaseInfo = LOADING_PHASES[phase];
+	return (
+		<motion.div
+			initial={{ opacity: 0, scale: 0.9 }}
+			animate={{ opacity: 1, scale: 1 }}
+			className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-background/80 backdrop-blur-sm border border-border/50 ${phaseInfo.color}`}
+		>
+			<motion.div
+				animate={{ rotate: phase === "reasoning" ? 360 : 0 }}
+				transition={{ duration: 2, repeat: phase === "reasoning" ? Infinity : 0, ease: "linear" }}
+			>
+				{phaseInfo.icon}
+			</motion.div>
+			<span>{phaseInfo.label}</span>
+			{elapsed > 0 && (
+				<span className="text-muted-foreground/60 tabular-nums">{elapsed}s</span>
+			)}
+		</motion.div>
+	);
+}
 
 // Helper function to get icon for a command type
 function getCommandIcon(cmd: BoardCommand, size = "w-4 h-4") {
@@ -223,28 +165,35 @@ function PlanStepsView({ steps }: { steps: PlanStep[] }) {
 
 	const completedCount = steps.filter((s) => s.status === "Completed").length;
 	const inProgressCount = steps.filter((s) => s.status === "InProgress").length;
+	const progress = steps.length > 0 ? (completedCount / steps.length) * 100 : 0;
 
-	// Get the most recent step (last one, or last in-progress one)
 	const currentStep =
 		steps.findLast((s) => s.status === "InProgress") || steps[steps.length - 1];
 
 	const getStatusIcon = (status: PlanStep["status"]) => {
 		switch (status) {
 			case "Completed":
-				return <CheckCircle2Icon className="w-3 h-3 text-green-500" />;
+				return (
+					<motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+						<CheckCircle2Icon className="w-3.5 h-3.5 text-green-500" />
+					</motion.div>
+				);
 			case "InProgress":
 				return (
-					<LoaderCircleIcon className="w-3 h-3 text-primary animate-spin" />
+					<div className="relative">
+						<div className="absolute inset-0 bg-primary/30 rounded-full animate-ping" />
+						<LoaderCircleIcon className="w-3.5 h-3.5 text-primary animate-spin relative" />
+					</div>
 				);
 			case "Failed":
-				return <XCircleIcon className="w-3 h-3 text-destructive" />;
+				return <XCircleIcon className="w-3.5 h-3.5 text-destructive" />;
 			default:
-				return <CircleDashedIcon className="w-3 h-3 text-muted-foreground" />;
+				return <CircleDashedIcon className="w-3.5 h-3.5 text-muted-foreground/50" />;
 		}
 	};
 
 	const getToolIcon = (toolName?: string) => {
-		if (!toolName) return null;
+		if (!toolName) return <ZapIcon className="w-3 h-3" />;
 		switch (toolName) {
 			case "catalog_search":
 			case "search_by_pin":
@@ -253,7 +202,7 @@ function PlanStepsView({ steps }: { steps: PlanStep[] }) {
 			case "think":
 				return <BrainCircuitIcon className="w-3 h-3" />;
 			case "focus_node":
-				return <CircleDotIcon className="w-3 h-3" />;
+				return <TargetIcon className="w-3 h-3" />;
 			case "emit_commands":
 				return <SparklesIcon className="w-3 h-3" />;
 			default:
@@ -261,96 +210,124 @@ function PlanStepsView({ steps }: { steps: PlanStep[] }) {
 		}
 	};
 
-	const getStatusColor = (status: PlanStep["status"]) => {
-		switch (status) {
-			case "Completed":
-				return "border-green-500/30 bg-green-500/5";
-			case "InProgress":
-				return "border-primary/50 bg-primary/10";
-			case "Failed":
-				return "border-destructive/30 bg-destructive/5";
-			default:
-				return "border-border/50 bg-muted/20";
+	const getToolLabel = (toolName?: string) => {
+		if (!toolName) return "Processing";
+		switch (toolName) {
+			case "catalog_search": return "Searching";
+			case "search_by_pin": return "Finding pins";
+			case "filter_category": return "Filtering";
+			case "think": return "Reasoning";
+			case "focus_node": return "Focusing";
+			case "emit_commands": return "Building";
+			default: return toolName.replace(/_/g, " ");
 		}
 	};
 
-	const renderStep = (step: PlanStep) => {
-		const isReasoningStep = step.tool_name === "think";
-		return (
-			<div
-				key={step.id}
-				className={`flex items-start gap-2 text-xs p-2 rounded-lg border transition-all overflow-hidden ${getStatusColor(step.status)}`}
-			>
-				<div className="shrink-0 mt-0.5">{getStatusIcon(step.status)}</div>
-				<div className="flex-1 min-w-0 overflow-hidden">
-					{isReasoningStep ? (
-						<Collapsible defaultOpen={step.status === "InProgress"}>
-							<CollapsibleTrigger className="flex items-center gap-1.5 w-full text-left group">
-								<span className="font-medium text-foreground">Reasoning</span>
-								<ChevronDown className="w-3 h-3 ml-auto transition-transform duration-200 group-data-[state=open]:rotate-180 text-muted-foreground shrink-0" />
-							</CollapsibleTrigger>
-							<CollapsibleContent>
-								<div className="mt-1.5 text-[11px] text-muted-foreground whitespace-pre-wrap wrap-break-word font-mono bg-background/50 rounded p-2 max-h-32 overflow-y-auto overflow-x-hidden">
-									{step.description}
-								</div>
-							</CollapsibleContent>
-						</Collapsible>
-					) : (
-						<div
-							className="font-medium text-foreground truncate max-w-[280px]"
-							title={step.description}
-						>
-							{step.description}
-						</div>
-					)}
-				</div>
-				{step.tool_name && (
-					<div className="shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-background/80">
-						{getToolIcon(step.tool_name)}
-					</div>
-				)}
-			</div>
-		);
-	};
-
 	return (
-		<div className="space-y-2 w-full">
-			{/* Progress indicator */}
-			<div className="flex items-center gap-2 text-xs text-muted-foreground">
-				<span className="font-medium px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-600 dark:text-green-400">
+		<motion.div
+			initial={{ opacity: 0, y: 5 }}
+			animate={{ opacity: 1, y: 0 }}
+			className="space-y-2.5 w-full"
+		>
+			{/* Progress bar with animated fill */}
+			<div className="flex items-center gap-3">
+				<div className="flex-1 h-1.5 bg-muted/50 rounded-full overflow-hidden">
+					<motion.div
+						className="h-full bg-linear-to-r from-primary via-violet-500 to-primary rounded-full"
+						initial={{ width: 0 }}
+						animate={{ width: `${progress}%` }}
+						transition={{ duration: 0.5, ease: "easeOut" }}
+					/>
+				</div>
+				<span className="text-[10px] font-medium text-muted-foreground tabular-nums shrink-0">
 					{completedCount}/{steps.length}
 				</span>
-				<span>
-					{inProgressCount > 0
-						? "Working..."
-						: completedCount === steps.length
-							? "Complete"
-							: "Planning"}
-				</span>
 			</div>
 
-			{/* Current/Latest step */}
-			{currentStep && renderStep(currentStep)}
+			{/* Current step with enhanced styling */}
+			{currentStep && (
+				<motion.div
+					key={currentStep.id}
+					initial={{ opacity: 0, x: -10 }}
+					animate={{ opacity: 1, x: 0 }}
+					className={`relative overflow-hidden rounded-xl border transition-all ${
+						currentStep.status === "InProgress"
+							? "border-primary/40 bg-linear-to-r from-primary/10 via-violet-500/5 to-transparent"
+							: currentStep.status === "Completed"
+								? "border-green-500/30 bg-green-500/5"
+								: "border-border/50 bg-muted/30"
+					}`}
+				>
+					{currentStep.status === "InProgress" && (
+						<motion.div
+							className="absolute inset-0 bg-linear-to-r from-primary/10 via-transparent to-primary/10"
+							animate={{ x: ["0%", "100%", "0%"] }}
+							transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+						/>
+					)}
+					<div className="relative p-3 flex items-start gap-2.5">
+						<div className="shrink-0 mt-0.5">
+							{getStatusIcon(currentStep.status)}
+						</div>
+						<div className="flex-1 min-w-0">
+							{currentStep.tool_name === "think" ? (
+								<Collapsible defaultOpen={currentStep.status === "InProgress"}>
+									<CollapsibleTrigger className="flex items-center gap-2 w-full text-left group">
+										<span className="text-xs font-medium text-foreground">Reasoning</span>
+										<ChevronDown className="w-3 h-3 ml-auto transition-transform duration-200 group-data-[state=open]:rotate-180 text-muted-foreground shrink-0" />
+									</CollapsibleTrigger>
+									<CollapsibleContent>
+										<div className="mt-2 text-[11px] text-muted-foreground whitespace-pre-wrap font-mono bg-background/60 rounded-lg p-2.5 max-h-28 overflow-y-auto border border-border/30">
+											{currentStep.description}
+											{currentStep.status === "InProgress" && (
+												<span className="inline-block w-1.5 h-3 ml-0.5 bg-primary/60 animate-pulse rounded-sm" />
+											)}
+										</div>
+									</CollapsibleContent>
+								</Collapsible>
+							) : (
+								<div className="flex items-center gap-2">
+									<span className="text-xs font-medium text-foreground truncate">
+										{currentStep.description}
+									</span>
+								</div>
+							)}
+						</div>
+						{currentStep.tool_name && (
+							<div className="shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground px-2 py-1 rounded-lg bg-background/60 border border-border/30">
+								{getToolIcon(currentStep.tool_name)}
+								<span className="hidden sm:inline">{getToolLabel(currentStep.tool_name)}</span>
+							</div>
+						)}
+					</div>
+				</motion.div>
+			)}
 
-			{/* Expand to show all steps */}
+			{/* Expandable history */}
 			{steps.length > 1 && (
 				<Collapsible open={expanded} onOpenChange={setExpanded}>
-					<CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full">
-						<ChevronDown
-							className={`w-3 h-3 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
-						/>
-						<span>
-							{expanded ? "Hide" : "Show"} all {steps.length} steps
-						</span>
+					<CollapsibleTrigger className="flex items-center gap-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full py-1">
+						<ChevronDown className={`w-3 h-3 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+						<span>{expanded ? "Hide" : "Show"} {steps.length - 1} previous step{steps.length > 2 ? "s" : ""}</span>
 					</CollapsibleTrigger>
 					<CollapsibleContent>
-						<div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
-							{steps.filter((s) => s.id !== currentStep?.id).map(renderStep)}
+						<div className="mt-2 space-y-1.5 pl-1">
+							{steps.filter((s) => s.id !== currentStep?.id).map((step) => (
+								<motion.div
+									key={step.id}
+									initial={{ opacity: 0 }}
+									animate={{ opacity: 1 }}
+									className="flex items-center gap-2 text-[11px] text-muted-foreground py-1"
+								>
+									{getStatusIcon(step.status)}
+									<span className="truncate flex-1">{step.description}</span>
+								</motion.div>
+							))}
 						</div>
 					</CollapsibleContent>
 				</Collapsible>
 			)}
-		</div>
+		</motion.div>
 	);
 }
 
@@ -366,37 +343,24 @@ function PendingCommandsView({
 	onDismiss: () => void;
 }) {
 	const [expanded, setExpanded] = useState(false);
+	const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
 	if (commands.length === 0) return null;
 
-	const getCommandEmoji = (cmd: BoardCommand): string => {
+	const getCommandColor = (cmd: BoardCommand): string => {
 		switch (cmd.command_type) {
 			case "AddNode":
-				return "➕";
+				return "from-green-500/20 to-emerald-500/10 border-green-500/30";
 			case "RemoveNode":
-				return "🗑️";
+				return "from-red-500/20 to-rose-500/10 border-red-500/30";
 			case "ConnectPins":
-				return "🔗";
+				return "from-blue-500/20 to-cyan-500/10 border-blue-500/30";
 			case "DisconnectPins":
-				return "✂️";
+				return "from-orange-500/20 to-amber-500/10 border-orange-500/30";
 			case "UpdateNodePin":
-				return "✏️";
-			case "MoveNode":
-				return "📍";
-			case "CreateVariable":
-			case "UpdateVariable":
-			case "DeleteVariable":
-				return "📦";
-			case "CreateComment":
-			case "UpdateComment":
-			case "DeleteComment":
-				return "💬";
-			case "CreateLayer":
-			case "AddNodesToLayer":
-			case "RemoveNodesFromLayer":
-				return "📁";
+				return "from-violet-500/20 to-purple-500/10 border-violet-500/30";
 			default:
-				return "⚡";
+				return "from-primary/20 to-primary/10 border-primary/30";
 		}
 	};
 
@@ -408,93 +372,152 @@ function PendingCommandsView({
 			case "RemoveNode":
 				return "Remove node";
 			case "ConnectPins":
-				return "Connect";
+				return `Connect ${cmd.from_pin} → ${cmd.to_pin}`;
 			case "DisconnectPins":
-				return "Disconnect";
+				return "Disconnect pins";
 			case "UpdateNodePin":
-				return "Set value";
+				return `Set ${cmd.pin_id}`;
 			case "MoveNode":
-				return "Move";
+				return "Move node";
 			default:
-				return cmd.command_type;
+				return cmd.command_type.replace(/([A-Z])/g, " $1").trim();
 		}
 	};
 
-	// Group commands by type for summary
 	const addCount = commands.filter((c) => c.command_type === "AddNode").length;
-	const connectCount = commands.filter(
-		(c) => c.command_type === "ConnectPins",
-	).length;
-	const updateCount = commands.filter(
-		(c) => c.command_type === "UpdateNodePin",
-	).length;
-	const otherCount = commands.length - addCount - connectCount - updateCount;
+	const connectCount = commands.filter((c) => c.command_type === "ConnectPins").length;
+	const updateCount = commands.filter((c) => c.command_type === "UpdateNodePin").length;
+	const removeCount = commands.filter((c) => c.command_type === "RemoveNode").length;
 
 	return (
 		<motion.div
-			initial={{ opacity: 0, y: 10 }}
-			animate={{ opacity: 1, y: 0 }}
+			initial={{ opacity: 0, y: 15, scale: 0.98 }}
+			animate={{ opacity: 1, y: 0, scale: 1 }}
+			transition={{ type: "spring", stiffness: 400, damping: 25 }}
 			className="w-full"
 		>
-			{/* Compact summary bar */}
-			<div className="flex items-center gap-2 p-2 rounded-xl bg-linear-to-r from-primary/10 via-purple-500/10 to-primary/10 border border-primary/20">
-				<div className="flex items-center gap-1.5 flex-1 min-w-0">
-					<SparklesIcon className="w-4 h-4 text-primary shrink-0" />
-					<div className="flex items-center gap-1 text-xs font-medium text-foreground overflow-hidden">
+			{/* Enhanced summary card */}
+			<div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-linear-to-br from-primary/5 via-violet-500/5 to-pink-500/5">
+				{/* Animated background shimmer */}
+				<motion.div
+					className="absolute inset-0 bg-linear-to-r from-transparent via-white/5 to-transparent"
+					animate={{ x: ["-100%", "200%"] }}
+					transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+				/>
+
+				<div className="relative p-3.5">
+					<div className="flex items-center justify-between gap-3 mb-3">
+						<div className="flex items-center gap-2.5">
+							<div className="relative">
+								<div className="absolute inset-0 bg-primary/30 rounded-lg blur-md" />
+								<div className="relative p-1.5 bg-linear-to-br from-primary to-violet-600 rounded-lg">
+									<SparklesIcon className="w-4 h-4 text-white" />
+								</div>
+							</div>
+							<div>
+								<div className="text-sm font-semibold text-foreground">
+									Ready to Apply
+								</div>
+								<div className="text-[11px] text-muted-foreground">
+									{commands.length} change{commands.length > 1 ? "s" : ""} pending
+								</div>
+							</div>
+						</div>
+
+						<div className="flex items-center gap-1.5">
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										size="sm"
+										variant="ghost"
+										className="h-8 w-8 p-0 rounded-lg hover:bg-background/60"
+										onClick={() => setExpanded(!expanded)}
+									>
+										<ChevronDown className={`w-4 h-4 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top" className="text-xs">
+									{expanded ? "Collapse" : "Expand"} details
+								</TooltipContent>
+							</Tooltip>
+
+							<Button
+								size="sm"
+								className="h-8 px-4 text-xs font-medium gap-1.5 bg-linear-to-r from-primary to-violet-600 hover:from-primary/90 hover:to-violet-600/90 shadow-lg shadow-primary/20 rounded-lg"
+								onClick={onExecute}
+							>
+								<PlayIcon className="w-3.5 h-3.5" />
+								Apply All
+							</Button>
+
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										size="sm"
+										variant="ghost"
+										className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+										onClick={onDismiss}
+									>
+										<XIcon className="w-4 h-4" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top" className="text-xs">
+									Dismiss changes
+								</TooltipContent>
+							</Tooltip>
+						</div>
+					</div>
+
+					{/* Command type badges */}
+					<div className="flex flex-wrap gap-1.5">
 						{addCount > 0 && (
-							<span className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-600 dark:text-green-400 whitespace-nowrap">
-								+{addCount}
-							</span>
+							<motion.span
+								initial={{ scale: 0 }}
+								animate={{ scale: 1 }}
+								className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-500/15 text-green-600 dark:text-green-400 border border-green-500/20"
+							>
+								<PlusCircleIcon className="w-3 h-3" />
+								{addCount} node{addCount > 1 ? "s" : ""}
+							</motion.span>
 						)}
 						{connectCount > 0 && (
-							<span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400 whitespace-nowrap">
-								🔗{connectCount}
-							</span>
+							<motion.span
+								initial={{ scale: 0 }}
+								animate={{ scale: 1 }}
+								transition={{ delay: 0.05 }}
+								className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+							>
+								<LinkIcon className="w-3 h-3" />
+								{connectCount} connection{connectCount > 1 ? "s" : ""}
+							</motion.span>
 						)}
 						{updateCount > 0 && (
-							<span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-600 dark:text-purple-400 whitespace-nowrap">
-								✏️{updateCount}
-							</span>
+							<motion.span
+								initial={{ scale: 0 }}
+								animate={{ scale: 1 }}
+								transition={{ delay: 0.1 }}
+								className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/20"
+							>
+								<PencilIcon className="w-3 h-3" />
+								{updateCount} update{updateCount > 1 ? "s" : ""}
+							</motion.span>
 						)}
-						{otherCount > 0 && (
-							<span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground whitespace-nowrap">
-								+{otherCount}
-							</span>
+						{removeCount > 0 && (
+							<motion.span
+								initial={{ scale: 0 }}
+								animate={{ scale: 1 }}
+								transition={{ delay: 0.15 }}
+								className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/20"
+							>
+								<XCircleIcon className="w-3 h-3" />
+								{removeCount} removal{removeCount > 1 ? "s" : ""}
+							</motion.span>
 						)}
 					</div>
 				</div>
-
-				<div className="flex items-center gap-1 shrink-0">
-					<Button
-						size="sm"
-						variant="ghost"
-						className="h-7 px-2 text-xs"
-						onClick={() => setExpanded(!expanded)}
-					>
-						<ChevronDown
-							className={`w-3 h-3 transition-transform ${expanded ? "rotate-180" : ""}`}
-						/>
-					</Button>
-					<Button
-						size="sm"
-						className="h-7 px-3 text-xs gap-1 bg-primary hover:bg-primary/90"
-						onClick={onExecute}
-					>
-						<PlayIcon className="w-3 h-3" />
-						Apply
-					</Button>
-					<Button
-						size="sm"
-						variant="ghost"
-						className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-						onClick={onDismiss}
-					>
-						<XIcon className="w-3 h-3" />
-					</Button>
-				</div>
 			</div>
 
-			{/* Expanded details */}
+			{/* Expanded command list */}
 			<AnimatePresence>
 				{expanded && (
 					<motion.div
@@ -504,24 +527,35 @@ function PendingCommandsView({
 						transition={{ duration: 0.2 }}
 						className="overflow-hidden"
 					>
-						<div className="pt-2 space-y-1 max-h-32 overflow-y-auto">
+						<div className="pt-2 space-y-1.5 max-h-40 overflow-y-auto">
 							{commands.map((cmd, i) => (
-								<div
+								<motion.div
 									key={i}
-									className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors group"
+									initial={{ opacity: 0, x: -10 }}
+									animate={{ opacity: 1, x: 0 }}
+									transition={{ delay: i * 0.03 }}
+									className={`group relative flex items-center gap-2.5 p-2.5 rounded-xl bg-linear-to-r ${getCommandColor(cmd)} border cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]`}
 									onClick={() => onExecuteSingle(i)}
+									onMouseEnter={() => setHoveredIndex(i)}
+									onMouseLeave={() => setHoveredIndex(null)}
 								>
-									<span className="text-sm shrink-0">
-										{getCommandEmoji(cmd)}
-									</span>
-									<span
-										className="text-xs text-foreground truncate flex-1"
-										title={getCommandSummary(cmd)}
-									>
+									<div className="shrink-0">
+										{getCommandIcon(cmd, "w-4 h-4")}
+									</div>
+									<span className="text-xs font-medium text-foreground truncate flex-1">
 										{getCommandSummary(cmd)}
 									</span>
-									<PlayIcon className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-								</div>
+									<motion.div
+										initial={{ opacity: 0, scale: 0.8 }}
+										animate={{
+											opacity: hoveredIndex === i ? 1 : 0,
+											scale: hoveredIndex === i ? 1 : 0.8
+										}}
+										className="shrink-0 p-1 rounded-md bg-primary/20"
+									>
+										<PlayIcon className="w-3 h-3 text-primary" />
+									</motion.div>
+								</motion.div>
 							))}
 						</div>
 					</motion.div>
@@ -710,18 +744,34 @@ export function FlowCopilot({
 			content: string;
 			agentType?: AgentType;
 			executedCommands?: BoardCommand[];
+			planSteps?: PlanStep[];
 		}[]
 	>([]);
 	const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 	const [pendingCommands, setPendingCommands] = useState<BoardCommand[]>([]);
 	const [loading, setLoading] = useState(false);
+	const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>("initializing");
+	const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
+	const [elapsedSeconds, setElapsedSeconds] = useState(0);
 	const [currentToolCall, setCurrentToolCall] = useState<string | null>(null);
+	const [tokenCount, setTokenCount] = useState(0);
 	const [planSteps, setPlanSteps] = useState<PlanStep[]>([]);
 	const [selectedModelId, setSelectedModelId] = useState<string | undefined>(
 		undefined,
 	);
 	const [autocompleteEnabled, setAutocompleteEnabled] = useState(false);
 	const backend = useBackend();
+
+	// Track elapsed time during loading
+	useEffect(() => {
+		if (loading && loadingStartTime) {
+			const interval = setInterval(() => {
+				setElapsedSeconds(Math.floor((Date.now() - loadingStartTime) / 1000));
+			}, 1000);
+			return () => clearInterval(interval);
+		}
+		setElapsedSeconds(0);
+	}, [loading, loadingStartTime]);
 
 	// Debug: Log whenever pendingCommands changes
 	useEffect(() => {
@@ -804,15 +854,17 @@ export function FlowCopilot({
 		}
 	}, [models, selectedModelId]);
 
-	const scrollToBottom = useCallback(() => {
-		if (userScrolledUp) return; // Don't auto-scroll if user scrolled up
-		// Use requestAnimationFrame to ensure DOM update is complete
-		requestAnimationFrame(() => {
-			messagesEndRef.current?.scrollIntoView({
-				behavior: "smooth",
-				block: "nearest",
-			});
+	const scrollToBottom = useCallback((force = false) => {
+		if (userScrolledUp && !force) return;
+		const container = scrollContainerRef.current;
+		if (!container) return;
+
+		// Smooth scroll to bottom
+		container.scrollTo({
+			top: container.scrollHeight,
+			behavior: force ? "smooth" : "auto",
 		});
+		if (force) setUserScrolledUp(false);
 	}, [userScrolledUp]);
 
 	// Handle scroll events to detect when user scrolls up
@@ -821,21 +873,22 @@ export function FlowCopilot({
 		if (!container) return;
 
 		const { scrollTop, scrollHeight, clientHeight } = container;
-		const isAtBottom = scrollHeight - scrollTop - clientHeight < 50; // 50px threshold
+		const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+		const isAtBottom = distanceFromBottom < 30;
 
-		if (isAtBottom) {
-			setUserScrolledUp(false);
-		} else {
-			setUserScrolledUp(true);
-		}
+		setUserScrolledUp(!isAtBottom);
 	}, []);
 
+	// Auto-scroll on new messages (only if user hasn't scrolled up)
 	useEffect(() => {
-		scrollToBottom();
-		// Double check scroll after a short delay to handle any layout shifts (like Collapsible animations)
-		const timeout = setTimeout(scrollToBottom, 150);
-		return () => clearTimeout(timeout);
-	}, [messages, suggestions, loading, scrollToBottom]);
+		if (!userScrolledUp) {
+			// Immediate scroll for instant feedback
+			scrollToBottom();
+			// Delayed scroll to catch any layout shifts
+			const timeout = setTimeout(() => scrollToBottom(), 100);
+			return () => clearTimeout(timeout);
+		}
+	}, [messages, suggestions, loading, userScrolledUp, scrollToBottom]);
 
 	const handleNewChat = () => {
 		setMessages([]);
@@ -906,42 +959,57 @@ export function FlowCopilot({
 		setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
 		setInput("");
 		setLoading(true);
+		setLoadingPhase("initializing");
+		setLoadingStartTime(Date.now());
+		setTokenCount(0);
 		setSuggestions([]);
 		setPendingCommands([]);
 		setPlanSteps([]);
-		setUserScrolledUp(false); // Reset scroll state when sending new message
+		setUserScrolledUp(false);
 
 		try {
 			if (!board) return;
 
 			let currentMessageContent = "";
-			// Add an empty assistant message to stream into
 			setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
+			// Transition to analyzing phase after a brief moment
+			setTimeout(() => setLoadingPhase("analyzing"), 300);
+
 			const onToken = (token: string) => {
+				console.log("[FlowCopilot] onToken received:", token.slice(0, 100));
+				setTokenCount((prev) => prev + 1);
+
 				// Check for plan step events
 				const planStepMatch = token.match(/<plan_step>([\s\S]*?)<\/plan_step>/);
 				if (planStepMatch) {
+					console.log("[FlowCopilot] Plan step detected:", planStepMatch[1].slice(0, 100));
 					try {
 						const eventData = JSON.parse(planStepMatch[1]);
 						if (eventData.PlanStep) {
 							const step = eventData.PlanStep;
+							// Update loading phase based on tool
+							if (step.tool_name === "think") {
+								setLoadingPhase("reasoning");
+							} else if (step.tool_name?.includes("search") || step.tool_name?.includes("catalog")) {
+								setLoadingPhase("searching");
+							} else if (step.tool_name === "emit_commands") {
+								setLoadingPhase("generating");
+							}
+
 							setPlanSteps((prev) => {
 								const existingIndex = prev.findIndex((s) => s.id === step.id);
 								if (existingIndex >= 0) {
-									// Update existing step
 									const updated = [...prev];
 									updated[existingIndex] = step;
 									return updated;
 								}
-								// Add new step
 								return [...prev, step];
 							});
 						}
 					} catch {
 						// Not valid JSON, ignore
 					}
-					// Don't add plan step tags to the message
 					return;
 				}
 
@@ -955,7 +1023,16 @@ export function FlowCopilot({
 				if (token.includes("tool_call:")) {
 					const match = token.match(/tool_call:(\w+)/);
 					if (match) {
-						setCurrentToolCall(match[1]);
+						const toolName = match[1];
+						setCurrentToolCall(toolName);
+						// Update phase based on tool type
+						if (toolName.includes("search") || toolName.includes("catalog") || toolName.includes("filter")) {
+							setLoadingPhase("searching");
+						} else if (toolName === "think") {
+							setLoadingPhase("reasoning");
+						} else if (toolName === "emit_commands") {
+							setLoadingPhase("generating");
+						}
 					}
 					return;
 				}
@@ -964,7 +1041,13 @@ export function FlowCopilot({
 					return;
 				}
 
+				// When we start receiving actual content, switch to generating phase
+				if (currentMessageContent.length === 0 && token.trim()) {
+					setLoadingPhase("generating");
+				}
+
 				currentMessageContent += token;
+				console.log("[FlowCopilot] Adding to message, total length:", currentMessageContent.length);
 				setMessages((prev) => {
 					const newMessages = [...prev];
 					const lastMessage = newMessages[newMessages.length - 1];
@@ -991,12 +1074,13 @@ export function FlowCopilot({
 				selectedModelId,
 			);
 
-			// Update the final message with agent type
+			// Update the final message with agent type and plan steps
 			setMessages((prev) => {
 				const newMessages = [...prev];
 				const lastMessage = newMessages[newMessages.length - 1];
 				if (lastMessage && lastMessage.role === "assistant") {
 					lastMessage.agentType = response.agent_type;
+					lastMessage.planSteps = planSteps.filter(s => s.status === "Completed");
 					// If the streamed content is empty, use the response message
 					if (!lastMessage.content.trim()) {
 						lastMessage.content = response.message;
@@ -1030,6 +1114,8 @@ export function FlowCopilot({
 			if (response.suggestions.length > 0) {
 				setSuggestions(response.suggestions);
 			}
+
+			setLoadingPhase("finalizing");
 		} catch (e) {
 			console.error(e);
 			setMessages((prev) => [
@@ -1041,7 +1127,9 @@ export function FlowCopilot({
 			]);
 		} finally {
 			setLoading(false);
+			setLoadingStartTime(null);
 			setCurrentToolCall(null);
+			setTokenCount(0);
 		}
 	};
 
@@ -1050,19 +1138,27 @@ export function FlowCopilot({
 			<motion.div
 				initial={{ scale: 0, opacity: 0 }}
 				animate={{ scale: 1, opacity: 1 }}
-				className="absolute bottom-6 right-6 z-50"
+				className="absolute top-20 right-4 z-40"
 			>
-				<div className="relative">
+				<div className="relative group">
+					{/* Subtle ambient glow on hover only */}
+					<div className="absolute -inset-2 bg-primary/30 rounded-full blur-xl opacity-0 group-hover:opacity-50 transition-all duration-300" />
+
 					<Button
-						className="rounded-full w-14 h-14 p-0 shadow-xl bg-linear-to-r from-primary to-purple-600 hover:scale-105 transition-transform"
+						className="relative rounded-full w-12 h-12 p-0 shadow-lg bg-background/90 backdrop-blur-sm border border-border/50 hover:border-primary/50 hover:bg-background hover:shadow-xl transition-all duration-200"
 						onClick={() => setIsOpen(true)}
 					>
-						<SparklesIcon className="w-6 h-6 text-white" />
+						<SparklesIcon className="w-5 h-5 text-primary" />
 					</Button>
+
 					{autocompleteEnabled && (
-						<div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 border-2 border-background rounded-full flex items-center justify-center">
-							<Wand2Icon className="w-3 h-3 text-white" />
-						</div>
+						<motion.div
+							initial={{ scale: 0 }}
+							animate={{ scale: 1 }}
+							className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-background rounded-full flex items-center justify-center shadow-md"
+						>
+							<Wand2Icon className="w-2.5 h-2.5 text-white" />
+						</motion.div>
 					)}
 				</div>
 			</motion.div>
@@ -1073,322 +1169,329 @@ export function FlowCopilot({
 		<AnimatePresence>
 			{isOpen && (
 				<motion.div
-					initial={{ opacity: 0, y: 20, scale: 0.95 }}
+					initial={{ opacity: 0, y: -20, scale: 0.95 }}
 					animate={{ opacity: 1, y: 0, scale: 1 }}
-					exit={{ opacity: 0, y: 20, scale: 0.95 }}
-					transition={{ duration: 0.2 }}
-					className="absolute bottom-6 right-6 z-50"
-					style={{ width: 420, height: 600 }}
+					exit={{ opacity: 0, y: -20, scale: 0.95 }}
+					transition={{ type: "spring", stiffness: 400, damping: 30 }}
+					className="absolute top-20 right-4 z-40"
+					style={{ width: 420, height: 560 }}
 				>
-					{/* Animated wavy border */}
+					{/* Subtle pulsating glow */}
 					{loading && (
-						<div className="absolute -inset-[2px] rounded-[26px] overflow-hidden">
-							{/* Animated gradient that flows along the border */}
-							<svg
-								className="absolute inset-0 w-full h-full"
-								viewBox="0 0 420 600"
-								preserveAspectRatio="none"
-							>
-								<defs>
-									<linearGradient
-										id="flowGradient"
-										x1="0%"
-										y1="0%"
-										x2="100%"
-										y2="100%"
-									>
-										<stop offset="0%" stopColor="#8b5cf6">
-											<animate
-												attributeName="stop-color"
-												values="#8b5cf6;#ec4899;#3b82f6;#10b981;#8b5cf6"
-												dur="3s"
-												repeatCount="indefinite"
-											/>
-										</stop>
-										<stop offset="50%" stopColor="#ec4899">
-											<animate
-												attributeName="stop-color"
-												values="#ec4899;#3b82f6;#10b981;#8b5cf6;#ec4899"
-												dur="3s"
-												repeatCount="indefinite"
-											/>
-										</stop>
-										<stop offset="100%" stopColor="#3b82f6">
-											<animate
-												attributeName="stop-color"
-												values="#3b82f6;#10b981;#8b5cf6;#ec4899;#3b82f6"
-												dur="3s"
-												repeatCount="indefinite"
-											/>
-										</stop>
-									</linearGradient>
-									{/* Wavy displacement filter */}
-									<filter
-										id="wavyFilter"
-										x="-20%"
-										y="-20%"
-										width="140%"
-										height="140%"
-									>
-										<feTurbulence
-											type="turbulence"
-											baseFrequency="0.02"
-											numOctaves="3"
-											result="turbulence"
-										>
-											<animate
-												attributeName="baseFrequency"
-												values="0.02;0.04;0.02"
-												dur="2s"
-												repeatCount="indefinite"
-											/>
-										</feTurbulence>
-										<feDisplacementMap
-											in="SourceGraphic"
-											in2="turbulence"
-											scale="4"
-											xChannelSelector="R"
-											yChannelSelector="G"
-										/>
-									</filter>
-								</defs>
-								{/* Border path with wavy effect */}
-								<rect
-									x="2"
-									y="2"
-									width="416"
-									height="596"
-									rx="24"
-									ry="24"
-									fill="none"
-									stroke="url(#flowGradient)"
-									strokeWidth="4"
-									filter="url(#wavyFilter)"
-								/>
-							</svg>
-							{/* Glow effect */}
-							<div
-								className="absolute inset-0 rounded-[26px] opacity-40 blur-md"
-								style={{
-									background:
-										"linear-gradient(45deg, #8b5cf6, #ec4899, #3b82f6, #10b981)",
-									backgroundSize: "400% 400%",
-									animation: "gradient-shift 3s ease infinite",
-								}}
-							/>
-							<style>{`
-								@keyframes gradient-shift {
-									0% { background-position: 0% 50%; }
-									50% { background-position: 100% 50%; }
-									100% { background-position: 0% 50%; }
-								}
-							`}</style>
-						</div>
+						<motion.div
+							className="absolute -inset-1 rounded-[28px] pointer-events-none bg-primary/20"
+							style={{ filter: "blur(16px)" }}
+							animate={{ opacity: [0.3, 0.6, 0.3], scale: [1, 1.02, 1] }}
+							transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+						/>
 					)}
 
-					{/* Main container - sits on top */}
-					<div className="absolute inset-0 bg-background rounded-3xl border border-border/50 flex flex-col overflow-hidden shadow-2xl">
-						{/* Header */}
-						<div className="flex flex-col border-b border-border/50 bg-linear-to-r from-primary/5 via-purple-500/5 to-primary/5 relative">
-							<div className="p-5 pb-3 flex justify-between items-center">
-								<div className="flex items-center gap-3">
-									<div className="p-2.5 bg-linear-to-br from-primary to-purple-600 rounded-xl shadow-lg shadow-primary/20">
-										<SparklesIcon className="w-5 h-5 text-white" />
-									</div>
-									<div>
-										<h3 className="font-semibold text-base">FlowPilot</h3>
-										<p className="text-xs text-muted-foreground flex items-center gap-1">
-											{loading ? (
-												<>
-													<LoaderCircleIcon className="w-3 h-3 animate-spin text-primary" />
-													<span className="text-primary font-medium">
-														Working...
-													</span>
-												</>
-											) : (
-												<>
-													<span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-													AI Assistant
-												</>
-											)}
-										</p>
-									</div>
-								</div>
-								<div className="flex items-center gap-1.5">
-									<Button
-										variant={autocompleteEnabled ? "default" : "ghost"}
-										size="icon"
-										className={`h-9 w-9 rounded-xl transition-all duration-200 ${
-											autocompleteEnabled
-												? "bg-primary/90 hover:bg-primary shadow-md shadow-primary/20"
-												: "hover:bg-accent/50"
-										}`}
-										onClick={() => setAutocompleteEnabled(!autocompleteEnabled)}
-										title={
-											autocompleteEnabled
-												? "Disable Autocomplete"
-												: "Enable Autocomplete"
-										}
-									>
-										<Wand2Icon
-											className={`w-4 h-4 ${autocompleteEnabled ? "text-primary-foreground" : ""}`}
-										/>
-									</Button>
-									<Button
-										variant="ghost"
-										size="icon"
-										className="h-9 w-9 rounded-xl hover:bg-accent/50 transition-all duration-200"
-										onClick={handleNewChat}
-										title="New Chat"
-									>
-										<SquarePenIcon className="w-4 h-4" />
-									</Button>
-									<Button
-										variant="ghost"
-										size="icon"
-										className="h-9 w-9 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
-										onClick={() => setIsOpen(false)}
-									>
-										<XIcon className="w-4 h-4" />
-									</Button>
-								</div>
-							</div>
+					{/* Main container */}
+					<div className="absolute inset-0 bg-background/95 backdrop-blur-xl rounded-3xl border border-border/40 flex flex-col overflow-hidden shadow-2xl">
+						{/* Enhanced Header */}
+						<div className="relative overflow-hidden">
+							{/* Background gradient */}
+							<div className="absolute inset-0 bg-linear-to-br from-primary/8 via-violet-500/5 to-pink-500/5" />
 
-							<div className="px-5 pb-4 flex items-center gap-2">
-								<div className="flex-1">
-									<Select
-										value={selectedModelId}
-										onValueChange={setSelectedModelId}
-									>
-										<SelectTrigger className="h-9 text-xs bg-background/80 backdrop-blur-sm border-border/50 hover:border-primary/30 transition-all duration-200 rounded-xl focus:ring-2 focus:ring-primary/20">
-											<SelectValue placeholder="Select Model" />
-										</SelectTrigger>
-										<SelectContent className="rounded-xl">
-											{models.map((model) => (
-												<SelectItem
-													key={model.id}
-													value={model.id}
-													className="text-xs rounded-lg"
-												>
-													{model.meta?.en?.name || model.id}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</div>
-							</div>
-
-							{/* Loading Indicator Line */}
+							{/* Animated mesh gradient overlay */}
 							{loading && (
 								<motion.div
-									className="absolute bottom-0 left-0 right-0 h-0.5 bg-linear-to-r from-transparent via-primary to-transparent"
-									initial={{ x: "-100%" }}
-									animate={{ x: "100%" }}
-									transition={{
-										repeat: Number.POSITIVE_INFINITY,
-										duration: 1.5,
-										ease: "easeInOut",
+									className="absolute inset-0 opacity-30"
+									style={{
+										background: "radial-gradient(circle at 30% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 70% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
 									}}
+									animate={{
+										background: [
+											"radial-gradient(circle at 30% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 70% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
+											"radial-gradient(circle at 70% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 30% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
+										]
+									}}
+									transition={{ duration: 3, repeat: Infinity, repeatType: "reverse" }}
 								/>
+							)}
+
+							<div className="relative p-4 pb-3">
+								<div className="flex justify-between items-start">
+									<div className="flex items-center gap-3">
+										{/* Animated logo */}
+										<div className="relative">
+											<motion.div
+												className="absolute inset-0 bg-linear-to-br from-primary to-violet-600 rounded-xl blur-lg opacity-50"
+												animate={loading ? { scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] } : {}}
+												transition={{ duration: 2, repeat: Infinity }}
+											/>
+											<div className="relative p-2.5 bg-linear-to-br from-primary via-violet-600 to-pink-600 rounded-xl shadow-lg">
+												<SparklesIcon className="w-5 h-5 text-white" />
+											</div>
+										</div>
+										<div>
+											<h3 className="font-bold text-base tracking-tight">FlowPilot</h3>
+											<div className="flex items-center gap-2">
+												{loading ? (
+													<StatusPill phase={loadingPhase} elapsed={elapsedSeconds} />
+												) : (
+													<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+														<span className="relative flex h-2 w-2">
+															<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+															<span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+														</span>
+														Ready to help
+													</div>
+												)}
+											</div>
+										</div>
+									</div>
+
+									<div className="flex items-center gap-1">
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Button
+													variant={autocompleteEnabled ? "default" : "ghost"}
+													size="icon"
+													className={`h-8 w-8 rounded-lg transition-all duration-200 ${
+														autocompleteEnabled
+															? "bg-primary/90 hover:bg-primary shadow-md shadow-primary/20"
+															: "hover:bg-accent/50"
+													}`}
+													onClick={() => setAutocompleteEnabled(!autocompleteEnabled)}
+												>
+													<Wand2Icon className={`w-4 h-4 ${autocompleteEnabled ? "text-primary-foreground" : ""}`} />
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent side="bottom" className="text-xs">
+												{autocompleteEnabled ? "Disable" : "Enable"} autocomplete
+											</TooltipContent>
+										</Tooltip>
+
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Button
+													variant="ghost"
+													size="icon"
+													className="h-8 w-8 rounded-lg hover:bg-accent/50"
+													onClick={handleNewChat}
+												>
+													<SquarePenIcon className="w-4 h-4" />
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent side="bottom" className="text-xs">
+												New chat
+											</TooltipContent>
+										</Tooltip>
+
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Button
+													variant="ghost"
+													size="icon"
+													className="h-8 w-8 rounded-lg hover:bg-destructive/10 hover:text-destructive"
+													onClick={() => setIsOpen(false)}
+												>
+													<XIcon className="w-4 h-4" />
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent side="bottom" className="text-xs">
+												Close
+											</TooltipContent>
+										</Tooltip>
+									</div>
+								</div>
+							</div>
+
+							{/* Model selector row */}
+							<div className="relative px-4 pb-3">
+								<Select value={selectedModelId} onValueChange={setSelectedModelId}>
+									<SelectTrigger className="h-9 text-xs bg-background/60 backdrop-blur-sm border-border/30 hover:border-primary/30 transition-all duration-200 rounded-xl focus:ring-2 focus:ring-primary/20">
+										<div className="flex items-center gap-2">
+											<BotIcon className="w-3.5 h-3.5 text-muted-foreground" />
+											<SelectValue placeholder="Select Model" />
+										</div>
+									</SelectTrigger>
+									<SelectContent className="rounded-xl">
+										{models.map((model) => (
+											<SelectItem key={model.id} value={model.id} className="text-xs rounded-lg">
+												{model.meta?.en?.name || model.id}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+
+							{/* Progress bar when loading */}
+							{loading && (
+								<motion.div
+									className="absolute bottom-0 left-0 right-0 h-0.5 bg-muted/30"
+									initial={{ opacity: 0 }}
+									animate={{ opacity: 1 }}
+								>
+									<motion.div
+										className="h-full bg-linear-to-r from-primary via-violet-500 to-pink-500"
+										initial={{ width: "0%" }}
+										animate={{ width: "100%" }}
+										transition={{ duration: 30, ease: "linear" }}
+									/>
+								</motion.div>
 							)}
 						</div>
 
 						{/* Chat Area */}
 						<ScrollArea
-							className="flex-1 p-5 flex flex-col max-h-full overflow-auto"
+							className="flex-1 p-4 flex flex-col max-h-full overflow-auto"
 							viewportRef={scrollContainerRef}
 							onScroll={handleScroll}
 						>
-							<div className="space-y-3 min-w-0">
+							<div className="space-y-4 min-w-0">
 								{messages.length === 0 && (
-									<div className="text-center text-muted-foreground py-16 space-y-3">
+									<motion.div
+										initial={{ opacity: 0, y: 10 }}
+										animate={{ opacity: 1, y: 0 }}
+										className="text-center py-12 space-y-4"
+									>
 										<div className="relative inline-block">
-											<div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
-											<SparklesIcon className="w-12 h-12 mx-auto relative text-primary/40" />
+											<div className="absolute inset-0 bg-linear-to-br from-primary/30 via-violet-500/20 to-pink-500/30 blur-3xl rounded-full scale-150" />
+											<motion.div
+												animate={{ rotate: [0, 5, -5, 0] }}
+												transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+											>
+												<SparklesIcon className="w-14 h-14 mx-auto relative text-primary/50" />
+											</motion.div>
 										</div>
-										<p className="text-sm font-medium">
-											How can I help you build your flow today?
-										</p>
-										<p className="text-xs text-muted-foreground/60">
-											Ask me anything about your workflow
-										</p>
-									</div>
+										<div className="space-y-1.5">
+											<p className="text-base font-semibold text-foreground">
+												How can I help you today?
+											</p>
+											<p className="text-sm text-muted-foreground max-w-[280px] mx-auto">
+												Describe what you want to build or modify in your flow
+											</p>
+										</div>
+										<div className="flex flex-wrap gap-2 justify-center pt-2">
+											{["Add a node", "Connect components", "Explain my flow"].map((suggestion, i) => (
+												<motion.button
+													key={suggestion}
+													initial={{ opacity: 0, y: 5 }}
+													animate={{ opacity: 1, y: 0 }}
+													transition={{ delay: 0.2 + i * 0.1 }}
+													onClick={() => setInput(suggestion)}
+													className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 hover:bg-muted border border-border/50 hover:border-primary/30 rounded-full transition-all duration-200 hover:text-foreground"
+												>
+													{suggestion}
+												</motion.button>
+											))}
+										</div>
+									</motion.div>
 								)}
 
 								{messages.map((m, i) => (
 									<motion.div
 										initial={{ opacity: 0, y: 10 }}
 										animate={{ opacity: 1, y: 0 }}
+										transition={{ delay: i === messages.length - 1 ? 0.1 : 0 }}
 										key={i}
 										className={`flex min-w-0 ${m.role === "user" ? "justify-end" : "justify-start"}`}
 									>
 										<div
 											className={`p-3.5 rounded-2xl text-sm wrap-break-word overflow-hidden transition-all duration-200 min-w-0 ${
 												m.role === "user"
-													? "bg-linear-to-br from-primary to-primary/90 text-primary-foreground rounded-br-sm max-w-[85%] shadow-md shadow-primary/10 [&_a]:text-primary-foreground [&_a]:underline [&_a]:underline-offset-2"
-													: "bg-muted/60 backdrop-blur-sm rounded-bl-sm max-w-full border border-border/30"
+													? "bg-muted/60 text-foreground rounded-br-md max-w-[85%] border border-border/40"
+													: "bg-muted/40 backdrop-blur-sm rounded-bl-md max-w-full border border-border/30"
 											}`}
 										>
 											{m.role === "assistant" && m.agentType && (
-												<div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-border/30">
-													{m.agentType === "Explain" ? (
-														<BrainCircuitIcon className="w-3.5 h-3.5 text-blue-500" />
-													) : (
-														<EditIcon className="w-3.5 h-3.5 text-amber-500" />
-													)}
-													<span
-														className={`text-xs font-medium ${
-															m.agentType === "Explain"
-																? "text-blue-500"
-																: "text-amber-500"
-														}`}
-													>
-														{m.agentType === "Explain"
-															? "Explain Agent"
-															: "Edit Agent"}
+												<div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-border/30">
+													<div className={`p-1 rounded-md ${m.agentType === "Explain" ? "bg-blue-500/15" : "bg-amber-500/15"}`}>
+														{m.agentType === "Explain" ? (
+															<BrainCircuitIcon className="w-3 h-3 text-blue-500" />
+														) : (
+															<EditIcon className="w-3 h-3 text-amber-500" />
+														)}
+													</div>
+													<span className={`text-xs font-medium ${m.agentType === "Explain" ? "text-blue-500" : "text-amber-500"}`}>
+														{m.agentType === "Explain" ? "Explain Mode" : "Edit Mode"}
 													</span>
 												</div>
 											)}
 											{m.content ? (
-												<MessageContent
-													content={m.content}
-													onFocusNode={onFocusNode}
-													board={board}
-												/>
+												<>
+													<MessageContent
+														content={m.content}
+														onFocusNode={onFocusNode}
+														board={board}
+													/>
+													{/* Show plan steps at bottom of completed messages */}
+													{m.planSteps && m.planSteps.length > 0 && (
+														<Collapsible className="mt-3 pt-3 border-t border-border/30">
+															<CollapsibleTrigger className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full">
+																<ChevronDown className="w-3 h-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+																<ListChecksIcon className="w-3 h-3" />
+																<span>{m.planSteps.length} steps completed</span>
+															</CollapsibleTrigger>
+															<CollapsibleContent>
+																<div className="mt-2 space-y-1">
+																	{m.planSteps.map((step, idx) => (
+																		<div key={idx} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+																			<CheckCircle2Icon className="w-3 h-3 text-green-500 shrink-0" />
+																			<span className="truncate">{step.description}</span>
+																		</div>
+																	))}
+																</div>
+															</CollapsibleContent>
+														</Collapsible>
+													)}
+												</>
 											) : (
 												<div className="space-y-3">
-													<div className="flex items-center gap-2 text-muted-foreground">
-														<div className="flex gap-1">
-															<span
-																className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"
-																style={{ animationDelay: "0ms" }}
-															/>
-															<span
-																className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"
-																style={{ animationDelay: "150ms" }}
-															/>
-															<span
-																className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"
-																style={{ animationDelay: "300ms" }}
-															/>
+													{/* Separate thinking view */}
+													{planSteps.some(s => s.tool_name === "think" && s.status === "InProgress") ? (
+														<div className="space-y-2">
+															<div className="flex items-center gap-2">
+																<BrainCircuitIcon className="w-3.5 h-3.5 text-violet-500 animate-pulse" />
+																<span className="text-xs font-medium text-violet-500">Reasoning...</span>
+															</div>
+															<div className="text-[11px] text-muted-foreground font-mono bg-violet-500/5 rounded-lg p-2.5 max-h-24 overflow-y-auto border border-violet-500/20">
+																{planSteps.find(s => s.tool_name === "think")?.description}
+																<span className="inline-block w-1.5 h-3 ml-0.5 bg-violet-500/60 animate-pulse rounded-sm" />
+															</div>
 														</div>
-														<span className="text-xs font-medium">
-															Thinking...
-														</span>
-													</div>
-													{planSteps.length > 0 && (
+													) : (
+														<div className="flex items-center gap-2.5">
+															<div className="flex gap-1">
+																{[0, 1, 2].map((j) => (
+																	<motion.span
+																		key={j}
+																		className="w-1.5 h-1.5 bg-primary rounded-full"
+																		animate={{ opacity: [0.3, 1, 0.3] }}
+																		transition={{
+																			duration: 1,
+																			repeat: Infinity,
+																			delay: j * 0.2,
+																		}}
+																	/>
+																))}
+															</div>
+															<span className="text-xs text-muted-foreground">
+																{currentToolCall ? `Using ${currentToolCall.replace(/_/g, " ")}...` : "Processing..."}
+															</span>
+														</div>
+													)}
+													{/* Show plan steps inline during generation */}
+													{planSteps.length > 0 && !planSteps.some(s => s.tool_name === "think" && s.status === "InProgress") && (
 														<PlanStepsView steps={planSteps} />
 													)}
 												</div>
 											)}
 											{/* Show executed commands */}
 											{m.executedCommands && m.executedCommands.length > 0 && (
-												<div className="mt-3 pt-3 border-t border-border/30">
+												<motion.div
+													initial={{ opacity: 0, height: 0 }}
+													animate={{ opacity: 1, height: "auto" }}
+													className="mt-3 pt-3 border-t border-border/30"
+												>
 													<div className="flex items-center gap-1.5 mb-2 text-xs text-muted-foreground">
-														<CheckCircle2Icon className="w-3 h-3 text-green-500" />
+														<div className="p-0.5 bg-green-500/20 rounded">
+															<CheckCircle2Icon className="w-3 h-3 text-green-500" />
+														</div>
 														<span className="font-medium">
-															Executed {m.executedCommands.length} command
-															{m.executedCommands.length > 1 ? "s" : ""}
+															Applied {m.executedCommands.length} change{m.executedCommands.length > 1 ? "s" : ""}
 														</span>
 													</div>
 													<div className="space-y-1">
@@ -1407,7 +1510,7 @@ export function FlowCopilot({
 															</div>
 														))}
 													</div>
-												</div>
+												</motion.div>
 											)}
 										</div>
 									</motion.div>
@@ -1493,8 +1596,30 @@ export function FlowCopilot({
 							</div>
 						</ScrollArea>
 
+						{/* Scroll to bottom indicator */}
+						<AnimatePresence>
+							{userScrolledUp && messages.length > 0 && (
+								<motion.div
+									initial={{ opacity: 0, y: 10 }}
+									animate={{ opacity: 1, y: 0 }}
+									exit={{ opacity: 0, y: 10 }}
+									className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10"
+								>
+									<Button
+										size="sm"
+										variant="secondary"
+										className="rounded-full shadow-lg border border-border/50 gap-1.5 px-3 h-8 text-xs"
+										onClick={() => scrollToBottom(true)}
+									>
+										<ArrowDownIcon className="w-3.5 h-3.5" />
+										New messages
+									</Button>
+								</motion.div>
+							)}
+						</AnimatePresence>
+
 						{/* Input Area */}
-						<div className="p-5 bg-background/80 backdrop-blur-sm border-t border-border/50">
+						<div className="p-4 bg-background/80 backdrop-blur-sm border-t border-border/50">
 							<div className="relative flex items-center gap-2">
 								<Input
 									value={input}

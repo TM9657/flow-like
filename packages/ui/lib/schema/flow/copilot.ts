@@ -1,0 +1,129 @@
+/// Agent types for the multi-agent system
+export type AgentType = "Explain" | "Edit";
+
+/// Role in the chat conversation
+export type ChatRole = "User" | "Assistant";
+
+/// A message in the chat history
+export interface ChatMessage {
+	role: ChatRole;
+	content: string;
+}
+
+export interface Suggestion {
+	node_type: string;
+	reason: string;
+	connection_description: string;
+	position?: { x: number; y: number };
+	connections: Array<{
+		from_node_id: string;
+		from_pin: string;
+		to_pin: string;
+	}>;
+}
+
+/// Commands that can be executed on the board
+export type BoardCommand =
+	| {
+			command_type: "AddNode";
+			node_type: string;
+			ref_id?: string; // Reference ID for this node (e.g., "$0", "$1") used in connections
+			position?: { x: number; y: number };
+			friendly_name?: string;
+			summary?: string;
+	  }
+	| { command_type: "RemoveNode"; node_id: string; summary?: string }
+	| {
+			command_type: "ConnectPins";
+			from_node: string;
+			from_pin: string;
+			to_node: string;
+			to_pin: string;
+			summary?: string;
+	  }
+	| {
+			command_type: "DisconnectPins";
+			from_node: string;
+			from_pin: string;
+			to_node: string;
+			to_pin: string;
+			summary?: string;
+	  }
+	| {
+			command_type: "UpdateNodePin";
+			node_id: string;
+			pin_id: string;
+			value: unknown;
+			summary?: string;
+	  }
+	| {
+			command_type: "MoveNode";
+			node_id: string;
+			position: { x: number; y: number };
+			summary?: string;
+	  }
+	| {
+			command_type: "CreateVariable";
+			name: string;
+			data_type: string;
+			value_type?: string;
+			default_value?: unknown;
+			description?: string;
+			summary?: string;
+	  }
+	| {
+			command_type: "UpdateVariable";
+			variable_id: string;
+			value: unknown;
+			summary?: string;
+	  }
+	| { command_type: "DeleteVariable"; variable_id: string; summary?: string }
+	| {
+			command_type: "CreateComment";
+			content: string;
+			position?: { x: number; y: number };
+			color?: string;
+			summary?: string;
+	  }
+	| {
+			command_type: "UpdateComment";
+			comment_id: string;
+			content?: string;
+			color?: string;
+			summary?: string;
+	  }
+	| { command_type: "DeleteComment"; comment_id: string; summary?: string }
+	| {
+			command_type: "CreateLayer";
+			name: string;
+			color?: string;
+			node_ids?: string[];
+			summary?: string;
+	  }
+	| {
+			command_type: "AddNodesToLayer";
+			layer_id: string;
+			node_ids: string[];
+			summary?: string;
+	  }
+	| {
+			command_type: "RemoveNodesFromLayer";
+			layer_id: string;
+			node_ids: string[];
+			summary?: string;
+	  };
+
+/// Response from the copilot
+export interface CopilotResponse {
+	agent_type: AgentType;
+	message: string;
+	commands: BoardCommand[];
+	suggestions: Suggestion[];
+}
+
+export interface PlanStep {
+	id: string;
+	description: string;
+	status: "Pending" | "InProgress" | "Completed" | "Failed";
+	tool_name?: string;
+}
