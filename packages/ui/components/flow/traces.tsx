@@ -8,6 +8,7 @@ import {
 	InfoIcon,
 	LogsIcon,
 	ScrollIcon,
+	SparklesIcon,
 	TriangleAlertIcon,
 } from "lucide-react";
 import {
@@ -24,13 +25,7 @@ import "react-virtualized/styles.css";
 import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
 import { VariableSizeList as List, type VariableSizeList } from "react-window";
 import { toast } from "sonner";
-import {
-	type IBoard,
-	type ILog,
-	type INode,
-	useBackend,
-	useInfiniteInvoke,
-} from "../..";
+import { type IBoard, type ILog, useBackend, useInfiniteInvoke } from "../..";
 import { parseTimespan } from "../../lib/date";
 import { logLevelToNumber } from "../../lib/log-level";
 import { ILogLevel, type ILogMessage } from "../../lib/schema/flow/run";
@@ -39,7 +34,17 @@ import { DynamicImage, EmptyState } from "../ui";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import {
+	ResizableHandle,
+	ResizablePanel,
+	ResizablePanelGroup,
+} from "../ui/resizable";
 import { TextEditor } from "../ui/text-editor";
+import {
+	type BoardCommand,
+	FlowCopilot,
+	type Suggestion,
+} from "./flow-copilot";
 
 interface IEnrichedLogMessage extends ILogMessage {
 	node_id: string;
@@ -50,14 +55,21 @@ export function Traces({
 	boardId,
 	board,
 	onFocusNode,
+	onAcceptSuggestion,
+	onExecuteCommands,
+	onGhostNodesChange,
 }: Readonly<{
 	appId: string;
 	boardId: string;
 	board: RefObject<IBoard | undefined>;
 	onFocusNode: (nodeId: string) => void;
+	onAcceptSuggestion?: (suggestion: Suggestion) => void;
+	onExecuteCommands?: (commands: BoardCommand[]) => void;
+	onGhostNodesChange?: (suggestions: Suggestion[]) => void;
 }>) {
 	const backend = useBackend();
 	const { currentMetadata } = useLogAggregation();
+	const [showCopilot, setShowCopilot] = useState(false);
 
 	const [queryParts, setQueryParts] = useState<string[]>([]);
 	const [query, setQuery] = useState("");
@@ -208,87 +220,137 @@ export function Traces({
 		rowHeights.current = rowHeights.current.set(index, height);
 	}
 
-	return (
-		<div
-			className={
-				"transition-all top-0 bottom-0 right-0 h-[calc(100%)] z-10 bg-background border rounded-lg flex flex-col p-2 w-full"
-			}
-		>
-			<div className="flex flex-row items-stretch overflow-hidden grow h-full">
-				<div className="ml-2 flex flex-col w-full gap-1 overflow-x-hidden max-h-full grow h-full">
-					<div className="w-full flex flex-row items-center justify-between my-1">
-						<div className="flex flex-row items-center gap-1">
-							<LogFilterBadge
-								level={ILogLevel.Debug}
-								label="Debug"
-								logFilter={logFilter}
-								toggleLogFilter={toggleLogFilter}
-							/>
-							<LogFilterBadge
-								level={ILogLevel.Info}
-								label="Info"
-								logFilter={logFilter}
-								toggleLogFilter={toggleLogFilter}
-							/>
-							<LogFilterBadge
-								level={ILogLevel.Warn}
-								label="Warning"
-								logFilter={logFilter}
-								toggleLogFilter={toggleLogFilter}
-							/>
-							<LogFilterBadge
-								level={ILogLevel.Error}
-								label="Error"
-								logFilter={logFilter}
-								toggleLogFilter={toggleLogFilter}
-							/>
-							<LogFilterBadge
-								level={ILogLevel.Fatal}
-								label="Fatal"
-								logFilter={logFilter}
-								toggleLogFilter={toggleLogFilter}
-							/>
-						</div>
+	const handleAcceptSuggestion = useCallback(
+		(suggestion: Suggestion) => {
+			onAcceptSuggestion?.(suggestion);
+		},
+		[onAcceptSuggestion],
+	);
 
-						<div className="flex flex-row items-stretch">
-							<Input
-								value={search}
-								onChange={(e) => setSearch(e.target.value)}
-								placeholder="Search..."
-							/>
+	return (
+		<div className="transition-all h-full z-10 bg-background border rounded-lg flex flex-col w-full overflow-hidden">
+			<ResizablePanelGroup direction="horizontal" className="h-full">
+				{/* Logs panel */}
+				<ResizablePanel defaultSize={showCopilot ? 60 : 100} minSize={30}>
+					<div className="flex flex-col h-full p-2">
+						<div className="w-full flex flex-row items-center justify-between my-1 px-2">
+							<div className="flex flex-row items-center gap-1">
+								<LogFilterBadge
+									level={ILogLevel.Debug}
+									label="Debug"
+									logFilter={logFilter}
+									toggleLogFilter={toggleLogFilter}
+								/>
+								<LogFilterBadge
+									level={ILogLevel.Info}
+									label="Info"
+									logFilter={logFilter}
+									toggleLogFilter={toggleLogFilter}
+								/>
+								<LogFilterBadge
+									level={ILogLevel.Warn}
+									label="Warning"
+									logFilter={logFilter}
+									toggleLogFilter={toggleLogFilter}
+								/>
+								<LogFilterBadge
+									level={ILogLevel.Error}
+									label="Error"
+									logFilter={logFilter}
+									toggleLogFilter={toggleLogFilter}
+								/>
+								<LogFilterBadge
+									level={ILogLevel.Fatal}
+									label="Fatal"
+									logFilter={logFilter}
+									toggleLogFilter={toggleLogFilter}
+								/>
+							</div>
+
+							<div className="flex flex-row items-center gap-2">
+								{currentMetadata &&
+									(messages?.length ?? 0) > 0 &&
+									!showCopilot && (
+										<div className="relative group">
+											<div className="absolute -inset-1 bg-primary/30 rounded-lg blur-md opacity-0 group-hover:opacity-60 transition-all duration-300" />
+											<Button
+												size="sm"
+												className="relative gap-1.5 text-xs bg-background/90 backdrop-blur-sm border border-border/50 hover:border-primary/50 hover:bg-background hover:shadow-lg transition-all duration-200"
+												onClick={() => setShowCopilot(true)}
+											>
+												<SparklesIcon className="w-3.5 h-3.5 text-primary" />
+												<span className="text-primary font-medium">
+													Ask FlowPilot
+												</span>
+											</Button>
+										</div>
+									)}
+								<Input
+									value={search}
+									onChange={(e) => setSearch(e.target.value)}
+									placeholder="Search..."
+									className="w-32 md:w-48"
+								/>
+							</div>
+						</div>
+						<div className="flex flex-col w-full gap-1 overflow-x-auto flex-1 min-h-0 px-2">
+							{(messages?.length ?? 0) === 0 && (
+								<EmptyState
+									className="h-full w-full max-w-full"
+									icons={[LogsIcon, ScrollIcon, CheckCircle2Icon]}
+									description="No logs found yet, start an event to see your results here!"
+									title="No Logs"
+								/>
+							)}
+							{(messages?.length ?? 0) > 0 && (
+								<AutoSizer
+									className="h-full grow flex flex-col min-h-full"
+									disableWidth
+								>
+									{({ height, width }) => (
+										<List
+											className="log-container h-full grow flex flex-col"
+											height={height}
+											itemCount={
+												(messages?.length ?? 0) + (hasNextPage ? 1 : 0)
+											}
+											itemSize={getRowHeight}
+											ref={listRef}
+											width={width}
+										>
+											{renderItem}
+										</List>
+									)}
+								</AutoSizer>
+							)}
 						</div>
 					</div>
-					<div className="flex flex-col w-full gap-1 overflow-x-auto max-h-full grow h-full">
-						{(messages?.length ?? 0) === 0 && (
-							<EmptyState
-								className="h-full w-full max-w-full"
-								icons={[LogsIcon, ScrollIcon, CheckCircle2Icon]}
-								description="No logs found yet, start an event to see your results here!"
-								title="No Logs"
+				</ResizablePanel>
+
+				{/* FlowPilot panel - only show when active */}
+				{showCopilot && currentMetadata && (
+					<>
+						<ResizableHandle withHandle />
+						<ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
+							{console.log(
+								"[Traces] Rendering FlowCopilot with runContext:",
+								currentMetadata,
+							)}
+							<FlowCopilot
+								board={board.current}
+								selectedNodeIds={[]}
+								onAcceptSuggestion={handleAcceptSuggestion}
+								onFocusNode={onFocusNode}
+								onExecuteCommands={onExecuteCommands}
+								onGhostNodesChange={onGhostNodesChange}
+								runContext={currentMetadata}
+								embedded={true}
+								onClose={() => setShowCopilot(false)}
 							/>
-						)}
-						{(messages?.length ?? 0) > 0 && (
-							<AutoSizer
-								className="h-full grow flex flex-col min-h-full"
-								disableWidth
-							>
-								{({ height, width }) => (
-									<List
-										className="log-container h-full grow flex flex-col"
-										height={height}
-										itemCount={(messages?.length ?? 0) + (hasNextPage ? 1 : 0)}
-										itemSize={getRowHeight}
-										ref={listRef}
-										width={width}
-									>
-										{renderItem}
-									</List>
-								)}
-							</AutoSizer>
-						)}
-					</div>
-				</div>
-			</div>
+						</ResizablePanel>
+					</>
+				)}
+			</ResizablePanelGroup>
 		</div>
 	);
 }
@@ -308,15 +370,15 @@ const LogMessage = memo(function LogMessage({
 	onSetHeight: (index: number, height: number) => void;
 	onSelectNode: (nodeId: string) => void;
 }>) {
-	const [node, setNode] = useState<INode | undefined>();
 	const rowRef = useRef<HTMLDivElement>(null);
 
-	useEffect(() => {
-		if (log.node_id) {
-			const node = board.current?.nodes[log.node_id];
-			setNode(node);
+	// Use useMemo instead of useState + useEffect to avoid re-renders
+	const node = useMemo(() => {
+		if (log.node_id && board.current) {
+			return board.current.nodes[log.node_id];
 		}
-	}, [log.node_id, board]);
+		return undefined;
+	}, [log.node_id, board.current?.nodes]);
 
 	useEffect(() => {
 		if (rowRef.current) {

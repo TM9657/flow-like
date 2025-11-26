@@ -6,16 +6,6 @@ import { XIcon } from "lucide-react";
 import { useCallback } from "react";
 import type { BoardCommand } from "../components/flow/flow-copilot";
 import {
-	type IBoard,
-	type IComment,
-	ICommentType,
-	ILayerType,
-	type IVariable,
-} from "../lib/schema/flow/board";
-import { type INode, IVariableType } from "../lib/schema/flow/node";
-import type { ILayer } from "../lib/schema/flow/run";
-import type { IGenericCommand } from "../lib/schema";
-import {
 	IValueType,
 	addNodeCommand,
 	connectPinsCommand,
@@ -30,6 +20,16 @@ import {
 	upsertVariableCommand,
 } from "../lib";
 import { toastError } from "../lib/messages";
+import type { IGenericCommand } from "../lib/schema";
+import {
+	type IBoard,
+	type IComment,
+	ICommentType,
+	ILayerType,
+	type IVariable,
+} from "../lib/schema/flow/board";
+import { type INode, IVariableType } from "../lib/schema/flow/node";
+import type { ILayer } from "../lib/schema/flow/run";
 import { convertJsonToUint8Array } from "../lib/uint8";
 
 interface UseCopilotCommandsProps {
@@ -401,7 +401,10 @@ export function useCopilotCommands({
 									`[UpdateNodePin] ❌ FAILED - Could not encode value:`,
 									cmd.value,
 								);
-								toastError(`Pin update failed: Could not encode value`, <XIcon />);
+								toastError(
+									`Pin update failed: Could not encode value`,
+									<XIcon />,
+								);
 								break;
 							}
 						}

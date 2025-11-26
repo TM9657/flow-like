@@ -92,17 +92,11 @@ import {
 	type ILogMetadata,
 	IPinType,
 	IValueType,
-	addNodeCommand,
 	connectPinsCommand,
 	disconnectPinsCommand,
 	moveNodeCommand,
-	removeCommentCommand,
-	removeNodeCommand,
-	removeVariableCommand,
 	updateNodeCommand,
 	upsertCommentCommand,
-	upsertLayerCommand,
-	upsertVariableCommand,
 } from "../../lib";
 import {
 	handleConnection,
@@ -123,7 +117,6 @@ import {
 	type IBoard,
 	type IComment,
 	ICommentType,
-	ILayerType,
 	type IVariable,
 } from "../../lib/schema/flow/board";
 import { type INode, IVariableType } from "../../lib/schema/flow/node";
@@ -134,11 +127,7 @@ import { useBackend } from "../../state/backend-state";
 import { useFlowBoardParentState } from "../../state/flow-board-parent-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 import { BoardMeta } from "./board-meta";
-import {
-	type BoardCommand,
-	FlowCopilot,
-	type Suggestion,
-} from "./flow-copilot";
+import { FlowCopilot, type Suggestion } from "./flow-copilot";
 import { FlowCursors } from "./flow-cursors";
 import { FlowDataEdge } from "./flow-data-edge";
 import { FlowExecutionEdge } from "./flow-execution-edge";
@@ -1590,6 +1579,9 @@ export function FlowBoard({
 									onFocusNode={(nodeId: string) => {
 										focusNode(nodeId);
 									}}
+									onAcceptSuggestion={onAcceptSuggestion}
+									onExecuteCommands={handleExecuteCommands}
+									onGhostNodesChange={handleGhostNodesChange}
 								/>
 							)}
 						</ResizablePanel>
@@ -1664,6 +1656,9 @@ export function FlowBoard({
 									onFocusNode={(nodeId: string) => {
 										focusNode(nodeId);
 									}}
+									onAcceptSuggestion={onAcceptSuggestion}
+									onExecuteCommands={handleExecuteCommands}
+									onGhostNodesChange={handleGhostNodesChange}
 								/>
 							</div>
 						)}

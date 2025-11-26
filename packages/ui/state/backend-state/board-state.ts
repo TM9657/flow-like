@@ -12,6 +12,7 @@ import type {
 	ILogLevel,
 	ILogMetadata,
 	INode,
+	IRunContext,
 	IRunPayload,
 	IVersionType,
 } from "../../lib";
@@ -113,5 +114,6 @@ export interface IBoardState {
 		onToken?: (token: string) => void,
 		modelId?: string,
 		token?: string,
+		runContext?: IRunContext,
 	): Promise<CopilotResponse>;
 }

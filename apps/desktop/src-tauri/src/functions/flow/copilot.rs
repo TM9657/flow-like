@@ -243,8 +243,14 @@ pub async fn flowpilot_chat(
     history: Option<Vec<ChatMessage>>,
     model_id: Option<String>,
     token: Option<String>,
+    run_context: Option<flow_like::flow::copilot::RunContext>,
     channel: Channel<String>,
 ) -> Result<CopilotResponse, String> {
+    println!(
+        "[flowpilot_chat] Called with run_context: {:?}",
+        run_context
+    );
+
     let board = board.ok_or("Board is required")?;
     let selected_node_ids = selected_node_ids.unwrap_or_default();
     let history = history.unwrap_or_default();
@@ -277,6 +283,7 @@ pub async fn flowpilot_chat(
             history,
             model_id,
             token,
+            run_context,
             on_token,
         )
         .await

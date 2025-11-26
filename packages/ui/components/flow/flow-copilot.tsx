@@ -9,12 +9,11 @@ import {
 	ChevronDown,
 	CircleDashedIcon,
 	CircleDotIcon,
-	ClockIcon,
 	CpuIcon,
 	EditIcon,
-	LayersIcon,
 	LinkIcon,
 	ListChecksIcon,
+	Loader2Icon,
 	LoaderCircleIcon,
 	MessageSquareIcon,
 	MoveIcon,
@@ -33,7 +32,7 @@ import {
 	XIcon,
 	ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Input, ScrollArea, TextEditor } from "../..";
 import { useInvoke } from "../../hooks";
 import { IBitTypes, type IBoard } from "../../lib";
@@ -50,11 +49,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "../ui/select";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "../ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 // Re-export types from the shared schema file for backwards compatibility
 export type {
@@ -68,13 +63,14 @@ export type {
 } from "../../lib/schema/flow/copilot";
 
 import type {
-	Suggestion,
 	AgentType,
-	ChatMessage,
 	BoardCommand,
-	CopilotResponse,
+	ChatMessage,
 	PlanStep,
+	Suggestion,
 } from "../../lib/schema/flow/copilot";
+
+import type { ILogMetadata } from "../../lib/schema/flow/log-metadata";
 
 type LoadingPhase =
 	| "initializing"
@@ -91,20 +87,56 @@ interface FlowCopilotProps {
 	onFocusNode?: (nodeId: string) => void;
 	onGhostNodesChange?: (suggestions: Suggestion[]) => void;
 	onExecuteCommands?: (commands: BoardCommand[]) => void;
+	runContext?: ILogMetadata;
+	onClearRunContext?: () => void;
+	/** When true, renders inline without absolute positioning */
+	embedded?: boolean;
+	/** Called when user closes the embedded panel */
+	onClose?: () => void;
 }
 
 type Mode = "chat" | "autocomplete";
 
-const LOADING_PHASES: Record<LoadingPhase, { label: string; icon: React.ReactNode; color: string }> = {
-	initializing: { label: "Initializing...", icon: <CpuIcon className="w-3.5 h-3.5" />, color: "text-blue-500" },
-	analyzing: { label: "Analyzing your flow...", icon: <SearchIcon className="w-3.5 h-3.5" />, color: "text-violet-500" },
-	searching: { label: "Searching catalog...", icon: <SearchIcon className="w-3.5 h-3.5" />, color: "text-cyan-500" },
-	reasoning: { label: "Thinking...", icon: <BrainCircuitIcon className="w-3.5 h-3.5" />, color: "text-amber-500" },
-	generating: { label: "Generating response...", icon: <SparklesIcon className="w-3.5 h-3.5" />, color: "text-pink-500" },
-	finalizing: { label: "Finalizing...", icon: <CheckCircle2Icon className="w-3.5 h-3.5" />, color: "text-green-500" },
+const LOADING_PHASES: Record<
+	LoadingPhase,
+	{ label: string; icon: React.ReactNode; color: string }
+> = {
+	initializing: {
+		label: "Initializing...",
+		icon: <CpuIcon className="w-3.5 h-3.5" />,
+		color: "text-blue-500",
+	},
+	analyzing: {
+		label: "Analyzing your flow...",
+		icon: <SearchIcon className="w-3.5 h-3.5" />,
+		color: "text-violet-500",
+	},
+	searching: {
+		label: "Searching catalog...",
+		icon: <SearchIcon className="w-3.5 h-3.5" />,
+		color: "text-cyan-500",
+	},
+	reasoning: {
+		label: "Thinking...",
+		icon: <BrainCircuitIcon className="w-3.5 h-3.5" />,
+		color: "text-amber-500",
+	},
+	generating: {
+		label: "Generating response...",
+		icon: <SparklesIcon className="w-3.5 h-3.5" />,
+		color: "text-pink-500",
+	},
+	finalizing: {
+		label: "Finalizing...",
+		icon: <CheckCircle2Icon className="w-3.5 h-3.5" />,
+		color: "text-green-500",
+	},
 };
 
-function StatusPill({ phase, elapsed }: { phase: LoadingPhase; elapsed: number }) {
+function StatusPill({
+	phase,
+	elapsed,
+}: { phase: LoadingPhase; elapsed: number }) {
 	const phaseInfo = LOADING_PHASES[phase];
 	return (
 		<motion.div
@@ -114,13 +146,19 @@ function StatusPill({ phase, elapsed }: { phase: LoadingPhase; elapsed: number }
 		>
 			<motion.div
 				animate={{ rotate: phase === "reasoning" ? 360 : 0 }}
-				transition={{ duration: 2, repeat: phase === "reasoning" ? Infinity : 0, ease: "linear" }}
+				transition={{
+					duration: 2,
+					repeat: phase === "reasoning" ? Number.POSITIVE_INFINITY : 0,
+					ease: "linear",
+				}}
 			>
 				{phaseInfo.icon}
 			</motion.div>
 			<span>{phaseInfo.label}</span>
 			{elapsed > 0 && (
-				<span className="text-muted-foreground/60 tabular-nums">{elapsed}s</span>
+				<span className="text-muted-foreground/60 tabular-nums">
+					{elapsed}s
+				</span>
 			)}
 		</motion.div>
 	);
@@ -188,7 +226,9 @@ function PlanStepsView({ steps }: { steps: PlanStep[] }) {
 			case "Failed":
 				return <XCircleIcon className="w-3.5 h-3.5 text-destructive" />;
 			default:
-				return <CircleDashedIcon className="w-3.5 h-3.5 text-muted-foreground/50" />;
+				return (
+					<CircleDashedIcon className="w-3.5 h-3.5 text-muted-foreground/50" />
+				);
 		}
 	};
 
@@ -213,13 +253,20 @@ function PlanStepsView({ steps }: { steps: PlanStep[] }) {
 	const getToolLabel = (toolName?: string) => {
 		if (!toolName) return "Processing";
 		switch (toolName) {
-			case "catalog_search": return "Searching";
-			case "search_by_pin": return "Finding pins";
-			case "filter_category": return "Filtering";
-			case "think": return "Reasoning";
-			case "focus_node": return "Focusing";
-			case "emit_commands": return "Building";
-			default: return toolName.replace(/_/g, " ");
+			case "catalog_search":
+				return "Searching";
+			case "search_by_pin":
+				return "Finding pins";
+			case "filter_category":
+				return "Filtering";
+			case "think":
+				return "Reasoning";
+			case "focus_node":
+				return "Focusing";
+			case "emit_commands":
+				return "Building";
+			default:
+				return toolName.replace(/_/g, " ");
 		}
 	};
 
@@ -262,7 +309,11 @@ function PlanStepsView({ steps }: { steps: PlanStep[] }) {
 						<motion.div
 							className="absolute inset-0 bg-linear-to-r from-primary/10 via-transparent to-primary/10"
 							animate={{ x: ["0%", "100%", "0%"] }}
-							transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+							transition={{
+								duration: 3,
+								repeat: Number.POSITIVE_INFINITY,
+								ease: "linear",
+							}}
 						/>
 					)}
 					<div className="relative p-3 flex items-start gap-2.5">
@@ -273,7 +324,9 @@ function PlanStepsView({ steps }: { steps: PlanStep[] }) {
 							{currentStep.tool_name === "think" ? (
 								<Collapsible defaultOpen={currentStep.status === "InProgress"}>
 									<CollapsibleTrigger className="flex items-center gap-2 w-full text-left group">
-										<span className="text-xs font-medium text-foreground">Reasoning</span>
+										<span className="text-xs font-medium text-foreground">
+											Reasoning
+										</span>
 										<ChevronDown className="w-3 h-3 ml-auto transition-transform duration-200 group-data-[state=open]:rotate-180 text-muted-foreground shrink-0" />
 									</CollapsibleTrigger>
 									<CollapsibleContent>
@@ -296,7 +349,9 @@ function PlanStepsView({ steps }: { steps: PlanStep[] }) {
 						{currentStep.tool_name && (
 							<div className="shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground px-2 py-1 rounded-lg bg-background/60 border border-border/30">
 								{getToolIcon(currentStep.tool_name)}
-								<span className="hidden sm:inline">{getToolLabel(currentStep.tool_name)}</span>
+								<span className="hidden sm:inline">
+									{getToolLabel(currentStep.tool_name)}
+								</span>
 							</div>
 						)}
 					</div>
@@ -307,22 +362,29 @@ function PlanStepsView({ steps }: { steps: PlanStep[] }) {
 			{steps.length > 1 && (
 				<Collapsible open={expanded} onOpenChange={setExpanded}>
 					<CollapsibleTrigger className="flex items-center gap-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full py-1">
-						<ChevronDown className={`w-3 h-3 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
-						<span>{expanded ? "Hide" : "Show"} {steps.length - 1} previous step{steps.length > 2 ? "s" : ""}</span>
+						<ChevronDown
+							className={`w-3 h-3 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+						/>
+						<span>
+							{expanded ? "Hide" : "Show"} {steps.length - 1} previous step
+							{steps.length > 2 ? "s" : ""}
+						</span>
 					</CollapsibleTrigger>
 					<CollapsibleContent>
 						<div className="mt-2 space-y-1.5 pl-1">
-							{steps.filter((s) => s.id !== currentStep?.id).map((step) => (
-								<motion.div
-									key={step.id}
-									initial={{ opacity: 0 }}
-									animate={{ opacity: 1 }}
-									className="flex items-center gap-2 text-[11px] text-muted-foreground py-1"
-								>
-									{getStatusIcon(step.status)}
-									<span className="truncate flex-1">{step.description}</span>
-								</motion.div>
-							))}
+							{steps
+								.filter((s) => s.id !== currentStep?.id)
+								.map((step) => (
+									<motion.div
+										key={step.id}
+										initial={{ opacity: 0 }}
+										animate={{ opacity: 1 }}
+										className="flex items-center gap-2 text-[11px] text-muted-foreground py-1"
+									>
+										{getStatusIcon(step.status)}
+										<span className="truncate flex-1">{step.description}</span>
+									</motion.div>
+								))}
 						</div>
 					</CollapsibleContent>
 				</Collapsible>
@@ -385,9 +447,15 @@ function PendingCommandsView({
 	};
 
 	const addCount = commands.filter((c) => c.command_type === "AddNode").length;
-	const connectCount = commands.filter((c) => c.command_type === "ConnectPins").length;
-	const updateCount = commands.filter((c) => c.command_type === "UpdateNodePin").length;
-	const removeCount = commands.filter((c) => c.command_type === "RemoveNode").length;
+	const connectCount = commands.filter(
+		(c) => c.command_type === "ConnectPins",
+	).length;
+	const updateCount = commands.filter(
+		(c) => c.command_type === "UpdateNodePin",
+	).length;
+	const removeCount = commands.filter(
+		(c) => c.command_type === "RemoveNode",
+	).length;
 
 	return (
 		<motion.div
@@ -402,7 +470,11 @@ function PendingCommandsView({
 				<motion.div
 					className="absolute inset-0 bg-linear-to-r from-transparent via-white/5 to-transparent"
 					animate={{ x: ["-100%", "200%"] }}
-					transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+					transition={{
+						duration: 2,
+						repeat: Number.POSITIVE_INFINITY,
+						repeatDelay: 1,
+					}}
 				/>
 
 				<div className="relative p-3.5">
@@ -419,7 +491,8 @@ function PendingCommandsView({
 									Ready to Apply
 								</div>
 								<div className="text-[11px] text-muted-foreground">
-									{commands.length} change{commands.length > 1 ? "s" : ""} pending
+									{commands.length} change{commands.length > 1 ? "s" : ""}{" "}
+									pending
 								</div>
 							</div>
 						</div>
@@ -433,7 +506,9 @@ function PendingCommandsView({
 										className="h-8 w-8 p-0 rounded-lg hover:bg-background/60"
 										onClick={() => setExpanded(!expanded)}
 									>
-										<ChevronDown className={`w-4 h-4 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+										<ChevronDown
+											className={`w-4 h-4 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+										/>
 									</Button>
 								</TooltipTrigger>
 								<TooltipContent side="top" className="text-xs">
@@ -549,7 +624,7 @@ function PendingCommandsView({
 										initial={{ opacity: 0, scale: 0.8 }}
 										animate={{
 											opacity: hoveredIndex === i ? 1 : 0,
-											scale: hoveredIndex === i ? 1 : 0.8
+											scale: hoveredIndex === i ? 1 : 0.8,
 										}}
 										className="shrink-0 p-1 rounded-md bg-primary/20"
 									>
@@ -581,15 +656,16 @@ function MessageContent({
 		return node?.friendly_name || node?.node_type?.split("::").pop() || "Node";
 	};
 
-	// Helper to resolve node ID from name or ID
+	// Helper to resolve node ID from name, type, or ID
 	const resolveNode = (
 		identifier: string,
 	): { id: string; name: string } | null => {
 		if (!board?.nodes) return null;
 
 		const trimmed = identifier.trim();
+		const trimmedLower = trimmed.toLowerCase();
 
-		// 1. Check if identifier is a valid ID
+		// 1. Check if identifier is a valid node ID
 		if (board.nodes[trimmed]) {
 			return {
 				id: trimmed,
@@ -597,14 +673,53 @@ function MessageContent({
 			};
 		}
 
-		// 2. Search by friendly_name (case-insensitive)
+		// 2. Search by friendly_name (case-insensitive exact match)
 		const nodeByFriendlyName = Object.values(board.nodes).find(
-			(n) => n.friendly_name?.toLowerCase() === trimmed.toLowerCase(),
+			(n) => n.friendly_name?.toLowerCase() === trimmedLower,
 		);
 		if (nodeByFriendlyName) {
 			return {
 				id: nodeByFriendlyName.id,
 				name: nodeByFriendlyName.friendly_name || "Node",
+			};
+		}
+
+		// 3. Search by node_type (exact match on last segment)
+		const nodeByType = Object.values(board.nodes).find(
+			(n) => n.node_type?.split("::").pop()?.toLowerCase() === trimmedLower,
+		);
+		if (nodeByType) {
+			return {
+				id: nodeByType.id,
+				name:
+					nodeByType.friendly_name ||
+					nodeByType.node_type?.split("::").pop() ||
+					"Node",
+			};
+		}
+
+		// 4. Search by partial friendly_name match
+		const nodeByPartialName = Object.values(board.nodes).find((n) =>
+			n.friendly_name?.toLowerCase().includes(trimmedLower),
+		);
+		if (nodeByPartialName) {
+			return {
+				id: nodeByPartialName.id,
+				name: nodeByPartialName.friendly_name || "Node",
+			};
+		}
+
+		// 5. Search by partial node_type match
+		const nodeByPartialType = Object.values(board.nodes).find((n) =>
+			n.node_type?.toLowerCase().includes(trimmedLower),
+		);
+		if (nodeByPartialType) {
+			return {
+				id: nodeByPartialType.id,
+				name:
+					nodeByPartialType.friendly_name ||
+					nodeByPartialType.node_type?.split("::").pop() ||
+					"Node",
 			};
 		}
 
@@ -627,8 +742,8 @@ function MessageContent({
 					return `[${resolved.name}](focus://${resolved.id})`;
 				}
 
-				// Fallback: if it looks like a UUID, assume it's an ID that might exist later
-				if (/^[0-9a-fA-F-]{36}$/.test(trimmedContent)) {
+				// Fallback: if it looks like a cuid2 (lowercase alphanumeric, 24+ chars), assume it's an ID
+				if (/^[a-z0-9]{24,}$/.test(trimmedContent)) {
 					return `[${getNodeName(trimmedContent)}](focus://${trimmedContent})`;
 				}
 
@@ -734,8 +849,12 @@ export function FlowCopilot({
 	onFocusNode,
 	onGhostNodesChange,
 	onExecuteCommands,
+	runContext,
+	onClearRunContext,
+	embedded = false,
+	onClose,
 }: FlowCopilotProps) {
-	const [isOpen, setIsOpen] = useState(false);
+	const [isOpen, setIsOpen] = useState(embedded); // Start open if embedded
 	const [mode, setMode] = useState<Mode>("chat");
 	const [input, setInput] = useState("");
 	const [messages, setMessages] = useState<
@@ -750,7 +869,8 @@ export function FlowCopilot({
 	const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 	const [pendingCommands, setPendingCommands] = useState<BoardCommand[]>([]);
 	const [loading, setLoading] = useState(false);
-	const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>("initializing");
+	const [loadingPhase, setLoadingPhase] =
+		useState<LoadingPhase>("initializing");
 	const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
 	const [elapsedSeconds, setElapsedSeconds] = useState(0);
 	const [currentToolCall, setCurrentToolCall] = useState<string | null>(null);
@@ -761,6 +881,13 @@ export function FlowCopilot({
 	);
 	const [autocompleteEnabled, setAutocompleteEnabled] = useState(false);
 	const backend = useBackend();
+
+	// Auto-open when run context is provided
+	useEffect(() => {
+		if (runContext) {
+			setIsOpen(true);
+		}
+	}, [runContext]);
 
 	// Track elapsed time during loading
 	useEffect(() => {
@@ -854,18 +981,21 @@ export function FlowCopilot({
 		}
 	}, [models, selectedModelId]);
 
-	const scrollToBottom = useCallback((force = false) => {
-		if (userScrolledUp && !force) return;
-		const container = scrollContainerRef.current;
-		if (!container) return;
+	const scrollToBottom = useCallback(
+		(force = false) => {
+			if (userScrolledUp && !force) return;
+			const container = scrollContainerRef.current;
+			if (!container) return;
 
-		// Smooth scroll to bottom
-		container.scrollTo({
-			top: container.scrollHeight,
-			behavior: force ? "smooth" : "auto",
-		});
-		if (force) setUserScrolledUp(false);
-	}, [userScrolledUp]);
+			// Smooth scroll to bottom
+			container.scrollTo({
+				top: container.scrollHeight,
+				behavior: force ? "smooth" : "auto",
+			});
+			if (force) setUserScrolledUp(false);
+		},
+		[userScrolledUp],
+	);
 
 	// Handle scroll events to detect when user scrolls up
 	const handleScroll = useCallback(() => {
@@ -955,8 +1085,25 @@ export function FlowCopilot({
 	const handleSubmit = async () => {
 		if (!input.trim()) return;
 
-		const userMsg = input;
-		setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+		// Build the prompt with optional run context
+		let userMsg = input;
+		if (runContext) {
+			// Include run metadata in the prompt - the AI agent can query logs on demand
+			const runInfo = {
+				run_id: runContext.run_id,
+				app_id: runContext.app_id,
+				board_id: runContext.board_id,
+				event_id: runContext.event_id,
+			};
+			userMsg = `[RUN CONTEXT - User is asking about a flow execution run. Use the query_logs tool to fetch relevant logs.]
+\`\`\`json
+${JSON.stringify(runInfo, null, 2)}
+\`\`\`
+
+${input}`;
+		}
+
+		setMessages((prev) => [...prev, { role: "user", content: input }]);
 		setInput("");
 		setLoading(true);
 		setLoadingPhase("initializing");
@@ -983,7 +1130,10 @@ export function FlowCopilot({
 				// Check for plan step events
 				const planStepMatch = token.match(/<plan_step>([\s\S]*?)<\/plan_step>/);
 				if (planStepMatch) {
-					console.log("[FlowCopilot] Plan step detected:", planStepMatch[1].slice(0, 100));
+					console.log(
+						"[FlowCopilot] Plan step detected:",
+						planStepMatch[1].slice(0, 100),
+					);
 					try {
 						const eventData = JSON.parse(planStepMatch[1]);
 						if (eventData.PlanStep) {
@@ -991,7 +1141,10 @@ export function FlowCopilot({
 							// Update loading phase based on tool
 							if (step.tool_name === "think") {
 								setLoadingPhase("reasoning");
-							} else if (step.tool_name?.includes("search") || step.tool_name?.includes("catalog")) {
+							} else if (
+								step.tool_name?.includes("search") ||
+								step.tool_name?.includes("catalog")
+							) {
 								setLoadingPhase("searching");
 							} else if (step.tool_name === "emit_commands") {
 								setLoadingPhase("generating");
@@ -1026,7 +1179,11 @@ export function FlowCopilot({
 						const toolName = match[1];
 						setCurrentToolCall(toolName);
 						// Update phase based on tool type
-						if (toolName.includes("search") || toolName.includes("catalog") || toolName.includes("filter")) {
+						if (
+							toolName.includes("search") ||
+							toolName.includes("catalog") ||
+							toolName.includes("filter")
+						) {
 							setLoadingPhase("searching");
 						} else if (toolName === "think") {
 							setLoadingPhase("reasoning");
@@ -1047,7 +1204,10 @@ export function FlowCopilot({
 				}
 
 				currentMessageContent += token;
-				console.log("[FlowCopilot] Adding to message, total length:", currentMessageContent.length);
+				console.log(
+					"[FlowCopilot] Adding to message, total length:",
+					currentMessageContent.length,
+				);
 				setMessages((prev) => {
 					const newMessages = [...prev];
 					const lastMessage = newMessages[newMessages.length - 1];
@@ -1065,6 +1225,15 @@ export function FlowCopilot({
 				content: m.content,
 			}));
 
+			// Convert runContext (ILogMetadata) to IRunContext for the backend
+			const backendRunContext = runContext
+				? {
+						run_id: runContext.run_id,
+						app_id: runContext.app_id,
+						board_id: runContext.board_id,
+					}
+				: undefined;
+
 			const response = await backend.boardState.flowpilot_chat(
 				board,
 				selectedNodeIds,
@@ -1072,6 +1241,8 @@ export function FlowCopilot({
 				chatHistory,
 				onToken,
 				selectedModelId,
+				undefined, // token
+				backendRunContext,
 			);
 
 			// Update the final message with agent type and plan steps
@@ -1080,7 +1251,9 @@ export function FlowCopilot({
 				const lastMessage = newMessages[newMessages.length - 1];
 				if (lastMessage && lastMessage.role === "assistant") {
 					lastMessage.agentType = response.agent_type;
-					lastMessage.planSteps = planSteps.filter(s => s.status === "Completed");
+					lastMessage.planSteps = planSteps.filter(
+						(s) => s.status === "Completed",
+					);
 					// If the streamed content is empty, use the response message
 					if (!lastMessage.content.trim()) {
 						lastMessage.content = response.message;
@@ -1133,7 +1306,8 @@ export function FlowCopilot({
 		}
 	};
 
-	if (!isOpen) {
+	// For embedded mode, don't show the floating button
+	if (!isOpen && !embedded) {
 		return (
 			<motion.div
 				initial={{ scale: 0, opacity: 0 }}
@@ -1165,6 +1339,487 @@ export function FlowCopilot({
 		);
 	}
 
+	// For embedded mode, don't show when closed
+	if (!isOpen && embedded) {
+		return null;
+	}
+
+	// Embedded mode: render inline without absolute positioning
+	if (embedded) {
+		return (
+			<div className="h-full w-full flex flex-col bg-background/95 backdrop-blur-xl border-l border-border/40 overflow-hidden">
+				{/* Header */}
+				<div className="relative overflow-hidden shrink-0">
+					<div className="absolute inset-0 bg-linear-to-br from-primary/8 via-violet-500/5 to-pink-500/5" />
+
+					{/* Animated mesh gradient overlay when loading */}
+					{loading && (
+						<motion.div
+							className="absolute inset-0 opacity-30"
+							style={{
+								background:
+									"radial-gradient(circle at 30% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 70% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
+							}}
+							animate={{
+								background: [
+									"radial-gradient(circle at 30% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 70% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
+									"radial-gradient(circle at 70% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 30% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
+								],
+							}}
+							transition={{
+								duration: 3,
+								repeat: Number.POSITIVE_INFINITY,
+								repeatType: "reverse",
+							}}
+						/>
+					)}
+
+					<div className="relative px-3 py-2.5 flex items-center justify-between">
+						<div className="flex items-center gap-2">
+							<div className="relative">
+								<motion.div
+									className="absolute inset-0 bg-linear-to-br from-primary to-violet-600 rounded-lg blur-md opacity-50"
+									animate={
+										loading
+											? { scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }
+											: {}
+									}
+									transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
+								/>
+								<div className="relative p-1.5 bg-linear-to-br from-primary via-violet-600 to-pink-600 rounded-lg shadow-md">
+									<SparklesIcon className="w-3.5 h-3.5 text-white" />
+								</div>
+							</div>
+							<div>
+								<h3 className="text-[10px] font-bold">FlowPilot</h3>
+								{loading ? (
+									<StatusPill phase={loadingPhase} elapsed={elapsedSeconds} />
+								) : (
+									<div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+										<span className="relative flex h-1.5 w-1.5">
+											<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+											<span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+										</span>
+										Ready
+									</div>
+								)}
+							</div>
+						</div>
+						<div className="flex items-center gap-1">
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										variant="ghost"
+										size="icon"
+										className="h-6 w-6 rounded-md hover:bg-accent/50"
+										onClick={handleNewChat}
+									>
+										<SquarePenIcon className="w-3 h-3" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom" className="text-xs">
+									New chat
+								</TooltipContent>
+							</Tooltip>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-6 w-6 rounded-md hover:bg-muted/50"
+								onClick={() => {
+									setIsOpen(false);
+									onClose?.();
+								}}
+							>
+								<XIcon className="w-3 h-3" />
+							</Button>
+						</div>
+					</div>
+
+					{/* Model selector */}
+					<div className="relative px-3 pb-2">
+						<Select value={selectedModelId} onValueChange={setSelectedModelId}>
+							<SelectTrigger className="h-7 text-[10px] bg-background/60 backdrop-blur-sm border-border/30 hover:border-primary/30 transition-all duration-200 rounded-lg focus:ring-2 focus:ring-primary/20">
+								<div className="flex items-center gap-1.5">
+									<BotIcon className="w-3 h-3 text-muted-foreground" />
+									<SelectValue placeholder="Select Model" />
+								</div>
+							</SelectTrigger>
+							<SelectContent className="rounded-lg">
+								{models.map((model) => (
+									<SelectItem
+										key={model.id}
+										value={model.id}
+										className="text-[10px] rounded-md"
+									>
+										{model.meta?.en?.name || model.id}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+
+					{/* Progress bar when loading */}
+					{loading && (
+						<motion.div
+							className="absolute bottom-0 left-0 right-0 h-0.5 bg-muted/30"
+							initial={{ opacity: 0 }}
+							animate={{ opacity: 1 }}
+						>
+							<motion.div
+								className="h-full bg-linear-to-r from-primary via-violet-500 to-pink-500"
+								initial={{ width: "0%" }}
+								animate={{ width: "100%" }}
+								transition={{ duration: 30, ease: "linear" }}
+							/>
+						</motion.div>
+					)}
+				</div>
+
+				{/* Messages area */}
+				<ScrollArea
+					className="flex-1 min-h-0 px-3"
+					viewportRef={scrollContainerRef}
+					onScroll={handleScroll}
+				>
+					<div className="py-3 space-y-3 min-w-0">
+						{messages.length === 0 ? (
+							<motion.div
+								initial={{ opacity: 0, y: 10 }}
+								animate={{ opacity: 1, y: 0 }}
+								className="flex flex-col items-center justify-center py-6 text-center"
+							>
+								<div className="relative inline-block mb-3">
+									<div className="absolute inset-0 bg-linear-to-br from-primary/30 via-violet-500/20 to-pink-500/30 blur-2xl rounded-full scale-150" />
+									<motion.div
+										animate={{ rotate: [0, 5, -5, 0] }}
+										transition={{
+											duration: 4,
+											repeat: Number.POSITIVE_INFINITY,
+											ease: "easeInOut",
+										}}
+									>
+										<SparklesIcon className="w-10 h-10 relative text-primary/50" />
+									</motion.div>
+								</div>
+								<p className="text-[10px] font-medium text-foreground mb-1">
+									How can I help?
+								</p>
+								<p className="text-[10px] text-muted-foreground max-w-[180px]">
+									Ask about errors, trace issues, or get insights from your logs
+								</p>
+								<div className="flex flex-wrap gap-1.5 justify-center pt-3">
+									{["Find errors", "Trace execution", "Explain logs"].map(
+										(suggestion, i) => (
+											<motion.button
+												key={suggestion}
+												initial={{ opacity: 0, y: 5 }}
+												animate={{ opacity: 1, y: 0 }}
+												transition={{ delay: 0.2 + i * 0.1 }}
+												onClick={() => setInput(suggestion)}
+												className="px-2 py-1 text-[10px] font-medium text-muted-foreground bg-muted/50 hover:bg-muted border border-border/50 hover:border-primary/30 rounded-full transition-all duration-200 hover:text-foreground"
+											>
+												{suggestion}
+											</motion.button>
+										),
+									)}
+								</div>
+							</motion.div>
+						) : (
+							<>
+								{messages.map((m, i) => (
+									<motion.div
+										initial={{ opacity: 0, y: 10 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ delay: i === messages.length - 1 ? 0.1 : 0 }}
+										key={i}
+										className={`flex min-w-0 ${m.role === "user" ? "justify-end" : "justify-start"}`}
+									>
+										<div
+											className={`p-2.5 rounded-xl text-[10px] wrap-break-word overflow-hidden min-w-0 ${
+												m.role === "user"
+													? "bg-muted/60 text-foreground rounded-br-sm max-w-[85%] border border-border/40"
+													: "bg-muted/40 backdrop-blur-sm rounded-bl-sm max-w-full border border-border/30"
+											}`}
+										>
+											{m.role === "assistant" && m.agentType && (
+												<div className="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-border/30">
+													<div
+														className={`p-0.5 rounded ${m.agentType === "Explain" ? "bg-blue-500/15" : "bg-amber-500/15"}`}
+													>
+														{m.agentType === "Explain" ? (
+															<BrainCircuitIcon className="w-2.5 h-2.5 text-blue-500" />
+														) : (
+															<EditIcon className="w-2.5 h-2.5 text-amber-500" />
+														)}
+													</div>
+													<span
+														className={`text-[10px] font-medium ${m.agentType === "Explain" ? "text-blue-500" : "text-amber-500"}`}
+													>
+														{m.agentType === "Explain" ? "Explain" : "Edit"}
+													</span>
+												</div>
+											)}
+											{m.content ? (
+												<>
+													<MessageContent
+														content={m.content}
+														onFocusNode={onFocusNode}
+														board={board}
+													/>
+													{/* Show plan steps at bottom of completed messages */}
+													{m.planSteps && m.planSteps.length > 0 && (
+														<Collapsible className="mt-2 pt-2 border-t border-border/30">
+															<CollapsibleTrigger className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors w-full">
+																<ChevronDown className="w-2.5 h-2.5 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+																<ListChecksIcon className="w-2.5 h-2.5" />
+																<span>
+																	{m.planSteps.length} steps completed
+																</span>
+															</CollapsibleTrigger>
+															<CollapsibleContent>
+																<div className="mt-1.5 space-y-0.5">
+																	{m.planSteps.map((step, idx) => (
+																		<div
+																			key={idx}
+																			className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+																		>
+																			<CheckCircle2Icon className="w-2.5 h-2.5 text-green-500 shrink-0" />
+																			<span className="truncate">
+																				{step.description}
+																			</span>
+																		</div>
+																	))}
+																</div>
+															</CollapsibleContent>
+														</Collapsible>
+													)}
+												</>
+											) : (
+												<div className="space-y-2">
+													{/* Separate thinking view */}
+													{planSteps.some(
+														(s) =>
+															s.tool_name === "think" &&
+															s.status === "InProgress",
+													) ? (
+														<div className="space-y-1.5">
+															<div className="flex items-center gap-1.5">
+																<BrainCircuitIcon className="w-3 h-3 text-violet-500 animate-pulse" />
+																<span className="text-[10px] font-medium text-violet-500">
+																	Reasoning...
+																</span>
+															</div>
+															<div className="text-[10px] text-muted-foreground font-mono bg-violet-500/5 rounded-md p-2 max-h-20 overflow-y-auto border border-violet-500/20">
+																{
+																	planSteps.find((s) => s.tool_name === "think")
+																		?.description
+																}
+																<span className="inline-block w-1 h-2.5 ml-0.5 bg-violet-500/60 animate-pulse rounded-sm" />
+															</div>
+														</div>
+													) : (
+														<div className="flex items-center gap-2">
+															<div className="flex gap-0.5">
+																{[0, 1, 2].map((j) => (
+																	<motion.span
+																		key={j}
+																		className="w-1 h-1 bg-primary rounded-full"
+																		animate={{ opacity: [0.3, 1, 0.3] }}
+																		transition={{
+																			duration: 1,
+																			repeat: Number.POSITIVE_INFINITY,
+																			delay: j * 0.2,
+																		}}
+																	/>
+																))}
+															</div>
+															<span className="text-[10px] text-muted-foreground">
+																{currentToolCall
+																	? `Using ${currentToolCall.replace(/_/g, " ")}...`
+																	: "Processing..."}
+															</span>
+														</div>
+													)}
+													{/* Show plan steps inline during generation */}
+													{planSteps.length > 0 &&
+														!planSteps.some(
+															(s) =>
+																s.tool_name === "think" &&
+																s.status === "InProgress",
+														) && <PlanStepsView steps={planSteps} />}
+												</div>
+											)}
+											{/* Show executed commands */}
+											{m.executedCommands && m.executedCommands.length > 0 && (
+												<motion.div
+													initial={{ opacity: 0, height: 0 }}
+													animate={{ opacity: 1, height: "auto" }}
+													className="mt-2 pt-2 border-t border-border/30"
+												>
+													<div className="flex items-center gap-1 mb-1.5 text-[10px] text-muted-foreground">
+														<div className="p-0.5 bg-green-500/20 rounded">
+															<CheckCircle2Icon className="w-2.5 h-2.5 text-green-500" />
+														</div>
+														<span className="font-medium">
+															Applied {m.executedCommands.length} change
+															{m.executedCommands.length > 1 ? "s" : ""}
+														</span>
+													</div>
+													<div className="space-y-0.5">
+														{m.executedCommands.map((cmd, cmdIndex) => (
+															<div
+																key={cmdIndex}
+																className="text-[10px] bg-green-500/10 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded flex items-center gap-1 max-w-full overflow-hidden"
+																title={cmd.summary || cmd.command_type}
+															>
+																<span className="shrink-0">
+																	{getCommandIcon(cmd, "w-2.5 h-2.5")}
+																</span>
+																<span className="truncate">
+																	{cmd.summary || cmd.command_type}
+																</span>
+															</div>
+														))}
+													</div>
+												</motion.div>
+											)}
+										</div>
+									</motion.div>
+								))}
+
+								{/* Pending Commands UI */}
+								{pendingCommands.length > 0 && (
+									<PendingCommandsView
+										commands={pendingCommands}
+										onExecute={handleExecuteCommands}
+										onExecuteSingle={handleExecuteSingle}
+										onDismiss={handleDismissCommands}
+									/>
+								)}
+
+								{suggestions.length > 0 && (
+									<motion.div
+										initial={{ opacity: 0, y: 10 }}
+										animate={{ opacity: 1, y: 0 }}
+										className="space-y-2 pl-2 border-l-2 border-primary/30 ml-1"
+									>
+										<p className="text-[10px] font-semibold text-foreground/70 mb-1.5 flex items-center gap-1">
+											<Wand2Icon className="w-3 h-3 text-primary" />
+											Suggestions
+										</p>
+										{suggestions.map((s, i) => (
+											<div
+												key={i}
+												className="group border border-border/50 bg-card/80 backdrop-blur-sm hover:bg-accent/30 hover:border-primary/40 p-2.5 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md hover:shadow-primary/5"
+												onClick={() => onAcceptSuggestion(s)}
+											>
+												<div className="flex items-center justify-between mb-1">
+													<span className="font-semibold text-[10px] text-primary">
+														{s.node_type}
+													</span>
+													<Wand2Icon className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity text-primary" />
+												</div>
+												<div className="text-[10px] text-muted-foreground leading-relaxed">
+													{s.reason}
+												</div>
+											</div>
+										))}
+									</motion.div>
+								)}
+
+								{loading &&
+									messages.length > 0 &&
+									messages[messages.length - 1].role === "user" && (
+										<motion.div
+											initial={{ opacity: 0, y: 10 }}
+											animate={{ opacity: 1, y: 0 }}
+											className="flex justify-start"
+										>
+											<div className="bg-muted/60 backdrop-blur-sm border border-border/30 rounded-xl rounded-bl-sm px-3 py-2 flex items-center gap-2">
+												<div className="flex gap-0.5">
+													<span
+														className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
+														style={{ animationDelay: "0ms" }}
+													/>
+													<span
+														className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
+														style={{ animationDelay: "150ms" }}
+													/>
+													<span
+														className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
+														style={{ animationDelay: "300ms" }}
+													/>
+												</div>
+												<span className="text-[10px] text-muted-foreground font-medium">
+													{currentToolCall ? (
+														<span className="flex items-center gap-1">
+															<WrenchIcon className="w-2.5 h-2.5 animate-spin" />
+															Using {currentToolCall.replace(/_/g, " ")}...
+														</span>
+													) : (
+														"Thinking..."
+													)}
+												</span>
+											</div>
+										</motion.div>
+									)}
+								<div ref={messagesEndRef} />
+							</>
+						)}
+					</div>
+				</ScrollArea>
+
+				{/* Scroll to bottom indicator */}
+				<AnimatePresence>
+					{userScrolledUp && messages.length > 0 && (
+						<motion.div
+							initial={{ opacity: 0, y: 10 }}
+							animate={{ opacity: 1, y: 0 }}
+							exit={{ opacity: 0, y: 10 }}
+							className="absolute bottom-16 left-1/2 -translate-x-1/2 z-10"
+						>
+							<Button
+								size="sm"
+								variant="secondary"
+								className="rounded-full shadow-lg border border-border/50 gap-1 px-2 h-6 text-[10px]"
+								onClick={() => scrollToBottom(true)}
+							>
+								<ArrowDownIcon className="w-3 h-3" />
+								New
+							</Button>
+						</motion.div>
+					)}
+				</AnimatePresence>
+
+				{/* Input area */}
+				<div className="shrink-0 p-2.5 border-t border-border/30 bg-background/80 backdrop-blur-sm">
+					<div className="relative flex items-center gap-1.5">
+						<Input
+							value={input}
+							onChange={(e) => setInput(e.target.value)}
+							onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+							placeholder="Ask about the logs..."
+							className="flex-1 h-8 text-[10px] pr-9 rounded-lg bg-background/80 border-border/50 focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary/50"
+							disabled={loading}
+						/>
+						<Button
+							size="icon"
+							onClick={handleSubmit}
+							disabled={loading || !input.trim()}
+							className="absolute right-0 h-8 w-8 rounded-lg shadow-md bg-linear-to-br from-primary to-purple-600 hover:shadow-lg hover:shadow-primary/20 transition-all duration-200 disabled:opacity-50"
+						>
+							{loading ? (
+								<Loader2Icon className="w-3.5 h-3.5 animate-spin" />
+							) : (
+								<SendIcon className="w-3.5 h-3.5" />
+							)}
+						</Button>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<AnimatePresence>
 			{isOpen && (
@@ -1182,7 +1837,11 @@ export function FlowCopilot({
 							className="absolute -inset-1 rounded-[28px] pointer-events-none bg-primary/20"
 							style={{ filter: "blur(16px)" }}
 							animate={{ opacity: [0.3, 0.6, 0.3], scale: [1, 1.02, 1] }}
-							transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+							transition={{
+								duration: 2,
+								repeat: Number.POSITIVE_INFINITY,
+								ease: "easeInOut",
+							}}
 						/>
 					)}
 
@@ -1198,15 +1857,20 @@ export function FlowCopilot({
 								<motion.div
 									className="absolute inset-0 opacity-30"
 									style={{
-										background: "radial-gradient(circle at 30% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 70% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
+										background:
+											"radial-gradient(circle at 30% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 70% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
 									}}
 									animate={{
 										background: [
 											"radial-gradient(circle at 30% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 70% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
 											"radial-gradient(circle at 70% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 30% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
-										]
+										],
 									}}
-									transition={{ duration: 3, repeat: Infinity, repeatType: "reverse" }}
+									transition={{
+										duration: 3,
+										repeat: Number.POSITIVE_INFINITY,
+										repeatType: "reverse",
+									}}
 								/>
 							)}
 
@@ -1217,18 +1881,30 @@ export function FlowCopilot({
 										<div className="relative">
 											<motion.div
 												className="absolute inset-0 bg-linear-to-br from-primary to-violet-600 rounded-xl blur-lg opacity-50"
-												animate={loading ? { scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] } : {}}
-												transition={{ duration: 2, repeat: Infinity }}
+												animate={
+													loading
+														? { scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }
+														: {}
+												}
+												transition={{
+													duration: 2,
+													repeat: Number.POSITIVE_INFINITY,
+												}}
 											/>
 											<div className="relative p-2.5 bg-linear-to-br from-primary via-violet-600 to-pink-600 rounded-xl shadow-lg">
 												<SparklesIcon className="w-5 h-5 text-white" />
 											</div>
 										</div>
 										<div>
-											<h3 className="font-bold text-base tracking-tight">FlowPilot</h3>
+											<h3 className="font-bold text-base tracking-tight">
+												FlowPilot
+											</h3>
 											<div className="flex items-center gap-2">
 												{loading ? (
-													<StatusPill phase={loadingPhase} elapsed={elapsedSeconds} />
+													<StatusPill
+														phase={loadingPhase}
+														elapsed={elapsedSeconds}
+													/>
 												) : (
 													<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
 														<span className="relative flex h-2 w-2">
@@ -1253,13 +1929,18 @@ export function FlowCopilot({
 															? "bg-primary/90 hover:bg-primary shadow-md shadow-primary/20"
 															: "hover:bg-accent/50"
 													}`}
-													onClick={() => setAutocompleteEnabled(!autocompleteEnabled)}
+													onClick={() =>
+														setAutocompleteEnabled(!autocompleteEnabled)
+													}
 												>
-													<Wand2Icon className={`w-4 h-4 ${autocompleteEnabled ? "text-primary-foreground" : ""}`} />
+													<Wand2Icon
+														className={`w-4 h-4 ${autocompleteEnabled ? "text-primary-foreground" : ""}`}
+													/>
 												</Button>
 											</TooltipTrigger>
 											<TooltipContent side="bottom" className="text-xs">
-												{autocompleteEnabled ? "Disable" : "Enable"} autocomplete
+												{autocompleteEnabled ? "Disable" : "Enable"}{" "}
+												autocomplete
 											</TooltipContent>
 										</Tooltip>
 
@@ -1300,7 +1981,10 @@ export function FlowCopilot({
 
 							{/* Model selector row */}
 							<div className="relative px-4 pb-3">
-								<Select value={selectedModelId} onValueChange={setSelectedModelId}>
+								<Select
+									value={selectedModelId}
+									onValueChange={setSelectedModelId}
+								>
 									<SelectTrigger className="h-9 text-xs bg-background/60 backdrop-blur-sm border-border/30 hover:border-primary/30 transition-all duration-200 rounded-xl focus:ring-2 focus:ring-primary/20">
 										<div className="flex items-center gap-2">
 											<BotIcon className="w-3.5 h-3.5 text-muted-foreground" />
@@ -1309,7 +1993,11 @@ export function FlowCopilot({
 									</SelectTrigger>
 									<SelectContent className="rounded-xl">
 										{models.map((model) => (
-											<SelectItem key={model.id} value={model.id} className="text-xs rounded-lg">
+											<SelectItem
+												key={model.id}
+												value={model.id}
+												className="text-xs rounded-lg"
+											>
 												{model.meta?.en?.name || model.id}
 											</SelectItem>
 										))}
@@ -1336,7 +2024,7 @@ export function FlowCopilot({
 
 						{/* Chat Area */}
 						<ScrollArea
-							className="flex-1 p-4 flex flex-col max-h-full overflow-auto"
+							className="flex-1 min-h-0 p-4 flex flex-col"
 							viewportRef={scrollContainerRef}
 							onScroll={handleScroll}
 						>
@@ -1351,7 +2039,11 @@ export function FlowCopilot({
 											<div className="absolute inset-0 bg-linear-to-br from-primary/30 via-violet-500/20 to-pink-500/30 blur-3xl rounded-full scale-150" />
 											<motion.div
 												animate={{ rotate: [0, 5, -5, 0] }}
-												transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+												transition={{
+													duration: 4,
+													repeat: Number.POSITIVE_INFINITY,
+													ease: "easeInOut",
+												}}
 											>
 												<SparklesIcon className="w-14 h-14 mx-auto relative text-primary/50" />
 											</motion.div>
@@ -1365,7 +2057,11 @@ export function FlowCopilot({
 											</p>
 										</div>
 										<div className="flex flex-wrap gap-2 justify-center pt-2">
-											{["Add a node", "Connect components", "Explain my flow"].map((suggestion, i) => (
+											{[
+												"Add a node",
+												"Connect components",
+												"Explain my flow",
+											].map((suggestion, i) => (
 												<motion.button
 													key={suggestion}
 													initial={{ opacity: 0, y: 5 }}
@@ -1398,15 +2094,21 @@ export function FlowCopilot({
 										>
 											{m.role === "assistant" && m.agentType && (
 												<div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-border/30">
-													<div className={`p-1 rounded-md ${m.agentType === "Explain" ? "bg-blue-500/15" : "bg-amber-500/15"}`}>
+													<div
+														className={`p-1 rounded-md ${m.agentType === "Explain" ? "bg-blue-500/15" : "bg-amber-500/15"}`}
+													>
 														{m.agentType === "Explain" ? (
 															<BrainCircuitIcon className="w-3 h-3 text-blue-500" />
 														) : (
 															<EditIcon className="w-3 h-3 text-amber-500" />
 														)}
 													</div>
-													<span className={`text-xs font-medium ${m.agentType === "Explain" ? "text-blue-500" : "text-amber-500"}`}>
-														{m.agentType === "Explain" ? "Explain Mode" : "Edit Mode"}
+													<span
+														className={`text-xs font-medium ${m.agentType === "Explain" ? "text-blue-500" : "text-amber-500"}`}
+													>
+														{m.agentType === "Explain"
+															? "Explain Mode"
+															: "Edit Mode"}
 													</span>
 												</div>
 											)}
@@ -1423,14 +2125,21 @@ export function FlowCopilot({
 															<CollapsibleTrigger className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full">
 																<ChevronDown className="w-3 h-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
 																<ListChecksIcon className="w-3 h-3" />
-																<span>{m.planSteps.length} steps completed</span>
+																<span>
+																	{m.planSteps.length} steps completed
+																</span>
 															</CollapsibleTrigger>
 															<CollapsibleContent>
 																<div className="mt-2 space-y-1">
 																	{m.planSteps.map((step, idx) => (
-																		<div key={idx} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+																		<div
+																			key={idx}
+																			className="flex items-center gap-2 text-[11px] text-muted-foreground"
+																		>
 																			<CheckCircle2Icon className="w-3 h-3 text-green-500 shrink-0" />
-																			<span className="truncate">{step.description}</span>
+																			<span className="truncate">
+																				{step.description}
+																			</span>
 																		</div>
 																	))}
 																</div>
@@ -1441,14 +2150,23 @@ export function FlowCopilot({
 											) : (
 												<div className="space-y-3">
 													{/* Separate thinking view */}
-													{planSteps.some(s => s.tool_name === "think" && s.status === "InProgress") ? (
+													{planSteps.some(
+														(s) =>
+															s.tool_name === "think" &&
+															s.status === "InProgress",
+													) ? (
 														<div className="space-y-2">
 															<div className="flex items-center gap-2">
 																<BrainCircuitIcon className="w-3.5 h-3.5 text-violet-500 animate-pulse" />
-																<span className="text-xs font-medium text-violet-500">Reasoning...</span>
+																<span className="text-xs font-medium text-violet-500">
+																	Reasoning...
+																</span>
 															</div>
 															<div className="text-[11px] text-muted-foreground font-mono bg-violet-500/5 rounded-lg p-2.5 max-h-24 overflow-y-auto border border-violet-500/20">
-																{planSteps.find(s => s.tool_name === "think")?.description}
+																{
+																	planSteps.find((s) => s.tool_name === "think")
+																		?.description
+																}
 																<span className="inline-block w-1.5 h-3 ml-0.5 bg-violet-500/60 animate-pulse rounded-sm" />
 															</div>
 														</div>
@@ -1462,21 +2180,26 @@ export function FlowCopilot({
 																		animate={{ opacity: [0.3, 1, 0.3] }}
 																		transition={{
 																			duration: 1,
-																			repeat: Infinity,
+																			repeat: Number.POSITIVE_INFINITY,
 																			delay: j * 0.2,
 																		}}
 																	/>
 																))}
 															</div>
 															<span className="text-xs text-muted-foreground">
-																{currentToolCall ? `Using ${currentToolCall.replace(/_/g, " ")}...` : "Processing..."}
+																{currentToolCall
+																	? `Using ${currentToolCall.replace(/_/g, " ")}...`
+																	: "Processing..."}
 															</span>
 														</div>
 													)}
 													{/* Show plan steps inline during generation */}
-													{planSteps.length > 0 && !planSteps.some(s => s.tool_name === "think" && s.status === "InProgress") && (
-														<PlanStepsView steps={planSteps} />
-													)}
+													{planSteps.length > 0 &&
+														!planSteps.some(
+															(s) =>
+																s.tool_name === "think" &&
+																s.status === "InProgress",
+														) && <PlanStepsView steps={planSteps} />}
 												</div>
 											)}
 											{/* Show executed commands */}
@@ -1491,7 +2214,8 @@ export function FlowCopilot({
 															<CheckCircle2Icon className="w-3 h-3 text-green-500" />
 														</div>
 														<span className="font-medium">
-															Applied {m.executedCommands.length} change{m.executedCommands.length > 1 ? "s" : ""}
+															Applied {m.executedCommands.length} change
+															{m.executedCommands.length > 1 ? "s" : ""}
 														</span>
 													</div>
 													<div className="space-y-1">

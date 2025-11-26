@@ -9,6 +9,7 @@ import type {
 	ILogLevel,
 	ILogMetadata,
 	INode,
+	IRunContext,
 	IRunPayload,
 	IVersionType,
 } from "../../../";
@@ -142,6 +143,7 @@ export class EmptyBoardState implements IBoardState {
 		onToken?: (token: string) => void,
 		modelId?: string,
 		token?: string,
+		runContext?: IRunContext,
 	): Promise<CopilotResponse> {
 		throw new Error("Method not implemented.");
 	}

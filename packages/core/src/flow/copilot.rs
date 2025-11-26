@@ -778,14 +778,163 @@ impl Tool for EmitCommandsTool {
     }
 }
 
+// Log query tool for analyzing execution logs
+#[derive(Deserialize, Debug)]
+struct QueryLogsArgs {
+    /// Optional filter query (e.g., "log_level = 4" for errors, "node_id = 'abc123'")
+    filter: Option<String>,
+    /// Maximum number of logs to return
+    limit: Option<usize>,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Query logs tool error: {0}")]
+struct QueryLogsToolError(String);
+
+struct QueryLogsTool {
+    state: FlowLikeState,
+    run_context: Option<RunContext>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunContext {
+    pub run_id: String,
+    pub app_id: String,
+    pub board_id: String,
+}
+
+impl Tool for QueryLogsTool {
+    const NAME: &'static str = "query_logs";
+
+    type Error = QueryLogsToolError;
+    type Args = QueryLogsArgs;
+    type Output = String;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: "query_logs".to_string(),
+            description: "Query execution logs from a flow run. Use this to find errors, warnings, or trace execution flow. Log levels: 0=Debug, 1=Info, 2=Warn, 3=Error, 4=Fatal. Returns log messages with their node_id so you can use focus_node to highlight problematic nodes.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "filter": {
+                        "type": "string",
+                        "description": "Optional SQL-like filter query. Examples: 'log_level >= 3' (errors and above), 'node_id = \"abc123\"', 'message LIKE \"%error%\"'"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of logs to return (default: 50, max: 100)"
+                    }
+                },
+                "required": []
+            }),
+        }
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        println!("[QueryLogsTool] call() invoked with args: {:?}", args);
+
+        let run_context = self.run_context.as_ref().ok_or_else(|| {
+            println!("[QueryLogsTool] ERROR: No run context available");
+            QueryLogsToolError(
+                "No run context available. User must select a run first.".to_string(),
+            )
+        })?;
+
+        println!(
+            "[QueryLogsTool] run_context: app_id={}, run_id={}, board_id={}",
+            run_context.app_id, run_context.run_id, run_context.board_id
+        );
+
+        let limit = args.limit.unwrap_or(50).min(100);
+        let filter = args.filter.clone().unwrap_or_default();
+
+        println!("[QueryLogsTool] Using limit={}, filter='{}'", limit, filter);
+
+        // Build LogMeta from RunContext
+        let log_meta = crate::flow::execution::LogMeta {
+            app_id: run_context.app_id.clone(),
+            run_id: run_context.run_id.clone(),
+            board_id: run_context.board_id.clone(),
+            start: 0,
+            end: 0,
+            log_level: 0,
+            version: String::new(),
+            nodes: None,
+            logs: None,
+            node_id: String::new(),
+            event_version: None,
+            event_id: String::new(),
+            payload: vec![],
+        };
+
+        #[cfg(feature = "flow-runtime")]
+        {
+            println!("[QueryLogsTool] Calling state.query_run()...");
+            let logs = self
+                .state
+                .query_run(&log_meta, &filter, Some(limit), Some(0))
+                .await
+                .map_err(|e| {
+                    println!("[QueryLogsTool] ERROR querying logs: {}", e);
+                    QueryLogsToolError(format!("Failed to query logs: {}", e))
+                })?;
+
+            println!("[QueryLogsTool] Got {} logs", logs.len());
+
+            if logs.is_empty() {
+                let msg = if filter.is_empty() {
+                    "No logs found for this run. The execution may have completed without producing any log output, or logs may have been cleared."
+                } else {
+                    "No logs matching your filter criteria. Try a broader search or check if the filter syntax is correct."
+                };
+                println!("[QueryLogsTool] Returning empty message: {}", msg);
+                return Ok(msg.to_string());
+            }
+
+            // Format logs for the AI
+            let formatted_logs: Vec<serde_json::Value> = logs
+                .iter()
+                .map(|log| {
+                    json!({
+                        "level": match log.log_level {
+                            crate::flow::execution::LogLevel::Debug => "Debug",
+                            crate::flow::execution::LogLevel::Info => "Info",
+                            crate::flow::execution::LogLevel::Warn => "Warn",
+                            crate::flow::execution::LogLevel::Error => "Error",
+                            crate::flow::execution::LogLevel::Fatal => "Fatal",
+                        },
+                        "message": log.message,
+                        "node_id": log.node_id,
+                    })
+                })
+                .collect();
+
+            let result = serde_json::to_string_pretty(&formatted_logs).unwrap_or_default();
+            println!(
+                "[QueryLogsTool] Returning {} bytes of formatted logs",
+                result.len()
+            );
+            println!(
+                "[QueryLogsTool] First 500 chars: {}",
+                &result[..result.len().min(500)]
+            );
+            Ok(result)
+        }
+
+        #[cfg(not(feature = "flow-runtime"))]
+        {
+            println!("[QueryLogsTool] flow-runtime feature not enabled");
+            Ok("Log querying is not available in this build.".to_string())
+        }
+    }
+}
+
 use futures::StreamExt;
 use rig::{
     OneOrMany,
     completion::Completion,
-    message::{
-        AssistantContent, ToolCall as RigToolCall, ToolResult as RigToolResult, ToolResultContent,
-        UserContent,
-    },
+    message::{AssistantContent, ToolResult as RigToolResult, ToolResultContent, UserContent},
     streaming::StreamedAssistantContent,
 };
 
@@ -899,11 +1048,17 @@ impl Copilot {
         history: Vec<ChatMessage>,
         model_id: Option<String>,
         token: Option<String>,
+        run_context: Option<RunContext>,
         on_token: Option<F>,
     ) -> Result<CopilotResponse>
     where
         F: Fn(String) + Send + Sync + 'static,
     {
+        println!(
+            "[Copilot::chat] Starting chat with run_context: {:?}",
+            run_context
+        );
+
         let context = self.prepare_context(board, selected_node_ids).await?;
         let context_json = flow_like_types::json::to_string_pretty(&context)?;
 
@@ -914,8 +1069,12 @@ impl Copilot {
         let (model_name, completion_client) = self.get_model(model_id, token).await?;
 
         // Build a compact system prompt
-        let system_prompt =
-            Self::build_system_prompt(&context_json, node_count, !self.templates.is_empty());
+        let system_prompt = Self::build_system_prompt(
+            &context_json,
+            node_count,
+            !self.templates.is_empty(),
+            run_context.is_some(),
+        );
 
         let mut agent_builder = completion_client
             .agent(&model_name)
@@ -939,6 +1098,20 @@ impl Copilot {
                 templates: self.templates.clone(),
                 current_template_id: self.current_template_id.clone(),
             });
+        }
+
+        // Add logs query tool if run context is provided
+        if run_context.is_some() {
+            println!(
+                "[Copilot::chat] Adding QueryLogsTool with run_context: {:?}",
+                run_context
+            );
+            agent_builder = agent_builder.tool(QueryLogsTool {
+                state: self.state.clone(),
+                run_context: run_context.clone(),
+            });
+        } else {
+            println!("[Copilot::chat] No run_context provided, QueryLogsTool NOT added");
         }
 
         let agent = agent_builder.build();
@@ -1115,8 +1288,9 @@ impl Copilot {
                         let name = tool_call.function.name.clone();
                         let arguments = tool_call.function.arguments.clone();
                         let id = tool_call.id.clone();
+                        let ctx = run_context.clone();
                         async move {
-                            let output = self.execute_tool(&name, &arguments).await;
+                            let output = self.execute_tool(&name, &arguments, ctx.as_ref()).await;
                             (id, name, output)
                         }
                     })
@@ -1243,9 +1417,20 @@ impl Copilot {
     }
 
     /// Build a compact system prompt to reduce context size
-    fn build_system_prompt(context_json: &str, node_count: usize, has_templates: bool) -> String {
+    fn build_system_prompt(
+        context_json: &str,
+        node_count: usize,
+        has_templates: bool,
+        has_run_context: bool,
+    ) -> String {
         let templates_tool = if has_templates {
             "\n- **search_templates**: Search workflow templates for implementation examples"
+        } else {
+            ""
+        };
+
+        let logs_tool = if has_run_context {
+            "\n- **query_logs**: Query execution logs from the current run. Use focus_node to highlight problematic nodes."
         } else {
             ""
         };
@@ -1257,19 +1442,20 @@ impl Copilot {
 {}
 
 ## Tools
-**Understanding**: think (reason step-by-step), focus_node (highlight node with <focus_node>id</focus_node>)
-**Catalog** ({} nodes): catalog_search (by name/description), search_by_pin (by pin type), filter_category (by category){}
+**Understanding**: think (reason step-by-step), focus_node (highlight node by ID)
+**Catalog** ({} nodes): catalog_search (by name/description), search_by_pin (by pin type), filter_category (by category){}{}
 **Modify**: emit_commands (execute graph changes)
 
 ## Key Rules
-1. Reference nodes with <focus_node>node_id</focus_node> in responses
-2. Use pin `n` (name) in commands for pin connections
-3. Connect compatible types only (check t=type from catalog)
-4. New nodes need ref_id ("$0", "$1"...) for subsequent connections
-5. Connect execution flow: exec_out → exec_in
-6. Position nodes left-to-right, 250px horizontal spacing
-7. Each command needs a `summary` field
-8. Limit output to 20 commands per turn
+1. Reference nodes using <focus_node>ID</focus_node> with the EXACT node ID from context (cuid2 format, e.g. "tz4a98xxat96...")
+2. NEVER use node names or types in focus_node tags - only the exact ID strings from the graph context
+3. Use pin `n` (name) in commands for pin connections
+4. Connect compatible types only (check t=type from catalog)
+5. New nodes need ref_id ("$0", "$1"...) for subsequent connections
+6. Connect execution flow: exec_out → exec_in
+7. Position nodes left-to-right, 250px horizontal spacing
+8. Each command needs a `summary` field
+9. Limit output to 20 commands per turn
 
 ## Commands
 AddNode(node_type, ref_id, position, summary) | RemoveNode(node_id, summary)
@@ -1284,7 +1470,7 @@ ALWAYS emit commands in this order:
 3. UpdateNodePin commands LAST (set default values)
 
 ## Workflow: Start from TARGET, work backwards. Search catalog first. Connect exec pins."#,
-            context_json, node_count, templates_tool
+            context_json, node_count, templates_tool, logs_tool
         )
     }
 
@@ -1340,12 +1526,24 @@ ALWAYS emit commands in this order:
                     "Searching templates...".to_string()
                 }
             }
+            "query_logs" => {
+                if let Some(query) = arguments.get("query").and_then(|v| v.as_str()) {
+                    format!("Searching logs for \"{}\"", query)
+                } else {
+                    "Querying execution logs...".to_string()
+                }
+            }
             _ => format!("Running {}...", name),
         }
     }
 
     /// Execute a tool by name and return the result
-    async fn execute_tool(&self, name: &str, arguments: &serde_json::Value) -> String {
+    async fn execute_tool(
+        &self,
+        name: &str,
+        arguments: &serde_json::Value,
+        run_context: Option<&RunContext>,
+    ) -> String {
         match name {
             "think" => {
                 if let Ok(args) = serde_json::from_value::<ThinkingArgs>(arguments.clone()) {
@@ -1448,7 +1646,79 @@ ALWAYS emit commands in this order:
                     "[]".to_string()
                 }
             }
-            _ => format!("Unknown tool: {}", name),
+            "query_logs" => {
+                #[cfg(feature = "flow-runtime")]
+                {
+                    if let Some(ctx) = run_context {
+                        let args = serde_json::from_value::<QueryLogsArgs>(arguments.clone())
+                            .unwrap_or(QueryLogsArgs {
+                                filter: None,
+                                limit: None,
+                            });
+
+                        let limit = args.limit.unwrap_or(50).min(100);
+                        let filter = args.filter.unwrap_or_default();
+
+                        let log_meta = crate::flow::execution::LogMeta {
+                            app_id: ctx.app_id.clone(),
+                            run_id: ctx.run_id.clone(),
+                            board_id: ctx.board_id.clone(),
+                            start: 0,
+                            end: 0,
+                            log_level: 0,
+                            version: String::new(),
+                            nodes: None,
+                            logs: None,
+                            node_id: String::new(),
+                            event_version: None,
+                            event_id: String::new(),
+                            payload: vec![],
+                        };
+
+                        match self
+                            .state
+                            .query_run(&log_meta, &filter, Some(limit), Some(0))
+                            .await
+                        {
+                            Ok(logs) => {
+                                if logs.is_empty() {
+                                    if filter.is_empty() {
+                                        "No logs found for this run.".to_string()
+                                    } else {
+                                        "No logs matching your filter criteria.".to_string()
+                                    }
+                                } else {
+                                    let formatted: Vec<serde_json::Value> = logs.iter().map(|log| {
+                                        json!({
+                                            "level": match log.log_level {
+                                                crate::flow::execution::LogLevel::Debug => "Debug",
+                                                crate::flow::execution::LogLevel::Info => "Info",
+                                                crate::flow::execution::LogLevel::Warn => "Warn",
+                                                crate::flow::execution::LogLevel::Error => "Error",
+                                                crate::flow::execution::LogLevel::Fatal => "Fatal",
+                                            },
+                                            "message": log.message,
+                                            "node_id": log.node_id,
+                                        })
+                                    }).collect();
+                                    serde_json::to_string_pretty(&formatted).unwrap_or_default()
+                                }
+                            }
+                            Err(e) => format!("Failed to query logs: {}", e),
+                        }
+                    } else {
+                        "No run context available. Please select a run first.".to_string()
+                    }
+                }
+                #[cfg(not(feature = "flow-runtime"))]
+                {
+                    "Log querying is not available in this build.".to_string()
+                }
+            }
+            _ => {
+                println!("[Copilot] Unknown tool requested: {}", name);
+                format!("Unknown tool: {}", name)
+            }
         }
     }
 
