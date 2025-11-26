@@ -1,0 +1,236 @@
+---
+import {
+  LuBug,
+  LuSparkles,
+  LuPuzzle,
+  LuMessageCircleQuestion,
+  LuPlay,
+} from "react-icons/lu";
+---
+
+<section
+  id="flowpilot"
+  class="relative w-full min-h-screen overflow-hidden"
+>
+  <!-- Top fade for seamless transition from previous section -->
+  <div class="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-background via-background/70 to-transparent pointer-events-none z-20"></div>
+
+  <!-- Full-width video background - maximum visibility -->
+  <div class="absolute inset-0">
+    <video
+      id="flowpilot-video"
+      autoplay
+      loop
+      muted
+      playsinline
+      preload="auto"
+      class="absolute inset-0 w-full h-full object-cover object-right md:object-center"
+      poster="/images/flowpilot-poster.png"
+    >
+      <source src="/process-workflow.webm" type="video/webm" />
+    </video>
+
+    <!-- Minimal gradients - just enough for text readability -->
+    <div class="absolute inset-0 bg-gradient-to-r from-background/90 via-background/30 to-transparent"></div>
+    <div class="absolute inset-0 bg-gradient-to-b from-background/40 via-transparent to-background/80"></div>
+  </div>
+
+  <!-- Animated glow orbs -->
+  <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+    <div class="glow-orb glow-orb-1"></div>
+    <div class="glow-orb glow-orb-2"></div>
+  </div>
+
+  <!-- Content -->
+  <div class="relative z-10 mx-auto max-w-7xl px-4 lg:px-8 min-h-screen flex items-center">
+    <div class="py-24 lg:py-0 max-w-xl">
+
+      <!-- Glowing badge with animation -->
+      <div class="inline-flex items-center gap-2.5 rounded-full border border-violet-400/50 bg-violet-500/20 backdrop-blur-2xl px-5 py-3 text-sm font-semibold text-violet-200 mb-10 shadow-[0_0_40px_-8px_rgba(139,92,246,0.5)] hover:shadow-[0_0_50px_-5px_rgba(139,92,246,0.6)] transition-shadow duration-500 group">
+        <div class="relative">
+          <LuSparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+          <div class="absolute inset-0 blur-sm bg-violet-400/50 rounded-full"></div>
+        </div>
+        <span>AI-powered workflow assistant</span>
+      </div>
+
+      <!-- Title with text shadow for depth -->
+      <h2 class="text-5xl font-black sm:text-6xl lg:text-7xl leading-[1.05] tracking-tight drop-shadow-2xl">
+        <span class="bg-gradient-to-r from-white to-white/90 bg-clip-text text-transparent">Meet</span>
+        <br />
+        <span class="bg-gradient-to-br from-violet-300 via-fuchsia-300 to-cyan-300 bg-clip-text text-transparent animate-gradient-x">FlowPilot</span>
+      </h2>
+
+      <!-- Subtitle with better contrast -->
+      <p class="mt-8 text-lg lg:text-xl text-white/80 max-w-md leading-relaxed drop-shadow-lg">
+        Your AI copilot for building, debugging, and understanding workflows.
+        From a screenshot to a fully implemented flow — <span class="text-violet-300 font-semibold">in seconds</span>.
+      </p>
+
+      <!-- Feature pills - glassy and interactive -->
+      <div class="mt-14 flex flex-wrap gap-3">
+        <div class="feature-pill group border-violet-400/40 hover:border-violet-300/60">
+          <div class="feature-icon from-violet-500 to-fuchsia-600">
+            <LuBug className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span class="text-violet-100 group-hover:text-white">Debug logs</span>
+        </div>
+
+        <div class="feature-pill group border-cyan-400/40 hover:border-cyan-300/60">
+          <div class="feature-icon from-cyan-500 to-blue-600">
+            <LuSparkles className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span class="text-cyan-100 group-hover:text-white">Build workflows</span>
+        </div>
+
+        <div class="feature-pill group border-emerald-400/40 hover:border-emerald-300/60">
+          <div class="feature-icon from-emerald-500 to-teal-600">
+            <LuPuzzle className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span class="text-emerald-100 group-hover:text-white">Extend flows</span>
+        </div>
+
+        <div class="feature-pill group border-amber-400/40 hover:border-amber-300/60">
+          <div class="feature-icon from-amber-500 to-orange-600">
+            <LuMessageCircleQuestion className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span class="text-amber-100 group-hover:text-white">Explain logic</span>
+        </div>
+      </div>
+
+      <!-- Live indicator with play icon -->
+      <div class="mt-12 inline-flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl px-5 py-3">
+        <div class="relative">
+          <span class="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping"></span>
+          <span class="relative flex h-3 w-3 rounded-full bg-green-500 shadow-[0_0_10px_2px_rgba(34,197,94,0.5)]"></span>
+        </div>
+        <p class="text-sm text-white/70 font-medium">
+          Watching: Screenshot → workflow transformation
+        </p>
+        <LuPlay className="w-4 h-4 text-white/50" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom fade for seamless transition -->
+  <div class="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-background via-background/80 to-transparent pointer-events-none z-20"></div>
+</section>
+
+<script>
+  // Ensure video plays - handle browser autoplay policies
+  const video = document.getElementById('flowpilot-video') as HTMLVideoElement;
+  if (video) {
+    // Try to play immediately
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        // Autoplay was prevented, try again on first user interaction
+        const playOnInteraction = () => {
+          video.play();
+          document.removeEventListener('click', playOnInteraction);
+          document.removeEventListener('scroll', playOnInteraction);
+          document.removeEventListener('touchstart', playOnInteraction);
+        };
+        document.addEventListener('click', playOnInteraction, { once: true });
+        document.addEventListener('scroll', playOnInteraction, { once: true });
+        document.addEventListener('touchstart', playOnInteraction, { once: true });
+      });
+    }
+
+    // Also try when video becomes visible
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          video.play().catch(() => {});
+        }
+      });
+    }, { threshold: 0.1 });
+    observer.observe(video);
+  }
+</script>
+
+<style>
+  /* Feature pills */
+  .feature-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    border-radius: 9999px;
+    border-width: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(24px);
+    padding: 0.625rem 1rem;
+    transition: all 0.3s ease;
+    cursor: default;
+  }
+
+  .feature-pill:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.3);
+  }
+
+  .feature-icon {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(to bottom right, var(--tw-gradient-from), var(--tw-gradient-to));
+    box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.3);
+  }
+
+  .feature-pill span {
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  /* Glow orbs */
+  .glow-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.4;
+    animation: float 8s ease-in-out infinite;
+  }
+
+  .glow-orb-1 {
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%);
+    top: 20%;
+    left: 5%;
+    animation-delay: 0s;
+  }
+
+  .glow-orb-2 {
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(6, 182, 212, 0.3) 0%, transparent 70%);
+    bottom: 30%;
+    left: 15%;
+    animation-delay: 4s;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(20px, -20px) scale(1.05); }
+  }
+
+  /* Gradient text animation */
+  @keyframes gradient-x {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  .animate-gradient-x {
+    background-size: 200% 200%;
+    animation: gradient-x 8s ease infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glow-orb, .animate-gradient-x { animation: none; }
+  }
+</style>

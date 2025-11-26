@@ -15,23 +15,36 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
             class="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"
         >
         </div>
+        <!-- Enhanced glow orbs - BIGGER -->
+        <div
+            class="glow-orb absolute -top-40 -left-40 h-[30rem] w-[30rem]"
+            style="background: radial-gradient(60% 60% at 50% 50%, hsl(262 100% 63% / 0.55) 0%, transparent 60%);"
+        ></div>
+        <div
+            class="glow-orb absolute -bottom-40 -right-40 h-[28rem] w-[28rem]"
+            style="background: radial-gradient(60% 60% at 50% 50%, hsl(199 90% 55% / 0.5) 0%, transparent 60%); animation-delay: -4s;"
+        ></div>
+        <div
+            class="glow-orb absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[24rem] w-[24rem]"
+            style="background: radial-gradient(60% 60% at 50% 50%, hsl(230 80% 60% / 0.35) 0%, transparent 60%); animation-delay: -2s;"
+        ></div>
     </div>
 
     <div class="relative z-10">
         <div class="mx-auto max-w-4xl text-center">
             <div
-                class="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 mb-6"
+                class="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 backdrop-blur-2xl px-4 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 mb-6 shadow-[0_0_40px_-8px_rgba(99,102,241,0.4)]"
             >
-                <div class="w-2 h-2 bg-indigo-500 rounded-full animate-pulse">
+                <div class="w-2 h-2 bg-indigo-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(99,102,241,0.8)]">
                 </div>
                 One flow, many views
             </div>
             <h2
-                class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-indigo-500 to-cyan-500 bg-clip-text text-transparent"
+                class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-indigo-500 to-cyan-500 bg-clip-text text-transparent drop-shadow-sm"
             >
                 One process, seen three ways
             </h2>
-            <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
+            <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
                 People think in steps. Systems run on data. IT cares about
                 logic. Flow-Like shows all three together, so every role sees
                 the same truth — just in their own language.
@@ -413,9 +426,26 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
 </script>
 
 <style>
+    /* Glow orb animation */
+    @keyframes glow-float {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        33% { transform: translate(40px, -30px) scale(1.15); }
+        66% { transform: translate(-25px, 20px) scale(0.88); }
+    }
+
+    #layers .glow-orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(100px);
+        opacity: 0.55;
+        animation: glow-float 10s ease-in-out infinite;
+        pointer-events: none;
+    }
+
     /* Stage layout */
     .stage {
         --stage-h: min(56vh, 520px);
+        box-shadow: 0 25px 70px -20px rgba(0, 0, 0, 0.2);
     }
 
     /* Panels: stacked/faded (desktop) */
@@ -540,6 +570,9 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
         #tab-indicator,
         .panel {
             transition: none !important;
+        }
+        #layers .glow-orb {
+            animation: none !important;
         }
     }
 </style>
