@@ -1,4 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Redo2Icon, Undo2Icon, XIcon } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { toastError, toastSuccess } from "../lib/messages";
@@ -33,6 +34,16 @@ export function useKeyboardShortcuts({
 	redo,
 }: UseKeyboardShortcutsProps) {
 	const backend = useBackend();
+	const queryClient = useQueryClient();
+
+	// Helper to invalidate and refetch board data
+	const invalidateBoard = useCallback(async () => {
+		const queryKey = ["getBoard", appId, boardId, version].filter(
+			(arg) => typeof arg !== "undefined",
+		);
+		await queryClient.invalidateQueries({ queryKey });
+		await board.refetch();
+	}, [queryClient, appId, boardId, version, board]);
 
 	const placeNodeShortcut = useCallback(
 		async (node: INode) => {
@@ -73,12 +84,12 @@ export function useKeyboardShortcuts({
 				if (stack) {
 					try {
 						await backend.boardState.undoBoard(appId, boardId, stack);
-						await board.refetch();
+						await invalidateBoard();
 						toastSuccess("Undo", <Undo2Icon className="w-4 h-4" />);
 					} catch (error) {
 						console.error("Undo failed:", error);
 						toastError("Undo failed", <XIcon />);
-						await board.refetch();
+						await invalidateBoard();
 					}
 				}
 				return;
@@ -96,12 +107,12 @@ export function useKeyboardShortcuts({
 				if (stack) {
 					try {
 						await backend.boardState.redoBoard(appId, boardId, stack);
-						await board.refetch();
+						await invalidateBoard();
 						toastSuccess("Redo", <Redo2Icon className="w-4 h-4" />);
 					} catch (error) {
 						console.error("Redo failed:", error);
 						toastError("Redo failed", <XIcon />);
-						await board.refetch();
+						await invalidateBoard();
 					}
 				}
 				return;
@@ -124,7 +135,7 @@ export function useKeyboardShortcuts({
 				);
 				if (!node) return;
 				await placeNodeShortcut(node);
-				await board.refetch();
+				await invalidateBoard();
 				return;
 			}
 
@@ -145,7 +156,7 @@ export function useKeyboardShortcuts({
 				);
 				if (!node) return;
 				await placeNodeShortcut(node);
-				await board.refetch();
+				await invalidateBoard();
 				return;
 			}
 
@@ -164,7 +175,7 @@ export function useKeyboardShortcuts({
 				const node = catalog.data?.find((node) => node.name === "log_info");
 				if (!node) return;
 				await placeNodeShortcut(node);
-				await board.refetch();
+				await invalidateBoard();
 				return;
 			}
 
@@ -183,7 +194,7 @@ export function useKeyboardShortcuts({
 				const node = catalog.data?.find((node) => node.name === "reroute");
 				if (!node) return;
 				await placeNodeShortcut(node);
-				await board.refetch();
+				await invalidateBoard();
 			}
 		},
 		[
@@ -196,6 +207,7 @@ export function useKeyboardShortcuts({
 			undo,
 			redo,
 			appId,
+			invalidateBoard,
 		],
 	);
 

@@ -1,5 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import {
+	type ChatMessage,
+	type CopilotResponse,
 	type IBoard,
 	type IBoardState,
 	IConnectionMode,
@@ -10,6 +12,7 @@ import {
 	type ILogLevel,
 	type ILogMetadata,
 	type INode,
+	type IRunContext,
 	type IRunPayload,
 	type ISettingsProfile,
 	type IVersionType,
@@ -790,5 +793,36 @@ export class BoardState implements IBoardState {
 		}
 
 		return returnValue;
+	}
+
+	async flowpilot_chat(
+		board: IBoard,
+		selectedNodeIds: string[],
+		userPrompt: string,
+		history: ChatMessage[],
+		onToken?: (token: string) => void,
+		modelId?: string,
+		token?: string,
+		runContext?: IRunContext,
+	): Promise<CopilotResponse> {
+		console.log("[flowpilot_chat] Calling with runContext:", runContext);
+
+		const channel = new Channel<string>();
+		if (onToken) {
+			channel.onmessage = onToken;
+		}
+
+		const actualToken = token ?? this.backend.auth?.user?.access_token;
+
+		return await invoke("flowpilot_chat", {
+			board,
+			selectedNodeIds,
+			userPrompt,
+			history,
+			modelId,
+			channel,
+			token: actualToken,
+			runContext,
+		});
 	}
 }

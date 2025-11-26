@@ -1,5 +1,6 @@
 pub mod board;
 pub mod catalog;
+pub mod copilot;
 pub mod event;
 pub mod execution;
 pub mod node;

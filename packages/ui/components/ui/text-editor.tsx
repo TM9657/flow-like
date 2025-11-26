@@ -10,6 +10,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { BaseEditorKit } from "../editor/editor-base-kit";
 import { EditorKit } from "../editor/editor-kit";
+import { remarkFocusNodes } from "../editor/plugins/remark-focus-nodes";
 import { Editor, EditorContainer } from "../editor/ui/editor";
 
 /**
@@ -48,6 +49,58 @@ const splitMarkdownPreservingCodeBlocks = (markdown: string): string[] => {
 };
 
 /**
+ * Post-process Plate nodes to convert focus:// and invalid:// links to focus_node elements
+ */
+const transformFocusLinks = (nodes: any[]): any[] => {
+	return nodes.map((node) => {
+		// If this is a link with focus:// url, convert to focus_node
+		if (
+			node.type === "a" &&
+			typeof node.url === "string" &&
+			node.url.startsWith("focus://")
+		) {
+			const nodeId = node.url.replace("focus://", "");
+			// Extract text from children
+			const nodeName =
+				node.children?.map((child: any) => child.text || "").join("") || "Node";
+			return {
+				type: "focus_node",
+				nodeId,
+				nodeName,
+				isInvalid: false,
+				children: [{ text: "" }],
+			};
+		}
+		// If this is a link with invalid:// url, convert to invalid focus_node
+		if (
+			node.type === "a" &&
+			typeof node.url === "string" &&
+			node.url.startsWith("invalid://")
+		) {
+			// Extract text from children - this will be the attempted reference
+			const nodeName =
+				node.children?.map((child: any) => child.text || "").join("") ||
+				"Unknown";
+			return {
+				type: "focus_node",
+				nodeId: "",
+				nodeName,
+				isInvalid: true,
+				children: [{ text: "" }],
+			};
+		}
+		// Recursively process children
+		if (node.children && Array.isArray(node.children)) {
+			return {
+				...node,
+				children: transformFocusLinks(node.children),
+			};
+		}
+		return node;
+	});
+};
+
+/**
  * Safely deserializes content into Plate editor nodes.
  * It handles prefixed native Plate JSON, Markdown, and plain text, with fallbacks.
  */
@@ -63,7 +116,7 @@ export const safeDeserialize = (
 			const jsonString = data.substring(PLATE_JSON_PREFIX.length);
 			const nodes = JSON.parse(jsonString);
 			if (Array.isArray(nodes) && nodes.length > 0) {
-				return nodes;
+				return transformFocusLinks(nodes);
 			}
 		} catch (error) {
 			console.error(
@@ -79,7 +132,7 @@ export const safeDeserialize = (
 		try {
 			// Assuming editor.api.deserialize is a custom function, potentially JSON.parse
 			const nodes = editor.api.deserialize(data);
-			if (nodes.length > 0) return nodes;
+			if (nodes.length > 0) return transformFocusLinks(nodes);
 			return [{ type: "p", children: [{ text: data }] }];
 		} catch {
 			return [{ type: "p", children: [{ text: data }] }];
@@ -89,7 +142,7 @@ export const safeDeserialize = (
 	// 3. Handle initial markdown content.
 	try {
 		const nodes = editor.api.markdown.deserialize(data, { remarkPlugins });
-		if (nodes.length > 0) return nodes;
+		if (nodes.length > 0) return transformFocusLinks(nodes);
 		return [{ type: "p", children: [{ text: "" }] }];
 	} catch (error) {
 		console.error(
@@ -107,7 +160,7 @@ export const safeDeserialize = (
 			}
 		});
 
-		if (nodes.length > 0) return nodes;
+		if (nodes.length > 0) return transformFocusLinks(nodes);
 		return [{ type: "p", children: [{ text: data }] }];
 	}
 };
@@ -116,10 +169,12 @@ function TextEditorInner({
 	initialContent,
 	onChange,
 	isMarkdown,
+	onFocusNode,
 }: Readonly<{
 	initialContent: string;
 	onChange: (content: string) => void;
 	isMarkdown?: boolean;
+	onFocusNode?: (nodeId: string) => void;
 }>) {
 	const remarkPlugins = useMemo(
 		() => [
@@ -129,6 +184,7 @@ function TextEditorInner({
 			remarkMdx,
 			remarkMention,
 			remarkEmoji as any,
+			remarkFocusNodes,
 		],
 		[],
 	);
@@ -175,15 +231,17 @@ function TextEditorStatic({
 	initialContent,
 	isMarkdown,
 	minimal = false,
+	onFocusNode,
 }: Readonly<{
 	initialContent: string;
 	isMarkdown?: boolean;
 	minimal?: boolean;
+	onFocusNode?: (nodeId: string) => void;
 }>) {
 	const remarkPlugins = useMemo(
 		() =>
 			minimal
-				? [remarkGfm, remarkBreaks]
+				? [remarkGfm, remarkBreaks, remarkFocusNodes]
 				: [
 						remarkMath,
 						remarkGfm,
@@ -191,6 +249,7 @@ function TextEditorStatic({
 						remarkMdx,
 						remarkMention,
 						remarkEmoji as any,
+						remarkFocusNodes,
 					],
 		[minimal],
 	);
@@ -250,7 +309,23 @@ function TextEditorStatic({
 		[plugins, value],
 	);
 
-	return <PlateStatic editor={editor} className="py-0" />;
+	return (
+		<div
+			onClick={(e) => {
+				const target = e.target as HTMLElement;
+				const focusSpan = target.closest("[data-focus-node-id]");
+				if (focusSpan && onFocusNode) {
+					e.preventDefault();
+					const nodeId = focusSpan.getAttribute("data-focus-node-id");
+					if (nodeId) {
+						onFocusNode(nodeId);
+					}
+				}
+			}}
+		>
+			<PlateStatic editor={editor} className="py-0" />
+		</div>
+	);
 }
 
 type TextEditorProps = {
@@ -259,6 +334,7 @@ type TextEditorProps = {
 	isMarkdown?: boolean;
 	editable?: boolean;
 	minimal?: boolean;
+	onFocusNode?: (nodeId: string) => void;
 };
 
 export const TextEditor = memo(function TextEditor({
@@ -267,6 +343,7 @@ export const TextEditor = memo(function TextEditor({
 	isMarkdown,
 	editable = false,
 	minimal = false,
+	onFocusNode,
 }: Readonly<TextEditorProps>) {
 	if (editable && onChange) {
 		return (
@@ -276,6 +353,7 @@ export const TextEditor = memo(function TextEditor({
 					onChange(content);
 				}}
 				isMarkdown={isMarkdown}
+				onFocusNode={onFocusNode}
 			/>
 		);
 	}
@@ -284,6 +362,7 @@ export const TextEditor = memo(function TextEditor({
 			initialContent={initialContent}
 			isMarkdown={isMarkdown}
 			minimal={minimal}
+			onFocusNode={onFocusNode}
 		/>
 	);
 });

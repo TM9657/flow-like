@@ -7,6 +7,7 @@ import { BaseCodeBlockKit } from "./plugins/code-block-base-kit";
 import { BaseColumnKit } from "./plugins/column-base-kit";
 import { BaseCommentKit } from "./plugins/comment-base-kit";
 import { BaseDateKit } from "./plugins/date-base-kit";
+import { BaseFocusNodeKit } from "./plugins/focus-node-base-kit";
 import { BaseFontKit } from "./plugins/font-base-kit";
 import { BaseLineHeightKit } from "./plugins/line-height-base-kit";
 import { BaseLinkKit } from "./plugins/link-base-kit";
@@ -33,6 +34,7 @@ export const BaseEditorKit = [
 	...BaseDateKit,
 	...BaseLinkKit,
 	...BaseMentionKit,
+	...BaseFocusNodeKit,
 	...BaseBasicMarksKit,
 	...BaseFontKit,
 	...BaseListKit,

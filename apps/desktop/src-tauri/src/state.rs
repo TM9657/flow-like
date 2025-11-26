@@ -7,6 +7,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::{event_bus::EventBus, profile::UserProfile, settings::Settings};
 
+#[derive(Clone)]
 pub struct TauriFlowLikeState(pub Arc<Mutex<FlowLikeState>>);
 impl TauriFlowLikeState {
     #[inline]

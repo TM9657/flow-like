@@ -28,24 +28,39 @@ export function useCommandExecution({
 	const executeCommand = useCallback(
 		async (command: IGenericCommand, append = false): Promise<any> => {
 			const backend = useBackendStore.getState().backend;
-			if (!backend) return;
+			if (!backend) {
+				console.error("[executeCommand] No backend available");
+				toastError("Backend not initialized", <XIcon />);
+				return;
+			}
 			if (typeof version !== "undefined") {
+				console.error("[executeCommand] Cannot modify old version:", version);
 				toastError("Cannot change old version", <XIcon />);
 				return;
 			}
-			const result = await backend.boardState.executeCommand(
-				appId,
-				boardId,
-				command,
-			);
-			await pushCommand(result, append);
-			await board.refetch();
 
-			if (awarenessRef.current) {
-				awarenessRef.current.setLocalStateField("boardUpdate", Date.now());
+			console.log("[executeCommand] Executing:", command.command_type, command);
+
+			try {
+				const result = await backend.boardState.executeCommand(
+					appId,
+					boardId,
+					command,
+				);
+				console.log("[executeCommand] Success:", command.command_type, result);
+				await pushCommand(result, append);
+				await board.refetch();
+
+				if (awarenessRef.current) {
+					awarenessRef.current.setLocalStateField("boardUpdate", Date.now());
+				}
+
+				return result;
+			} catch (error) {
+				console.error("[executeCommand] Failed:", command.command_type, error);
+				toastError(`Command failed: ${error}`, <XIcon />);
+				throw error;
 			}
-
-			return result;
 		},
 		[board.refetch, appId, boardId, pushCommand, version],
 	);
@@ -53,25 +68,37 @@ export function useCommandExecution({
 	const executeCommands = useCallback(
 		async (commands: IGenericCommand[]) => {
 			const backend = useBackendStore.getState().backend;
-			if (!backend) return;
+			if (!backend) {
+				console.error("[executeCommands] No backend available");
+				toastError("Backend not initialized", <XIcon />);
+				return;
+			}
 			if (typeof version !== "undefined") {
+				console.error("[executeCommands] Cannot modify old version:", version);
 				toastError("Cannot change old version", <XIcon />);
 				return;
 			}
 			if (commands.length === 0) return;
-			const result = await backend.boardState.executeCommands(
-				appId,
-				boardId,
-				commands,
-			);
-			await pushCommands(result);
-			await board.refetch();
 
-			if (awarenessRef.current) {
-				awarenessRef.current.setLocalStateField("boardUpdate", Date.now());
+			try {
+				const result = await backend.boardState.executeCommands(
+					appId,
+					boardId,
+					commands,
+				);
+				await pushCommands(result);
+				await board.refetch();
+
+				if (awarenessRef.current) {
+					awarenessRef.current.setLocalStateField("boardUpdate", Date.now());
+				}
+
+				return result;
+			} catch (error) {
+				console.error("[executeCommands] Failed:", error);
+				toastError(`Commands failed: ${error}`, <XIcon />);
+				throw error;
 			}
-
-			return result;
 		},
 		[board.refetch, appId, boardId, pushCommands, version],
 	);

@@ -11,6 +11,7 @@ import {
 	TriangleAlertIcon,
 } from "lucide-react";
 import {
+	type ReactNode,
 	type RefObject,
 	memo,
 	useCallback,
@@ -24,13 +25,7 @@ import "react-virtualized/styles.css";
 import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
 import { VariableSizeList as List, type VariableSizeList } from "react-window";
 import { toast } from "sonner";
-import {
-	type IBoard,
-	type ILog,
-	type INode,
-	useBackend,
-	useInfiniteInvoke,
-} from "../..";
+import { type IBoard, type ILog, useBackend, useInfiniteInvoke } from "../..";
 import { parseTimespan } from "../../lib/date";
 import { logLevelToNumber } from "../../lib/log-level";
 import { ILogLevel, type ILogMessage } from "../../lib/schema/flow/run";
@@ -39,6 +34,11 @@ import { DynamicImage, EmptyState } from "../ui";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import {
+	ResizableHandle,
+	ResizablePanel,
+	ResizablePanelGroup,
+} from "../ui/resizable";
 import { TextEditor } from "../ui/text-editor";
 
 interface IEnrichedLogMessage extends ILogMessage {
@@ -50,10 +50,12 @@ export function Traces({
 	boardId,
 	board,
 	onFocusNode,
+	copilotPanel,
 }: Readonly<{
 	appId: string;
 	boardId: string;
 	board: RefObject<IBoard | undefined>;
+	copilotPanel?: ReactNode;
 	onFocusNode: (nodeId: string) => void;
 }>) {
 	const backend = useBackend();
@@ -209,87 +211,96 @@ export function Traces({
 	}
 
 	return (
-		<div
-			className={
-				"transition-all top-0 bottom-0 right-0 h-[calc(100%)] z-10 bg-background border rounded-lg flex flex-col p-2 w-full"
-			}
-		>
-			<div className="flex flex-row items-stretch overflow-hidden grow h-full">
-				<div className="ml-2 flex flex-col w-full gap-1 overflow-x-hidden max-h-full grow h-full">
-					<div className="w-full flex flex-row items-center justify-between my-1">
-						<div className="flex flex-row items-center gap-1">
-							<LogFilterBadge
-								level={ILogLevel.Debug}
-								label="Debug"
-								logFilter={logFilter}
-								toggleLogFilter={toggleLogFilter}
-							/>
-							<LogFilterBadge
-								level={ILogLevel.Info}
-								label="Info"
-								logFilter={logFilter}
-								toggleLogFilter={toggleLogFilter}
-							/>
-							<LogFilterBadge
-								level={ILogLevel.Warn}
-								label="Warning"
-								logFilter={logFilter}
-								toggleLogFilter={toggleLogFilter}
-							/>
-							<LogFilterBadge
-								level={ILogLevel.Error}
-								label="Error"
-								logFilter={logFilter}
-								toggleLogFilter={toggleLogFilter}
-							/>
-							<LogFilterBadge
-								level={ILogLevel.Fatal}
-								label="Fatal"
-								logFilter={logFilter}
-								toggleLogFilter={toggleLogFilter}
-							/>
-						</div>
+		<ResizablePanelGroup direction="horizontal" className="h-full w-full">
+			<ResizablePanel defaultSize={copilotPanel ? 60 : 100} minSize={30}>
+				<div className="transition-all h-full z-10 bg-background border rounded-lg flex flex-col w-full overflow-hidden">
+					<div className="flex flex-col h-full p-2">
+						<div className="w-full flex flex-row items-center justify-between my-1 px-2">
+							<div className="flex flex-row items-center gap-1">
+								<LogFilterBadge
+									level={ILogLevel.Debug}
+									label="Debug"
+									logFilter={logFilter}
+									toggleLogFilter={toggleLogFilter}
+								/>
+								<LogFilterBadge
+									level={ILogLevel.Info}
+									label="Info"
+									logFilter={logFilter}
+									toggleLogFilter={toggleLogFilter}
+								/>
+								<LogFilterBadge
+									level={ILogLevel.Warn}
+									label="Warning"
+									logFilter={logFilter}
+									toggleLogFilter={toggleLogFilter}
+								/>
+								<LogFilterBadge
+									level={ILogLevel.Error}
+									label="Error"
+									logFilter={logFilter}
+									toggleLogFilter={toggleLogFilter}
+								/>
+								<LogFilterBadge
+									level={ILogLevel.Fatal}
+									label="Fatal"
+									logFilter={logFilter}
+									toggleLogFilter={toggleLogFilter}
+								/>
+							</div>
 
-						<div className="flex flex-row items-stretch">
-							<Input
-								value={search}
-								onChange={(e) => setSearch(e.target.value)}
-								placeholder="Search..."
-							/>
+							<div className="flex flex-row items-center gap-2">
+								<Input
+									value={search}
+									onChange={(e) => setSearch(e.target.value)}
+									placeholder="Search..."
+									className="w-32 md:w-48"
+								/>
+							</div>
 						</div>
-					</div>
-					<div className="flex flex-col w-full gap-1 overflow-x-auto max-h-full grow h-full">
-						{(messages?.length ?? 0) === 0 && (
-							<EmptyState
-								className="h-full w-full max-w-full"
-								icons={[LogsIcon, ScrollIcon, CheckCircle2Icon]}
-								description="No logs found yet, start an event to see your results here!"
-								title="No Logs"
-							/>
-						)}
-						{(messages?.length ?? 0) > 0 && (
-							<AutoSizer
-								className="h-full grow flex flex-col min-h-full"
-								disableWidth
-							>
-								{({ height, width }) => (
-									<List
-										className="log-container h-full grow flex flex-col"
-										height={height}
-										itemCount={(messages?.length ?? 0) + (hasNextPage ? 1 : 0)}
-										itemSize={getRowHeight}
-										ref={listRef}
-										width={width}
-									>
-										{renderItem}
-									</List>
-								)}
-							</AutoSizer>
-						)}
+						<div className="flex flex-col w-full gap-1 overflow-x-auto flex-1 min-h-0 px-2">
+							{(messages?.length ?? 0) === 0 && (
+								<EmptyState
+									className="h-full w-full max-w-full"
+									icons={[LogsIcon, ScrollIcon, CheckCircle2Icon]}
+									description="No logs found yet, start an event to see your results here!"
+									title="No Logs"
+								/>
+							)}
+							{(messages?.length ?? 0) > 0 && (
+								<AutoSizer
+									className="h-full grow flex flex-col min-h-full"
+									disableWidth
+								>
+									{({ height, width }) => (
+										<List
+											className="log-container h-full grow flex flex-col"
+											height={height}
+											itemCount={
+												(messages?.length ?? 0) + (hasNextPage ? 1 : 0)
+											}
+											itemSize={getRowHeight}
+											ref={listRef}
+											width={width}
+										>
+											{renderItem}
+										</List>
+									)}
+								</AutoSizer>
+							)}
+						</div>
 					</div>
 				</div>
-			</div>
-		</div>
+			</ResizablePanel>
+			{copilotPanel && (
+				<>
+					<ResizableHandle withHandle />
+					<ResizablePanel defaultSize={40} minSize={25} maxSize={50}>
+						{copilotPanel}
+					</ResizablePanel>
+				</>
+			)}
+		</ResizablePanelGroup>
 	);
 }
 
@@ -308,15 +319,15 @@ const LogMessage = memo(function LogMessage({
 	onSetHeight: (index: number, height: number) => void;
 	onSelectNode: (nodeId: string) => void;
 }>) {
-	const [node, setNode] = useState<INode | undefined>();
 	const rowRef = useRef<HTMLDivElement>(null);
 
-	useEffect(() => {
-		if (log.node_id) {
-			const node = board.current?.nodes[log.node_id];
-			setNode(node);
+	// Use useMemo instead of useState + useEffect to avoid re-renders
+	const node = useMemo(() => {
+		if (log.node_id && board.current) {
+			return board.current.nodes[log.node_id];
 		}
-	}, [log.node_id, board]);
+		return undefined;
+	}, [log.node_id, board.current?.nodes]);
 
 	useEffect(() => {
 		if (rowRef.current) {
@@ -411,7 +422,7 @@ const LogMessage = memo(function LogMessage({
 });
 
 function logLevelToColor(logLevel: ILogLevel, icon = false) {
-	const colors: Record<number, { base: string; icon: string }> = {
+	const colors: Record<ILogLevel, { base: string; icon: string }> = {
 		[ILogLevel.Debug]: {
 			base: "bg-muted/20 text-muted-foreground",
 			icon: "bg-muted-foreground",

@@ -22,16 +22,19 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
       class="absolute inset-0 [mask-image:radial-gradient(70%_70%_at_50%_40%,black,transparent)] bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"
     >
     </div>
+    <!-- Animated glow orbs -->
+    <div class="ztp-glow ztp-glow-1"></div>
+    <div class="ztp-glow ztp-glow-2"></div>
   </div>
 
   <div class="relative z-10">
     <!-- Headline -->
     <div class="mx-auto max-w-4xl text-center reveal">
       <div
-        class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-primary mb-6"
+        class="inline-flex items-center gap-2.5 rounded-full border border-primary/30 bg-primary/10 backdrop-blur-xl px-5 py-2.5 text-sm font-semibold text-primary mb-8 shadow-[0_0_30px_-8px_hsl(var(--primary)/.4)] hover:shadow-[0_0_40px_-5px_hsl(var(--primary)/.5)] transition-all duration-500 group"
       >
-        <div class="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
-        Prototype → Ship
+        <span class="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.6)]"></span>
+        <span>Prototype → Ship</span>
       </div>
 
       <h2
@@ -97,61 +100,54 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
     <div class="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       <!-- 1 -->
       <article
-        class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300 reveal"
+        class="ztp-card group reveal"
       >
+        <div class="ztp-card-glow ztp-card-glow-primary"></div>
         <div class="relative z-10">
           <div
-            class="w-12 h-12 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center mb-4"
+            class="w-12 h-12 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-primary/20"
           >
             <LuCircleCheck className="w-6 h-6 text-primary-foreground" />
           </div>
-          <h3 class="text-xl font-semibold mb-3">Ready to ship by default</h3>
+          <h3 class="text-xl font-bold mb-3">Ready to ship by default</h3>
           <p class="text-muted-foreground leading-relaxed">
             Checks catch broken connections and mismatched data before you run.
             Flows stay shippable as they evolve — not just demo-ready.
           </p>
         </div>
-        <div
-          aria-hidden="true"
-          class="absolute -top-16 -left-16 size-32 rounded-full bg-primary/15 blur-3xl group-hover:translate-x-4 group-hover:translate-y-4 transition-transform"
-        >
-        </div>
       </article>
 
       <!-- 2 -->
       <article
-        class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300 reveal"
+        class="ztp-card group reveal"
       >
+        <div class="ztp-card-glow ztp-card-glow-secondary"></div>
         <div class="relative z-10">
           <div
-            class="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center mb-4"
+            class="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-secondary/20"
           >
             <LuZap className="w-6 h-6 text-secondary-foreground" />
           </div>
-          <h3 class="text-xl font-semibold mb-3">Change with confidence</h3>
+          <h3 class="text-xl font-bold mb-3">Change with confidence</h3>
           <p class="text-muted-foreground leading-relaxed">
             When something changes, Flow-Like shows what changed and whether it
             still fits. Review diffs, keep contracts intact, and avoid breakage.
           </p>
         </div>
-        <div
-          aria-hidden="true"
-          class="absolute -bottom-16 -right-16 size-32 rounded-full bg-secondary/15 blur-3xl group-hover:-translate-x-4 group-hover:-translate-y-4 transition-transform"
-        >
-        </div>
       </article>
 
       <!-- 3 -->
       <article
-        class="group relative overflow-hidden rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm p-8 hover:bg-card/60 transition-all duration-300 md:col-span-2 lg:col-span-1 reveal"
+        class="ztp-card group reveal md:col-span-2 lg:col-span-1"
       >
+        <div class="ztp-card-glow ztp-card-glow-tertiary"></div>
         <div class="relative z-10">
           <div
-            class="w-12 h-12 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-xl flex items-center justify-center mb-4"
+            class="w-12 h-12 bg-gradient-to-br from-tertiary to-tertiary/60 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-tertiary/20"
           >
             <LuTrendingUp className="w-6 h-6 text-tertiary-foreground" />
           </div>
-          <h3 class="text-xl font-semibold mb-3">Predictable in production</h3>
+          <h3 class="text-xl font-bold mb-3">Predictable in production</h3>
           <p class="text-muted-foreground leading-relaxed">
             Each step records inputs and outputs, so issues are easy to spot as
             traffic grows. Runs stay steady and explainable — no <span
@@ -159,11 +155,6 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
               >black-boxes</span
             >.
           </p>
-        </div>
-        <div
-          aria-hidden="true"
-          class="absolute top-1/2 -translate-y-1/2 -left-20 size-32 rounded-full bg-tertiary/15 blur-3xl group-hover:translate-x-3 transition-transform"
-        >
         </div>
       </article>
     </div>
@@ -227,6 +218,88 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
       --c1: attr(data-c1);
       --c2: attr(data-c2);
     }
+
+    /* Background glows - BIGGER */
+    .ztp-glow {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.4;
+      animation: ztp-float 12s ease-in-out infinite;
+    }
+
+    .ztp-glow-1 {
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, hsl(var(--primary) / 0.5) 0%, transparent 60%);
+      top: 0%;
+      left: 5%;
+    }
+
+    .ztp-glow-2 {
+      width: 550px;
+      height: 550px;
+      background: radial-gradient(circle, hsl(var(--secondary) / 0.4) 0%, transparent 60%);
+      bottom: 5%;
+      right: 5%;
+      animation-delay: 6s;
+    }
+
+    @keyframes ztp-float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(30px, -25px) scale(1.1); }
+      66% { transform: translate(-20px, 15px) scale(0.92); }
+    }
+
+    /* Feature cards - more dramatic */
+    .ztp-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 1.5rem;
+      border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+      background: linear-gradient(
+        135deg,
+        color-mix(in oklch, var(--card) 90%, transparent),
+        color-mix(in oklch, var(--card) 60%, transparent)
+      );
+      backdrop-filter: blur(24px);
+      padding: 2rem;
+      transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .ztp-card:hover {
+      transform: translateY(-8px) scale(1.02);
+      border-color: color-mix(in oklch, var(--primary) 50%, transparent);
+      box-shadow:
+        0 30px 80px -20px rgba(0, 0, 0, 0.35),
+        0 0 60px -20px hsl(var(--primary) / 0.3);
+    }
+
+    /* Card hover glows - stronger */
+    .ztp-card-glow {
+      position: absolute;
+      inset: -2px;
+      border-radius: inherit;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+
+    .ztp-card:hover .ztp-card-glow {
+      opacity: 1;
+    }
+
+    .ztp-card-glow-primary {
+      background: radial-gradient(circle at 20% 20%, hsl(var(--primary) / 0.2) 0%, transparent 55%);
+    }
+
+    .ztp-card-glow-secondary {
+      background: radial-gradient(circle at 80% 80%, hsl(var(--secondary) / 0.2) 0%, transparent 55%);
+    }
+
+    .ztp-card-glow-tertiary {
+      background: radial-gradient(circle at 20% 50%, hsl(var(--tertiary) / 0.2) 0%, transparent 55%);
+    }
+
     /* reveal animation */
     #typed .reveal {
       opacity: 0;
@@ -262,6 +335,11 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
       /* mirror group-hover:bg-black/10 and group-hover:text-black */
       background-color: rgba(0,0,0,0.10);
       color: #000;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .ztp-glow { animation: none; }
+      .ztp-card { transition: none; }
     }
   </style>
 </section>
