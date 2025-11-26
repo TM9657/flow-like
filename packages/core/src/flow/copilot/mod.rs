@@ -604,9 +604,10 @@ impl Copilot {
 **Modify**: emit_commands (execute graph changes)
 
 ## Key Rules
-1. Reference nodes using <focus_node>ID</focus_node> with the EXACT node ID from context (cuid2 format, e.g. "tz4a98xxat96...")
-2. NEVER use node names or types in focus_node tags - only the exact ID strings from the graph context
-3. Use pin `n` (name) in commands for pin connections
+1. Reference nodes: <focus_node>ID</focus_node> - put ONLY the node ID between tags, nothing else
+2. Node IDs are cuid2 format (lowercase alphanumeric, 24+ chars, e.g. "tz4a98xxat96ipl6cg5ebkj1")
+3. WRONG: <focus_node node_id="..."> or <focus_node>Node Name</focus_node> - these will NOT work
+4. Use pin `n` (name) in commands for pin connections
 4. Connect compatible types only (check t=type from catalog)
 5. New nodes need ref_id ("$0", "$1"...) for subsequent connections
 6. Connect execution flow: exec_out → exec_in

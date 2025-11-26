@@ -18,7 +18,7 @@ import {
 	WrenchIcon,
 	XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../ui/button";
 import {
@@ -675,7 +675,7 @@ ${input}`;
 	);
 }
 
-// Embedded view component
+// Embedded view component - memoized to prevent re-renders
 interface EmbeddedViewProps {
 	messages: Message[];
 	input: string;
@@ -711,7 +711,7 @@ interface EmbeddedViewProps {
 	handleKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 }
 
-function EmbeddedView({
+const EmbeddedView = memo(function EmbeddedView({
 	messages,
 	input,
 	setInput,
@@ -991,9 +991,9 @@ function EmbeddedView({
 			</div>
 		</motion.div>
 	);
-}
+});
 
-// Floating panel view component
+// Floating panel view component - memoized to prevent re-renders
 interface FloatingPanelViewProps extends EmbeddedViewProps {
 	autocompleteEnabled: boolean;
 	setAutocompleteEnabled: (value: boolean) => void;
@@ -1001,7 +1001,7 @@ interface FloatingPanelViewProps extends EmbeddedViewProps {
 	mode: "chat" | "autocomplete";
 }
 
-function FloatingPanelView({
+const FloatingPanelView = memo(function FloatingPanelView({
 	messages,
 	input,
 	setInput,
@@ -1358,9 +1358,9 @@ function FloatingPanelView({
 			</div>
 		</motion.div>
 	);
-}
+});
 
-// Messages area component
+// Messages area component - memoized to prevent re-renders during streaming
 interface MessagesAreaProps {
 	messages: Message[];
 	loading: boolean;
@@ -1378,7 +1378,7 @@ interface MessagesAreaProps {
 	embedded: boolean;
 }
 
-function MessagesArea({
+const MessagesArea = memo(function MessagesArea({
 	messages,
 	loading,
 	planSteps,
@@ -1394,11 +1394,19 @@ function MessagesArea({
 	setInput,
 	embedded,
 }: MessagesAreaProps) {
-	const textSize = embedded ? "text-[10px]" : "text-sm";
-	const smallTextSize = embedded ? "text-[10px]" : "text-xs";
-	const iconSize = embedded ? "w-2.5 h-2.5" : "w-3 h-3";
-	const padding = embedded ? "p-2.5" : "p-3.5";
-	const borderRadius = embedded ? "rounded-xl" : "rounded-2xl";
+	// Memoize computed styles to prevent recalculation on every render
+	const styles = useMemo(
+		() => ({
+			textSize: embedded ? "text-[10px]" : "text-sm",
+			smallTextSize: embedded ? "text-[10px]" : "text-xs",
+			iconSize: embedded ? "w-2.5 h-2.5" : "w-3 h-3",
+			padding: embedded ? "p-2.5" : "p-3.5",
+			borderRadius: embedded ? "rounded-xl" : "rounded-2xl",
+		}),
+		[embedded],
+	);
+
+	const { textSize, smallTextSize, iconSize, padding, borderRadius } = styles;
 
 	if (messages.length === 0) {
 		return (
@@ -1616,7 +1624,7 @@ function MessagesArea({
 									{m.executedCommands.map((cmd, cmdIndex) => (
 										<div
 											key={cmdIndex}
-											className={`${smallTextSize} bg-green-500/10 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded flex items-center gap-1 max-w-full overflow-hidden`}
+											className={`${smallTextSize} bg-green-500/10 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded flex items-center gap-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap`}
 											title={cmd.summary || cmd.command_type}
 										>
 											<span className="shrink-0">
@@ -1721,4 +1729,4 @@ function MessagesArea({
 				)}
 		</>
 	);
-}
+});

@@ -8,6 +8,34 @@ import { SlateElement } from "platejs";
 export function LinkElementStatic(props: SlateElementProps<TLinkElement>) {
 	const url = props.element.url;
 
+	// Check if this is an invalid node reference
+	if (typeof url === "string" && url.startsWith("invalid://")) {
+		return (
+			<span
+				className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 text-xs font-medium text-muted-foreground bg-muted/50 rounded-md border border-border/50 cursor-default"
+				title="Node not found in current flow"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="12"
+					height="12"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					strokeWidth="2"
+					strokeLinecap="round"
+					strokeLinejoin="round"
+					className="shrink-0 opacity-50"
+				>
+					<circle cx="12" cy="12" r="10" />
+					<line x1="12" y1="8" x2="12" y2="12" />
+					<line x1="12" y1="16" x2="12.01" y2="16" />
+				</svg>
+				{props.children}
+			</span>
+		);
+	}
+
 	// Check if this is a focus node link
 	if (typeof url === "string" && url.startsWith("focus://")) {
 		const nodeId = url.replace("focus://", "");

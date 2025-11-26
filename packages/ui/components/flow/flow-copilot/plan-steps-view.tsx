@@ -14,7 +14,7 @@ import {
 	XCircleIcon,
 	ZapIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 
 import {
 	Collapsible,
@@ -90,16 +90,28 @@ function getToolLabel(toolName?: string) {
 	}
 }
 
-export function PlanStepsView({ steps }: PlanStepsViewProps) {
+export const PlanStepsView = memo(function PlanStepsView({
+	steps,
+}: PlanStepsViewProps) {
 	const [expanded, setExpanded] = useState(false);
+	const toggleExpanded = useCallback((open: boolean) => setExpanded(open), []);
+
+	// Memoize computed values
+	const { completedCount, progress, currentStep, historySteps } =
+		useMemo(() => {
+			const completed = steps.filter((s) => s.status === "Completed").length;
+			const current =
+				steps.findLast((s) => s.status === "InProgress") ||
+				steps[steps.length - 1];
+			return {
+				completedCount: completed,
+				progress: steps.length > 0 ? (completed / steps.length) * 100 : 0,
+				currentStep: current,
+				historySteps: steps.filter((s) => s.id !== current?.id),
+			};
+		}, [steps]);
 
 	if (steps.length === 0) return null;
-
-	const completedCount = steps.filter((s) => s.status === "Completed").length;
-	const progress = steps.length > 0 ? (completedCount / steps.length) * 100 : 0;
-
-	const currentStep =
-		steps.findLast((s) => s.status === "InProgress") || steps[steps.length - 1];
 
 	return (
 		<motion.div
@@ -147,11 +159,11 @@ export function PlanStepsView({ steps }: PlanStepsViewProps) {
 							}}
 						/>
 					)}
-					<div className="relative p-3 flex items-start gap-2.5">
+					<div className="relative p-3 flex items-start gap-2.5 max-w-full overflow-hidden">
 						<div className="shrink-0 mt-0.5">
 							{getStatusIcon(currentStep.status)}
 						</div>
-						<div className="flex-1 min-w-0">
+						<div className="flex-1 min-w-0 overflow-hidden">
 							{currentStep.tool_name === "think" ? (
 								<Collapsible defaultOpen={currentStep.status === "InProgress"}>
 									<CollapsibleTrigger className="flex items-center gap-2 w-full text-left group">
@@ -170,7 +182,7 @@ export function PlanStepsView({ steps }: PlanStepsViewProps) {
 									</CollapsibleContent>
 								</Collapsible>
 							) : (
-								<div className="flex items-center gap-2">
+								<div className="flex items-center gap-2 min-w-0">
 									<span className="text-xs font-medium text-foreground truncate">
 										{currentStep.description}
 									</span>
@@ -191,7 +203,7 @@ export function PlanStepsView({ steps }: PlanStepsViewProps) {
 
 			{/* Expandable history */}
 			{steps.length > 1 && (
-				<Collapsible open={expanded} onOpenChange={setExpanded}>
+				<Collapsible open={expanded} onOpenChange={toggleExpanded}>
 					<CollapsibleTrigger className="flex items-center gap-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full py-1">
 						<ChevronDown
 							className={`w-3 h-3 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
@@ -203,23 +215,23 @@ export function PlanStepsView({ steps }: PlanStepsViewProps) {
 					</CollapsibleTrigger>
 					<CollapsibleContent>
 						<div className="mt-2 space-y-1.5 pl-1">
-							{steps
-								.filter((s) => s.id !== currentStep?.id)
-								.map((step) => (
-									<motion.div
-										key={step.id}
-										initial={{ opacity: 0 }}
-										animate={{ opacity: 1 }}
-										className="flex items-center gap-2 text-[11px] text-muted-foreground py-1"
-									>
-										{getStatusIcon(step.status)}
-										<span className="truncate flex-1">{step.description}</span>
-									</motion.div>
-								))}
+							{historySteps.map((step) => (
+								<motion.div
+									key={step.id}
+									initial={{ opacity: 0 }}
+									animate={{ opacity: 1 }}
+									className="flex items-center gap-2 text-[11px] text-muted-foreground py-1 max-w-full"
+								>
+									{getStatusIcon(step.status)}
+									<span className="truncate flex-1 min-w-0">
+										{step.description}
+									</span>
+								</motion.div>
+							))}
 						</div>
 					</CollapsibleContent>
 				</Collapsible>
 			)}
 		</motion.div>
 	);
-}
+});

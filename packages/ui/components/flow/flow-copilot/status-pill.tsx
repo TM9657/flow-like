@@ -8,6 +8,7 @@ import {
 	SearchIcon,
 	SparklesIcon,
 } from "lucide-react";
+import { memo, useMemo } from "react";
 
 import type { LoadingPhase, LoadingPhaseInfo } from "./types";
 
@@ -49,8 +50,12 @@ interface StatusPillProps {
 	elapsed: number;
 }
 
-export function StatusPill({ phase, elapsed }: StatusPillProps) {
-	const phaseInfo = LOADING_PHASES[phase];
+export const StatusPill = memo(function StatusPill({
+	phase,
+	elapsed,
+}: StatusPillProps) {
+	const phaseInfo = useMemo(() => LOADING_PHASES[phase], [phase]);
+
 	return (
 		<motion.div
 			initial={{ opacity: 0, scale: 0.9 }}
@@ -75,4 +80,4 @@ export function StatusPill({ phase, elapsed }: StatusPillProps) {
 			)}
 		</motion.div>
 	);
-}
+});

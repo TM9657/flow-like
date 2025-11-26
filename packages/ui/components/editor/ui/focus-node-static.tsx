@@ -8,6 +8,7 @@ export interface TFocusNodeElement {
 	type: "focus_node";
 	nodeId: string;
 	nodeName: string;
+	isInvalid?: boolean;
 	children: [{ text: "" }];
 	[key: string]: unknown;
 }
@@ -15,8 +16,61 @@ export interface TFocusNodeElement {
 export function FocusNodeElementStatic(
 	props: SlateElementProps<TFocusNodeElement>,
 ) {
-	const { nodeId, nodeName } = props.element;
+	const { nodeId, nodeName, isInvalid } = props.element;
 
+	// Invalid node - show gray muted badge
+	if (isInvalid) {
+		return (
+			<SlateElement
+				{...props}
+				as="span"
+				className="
+					inline-flex items-center gap-1.5
+					px-1 pr-2 py-0.5
+					-my-0.5 mx-0.5
+					align-baseline
+					text-xs font-medium tracking-tight
+					text-muted-foreground
+					bg-muted/60
+					rounded-full
+					border border-border/60
+					shadow-sm
+					cursor-default
+					select-none
+				"
+				attributes={{
+					...props.attributes,
+					title: "Node not found in current flow",
+				}}
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="11"
+					height="11"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					strokeWidth="2"
+					strokeLinecap="round"
+					strokeLinejoin="round"
+					className="shrink-0 opacity-60"
+				>
+					<circle cx="12" cy="12" r="10" />
+					<line x1="12" y1="8" x2="12" y2="12" />
+					<line x1="12" y1="16" x2="12.01" y2="16" />
+				</svg>
+				<span
+					contentEditable={false}
+					className="leading-none line-through opacity-70"
+				>
+					{nodeName}
+				</span>
+				{props.children}
+			</SlateElement>
+		);
+	}
+
+	// Valid node - show purple gradient badge
 	return (
 		<SlateElement
 			{...props}

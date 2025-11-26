@@ -49,7 +49,7 @@ const splitMarkdownPreservingCodeBlocks = (markdown: string): string[] => {
 };
 
 /**
- * Post-process Plate nodes to convert focus:// links to focus_node elements
+ * Post-process Plate nodes to convert focus:// and invalid:// links to focus_node elements
  */
 const transformFocusLinks = (nodes: any[]): any[] => {
 	return nodes.map((node) => {
@@ -67,6 +67,25 @@ const transformFocusLinks = (nodes: any[]): any[] => {
 				type: "focus_node",
 				nodeId,
 				nodeName,
+				isInvalid: false,
+				children: [{ text: "" }],
+			};
+		}
+		// If this is a link with invalid:// url, convert to invalid focus_node
+		if (
+			node.type === "a" &&
+			typeof node.url === "string" &&
+			node.url.startsWith("invalid://")
+		) {
+			// Extract text from children - this will be the attempted reference
+			const nodeName =
+				node.children?.map((child: any) => child.text || "").join("") ||
+				"Unknown";
+			return {
+				type: "focus_node",
+				nodeId: "",
+				nodeName,
+				isInvalid: true,
 				children: [{ text: "" }],
 			};
 		}

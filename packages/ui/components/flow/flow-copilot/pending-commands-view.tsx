@@ -11,7 +11,7 @@ import {
 	XCircleIcon,
 	XIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 
 import { Button } from "../../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
@@ -26,7 +26,7 @@ interface PendingCommandsViewProps {
 	onDismiss: () => void;
 }
 
-export function PendingCommandsView({
+export const PendingCommandsView = memo(function PendingCommandsView({
 	commands,
 	onExecute,
 	onExecuteSingle,
@@ -35,18 +35,20 @@ export function PendingCommandsView({
 	const [expanded, setExpanded] = useState(false);
 	const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-	if (commands.length === 0) return null;
+	const toggleExpanded = useCallback(() => setExpanded((prev) => !prev), []);
 
-	const addCount = commands.filter((c) => c.command_type === "AddNode").length;
-	const connectCount = commands.filter(
-		(c) => c.command_type === "ConnectPins",
-	).length;
-	const updateCount = commands.filter(
-		(c) => c.command_type === "UpdateNodePin",
-	).length;
-	const removeCount = commands.filter(
-		(c) => c.command_type === "RemoveNode",
-	).length;
+	// Memoize command counts to avoid recalculation on every render
+	const commandCounts = useMemo(
+		() => ({
+			add: commands.filter((c) => c.command_type === "AddNode").length,
+			connect: commands.filter((c) => c.command_type === "ConnectPins").length,
+			update: commands.filter((c) => c.command_type === "UpdateNodePin").length,
+			remove: commands.filter((c) => c.command_type === "RemoveNode").length,
+		}),
+		[commands],
+	);
+
+	if (commands.length === 0) return null;
 
 	return (
 		<motion.div
@@ -95,7 +97,7 @@ export function PendingCommandsView({
 										size="sm"
 										variant="ghost"
 										className="h-8 w-8 p-0 rounded-lg hover:bg-background/60"
-										onClick={() => setExpanded(!expanded)}
+										onClick={toggleExpanded}
 									>
 										<ChevronDown
 											className={`w-4 h-4 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
@@ -136,17 +138,17 @@ export function PendingCommandsView({
 
 					{/* Command type badges */}
 					<div className="flex flex-wrap gap-1.5">
-						{addCount > 0 && (
+						{commandCounts.add > 0 && (
 							<motion.span
 								initial={{ scale: 0 }}
 								animate={{ scale: 1 }}
 								className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-500/15 text-green-600 dark:text-green-400 border border-green-500/20"
 							>
 								<PlusCircleIcon className="w-3 h-3" />
-								{addCount} node{addCount > 1 ? "s" : ""}
+								{commandCounts.add} node{commandCounts.add > 1 ? "s" : ""}
 							</motion.span>
 						)}
-						{connectCount > 0 && (
+						{commandCounts.connect > 0 && (
 							<motion.span
 								initial={{ scale: 0 }}
 								animate={{ scale: 1 }}
@@ -154,10 +156,11 @@ export function PendingCommandsView({
 								className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20"
 							>
 								<LinkIcon className="w-3 h-3" />
-								{connectCount} connection{connectCount > 1 ? "s" : ""}
+								{commandCounts.connect} connection
+								{commandCounts.connect > 1 ? "s" : ""}
 							</motion.span>
 						)}
-						{updateCount > 0 && (
+						{commandCounts.update > 0 && (
 							<motion.span
 								initial={{ scale: 0 }}
 								animate={{ scale: 1 }}
@@ -165,10 +168,11 @@ export function PendingCommandsView({
 								className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/20"
 							>
 								<PencilIcon className="w-3 h-3" />
-								{updateCount} update{updateCount > 1 ? "s" : ""}
+								{commandCounts.update} update
+								{commandCounts.update > 1 ? "s" : ""}
 							</motion.span>
 						)}
-						{removeCount > 0 && (
+						{commandCounts.remove > 0 && (
 							<motion.span
 								initial={{ scale: 0 }}
 								animate={{ scale: 1 }}
@@ -176,7 +180,8 @@ export function PendingCommandsView({
 								className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/20"
 							>
 								<XCircleIcon className="w-3 h-3" />
-								{removeCount} removal{removeCount > 1 ? "s" : ""}
+								{commandCounts.remove} removal
+								{commandCounts.remove > 1 ? "s" : ""}
 							</motion.span>
 						)}
 					</div>
@@ -229,4 +234,4 @@ export function PendingCommandsView({
 			</AnimatePresence>
 		</motion.div>
 	);
-}
+});
