@@ -4,10 +4,20 @@ export type AgentType = "Explain" | "Edit";
 /// Role in the chat conversation
 export type ChatRole = "User" | "Assistant";
 
+/// An image attachment in a chat message
+export interface ChatImage {
+	/** Base64-encoded image data (without data URL prefix) */
+	data: string;
+	/** MIME type (e.g., "image/png", "image/jpeg") */
+	media_type: string;
+}
+
 /// A message in the chat history
 export interface ChatMessage {
 	role: ChatRole;
 	content: string;
+	/** Optional images attached to this message (for vision models) */
+	images?: ChatImage[];
 }
 
 export interface Suggestion {
@@ -22,6 +32,23 @@ export interface Suggestion {
 	}>;
 }
 
+/// Pin definition for placeholder nodes
+export interface PlaceholderPinDef {
+	name: string; // Internal name for the pin
+	friendly_name: string; // Display name for the pin
+	description?: string;
+	pin_type: "Input" | "Output";
+	data_type:
+		| "String"
+		| "Integer"
+		| "Float"
+		| "Boolean"
+		| "Struct"
+		| "Generic"
+		| "Execution";
+	value_type?: "Normal" | "Array" | "HashMap" | "HashSet";
+}
+
 /// Commands that can be executed on the board
 export type BoardCommand =
 	| {
@@ -30,6 +57,14 @@ export type BoardCommand =
 			ref_id?: string; // Reference ID for this node (e.g., "$0", "$1") used in connections
 			position?: { x: number; y: number };
 			friendly_name?: string;
+			summary?: string;
+	  }
+	| {
+			command_type: "AddPlaceholder";
+			name: string;
+			ref_id?: string;
+			position?: { x: number; y: number };
+			pins?: PlaceholderPinDef[];
 			summary?: string;
 	  }
 	| { command_type: "RemoveNode"; node_id: string; summary?: string }
@@ -82,6 +117,8 @@ export type BoardCommand =
 			command_type: "CreateComment";
 			content: string;
 			position?: { x: number; y: number };
+			width?: number;
+			height?: number;
 			color?: string;
 			summary?: string;
 	  }

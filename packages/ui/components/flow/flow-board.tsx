@@ -1206,14 +1206,19 @@ export function FlowBoard({
 
 	return (
 		<div className="w-full flex-1 grow flex-col min-h-0 relative">
-			<FlowCopilot
-				board={board.data}
-				selectedNodeIds={Array.from(selected.current)}
-				onAcceptSuggestion={onAcceptSuggestion}
-				onFocusNode={focusNode}
-				onGhostNodesChange={handleGhostNodesChange}
-				onExecuteCommands={handleExecuteCommands}
-			/>
+			{/* Show floating FlowCopilot only when logs panel is NOT visible */}
+			{!currentMetadata && (
+				<FlowCopilot
+					board={board.data}
+					selectedNodeIds={Array.from(selected.current)}
+					onAcceptSuggestion={onAcceptSuggestion}
+					onFocusNode={focusNode}
+					onGhostNodesChange={handleGhostNodesChange}
+					onExecuteCommands={handleExecuteCommands}
+					runContext={currentMetadata}
+					onClearRunContext={() => setCurrentMetadata(undefined)}
+				/>
+			)}
 			{/* Realtime connection status indicator */}
 			{awareness && connectionStatus === "connected" && (
 				<div className="fixed right-3 top-16 z-50 flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--primary)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm sm:right-4 sm:top-16 md:right-6 md:top-6">
@@ -1579,9 +1584,19 @@ export function FlowBoard({
 									onFocusNode={(nodeId: string) => {
 										focusNode(nodeId);
 									}}
-									onAcceptSuggestion={onAcceptSuggestion}
-									onExecuteCommands={handleExecuteCommands}
-									onGhostNodesChange={handleGhostNodesChange}
+									copilotPanel={
+										<FlowCopilot
+											board={board.data}
+											selectedNodeIds={Array.from(selected.current)}
+											onAcceptSuggestion={onAcceptSuggestion}
+											onFocusNode={focusNode}
+											onGhostNodesChange={handleGhostNodesChange}
+											onExecuteCommands={handleExecuteCommands}
+											runContext={currentMetadata}
+											onClearRunContext={() => setCurrentMetadata(undefined)}
+											embedded
+										/>
+									}
 								/>
 							)}
 						</ResizablePanel>
@@ -1656,9 +1671,19 @@ export function FlowBoard({
 									onFocusNode={(nodeId: string) => {
 										focusNode(nodeId);
 									}}
-									onAcceptSuggestion={onAcceptSuggestion}
-									onExecuteCommands={handleExecuteCommands}
-									onGhostNodesChange={handleGhostNodesChange}
+									copilotPanel={
+										<FlowCopilot
+											board={board.data}
+											selectedNodeIds={Array.from(selected.current)}
+											onAcceptSuggestion={onAcceptSuggestion}
+											onFocusNode={focusNode}
+											onGhostNodesChange={handleGhostNodesChange}
+											onExecuteCommands={handleExecuteCommands}
+											runContext={currentMetadata}
+											onClearRunContext={() => setCurrentMetadata(undefined)}
+											embedded
+										/>
+									}
 								/>
 							</div>
 						)}

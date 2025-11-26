@@ -8,10 +8,10 @@ import {
 	InfoIcon,
 	LogsIcon,
 	ScrollIcon,
-	SparklesIcon,
 	TriangleAlertIcon,
 } from "lucide-react";
 import {
+	type ReactNode,
 	type RefObject,
 	memo,
 	useCallback,
@@ -40,11 +40,6 @@ import {
 	ResizablePanelGroup,
 } from "../ui/resizable";
 import { TextEditor } from "../ui/text-editor";
-import {
-	type BoardCommand,
-	FlowCopilot,
-	type Suggestion,
-} from "./flow-copilot";
 
 interface IEnrichedLogMessage extends ILogMessage {
 	node_id: string;
@@ -55,21 +50,16 @@ export function Traces({
 	boardId,
 	board,
 	onFocusNode,
-	onAcceptSuggestion,
-	onExecuteCommands,
-	onGhostNodesChange,
+	copilotPanel,
 }: Readonly<{
 	appId: string;
 	boardId: string;
 	board: RefObject<IBoard | undefined>;
+	copilotPanel?: ReactNode;
 	onFocusNode: (nodeId: string) => void;
-	onAcceptSuggestion?: (suggestion: Suggestion) => void;
-	onExecuteCommands?: (commands: BoardCommand[]) => void;
-	onGhostNodesChange?: (suggestions: Suggestion[]) => void;
 }>) {
 	const backend = useBackend();
 	const { currentMetadata } = useLogAggregation();
-	const [showCopilot, setShowCopilot] = useState(false);
 
 	const [queryParts, setQueryParts] = useState<string[]>([]);
 	const [query, setQuery] = useState("");
@@ -220,18 +210,10 @@ export function Traces({
 		rowHeights.current = rowHeights.current.set(index, height);
 	}
 
-	const handleAcceptSuggestion = useCallback(
-		(suggestion: Suggestion) => {
-			onAcceptSuggestion?.(suggestion);
-		},
-		[onAcceptSuggestion],
-	);
-
 	return (
-		<div className="transition-all h-full z-10 bg-background border rounded-lg flex flex-col w-full overflow-hidden">
-			<ResizablePanelGroup direction="horizontal" className="h-full">
-				{/* Logs panel */}
-				<ResizablePanel defaultSize={showCopilot ? 60 : 100} minSize={30}>
+		<ResizablePanelGroup direction="horizontal" className="h-full w-full">
+			<ResizablePanel defaultSize={copilotPanel ? 60 : 100} minSize={30}>
+				<div className="transition-all h-full z-10 bg-background border rounded-lg flex flex-col w-full overflow-hidden">
 					<div className="flex flex-col h-full p-2">
 						<div className="w-full flex flex-row items-center justify-between my-1 px-2">
 							<div className="flex flex-row items-center gap-1">
@@ -268,23 +250,6 @@ export function Traces({
 							</div>
 
 							<div className="flex flex-row items-center gap-2">
-								{currentMetadata &&
-									(messages?.length ?? 0) > 0 &&
-									!showCopilot && (
-										<div className="relative group">
-											<div className="absolute -inset-1 bg-primary/30 rounded-lg blur-md opacity-0 group-hover:opacity-60 transition-all duration-300" />
-											<Button
-												size="sm"
-												className="relative gap-1.5 text-xs bg-background/90 backdrop-blur-sm border border-border/50 hover:border-primary/50 hover:bg-background hover:shadow-lg transition-all duration-200"
-												onClick={() => setShowCopilot(true)}
-											>
-												<SparklesIcon className="w-3.5 h-3.5 text-primary" />
-												<span className="text-primary font-medium">
-													Ask FlowPilot
-												</span>
-											</Button>
-										</div>
-									)}
 								<Input
 									value={search}
 									onChange={(e) => setSearch(e.target.value)}
@@ -325,33 +290,17 @@ export function Traces({
 							)}
 						</div>
 					</div>
-				</ResizablePanel>
-
-				{/* FlowPilot panel - only show when active */}
-				{showCopilot && currentMetadata && (
-					<>
-						<ResizableHandle withHandle />
-						<ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
-							{console.log(
-								"[Traces] Rendering FlowCopilot with runContext:",
-								currentMetadata,
-							)}
-							<FlowCopilot
-								board={board.current}
-								selectedNodeIds={[]}
-								onAcceptSuggestion={handleAcceptSuggestion}
-								onFocusNode={onFocusNode}
-								onExecuteCommands={onExecuteCommands}
-								onGhostNodesChange={onGhostNodesChange}
-								runContext={currentMetadata}
-								embedded={true}
-								onClose={() => setShowCopilot(false)}
-							/>
-						</ResizablePanel>
-					</>
-				)}
-			</ResizablePanelGroup>
-		</div>
+				</div>
+			</ResizablePanel>
+			{copilotPanel && (
+				<>
+					<ResizableHandle withHandle />
+					<ResizablePanel defaultSize={40} minSize={25} maxSize={50}>
+						{copilotPanel}
+					</ResizablePanel>
+				</>
+			)}
+		</ResizablePanelGroup>
 	);
 }
 
@@ -473,7 +422,7 @@ const LogMessage = memo(function LogMessage({
 });
 
 function logLevelToColor(logLevel: ILogLevel, icon = false) {
-	const colors: Record<number, { base: string; icon: string }> = {
+	const colors: Record<ILogLevel, { base: string; icon: string }> = {
 		[ILogLevel.Debug]: {
 			base: "bg-muted/20 text-muted-foreground",
 			icon: "bg-muted-foreground",

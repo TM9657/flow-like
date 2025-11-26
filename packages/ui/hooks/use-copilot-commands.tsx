@@ -29,6 +29,7 @@ import {
 	type IVariable,
 } from "../lib/schema/flow/board";
 import { type INode, IVariableType } from "../lib/schema/flow/node";
+import { type IPin, IPinType } from "../lib/schema/flow/pin";
 import type { ILayer } from "../lib/schema/flow/run";
 import { convertJsonToUint8Array } from "../lib/uint8";
 
@@ -199,6 +200,119 @@ export function useCopilotCommands({
 
 					nodeIndex++;
 				}
+
+				// Handle AddPlaceholder in first pass (creates layer nodes)
+				if (cmd.command_type === "AddPlaceholder") {
+					const layerId = createId();
+					const position = cmd.position || {
+						x: baseX + (nodeIndex % 3) * 300,
+						y: baseY + Math.floor(nodeIndex / 3) * 200,
+					};
+
+					// Create default execution pins
+					const execInPin: IPin = {
+						id: createId(),
+						name: "exec_in",
+						friendly_name: "Exec In",
+						connected_to: [],
+						depends_on: [],
+						description: "",
+						index: 0,
+						pin_type: IPinType.Input,
+						value_type: IValueType.Normal,
+						data_type: IVariableType.Execution,
+						default_value: null,
+					};
+
+					const execOutPin: IPin = {
+						...execInPin,
+						id: createId(),
+						pin_type: IPinType.Output,
+						name: "exec_out",
+						friendly_name: "Exec Out",
+						index: 1,
+					};
+
+					// Build pins object starting with exec pins
+					const pins: Record<string, IPin> = {
+						[execInPin.id]: execInPin,
+						[execOutPin.id]: execOutPin,
+					};
+
+					// Add custom pins if provided
+					if (cmd.pins && cmd.pins.length > 0) {
+						let pinIndex = 2;
+						for (const pinDef of cmd.pins) {
+							const pin: IPin = {
+								id: createId(),
+								name: pinDef.name,
+								friendly_name: pinDef.friendly_name,
+								description: pinDef.description || "",
+								connected_to: [],
+								depends_on: [],
+								index: pinIndex++,
+								pin_type: pinDef.pin_type as IPinType,
+								value_type:
+									(pinDef.value_type as IValueType) || IValueType.Normal,
+								data_type: pinDef.data_type as IVariableType,
+								default_value: null,
+							};
+							pins[pin.id] = pin;
+						}
+					}
+
+					const layer: ILayer = {
+						id: layerId,
+						name: cmd.name,
+						type: ILayerType.Collapsed,
+						coordinates: [position.x, position.y, 0],
+						nodes: {},
+						variables: {},
+						comments: {},
+						pins,
+						parent_id: currentLayer,
+					};
+
+					const result = await executeCommand(
+						upsertLayerCommand({
+							layer,
+							node_ids: [],
+							current_layer: currentLayer,
+						}),
+					);
+
+					if (result) {
+						// Treat the layer as a "node" for reference purposes
+						const layerAsNode = {
+							id: layerId,
+							name: cmd.name,
+							friendly_name: cmd.name,
+							pins,
+							coordinates: [position.x, position.y, 0],
+						} as unknown as INode;
+
+						const refs = [
+							cmd.ref_id,
+							`$${nodeIndex}`,
+							cmd.name,
+							layerId,
+						].filter(Boolean) as string[];
+
+						for (const ref of refs) {
+							nodeReferenceMap.set(ref, layerAsNode);
+							buildPinMapping(ref, layerAsNode);
+						}
+
+						console.log(`[AddPlaceholder] Created "${cmd.name}" (${layerId})`, {
+							refs,
+							pins: Object.values(pins).map(
+								(p) => `${p.name}:${p.id.slice(0, 8)}`,
+							),
+						});
+					}
+
+					nodeIndex++;
+				}
 			}
 
 			const delay = (ms: number) =>
@@ -210,6 +324,10 @@ export function useCopilotCommands({
 
 				switch (cmd.command_type) {
 					case "AddNode":
+						break;
+
+					case "AddPlaceholder":
+						// Already handled in first pass
 						break;
 
 					case "RemoveNode": {
@@ -541,6 +659,8 @@ export function useCopilotCommands({
 							coordinates: cmd.position
 								? [cmd.position.x, cmd.position.y, 0]
 								: [baseX, baseY, 0],
+							width: cmd.width ?? 200,
+							height: cmd.height ?? 100,
 							color: cmd.color || null,
 							timestamp: {
 								nanos_since_epoch: 0,
