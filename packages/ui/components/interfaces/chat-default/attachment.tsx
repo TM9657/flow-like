@@ -138,7 +138,7 @@ export function FilePreview({
 						</div>
 					)}
 					<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent text-white text-xs p-1 truncate">
-						{file.name}
+						{decodeURIComponent(file.name)}
 					</div>
 				</div>
 			);

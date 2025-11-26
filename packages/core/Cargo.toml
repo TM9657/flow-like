@@ -19,7 +19,8 @@ flow-like-types.workspace = true
 flow-like-bits.workspace = true
 flow-like-model-provider.workspace = true
 flow-like-storage.workspace = true
-rig-core.workspace = true
+rig-core.workspace = true#
+rmcp.workspace = true
 rayon = "1.11.0"
 portpicker = "0.1.1"
 dirs-next.workspace = true
@@ -46,6 +47,9 @@ flate2 = { version = "1.1.2", default-features = false, features = ["rust_backen
 chacha20poly1305 = {version="0.10.1", features=["stream", "std"]}
 argon2 = "0.5.3"
 zeroize = "1.8.1"
+thiserror = "1.0"
+serde_json.workspace = true
+async-trait.workspace = true
 
 [features]
 tauri = ["flow-like-storage/tauri"]

@@ -3,6 +3,7 @@ import "@tm9657/flow-like-ui/globals.css";
 import type { Viewport } from "next";
 
 import {
+	ExecutionEngineProviderComponent,
 	PersistQueryClientProvider,
 	QueryClient,
 	ReactFlowProvider,
@@ -71,7 +72,9 @@ export default function RootLayout({
 									enableSystem
 									disableTransitionOnChange
 								>
-									{children}
+									<ExecutionEngineProviderComponent>
+										{children}
+									</ExecutionEngineProviderComponent>
 								</ThemeProvider>
 							</Suspense>
 						</body>

@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 pub mod credentials;
 #[cfg(feature = "flow")]
 pub mod flow;

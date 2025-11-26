@@ -43,6 +43,16 @@ import {
 } from "../../ui";
 import type { ProcessedAttachment } from "./attachment";
 
+const getDisplayFileName = (name: string) => {
+	try {
+		const decoded = decodeURIComponent(name);
+		const parts = decoded.split(/[/\\]/);
+		return parts[parts.length - 1];
+	} catch {
+		return name;
+	}
+};
+
 interface FileDialogProps {
 	files: ProcessedAttachment[];
 	handleFileClick: (file: ProcessedAttachment) => void;
@@ -140,12 +150,15 @@ export function FileDialog({
 			<div>
 				<Dialog>
 					<DialogTrigger asChild>
-						<Badge
-							variant="secondary"
-							className="cursor-pointer hover:bg-secondary/80 transition-colors gap-1 text-xs"
-						>
-							<FileText className="w-3 h-3" />+{files.length} more
-						</Badge>
+						<button className="text-muted-foreground hover:text-foreground transition-colors">
+							<Badge
+								variant="secondary"
+								className="cursor-pointer hover:bg-secondary/80 transition-colors gap-1 text-xs h-6 rounded-full"
+							>
+								<FileText className="w-3 h-3" />
+								{files.length}
+							</Badge>
+						</button>
 					</DialogTrigger>
 					<DialogContent className="min-w-[calc(100dvw-5rem)] min-h-[calc(100dvh-5rem)] max-w-[calc(100dvw-5rem)] max-h-[calc(100dvh-5rem)] overflow-hidden flex flex-col">
 						<DialogHeader>
@@ -362,7 +375,7 @@ export function FileDialog({
 								<div className="fixed inset-0 z-50 bg-background flex flex-grow flex-col h-full">
 									<div className="p-4 border-b bg-background flex items-center justify-between">
 										<h3 className="font-medium text-lg">
-											Preview - {selectedFile.name}
+											Preview - {getDisplayFileName(selectedFile.name)}
 										</h3>
 										<Button
 											variant="ghost"
@@ -550,7 +563,7 @@ function FileItem({
 					)}
 					<div className="flex flex-col items-center gap-1 w-full overflow-hidden">
 						<p className="max-w-full w-full text-center font-medium text-foreground text-xs leading-tight line-clamp-1">
-							{file.name}
+							{getDisplayFileName(file.name)}
 						</p>
 						<div className="flex flex-col items-center gap-1">
 							<Badge
@@ -633,7 +646,7 @@ function FileItem({
 					)}
 					<div className="flex flex-col items-start flex-1 min-w-0">
 						<p className="line-clamp-1 text-start font-medium text-foreground truncate w-full text-sm">
-							{file.name}
+							{getDisplayFileName(file.name)}
 						</p>
 						<div className="flex items-center gap-1 mt-1">
 							<Badge
@@ -727,7 +740,9 @@ export function FileDialogPreview({ file }: Readonly<FileDialogPreviewProps>) {
 					}
 				>
 					<Music className="w-16 h-16 text-muted-foreground" />
-					<p className="text-lg font-medium text-center">{file.name}</p>
+					<p className="text-lg font-medium text-center">
+						{getDisplayFileName(file.name)}
+					</p>
 					<audio controls className="w-full max-w-md">
 						<source src={file.url} />
 						Your browser does not support the audio tag.

@@ -1,4 +1,8 @@
 import type {
+	ChatMessage,
+	CopilotResponse,
+} from "../../components/flow/flow-copilot";
+import type {
 	IBoard,
 	IConnectionMode,
 	IExecutionStage,
@@ -8,6 +12,7 @@ import type {
 	ILogLevel,
 	ILogMetadata,
 	INode,
+	IRunContext,
 	IRunPayload,
 	IVersionType,
 } from "../../lib";
@@ -100,4 +105,15 @@ export interface IBoardState {
 		boardId: string,
 		commands: IGenericCommand[],
 	): Promise<IGenericCommand[]>;
+
+	flowpilot_chat(
+		board: IBoard,
+		selectedNodeIds: string[],
+		userPrompt: string,
+		history: ChatMessage[],
+		onToken?: (token: string) => void,
+		modelId?: string,
+		token?: string,
+		runContext?: IRunContext,
+	): Promise<CopilotResponse>;
 }

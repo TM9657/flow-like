@@ -80,6 +80,7 @@ import {
 	ResizablePanelGroup,
 } from "../../components/ui/resizable";
 import { useCommandExecution } from "../../hooks/use-command-execution";
+import { useCopilotCommands } from "../../hooks/use-copilot-commands";
 import { useFlowPanels } from "../../hooks/use-flow-panels";
 import { useInvoke } from "../../hooks/use-invoke";
 import { useKeyboardShortcuts } from "../../hooks/use-keyboard-shortcuts";
@@ -126,6 +127,7 @@ import { useBackend } from "../../state/backend-state";
 import { useFlowBoardParentState } from "../../state/flow-board-parent-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 import { BoardMeta } from "./board-meta";
+import { FlowCopilot, type Suggestion } from "./flow-copilot";
 import { FlowCursors } from "./flow-cursors";
 import { FlowDataEdge } from "./flow-data-edge";
 import { FlowExecutionEdge } from "./flow-execution-edge";
@@ -862,6 +864,8 @@ export function FlowBoard({
 				const sourceChanged = oldSource !== newSource;
 				const targetChanged = oldTarget !== newTarget;
 
+				const commands: IGenericCommand[] = [];
+
 				if (sourceChanged) {
 					// Source (ref_out) was reconnected - update both old and new source nodes
 					const oldRefOutNodeId = oldSource?.replace("ref_out_", "") || "";
@@ -890,7 +894,7 @@ export function FlowBoard({
 							},
 						};
 
-						await executeCommand(updateNodeCommand({ node: updatedOldNode }));
+						commands.push(updateNodeCommand({ node: updatedOldNode }));
 					}
 
 					// Add ref to new source node
@@ -914,7 +918,7 @@ export function FlowBoard({
 							},
 						};
 
-						await executeCommand(updateNodeCommand({ node: updatedNewNode }));
+						commands.push(updateNodeCommand({ node: updatedNewNode }));
 					}
 				} else if (targetChanged) {
 					// Target (ref_in) was reconnected - update the source node's refs
@@ -948,8 +952,12 @@ export function FlowBoard({
 							},
 						};
 
-						await executeCommand(updateNodeCommand({ node: updatedNode }));
+						commands.push(updateNodeCommand({ node: updatedNode }));
 					}
+				}
+
+				if (commands.length > 0) {
+					await executeCommands(commands);
 				}
 			} else {
 				// Regular pin connection reconnection - need to look up nodes
@@ -1156,8 +1164,61 @@ export function FlowBoard({
 		[shiftPressed],
 	);
 
+	const onAcceptSuggestion = useCallback(
+		async (suggestion: any) => {
+			const node = catalog.data?.find((n) => n.name === suggestion.node_type);
+			if (node) {
+				await placeNode(node);
+			} else {
+				toastError(`Node type ${suggestion.node_type} not found`, <XIcon />);
+			}
+		},
+		[catalog.data, placeNode],
+	);
+
+	const [ghostNodes, setGhostNodes] = useState<
+		{
+			id: string;
+			node_type: string;
+			position: { x: number; y: number };
+			reason: string;
+		}[]
+	>([]);
+
+	const handleGhostNodesChange = useCallback((suggestions: Suggestion[]) => {
+		setGhostNodes(
+			suggestions.map((s, i) => ({
+				id: `ghost-${i}`,
+				node_type: s.node_type,
+				position: s.position || { x: 0, y: 0 },
+				reason: s.reason,
+			})),
+		);
+	}, []);
+
+	// Use the copilot commands hook for executing AI-generated commands
+	const { handleExecuteCommands } = useCopilotCommands({
+		board,
+		catalog,
+		executeCommand,
+		currentLayer,
+	});
+
 	return (
 		<div className="w-full flex-1 grow flex-col min-h-0 relative">
+			{/* Show floating FlowCopilot only when logs panel is NOT visible */}
+			{!currentMetadata && (
+				<FlowCopilot
+					board={board.data}
+					selectedNodeIds={Array.from(selected.current)}
+					onAcceptSuggestion={onAcceptSuggestion}
+					onFocusNode={focusNode}
+					onGhostNodesChange={handleGhostNodesChange}
+					onExecuteCommands={handleExecuteCommands}
+					runContext={currentMetadata}
+					onClearRunContext={() => setCurrentMetadata(undefined)}
+				/>
+			)}
 			{/* Realtime connection status indicator */}
 			{awareness && connectionStatus === "connected" && (
 				<div className="fixed right-3 top-16 z-50 flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--primary)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm sm:right-4 sm:top-16 md:right-6 md:top-6">
@@ -1523,6 +1584,19 @@ export function FlowBoard({
 									onFocusNode={(nodeId: string) => {
 										focusNode(nodeId);
 									}}
+									copilotPanel={
+										<FlowCopilot
+											board={board.data}
+											selectedNodeIds={Array.from(selected.current)}
+											onAcceptSuggestion={onAcceptSuggestion}
+											onFocusNode={focusNode}
+											onGhostNodesChange={handleGhostNodesChange}
+											onExecuteCommands={handleExecuteCommands}
+											runContext={currentMetadata}
+											onClearRunContext={() => setCurrentMetadata(undefined)}
+											embedded
+										/>
+									}
 								/>
 							)}
 						</ResizablePanel>
@@ -1597,6 +1671,19 @@ export function FlowBoard({
 									onFocusNode={(nodeId: string) => {
 										focusNode(nodeId);
 									}}
+									copilotPanel={
+										<FlowCopilot
+											board={board.data}
+											selectedNodeIds={Array.from(selected.current)}
+											onAcceptSuggestion={onAcceptSuggestion}
+											onFocusNode={focusNode}
+											onGhostNodesChange={handleGhostNodesChange}
+											onExecuteCommands={handleExecuteCommands}
+											runContext={currentMetadata}
+											onClearRunContext={() => setCurrentMetadata(undefined)}
+											embedded
+										/>
+									}
 								/>
 							</div>
 						)}

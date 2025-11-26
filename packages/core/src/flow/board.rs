@@ -258,7 +258,13 @@ impl Board {
         state: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<GenericCommand> {
         let mut command = command;
-        command.execute(self, state.clone()).await?;
+        let cmd_json = serde_json::to_string(&command).unwrap_or_default();
+        println!("[Board] execute_command: {}", cmd_json);
+        if let Err(e) = command.execute(self, state.clone()).await {
+            println!("[Board] execute_command ❌ ERROR: {:?}", e);
+            return Err(e);
+        }
+        println!("[Board] execute_command ✓ Success");
         self.node_updates(state).await;
         self.updated_at = SystemTime::now();
         self.cleanup();
@@ -271,10 +277,15 @@ impl Board {
         state: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<Vec<GenericCommand>> {
         let mut commands = commands;
-        for command in commands.iter_mut() {
+        println!("[Board] execute_commands: {} commands", commands.len());
+        for (i, command) in commands.iter_mut().enumerate() {
+            let cmd_json = serde_json::to_string(&command).unwrap_or_default();
+            println!("[Board]   [{}] Executing: {}", i, cmd_json);
             let res = command.execute(self, state.clone()).await;
             if let Err(e) = res {
-                println!("Error executing command: {:?}", e);
+                println!("[Board]   [{}] ❌ ERROR: {:?}", i, e);
+            } else {
+                println!("[Board]   [{}] ✓ Success", i);
             }
         }
         self.node_updates(state).await;
@@ -302,7 +313,7 @@ impl Board {
         state: Arc<Mutex<FlowLikeState>>,
     ) -> flow_like_types::Result<()> {
         let mut commands = commands;
-        for command in commands.iter_mut().rev() {
+        for command in commands.iter_mut() {
             command.execute(self, state.clone()).await?;
         }
         self.cleanup();

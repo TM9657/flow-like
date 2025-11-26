@@ -156,13 +156,35 @@ export function LinkFloatingToolbar({
 		</div>
 	);
 
+	const safeInsertProps = React.useMemo<
+		React.HTMLAttributes<HTMLDivElement>
+	>(() => {
+		const { style, ...rest } = insertProps;
+		const cleanStyle: React.CSSProperties = {
+			...(style as React.CSSProperties),
+			WebkitUserSelect: "none",
+		};
+		return { ...rest, style: cleanStyle };
+	}, [insertProps]);
+
+	const safeEditProps = React.useMemo<
+		React.HTMLAttributes<HTMLDivElement>
+	>(() => {
+		const { style, ...rest } = editProps;
+		const cleanStyle: React.CSSProperties = {
+			...(style as React.CSSProperties),
+			WebkitUserSelect: "none",
+		};
+		return { ...rest, style: cleanStyle };
+	}, [editProps]);
+
 	return (
 		<>
-			<div ref={insertRef} className={popoverVariants()} {...insertProps}>
+			<div ref={insertRef} className={popoverVariants()} {...safeInsertProps}>
 				{input}
 			</div>
 
-			<div ref={editRef} className={popoverVariants()} {...editProps}>
+			<div ref={editRef} className={popoverVariants()} {...safeEditProps}>
 				{editContent}
 			</div>
 		</>

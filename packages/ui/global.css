@@ -410,6 +410,37 @@
 			transform: scale(1);
 		}
 	}
+
+	@keyframes spin-slow {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	@keyframes spin-reverse {
+		from {
+			transform: rotate(360deg);
+		}
+		to {
+			transform: rotate(0deg);
+		}
+	}
+
+	@keyframes progress {
+		0% {
+			transform: translateX(-100%);
+		}
+		100% {
+			transform: translateX(100%);
+		}
+	}
+
+	--animate-spin-slow: spin-slow 3s linear infinite;
+	--animate-spin-reverse: spin-reverse 2s linear infinite;
+	--animate-progress: progress 1.5s ease-in-out infinite;
 }
 
 @layer base {

@@ -898,21 +898,39 @@ export default function Id({
 							</div>
 						</CardHeader>
 						<CardContent className="flex-1 p-0 overflow-hidden min-h-0">
-							<ScrollArea className="h-full">
-								<div className="p-6 pb-0 pt-0">
-									<Suspense
-										fallback={
-											<div className="space-y-4">
-												<Skeleton className="h-8 w-full" />
-												<Skeleton className="h-32 w-full" />
-												<Skeleton className="h-24 w-full" />
-											</div>
-										}
-									>
-										{children}
-									</Suspense>
+							{currentRoute?.includes("/storage") ? (
+								<div className="h-full flex flex-col">
+									<div className="flex-1 min-h-0 p-6 pb-0 pt-0">
+										<Suspense
+											fallback={
+												<div className="space-y-4">
+													<Skeleton className="h-8 w-full" />
+													<Skeleton className="h-32 w-full" />
+													<Skeleton className="h-24 w-full" />
+												</div>
+											}
+										>
+											{children}
+										</Suspense>
+									</div>
 								</div>
-							</ScrollArea>
+							) : (
+								<ScrollArea className="h-full">
+									<div className="p-6 pb-0 pt-0">
+										<Suspense
+											fallback={
+												<div className="space-y-4">
+													<Skeleton className="h-8 w-full" />
+													<Skeleton className="h-32 w-full" />
+													<Skeleton className="h-24 w-full" />
+												</div>
+											}
+										>
+											{children}
+										</Suspense>
+									</div>
+								</ScrollArea>
+							)}
 						</CardContent>
 					</Card>
 

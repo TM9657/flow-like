@@ -85,6 +85,7 @@ import {
 	Textarea,
 } from "../ui";
 import { DynamicImage } from "../ui/dynamic-image";
+import { AutoResizeText } from "./auto-resize-text";
 import { useUndoRedo } from "./flow-history";
 import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
 import { FlowPinAction } from "./flow-node/flow-node-pin-action";
@@ -544,7 +545,7 @@ const FlowNodeInner = memo(
 
 		// Compute connection states efficiently - only track the specific fn_refs we care about
 		const refInConnected = useMemo(() => {
-			const board = props.data.boardRef.current;
+			const board = props.data.boardRef?.current;
 			if (!board) return false;
 			const currentNodeId = props.data.node.id;
 			// Only check nodes, return boolean to avoid object reference changes
@@ -813,21 +814,24 @@ const FlowNodeInner = memo(
 					<div
 						className={`header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b p-1 justify-between rounded-md rounded-b-none bg-card ${props.data.node.event_callback && "bg-linear-to-l  from-card via-primary/50 to-primary"} ${!isExec && "bg-linear-to-r  from-card via-tertiary/50 to-tertiary"} ${props.data.node.start && "bg-linear-to-r  from-card via-primary/50 to-primary"} ${isReroute && "w-6"}`}
 					>
-						<div className={"flex flex-row items-center gap-1"}>
+						<div className={"flex flex-row items-center gap-1 min-w-0"}>
 							{useMemo(
 								() =>
 									props.data.node?.icon ? (
 										<DynamicImage
-											className="w-2 h-2 bg-foreground"
+											className="w-2 h-2 bg-foreground shrink-0"
 											url={props.data.node.icon}
 										/>
 									) : (
-										<WorkflowIcon className="w-2 h-2" />
+										<WorkflowIcon className="w-2 h-2 shrink-0" />
 									),
 								[props.data.node?.icon],
 							)}
-							<small className="font-medium leading-none text-start line-clamp-1">
-								{props.data.node?.friendly_name}
+							<small className="font-medium leading-none text-start truncate">
+								<AutoResizeText
+									text={props.data.node?.friendly_name}
+									maxChars={30}
+								/>
 							</small>
 						</div>
 						<div className="flex flex-row items-center gap-1">
