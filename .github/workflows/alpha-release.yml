@@ -9,6 +9,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+
 jobs:
   alpha-release:
     permissions:
@@ -17,13 +22,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest" # for Arm based macs (M1 and above).
+          - platform: "macos-latest"
             args: "--config src-tauri/configs/tauri.macos.arm.conf.json --verbose"
-          - platform: "macos-13" # for Intel based macs.
+          - platform: "macos-13"
             args: "--config src-tauri/configs/tauri.macos.intel.conf.json --verbose"
-          - platform: "ubuntu-latest" # for Tauri v1 you could replace this with ubuntu-20.04.
+          - platform: "ubuntu-latest"
             args: "--config src-tauri/configs/tauri.linux.x64.conf.json --verbose"
-          - platform: "ubuntu-24.04-arm" # for Tauri v1 you could replace this with ubuntu-20.04.
+          - platform: "ubuntu-24.04-arm"
             args: "--verbose"
           - platform: "windows-latest"
             args: "--config src-tauri/configs/tauri.win.x64.conf.json --verbose"
@@ -64,19 +69,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
 
-      - name: install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-latest' || matrix.platform == 'ubuntu-24.04-arm'
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
-      - name: install dependencies (ubuntu arm only)
-        if: matrix.platform == 'ubuntu-24.04-arm'
-        run: |
-          sudo apt-get install -y xdg-utils
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
 
       - name: Import Apple Developer Certificate
         if: runner.os == 'macOS'
@@ -92,20 +91,9 @@ jobs:
           security set-keychain-settings -t 7200 -u build.keychain
           security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
-          security find-identity -v -p codesigning build.keychain
-
-      - name: Verify Certificate
-        if: runner.os == 'macOS'
-        run: |
           CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "TM9657 GmbH")
           CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
           echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
-          echo "Certificate imported."
-
-      - name: setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
@@ -117,50 +105,37 @@ jobs:
         with:
           bun-version: 1.3.1
 
-      - name: install Rust stable
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@1.89.0
         with:
-          targets: ${{ (matrix.platform == 'macos-latest' || matrix.platform == 'macos-13') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: install frontend dependencies
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+          cache-on-failure: true
+
+      - name: Install frontend dependencies
         run: bun install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: tauri-apps/tauri-action@v0
-        if: matrix.platform == 'ubuntu-latest' || matrix.platform == 'ubuntu-24.04-arm'
+      - name: Build and Release
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           PUBLIC_SENTRY_ENDPOINT: ${{ secrets.PUBLIC_SENTRY_ENDPOINT }}
-          LD_LIBRARY_PATH: "${{ github.workspace }}/apps/desktop/src-tauri/binaries/linux/x64"
-        with:
-          tagName: alpha-v__VERSION__
-          releaseName: "Flow Like - Alpha v__VERSION__"
-          releaseBody: "Alpha release for testing purposes. Please do not distribute."
-          releaseDraft: true
-          prerelease: true
-          projectPath: "./apps/desktop"
-          tauriScript: "bun tauri"
-          args: ${{ matrix.args }}
-
-      - uses: tauri-apps/tauri-action@v0
-        if: matrix.platform != 'ubuntu-latest' && matrix.platform != 'ubuntu-24.04-arm'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LD_LIBRARY_PATH: ${{ runner.os == 'Linux' && format('{0}/apps/desktop/src-tauri/binaries/linux/x64', github.workspace) || '' }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          PUBLIC_SENTRY_ENDPOINT: ${{ secrets.PUBLIC_SENTRY_ENDPOINT }}
           APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
-          RUSTFLAGS: ${{ matrix.platform == 'windows-latest' && '-C link-arg=/STACK:8388608' || '' }}
+          RUSTFLAGS: ${{ runner.os == 'Windows' && '-C link-arg=/STACK:8388608' || '' }}
         with:
-          tagName: alpha-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
+          tagName: alpha-v__VERSION__
           releaseName: "Flow Like - Alpha v__VERSION__"
           releaseBody: "Alpha release for testing purposes. Please do not distribute."
           releaseDraft: true
