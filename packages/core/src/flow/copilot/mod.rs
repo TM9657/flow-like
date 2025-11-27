@@ -11,7 +11,7 @@ mod types;
 pub use context::{EdgeContext, GraphContext, NodeContext, PinContext, prepare_context};
 pub use provider::CatalogProvider;
 pub use tools::{
-    CatalogTool, EmitCommandsTool, FilterCategoryTool, FocusNodeTool, QueryLogsTool,
+    CatalogTool, EmitCommandsTool, FilterCategoryTool, GetNodeDetailsTool, QueryLogsTool,
     SearchByPinTool, SearchTemplatesTool, get_tool_description,
 };
 pub use types::{
@@ -46,7 +46,7 @@ use flow_like_model_provider::provider::ModelProvider;
 use flow_like_types::sync::Mutex;
 
 use tools::{
-    EmitCommandsArgs, FilterCategoryArgs, FocusNodeArgs, QueryLogsArgs, SearchArgs,
+    EmitCommandsArgs, FilterCategoryArgs, GetNodeDetailsArgs, QueryLogsArgs, SearchArgs,
     SearchByPinArgs, SearchTemplatesArgs, ThinkingArgs,
 };
 
@@ -193,7 +193,9 @@ impl Copilot {
             .agent(&model_name)
             .preamble(&system_prompt)
             .tool(ThinkTool)
-            .tool(FocusNodeTool)
+            .tool(GetNodeDetailsTool {
+                graph_context: Arc::new(context.clone()),
+            })
             .tool(EmitCommandsTool)
             .tool(CatalogTool {
                 provider: self.catalog_provider.clone(),
@@ -434,8 +436,11 @@ impl Copilot {
                         let arguments = tool_call.function.arguments.clone();
                         let id = tool_call.id.clone();
                         let ctx = run_context.clone();
+                        let graph_ctx = context.clone();
                         async move {
-                            let output = self.execute_tool(&name, &arguments, ctx.as_ref()).await;
+                            let output = self
+                                .execute_tool(&name, &arguments, ctx.as_ref(), &graph_ctx)
+                                .await;
                             (id, name, output)
                         }
                     })
@@ -494,13 +499,6 @@ impl Copilot {
                             ));
                         }
                         callback("tool_result:done".to_string());
-                    }
-
-                    // Only stream focus_node results to the user
-                    if let Some(ref callback) = on_token {
-                        if name == "focus_node" {
-                            callback(tool_output.clone());
-                        }
                     }
                 }
 
@@ -587,7 +585,7 @@ impl Copilot {
         };
 
         let logs_tool = if has_run_context {
-            "\n- **query_logs**: Query execution logs from the current run. Use focus_node to highlight problematic nodes."
+            "\n- **query_logs**: Query execution logs from the current run"
         } else {
             ""
         };
@@ -599,21 +597,21 @@ impl Copilot {
 {}
 
 ## Tools
-**Understanding**: think (reason step-by-step), focus_node (highlight node by ID)
+**Understanding**: think (reason step-by-step), get_node_details (get full info about a specific node)
 **Catalog** ({} nodes): catalog_search (by name/description), search_by_pin (by pin type), filter_category (by category){}{}
 **Modify**: emit_commands (execute graph changes)
 
 ## Key Rules
-1. Reference nodes: <focus_node>ID</focus_node> - put ONLY the node ID between tags, nothing else
+1. Reference nodes in your explanations using: <focus_node>NODE_ID</focus_node> to highlight them in the UI
 2. Node IDs are cuid2 format (lowercase alphanumeric, 24+ chars, e.g. "tz4a98xxat96ipl6cg5ebkj1")
-3. WRONG: <focus_node node_id="..."> or <focus_node>Node Name</focus_node> - these will NOT work
+3. Use get_node_details when you need complete information about a node beyond the abbreviated context
 4. Use pin `n` (name) in commands for pin connections
-4. Connect compatible types only (check t=type from catalog)
-5. New nodes need ref_id ("$0", "$1"...) for subsequent connections
-6. Connect execution flow: exec_out → exec_in
-7. Position nodes left-to-right, 250px horizontal spacing
-8. Each command needs a `summary` field
-9. Limit output to 20 commands per turn
+5. Connect compatible types only (check t=type from catalog)
+6. New nodes need ref_id ("$0", "$1"...) for subsequent connections
+7. Connect execution flow: exec_out → exec_in
+8. Position nodes left-to-right, 250px horizontal spacing
+9. Each command needs a `summary` field
+10. Limit output to 20 commands per turn
 
 ## Commands
 AddNode(node_type, ref_id, position, summary) | RemoveNode(node_id, summary)
@@ -666,6 +664,7 @@ ALWAYS emit commands in this order:
         name: &str,
         arguments: &serde_json::Value,
         run_context: Option<&RunContext>,
+        graph_context: &GraphContext,
     ) -> String {
         match name {
             "think" => {
@@ -675,11 +674,73 @@ ALWAYS emit commands in this order:
                     "Thinking...".to_string()
                 }
             }
-            "focus_node" => {
-                if let Ok(args) = serde_json::from_value::<FocusNodeArgs>(arguments.clone()) {
-                    format!("<focus_node>{}</focus_node>", args.node_id)
+            "get_node_details" => {
+                if let Ok(args) = serde_json::from_value::<GetNodeDetailsArgs>(arguments.clone()) {
+                    // Find the node in the context
+                    let node = graph_context.nodes.iter().find(|n| n.id == args.node_id);
+
+                    match node {
+                        Some(node_ctx) => {
+                            // Build detailed output including all connections
+                            let incoming_edges: Vec<_> = graph_context
+                                .edges
+                                .iter()
+                                .filter(|e| e.to_node_id == args.node_id)
+                                .map(|e| {
+                                    json!({
+                                        "from_node": e.from_node_id,
+                                        "from_pin": e.from_pin_name,
+                                        "to_pin": e.to_pin_name
+                                    })
+                                })
+                                .collect();
+
+                            let outgoing_edges: Vec<_> = graph_context
+                                .edges
+                                .iter()
+                                .filter(|e| e.from_node_id == args.node_id)
+                                .map(|e| {
+                                    json!({
+                                        "from_pin": e.from_pin_name,
+                                        "to_node": e.to_node_id,
+                                        "to_pin": e.to_pin_name
+                                    })
+                                })
+                                .collect();
+
+                            let details = json!({
+                                "id": node_ctx.id,
+                                "node_type": node_ctx.node_type,
+                                "friendly_name": node_ctx.friendly_name,
+                                "position": { "x": node_ctx.position.0, "y": node_ctx.position.1 },
+                                "size": { "width": node_ctx.estimated_size.0, "height": node_ctx.estimated_size.1 },
+                                "inputs": node_ctx.inputs.iter().map(|p| {
+                                    json!({
+                                        "name": p.name,
+                                        "type": p.type_name,
+                                        "default_value": p.default_value
+                                    })
+                                }).collect::<Vec<_>>(),
+                                "outputs": node_ctx.outputs.iter().map(|p| {
+                                    json!({
+                                        "name": p.name,
+                                        "type": p.type_name
+                                    })
+                                }).collect::<Vec<_>>(),
+                                "incoming_connections": incoming_edges,
+                                "outgoing_connections": outgoing_edges,
+                                "is_selected": graph_context.selected_nodes.contains(&args.node_id)
+                            });
+
+                            serde_json::to_string_pretty(&details).unwrap_or_default()
+                        }
+                        None => format!(
+                            "Node with ID '{}' not found in the current graph",
+                            args.node_id
+                        ),
+                    }
                 } else {
-                    "".to_string()
+                    "Failed to parse node ID".to_string()
                 }
             }
             "emit_commands" => {
