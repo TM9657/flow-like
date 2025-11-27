@@ -1,6 +1,5 @@
 "use client";
 
-import { useReactFlow } from "@xyflow/react";
 import {
 	BanIcon,
 	CheckCircle2Icon,
@@ -50,6 +49,7 @@ const FlowRunsComponent = ({
 	version,
 	executeBoard,
 	onVersionChange,
+	onFocusNode,
 }: {
 	appId: string;
 	boardId: string;
@@ -59,6 +59,7 @@ const FlowRunsComponent = ({
 	version: [number, number, number];
 	executeBoard: (node: INode, payload?: object) => Promise<void>;
 	onVersionChange: (version?: [number, number, number]) => void;
+	onFocusNode: (nodeId: string) => void;
 }) => {
 	const backend = useBackend();
 	const {
@@ -68,7 +69,6 @@ const FlowRunsComponent = ({
 		setFilter,
 		refetchLogs,
 	} = useLogAggregation();
-	const { fitView } = useReactFlow();
 	const [localFilter, setLocalFilter] = useState<ILogAggregationFilter>({
 		appId,
 		boardId,
@@ -119,20 +119,6 @@ const FlowRunsComponent = ({
 			from: from ? from * 1000 : undefined,
 		}));
 	}, [timeRange]);
-
-	const zoomNode = useCallback(
-		(nodeId: string) => {
-			fitView({
-				nodes: [
-					{
-						id: nodeId,
-					},
-				],
-				duration: 500,
-			});
-		},
-		[fitView],
-	);
 
 	return (
 		<div className="flex flex-col gap-2 p-4 bg-background grow h-full max-h-full overflow-hidden">
@@ -319,7 +305,7 @@ const FlowRunsComponent = ({
 									<DropdownMenuSeparator />
 									<DropdownMenuItem
 										onClick={() => {
-											zoomNode(run.node_id);
+											onFocusNode(run.node_id);
 										}}
 										className="flex flex-row gap-2 items-center"
 									>
@@ -356,6 +342,7 @@ export const FlowRuns = memo(
 		prev.appId === next.appId &&
 		prev.boardId === next.boardId &&
 		prev.executeBoard === next.executeBoard &&
+		prev.onFocusNode === next.onFocusNode &&
 		// shallow compare nodes object by reference
 		prev.nodes === next.nodes,
 );

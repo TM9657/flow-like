@@ -370,21 +370,14 @@ export function FlowBoard({
 	}, [logPanelRef.current]);
 
 	const initializeFlow = useCallback(
-		async (instance: ReactFlowInstance) => {
+		async (_instance: ReactFlowInstance) => {
 			if (initialized) return;
 			if (!nodeId || nodeId === "") return;
 
-			instance.fitView({
-				nodes: [
-					{
-						id: nodeId ?? "",
-					},
-				],
-				duration: 500,
-			});
+			focusNode(nodeId);
 			setInitialized(true);
 		},
-		[nodeId, initialized],
+		[nodeId, initialized, focusNode],
 	);
 
 	const [varsOpen, setVarsOpen] = useState(false);
@@ -1581,9 +1574,7 @@ export function FlowBoard({
 									appId={appId}
 									boardId={boardId}
 									board={boardRef}
-									onFocusNode={(nodeId: string) => {
-										focusNode(nodeId);
-									}}
+									onFocusNode={focusNode}
 									copilotPanel={
 										<FlowCopilot
 											board={board.data}
@@ -1619,6 +1610,7 @@ export function FlowBoard({
 							boardId={boardId}
 							version={board.data.version as [number, number, number]}
 							onVersionChange={setVersion}
+							onFocusNode={focusNode}
 						/>
 					)}
 				</ResizablePanel>
@@ -1652,6 +1644,7 @@ export function FlowBoard({
 									boardId={boardId}
 									version={board.data.version as [number, number, number]}
 									onVersionChange={setVersion}
+									onFocusNode={focusNode}
 								/>
 							</div>
 						)}
@@ -1668,9 +1661,7 @@ export function FlowBoard({
 									appId={appId}
 									boardId={boardId}
 									board={boardRef}
-									onFocusNode={(nodeId: string) => {
-										focusNode(nodeId);
-									}}
+									onFocusNode={focusNode}
 									copilotPanel={
 										<FlowCopilot
 											board={board.data}
