@@ -21,8 +21,8 @@ pub struct CatalogToolError;
 pub struct TemplateToolError;
 
 #[derive(Debug, thiserror::Error)]
-#[error("Focus node tool error")]
-pub struct FocusNodeToolError;
+#[error("Get node details tool error: {0}")]
+pub struct GetNodeDetailsToolError(pub String);
 
 #[derive(Debug, thiserror::Error)]
 #[error("Emit commands tool error")]
@@ -63,10 +63,8 @@ pub struct ThinkingArgs {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
-pub struct FocusNodeArgs {
+pub struct GetNodeDetailsArgs {
     pub node_id: String,
-    pub description: String,
 }
 
 #[derive(Deserialize)]
@@ -285,41 +283,109 @@ impl Tool for SearchTemplatesTool {
 }
 
 // ============================================================================
-// Focus Node Tool
+// Get Node Details Tool
 // ============================================================================
 
-pub struct FocusNodeTool;
+use super::context::GraphContext;
 
-impl Tool for FocusNodeTool {
-    const NAME: &'static str = "focus_node";
+pub struct GetNodeDetailsTool {
+    pub graph_context: Arc<GraphContext>,
+}
 
-    type Error = FocusNodeToolError;
-    type Args = FocusNodeArgs;
+impl Tool for GetNodeDetailsTool {
+    const NAME: &'static str = "get_node_details";
+
+    type Error = GetNodeDetailsToolError;
+    type Args = GetNodeDetailsArgs;
     type Output = String;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
-            name: "focus_node".to_string(),
-            description: "When explaining the board or referencing specific nodes, use this to highlight and focus on a particular node. The UI will automatically navigate to and highlight the node.".to_string(),
+            name: "get_node_details".to_string(),
+            description: "Get complete, unfiltered details about a specific node including all pin information, connections, default values, and metadata. Use this when you need more information than what's shown in the abbreviated context.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "node_id": {
                         "type": "string",
-                        "description": "The ID of the node to focus on"
-                    },
-                    "description": {
-                        "type": "string",
-                        "description": "Brief description of why you're focusing on this node (e.g., 'This node processes the user input')"
+                        "description": "The ID of the node to get full details for"
                     }
                 },
-                "required": ["node_id", "description"]
+                "required": ["node_id"]
             }),
         }
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        Ok(format!("<focus_node>{}</focus_node>", args.node_id))
+        // Find the node in the context
+        let node = self
+            .graph_context
+            .nodes
+            .iter()
+            .find(|n| n.id == args.node_id);
+
+        match node {
+            Some(node_ctx) => {
+                // Build detailed output including all connections
+                let incoming_edges: Vec<_> = self
+                    .graph_context
+                    .edges
+                    .iter()
+                    .filter(|e| e.to_node_id == args.node_id)
+                    .map(|e| {
+                        json!({
+                            "from_node": e.from_node_id,
+                            "from_pin": e.from_pin_name,
+                            "to_pin": e.to_pin_name
+                        })
+                    })
+                    .collect();
+
+                let outgoing_edges: Vec<_> = self
+                    .graph_context
+                    .edges
+                    .iter()
+                    .filter(|e| e.from_node_id == args.node_id)
+                    .map(|e| {
+                        json!({
+                            "from_pin": e.from_pin_name,
+                            "to_node": e.to_node_id,
+                            "to_pin": e.to_pin_name
+                        })
+                    })
+                    .collect();
+
+                let details = json!({
+                    "id": node_ctx.id,
+                    "node_type": node_ctx.node_type,
+                    "friendly_name": node_ctx.friendly_name,
+                    "position": { "x": node_ctx.position.0, "y": node_ctx.position.1 },
+                    "size": { "width": node_ctx.estimated_size.0, "height": node_ctx.estimated_size.1 },
+                    "inputs": node_ctx.inputs.iter().map(|p| {
+                        json!({
+                            "name": p.name,
+                            "type": p.type_name,
+                            "default_value": p.default_value
+                        })
+                    }).collect::<Vec<_>>(),
+                    "outputs": node_ctx.outputs.iter().map(|p| {
+                        json!({
+                            "name": p.name,
+                            "type": p.type_name
+                        })
+                    }).collect::<Vec<_>>(),
+                    "incoming_connections": incoming_edges,
+                    "outgoing_connections": outgoing_edges,
+                    "is_selected": self.graph_context.selected_nodes.contains(&args.node_id)
+                });
+
+                Ok(serde_json::to_string_pretty(&details).unwrap_or_default())
+            }
+            None => Err(GetNodeDetailsToolError(format!(
+                "Node with ID '{}' not found in the current graph",
+                args.node_id
+            ))),
+        }
     }
 }
 
@@ -791,11 +857,11 @@ pub fn get_tool_description(name: &str, arguments: &serde_json::Value) -> String
                 "Reasoning through the problem...".to_string()
             }
         }
-        "focus_node" => {
+        "get_node_details" => {
             if let Some(node_id) = arguments.get("node_id").and_then(|v| v.as_str()) {
-                format!("Examining node {}", node_id)
+                format!("Getting details for node {}", node_id)
             } else {
-                "Examining a node...".to_string()
+                "Getting node details...".to_string()
             }
         }
         "emit_commands" => {
