@@ -5104,7 +5104,7 @@ dependencies = [
  "strsim",
  "sysinfo 0.37.2",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.17",
  "tracing",
  "url",
  "zeroize",
