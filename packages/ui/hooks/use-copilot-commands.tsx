@@ -52,6 +52,7 @@ export function useCopilotCommands({
 	const handleExecuteCommands = useCallback(
 		async (commands: BoardCommand[]) => {
 			const boardNodes = board.data?.nodes ?? {};
+			const boardLayers = board.data?.layers ?? {};
 
 			// ===== MAPPING TABLES =====
 			const nodeReferenceMap = new Map<string, INode>();
@@ -71,10 +72,24 @@ export function useCopilotCommands({
 				baseY = rightmostNode.coordinates?.[1] ?? 100;
 			}
 
+			// Helper to convert a layer to node-like structure for pin resolution
+			const layerAsNode = (layer: ILayer): INode => ({
+				id: layer.id,
+				name: layer.name,
+				friendly_name: layer.name,
+				pins: layer.pins,
+				coordinates: layer.coordinates,
+			} as unknown as INode);
+
 			// ===== HELPER FUNCTIONS =====
 			const resolveNode = (ref: string): INode | undefined => {
+				// Check regular nodes first
 				if (boardNodes[ref]) return boardNodes[ref];
-				return nodeReferenceMap.get(ref);
+				// Check reference map (newly created nodes/layers)
+				if (nodeReferenceMap.has(ref)) return nodeReferenceMap.get(ref);
+				// Check existing layers (placeholders) - they can be connected to like nodes
+				if (boardLayers[ref]) return layerAsNode(boardLayers[ref]);
+				return undefined;
 			};
 
 			const resolvePinId = (
@@ -129,6 +144,11 @@ export function useCopilotCommands({
 				buildPinMapping(nodeId, node);
 			}
 
+			// Build pin mappings for existing layers (placeholders) so they can be connected to
+			for (const [layerId, layer] of Object.entries(boardLayers)) {
+				buildPinMapping(layerId, layerAsNode(layer));
+			}
+
 			// ===== FIRST PASS: ADD NODES =====
 			let nodeIndex = 0;
 
@@ -150,13 +170,15 @@ export function useCopilotCommands({
 						y: baseY + Math.floor(nodeIndex / 3) * 200,
 					};
 
+					const targetLayer = cmd.target_layer ?? currentLayer;
+
 					const result = addNodeCommand({
 						node: {
 							...catalogNode,
 							coordinates: [position.x, position.y, 0],
 							friendly_name: catalogNode.friendly_name,
 						},
-						current_layer: currentLayer,
+						current_layer: targetLayer,
 					});
 
 					const executedCommand = await executeCommand(result.command);
@@ -208,6 +230,8 @@ export function useCopilotCommands({
 						x: baseX + (nodeIndex % 3) * 300,
 						y: baseY + Math.floor(nodeIndex / 3) * 200,
 					};
+
+					const targetLayer = cmd.target_layer ?? currentLayer;
 
 					// Create default execution pins
 					const execInPin: IPin = {
@@ -270,14 +294,14 @@ export function useCopilotCommands({
 						variables: {},
 						comments: {},
 						pins,
-						parent_id: currentLayer,
+						parent_id: targetLayer,
 					};
 
 					const result = await executeCommand(
 						upsertLayerCommand({
 							layer,
 							node_ids: [],
-							current_layer: currentLayer,
+							current_layer: targetLayer,
 						}),
 					);
 
@@ -572,11 +596,13 @@ export function useCopilotCommands({
 						const node = resolveNode(cmd.node_id);
 						if (!node) break;
 
+						const targetLayer = cmd.target_layer ?? currentLayer;
+
 						await executeCommand(
 							moveNodeCommand({
 								node_id: node.id,
 								to_coordinates: [cmd.position.x, cmd.position.y, 0],
-								current_layer: currentLayer,
+								current_layer: targetLayer,
 							}),
 						);
 						break;
@@ -669,9 +695,11 @@ export function useCopilotCommands({
 							author: "copilot",
 						};
 
+						const targetLayer = cmd.target_layer ?? currentLayer;
+
 						console.log(`[CreateComment] "${cmd.content.slice(0, 30)}..."`);
 						await executeCommand(
-							upsertCommentCommand({ comment, current_layer: currentLayer }),
+							upsertCommentCommand({ comment, current_layer: targetLayer }),
 						);
 						break;
 					}
@@ -726,6 +754,8 @@ export function useCopilotCommands({
 
 					case "CreateLayer": {
 						const layerId = createId();
+						const targetLayer = cmd.target_layer ?? currentLayer;
+
 						const layer: ILayer = {
 							id: layerId,
 							name: cmd.name,
@@ -736,7 +766,7 @@ export function useCopilotCommands({
 							variables: {},
 							comments: {},
 							pins: {},
-							parent_id: currentLayer,
+							parent_id: targetLayer,
 						};
 
 						console.log(
@@ -746,7 +776,7 @@ export function useCopilotCommands({
 							upsertLayerCommand({
 								layer,
 								node_ids: cmd.node_ids || [],
-								current_layer: currentLayer,
+								current_layer: targetLayer,
 							}),
 						);
 						break;
