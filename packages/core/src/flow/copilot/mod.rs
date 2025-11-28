@@ -8,7 +8,7 @@ mod provider;
 mod tools;
 mod types;
 
-pub use context::{EdgeContext, GraphContext, NodeContext, PinContext, prepare_context};
+pub use context::{EdgeContext, GraphContext, LayerContext, NodeContext, PinContext, prepare_context};
 pub use provider::CatalogProvider;
 pub use tools::{
     CatalogTool, EmitCommandsTool, FilterCategoryTool, GetNodeDetailsTool, QueryLogsTool,
@@ -593,8 +593,34 @@ impl Copilot {
         format!(
             r#"You are an expert graph editor assistant. You help users understand and modify visual workflows.
 
-## Graph Context (abbreviated keys: t=type, n=name, i=inputs, o=outputs, p=position, s=size, f=from, fp=from_pin, tp=to_pin, v=value)
+## Graph Context (abbreviated keys: t=type, n=name, i=inputs, o=outputs, p=position, s=size, f=from, fp=from_pin, tp=to_pin, v=value, p=parent)
 {}
+
+## Layers (also called Placeholders)
+Layers are containers that group nodes. They are created via AddPlaceholder command and appear in the "layers" array.
+The context includes a "layers" array with:
+- id: unique layer identifier
+- n: layer name
+- p: parent layer ID (if nested, omitted if at root)
+- nodes: array of node IDs in this layer
+- pos: layer position
+- i: input pins (to connect TO this layer from outside)
+- o: output pins (to connect FROM this layer to outside)
+
+**Connecting to Layers/Placeholders**: Layers have pins and CAN be connected like nodes!
+- Every layer has default pins: exec_in (Input), exec_out (Output)
+- Custom data pins can be defined via AddPlaceholder's pins[] array
+- Connection rules from OUTSIDE a layer (at root or parent level):
+  - To send execution/data INTO a layer: connect to layer's INPUT pins (exec_in, custom inputs)
+  - To receive execution/data FROM a layer: connect from layer's OUTPUT pins (exec_out, custom outputs)
+  - Example flow: Node.exec_out → Layer.exec_in ... Layer.exec_out → NextNode.exec_in
+
+Use target_layer in commands to place nodes/comments INSIDE specific layers:
+- AddNode(..., target_layer: "layer_id") - add node inside a layer
+- AddPlaceholder(..., target_layer: "layer_id") - add nested placeholder inside a layer
+- CreateComment(..., target_layer: "layer_id") - add comment inside a layer
+- MoveNode(..., target_layer: "layer_id") - move node into a different layer
+If target_layer is omitted, nodes are added to the current/root layer.
 
 ## Tools
 **Understanding**: think (reason step-by-step), get_node_details (get full info about a specific node)
@@ -614,11 +640,12 @@ impl Copilot {
 10. Limit output to 20 commands per turn
 
 ## Commands
-AddNode(node_type, ref_id, position, summary) | RemoveNode(node_id, summary)
-AddPlaceholder(name, ref_id, position, pins[], summary) - Create a placeholder node for process modeling with custom name and pins
+AddNode(node_type, ref_id, position, target_layer?, summary) | RemoveNode(node_id, summary)
+AddPlaceholder(name, ref_id, position, pins[], target_layer?, summary) - Create a placeholder node for process modeling
 ConnectPins(from_node, from_pin, to_node, to_pin, summary) | DisconnectPins(same)
-UpdateNodePin(node_id, pin_id, value, summary) | MoveNode(node_id, position, summary)
-CreateVariable(name, data_type, value_type, summary) | CreateComment(content, position, summary)
+UpdateNodePin(node_id, pin_id, value, summary) | MoveNode(node_id, position, target_layer?, summary)
+CreateVariable(name, data_type, value_type, summary) | CreateComment(content, position, target_layer?, summary)
+CreateLayer(name, node_ids[], target_layer?, summary) - Create a layer, optionally nested inside target_layer
 
 ## Process Modeling
 Use these tools when the user wants to model/sketch a process before implementing with real nodes:

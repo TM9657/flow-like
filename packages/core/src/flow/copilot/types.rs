@@ -228,6 +228,9 @@ pub enum BoardCommand {
         position: Option<NodePosition>,
         #[serde(default)]
         friendly_name: Option<String>,
+        /// Target layer ID to place the node in. If None, uses current layer.
+        #[serde(default)]
+        target_layer: Option<String>,
         #[serde(default)]
         summary: Option<String>,
     },
@@ -239,6 +242,9 @@ pub enum BoardCommand {
         position: Option<NodePosition>,
         #[serde(default)]
         pins: Option<Vec<PlaceholderPinDef>>,
+        /// Target layer ID to place the placeholder in. If None, uses current layer.
+        #[serde(default)]
+        target_layer: Option<String>,
         #[serde(default)]
         summary: Option<String>,
     },
@@ -273,6 +279,9 @@ pub enum BoardCommand {
     MoveNode {
         node_id: String,
         position: NodePosition,
+        /// Target layer ID to move the node to. If None, moves within current layer.
+        #[serde(default)]
+        target_layer: Option<String>,
         #[serde(default)]
         summary: Option<String>,
     },
@@ -300,6 +309,9 @@ pub enum BoardCommand {
         width: Option<f64>,
         height: Option<f64>,
         color: Option<String>,
+        /// Target layer ID to place the comment in. If None, uses current layer.
+        #[serde(default)]
+        target_layer: Option<String>,
         #[serde(default)]
         summary: Option<String>,
     },
@@ -315,6 +327,9 @@ pub enum BoardCommand {
         node_ids: Vec<String>, // Nodes to include in the layer
         position: Option<NodePosition>,
         color: Option<String>,
+        /// Parent layer ID. If None, creates at root or current layer.
+        #[serde(default)]
+        target_layer: Option<String>,
         #[serde(default)]
         summary: Option<String>,
     },

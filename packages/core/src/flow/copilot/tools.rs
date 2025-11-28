@@ -425,6 +425,7 @@ impl Tool for EmitCommandsTool {
                                             "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
                                         },
                                         "friendly_name": { "type": "string", "description": "Optional friendly name" },
+                                        "target_layer": { "type": "string", "description": "Layer ID to place the node in. Use layer ID from context. Omit for root/current layer." },
                                         "summary": { "type": "string", "description": "Human-readable summary, e.g. 'Add a String Concat node'" }
                                     },
                                     "required": ["command_type", "node_type", "ref_id", "summary"]
@@ -454,6 +455,7 @@ impl Tool for EmitCommandsTool {
                                                 "required": ["name", "friendly_name", "pin_type", "data_type"]
                                             }
                                         },
+                                        "target_layer": { "type": "string", "description": "Layer ID to place the placeholder in. Use layer ID from context. Omit for root/current layer." },
                                         "summary": { "type": "string", "description": "Human-readable summary, e.g. 'Add placeholder for order processing'" }
                                     },
                                     "required": ["command_type", "name", "ref_id", "summary"]
@@ -507,6 +509,7 @@ impl Tool for EmitCommandsTool {
                                             "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
                                             "required": ["x", "y"]
                                         },
+                                        "target_layer": { "type": "string", "description": "Layer ID to move the node to. Use layer ID from context." },
                                         "summary": { "type": "string", "description": "Human-readable summary" }
                                     },
                                     "required": ["command_type", "node_id", "position", "summary"]
@@ -551,6 +554,7 @@ impl Tool for EmitCommandsTool {
                                         "width": { "type": "number", "description": "Comment width in pixels (default: 200)" },
                                         "height": { "type": "number", "description": "Comment height in pixels (default: 100)" },
                                         "color": { "type": "string", "description": "Optional hex color (e.g. #FFD700)" },
+                                        "target_layer": { "type": "string", "description": "Layer ID to place the comment in. Use layer ID from context. Omit for root/current layer." },
                                         "summary": { "type": "string", "description": "Human-readable summary" }
                                     },
                                     "required": ["command_type", "content", "summary"]
@@ -579,6 +583,7 @@ impl Tool for EmitCommandsTool {
                                         "name": { "type": "string", "description": "Layer name" },
                                         "color": { "type": "string", "description": "Optional layer color" },
                                         "node_ids": { "type": "array", "items": { "type": "string" }, "description": "Node IDs to include" },
+                                        "target_layer": { "type": "string", "description": "Parent layer ID for nesting. Use layer ID from context. Omit for root layer." },
                                         "summary": { "type": "string", "description": "Human-readable summary" }
                                     },
                                     "required": ["command_type", "name", "summary"]

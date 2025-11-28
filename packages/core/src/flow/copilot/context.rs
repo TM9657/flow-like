@@ -48,11 +48,36 @@ pub struct EdgeContext {
     pub to_pin_name: String,
 }
 
+/// Compact layer representation for context
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LayerContext {
+    pub id: String,
+    #[serde(rename = "n")] // "name" abbreviated
+    pub name: String,
+    /// Parent layer ID if nested, None if at root
+    #[serde(rename = "p", skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// Node IDs contained in this layer
+    #[serde(rename = "nodes")]
+    pub node_ids: Vec<String>,
+    #[serde(rename = "pos")] // "position" abbreviated
+    pub position: (i32, i32),
+    /// Input pins (for connecting TO this layer)
+    #[serde(rename = "i", skip_serializing_if = "Vec::is_empty")]
+    pub inputs: Vec<PinContext>,
+    /// Output pins (for connecting FROM this layer)
+    #[serde(rename = "o", skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<PinContext>,
+}
+
 /// Complete graph context for the LLM
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphContext {
     pub nodes: Vec<NodeContext>,
     pub edges: Vec<EdgeContext>,
+    /// All layers in the board with their hierarchy
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<LayerContext>,
     pub selected_nodes: Vec<String>,
 }
 
@@ -167,9 +192,52 @@ pub fn prepare_context(board: &Board, selected_node_ids: &[String]) -> Result<Gr
         process_edges(&layer.nodes);
     }
 
+    // Build layer contexts
+    let layer_contexts: Vec<LayerContext> = board
+        .layers
+        .values()
+        .map(|layer| {
+            let (x, y) = (layer.coordinates.0 as i32, layer.coordinates.1 as i32);
+
+            // Build input and output pin lists for the layer
+            let inputs: Vec<PinContext> = layer
+                .pins
+                .values()
+                .filter(|p| p.pin_type == PinType::Input)
+                .map(|p| PinContext {
+                    name: p.name.clone(),
+                    type_name: format!("{:?}", p.data_type),
+                    default_value: None,
+                })
+                .collect();
+
+            let outputs: Vec<PinContext> = layer
+                .pins
+                .values()
+                .filter(|p| p.pin_type == PinType::Output)
+                .map(|p| PinContext {
+                    name: p.name.clone(),
+                    type_name: format!("{:?}", p.data_type),
+                    default_value: None,
+                })
+                .collect();
+
+            LayerContext {
+                id: layer.id.clone(),
+                name: layer.name.clone(),
+                parent_id: layer.parent_id.clone(),
+                node_ids: layer.nodes.keys().cloned().collect(),
+                position: (x, y),
+                inputs,
+                outputs,
+            }
+        })
+        .collect();
+
     Ok(GraphContext {
         nodes: node_contexts,
         edges: edge_contexts,
+        layers: layer_contexts,
         selected_nodes: selected_node_ids.to_vec(),
     })
 }
