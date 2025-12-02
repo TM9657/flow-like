@@ -32,10 +32,7 @@ export interface IEventState {
 		oauthTokens?: Record<string, IOAuthToken>,
 	): Promise<IEvent>;
 	/** Check OAuth requirements for an event's board. Returns missing providers. */
-	checkEventOAuth?(
-		appId: string,
-		event: IEvent,
-	): Promise<IOAuthCheckResult>;
+	checkEventOAuth?(appId: string, event: IEvent): Promise<IOAuthCheckResult>;
 	deleteEvent(appId: string, eventId: string): Promise<void>;
 	validateEvent(
 		appId: string,

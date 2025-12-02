@@ -3,13 +3,13 @@
 import { CheckCircle2, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { OAuthService } from "../../lib/oauth/service";
 import type {
 	IDeviceAuthResponse,
 	IOAuthProvider,
 	IOAuthRuntime,
 	IStoredOAuthToken,
 } from "../../lib/oauth/types";
-import type { OAuthService } from "../../lib/oauth/service";
 import { Button } from "../ui/button";
 import {
 	Dialog,

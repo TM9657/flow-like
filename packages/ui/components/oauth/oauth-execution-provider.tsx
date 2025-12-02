@@ -9,6 +9,9 @@ import {
 	useRef,
 	useState,
 } from "react";
+import type { IOAuthConsentStore } from "../../db/oauth-db";
+import { checkOAuthTokens } from "../../lib/oauth/helpers";
+import type { OAuthService } from "../../lib/oauth/service";
 import type {
 	IOAuthProvider,
 	IOAuthRuntime,
@@ -17,11 +20,8 @@ import type {
 	IStoredOAuthToken,
 } from "../../lib/oauth/types";
 import type { IBoard } from "../../lib/schema/flow/board";
-import type { OAuthService } from "../../lib/oauth/service";
-import { checkOAuthTokens } from "../../lib/oauth/helpers";
-import type { IOAuthConsentStore } from "../../db/oauth-db";
-import { OAuthConsentDialog } from "./oauth-consent-dialog";
 import { DeviceFlowDialog } from "./device-flow-dialog";
+import { OAuthConsentDialog } from "./oauth-consent-dialog";
 
 export interface OAuthExecutionContextValue {
 	withOAuthCheck: <T>(
@@ -80,14 +80,24 @@ export function OAuthExecutionProvider({
 	onOAuthCallback,
 	providerCacheRef,
 }: OAuthExecutionProviderProps) {
-	const [missingProviders, setMissingProviders] = useState<IOAuthProvider[]>([]);
+	const [missingProviders, setMissingProviders] = useState<IOAuthProvider[]>(
+		[],
+	);
 	const [currentAppId, setCurrentAppId] = useState<string | null>(null);
-	const [pendingExecution, setPendingExecution] = useState<PendingExecution | null>(null);
+	const [pendingExecution, setPendingExecution] =
+		useState<PendingExecution | null>(null);
 	const [isDialogOpen, setIsDialogOpen] = useState(false);
-	const [authorizedProviders, setAuthorizedProviders] = useState<Set<string>>(new Set());
-	const [preAuthorizedProviders, setPreAuthorizedProviders] = useState<Set<string>>(new Set());
-	const [deviceFlowProvider, setDeviceFlowProvider] = useState<IOAuthProvider | null>(null);
-	const [pendingAutoConsent, setPendingAutoConsent] = useState<IOAuthProvider[]>([]);
+	const [authorizedProviders, setAuthorizedProviders] = useState<Set<string>>(
+		new Set(),
+	);
+	const [preAuthorizedProviders, setPreAuthorizedProviders] = useState<
+		Set<string>
+	>(new Set());
+	const [deviceFlowProvider, setDeviceFlowProvider] =
+		useState<IOAuthProvider | null>(null);
+	const [pendingAutoConsent, setPendingAutoConsent] = useState<
+		IOAuthProvider[]
+	>([]);
 
 	const pendingExecutionRef = useRef<PendingExecution | null>(null);
 	const currentAppIdRef = useRef<string | null>(null);
@@ -155,7 +165,13 @@ export function OAuthExecutionProvider({
 	useEffect(() => {
 		const handleOAuthRequired = async (event: Event) => {
 			const oauthEvent = event as OAuthRequiredEvent;
-			const { appId, boardId, nodeId, payload, missingProviders: allMissing } = oauthEvent.detail;
+			const {
+				appId,
+				boardId,
+				nodeId,
+				payload,
+				missingProviders: allMissing,
+			} = oauthEvent.detail;
 			setCurrentAppId(appId);
 			setPendingExecution({ appId, boardId, nodeId, payload });
 
@@ -197,56 +213,67 @@ export function OAuthExecutionProvider({
 		};
 	}, [consentStore, tokenStore]);
 
-	const handleAuthorize = useCallback(async (providerId: string) => {
-		const provider = missingProvidersRef.current.find((p) => p.id === providerId);
-		if (!provider) return;
-
-		if (provider.use_device_flow && provider.device_auth_url) {
-			setDeviceFlowProvider(provider);
-			return;
-		}
-
-		await oauthService.startAuthorization(provider);
-	}, [oauthService]);
-
-	const handleConfirmAll = useCallback(async (rememberConsent: boolean) => {
-		const appId = currentAppIdRef.current;
-		const providers = missingProvidersRef.current;
-		const execution = pendingExecutionRef.current;
-
-		if (rememberConsent && appId) {
-			for (const provider of providers) {
-				await consentStore.setConsent(appId, provider.id, provider.scopes);
-			}
-		}
-
-		setIsDialogOpen(false);
-		setMissingProviders([]);
-		setAuthorizedProviders(new Set());
-		setPreAuthorizedProviders(new Set());
-
-		if (execution) {
-			window.dispatchEvent(
-				new CustomEvent("flow:oauth-retry", {
-					detail: {
-						...execution,
-						skipConsentCheck: true,
-					},
-				}),
+	const handleAuthorize = useCallback(
+		async (providerId: string) => {
+			const provider = missingProvidersRef.current.find(
+				(p) => p.id === providerId,
 			);
-			setPendingExecution(null);
-		}
-	}, [consentStore]);
+			if (!provider) return;
 
-	const handleDeviceFlowSuccess = useCallback((token: IStoredOAuthToken) => {
-		setDeviceFlowProvider(null);
-		setAuthorizedProviders((prev) => {
-			const next = new Set(prev);
-			next.add(token.providerId);
-			return next;
-		});
-		onOAuthCallback?.(token.providerId, token);
-	}, [onOAuthCallback]);
+			if (provider.use_device_flow && provider.device_auth_url) {
+				setDeviceFlowProvider(provider);
+				return;
+			}
+
+			await oauthService.startAuthorization(provider);
+		},
+		[oauthService],
+	);
+
+	const handleConfirmAll = useCallback(
+		async (rememberConsent: boolean) => {
+			const appId = currentAppIdRef.current;
+			const providers = missingProvidersRef.current;
+			const execution = pendingExecutionRef.current;
+
+			if (rememberConsent && appId) {
+				for (const provider of providers) {
+					await consentStore.setConsent(appId, provider.id, provider.scopes);
+				}
+			}
+
+			setIsDialogOpen(false);
+			setMissingProviders([]);
+			setAuthorizedProviders(new Set());
+			setPreAuthorizedProviders(new Set());
+
+			if (execution) {
+				window.dispatchEvent(
+					new CustomEvent("flow:oauth-retry", {
+						detail: {
+							...execution,
+							skipConsentCheck: true,
+						},
+					}),
+				);
+				setPendingExecution(null);
+			}
+		},
+		[consentStore],
+	);
+
+	const handleDeviceFlowSuccess = useCallback(
+		(token: IStoredOAuthToken) => {
+			setDeviceFlowProvider(null);
+			setAuthorizedProviders((prev) => {
+				const next = new Set(prev);
+				next.add(token.providerId);
+				return next;
+			});
+			onOAuthCallback?.(token.providerId, token);
+		},
+		[onOAuthCallback],
+	);
 
 	const handleDeviceFlowCancel = useCallback(() => {
 		setDeviceFlowProvider(null);
@@ -268,7 +295,8 @@ export function OAuthExecutionProvider({
 			const result = await checkOAuthTokens(board, tokenStore);
 
 			if (result.missingProviders.length === 0) {
-				const tokens = Object.keys(result.tokens).length > 0 ? result.tokens : undefined;
+				const tokens =
+					Object.keys(result.tokens).length > 0 ? result.tokens : undefined;
 				return executor(tokens);
 			}
 

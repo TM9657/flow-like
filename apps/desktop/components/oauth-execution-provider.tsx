@@ -2,9 +2,8 @@
 
 import {
 	OAuthExecutionProvider as BaseOAuthExecutionProvider,
-	useOAuthExecutionContext,
 	type IOAuthProvider,
-	type IStoredOAuthToken,
+	useOAuthExecutionContext,
 } from "@tm9657/flow-like-ui";
 import { type ReactNode, useRef } from "react";
 import { oauthConsentStore, oauthTokenStore } from "../lib/oauth-db";
@@ -63,11 +62,14 @@ function OAuthCallbackSync({
 	providerCacheRef: React.MutableRefObject<Map<string, IOAuthProvider>>;
 }) {
 	// Keep provider cache in sync
-	useOAuthCallbackListener((pending, _token) => {
-		if (providerCacheRef.current.size > 0) {
-			setProviderCache(providerCacheRef.current);
-		}
-	}, [providerCacheRef]);
+	useOAuthCallbackListener(
+		(pending, _token) => {
+			if (providerCacheRef.current.size > 0) {
+				setProviderCache(providerCacheRef.current);
+			}
+		},
+		[providerCacheRef],
+	);
 
 	return <>{children}</>;
 }

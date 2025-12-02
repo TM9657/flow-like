@@ -109,7 +109,10 @@ async function processCallback(payload: IOAuthCallbackData) {
 		const provider = pending.provider ?? providerCache?.get(pending.providerId);
 
 		if (!provider) {
-			console.error("Provider not found in cache or pending auth:", pending.providerId);
+			console.error(
+				"Provider not found in cache or pending auth:",
+				pending.providerId,
+			);
 			toast.error(`Provider not found: ${pending.providerId}. Please retry.`);
 			return;
 		}

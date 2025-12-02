@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { oauthTokenStore } from "../db/oauth-db";
 import { checkOAuthTokens } from "../lib/oauth/helpers";
 import { createOAuthService } from "../lib/oauth/service";
@@ -61,7 +61,11 @@ export function useOAuthExecution(
 	});
 
 	const oauthService = useMemo(
-		() => createOAuthService({ runtime: options.runtime, tokenStore: oauthTokenStore }),
+		() =>
+			createOAuthService({
+				runtime: options.runtime,
+				tokenStore: oauthTokenStore,
+			}),
 		[options.runtime],
 	);
 
