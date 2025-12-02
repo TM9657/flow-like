@@ -206,6 +206,7 @@ impl EventBus {
         offline: bool,
         token: Option<String>,
         callback: Option<Arc<BufferedInterComHandler>>,
+        oauth_tokens: Option<std::collections::HashMap<String, OAuthToken>>,
     ) -> Result<(), String> {
         if !offline && token.is_none() {
             return Err("No token registered, cannot send online events".to_string());
@@ -218,7 +219,7 @@ impl EventBus {
             token,
             offline,
             callback,
-            oauth_tokens: std::collections::HashMap::new(),
+            oauth_tokens: oauth_tokens.unwrap_or_default(),
         };
 
         self.sender

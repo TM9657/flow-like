@@ -347,7 +347,7 @@ impl EventSinkManager {
     }
 
     /// Fire an event by retrieving its configuration and pushing it to the event bus
-    /// This is a centralized method that handles offline status, personal_access_token, etc.
+    /// This is a centralized method that handles offline status, personal_access_token, oauth_tokens, etc.
     pub fn fire_event(
         &self,
         app_handle: &AppHandle,
@@ -360,18 +360,32 @@ impl EventSinkManager {
         let conn = self.db.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT app_id, offline, personal_access_token FROM event_registrations WHERE event_id = ?1",
+            "SELECT app_id, offline, personal_access_token, oauth_tokens FROM event_registrations WHERE event_id = ?1",
         )?;
 
         let query_result = stmt.query_row(params![event_id], |row| {
+            let oauth_tokens_json: Option<String> = row.get(3)?;
+            let oauth_tokens: HashMap<String, OAuthToken> = oauth_tokens_json
+                .map(|json| serde_json::from_str(&json))
+                .transpose()
+                .map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        3,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?
+                .unwrap_or_default();
+
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, bool>(1)?,
                 row.get::<_, Option<String>>(2)?,
+                oauth_tokens,
             ))
         });
 
-        let (app_id, offline, personal_access_token) = match query_result {
+        let (app_id, offline, personal_access_token, oauth_tokens) = match query_result {
             Ok(result) => result,
             Err(e) => {
                 drop(stmt);
@@ -383,28 +397,25 @@ impl EventSinkManager {
         drop(stmt);
         drop(conn);
 
+        // Convert oauth_tokens to Option if empty
+        let oauth_tokens_opt = if oauth_tokens.is_empty() {
+            None
+        } else {
+            Some(oauth_tokens)
+        };
+
         if let Some(event_bus_state) = app_handle.try_state::<crate::state::TauriEventBusState>() {
             let event_bus = &event_bus_state.0;
 
-            let push_result = if let Some(token) = personal_access_token {
-                event_bus.push_event_with_token(
-                    payload,
-                    app_id.clone(),
-                    event_id.to_string(),
-                    offline,
-                    Some(token),
-                    callback,
-                )
-            } else {
-                event_bus.push_event_with_token(
-                    payload,
-                    app_id.clone(),
-                    event_id.to_string(),
-                    offline,
-                    personal_access_token,
-                    callback,
-                )
-            };
+            let push_result = event_bus.push_event_with_token(
+                payload,
+                app_id.clone(),
+                event_id.to_string(),
+                offline,
+                personal_access_token,
+                callback,
+                oauth_tokens_opt,
+            );
 
             match push_result {
                 Ok(_) => Ok(true),
