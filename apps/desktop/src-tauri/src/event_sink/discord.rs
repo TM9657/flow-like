@@ -1001,6 +1001,7 @@ impl DiscordSink {
             app_id: "unknown".to_string(),
             default_payload: None,
             personal_access_token: None,
+            oauth_tokens: std::collections::HashMap::new(),
         }
     }
 

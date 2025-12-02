@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
+use flow_like::flow::oauth::OAuthToken;
 use flow_like_types::intercom::BufferedInterComHandler;
 use rusqlite::{Connection, params};
 use serde_json;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -50,10 +51,25 @@ impl RegistrationStorage {
                 offline INTEGER NOT NULL,
                 app_id TEXT NOT NULL,
                 default_payload TEXT,
-                personal_access_token TEXT
+                personal_access_token TEXT,
+                oauth_tokens TEXT
             )",
             [],
         )?;
+
+        // Migration: add oauth_tokens column if it doesn't exist
+        let has_oauth_tokens: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('event_registrations') WHERE name='oauth_tokens'")?
+            .query_row([], |row| row.get::<_, i32>(0))
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_oauth_tokens {
+            conn.execute(
+                "ALTER TABLE event_registrations ADD COLUMN oauth_tokens TEXT",
+                [],
+            )?;
+        }
 
         Ok(())
     }
@@ -65,6 +81,11 @@ impl RegistrationStorage {
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
+        let oauth_tokens_json = if registration.oauth_tokens.is_empty() {
+            None
+        } else {
+            Some(serde_json::to_string(&registration.oauth_tokens)?)
+        };
 
         let updated_at = registration
             .updated_at
@@ -87,8 +108,8 @@ impl RegistrationStorage {
 
             conn.execute(
                 "INSERT OR REPLACE INTO event_registrations
-                 (event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                 (event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token, oauth_tokens)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     registration.event_id,
                     registration.name,
@@ -100,6 +121,7 @@ impl RegistrationStorage {
                     registration.app_id,
                     default_payload_json,
                     registration.personal_access_token,
+                    oauth_tokens_json,
                 ],
             )?;
         }
@@ -116,7 +138,7 @@ impl RegistrationStorage {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token
+            "SELECT event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token, oauth_tokens
              FROM event_registrations WHERE event_id = ?1"
         )?;
 
@@ -142,6 +164,19 @@ impl RegistrationStorage {
                     )
                 })?;
 
+            let oauth_tokens_json: Option<String> = row.get(10)?;
+            let oauth_tokens: HashMap<String, OAuthToken> = oauth_tokens_json
+                .map(|json| serde_json::from_str(&json))
+                .transpose()
+                .map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        10,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?
+                .unwrap_or_default();
+
             let updated_at_secs: i64 = row.get(3)?;
             let created_at_secs: i64 = row.get(4)?;
 
@@ -158,6 +193,7 @@ impl RegistrationStorage {
                 app_id: row.get(7)?,
                 default_payload,
                 personal_access_token: row.get(9)?,
+                oauth_tokens,
             })
         });
 
@@ -172,7 +208,7 @@ impl RegistrationStorage {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token
+            "SELECT event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token, oauth_tokens
              FROM event_registrations ORDER BY created_at DESC"
         )?;
 
@@ -199,6 +235,19 @@ impl RegistrationStorage {
                         )
                     })?;
 
+                let oauth_tokens_json: Option<String> = row.get(10)?;
+                let oauth_tokens: HashMap<String, OAuthToken> = oauth_tokens_json
+                    .map(|json| serde_json::from_str(&json))
+                    .transpose()
+                    .map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            10,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    })?
+                    .unwrap_or_default();
+
                 let updated_at_secs: i64 = row.get(3)?;
                 let created_at_secs: i64 = row.get(4)?;
 
@@ -215,6 +264,7 @@ impl RegistrationStorage {
                     app_id: row.get(7)?,
                     default_payload,
                     personal_access_token: row.get(9)?,
+                    oauth_tokens,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -633,6 +683,7 @@ impl EventSinkManager {
                     app_id: app_id.to_string(),
                     default_payload: None, // TODO: Parse from event if needed
                     personal_access_token: final_pat.clone(),
+                    oauth_tokens: HashMap::new(),
                 };
 
                 self.register_event(app_handle, registration).await?;

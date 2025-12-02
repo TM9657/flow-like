@@ -14,13 +14,34 @@ function ask(question: string): Promise<string> {
 }
 
 async function main() {
+	console.log("Debug Auth Helper");
+	console.log("=================");
+	console.log("1. Internal OIDC (flow-like://auth)");
+	console.log("2. Thirdparty OAuth/OIDC (flow-like://thirdparty/callback)");
+	console.log("");
+
+	const choice = await ask("Select type (1 or 2): ");
 	const url = await ask("Callback URL: ");
-	console.log(`
+
+	if (choice === "2") {
+		// Thirdparty OAuth/OIDC callback
+		console.log(`
+// Paste this in your browser console:
+window.dispatchEvent(
+  new CustomEvent("debug-thirdparty", { detail: {
+    url: "${url}",
+  } })
+);`);
+	} else {
+		// Internal OIDC
+		console.log(`
+// Paste this in your browser console:
 window.dispatchEvent(
   new CustomEvent("debug-oidc", { detail: {
     url: "${url}",
   } })
 );`);
+	}
 }
 
 main();

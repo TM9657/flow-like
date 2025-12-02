@@ -1,6 +1,7 @@
 use crate::{state::TauriSettingsState, utils::UiEmitTarget};
 use flow_like::app::App;
 use flow_like::flow::execution::{InternalRun, LogMeta};
+use flow_like::flow::oauth::OAuthToken;
 use flow_like::flow_like_storage::Path;
 use flow_like::hub::Hub;
 use flow_like::state::RunData;
@@ -27,6 +28,9 @@ pub struct EventBusEvent {
     pub token: Option<String>,
 
     pub callback: Option<Arc<BufferedInterComHandler>>,
+
+    /// OAuth tokens for third-party services
+    pub oauth_tokens: std::collections::HashMap<String, OAuthToken>,
 }
 
 impl EventBusEvent {
@@ -109,6 +113,7 @@ impl EventBusEvent {
             buffered_sender.into_callback(),
             credentials,
             self.token.clone(),
+            self.oauth_tokens.clone(),
         )
         .await?;
 
@@ -213,6 +218,7 @@ impl EventBus {
             token,
             offline,
             callback,
+            oauth_tokens: std::collections::HashMap::new(),
         };
 
         self.sender

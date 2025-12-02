@@ -1,5 +1,6 @@
-use std::time::SystemTime;
+use std::{collections::HashMap, time::SystemTime};
 
+use flow_like::flow::oauth::OAuthToken;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
@@ -117,4 +118,7 @@ pub struct EventRegistration {
     pub app_id: String,
     pub default_payload: Option<flow_like_types::Value>,
     pub personal_access_token: Option<String>,
+    /// OAuth tokens for third-party services, keyed by provider ID
+    #[serde(default)]
+    pub oauth_tokens: HashMap<String, OAuthToken>,
 }

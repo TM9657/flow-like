@@ -8,7 +8,9 @@ mod provider;
 mod tools;
 mod types;
 
-pub use context::{EdgeContext, GraphContext, LayerContext, NodeContext, PinContext, prepare_context};
+pub use context::{
+    EdgeContext, GraphContext, LayerContext, NodeContext, PinContext, prepare_context,
+};
 pub use provider::CatalogProvider;
 pub use tools::{
     CatalogTool, EmitCommandsTool, FilterCategoryTool, GetNodeDetailsTool, QueryLogsTool,

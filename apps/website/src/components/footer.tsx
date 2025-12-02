@@ -1,14 +1,10 @@
 export function Footer() {
 	return (
 		<footer className="w-full flex flex-row items-center absolute bottom-0 left-0 right-0 h-10 z-20 bg-transparent justify-start px-2 gap-2">
-			<a href="https://great-co.de/eula" target="_blank" rel="noreferrer">
+			<a href="/eula">
 				<small>EULA</small>
 			</a>
-			<a
-				href="https://great-co.de/privacy-policy"
-				target="_blank"
-				rel="noreferrer"
-			>
+			<a href="/privacy-policy">
 				<small>Privacy Policy</small>
 			</a>
 			<a

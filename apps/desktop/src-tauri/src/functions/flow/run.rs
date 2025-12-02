@@ -3,6 +3,7 @@ use flow_like::credentials::SharedCredentials;
 use flow_like::flow::execution::InternalRun;
 use flow_like::flow::execution::log::LogMessage;
 use flow_like::flow::execution::{LogLevel, LogMeta, RunPayload};
+use flow_like::flow::oauth::OAuthToken;
 use flow_like::flow_like_storage::lancedb::query::{ExecutableQuery, QueryBase};
 use flow_like::flow_like_storage::{Path, serde_arrow};
 use flow_like::state::RunData;
@@ -10,6 +11,7 @@ use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
 use flow_like_types::tokio_util::sync::CancellationToken;
 use flow_like_types::{json, tokio};
 use futures::TryStreamExt;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::AppHandle;
@@ -30,6 +32,7 @@ async fn execute_internal(
     stream_state: bool,
     credentials: Option<SharedCredentials>,
     token: Option<String>,
+    oauth_tokens: Option<HashMap<String, OAuthToken>>,
 ) -> Result<Option<LogMeta>, TauriFunctionError> {
     let mut event = None;
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
@@ -100,6 +103,7 @@ async fn execute_internal(
         buffered_sender.into_callback(),
         credentials,
         token,
+        oauth_tokens.unwrap_or_default().into_iter().collect(),
     )
     .await?;
     let run_id = internal_run.run.lock().await.id.clone();
@@ -178,6 +182,7 @@ pub async fn execute_board(
     events: tauri::ipc::Channel<Vec<InterComEvent>>,
     credentials: Option<SharedCredentials>,
     token: Option<String>,
+    oauth_tokens: Option<HashMap<String, OAuthToken>>,
 ) -> Result<Option<LogMeta>, TauriFunctionError> {
     let stream_state = stream_state.unwrap_or(true);
     execute_internal(
@@ -190,6 +195,7 @@ pub async fn execute_board(
         stream_state,
         credentials,
         token,
+        oauth_tokens,
     )
     .await
 }
@@ -204,6 +210,7 @@ pub async fn execute_event(
     events: tauri::ipc::Channel<Vec<InterComEvent>>,
     credentials: Option<SharedCredentials>,
     token: Option<String>,
+    oauth_tokens: Option<HashMap<String, OAuthToken>>,
 ) -> Result<Option<LogMeta>, TauriFunctionError> {
     let stream_state = stream_state.unwrap_or(false);
     execute_internal(
@@ -216,6 +223,7 @@ pub async fn execute_event(
         stream_state,
         credentials,
         token,
+        oauth_tokens,
     )
     .await
 }

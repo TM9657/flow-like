@@ -415,7 +415,7 @@ export function FlowBoard({
 	}, [saveViewport]);
 
 	const executeBoard = useCallback(
-		async (node: INode, payload?: object) => {
+		async (node: INode, payload?: object, skipConsentCheck?: boolean) => {
 			let added = false;
 			let runId = "";
 			let meta: ILogMetadata | undefined = undefined;
@@ -449,9 +449,31 @@ export function FlowBoard({
 
 						pushUpdate(firstItem.run_id, runUpdates);
 					},
+					skipConsentCheck,
 				);
 			} catch (error) {
 				console.warn("Failed to execute board", error);
+
+				// Check if this is an OAuth error with missing providers
+				const oauthError = error as Error & {
+					isOAuthError?: boolean;
+					missingProviders?: unknown[];
+				};
+				if (oauthError.isOAuthError && oauthError.missingProviders) {
+					// Emit custom event for OAuth handling
+					window.dispatchEvent(
+						new CustomEvent("flow:oauth-required", {
+							detail: {
+								missingProviders: oauthError.missingProviders,
+								appId,
+								boardId,
+								nodeId: node.id,
+								payload,
+							},
+						}),
+					);
+					return;
+				}
 			}
 			removeRun(runId);
 			if (!meta) {
@@ -475,6 +497,50 @@ export function FlowBoard({
 			setCurrentMetadata,
 		],
 	);
+
+	// Listen for OAuth retry events to re-execute after authorization
+	useEffect(() => {
+		const handleOAuthRetry = (event: Event) => {
+			const retryEvent = event as CustomEvent<{
+				appId: string;
+				boardId: string;
+				nodeId: string;
+				payload?: object;
+				skipConsentCheck?: boolean;
+			}>;
+
+			const {
+				appId: eventAppId,
+				boardId: eventBoardId,
+				nodeId,
+				payload,
+				skipConsentCheck,
+			} = retryEvent.detail;
+
+			// Only handle if this is for our board
+			if (eventAppId !== appId || eventBoardId !== boardId) return;
+
+			console.log(
+				"[FlowBoard] OAuth retry event received, re-executing node:",
+				nodeId,
+				"skipConsentCheck:",
+				skipConsentCheck,
+			);
+
+			// Find the node and re-execute
+			const node = nodes.find((n) => n.id === nodeId);
+			if (node?.data?.node) {
+				executeBoard(node.data.node as INode, payload, skipConsentCheck);
+			} else {
+				console.warn("[FlowBoard] Node not found for OAuth retry:", nodeId);
+			}
+		};
+
+		window.addEventListener("flow:oauth-retry", handleOAuthRetry);
+		return () => {
+			window.removeEventListener("flow:oauth-retry", handleOAuthRetry);
+		};
+	}, [appId, boardId, nodes, executeBoard]);
 
 	const handlePasteCB = useCallback(
 		async (event: ClipboardEvent) => {

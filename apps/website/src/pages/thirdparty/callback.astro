@@ -1,0 +1,68 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import Layout from "../../layouts/Layout.astro";
+---
+
+<Layout>
+    <div class="flex flex-col items-center justify-center h-screen gap-4">
+        <div class="flex items-center gap-3">
+            <svg class="w-8 h-8 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <h1 class="text-xl font-semibold">Connecting to Flow-Like...</h1>
+        </div>
+        <p class="text-sm text-gray-500">
+            If the app doesn't open automatically,
+            <a id="deeplink" class="underline text-blue-500 hover:text-blue-600" href="#">click here to open Flow-Like</a>.
+        </p>
+        <p id="error" class="hidden text-sm text-red-500 mt-4"></p>
+    </div>
+    <script>
+        (function () {
+            try {
+                var search = new URLSearchParams(window.location.search);
+
+                // Also check for hash/fragment params (OIDC implicit flow returns tokens in fragment)
+                // This handles: #access_token=...&id_token=...&token_type=Bearer&expires_in=3600
+                var hash = window.location.hash ? window.location.hash.substring(1) : "";
+                if (hash) {
+                    var hashParams = new URLSearchParams(hash);
+                    hashParams.forEach(function (v, k) {
+                        // Don't overwrite query params with hash params
+                        if (!search.has(k)) {
+                            search.set(k, v);
+                        }
+                    });
+                }
+
+                var qs = search.toString();
+                var deeplink = "flow-like://thirdparty/callback" + (qs ? "?" + qs : "");
+
+                // Set the manual link
+                var link = document.getElementById("deeplink");
+                if (link) link.setAttribute("href", deeplink);
+
+                // Check for OAuth/OIDC errors
+                var error = search.get("error");
+                var errorDescription = search.get("error_description");
+                if (error) {
+                    var errorEl = document.getElementById("error");
+                    if (errorEl) {
+                        errorEl.textContent = "Authorization failed: " + (errorDescription || error);
+                        errorEl.classList.remove("hidden");
+                    }
+                }
+
+                // Redirect to the app via deep link
+                window.location.replace(deeplink);
+            } catch (e) {
+                var errorEl = document.getElementById("error");
+                if (errorEl) {
+                    errorEl.textContent = "Failed to process callback: " + (e instanceof Error ? e.message : String(e));
+                    errorEl.classList.remove("hidden");
+                }
+            }
+        })();
+    </script>
+</Layout>

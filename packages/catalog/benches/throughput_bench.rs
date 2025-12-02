@@ -14,6 +14,7 @@ use flow_like_storage::{
     files::store::{FlowLikeStore, local_store::LocalObjectStore},
 };
 use flow_like_types::{intercom::BufferedInterComHandler, sync::Mutex, tokio};
+use std::collections::HashMap;
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -135,6 +136,7 @@ async fn run_once(
         buffered_sender.clone().into_callback(),
         None,
         None,
+        HashMap::new(),
     )
     .await
     .expect("InternalRun::new");
