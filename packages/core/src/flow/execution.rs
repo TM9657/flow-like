@@ -1,5 +1,6 @@
 use super::board::ExecutionStage;
 use super::event::Event;
+use super::oauth::OAuthToken;
 use super::{board::Board, node::NodeState, variable::Variable};
 use crate::credentials::SharedCredentials;
 use crate::flow::execution::internal_node::ExecutionTarget;
@@ -388,6 +389,7 @@ pub struct InternalRun {
     pub callback: InterComCallback,
     pub credentials: Option<Arc<SharedCredentials>>,
     pub token: Option<String>,
+    pub oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
 
     stack: Arc<RunStack>,
     concurrency_limit: u64,
@@ -414,7 +416,11 @@ impl InternalRun {
         callback: InterComCallback,
         credentials: Option<SharedCredentials>,
         token: Option<String>,
+        oauth_tokens: std::collections::HashMap<String, OAuthToken>,
     ) -> flow_like_types::Result<Self> {
+        // Convert to AHashMap for internal use
+        let oauth_tokens: AHashMap<String, OAuthToken> = oauth_tokens.into_iter().collect();
+
         let before = Instant::now();
         let run_id = create_id();
 
@@ -647,6 +653,7 @@ impl InternalRun {
             callback,
             credentials: credentials.map(Arc::new),
             token,
+            oauth_tokens: Arc::new(oauth_tokens),
             dependencies,
             log_level: board.log_level,
             profile: Arc::new(profile.clone()),
@@ -714,6 +721,7 @@ impl InternalRun {
                 let credentials = self.credentials.clone();
                 let token = self.token.clone();
                 let nodes = self.nodes.clone();
+                let oauth_tokens = self.oauth_tokens.clone();
 
                 async move {
                     step_core(
@@ -732,6 +740,7 @@ impl InternalRun {
                         &completion_callbacks,
                         credentials,
                         token,
+                        oauth_tokens,
                     )
                     .await
                 }
@@ -781,6 +790,7 @@ impl InternalRun {
             &self.completion_callbacks,
             self.credentials.clone(),
             self.token.clone(),
+            self.oauth_tokens.clone(),
         )
         .await;
 
@@ -1020,6 +1030,7 @@ async fn step_core(
     completion_callbacks: &Arc<RwLock<Vec<EventTrigger>>>,
     credentials: Option<Arc<SharedCredentials>>,
     token: Option<String>,
+    oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
 ) -> flow_like_types::Result<Vec<ExecutionTarget>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
     {
@@ -1044,6 +1055,7 @@ async fn step_core(
         completion_callbacks.clone(),
         credentials,
         token,
+        oauth_tokens,
     )
     .await;
     context.started_by = if target.through_pins.is_empty() {

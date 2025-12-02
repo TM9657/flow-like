@@ -1,0 +1,154 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import { BlogFooter } from "../components/blog-footer";
+import { BlogHeader } from "../components/blog-header";
+import PostHog from "../components/posthog.astro";
+
+interface Props {
+	title: string;
+	description?: string;
+	lastUpdated?: string;
+}
+
+const { title, description, lastUpdated } = Astro.props;
+
+const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
+const canonical = new URL(Astro.url.pathname, site).toString();
+const desc = description ?? "Legal information for Flow-Like";
+---
+
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="generator" content={Astro.generator} />
+
+		<title>{title} | Flow-Like</title>
+		<meta name="description" content={desc} />
+		<meta name="robots" content="index, follow" />
+		<link rel="canonical" href={canonical} />
+		<link rel="sitemap" href="/sitemap-index.xml" />
+
+		<!-- Open Graph -->
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="Flow-Like" />
+		<meta property="og:url" content={canonical} />
+		<meta property="og:title" content={`${title} | Flow-Like`} />
+		<meta property="og:description" content={desc} />
+
+		<!-- Twitter -->
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:site" content="@greatco_de" />
+		<meta name="twitter:title" content={`${title} | Flow-Like`} />
+		<meta name="twitter:description" content={desc} />
+
+		<PostHog />
+	</head>
+	<body class="min-h-screen bg-background text-foreground overflow-y-auto overflow-x-hidden">
+		<!-- Subtle dot pattern background -->
+		<div class="pointer-events-none fixed inset-0 h-full w-full bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] opacity-30 -z-[100]"/>
+
+		<BlogHeader client:load/>
+
+		<main class="relative">
+			<!-- Hero section -->
+			<div class="border-b border-border/40 bg-gradient-to-b from-background to-muted/20">
+				<div class="max-w-4xl mx-auto px-6 py-16 md:py-24">
+					<h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4">{title}</h1>
+					{lastUpdated && (
+						<p class="text-muted-foreground text-sm">
+							Last updated: <time>{lastUpdated}</time>
+						</p>
+					)}
+				</div>
+			</div>
+
+			<!-- Content -->
+			<div class="max-w-4xl mx-auto px-6 py-12 md:py-16">
+				<article class="legal-content">
+					<slot />
+				</article>
+			</div>
+		</main>
+
+		<BlogFooter />
+	</body>
+</html>
+
+<style is:global>
+	@reference "@tm9657/flow-like-ui/global.css";
+
+	.legal-content {
+		@apply text-muted-foreground leading-relaxed;
+	}
+
+	.legal-content h2 {
+		@apply text-2xl font-semibold text-foreground mt-16 mb-6 pb-2 border-b border-border/40;
+	}
+
+	.legal-content h3 {
+		@apply text-xl font-semibold text-foreground mt-10 mb-4;
+	}
+
+	.legal-content h4 {
+		@apply text-lg font-medium text-foreground mt-8 mb-3;
+	}
+
+	.legal-content p {
+		@apply mb-4 text-base leading-7;
+	}
+
+	.legal-content ul {
+		@apply my-4 space-y-2;
+	}
+
+	.legal-content li {
+		@apply pl-2 text-base leading-7;
+	}
+
+	.legal-content strong {
+		@apply text-foreground font-medium;
+	}
+
+	.legal-content a {
+		@apply text-primary hover:underline underline-offset-2 transition-colors;
+	}
+
+	.legal-content .info-card {
+		@apply bg-muted/30 border border-border/50 rounded-lg p-6 my-8;
+	}
+
+	.legal-content .info-card h3 {
+		@apply mt-0 mb-4 text-lg;
+	}
+
+	.legal-content .service-grid {
+		@apply grid gap-3 my-4;
+	}
+
+	.legal-content .service-item {
+		@apply flex items-center justify-between bg-muted/20 border border-border/30 rounded-md px-4 py-3 text-sm;
+	}
+
+	.legal-content .service-item strong {
+		@apply font-medium;
+	}
+
+	.legal-content .rights-grid {
+		@apply grid md:grid-cols-2 gap-4 my-6;
+	}
+
+	.legal-content .rights-card {
+		@apply bg-muted/20 border border-border/30 rounded-lg p-4;
+	}
+
+	.legal-content .rights-card strong {
+		@apply block mb-1 text-foreground;
+	}
+
+	.legal-content .rights-card p {
+		@apply text-sm mb-0 text-muted-foreground;
+	}
+</style>

@@ -73,13 +73,14 @@ export function useCopilotCommands({
 			}
 
 			// Helper to convert a layer to node-like structure for pin resolution
-			const layerAsNode = (layer: ILayer): INode => ({
-				id: layer.id,
-				name: layer.name,
-				friendly_name: layer.name,
-				pins: layer.pins,
-				coordinates: layer.coordinates,
-			} as unknown as INode);
+			const layerAsNode = (layer: ILayer): INode =>
+				({
+					id: layer.id,
+					name: layer.name,
+					friendly_name: layer.name,
+					pins: layer.pins,
+					coordinates: layer.coordinates,
+				}) as unknown as INode;
 
 			// ===== HELPER FUNCTIONS =====
 			const resolveNode = (ref: string): INode | undefined => {

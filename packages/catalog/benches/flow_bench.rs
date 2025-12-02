@@ -13,6 +13,7 @@ use flow_like_storage::{
     files::store::{FlowLikeStore, local_store::LocalObjectStore},
 };
 use flow_like_types::{intercom::BufferedInterComHandler, sync::Mutex, tokio};
+use std::collections::HashMap;
 use std::{path::PathBuf, sync::Arc};
 
 const BOARD_1: &str = "o4wqrpzkx1cp4svxe91yordw";
@@ -84,6 +85,7 @@ async fn run_board(id: &str, start_ids: Vec<String>) {
             buffered_sender.clone().into_callback(),
             None,
             None,
+            HashMap::new(),
         )
         .await
         .unwrap();
@@ -120,6 +122,7 @@ async fn run_shared_board(
             buffered_sender.clone().into_callback(),
             None,
             None,
+            HashMap::new(),
         )
         .await
         .unwrap();

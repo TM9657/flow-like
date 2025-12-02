@@ -1,15 +1,20 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import {
+	type IBoard,
 	type IEvent,
 	type IEventState,
 	type IIntercomEvent,
 	type ILogMetadata,
+	type IOAuthProvider,
+	type IOAuthToken,
 	type IRunPayload,
 	type IVersionType,
+	checkOAuthTokens,
 	injectDataFunction,
 	isEqual,
 } from "@tm9657/flow-like-ui";
 import { fetcher } from "../../lib/api";
+import { oauthConsentStore, oauthTokenStore } from "../../lib/oauth-db";
 import type { TauriBackend } from "../tauri-provider";
 
 export class EventState implements IEventState {
@@ -175,6 +180,7 @@ export class EventState implements IEventState {
 		event: IEvent,
 		versionType?: IVersionType,
 		personalAccessToken?: string,
+		oauthTokens?: Record<string, IOAuthToken>,
 	): Promise<IEvent> {
 		const isOffline = await this.backend.isOffline(appId);
 		if (isOffline) {
@@ -184,6 +190,7 @@ export class EventState implements IEventState {
 				versionType: versionType,
 				offline: isOffline,
 				pat: personalAccessToken,
+				oauthTokens: oauthTokens,
 			});
 		}
 		if (
@@ -214,6 +221,7 @@ export class EventState implements IEventState {
 			enforceId: true,
 			offline: isOffline,
 			pat: personalAccessToken,
+			oauthTokens: oauthTokens,
 		});
 		return response;
 	}
@@ -331,6 +339,7 @@ export class EventState implements IEventState {
 
 		return response.feedback_id;
 	}
+
 	async executeEvent(
 		appId: string,
 		eventId: string,
@@ -359,6 +368,59 @@ export class EventState implements IEventState {
 			} catch (e) {
 				console.warn(e);
 			}
+		}
+
+		// Collect OAuth tokens from event's board using shared helper
+		let oauthTokens:
+			| Record<
+					string,
+					{
+						access_token: string;
+						refresh_token?: string;
+						expires_at?: number;
+						token_type?: string;
+					}
+			  >
+			| undefined;
+		const event = await this.getEvent(appId, eventId);
+		const board: IBoard = await invoke("get_board", {
+			appId: appId,
+			boardId: event.board_id,
+			version: event.board_version,
+		});
+		const oauthResult = await checkOAuthTokens(board, oauthTokenStore);
+
+		// Check consent for providers that have tokens but might not have consent for this app
+		const consentedIds = await oauthConsentStore.getConsentedProviderIds(appId);
+		const providersNeedingConsent: IOAuthProvider[] = [];
+
+		// Add providers that are missing tokens
+		providersNeedingConsent.push(...oauthResult.missingProviders);
+
+		// Also add providers that have tokens but no consent for this specific app
+		for (const provider of oauthResult.requiredProviders) {
+			const hasToken = oauthResult.tokens[provider.id] !== undefined;
+			const hasConsent = consentedIds.has(provider.id);
+
+			if (hasToken && !hasConsent) {
+				console.log(
+					`[OAuth] Provider ${provider.id} has token but no consent for app ${appId}`,
+				);
+				providersNeedingConsent.push(provider);
+			}
+		}
+
+		if (providersNeedingConsent.length > 0) {
+			const error = new Error(
+				`Missing OAuth authorization for: ${providersNeedingConsent.map((p) => p.name).join(", ")}`,
+			);
+			(error as any).missingProviders = providersNeedingConsent;
+			(error as any).isOAuthError = true;
+			throw error;
+		}
+
+		if (Object.keys(oauthResult.tokens).length > 0) {
+			oauthTokens = oauthResult.tokens;
 		}
 
 		channel.onmessage = (events: IIntercomEvent[]) => {
@@ -393,6 +455,7 @@ export class EventState implements IEventState {
 			streamState: streamState,
 			credentials,
 			token,
+			oauthTokens,
 		});
 
 		closed = true;
@@ -410,5 +473,54 @@ export class EventState implements IEventState {
 		return await invoke<boolean>("is_event_sink_active", {
 			eventId: eventId,
 		});
+	}
+
+	async checkEventOAuth(
+		appId: string,
+		event: IEvent,
+	): Promise<{
+		tokens?: Record<string, IOAuthToken>;
+		missingProviders: IOAuthProvider[];
+	}> {
+		// Get the board for this event
+		const board: IBoard = await invoke("get_board", {
+			appId: appId,
+			boardId: event.board_id,
+			version: event.board_version,
+		});
+
+		const oauthResult = await checkOAuthTokens(board, oauthTokenStore);
+
+		// Check consent for providers that have tokens but might not have consent for this app
+		const consentedIds = await oauthConsentStore.getConsentedProviderIds(appId);
+		const providersNeedingConsent: IOAuthProvider[] = [];
+
+		// Add providers that are missing tokens
+		providersNeedingConsent.push(...oauthResult.missingProviders);
+
+		// Also add providers that have tokens but no consent for this specific app
+		for (const provider of oauthResult.requiredProviders) {
+			const hasToken = oauthResult.tokens[provider.id] !== undefined;
+			const hasConsent = consentedIds.has(provider.id);
+
+			if (hasToken && !hasConsent) {
+				providersNeedingConsent.push(provider);
+			}
+		}
+
+		if (providersNeedingConsent.length > 0) {
+			return {
+				tokens: undefined,
+				missingProviders: providersNeedingConsent,
+			};
+		}
+
+		return {
+			tokens:
+				Object.keys(oauthResult.tokens).length > 0
+					? oauthResult.tokens
+					: undefined,
+			missingProviders: [],
+		};
 	}
 }

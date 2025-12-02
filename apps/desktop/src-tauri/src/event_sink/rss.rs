@@ -1,6 +1,8 @@
 use anyhow::Result;
+use flow_like::flow::oauth::OAuthToken;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -121,21 +123,43 @@ impl RSSSink {
             // TODO: Compare with last_item_guid
             // For now, we'll trigger an event on each check
 
-            // Get app_id and offline flag from registration
+            // Get app_id, offline flag, and oauth_tokens from registration
             let registration_info = {
                 let conn = db.lock().unwrap();
                 let mut stmt = conn.prepare(
-                    "SELECT app_id, offline FROM event_registrations WHERE event_id = ?1",
+                    "SELECT app_id, offline, oauth_tokens FROM event_registrations WHERE event_id = ?1",
                 )?;
                 stmt.query_row(params![event_id], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
+                    let oauth_tokens_json: Option<String> = row.get(2)?;
+                    let oauth_tokens: HashMap<String, OAuthToken> = oauth_tokens_json
+                        .map(|json| serde_json::from_str(&json))
+                        .transpose()
+                        .map_err(|e| {
+                            rusqlite::Error::FromSqlConversionFailure(
+                                2,
+                                rusqlite::types::Type::Text,
+                                Box::new(e),
+                            )
+                        })?
+                        .unwrap_or_default();
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, bool>(1)?,
+                        oauth_tokens,
+                    ))
                 })
                 .ok()
             };
 
-            if let Some((app_id, offline)) = registration_info {
+            if let Some((app_id, offline, oauth_tokens)) = registration_info {
                 if let Some(event_bus_state) = _app_handle.try_state::<TauriEventBusState>() {
                     let event_bus = &event_bus_state.0;
+
+                    let oauth_tokens_opt = if oauth_tokens.is_empty() {
+                        None
+                    } else {
+                        Some(oauth_tokens)
+                    };
 
                     if let Err(e) = event_bus.push_event_with_token(
                         None,
@@ -144,6 +168,7 @@ impl RSSSink {
                         offline,
                         None,
                         None,
+                        oauth_tokens_opt,
                     ) {
                         tracing::error!("Failed to push RSS event to EventBus: {}", e);
                     } else {

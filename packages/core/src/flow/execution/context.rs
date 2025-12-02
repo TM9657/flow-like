@@ -7,6 +7,7 @@ use crate::{
     flow::{
         board::ExecutionStage,
         node::{Node, NodeState},
+        oauth::OAuthToken,
         pin::PinType,
         utils::{evaluate_pin_value, evaluate_pin_value_reference},
         variable::{Variable, VariableType},
@@ -154,6 +155,7 @@ pub struct ExecutionContext {
     pub context_state: BTreeMap<String, Value>,
     pub context_pin_overrides: Option<BTreeMap<String, Value>>,
     pub result: Option<Value>,
+    pub oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
     run_id: String,
     state: NodeState,
     callback: InterComCallback,
@@ -174,6 +176,7 @@ impl ExecutionContext {
         completion_callbacks: Arc<RwLock<Vec<EventTrigger>>>,
         credentials: Option<Arc<SharedCredentials>>,
         token: Option<String>,
+        oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
     ) -> Self {
         let (id, execution_cache) = {
             let node_id = node.node.lock().await.id.clone();
@@ -220,6 +223,7 @@ impl ExecutionContext {
             context_pin_overrides: None,
             result: None,
             delegated: false,
+            oauth_tokens,
         }
     }
 
@@ -269,6 +273,7 @@ impl ExecutionContext {
             self.completion_callbacks.clone(),
             self.credentials.clone(),
             self.token.clone(),
+            self.oauth_tokens.clone(),
         )
         .await;
 
@@ -346,6 +351,26 @@ impl ExecutionContext {
     pub async fn set_cache(&self, key: &str, value: Arc<dyn Cacheable>) {
         let mut cache = self.cache.write().await;
         cache.insert(key.to_string(), value);
+    }
+
+    /// Get an OAuth token for a specific provider.
+    /// Returns the token if found and not expired.
+    pub fn get_oauth_token(&self, provider_id: &str) -> Option<&OAuthToken> {
+        self.oauth_tokens
+            .get(provider_id)
+            .filter(|token| !token.is_expired())
+    }
+
+    /// Get an OAuth access token string for a specific provider.
+    /// Returns None if the token is not found or expired.
+    pub fn get_oauth_access_token(&self, provider_id: &str) -> Option<&str> {
+        self.get_oauth_token(provider_id)
+            .map(|token| token.access_token.as_str())
+    }
+
+    /// Check if a valid OAuth token exists for a specific provider.
+    pub fn has_oauth_token(&self, provider_id: &str) -> bool {
+        self.get_oauth_token(provider_id).is_some()
     }
 
     pub fn log(&mut self, log: LogMessage) {

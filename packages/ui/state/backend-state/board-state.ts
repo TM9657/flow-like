@@ -51,6 +51,7 @@ export interface IBoardState {
 		streamState?: boolean,
 		eventId?: (id: string) => void,
 		cb?: (event: IIntercomEvent[]) => void,
+		skipConsentCheck?: boolean,
 	): Promise<ILogMetadata | undefined>;
 
 	listRuns(

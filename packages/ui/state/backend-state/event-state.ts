@@ -2,9 +2,16 @@ import type {
 	IEvent,
 	IIntercomEvent,
 	ILogMetadata,
+	IOAuthProvider,
+	IOAuthToken,
 	IRunPayload,
 	IVersionType,
 } from "../../lib";
+
+export interface IOAuthCheckResult {
+	tokens?: Record<string, IOAuthToken>;
+	missingProviders: IOAuthProvider[];
+}
 
 export interface IEventState {
 	getEvent(
@@ -22,7 +29,10 @@ export interface IEventState {
 		event: IEvent,
 		versionType?: IVersionType,
 		personalAccessToken?: string,
+		oauthTokens?: Record<string, IOAuthToken>,
 	): Promise<IEvent>;
+	/** Check OAuth requirements for an event's board. Returns missing providers. */
+	checkEventOAuth?(appId: string, event: IEvent): Promise<IOAuthCheckResult>;
 	deleteEvent(appId: string, eventId: string): Promise<void>;
 	validateEvent(
 		appId: string,

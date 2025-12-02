@@ -4,6 +4,7 @@ pub mod copilot;
 pub mod event;
 pub mod execution;
 pub mod node;
+pub mod oauth;
 pub mod pin;
 pub mod utils;
 pub mod variable;
