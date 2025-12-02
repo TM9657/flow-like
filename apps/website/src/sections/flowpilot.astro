@@ -10,11 +10,8 @@ import {
 
 <section
   id="flowpilot"
-  class="relative w-full min-h-screen overflow-hidden"
+  class="relative w-full min-h-screen border-t border-b"
 >
-  <!-- Top fade for seamless transition from previous section -->
-  <div class="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-background via-background/70 to-transparent pointer-events-none z-20"></div>
-
   <!-- Full-width video background - maximum visibility -->
   <div class="absolute inset-0">
     <video
@@ -30,15 +27,22 @@ import {
       <source src="/process-workflow.webm" type="video/webm" />
     </video>
 
-    <!-- Minimal gradients - just enough for text readability -->
-    <div class="absolute inset-0 bg-gradient-to-r from-background/90 via-background/30 to-transparent"></div>
-    <div class="absolute inset-0 bg-gradient-to-b from-background/40 via-transparent to-background/80"></div>
+    <!-- Gradients for readability -->
+    <div class="absolute inset-0 bg-linear-to-r from-background/95 via-background/40 to-transparent"></div>
+    <div class="absolute inset-0 bg-linear-to-b from-background via-transparent to-background"></div>
   </div>
 
-  <!-- Animated glow orbs -->
+  <!-- Animated glow orbs - enhanced -->
   <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
     <div class="glow-orb glow-orb-1"></div>
     <div class="glow-orb glow-orb-2"></div>
+    <div class="glow-orb glow-orb-3"></div>
+    <!-- Flashy light particles -->
+    <div class="light-particle light-particle-1"></div>
+    <div class="light-particle light-particle-2"></div>
+    <div class="light-particle light-particle-3"></div>
+    <div class="light-particle light-particle-4"></div>
+    <div class="light-particle light-particle-5"></div>
   </div>
 
   <!-- Content -->
@@ -56,9 +60,9 @@ import {
 
       <!-- Title with text shadow for depth -->
       <h2 class="text-5xl font-black sm:text-6xl lg:text-7xl leading-[1.05] tracking-tight drop-shadow-2xl">
-        <span class="bg-gradient-to-r from-white to-white/90 bg-clip-text text-transparent">Meet</span>
+        <span class="bg-linear-to-r from-white to-white/90 bg-clip-text text-transparent">Meet</span>
         <br />
-        <span class="bg-gradient-to-br from-violet-300 via-fuchsia-300 to-cyan-300 bg-clip-text text-transparent animate-gradient-x">FlowPilot</span>
+        <span class="bg-linear-to-br from-violet-300 via-fuchsia-300 to-cyan-300 bg-clip-text text-transparent animate-gradient-x">FlowPilot</span>
       </h2>
 
       <!-- Subtitle with better contrast -->
@@ -111,9 +115,6 @@ import {
       </div>
     </div>
   </div>
-
-  <!-- Bottom fade for seamless transition -->
-  <div class="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-background via-background/80 to-transparent pointer-events-none z-20"></div>
 </section>
 
 <script>
@@ -187,36 +188,78 @@ import {
     transition: color 0.2s;
   }
 
-  /* Glow orbs */
+  /* Glow orbs - enhanced */
   .glow-orb {
     position: absolute;
     border-radius: 50%;
     filter: blur(80px);
-    opacity: 0.4;
+    opacity: 0.5;
     animation: float 8s ease-in-out infinite;
   }
 
   .glow-orb-1 {
-    width: 400px;
-    height: 400px;
-    background: radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%);
-    top: 20%;
-    left: 5%;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.5) 0%, transparent 70%);
+    top: 15%;
+    left: 0%;
     animation-delay: 0s;
   }
 
   .glow-orb-2 {
-    width: 300px;
-    height: 300px;
-    background: radial-gradient(circle, rgba(6, 182, 212, 0.3) 0%, transparent 70%);
-    bottom: 30%;
-    left: 15%;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(6, 182, 212, 0.4) 0%, transparent 70%);
+    bottom: 25%;
+    left: 10%;
     animation-delay: 4s;
+  }
+
+  .glow-orb-3 {
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(236, 72, 153, 0.3) 0%, transparent 70%);
+    top: 40%;
+    left: -5%;
+    animation-delay: 2s;
+  }
+
+  /* Light particles */
+  .light-particle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 0 10px 2px rgba(255, 255, 255, 0.8), 0 0 20px 4px rgba(139, 92, 246, 0.5);
+    opacity: 0;
+    animation: particle-float 6s ease-in-out infinite;
+  }
+
+  .light-particle-1 { top: 20%; left: 15%; animation-delay: 0s; }
+  .light-particle-2 { top: 35%; left: 8%; animation-delay: 1.2s; }
+  .light-particle-3 { top: 50%; left: 20%; animation-delay: 2.4s; }
+  .light-particle-4 { top: 65%; left: 5%; animation-delay: 3.6s; }
+  .light-particle-5 { top: 80%; left: 18%; animation-delay: 4.8s; }
+
+  @keyframes particle-float {
+    0%, 100% {
+      opacity: 0;
+      transform: translate(0, 0) scale(0.5);
+    }
+    20% {
+      opacity: 1;
+      transform: translate(10px, -20px) scale(1);
+    }
+    80% {
+      opacity: 0.8;
+      transform: translate(30px, -60px) scale(0.8);
+    }
   }
 
   @keyframes float {
     0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(20px, -20px) scale(1.05); }
+    50% { transform: translate(30px, -30px) scale(1.1); }
   }
 
   /* Gradient text animation */
@@ -231,6 +274,7 @@ import {
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .glow-orb, .animate-gradient-x { animation: none; }
+    .glow-orb, .animate-gradient-x, .light-particle { animation: none; }
+    .light-particle { opacity: 0; }
   }
 </style>
