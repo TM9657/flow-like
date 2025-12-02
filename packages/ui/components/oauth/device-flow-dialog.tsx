@@ -1,25 +1,28 @@
 "use client";
 
+import { CheckCircle2, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import type {
+	IDeviceAuthResponse,
+	IOAuthProvider,
+	IOAuthRuntime,
+	IStoredOAuthToken,
+} from "../../lib/oauth/types";
+import type { OAuthService } from "../../lib/oauth/service";
+import { Button } from "../ui/button";
 import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
 	DialogHeader,
 	DialogTitle,
-} from "@tm9657/flow-like-ui";
-import { Button } from "@tm9657/flow-like-ui";
-import type {
-	IDeviceAuthResponse,
-	IOAuthProvider,
-	IStoredOAuthToken,
-} from "@tm9657/flow-like-ui";
-import { CheckCircle2, Copy, ExternalLink, Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
-import { oauthService } from "../lib/oauth-service";
+} from "../ui/dialog";
 
 interface DeviceFlowDialogProps {
 	provider: IOAuthProvider | null;
+	oauthService: OAuthService;
+	runtime: IOAuthRuntime;
 	onSuccess: (token: IStoredOAuthToken) => void;
 	onCancel: () => void;
 }
@@ -34,6 +37,8 @@ type DeviceFlowState =
 
 export function DeviceFlowDialog({
 	provider,
+	oauthService,
+	runtime,
 	onSuccess,
 	onCancel,
 }: DeviceFlowDialogProps) {
@@ -62,13 +67,11 @@ export function DeviceFlowDialog({
 
 		try {
 			const deviceAuth = await oauthService.startDeviceAuthorization(provider);
-			console.log("[DeviceFlow] Got device auth:", deviceAuth);
 
 			if (abortRef.current) return;
 
 			setState({ status: "awaiting_user", deviceAuth });
 		} catch (e) {
-			console.error("[DeviceFlow] Failed to start:", e);
 			setState({
 				status: "error",
 				message:
@@ -107,7 +110,6 @@ export function DeviceFlowDialog({
 					setState({ status: "success" });
 					toast.success(`Connected to ${provider.name}`);
 
-					// Short delay to show success state
 					await new Promise((resolve) => setTimeout(resolve, 500));
 					onSuccess(token);
 					return;
@@ -130,7 +132,6 @@ export function DeviceFlowDialog({
 						return;
 					}
 				}
-				console.error("[DeviceFlow] Poll error:", e);
 			}
 		}
 
@@ -152,12 +153,7 @@ export function DeviceFlowDialog({
 	}
 
 	async function openVerificationUrl(url: string) {
-		try {
-			const { open } = await import("@tauri-apps/plugin-shell");
-			await open(url);
-		} catch {
-			window.open(url, "_blank");
-		}
+		await runtime.openUrl(url);
 	}
 
 	function handleOpenAndPoll() {

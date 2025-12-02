@@ -3,6 +3,7 @@ import type {
 	IEventState,
 	IIntercomEvent,
 	ILogMetadata,
+	IOAuthToken,
 	IRunPayload,
 	IVersionType,
 } from "@tm9657/flow-like-ui";
@@ -29,6 +30,7 @@ export class EmptyEventState implements IEventState {
 		event: IEvent,
 		versionType?: IVersionType,
 		personalAccessToken?: string,
+		oauthTokens?: Record<string, IOAuthToken>,
 	): Promise<IEvent> {
 		throw new Error("Method not implemented.");
 	}

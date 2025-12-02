@@ -104,10 +104,12 @@ async function processCallback(payload: IOAuthCallbackData) {
 			return;
 		}
 
-		const provider = providerCache?.get(pending.providerId);
+		// Try to get provider from pending auth first (survives page reload),
+		// then fall back to cache (for same-session callbacks)
+		const provider = pending.provider ?? providerCache?.get(pending.providerId);
 
 		if (!provider) {
-			console.error("Provider not found in cache:", pending.providerId);
+			console.error("Provider not found in cache or pending auth:", pending.providerId);
 			toast.error(`Provider not found: ${pending.providerId}. Please retry.`);
 			return;
 		}

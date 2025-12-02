@@ -95,6 +95,8 @@ export interface IOAuthPendingAuth {
 	initiatedAt: number;
 	appId?: string;
 	boardId?: string;
+	/** Full provider configuration stored for callback handling after page reload */
+	provider?: IOAuthProvider;
 }
 
 /**

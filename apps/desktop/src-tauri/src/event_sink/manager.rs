@@ -630,6 +630,7 @@ impl EventSinkManager {
         event: &flow_like::flow::event::Event,
         offline: Option<bool>,
         personal_access_token: Option<String>,
+        oauth_tokens: Option<HashMap<String, OAuthToken>>,
     ) -> Result<()> {
         // Check if this event type supports sink registration
         if !Self::supports_sink_registration(&event.event_type) {
@@ -672,6 +673,18 @@ impl EventSinkManager {
 
         match config_result {
             Ok(event_config) => {
+                // Merge oauth_tokens from existing registration with new tokens
+                let final_oauth_tokens =
+                    if let Some(existing_reg) = self.storage.get_registration(&event.id)? {
+                        let mut merged = existing_reg.oauth_tokens.clone();
+                        if let Some(new_tokens) = oauth_tokens {
+                            merged.extend(new_tokens);
+                        }
+                        merged
+                    } else {
+                        oauth_tokens.unwrap_or_default()
+                    };
+
                 let registration = EventRegistration {
                     event_id: event.id.clone(),
                     name: event.name.clone(),
@@ -683,7 +696,7 @@ impl EventSinkManager {
                     app_id: app_id.to_string(),
                     default_payload: None, // TODO: Parse from event if needed
                     personal_access_token: final_pat.clone(),
-                    oauth_tokens: HashMap::new(),
+                    oauth_tokens: final_oauth_tokens,
                 };
 
                 self.register_event(app_handle, registration).await?;

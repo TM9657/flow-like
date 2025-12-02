@@ -81,6 +81,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				initiatedAt: Date.now(),
 				appId: options?.appId,
 				boardId: options?.boardId,
+				provider, // Store full provider for callback handling
 			});
 
 			const params = new URLSearchParams({
