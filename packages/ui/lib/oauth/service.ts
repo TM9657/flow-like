@@ -30,6 +30,12 @@ export interface OAuthServiceConfig {
 	runtime: IOAuthRuntime;
 	tokenStore: IOAuthTokenStoreWithPending;
 	redirectUri?: string;
+	/**
+	 * Function to get the API base URL for the OAuth proxy.
+	 * Required for providers with requires_secret_proxy=true.
+	 * Should return the base URL like "https://api.example.com"
+	 */
+	getApiBaseUrl?: () => Promise<string | null>;
 }
 
 export function createOAuthService(config: OAuthServiceConfig) {
@@ -37,6 +43,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 		runtime,
 		tokenStore,
 		redirectUri = "https://flow-like.com/thirdparty/callback",
+		getApiBaseUrl,
 	} = config;
 
 	return {
@@ -82,6 +89,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				appId: options?.appId,
 				boardId: options?.boardId,
 				provider, // Store full provider for callback handling
+				apiBaseUrl: getApiBaseUrl ? await getApiBaseUrl() ?? undefined : undefined,
 			});
 
 			const params = new URLSearchParams({
@@ -148,6 +156,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				code,
 				pendingAuth.codeVerifier,
 				pendingAuth.redirectUri,
+				pendingAuth.apiBaseUrl,
 			);
 
 			let userInfo: IStoredOAuthToken["userInfo"];
@@ -234,6 +243,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			code: string,
 			codeVerifier: string,
 			callbackRedirectUri: string,
+			overrideApiBaseUrl?: string,
 		): Promise<{
 			access_token: string;
 			refresh_token?: string;
@@ -247,6 +257,63 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			bot_id?: string;
 			owner?: unknown;
 		}> {
+			// If provider requires secret proxy, route through the API server
+			if (provider.requires_secret_proxy) {
+				// Use override URL from pending auth, or fall back to config
+				const apiBaseUrl = overrideApiBaseUrl ?? (getApiBaseUrl ? await getApiBaseUrl() : null);
+				if (!apiBaseUrl) {
+					throw new Error(
+						`Provider ${provider.id} requires secret proxy but no API base URL is available`,
+					);
+				}
+
+				const proxyUrl = `${apiBaseUrl}/api/v1/oauth/token/${provider.id}`;
+				const proxyBody = JSON.stringify({
+					code,
+					redirect_uri: callbackRedirectUri,
+					code_verifier: provider.pkce_required ? codeVerifier : undefined,
+				});
+
+				console.log("[OAuth] Using secret proxy for token exchange:", proxyUrl);
+
+				const response = await runtime.httpPost(proxyUrl, proxyBody, {
+					"Content-Type": "application/json",
+					Accept: "application/json",
+				});
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					console.error("[OAuth] Proxy token exchange failed:", response.status, errorText);
+					throw new Error(`Token exchange failed: ${response.status} - ${errorText}`);
+				}
+
+				const tokenData = (await response.json()) as {
+					access_token: string;
+					refresh_token?: string;
+					expires_in?: number;
+					token_type?: string;
+					workspace_id?: string;
+					workspace_name?: string;
+					workspace_icon?: string;
+					bot_id?: string;
+					error?: string;
+					error_description?: string;
+				};
+
+				if (tokenData.error) {
+					throw new Error(
+						`Token exchange error: ${tokenData.error} - ${tokenData.error_description || ""}`,
+					);
+				}
+
+				if (!tokenData.access_token) {
+					throw new Error("No access_token in token response");
+				}
+
+				return tokenData;
+			}
+
+			// Standard token exchange (non-proxy flow)
 			const params = new URLSearchParams({
 				code,
 				redirect_uri: callbackRedirectUri,
@@ -366,6 +433,62 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				throw new Error("No refresh token available");
 			}
 
+			// If provider requires secret proxy, route through the API server
+			if (provider.requires_secret_proxy) {
+				if (!getApiBaseUrl) {
+					throw new Error(
+						`Provider ${provider.id} requires secret proxy but getApiBaseUrl is not configured`,
+					);
+				}
+
+				const apiBaseUrl = await getApiBaseUrl();
+				if (!apiBaseUrl) {
+					throw new Error(
+						`Provider ${provider.id} requires secret proxy but no API base URL is available`,
+					);
+				}
+
+				const proxyUrl = `${apiBaseUrl}/api/v1/oauth/refresh/${provider.id}`;
+				const proxyBody = JSON.stringify({
+					refresh_token: token.refresh_token,
+				});
+
+				console.log("[OAuth] Using secret proxy for token refresh:", proxyUrl);
+
+				const response = await runtime.httpPost(proxyUrl, proxyBody, {
+					"Content-Type": "application/json",
+					Accept: "application/json",
+				});
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					await tokenStore.deleteToken(provider.id);
+					throw new Error(`Token refresh failed: ${response.status} - ${errorText}`);
+				}
+
+				const tokenResponse = (await response.json()) as {
+					access_token: string;
+					refresh_token?: string;
+					expires_in?: number;
+					token_type?: string;
+				};
+
+				const updatedToken: IStoredOAuthToken = {
+					...token,
+					access_token: tokenResponse.access_token,
+					refresh_token: tokenResponse.refresh_token ?? token.refresh_token,
+					expires_at: tokenResponse.expires_in
+						? Date.now() + tokenResponse.expires_in * 1000
+						: undefined,
+					token_type: tokenResponse.token_type ?? token.token_type,
+					storedAt: Date.now(),
+				};
+
+				await tokenStore.setToken(updatedToken);
+				return updatedToken;
+			}
+
+			// Standard refresh flow (non-proxy)
 			const params = new URLSearchParams({
 				refresh_token: token.refresh_token,
 				grant_type: "refresh_token",

@@ -3,6 +3,7 @@ import {
 	type IBoard,
 	type IEvent,
 	type IEventState,
+	type IHub,
 	type IIntercomEvent,
 	type ILogMetadata,
 	type IOAuthProvider,
@@ -16,6 +17,31 @@ import {
 import { fetcher } from "../../lib/api";
 import { oauthConsentStore, oauthTokenStore } from "../../lib/oauth-db";
 import type { TauriBackend } from "../tauri-provider";
+
+// Hub configuration cache (shared with board-state)
+let hubCache: IHub | undefined;
+let hubCachePromise: Promise<IHub | undefined> | undefined;
+
+async function getHubConfig(profile?: { hub?: string }): Promise<IHub | undefined> {
+	if (hubCache) return hubCache;
+	if (hubCachePromise) return hubCachePromise;
+
+	const hubUrl = profile?.hub;
+	if (!hubUrl) return undefined;
+
+	hubCachePromise = fetch(`https://${hubUrl}/api/v1`)
+		.then((res) => res.json() as Promise<IHub>)
+		.then((hub) => {
+			hubCache = hub;
+			return hub;
+		})
+		.catch((e) => {
+			console.warn("[OAuth] Failed to fetch Hub config:", e);
+			return undefined;
+		});
+
+	return hubCachePromise;
+}
 
 export class EventState implements IEventState {
 	constructor(private readonly backend: TauriBackend) {}
@@ -388,7 +414,8 @@ export class EventState implements IEventState {
 			boardId: event.board_id,
 			version: event.board_version,
 		});
-		const oauthResult = await checkOAuthTokens(board, oauthTokenStore);
+		const hub = await getHubConfig(this.backend.profile);
+		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub);
 
 		// Check consent for providers that have tokens but might not have consent for this app
 		const consentedIds = await oauthConsentStore.getConsentedProviderIds(appId);
@@ -489,7 +516,8 @@ export class EventState implements IEventState {
 			version: event.board_version,
 		});
 
-		const oauthResult = await checkOAuthTokens(board, oauthTokenStore);
+		const hub = await getHubConfig(this.backend.profile);
+		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub);
 
 		// Check consent for providers that have tokens but might not have consent for this app
 		const consentedIds = await oauthConsentStore.getConsentedProviderIds(appId);

@@ -12,7 +12,6 @@ use crate::state::FlowLikeState;
 use super::{
     board::Board,
     execution::context::ExecutionContext,
-    oauth::OAuthProvider,
     pin::{Pin, PinType, ValueType},
     variable::VariableType,
 };
@@ -114,9 +113,9 @@ pub struct Node {
     pub layer: Option<String>,
     pub hash: Option<u64>,
     pub fn_refs: Option<FnRefs>,
-    /// OAuth/OIDC providers this node requires for third-party service access
-    pub oauth_providers: Option<Vec<OAuthProvider>>,
-    /// Additional OAuth scopes required by this node (provider_id -> scopes)
+    /// OAuth provider IDs this node requires (references Hub's oauth_providers config)
+    pub oauth_providers: Option<Vec<String>>,
+    /// OAuth scopes required by this node (provider_id -> scopes)
     pub required_oauth_scopes: Option<HashMap<String, Vec<String>>>,
 }
 
@@ -186,21 +185,20 @@ impl Node {
         }
     }
 
-    /// Add an OAuth provider requirement to this node
-    pub fn add_oauth_provider(&mut self, provider: OAuthProvider) {
+    /// Add an OAuth provider ID requirement to this node
+    pub fn add_oauth_provider(&mut self, provider_id: &str) {
         if let Some(providers) = &mut self.oauth_providers {
-            providers.push(provider);
+            if !providers.contains(&provider_id.to_string()) {
+                providers.push(provider_id.to_string());
+            }
         } else {
-            self.oauth_providers = Some(vec![provider]);
+            self.oauth_providers = Some(vec![provider_id.to_string()]);
         }
     }
 
     /// Get all OAuth provider IDs required by this node
     pub fn get_oauth_provider_ids(&self) -> Vec<String> {
-        self.oauth_providers
-            .as_ref()
-            .map(|providers| providers.iter().map(|p| p.id.clone()).collect())
-            .unwrap_or_default()
+        self.oauth_providers.clone().unwrap_or_default()
     }
 
     /// Add required OAuth scopes for a specific provider.

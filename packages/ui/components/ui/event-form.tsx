@@ -6,6 +6,7 @@ import { useInvoke } from "../../hooks";
 import type { IEvent, IOAuthProvider, IOAuthToken } from "../../lib";
 import { checkOAuthTokens } from "../../lib/oauth/helpers";
 import type { IOAuthTokenStoreWithPending } from "../../lib/oauth/types";
+import type { IHub } from "../../lib/schema/hub/hub";
 import { convertJsonToUint8Array } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
 import type { IEventMapping } from "../interfaces";
@@ -37,6 +38,8 @@ interface EventFormProps {
 	tokenStore?: IOAuthTokenStoreWithPending;
 	/** Consent store for OAuth consent tracking. */
 	consentStore?: IOAuthConsentStore;
+	/** Hub configuration for OAuth provider resolution */
+	hub?: IHub;
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
 }
@@ -49,6 +52,7 @@ export function EventForm({
 	onCancel,
 	tokenStore,
 	consentStore,
+	hub,
 	onStartOAuth,
 }: Readonly<EventFormProps>) {
 	const backend = useBackend();
@@ -112,7 +116,7 @@ export function EventForm({
 
 		// Check OAuth requirements if tokenStore is provided and board is loaded
 		if (tokenStore && board.data) {
-			const oauthResult = await checkOAuthTokens(board.data, tokenStore);
+			const oauthResult = await checkOAuthTokens(board.data, tokenStore, hub);
 
 			if (oauthResult.requiredProviders.length > 0) {
 				// Check consent for providers that have tokens but might not have consent for this app

@@ -2,7 +2,6 @@ use flow_like::{
     flow::{
         execution::context::ExecutionContext,
         node::{Node, NodeLogic, NodeScores},
-        oauth::OAuthProvider,
         pin::PinOptions,
         variable::VariableType,
     },
@@ -12,8 +11,6 @@ use flow_like_types::{JsonSchema, async_trait, json::json};
 use serde::{Deserialize, Serialize};
 
 pub const MICROSOFT_PROVIDER_ID: &str = "microsoft";
-
-const MS_CLIENT_ID: Option<&str> = option_env!("MS_CLIENT_ID");
 
 /// Microsoft Graph provider - works with OAuth or access tokens
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -141,12 +138,10 @@ impl NodeLogic for MicrosoftGraphOAuthProviderNode {
         let mut node = Node::new(
             "data_microsoft_provider_oauth",
             "Microsoft Graph (OAuth)",
-            "Connect to Microsoft Graph using OAuth Authorization Code Flow with PKCE. Requires MS_CLIENT_ID environment variable.",
+            "Connect to Microsoft Graph using OAuth Authorization Code Flow with PKCE.",
             "Data/Microsoft",
         );
         node.add_icon("/flow/icons/microsoft.svg");
-
-        let env_client_id = MS_CLIENT_ID.unwrap_or_default();
 
         node.add_input_pin(
             "base_url",
@@ -165,23 +160,14 @@ impl NodeLogic for MicrosoftGraphOAuthProviderNode {
         .set_schema::<MicrosoftGraphProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        // Microsoft Identity Platform with Authorization Code Flow + PKCE
-        // Base scopes only - individual nodes add their required scopes
-        let oauth_provider = OAuthProvider::new(MICROSOFT_PROVIDER_ID, "Microsoft")
-            .set_auth_url("https://login.microsoftonline.com/common/oauth2/v2.0/authorize")
-            .set_token_url("https://login.microsoftonline.com/common/oauth2/v2.0/token")
-            .set_client_id(env_client_id)
-            .set_scopes(vec!["User.Read".to_string(), "offline_access".to_string()])
-            .set_pkce_required(true)
-            .set_userinfo_url("https://graph.microsoft.com/v1.0/me")
-            .set_revoke_url("https://login.microsoftonline.com/common/oauth2/v2.0/logout");
-
-        node.add_oauth_provider(oauth_provider);
+        // Add OAuth provider reference - full config comes from Hub
+        node.add_oauth_provider(MICROSOFT_PROVIDER_ID);
+        node.add_required_oauth_scopes(MICROSOFT_PROVIDER_ID, vec!["User.Read", "offline_access"]);
 
         node.set_scores(
             NodeScores::new()
                 .set_privacy(6)
-                .set_security(9) // PKCE is more secure
+                .set_security(9)
                 .set_performance(8)
                 .set_governance(7)
                 .set_reliability(9)
@@ -193,15 +179,6 @@ impl NodeLogic for MicrosoftGraphOAuthProviderNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        let env_client_id = MS_CLIENT_ID.unwrap_or_default();
-
-        if env_client_id.is_empty() {
-            return Err(flow_like_types::anyhow!(
-                "Microsoft OAuth requires MS_CLIENT_ID environment variable. \
-                Please set it at build time or use the 'Microsoft Graph (Token)' node instead."
-            ));
-        }
-
         let base_url: String = context
             .evaluate_pin("base_url")
             .await

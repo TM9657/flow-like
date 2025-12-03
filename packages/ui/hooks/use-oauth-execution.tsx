@@ -11,6 +11,7 @@ import type {
 	IStoredOAuthToken,
 } from "../lib/oauth/types";
 import type { IBoard } from "../lib/schema/flow/board";
+import type { IHub } from "../lib/schema/hub/hub";
 
 export interface OAuthExecutionState {
 	/** Whether OAuth consent is pending */
@@ -26,6 +27,8 @@ export interface OAuthExecutionState {
 export interface UseOAuthExecutionOptions {
 	/** OAuth runtime for platform-specific operations */
 	runtime: IOAuthRuntime;
+	/** Optional hub configuration for OAuth provider resolution */
+	hub?: IHub;
 }
 
 export interface UseOAuthExecutionResult {
@@ -70,7 +73,7 @@ export function useOAuthExecution(
 	);
 
 	const checkBoardOAuth = useCallback(async (board: IBoard) => {
-		const result = await checkOAuthTokens(board, oauthTokenStore);
+		const result = await checkOAuthTokens(board, oauthTokenStore, options.hub);
 
 		if (result.missingProviders.length > 0) {
 			setState({
@@ -96,7 +99,7 @@ export function useOAuthExecution(
 			tokens: Object.keys(result.tokens).length > 0 ? result.tokens : undefined,
 			missingProviders: [],
 		};
-	}, []);
+	}, [options.hub]);
 
 	const authorizeProvider = useCallback(
 		async (providerId: string) => {

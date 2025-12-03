@@ -7,6 +7,7 @@ pub mod bit;
 pub mod chat;
 pub mod health;
 pub mod info;
+pub mod oauth;
 pub mod profile;
 pub mod store;
 pub mod tmp;

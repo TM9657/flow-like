@@ -1,6 +1,6 @@
 /**
- * OAuth provider configuration from nodes.
- * This matches the Rust OAuthProvider struct.
+ * Full OAuth provider configuration used for OAuth operations.
+ * This is constructed by merging Hub config with node provider references.
  */
 export interface IOAuthProvider {
 	id: string;
@@ -12,6 +12,12 @@ export interface IOAuthProvider {
 	client_secret?: string;
 	scopes: string[];
 	pkce_required: boolean;
+	/**
+	 * Whether this provider requires the secret proxy for token exchange.
+	 * If true, token exchange and refresh requests go through the API server
+	 * which adds the client_secret. The client handles all token storage.
+	 */
+	requires_secret_proxy: boolean;
 	revoke_url?: string;
 	userinfo_url?: string;
 	oidc_discovery_url?: string;
@@ -97,6 +103,8 @@ export interface IOAuthPendingAuth {
 	boardId?: string;
 	/** Full provider configuration stored for callback handling after page reload */
 	provider?: IOAuthProvider;
+	/** API base URL for OAuth proxy (required for providers with requires_secret_proxy=true) */
+	apiBaseUrl?: string;
 }
 
 /**

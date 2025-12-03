@@ -44,6 +44,7 @@ import {
 import type { IOAuthConsentStore } from "@tm9657/flow-like-ui/db/oauth-db";
 import { checkOAuthTokens } from "@tm9657/flow-like-ui/lib/oauth/helpers";
 import type { IOAuthTokenStoreWithPending } from "@tm9657/flow-like-ui/lib/oauth/types";
+import type { IHub } from "@tm9657/flow-like-ui/lib/schema/hub/hub";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,
@@ -87,6 +88,8 @@ export interface EventsPageProps {
 	tokenStore?: IOAuthTokenStoreWithPending;
 	/** Consent store for OAuth consent tracking. */
 	consentStore?: IOAuthConsentStore;
+	/** Hub configuration for OAuth provider resolution */
+	hub?: IHub;
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
 }
@@ -95,6 +98,7 @@ export default function EventsPage({
 	eventMapping,
 	tokenStore,
 	consentStore,
+	hub,
 	onStartOAuth,
 }: Readonly<EventsPageProps>) {
 	const searchParams = useSearchParams();
@@ -310,6 +314,7 @@ export default function EventsPage({
 				}}
 				tokenStore={tokenStore}
 				consentStore={consentStore}
+				hub={hub}
 				onStartOAuth={onStartOAuth}
 			/>
 		);
@@ -350,6 +355,7 @@ export default function EventsPage({
 							onCreateEvent={() => setIsCreateDialogOpen(true)}
 							tokenStore={tokenStore}
 							consentStore={consentStore}
+							hub={hub}
 							onStartOAuth={onStartOAuth}
 						/>
 					)}
@@ -372,6 +378,7 @@ export default function EventsPage({
 							onCancel={() => setIsCreateDialogOpen(false)}
 							tokenStore={tokenStore}
 							consentStore={consentStore}
+							hub={hub}
 							onStartOAuth={onStartOAuth}
 						/>
 					)}
@@ -398,6 +405,7 @@ function EventConfiguration({
 	onReload,
 	tokenStore,
 	consentStore,
+	hub,
 	onStartOAuth,
 }: Readonly<{
 	eventMapping: IEventMapping;
@@ -409,6 +417,8 @@ function EventConfiguration({
 	tokenStore?: IOAuthTokenStoreWithPending;
 	/** Consent store for OAuth consent tracking. */
 	consentStore?: IOAuthConsentStore;
+	/** Hub configuration for OAuth provider resolution */
+	hub?: IHub;
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
 }>) {
@@ -550,7 +560,7 @@ function EventConfiguration({
 			onStartOAuth &&
 			!oauthTokens
 		) {
-			const oauthResult = await checkOAuthTokens(board.data, tokenStore);
+			const oauthResult = await checkOAuthTokens(board.data, tokenStore, hub);
 
 			if (oauthResult.requiredProviders.length > 0) {
 				// Check consent for providers that have tokens but might not have consent for this app
@@ -1236,6 +1246,7 @@ function TableActivateSinkButton({
 	onActivated,
 	tokenStore,
 	consentStore,
+	hub,
 	onStartOAuth,
 }: {
 	event: IEvent;
@@ -1243,6 +1254,7 @@ function TableActivateSinkButton({
 	onActivated: () => void;
 	tokenStore?: IOAuthTokenStoreWithPending;
 	consentStore?: IOAuthConsentStore;
+	hub?: IHub;
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
 }) {
 	const backend = useBackend();
@@ -1302,7 +1314,7 @@ function TableActivateSinkButton({
 					event.board_version as [number, number, number] | undefined,
 				);
 				if (board) {
-					const oauthResult = await checkOAuthTokens(board, tokenStore);
+					const oauthResult = await checkOAuthTokens(board, tokenStore, hub);
 
 					if (oauthResult.requiredProviders.length > 0) {
 						// Check consent for providers that have tokens but might not have consent for this app
@@ -1502,6 +1514,8 @@ interface IEventsTableProps {
 	tokenStore?: IOAuthTokenStoreWithPending;
 	/** Consent store for OAuth consent tracking. */
 	consentStore?: IOAuthConsentStore;
+	/** Hub configuration for OAuth provider resolution */
+	hub?: IHub;
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
 }
@@ -1517,6 +1531,7 @@ function EventsTable({
 	onCreateEvent,
 	tokenStore,
 	consentStore,
+	hub,
 	onStartOAuth,
 }: Readonly<IEventsTableProps>) {
 	const backend = useBackend();
@@ -1726,7 +1741,7 @@ function EventsTable({
 						event.board_version as [number, number, number] | undefined,
 					);
 					if (board) {
-						const oauthResult = await checkOAuthTokens(board, tokenStore);
+						const oauthResult = await checkOAuthTokens(board, tokenStore, hub);
 
 						if (oauthResult.requiredProviders.length > 0) {
 							// Check consent for providers that have tokens but might not have consent for this app
@@ -2127,6 +2142,7 @@ function EventsTable({
 																	appId={appId}
 																	tokenStore={tokenStore}
 																	consentStore={consentStore}
+																	hub={hub}
 																	onStartOAuth={onStartOAuth}
 																	onActivated={async () => {
 																		// Refresh sink status after activation

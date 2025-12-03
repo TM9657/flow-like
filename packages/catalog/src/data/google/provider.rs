@@ -2,7 +2,6 @@ use flow_like::{
     flow::{
         execution::context::ExecutionContext,
         node::{Node, NodeLogic, NodeScores},
-        oauth::OAuthProvider,
         pin::PinOptions,
         variable::VariableType,
     },
@@ -12,9 +11,6 @@ use flow_like_types::{JsonSchema, async_trait, json::json};
 use serde::{Deserialize, Serialize};
 
 pub const GOOGLE_PROVIDER_ID: &str = "google";
-
-/// Google OAuth Client ID - set via environment variable at build time
-const GOOGLE_CLIENT_ID: Option<&str> = option_env!("GOOGLE_CLIENT_ID");
 
 /// Google provider output - contains authentication token for all Google services
 /// (Drive, Sheets, Docs, Slides, Gmail, YouTube, Meet, Calendar, etc.)
@@ -46,7 +42,7 @@ impl NodeLogic for GoogleProviderNode {
         let mut node = Node::new(
             "data_google_provider",
             "Google",
-            "Authenticate with Google to access Drive, Sheets, Docs, Gmail, YouTube, Calendar and more. Requires GOOGLE_CLIENT_ID environment variable.",
+            "Authenticate with Google to access Drive, Sheets, Docs, Gmail, YouTube, Calendar and more.",
             "Data/Google",
         );
         node.add_icon("/flow/icons/google.svg");
@@ -60,23 +56,10 @@ impl NodeLogic for GoogleProviderNode {
         .set_schema::<GoogleProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        let client_id = GOOGLE_CLIENT_ID.unwrap_or_default();
-
-        // Base scopes are minimal - individual nodes add their required scopes dynamically
-        let oauth_provider = OAuthProvider::new(GOOGLE_PROVIDER_ID, "Google")
-            .set_auth_url("https://accounts.google.com/o/oauth2/v2/auth")
-            .set_token_url("https://oauth2.googleapis.com/token")
-            .set_client_id(client_id)
-            .set_scopes(vec![
-                "openid".to_string(),
-                "email".to_string(),
-                "profile".to_string(),
-            ])
-            .set_pkce_required(true)
-            .set_userinfo_url("https://www.googleapis.com/oauth2/v2/userinfo")
-            .set_revoke_url("https://oauth2.googleapis.com/revoke");
-
-        node.add_oauth_provider(oauth_provider);
+        // Add OAuth provider reference - full config comes from Hub
+        // Base scopes (openid, email, profile) are in the Hub config
+        // Individual service nodes add their required scopes via add_required_oauth_scopes
+        node.add_oauth_provider(GOOGLE_PROVIDER_ID);
 
         node.set_scores(
             NodeScores::new()

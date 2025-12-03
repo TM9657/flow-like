@@ -99,5 +99,60 @@
 		"additional_information": true,
 		"description": true,
 		"created_at": true
+	},
+	"oauth_providers": {
+		"notion": {
+			"name": "Notion",
+			"client_id": "2bcd872b-594c-803d-893c-0037e9662703",
+			"client_secret_env": "NOTION_CLIENT_SECRET",
+			"auth_url": "https://api.notion.com/v1/oauth/authorize",
+			"token_url": "https://api.notion.com/v1/oauth/token",
+			"scopes": [],
+			"pkce_required": false,
+			"requires_secret_proxy": true
+		},
+		"atlassian": {
+			"name": "Atlassian",
+			"client_id": "eobHfVJUiONqdPr1RZCKZBGlG4K9oPV7",
+			"client_secret_env": "ATLASSIAN_CLIENT_SECRET",
+			"auth_url": "https://auth.atlassian.com/authorize",
+			"token_url": "https://auth.atlassian.com/oauth/token",
+			"scopes": ["offline_access"],
+			"pkce_required": true,
+			"requires_secret_proxy": true,
+			"audience": "api.atlassian.com"
+		},
+		"google": {
+			"name": "Google",
+			"client_id": "290832386845-thpbvl5av7u4c4m02egdtgvcf2rrc00j.apps.googleusercontent.com",
+			"auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+			"token_url": "https://oauth2.googleapis.com/token",
+			"scopes": ["openid", "email", "profile"],
+			"pkce_required": true,
+			"requires_secret_proxy": false,
+			"userinfo_url": "https://www.googleapis.com/oauth2/v2/userinfo",
+			"revoke_url": "https://oauth2.googleapis.com/revoke"
+		},
+		"github": {
+			"name": "GitHub",
+			"client_id": "Ov23lizsysUhDlNMfrTO",
+			"auth_url": "https://github.com/login/oauth/authorize",
+			"token_url": "https://github.com/login/oauth/access_token",
+			"device_auth_url": "https://github.com/login/device/code",
+			"scopes": [],
+			"pkce_required": false,
+			"requires_secret_proxy": false,
+			"use_device_flow": true
+		},
+		"microsoft": {
+			"name": "Microsoft",
+			"client_id": "c2f4f10c-2867-43a1-9558-ccae12f84bde",
+			"auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+			"token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+			"scopes": ["openid", "profile", "email", "offline_access"],
+			"pkce_required": true,
+			"requires_secret_proxy": false,
+			"userinfo_url": "https://graph.microsoft.com/oidc/userinfo"
+		}
 	}
 }

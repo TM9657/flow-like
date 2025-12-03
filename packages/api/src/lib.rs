@@ -41,6 +41,7 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/bit", routes::bit::routes())
         .nest("/store", routes::store::routes())
         .nest("/auth", routes::auth::routes())
+        .nest("/oauth", routes::oauth::routes())
         .nest("/chat", routes::chat::routes())
         .nest("/admin", routes::admin::routes())
         .nest("/tmp", routes::tmp::routes())

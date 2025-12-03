@@ -20,6 +20,7 @@ import type {
 	IStoredOAuthToken,
 } from "../../lib/oauth/types";
 import type { IBoard } from "../../lib/schema/flow/board";
+import type { IHub } from "../../lib/schema/hub/hub";
 import { DeviceFlowDialog } from "./device-flow-dialog";
 import { OAuthConsentDialog } from "./oauth-consent-dialog";
 
@@ -67,6 +68,7 @@ export interface OAuthExecutionProviderProps {
 	runtime: IOAuthRuntime;
 	tokenStore: IOAuthTokenStoreWithPending;
 	consentStore: IOAuthConsentStore;
+	hub?: IHub;
 	onOAuthCallback?: (providerId: string, token: IStoredOAuthToken) => void;
 	providerCacheRef?: React.MutableRefObject<Map<string, IOAuthProvider>>;
 }
@@ -77,6 +79,7 @@ export function OAuthExecutionProvider({
 	runtime,
 	tokenStore,
 	consentStore,
+	hub,
 	onOAuthCallback,
 	providerCacheRef,
 }: OAuthExecutionProviderProps) {
@@ -292,7 +295,7 @@ export function OAuthExecutionProvider({
 			board: IBoard,
 			executor: (tokens?: Record<string, IOAuthToken>) => Promise<T>,
 		): Promise<T> => {
-			const result = await checkOAuthTokens(board, tokenStore);
+			const result = await checkOAuthTokens(board, tokenStore, hub);
 
 			if (result.missingProviders.length === 0) {
 				const tokens =
@@ -305,7 +308,7 @@ export function OAuthExecutionProvider({
 
 			throw new Error("OAuth authorization required");
 		},
-		[tokenStore],
+		[tokenStore, hub],
 	);
 
 	// Register callback handler for OAuth callbacks

@@ -2,7 +2,6 @@ use flow_like::{
     flow::{
         execution::context::ExecutionContext,
         node::{Node, NodeLogic, NodeScores},
-        oauth::OAuthProvider,
         pin::PinOptions,
         variable::VariableType,
     },
@@ -12,8 +11,6 @@ use flow_like_types::{JsonSchema, async_trait, json::json};
 use serde::{Deserialize, Serialize};
 
 pub const GITHUB_PROVIDER_ID: &str = "github";
-
-const GH_CLIENT_ID: Option<&str> = option_env!("GH_CLIENT_ID");
 
 /// GitHub provider - works with OAuth, PAT, or GitHub App tokens
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -143,12 +140,10 @@ impl NodeLogic for GitHubOAuthProviderNode {
         let mut node = Node::new(
             "data_github_provider_oauth",
             "GitHub (OAuth)",
-            "Connect to GitHub using OAuth Device Flow. Requires GH_CLIENT_ID environment variable to be set at build time.",
+            "Connect to GitHub using OAuth Device Flow.",
             "Data/GitHub",
         );
         node.add_icon("/flow/icons/github.svg");
-
-        let env_client_id = GH_CLIENT_ID.unwrap_or_default();
 
         node.add_input_pin(
             "base_url",
@@ -157,14 +152,6 @@ impl NodeLogic for GitHubOAuthProviderNode {
             VariableType::String,
         )
         .set_default_value(Some(json!("https://api.github.com")));
-
-        node.add_input_pin(
-            "scopes",
-            "Scopes",
-            "OAuth scopes to request (comma-separated). Common: repo, read:user, read:org, gist",
-            VariableType::String,
-        )
-        .set_default_value(Some(json!("repo,read:user,read:org")));
 
         node.add_output_pin(
             "provider",
@@ -175,26 +162,9 @@ impl NodeLogic for GitHubOAuthProviderNode {
         .set_schema::<GitHubProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        // Only add OAuth provider if client_id is available
-        if !env_client_id.is_empty() {
-            // GitHub Device Flow (RFC 8628) - perfect for desktop apps
-            // User gets a code to enter at github.com/login/device
-            // No client_secret needed, no redirect handling needed
-            let oauth_provider = OAuthProvider::new(GITHUB_PROVIDER_ID, "GitHub")
-                .set_auth_url("https://github.com/login/oauth/authorize")
-                .set_token_url("https://github.com/login/oauth/access_token")
-                .set_device_auth_url("https://github.com/login/device/code")
-                .set_client_id(env_client_id)
-                .set_scopes(vec![
-                    "repo".to_string(),
-                    "read:user".to_string(),
-                    "read:org".to_string(),
-                ])
-                .set_pkce_required(false)
-                .set_use_device_flow(true);
-
-            node.add_oauth_provider(oauth_provider);
-        }
+        // Add OAuth provider reference - full config comes from Hub
+        node.add_oauth_provider(GITHUB_PROVIDER_ID);
+        node.add_required_oauth_scopes(GITHUB_PROVIDER_ID, vec!["repo", "read:user", "read:org"]);
 
         node.set_scores(
             NodeScores::new()
@@ -211,15 +181,6 @@ impl NodeLogic for GitHubOAuthProviderNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        let env_client_id = GH_CLIENT_ID.unwrap_or_default();
-
-        if env_client_id.is_empty() {
-            return Err(flow_like_types::anyhow!(
-                "GitHub OAuth requires GH_CLIENT_ID environment variable. \
-                Please set it at build time or use the 'GitHub (PAT)' node instead."
-            ));
-        }
-
         let base_url: String = context
             .evaluate_pin("base_url")
             .await

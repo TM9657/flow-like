@@ -1,4 +1,4 @@
-import type { IBoard, INode } from "../schema";
+import type { IBoard, IHub, INode, IOAuthProviderConfig } from "../schema";
 import type {
 	IOAuthProvider,
 	IOAuthToken,
@@ -8,41 +8,68 @@ import type {
 } from "./types";
 
 /**
+ * Build a full IOAuthProvider from Hub config and node's provider_id + scopes.
+ * Returns undefined if the provider is not configured in the Hub.
+ */
+export function buildOAuthProviderFromHub(
+	providerId: string,
+	nodeScopes: string[],
+	hubConfig: IOAuthProviderConfig,
+): IOAuthProvider {
+	const baseScopes = hubConfig.scopes ?? [];
+	const allScopes = [...new Set([...baseScopes, ...nodeScopes])];
+
+	return {
+		id: providerId,
+		name: hubConfig.name,
+		auth_url: hubConfig.auth_url,
+		token_url: hubConfig.token_url,
+		client_id: hubConfig.client_id ?? "",
+		scopes: baseScopes,
+		pkce_required: hubConfig.pkce_required ?? false,
+		requires_secret_proxy: hubConfig.requires_secret_proxy ?? false,
+		revoke_url: hubConfig.revoke_url ?? undefined,
+		userinfo_url: hubConfig.userinfo_url ?? undefined,
+		audience: hubConfig.audience ?? undefined,
+		device_auth_url: hubConfig.device_auth_url ?? undefined,
+		use_device_flow: hubConfig.use_device_flow ?? false,
+		merged_scopes: allScopes,
+	};
+}
+
+/**
  * Extract OAuth providers from board nodes (including layers).
+ * Nodes only contain provider_id and scopes - full config comes from Hub.
  * Deduplicates providers by ID and merges required scopes from all nodes.
  */
 export function extractOAuthProvidersFromBoard(
 	board: IBoard,
+	hub?: IHub,
 ): IOAuthProvider[] {
-	const providersMap = new Map<string, IOAuthProvider>();
-	const additionalScopesMap = new Map<string, Set<string>>();
+	const hubOAuthProviders = hub?.oauth_providers ?? {};
+	const scopesMap = new Map<string, Set<string>>();
 
 	const processNode = (node: INode) => {
-		const nodeProviders = (node as any).oauth_providers as
-			| IOAuthProvider[]
-			| undefined;
-		if (nodeProviders && nodeProviders.length > 0) {
-			console.log(
-				`[OAuth] Node ${node.friendly_name} has providers:`,
-				nodeProviders,
-			);
-			for (const provider of nodeProviders) {
-				if (!providersMap.has(provider.id)) {
-					providersMap.set(provider.id, { ...provider });
+		// oauth_providers is now just string[] of provider IDs
+		const providerIds = (node as any).oauth_providers as string[] | undefined;
+		if (providerIds && providerIds.length > 0) {
+			for (const providerId of providerIds) {
+				if (!scopesMap.has(providerId)) {
+					scopesMap.set(providerId, new Set());
 				}
 			}
 		}
 
-		// Collect required_oauth_scopes from nodes
+		// All scopes come from required_oauth_scopes
 		const requiredScopes = (node as any).required_oauth_scopes as
 			| Record<string, string[] | { values?: string[] }>
 			| undefined;
 		if (requiredScopes) {
 			for (const [providerId, scopes] of Object.entries(requiredScopes)) {
-				if (!additionalScopesMap.has(providerId)) {
-					additionalScopesMap.set(providerId, new Set());
+				if (!scopesMap.has(providerId)) {
+					scopesMap.set(providerId, new Set());
 				}
-				const scopeSet = additionalScopesMap.get(providerId)!;
+				const scopeSet = scopesMap.get(providerId)!;
 				// Handle both array format and protobuf { values: [] } format
 				const scopeArray = Array.isArray(scopes)
 					? scopes
@@ -63,22 +90,27 @@ export function extractOAuthProvidersFromBoard(
 		}
 	}
 
-	// Merge additional scopes into providers
+	// Build full providers from Hub config + collected scopes
 	const providers: IOAuthProvider[] = [];
-	for (const [providerId, provider] of providersMap) {
-		const additionalScopes = additionalScopesMap.get(providerId);
-		if (additionalScopes && additionalScopes.size > 0) {
-			// Merge base scopes with additional scopes from nodes
-			const allScopes = new Set([...provider.scopes, ...additionalScopes]);
-			provider.merged_scopes = Array.from(allScopes);
-			console.log(
-				`[OAuth] Provider ${provider.name} merged scopes:`,
-				provider.merged_scopes,
+	for (const [providerId, nodeScopes] of scopesMap) {
+		const hubConfig = hubOAuthProviders[providerId];
+		if (!hubConfig) {
+			console.warn(
+				`[OAuth] Provider ${providerId} referenced by node but not configured in Hub`,
 			);
-		} else {
-			provider.merged_scopes = [...provider.scopes];
+			continue;
 		}
+
+		const provider = buildOAuthProviderFromHub(
+			providerId,
+			Array.from(nodeScopes),
+			hubConfig,
+		);
 		providers.push(provider);
+		console.log(
+			`[OAuth] Built provider ${provider.name} with scopes:`,
+			provider.merged_scopes,
+		);
 	}
 
 	console.log(
@@ -130,12 +162,16 @@ export async function getOAuthTokensForProviders(
 /**
  * Check OAuth tokens and return result with missing providers.
  * Does NOT throw - caller decides how to handle missing providers.
+ * @param board The board to check for OAuth providers
+ * @param tokenStore The token store to check for existing tokens
+ * @param hub The hub configuration containing OAuth provider configs
  */
 export async function checkOAuthTokens(
 	board: IBoard,
 	tokenStore: IOAuthTokenStore,
+	hub?: IHub,
 ): Promise<IOAuthTokenCheckResult & { requiredProviders: IOAuthProvider[] }> {
-	const requiredProviders = extractOAuthProvidersFromBoard(board);
+	const requiredProviders = extractOAuthProvidersFromBoard(board, hub);
 
 	if (requiredProviders.length === 0) {
 		return { tokens: {}, missingProviders: [], requiredProviders: [] };
@@ -151,12 +187,16 @@ export async function checkOAuthTokens(
 /**
  * Check if all required OAuth providers have valid tokens.
  * Throws an error if any are missing.
+ * @param board The board to check for OAuth providers
+ * @param tokenStore The token store to check for existing tokens
+ * @param hub The hub configuration containing OAuth provider configs
  */
 export async function ensureOAuthTokens(
 	board: IBoard,
 	tokenStore: IOAuthTokenStore,
+	hub?: IHub,
 ): Promise<Record<string, IOAuthToken> | undefined> {
-	const requiredProviders = extractOAuthProvidersFromBoard(board);
+	const requiredProviders = extractOAuthProvidersFromBoard(board, hub);
 
 	if (requiredProviders.length === 0) {
 		return undefined;
