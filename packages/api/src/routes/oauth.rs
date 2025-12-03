@@ -107,8 +107,8 @@ fn get_oauth_configs() -> &'static HashMap<String, ResolvedOAuthConfig> {
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/token/:provider_id", post(proxy_token_exchange))
-        .route("/refresh/:provider_id", post(proxy_token_refresh))
+        .route("/token/{provider_id}", post(proxy_token_exchange))
+        .route("/refresh/{provider_id}", post(proxy_token_refresh))
 }
 
 /// Custom error type for OAuth proxy errors
