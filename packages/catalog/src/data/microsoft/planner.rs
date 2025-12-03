@@ -117,7 +117,7 @@ impl NodeLogic for ListMyPlansNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("plans", "Plans", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<PlannerPlan>>();
+            .set_schema::<PlannerPlan>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -302,7 +302,7 @@ impl NodeLogic for ListPlanTasksNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("tasks", "Tasks", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<PlannerTask>>();
+            .set_schema::<PlannerTask>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -397,7 +397,7 @@ impl NodeLogic for ListPlanBucketsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("buckets", "Buckets", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<PlannerBucket>>();
+            .set_schema::<PlannerBucket>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -853,7 +853,7 @@ impl NodeLogic for ListMyTasksNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("tasks", "Tasks", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<PlannerTask>>();
+            .set_schema::<PlannerTask>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 

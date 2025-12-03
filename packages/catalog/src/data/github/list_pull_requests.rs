@@ -209,7 +209,7 @@ impl NodeLogic for ListGitHubPullRequestsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GitHubPullRequest>>()
+        .set_schema::<GitHubPullRequest>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(

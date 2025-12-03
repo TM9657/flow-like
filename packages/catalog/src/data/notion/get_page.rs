@@ -164,7 +164,7 @@ impl NodeLogic for GetNotionPageNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<NotionBlock>>()
+        .set_schema::<NotionBlock>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_required_oauth_scopes(NOTION_PROVIDER_ID, vec![]);

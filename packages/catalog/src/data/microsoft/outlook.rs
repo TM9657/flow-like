@@ -230,7 +230,7 @@ impl NodeLogic for ListOutlookMailFoldersNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<OutlookMailFolder>>();
+        .set_schema::<OutlookMailFolder>();
         node.add_output_pin("count", "Count", "Number of folders", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -357,7 +357,7 @@ impl NodeLogic for ListOutlookMessagesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<OutlookMessage>>();
+        .set_schema::<OutlookMessage>();
         node.add_output_pin(
             "count",
             "Count",
@@ -785,7 +785,7 @@ impl NodeLogic for ListOutlookCalendarEventsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<OutlookCalendarEvent>>();
+        .set_schema::<OutlookCalendarEvent>();
         node.add_output_pin("count", "Count", "Number of events", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -931,7 +931,7 @@ impl NodeLogic for ListOutlookContactsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<OutlookContact>>();
+        .set_schema::<OutlookContact>();
         node.add_output_pin(
             "count",
             "Count",

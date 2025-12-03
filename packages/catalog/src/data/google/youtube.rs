@@ -175,7 +175,7 @@ impl NodeLogic for SearchYouTubeVideosNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("videos", "Videos", "List of videos", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<YouTubeVideo>>();
+            .set_schema::<YouTubeVideo>();
         node.add_output_pin(
             "next_page_token",
             "Next Page Token",
@@ -436,7 +436,7 @@ impl NodeLogic for ListMyYouTubeVideosNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("videos", "Videos", "List of videos", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<YouTubeVideo>>();
+            .set_schema::<YouTubeVideo>();
         node.add_output_pin(
             "next_page_token",
             "Next Page Token",
@@ -712,7 +712,7 @@ impl NodeLogic for ListYouTubePlaylistsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<YouTubePlaylist>>();
+        .set_schema::<YouTubePlaylist>();
         node.add_output_pin(
             "next_page_token",
             "Next Page Token",
@@ -875,7 +875,7 @@ impl NodeLogic for GetYouTubePlaylistItemsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("items", "Items", "Playlist items", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<YouTubePlaylistItem>>();
+            .set_schema::<YouTubePlaylistItem>();
         node.add_output_pin(
             "next_page_token",
             "Next Page Token",

@@ -100,7 +100,7 @@ impl NodeLogic for ListTaskListsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("task_lists", "Task Lists", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<TodoTaskList>>();
+            .set_schema::<TodoTaskList>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -298,7 +298,7 @@ impl NodeLogic for ListTasksNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("tasks", "Tasks", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<TodoTask>>();
+            .set_schema::<TodoTask>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 

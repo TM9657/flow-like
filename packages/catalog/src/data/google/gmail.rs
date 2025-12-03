@@ -368,7 +368,7 @@ impl NodeLogic for ListGmailLabelsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("labels", "Labels", "List of labels", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<GmailLabel>>();
+            .set_schema::<GmailLabel>();
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
         node.add_required_oauth_scopes(

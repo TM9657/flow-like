@@ -608,7 +608,7 @@ impl NodeLogic for SearchGoogleDriveNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("files", "Files", "Search results", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<GoogleDriveItem>>();
+            .set_schema::<GoogleDriveItem>();
         node.add_output_pin("count", "Count", "Number of results", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 

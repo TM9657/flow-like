@@ -125,7 +125,7 @@ impl NodeLogic for ListNotebooksNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("notebooks", "Notebooks", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<OneNoteNotebook>>();
+            .set_schema::<OneNoteNotebook>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -323,7 +323,7 @@ impl NodeLogic for ListSectionsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("sections", "Sections", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<OneNoteSection>>();
+            .set_schema::<OneNoteSection>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -535,7 +535,7 @@ impl NodeLogic for ListPagesNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("pages", "Pages", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<OneNotePage>>();
+            .set_schema::<OneNotePage>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 

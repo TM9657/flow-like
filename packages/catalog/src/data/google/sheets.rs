@@ -214,7 +214,7 @@ impl NodeLogic for GetGoogleSpreadsheetNode {
             .set_schema::<GoogleSpreadsheet>();
         node.add_output_pin("sheets", "Sheets", "List of sheets", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<GoogleSheet>>();
+            .set_schema::<GoogleSheet>();
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
         node.add_required_oauth_scopes(

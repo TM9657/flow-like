@@ -24,6 +24,8 @@ fasteval = "0.2.4"
 strsim = "0.11.1"
 regex.workspace = true
 chrono.workspace = true
+chrono-tz.workspace = true
+iana-time-zone.workspace = true
 calamine = { version = "0.30", default-features = false, features = ["dates"] }
 umya-spreadsheet = "2.3.2"
 nalgebra = "0.34.0"

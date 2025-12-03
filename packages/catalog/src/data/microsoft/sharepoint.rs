@@ -190,7 +190,7 @@ impl NodeLogic for SearchSharePointSitesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<SharePointSite>>();
+        .set_schema::<SharePointSite>();
         node.add_output_pin(
             "count",
             "Count",
@@ -457,7 +457,7 @@ impl NodeLogic for ListSharePointDrivesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<SharePointDrive>>();
+        .set_schema::<SharePointDrive>();
         node.add_output_pin("count", "Count", "Number of drives", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -584,7 +584,7 @@ impl NodeLogic for ListSharePointDriveItemsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<SharePointDriveItem>>();
+        .set_schema::<SharePointDriveItem>();
         node.add_output_pin("count", "Count", "Number of items", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -867,7 +867,7 @@ impl NodeLogic for ListSharePointListsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<SharePointList>>();
+        .set_schema::<SharePointList>();
         node.add_output_pin("count", "Count", "Number of lists", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -988,7 +988,7 @@ impl NodeLogic for GetSharePointListItemsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("items", "Items", "List items", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<SharePointListItem>>();
+            .set_schema::<SharePointListItem>();
         node.add_output_pin("count", "Count", "Number of items", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 

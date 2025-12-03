@@ -144,7 +144,7 @@ impl NodeLogic for ListGoogleDriveFilesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GoogleDriveFile>>()
+        .set_schema::<GoogleDriveFile>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(

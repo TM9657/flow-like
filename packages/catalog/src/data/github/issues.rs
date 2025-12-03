@@ -701,7 +701,7 @@ impl NodeLogic for ListGitHubIssueCommentsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GitHubIssueComment>>();
+        .set_schema::<GitHubIssueComment>();
 
         node.add_output_pin(
             "count",

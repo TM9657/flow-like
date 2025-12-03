@@ -209,7 +209,7 @@ impl NodeLogic for GetGoogleSlidesNode {
             .set_schema::<GooglePresentation>();
         node.add_output_pin("slides", "Slides", "List of slides", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<GoogleSlide>>();
+            .set_schema::<GoogleSlide>();
         node.add_output_pin("slide_count", "Slide Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 

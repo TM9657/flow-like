@@ -129,7 +129,7 @@ impl NodeLogic for SearchNotionNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<NotionSearchResult>>()
+        .set_schema::<NotionSearchResult>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(

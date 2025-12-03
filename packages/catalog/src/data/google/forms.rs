@@ -194,7 +194,7 @@ impl NodeLogic for GetGoogleFormNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GoogleFormQuestion>>();
+        .set_schema::<GoogleFormQuestion>();
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
         node.add_required_oauth_scopes(
@@ -309,7 +309,7 @@ impl NodeLogic for ListGoogleFormResponsesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GoogleFormResponse>>();
+        .set_schema::<GoogleFormResponse>();
         node.add_output_pin(
             "next_page_token",
             "Next Page Token",

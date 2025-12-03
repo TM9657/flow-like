@@ -161,7 +161,7 @@ impl NodeLogic for ListGitHubReleasesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GitHubRelease>>();
+        .set_schema::<GitHubRelease>();
 
         node.add_output_pin(
             "count",

@@ -770,7 +770,7 @@ impl NodeLogic for ListGitHubPullRequestFilesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GitHubPullRequestFile>>();
+        .set_schema::<GitHubPullRequestFile>();
 
         node.add_output_pin(
             "count",
@@ -955,7 +955,7 @@ impl NodeLogic for ListGitHubPullRequestReviewsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GitHubPullRequestReview>>();
+        .set_schema::<GitHubPullRequestReview>();
 
         node.add_output_pin("count", "Count", "Number of reviews", VariableType::Integer);
 

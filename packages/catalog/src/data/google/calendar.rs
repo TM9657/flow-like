@@ -145,7 +145,7 @@ impl NodeLogic for ListGoogleCalendarsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GoogleCalendar>>();
+        .set_schema::<GoogleCalendar>();
         node.add_output_pin(
             "primary_calendar_id",
             "Primary Calendar ID",
@@ -298,7 +298,7 @@ impl NodeLogic for ListGoogleCalendarEventsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("events", "Events", "List of events", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<GoogleCalendarEvent>>();
+            .set_schema::<GoogleCalendarEvent>();
         node.add_output_pin(
             "next_page_token",
             "Next Page Token",

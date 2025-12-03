@@ -114,7 +114,7 @@ impl NodeLogic for ListJoinedTeamsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("teams", "Teams", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<Team>>();
+            .set_schema::<Team>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -205,7 +205,7 @@ impl NodeLogic for ListTeamChannelsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("channels", "Channels", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<Channel>>();
+            .set_schema::<Channel>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -441,7 +441,7 @@ impl NodeLogic for GetChannelMessagesNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("messages", "Messages", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<ChatMessage>>();
+            .set_schema::<ChatMessage>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 

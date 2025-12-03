@@ -162,7 +162,7 @@ impl NodeLogic for ListCalendarsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("calendars", "Calendars", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<Calendar>>();
+            .set_schema::<Calendar>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -398,7 +398,7 @@ impl NodeLogic for ListEventsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("events", "Events", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<CalendarEvent>>();
+            .set_schema::<CalendarEvent>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -819,7 +819,7 @@ impl NodeLogic for FindMeetingTimesNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("suggestions", "Suggestions", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<MeetingTimeSuggestion>>();
+            .set_schema::<MeetingTimeSuggestion>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 

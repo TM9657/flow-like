@@ -64,7 +64,7 @@ impl NodeLogic for ListExcelWorksheetsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("worksheets", "Worksheets", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<ExcelWorksheet>>();
+            .set_schema::<ExcelWorksheet>();
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
         node.add_required_oauth_scopes(MICROSOFT_PROVIDER_ID, vec!["Files.Read.All"]);

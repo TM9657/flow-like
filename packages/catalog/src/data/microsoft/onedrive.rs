@@ -104,7 +104,7 @@ impl NodeLogic for ListOneDriveItemsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<OneDriveItem>>();
+        .set_schema::<OneDriveItem>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -1082,7 +1082,7 @@ impl NodeLogic for SearchOneDriveNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("items", "Items", "Search results", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<OneDriveItem>>();
+            .set_schema::<OneDriveItem>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 

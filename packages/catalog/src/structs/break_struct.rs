@@ -129,6 +129,7 @@ fn build_standalone_schema(schema: &Value, root_schema: &Value) -> Value {
     // For objects, build a complete schema with properties
     if resolved.get("type").and_then(|t| t.as_str()) == Some("object")
         || resolved.get("properties").is_some()
+        || resolved.get("additionalProperties").is_some()
     {
         let mut new_schema = json!({
             "$schema": "http://json-schema.org/draft-07/schema#",
@@ -141,6 +142,10 @@ fn build_standalone_schema(schema: &Value, root_schema: &Value) -> Value {
         if let Some(required) = resolved.get("required") {
             new_schema["required"] = required.clone();
         }
+        // Preserve additionalProperties for dynamic object types (e.g., HashMap)
+        if let Some(additional) = resolved.get("additionalProperties") {
+            new_schema["additionalProperties"] = additional.clone();
+        }
         if let Some(defs) = root_schema.get("definitions") {
             new_schema["definitions"] = defs.clone();
         } else if let Some(defs) = root_schema.get("$defs") {
@@ -150,23 +155,19 @@ fn build_standalone_schema(schema: &Value, root_schema: &Value) -> Value {
         return new_schema;
     }
 
-    // For arrays, build schema with items
+    // For arrays, extract the item schema (not the array schema itself)
+    // This is because Break Struct works on single items, and For Each will iterate
+    // providing individual items, so the schema should be the item type
     if resolved.get("type").and_then(|t| t.as_str()) == Some("array") {
-        let mut new_schema = json!({
-            "$schema": "http://json-schema.org/draft-07/schema#",
-            "type": "array"
-        });
-
         if let Some(items) = resolved.get("items") {
-            new_schema["items"] = items.clone();
+            // Recursively build standalone schema for the items type
+            return build_standalone_schema(items, root_schema);
         }
-        if let Some(defs) = root_schema.get("definitions") {
-            new_schema["definitions"] = defs.clone();
-        } else if let Some(defs) = root_schema.get("$defs") {
-            new_schema["$defs"] = defs.clone();
-        }
-
-        return new_schema;
+        // No items schema, return empty object schema
+        return json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object"
+        });
     }
 
     // For primitives, return as-is
@@ -286,12 +287,24 @@ impl NodeLogic for BreakStructNode {
             }
         };
 
+        // Resolve the schema in case it has $ref at the top level
+        let resolved_schema = resolve_schema(&schema, &schema);
+
         // Extract properties from the schema
         // JSON Schema stores properties under "properties" key
-        let properties = match schema.get("properties").and_then(|p| p.as_object()) {
+        let properties = match resolved_schema
+            .get("properties")
+            .and_then(|p| p.as_object())
+        {
             Some(props) => props,
             None => {
-                node.error = Some("Schema has no object properties".to_string());
+                // Check if this is a dynamic object type (additionalProperties without properties)
+                if resolved_schema.get("additionalProperties").is_some() {
+                    node.error = Some("Cannot break dynamic object types (e.g., HashMap). Use a different approach to access the values.".to_string());
+                } else {
+                    node.error = Some("Schema has no object properties".to_string());
+                }
+                node.pins.retain(|_, pin| pin.pin_type == PinType::Input);
                 return;
             }
         };

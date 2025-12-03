@@ -133,7 +133,7 @@ impl NodeLogic for QueryNotionDatabaseNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<NotionPage>>()
+        .set_schema::<NotionPage>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(

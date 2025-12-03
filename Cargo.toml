@@ -36,6 +36,8 @@ serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_json = "1.0.134"
 schemars = {version="1.1.0", features = ["preserve_order"]}
 chrono = "0.4.41"
+chrono-tz = "0.10.4"
+iana-time-zone = "0.1.64"
 axum = {version="0.8.4", features=["http2", "multipart"]}
 sea-orm = { version = "1.1.17", features = ["sqlx-postgres", "runtime-tokio-native-tls", "macros", "with-json", "seaography" ] }
 tower = "0.5.2"
