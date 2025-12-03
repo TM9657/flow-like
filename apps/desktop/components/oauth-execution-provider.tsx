@@ -3,11 +3,13 @@
 import {
 	OAuthExecutionProvider as BaseOAuthExecutionProvider,
 	type IOAuthProvider,
+	useBackend,
+	useInvoke,
 	useOAuthExecutionContext,
 } from "@tm9657/flow-like-ui";
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, useMemo, useRef } from "react";
 import { oauthConsentStore, oauthTokenStore } from "../lib/oauth-db";
-import { oauthService } from "../lib/oauth-service";
+import { getOAuthService } from "../lib/oauth-service";
 import { tauriOAuthRuntime } from "../lib/tauri-oauth-runtime";
 import {
 	clearProviderCache,
@@ -20,6 +22,28 @@ export { useOAuthExecutionContext as useOAuthExecution };
 
 export function OAuthExecutionProvider({ children }: { children: ReactNode }) {
 	const providerCacheRef = useRef<Map<string, IOAuthProvider>>(new Map());
+	const backend = useBackend();
+	const profile = useInvoke(
+		backend.userState.getProfile,
+		backend.userState,
+		[],
+	);
+
+	// Build API base URL from hub domain
+	const apiBaseUrl = useMemo(() => {
+		const hub = profile.data?.hub;
+		if (!hub) return undefined;
+		if (hub.startsWith("http://") || hub.startsWith("https://")) {
+			return hub;
+		}
+		return `https://${hub}`;
+	}, [profile.data?.hub]);
+
+	// Create OAuth service with API base URL for secret proxy
+	const oauthService = useMemo(
+		() => getOAuthService(apiBaseUrl),
+		[apiBaseUrl],
+	);
 
 	// Handle OAuth callback from Tauri deep links
 	useOAuthCallbackListener((pending, _token) => {

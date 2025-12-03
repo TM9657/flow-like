@@ -50,7 +50,7 @@ impl NodeLogic for SearchNotionNode {
             "Searches across all pages and databases the integration has access to",
             "Data/Notion",
         );
-        node.add_icon("/flow/icons/search.svg");
+        node.add_icon("/flow/icons/notion.svg");
 
         node.add_input_pin(
             "exec_in",

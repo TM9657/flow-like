@@ -39,7 +39,7 @@ impl NodeLogic for CreateNotionPageNode {
             "Creates a new page in a Notion database",
             "Data/Notion",
         );
-        node.add_icon("/flow/icons/file-plus.svg");
+        node.add_icon("/flow/icons/notion.svg");
 
         node.add_input_pin(
             "exec_in",

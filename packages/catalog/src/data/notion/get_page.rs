@@ -92,7 +92,7 @@ impl NodeLogic for GetNotionPageNode {
             "Retrieves a Notion page with its content and blocks",
             "Data/Notion",
         );
-        node.add_icon("/flow/icons/file-text.svg");
+        node.add_icon("/flow/icons/notion.svg");
 
         node.add_input_pin(
             "exec_in",

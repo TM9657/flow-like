@@ -50,7 +50,7 @@ impl NodeLogic for QueryNotionDatabaseNode {
             "Queries a Notion database and returns matching pages",
             "Data/Notion",
         );
-        node.add_icon("/flow/icons/search.svg");
+        node.add_icon("/flow/icons/notion.svg");
 
         node.add_input_pin(
             "exec_in",

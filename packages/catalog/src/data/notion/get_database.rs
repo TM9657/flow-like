@@ -52,7 +52,7 @@ impl NodeLogic for GetNotionDatabaseNode {
             "Retrieves a Notion database schema with its properties",
             "Data/Notion",
         );
-        node.add_icon("/flow/icons/database.svg");
+        node.add_icon("/flow/icons/notion.svg");
 
         node.add_input_pin(
             "exec_in",
