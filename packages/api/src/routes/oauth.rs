@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use axum::{
     Json,
@@ -12,10 +13,38 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
 
-/// OAuth configs loaded at build time with resolved secrets from environment variables
+/// OAuth configs loaded at build time (without secrets)
 static OAUTH_CONFIG: &str = include_str!(concat!(env!("OUT_DIR"), "/oauth_config.json"));
 
+/// Cached resolved configs with secrets from env
+static RESOLVED_CONFIGS: OnceLock<HashMap<String, ResolvedOAuthConfig>> = OnceLock::new();
+
+/// Config as stored in flow-like.config.json (without resolved secrets)
 #[derive(Debug, Clone, Deserialize)]
+struct OAuthProviderConfig {
+    name: String,
+    #[serde(default)]
+    client_id: Option<String>,
+    /// Environment variable name containing the client secret
+    client_secret_env: Option<String>,
+    auth_url: String,
+    token_url: String,
+    #[serde(default)]
+    scopes: Vec<String>,
+    #[serde(default)]
+    pkce_required: bool,
+    #[serde(default)]
+    requires_secret_proxy: bool,
+    revoke_url: Option<String>,
+    userinfo_url: Option<String>,
+    device_auth_url: Option<String>,
+    #[serde(default)]
+    use_device_flow: bool,
+    audience: Option<String>,
+}
+
+/// Resolved config with secrets loaded from env at runtime
+#[derive(Debug, Clone)]
 struct ResolvedOAuthConfig {
     name: String,
     client_id: Option<String>,
@@ -39,8 +68,41 @@ struct ResolvedOAuthConfig {
     audience: Option<String>,
 }
 
-fn get_oauth_configs() -> HashMap<String, ResolvedOAuthConfig> {
-    flow_like_types::json::from_str(OAUTH_CONFIG).unwrap_or_default()
+fn get_oauth_configs() -> &'static HashMap<String, ResolvedOAuthConfig> {
+    RESOLVED_CONFIGS.get_or_init(|| {
+        let raw_configs: HashMap<String, OAuthProviderConfig> =
+            flow_like_types::json::from_str(OAUTH_CONFIG).unwrap_or_default();
+
+        raw_configs
+            .into_iter()
+            .map(|(provider_id, cfg)| {
+                // Resolve client_secret from env var at runtime
+                let client_secret = cfg
+                    .client_secret_env
+                    .as_ref()
+                    .and_then(|env_name| std::env::var(env_name).ok())
+                    .filter(|s| !s.is_empty());
+
+                let resolved = ResolvedOAuthConfig {
+                    name: cfg.name,
+                    client_id: cfg.client_id,
+                    client_secret,
+                    auth_url: cfg.auth_url,
+                    token_url: cfg.token_url,
+                    scopes: cfg.scopes,
+                    pkce_required: cfg.pkce_required,
+                    requires_secret_proxy: cfg.requires_secret_proxy,
+                    revoke_url: cfg.revoke_url,
+                    userinfo_url: cfg.userinfo_url,
+                    device_auth_url: cfg.device_auth_url,
+                    use_device_flow: cfg.use_device_flow,
+                    audience: cfg.audience,
+                };
+
+                (provider_id, resolved)
+            })
+            .collect()
+    })
 }
 
 pub fn routes() -> Router<AppState> {
@@ -150,7 +212,7 @@ async fn proxy_token_exchange(
         OAuthProxyError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!(
-                "Client ID not configured for provider '{}'. Set the client_id_env environment variable at build time.",
+                "Client ID not configured for provider '{}' in flow-like.config.json",
                 provider_id,
             ),
         )
@@ -160,7 +222,7 @@ async fn proxy_token_exchange(
         OAuthProxyError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!(
-                "Client secret not configured for provider '{}'. Set the client_secret_env environment variable at build time.",
+                "Client secret not configured for provider '{}'. Set the environment variable specified in client_secret_env.",
                 provider_id,
             ),
         )
@@ -280,7 +342,7 @@ async fn proxy_token_refresh(
         OAuthProxyError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!(
-                "Client ID not configured for provider '{}'. Set the client_id_env environment variable at build time.",
+                "Client ID not configured for provider '{}' in flow-like.config.json",
                 provider_id,
             ),
         )
@@ -290,7 +352,7 @@ async fn proxy_token_refresh(
         OAuthProxyError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!(
-                "Client secret not configured for provider '{}'. Set the client_secret_env environment variable at build time.",
+                "Client secret not configured for provider '{}'. Set the environment variable specified in client_secret_env.",
                 provider_id,
             ),
         )
