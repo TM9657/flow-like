@@ -53,7 +53,9 @@ export function useOAuthExecution(): UseOAuthExecutionResult {
 	});
 
 	const checkBoardOAuth = useCallback(async (board: IBoard) => {
-		const result = await checkOAuthTokens(board, oauthTokenStore);
+		const result = await checkOAuthTokens(board, oauthTokenStore, undefined, {
+			refreshToken: oauthService.refreshToken.bind(oauthService),
+		});
 
 		if (result.missingProviders.length > 0) {
 			setState({

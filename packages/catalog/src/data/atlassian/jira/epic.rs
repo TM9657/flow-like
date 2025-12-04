@@ -77,7 +77,7 @@ impl NodeLogic for LinkToEpicNode {
             VariableType::Boolean,
         );
 
-        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["write:jira-work"]);
+        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["write:epic:jira-software"]);
         node.set_scores(
             NodeScores::new()
                 .set_privacy(6)
@@ -229,7 +229,7 @@ impl NodeLogic for UnlinkFromEpicNode {
             VariableType::Boolean,
         );
 
-        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["write:jira-work"]);
+        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["write:epic:jira-software"]);
         node.set_scores(
             NodeScores::new()
                 .set_privacy(6)
@@ -387,7 +387,7 @@ impl NodeLogic for GetEpicIssuesNode {
             VariableType::Integer,
         );
 
-        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:jira-work"]);
+        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:epic:jira-software"]);
         node.set_scores(
             NodeScores::new()
                 .set_privacy(7)

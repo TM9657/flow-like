@@ -1,7 +1,7 @@
 use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
-        execution::context::ExecutionContext,
+        execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic, NodeScores},
         pin::{PinOptions, ValueType},
         variable::VariableType,
@@ -61,7 +61,7 @@ impl NodeLogic for GetCurrentUserNode {
             .set_schema::<JiraUser>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:jira-user"]);
+        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:me", "read:jira-user"]);
         node.set_scores(
             NodeScores::new()
                 .set_privacy(7)
@@ -82,15 +82,21 @@ impl NodeLogic for GetCurrentUserNode {
         let client = reqwest::Client::new();
         let url = provider.jira_api_url("/myself");
 
+        context.log_message(&format!("Jira API URL: {}", url), LogLevel::Debug);
+        context.log_message(&format!("Auth type: {}", provider.auth_type), LogLevel::Debug);
+
         let response = client
             .get(&url)
             .header("Authorization", provider.auth_header())
             .send()
             .await?;
 
+        context.log_message(&format!("Response status: {}", response.status()), LogLevel::Debug);
+
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
+            context.log_message(&format!("Error response: {}", error_text), LogLevel::Error);
             return Err(flow_like_types::anyhow!(
                 "Failed to get current user: {} - {}",
                 status,

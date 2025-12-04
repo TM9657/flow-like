@@ -153,6 +153,17 @@
 			"pkce_required": true,
 			"requires_secret_proxy": false,
 			"userinfo_url": "https://graph.microsoft.com/oidc/userinfo"
+		},
+		"linkedin": {
+			"name": "LinkedIn",
+			"client_id": "77glup50dqcazr",
+			"client_secret_env": "LINKEDIN_CLIENT_SECRET",
+			"auth_url": "https://www.linkedin.com/oauth/v2/authorization",
+			"token_url": "https://www.linkedin.com/oauth/v2/accessToken",
+			"scopes": ["openid", "profile", "email"],
+			"pkce_required": false,
+			"requires_secret_proxy": true,
+			"userinfo_url": "https://api.linkedin.com/v2/userinfo"
 		}
 	}
 }

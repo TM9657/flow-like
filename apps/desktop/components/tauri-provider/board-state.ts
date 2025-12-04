@@ -23,6 +23,7 @@ import {
 	isEqual,
 } from "@tm9657/flow-like-ui";
 import type { IJwks, IRealtimeAccess } from "@tm9657/flow-like-ui";
+import { oauthService } from "../../lib/oauth-service";
 import { isObject } from "lodash-es";
 import { toast } from "sonner";
 import { fetcher } from "../../lib/api";
@@ -533,7 +534,9 @@ export class BoardState implements IBoardState {
 			| undefined;
 		const board = await this.getBoard(appId, boardId);
 		const hub = await getHubConfig(this.backend.profile);
-		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub);
+		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub, {
+			refreshToken: oauthService.refreshToken.bind(oauthService),
+		});
 
 		console.log("[OAuth] Board check result:", {
 			requiredProviders: oauthResult.requiredProviders.map((p) => p.id),

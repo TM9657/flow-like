@@ -8,6 +8,35 @@ import type {
 } from "./types";
 
 /**
+ * Check if a stored token has all the required scopes.
+ * Returns true if the token has all required scopes, false otherwise.
+ */
+export function hasRequiredScopes(
+	storedToken: IStoredOAuthToken,
+	requiredScopes: string[],
+): boolean {
+	if (!requiredScopes || requiredScopes.length === 0) {
+		return true;
+	}
+
+	const tokenScopes = new Set(storedToken.scopes ?? []);
+	const missingScopes = requiredScopes.filter((scope) => !tokenScopes.has(scope));
+
+	if (missingScopes.length > 0) {
+		console.log(
+			`[OAuth] Token for ${storedToken.providerId} is missing scopes:`,
+			missingScopes,
+			"| Has scopes:",
+			storedToken.scopes,
+			"| Required:",
+			requiredScopes,
+		);
+		return false;
+	}
+
+	return true;
+}
+/**
  * Build a full IOAuthProvider from Hub config and node's provider_id + scopes.
  * Returns undefined if the provider is not configured in the Hub.
  */
@@ -137,20 +166,63 @@ export function storedTokenToBackendFormat(
 }
 
 /**
+ * Options for getOAuthTokensForProviders
+ */
+export interface GetOAuthTokensOptions {
+	/**
+	 * Optional function to refresh expired tokens.
+	 * If provided, will attempt refresh before marking token as missing.
+	 */
+	refreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
+}
+
+/**
  * Get OAuth tokens for required providers, checking validity.
  * Returns valid tokens and list of providers that need authorization.
+ * If refreshToken callback is provided, will attempt to refresh expired tokens.
  */
 export async function getOAuthTokensForProviders(
 	providers: IOAuthProvider[],
 	tokenStore: IOAuthTokenStore,
+	options?: GetOAuthTokensOptions,
 ): Promise<IOAuthTokenCheckResult> {
 	const tokens: Record<string, IOAuthToken> = {};
 	const missingProviders: IOAuthProvider[] = [];
 
 	for (const provider of providers) {
-		const storedToken = await tokenStore.getToken(provider.id);
+		let storedToken = await tokenStore.getToken(provider.id);
+		const requiredScopes = provider.merged_scopes ?? provider.scopes ?? [];
+
+		// If token exists but is expired, try to refresh it
+		if (storedToken && tokenStore.isExpired(storedToken)) {
+			if (storedToken.refresh_token && options?.refreshToken) {
+				try {
+					console.log(`[OAuth] Token for ${provider.id} is expired, attempting refresh...`);
+					storedToken = await options.refreshToken(provider, storedToken);
+					console.log(`[OAuth] Token for ${provider.id} refreshed successfully`);
+				} catch (e) {
+					console.warn(`[OAuth] Failed to refresh token for ${provider.id}:`, e);
+					storedToken = undefined; // Mark as needing reauth
+				}
+			} else {
+				console.log(`[OAuth] Token for ${provider.id} is expired and has no refresh token`);
+				storedToken = undefined;
+			}
+		}
+
+		// Check if token exists, is valid, AND has all required scopes
 		if (storedToken && !tokenStore.isExpired(storedToken)) {
-			tokens[provider.id] = storedTokenToBackendFormat(storedToken);
+			if (hasRequiredScopes(storedToken, requiredScopes)) {
+				tokens[provider.id] = storedTokenToBackendFormat(storedToken);
+			} else {
+				console.log(
+					`[OAuth] Token for ${provider.id} exists but is missing required scopes. Reauthorization needed.`,
+				);
+				missingProviders.push(provider);
+			}
 		} else {
 			missingProviders.push(provider);
 		}
@@ -165,11 +237,13 @@ export async function getOAuthTokensForProviders(
  * @param board The board to check for OAuth providers
  * @param tokenStore The token store to check for existing tokens
  * @param hub The hub configuration containing OAuth provider configs
+ * @param options Optional configuration including refresh callback
  */
 export async function checkOAuthTokens(
 	board: IBoard,
 	tokenStore: IOAuthTokenStore,
 	hub?: IHub,
+	options?: GetOAuthTokensOptions,
 ): Promise<IOAuthTokenCheckResult & { requiredProviders: IOAuthProvider[] }> {
 	const requiredProviders = extractOAuthProvidersFromBoard(board, hub);
 
@@ -180,6 +254,7 @@ export async function checkOAuthTokens(
 	const result = await getOAuthTokensForProviders(
 		requiredProviders,
 		tokenStore,
+		options,
 	);
 	return { ...result, requiredProviders };
 }
@@ -190,11 +265,13 @@ export async function checkOAuthTokens(
  * @param board The board to check for OAuth providers
  * @param tokenStore The token store to check for existing tokens
  * @param hub The hub configuration containing OAuth provider configs
+ * @param options Optional configuration including refresh callback
  */
 export async function ensureOAuthTokens(
 	board: IBoard,
 	tokenStore: IOAuthTokenStore,
 	hub?: IHub,
+	options?: GetOAuthTokensOptions,
 ): Promise<Record<string, IOAuthToken> | undefined> {
 	const requiredProviders = extractOAuthProvidersFromBoard(board, hub);
 
@@ -205,6 +282,7 @@ export async function ensureOAuthTokens(
 	const { tokens, missingProviders } = await getOAuthTokensForProviders(
 		requiredProviders,
 		tokenStore,
+		options,
 	);
 
 	if (missingProviders.length > 0) {

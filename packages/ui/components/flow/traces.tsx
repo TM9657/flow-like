@@ -304,6 +304,29 @@ export function Traces({
 	);
 }
 
+/**
+ * Attempts to format a message with pretty-printed JSON.
+ * If the entire message is valid JSON, wraps it in a markdown code block.
+ * Otherwise returns the original message.
+ */
+function formatLogMessage(message: string): string {
+	const trimmed = message.trim();
+
+	// Check if the entire message is JSON (starts with { or [)
+	if ((trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+	    (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+		try {
+			const parsed = JSON.parse(trimmed);
+			const pretty = JSON.stringify(parsed, null, 2);
+			return `\`\`\`json\n${pretty}\n\`\`\``;
+		} catch {
+			// Not valid JSON, return as-is
+		}
+	}
+
+	return message;
+}
+
 const LogMessage = memo(function LogMessage({
 	log,
 	style,
@@ -329,6 +352,9 @@ const LogMessage = memo(function LogMessage({
 		return undefined;
 	}, [log.node_id, board.current?.nodes]);
 
+	// Format the message - memoized to avoid re-computing on every render
+	const formattedMessage = useMemo(() => formatLogMessage(log.message), [log.message]);
+
 	useEffect(() => {
 		if (rowRef.current) {
 			onSetHeight(index, rowRef.current.clientHeight);
@@ -349,7 +375,7 @@ const LogMessage = memo(function LogMessage({
 					<LogIndicator logLevel={log.log_level} />
 					<div className="text-start text-wrap break-all">
 						<TextEditor
-							initialContent={log.message}
+							initialContent={formattedMessage}
 							isMarkdown={true}
 							editable={false}
 							minimal={true}

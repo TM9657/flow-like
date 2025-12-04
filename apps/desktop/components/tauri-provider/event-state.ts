@@ -16,6 +16,7 @@ import {
 } from "@tm9657/flow-like-ui";
 import { fetcher } from "../../lib/api";
 import { oauthConsentStore, oauthTokenStore } from "../../lib/oauth-db";
+import { oauthService } from "../../lib/oauth-service";
 import type { TauriBackend } from "../tauri-provider";
 
 // Hub configuration cache (shared with board-state)
@@ -415,7 +416,9 @@ export class EventState implements IEventState {
 			version: event.board_version,
 		});
 		const hub = await getHubConfig(this.backend.profile);
-		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub);
+		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub, {
+			refreshToken: oauthService.refreshToken.bind(oauthService),
+		});
 
 		// Check consent for providers that have tokens but might not have consent for this app
 		const consentedIds = await oauthConsentStore.getConsentedProviderIds(appId);
@@ -517,7 +520,9 @@ export class EventState implements IEventState {
 		});
 
 		const hub = await getHubConfig(this.backend.profile);
-		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub);
+		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub, {
+			refreshToken: oauthService.refreshToken.bind(oauthService),
+		});
 
 		// Check consent for providers that have tokens but might not have consent for this app
 		const consentedIds = await oauthConsentStore.getConsentedProviderIds(appId);

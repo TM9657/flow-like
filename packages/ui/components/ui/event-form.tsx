@@ -24,6 +24,7 @@ import {
 } from "./select";
 import { Separator } from "./separator";
 import { Textarea } from "./textarea";
+import type { IStoredOAuthToken } from "../../lib/oauth/types";
 
 interface EventFormProps {
 	event?: IEvent;
@@ -42,6 +43,8 @@ interface EventFormProps {
 	hub?: IHub;
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
+	/** Optional callback to refresh expired tokens */
+	onRefreshToken?: (provider: IOAuthProvider, token: IStoredOAuthToken) => Promise<IStoredOAuthToken>;
 }
 
 export function EventForm({
@@ -54,6 +57,7 @@ export function EventForm({
 	consentStore,
 	hub,
 	onStartOAuth,
+	onRefreshToken,
 }: Readonly<EventFormProps>) {
 	const backend = useBackend();
 	const [formData, setFormData] = useState({
@@ -116,7 +120,9 @@ export function EventForm({
 
 		// Check OAuth requirements if tokenStore is provided and board is loaded
 		if (tokenStore && board.data) {
-			const oauthResult = await checkOAuthTokens(board.data, tokenStore, hub);
+			const oauthResult = await checkOAuthTokens(board.data, tokenStore, hub, {
+				refreshToken: onRefreshToken,
+			});
 
 			if (oauthResult.requiredProviders.length > 0) {
 				// Check consent for providers that have tokens but might not have consent for this app

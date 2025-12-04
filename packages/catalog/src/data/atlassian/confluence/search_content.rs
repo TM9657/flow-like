@@ -145,7 +145,7 @@ impl NodeLogic for SearchConfluenceContentNode {
             VariableType::Boolean,
         );
 
-        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:confluence-content.all"]);
+        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["search:confluence"]);
         node.set_scores(
             NodeScores::new()
                 .set_privacy(6)
@@ -199,16 +199,17 @@ impl NodeLogic for SearchConfluenceContentNode {
 
         let client = reqwest::Client::new();
 
-        // Use the v1 REST API for search as it's more widely supported
-        let base = provider.base_url.trim_end_matches('/');
+        // Use the provider's search URL method which handles OAuth vs API token correctly
         let url = format!(
-            "{}/wiki/rest/api/content/search?cql={}&limit={}&start={}",
-            base,
+            "{}?cql={}&limit={}&start={}",
+            provider.confluence_search_url(),
             urlencoding::encode(&final_cql),
             limit.clamp(1, 100),
             start.max(0)
         );
 
+        context.log_message(&format!("Confluence Search URL: {}", url), LogLevel::Debug);
+        context.log_message(&format!("Auth type: {}", provider.auth_type), LogLevel::Debug);
         context.log_message(
             &format!("Searching Confluence with CQL: {}", final_cql),
             LogLevel::Debug,
@@ -229,6 +230,8 @@ impl NodeLogic for SearchConfluenceContentNode {
                 return Ok(());
             }
         };
+
+        context.log_message(&format!("Response status: {}", response.status()), LogLevel::Debug);
 
         if !response.status().is_success() {
             let status = response.status();

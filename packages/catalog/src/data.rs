@@ -3,6 +3,7 @@ pub mod db;
 pub mod excel;
 pub mod github;
 pub mod google;
+pub mod linkedin;
 pub mod microsoft;
 pub mod notion;
 pub mod path;
