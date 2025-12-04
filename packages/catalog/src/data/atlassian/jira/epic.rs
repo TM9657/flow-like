@@ -1,4 +1,4 @@
-use crate::data::atlassian::provider::{AtlassianProvider, ATLASSIAN_PROVIDER_ID};
+use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -32,7 +32,7 @@ impl NodeLogic for LinkToEpicNode {
             "Link an issue to an epic (adds issue to epic's child issues)",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/link.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -138,7 +138,10 @@ impl NodeLogic for LinkToEpicNode {
             }
         } else {
             // Server/DC: Use agile endpoint
-            let url = format!("{}/rest/agile/1.0/epic/{}/issue", provider.base_url, epic_key);
+            let url = format!(
+                "{}/rest/agile/1.0/epic/{}/issue",
+                provider.base_url, epic_key
+            );
             let body = json!({
                 "issues": [issue_key]
             });
@@ -188,7 +191,7 @@ impl NodeLogic for UnlinkFromEpicNode {
             "Remove an issue from its epic",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/unlink.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -329,7 +332,7 @@ impl NodeLogic for GetEpicIssuesNode {
             "Get all issues linked to an epic",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/epic.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",

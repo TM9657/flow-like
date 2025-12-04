@@ -1,4 +1,4 @@
-use crate::data::atlassian::provider::{AtlassianProvider, ATLASSIAN_PROVIDER_ID};
+use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -71,7 +71,7 @@ impl NodeLogic for GetAttachmentsNode {
             "Get all attachments for a Jira issue",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/attachment.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -171,7 +171,9 @@ impl NodeLogic for GetAttachmentsNode {
 
         let count = attachments.len() as i64;
 
-        context.set_pin_value("attachments", json!(attachments)).await?;
+        context
+            .set_pin_value("attachments", json!(attachments))
+            .await?;
         context.set_pin_value("count", json!(count)).await?;
 
         Ok(())
@@ -198,7 +200,7 @@ impl NodeLogic for DownloadAttachmentNode {
             "Download the content of an attachment",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/download.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -317,7 +319,7 @@ impl NodeLogic for DeleteAttachmentNode {
             "Delete an attachment from an issue",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/delete.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",

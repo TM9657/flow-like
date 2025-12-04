@@ -30,7 +30,7 @@ impl NodeLogic for ListJiraProjectsNode {
             "List all accessible Jira projects",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/folder.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",

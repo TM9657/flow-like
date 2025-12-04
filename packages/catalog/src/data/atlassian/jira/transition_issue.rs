@@ -30,7 +30,7 @@ impl NodeLogic for TransitionJiraIssueNode {
             "Change the status of a Jira issue by applying a transition",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/arrow-right.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",

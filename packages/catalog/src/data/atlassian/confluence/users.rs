@@ -1,4 +1,4 @@
-use crate::data::atlassian::provider::{AtlassianProvider, ATLASSIAN_PROVIDER_ID};
+use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -32,7 +32,7 @@ impl NodeLogic for SearchUsersNode {
             "Search for users in Confluence",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/user.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -80,7 +80,12 @@ impl NodeLogic for SearchUsersNode {
         .set_schema::<ConfluenceUser>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin("count", "Count", "Number of users found", VariableType::Integer);
+        node.add_output_pin(
+            "count",
+            "Count",
+            "Number of users found",
+            VariableType::Integer,
+        );
 
         node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:confluence-user"]);
         node.set_scores(
@@ -205,7 +210,7 @@ impl NodeLogic for GetCurrentUserNode {
             "Get the profile of the currently authenticated user",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/user.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -229,14 +234,9 @@ impl NodeLogic for GetCurrentUserNode {
         .set_schema::<AtlassianProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin(
-            "user",
-            "User",
-            "Current user profile",
-            VariableType::Struct,
-        )
-        .set_schema::<ConfluenceUser>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin("user", "User", "Current user profile", VariableType::Struct)
+            .set_schema::<ConfluenceUser>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:confluence-user"]);
         node.set_scores(

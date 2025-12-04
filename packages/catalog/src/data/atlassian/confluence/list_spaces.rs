@@ -30,7 +30,7 @@ impl NodeLogic for ListConfluenceSpacesNode {
             "List all accessible Confluence spaces",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/folder.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",

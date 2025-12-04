@@ -1,4 +1,4 @@
-use crate::data::atlassian::provider::{AtlassianProvider, ATLASSIAN_PROVIDER_ID};
+use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -32,11 +32,24 @@ fn parse_sprint(value: &Value) -> Option<JiraSprint> {
     Some(JiraSprint {
         id: obj.get("id")?.as_i64()?,
         name: obj.get("name")?.as_str()?.to_string(),
-        state: obj.get("state").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+        state: obj
+            .get("state")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string(),
         goal: obj.get("goal").and_then(|g| g.as_str()).map(String::from),
-        start_date: obj.get("startDate").and_then(|d| d.as_str()).map(String::from),
-        end_date: obj.get("endDate").and_then(|d| d.as_str()).map(String::from),
-        complete_date: obj.get("completeDate").and_then(|d| d.as_str()).map(String::from),
+        start_date: obj
+            .get("startDate")
+            .and_then(|d| d.as_str())
+            .map(String::from),
+        end_date: obj
+            .get("endDate")
+            .and_then(|d| d.as_str())
+            .map(String::from),
+        complete_date: obj
+            .get("completeDate")
+            .and_then(|d| d.as_str())
+            .map(String::from),
         origin_board_id: obj.get("originBoardId").and_then(|b| b.as_i64()),
     })
 }
@@ -61,7 +74,7 @@ impl NodeLogic for GetSprintsNode {
             "Get all sprints for a board",
             "Data/Atlassian/Jira/Agile",
         );
-        node.add_icon("/flow/icons/sprint.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -134,13 +147,14 @@ impl NodeLogic for GetSprintsNode {
         let client = reqwest::Client::new();
 
         let url = if state.is_empty() {
-            format!("{}/rest/agile/1.0/board/{}/sprint", provider.base_url, board_id)
+            format!(
+                "{}/rest/agile/1.0/board/{}/sprint",
+                provider.base_url, board_id
+            )
         } else {
             format!(
                 "{}/rest/agile/1.0/board/{}/sprint?state={}",
-                provider.base_url,
-                board_id,
-                state
+                provider.base_url, board_id, state
             )
         };
 
@@ -197,7 +211,7 @@ impl NodeLogic for GetSprintIssuesNode {
             "Get all issues in a sprint",
             "Data/Atlassian/Jira/Agile",
         );
-        node.add_icon("/flow/icons/sprint.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -252,7 +266,12 @@ impl NodeLogic for GetSprintIssuesNode {
         .set_schema::<JiraIssue>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin("total", "Total", "Total issues in sprint", VariableType::Integer);
+        node.add_output_pin(
+            "total",
+            "Total",
+            "Total issues in sprint",
+            VariableType::Integer,
+        );
 
         node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:sprint:jira-software"]);
         node.set_scores(
@@ -342,7 +361,7 @@ impl NodeLogic for CreateSprintNode {
             "Create a new sprint on a board",
             "Data/Atlassian/Jira/Agile",
         );
-        node.add_icon("/flow/icons/sprint.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -366,12 +385,7 @@ impl NodeLogic for CreateSprintNode {
         .set_schema::<AtlassianProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin(
-            "name",
-            "Name",
-            "Name of the sprint",
-            VariableType::String,
-        );
+        node.add_input_pin("name", "Name", "Name of the sprint", VariableType::String);
 
         node.add_input_pin(
             "board_id",
@@ -502,7 +516,7 @@ impl NodeLogic for UpdateSprintNode {
             "Update an existing sprint",
             "Data/Atlassian/Jira/Agile",
         );
-        node.add_icon("/flow/icons/sprint.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -669,7 +683,7 @@ impl NodeLogic for MoveToSprintNode {
             "Move issues to a sprint",
             "Data/Atlassian/Jira/Agile",
         );
-        node.add_icon("/flow/icons/sprint.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -745,11 +759,16 @@ impl NodeLogic for MoveToSprintNode {
             .collect();
 
         if keys.is_empty() {
-            return Err(flow_like_types::anyhow!("At least one issue key is required"));
+            return Err(flow_like_types::anyhow!(
+                "At least one issue key is required"
+            ));
         }
 
         let client = reqwest::Client::new();
-        let url = format!("{}/rest/agile/1.0/sprint/{}/issue", provider.base_url, sprint_id);
+        let url = format!(
+            "{}/rest/agile/1.0/sprint/{}/issue",
+            provider.base_url, sprint_id
+        );
 
         let body = json!({
             "issues": keys

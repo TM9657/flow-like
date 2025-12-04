@@ -30,7 +30,7 @@ impl NodeLogic for GetConfluencePageNode {
             "Get a Confluence page by its ID",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/file-text.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",

@@ -30,7 +30,7 @@ impl NodeLogic for CreateConfluencePageNode {
             "Create a new Confluence page",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/plus-circle.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",

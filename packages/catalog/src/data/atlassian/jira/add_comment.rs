@@ -32,7 +32,7 @@ impl NodeLogic for AddJiraCommentNode {
             "Add a comment to a Jira issue",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/comment.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",

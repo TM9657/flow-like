@@ -30,7 +30,7 @@ impl NodeLogic for SearchJiraIssuesNode {
             "Search for Jira issues using JQL (Jira Query Language)",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/search.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",

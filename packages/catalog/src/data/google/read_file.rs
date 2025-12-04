@@ -27,9 +27,9 @@ impl NodeLogic for ReadGoogleDriveFileNode {
             "data_google_drive_read_file",
             "Read Google Drive File",
             "Reads the content of a file from Google Drive as text",
-            "Data/Google Drive",
+            "Data/Google/Drive",
         );
-        node.add_icon("/flow/icons/file-text.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         // Execution pins
         node.add_input_pin(

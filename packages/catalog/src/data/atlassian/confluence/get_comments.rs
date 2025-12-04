@@ -43,7 +43,7 @@ impl NodeLogic for GetConfluenceCommentsNode {
             "Get comments from a Confluence page",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/comment.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",

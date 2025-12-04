@@ -43,9 +43,9 @@ impl NodeLogic for CreateGoogleDocNode {
             "data_google_docs_create",
             "Create Document",
             "Create a new Google Document",
-            "Data/Google Docs",
+            "Data/Google/Docs",
         );
-        node.add_icon("/flow/icons/file-text.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -142,9 +142,9 @@ impl NodeLogic for GetGoogleDocNode {
             "data_google_docs_get",
             "Get Document",
             "Get a Google Document's metadata and content",
-            "Data/Google Docs",
+            "Data/Google/Docs",
         );
-        node.add_icon("/flow/icons/file-text.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -264,9 +264,9 @@ impl NodeLogic for GetGoogleDocTextNode {
             "data_google_docs_get_text",
             "Get Document Text",
             "Extract plain text from a Google Document",
-            "Data/Google Docs",
+            "Data/Google/Docs",
         );
-        node.add_icon("/flow/icons/file-text.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -354,9 +354,9 @@ impl NodeLogic for InsertGoogleDocTextNode {
             "data_google_docs_insert_text",
             "Insert Text",
             "Insert text at a specific location in a Google Document",
-            "Data/Google Docs",
+            "Data/Google/Docs",
         );
-        node.add_icon("/flow/icons/type.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -461,9 +461,9 @@ impl NodeLogic for DeleteGoogleDocTextNode {
             "data_google_docs_delete_text",
             "Delete Text",
             "Delete text from a range in a Google Document",
-            "Data/Google Docs",
+            "Data/Google/Docs",
         );
-        node.add_icon("/flow/icons/eraser.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -574,9 +574,9 @@ impl NodeLogic for ReplaceGoogleDocTextNode {
             "data_google_docs_replace_text",
             "Replace All Text",
             "Replace all occurrences of text in a Google Document",
-            "Data/Google Docs",
+            "Data/Google/Docs",
         );
-        node.add_icon("/flow/icons/replace.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -709,9 +709,9 @@ impl NodeLogic for ExportGoogleDocNode {
             "data_google_docs_export",
             "Export Document",
             "Export a Google Document to various formats",
-            "Data/Google Docs",
+            "Data/Google/Docs",
         );
-        node.add_icon("/flow/icons/download.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(

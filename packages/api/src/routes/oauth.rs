@@ -2,12 +2,11 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use axum::{
-    Json,
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::post,
-    Router,
 };
 use serde::{Deserialize, Serialize};
 
@@ -245,11 +244,10 @@ async fn proxy_token_exchange(
     // Notion uses HTTP Basic Auth, Atlassian uses client_secret in body
     let response = if provider_id == "notion" {
         // Notion: HTTP Basic Auth with client_id:client_secret
-        let credentials =
-            flow_like_types::base64::Engine::encode(
-                &flow_like_types::base64::engine::general_purpose::STANDARD,
-                format!("{}:{}", client_id, client_secret),
-            );
+        let credentials = flow_like_types::base64::Engine::encode(
+            &flow_like_types::base64::engine::general_purpose::STANDARD,
+            format!("{}:{}", client_id, client_secret),
+        );
 
         client
             .post(&provider_config.token_url)
@@ -362,11 +360,10 @@ async fn proxy_token_refresh(
 
     let response = if provider_id == "notion" {
         // Notion uses HTTP Basic Auth
-        let credentials =
-            flow_like_types::base64::Engine::encode(
-                &flow_like_types::base64::engine::general_purpose::STANDARD,
-                format!("{}:{}", client_id, client_secret),
-            );
+        let credentials = flow_like_types::base64::Engine::encode(
+            &flow_like_types::base64::engine::general_purpose::STANDARD,
+            format!("{}:{}", client_id, client_secret),
+        );
 
         client
             .post(&provider_config.token_url)

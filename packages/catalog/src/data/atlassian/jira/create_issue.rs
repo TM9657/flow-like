@@ -4,11 +4,13 @@ use flow_like::{
     flow::{
         execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
+        pin::{PinOptions, ValueType},
         variable::VariableType,
     },
     state::FlowLikeState,
 };
+use flow_like_types::JsonSchema;
+use flow_like_types::json::{Deserialize, Serialize};
 use flow_like_types::{Value, async_trait, json::json, reqwest};
 
 #[crate::register_node]
@@ -30,7 +32,7 @@ impl NodeLogic for CreateJiraIssueNode {
             "Create a new Jira issue",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/plus-circle.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -339,4 +341,274 @@ async fn fetch_created_issue(
     };
 
     Ok(parse_jira_issue(&data, &provider.base_url))
+}
+
+/// Input structure for batch issue creation
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct BatchIssueInput {
+    pub project_key: String,
+    pub issue_type: String,
+    pub summary: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub priority: Option<String>,
+    #[serde(default)]
+    pub assignee_id: Option<String>,
+    #[serde(default)]
+    pub labels: Option<Vec<String>>,
+    #[serde(default)]
+    pub parent_key: Option<String>,
+}
+
+/// Result of a batch issue creation
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct BatchIssueResult {
+    pub success: bool,
+    pub issue_key: Option<String>,
+    pub error: Option<String>,
+    pub input_index: usize,
+}
+
+/// Batch create Jira issues
+#[crate::register_node]
+#[derive(Default)]
+pub struct BatchCreateIssuesNode {}
+
+impl BatchCreateIssuesNode {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for BatchCreateIssuesNode {
+    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+        let mut node = Node::new(
+            "data_atlassian_jira_batch_create_issues",
+            "Batch Create Issues",
+            "Create multiple Jira issues in a batch",
+            "Data/Atlassian/Jira",
+        );
+        node.add_icon("/flow/icons/jira.svg");
+
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger the creation",
+            VariableType::Execution,
+        );
+
+        node.add_input_pin(
+            "provider",
+            "Provider",
+            "Atlassian provider",
+            VariableType::Struct,
+        )
+        .set_schema::<AtlassianProvider>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin(
+            "issues",
+            "Issues",
+            "Array of issues to create",
+            VariableType::Struct,
+        )
+        .set_value_type(ValueType::Array)
+        .set_schema::<BatchIssueInput>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_output_pin(
+            "exec_out",
+            "Success",
+            "Triggered when batch completes",
+            VariableType::Execution,
+        );
+
+        node.add_output_pin(
+            "results",
+            "Results",
+            "Results for each issue creation",
+            VariableType::Struct,
+        )
+        .set_value_type(ValueType::Array)
+        .set_schema::<BatchIssueResult>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_output_pin(
+            "created_count",
+            "Created Count",
+            "Number of successfully created issues",
+            VariableType::Integer,
+        );
+
+        node.add_output_pin(
+            "failed_count",
+            "Failed Count",
+            "Number of failed issue creations",
+            VariableType::Integer,
+        );
+
+        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["write:jira-work"]);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(6)
+                .set_security(8)
+                .set_performance(6)
+                .set_governance(7)
+                .set_reliability(7)
+                .set_cost(6)
+                .build(),
+        );
+
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        context.deactivate_exec_pin("exec_out").await?;
+
+        let provider: AtlassianProvider = context.evaluate_pin("provider").await?;
+        let issues: Vec<BatchIssueInput> = context.evaluate_pin("issues").await?;
+
+        if issues.is_empty() {
+            context.set_pin_value("results", json!([])).await?;
+            context.set_pin_value("created_count", json!(0)).await?;
+            context.set_pin_value("failed_count", json!(0)).await?;
+            context.activate_exec_pin("exec_out").await?;
+            return Ok(());
+        }
+
+        let client = reqwest::Client::new();
+        let url = provider.jira_api_url("/issue");
+        let mut results: Vec<BatchIssueResult> = Vec::with_capacity(issues.len());
+        let mut created_count = 0i64;
+        let mut failed_count = 0i64;
+
+        for (index, issue_input) in issues.iter().enumerate() {
+            let mut fields = json!({
+                "project": { "key": issue_input.project_key },
+                "summary": issue_input.summary,
+                "issuetype": { "name": issue_input.issue_type }
+            });
+
+            if let Some(ref desc) = issue_input.description {
+                if !desc.is_empty() {
+                    if provider.is_cloud {
+                        fields["description"] = json!({
+                            "type": "doc",
+                            "version": 1,
+                            "content": [{
+                                "type": "paragraph",
+                                "content": [{
+                                    "type": "text",
+                                    "text": desc
+                                }]
+                            }]
+                        });
+                    } else {
+                        fields["description"] = json!(desc);
+                    }
+                }
+            }
+
+            if let Some(ref priority) = issue_input.priority {
+                if !priority.is_empty() {
+                    fields["priority"] = json!({ "name": priority });
+                }
+            }
+
+            if let Some(ref assignee) = issue_input.assignee_id {
+                if !assignee.is_empty() {
+                    if provider.is_cloud {
+                        fields["assignee"] = json!({ "accountId": assignee });
+                    } else {
+                        fields["assignee"] = json!({ "name": assignee });
+                    }
+                }
+            }
+
+            if let Some(ref labels) = issue_input.labels {
+                if !labels.is_empty() {
+                    fields["labels"] = json!(labels);
+                }
+            }
+
+            if let Some(ref parent) = issue_input.parent_key {
+                if !parent.is_empty() {
+                    fields["parent"] = json!({ "key": parent });
+                }
+            }
+
+            let body = json!({ "fields": fields });
+
+            let response = client
+                .post(&url)
+                .header("Authorization", provider.auth_header())
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .send()
+                .await;
+
+            match response {
+                Ok(resp) if resp.status().is_success() => {
+                    if let Ok(data) = resp.json::<Value>().await {
+                        let issue_key = data.get("key").and_then(|v| v.as_str()).map(String::from);
+                        results.push(BatchIssueResult {
+                            success: true,
+                            issue_key,
+                            error: None,
+                            input_index: index,
+                        });
+                        created_count += 1;
+                    } else {
+                        results.push(BatchIssueResult {
+                            success: false,
+                            issue_key: None,
+                            error: Some("Failed to parse response".to_string()),
+                            input_index: index,
+                        });
+                        failed_count += 1;
+                    }
+                }
+                Ok(resp) => {
+                    let error_text = resp.text().await.unwrap_or_default();
+                    results.push(BatchIssueResult {
+                        success: false,
+                        issue_key: None,
+                        error: Some(error_text),
+                        input_index: index,
+                    });
+                    failed_count += 1;
+                }
+                Err(e) => {
+                    results.push(BatchIssueResult {
+                        success: false,
+                        issue_key: None,
+                        error: Some(e.to_string()),
+                        input_index: index,
+                    });
+                    failed_count += 1;
+                }
+            }
+        }
+
+        context.log_message(
+            &format!(
+                "Batch create: {} created, {} failed",
+                created_count, failed_count
+            ),
+            LogLevel::Debug,
+        );
+
+        context.set_pin_value("results", json!(results)).await?;
+        context
+            .set_pin_value("created_count", json!(created_count))
+            .await?;
+        context
+            .set_pin_value("failed_count", json!(failed_count))
+            .await?;
+        context.activate_exec_pin("exec_out").await?;
+
+        Ok(())
+    }
 }

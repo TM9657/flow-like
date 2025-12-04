@@ -30,7 +30,7 @@ impl NodeLogic for GetJiraIssueNode {
             "Get a single Jira issue by its key (e.g., PROJ-123)",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/file-text.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",

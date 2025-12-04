@@ -1,4 +1,4 @@
-use crate::data::atlassian::provider::{AtlassianProvider, ATLASSIAN_PROVIDER_ID};
+use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -30,11 +30,26 @@ fn parse_version(value: &Value) -> Option<JiraVersion> {
     Some(JiraVersion {
         id: obj.get("id")?.as_str()?.to_string(),
         name: obj.get("name")?.as_str()?.to_string(),
-        description: obj.get("description").and_then(|d| d.as_str()).map(String::from),
-        archived: obj.get("archived").and_then(|a| a.as_bool()).unwrap_or(false),
-        released: obj.get("released").and_then(|r| r.as_bool()).unwrap_or(false),
-        release_date: obj.get("releaseDate").and_then(|d| d.as_str()).map(String::from),
-        start_date: obj.get("startDate").and_then(|d| d.as_str()).map(String::from),
+        description: obj
+            .get("description")
+            .and_then(|d| d.as_str())
+            .map(String::from),
+        archived: obj
+            .get("archived")
+            .and_then(|a| a.as_bool())
+            .unwrap_or(false),
+        released: obj
+            .get("released")
+            .and_then(|r| r.as_bool())
+            .unwrap_or(false),
+        release_date: obj
+            .get("releaseDate")
+            .and_then(|d| d.as_str())
+            .map(String::from),
+        start_date: obj
+            .get("startDate")
+            .and_then(|d| d.as_str())
+            .map(String::from),
         project_id: obj.get("projectId").and_then(|p| p.as_i64()).unwrap_or(0),
     })
 }
@@ -59,7 +74,7 @@ impl NodeLogic for GetVersionsNode {
             "Get all versions (releases) for a project",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/version.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -186,7 +201,7 @@ impl NodeLogic for CreateVersionNode {
             "Create a new version (release) in a project",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/version.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -210,12 +225,7 @@ impl NodeLogic for CreateVersionNode {
         .set_schema::<AtlassianProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin(
-            "name",
-            "Name",
-            "Name of the version",
-            VariableType::String,
-        );
+        node.add_input_pin("name", "Name", "Name of the version", VariableType::String);
 
         node.add_input_pin(
             "project_key",
@@ -280,8 +290,14 @@ impl NodeLogic for CreateVersionNode {
         let provider: AtlassianProvider = context.evaluate_pin("provider").await?;
         let name: String = context.evaluate_pin("name").await?;
         let project_key: String = context.evaluate_pin("project_key").await?;
-        let description: String = context.evaluate_pin("description").await.unwrap_or_default();
-        let release_date: String = context.evaluate_pin("release_date").await.unwrap_or_default();
+        let description: String = context
+            .evaluate_pin("description")
+            .await
+            .unwrap_or_default();
+        let release_date: String = context
+            .evaluate_pin("release_date")
+            .await
+            .unwrap_or_default();
         let start_date: String = context.evaluate_pin("start_date").await.unwrap_or_default();
         let released: bool = context.evaluate_pin("released").await.unwrap_or(false);
 
@@ -338,6 +354,233 @@ impl NodeLogic for CreateVersionNode {
     }
 }
 
+/// Input structure for batch version creation
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct BatchVersionInput {
+    pub project_key: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub release_date: Option<String>,
+    #[serde(default)]
+    pub start_date: Option<String>,
+    #[serde(default)]
+    pub released: Option<bool>,
+    #[serde(default)]
+    pub archived: Option<bool>,
+}
+
+/// Result of a batch version creation
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct BatchVersionResult {
+    pub success: bool,
+    pub version_id: Option<String>,
+    pub version_name: Option<String>,
+    pub error: Option<String>,
+    pub input_index: usize,
+}
+
+/// Batch create versions
+#[crate::register_node]
+#[derive(Default)]
+pub struct BatchCreateVersionsNode {}
+
+impl BatchCreateVersionsNode {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for BatchCreateVersionsNode {
+    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+        let mut node = Node::new(
+            "data_atlassian_jira_batch_create_versions",
+            "Batch Create Versions",
+            "Create multiple versions (releases) in a batch",
+            "Data/Atlassian/Jira",
+        );
+        node.add_icon("/flow/icons/jira.svg");
+
+        node.add_input_pin(
+            "exec_in",
+            "Exec In",
+            "Execution input",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "exec_out",
+            "Exec Out",
+            "Execution output",
+            VariableType::Execution,
+        );
+
+        node.add_input_pin(
+            "provider",
+            "Provider",
+            "Atlassian provider",
+            VariableType::Struct,
+        )
+        .set_schema::<AtlassianProvider>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin(
+            "versions",
+            "Versions",
+            "Array of versions to create",
+            VariableType::Struct,
+        )
+        .set_value_type(ValueType::Array)
+        .set_schema::<BatchVersionInput>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_output_pin(
+            "results",
+            "Results",
+            "Results for each version creation",
+            VariableType::Struct,
+        )
+        .set_value_type(ValueType::Array)
+        .set_schema::<BatchVersionResult>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_output_pin(
+            "created_count",
+            "Created Count",
+            "Number of successfully created versions",
+            VariableType::Integer,
+        );
+
+        node.add_output_pin(
+            "failed_count",
+            "Failed Count",
+            "Number of failed version creations",
+            VariableType::Integer,
+        );
+
+        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["write:jira-work"]);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(7)
+                .set_security(8)
+                .set_performance(6)
+                .set_governance(7)
+                .set_reliability(7)
+                .set_cost(8)
+                .build(),
+        );
+
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        let provider: AtlassianProvider = context.evaluate_pin("provider").await?;
+        let versions: Vec<BatchVersionInput> = context.evaluate_pin("versions").await?;
+
+        if versions.is_empty() {
+            context.set_pin_value("results", json!([])).await?;
+            context.set_pin_value("created_count", json!(0)).await?;
+            context.set_pin_value("failed_count", json!(0)).await?;
+            return Ok(());
+        }
+
+        let client = reqwest::Client::new();
+        let url = provider.jira_api_url("/version");
+        let mut results: Vec<BatchVersionResult> = Vec::with_capacity(versions.len());
+        let mut created_count = 0i64;
+        let mut failed_count = 0i64;
+
+        for (index, version_input) in versions.iter().enumerate() {
+            let mut body = json!({
+                "project": version_input.project_key,
+                "name": version_input.name,
+            });
+
+            if let Some(ref desc) = version_input.description {
+                body["description"] = json!(desc);
+            }
+            if let Some(ref date) = version_input.release_date {
+                body["releaseDate"] = json!(date);
+            }
+            if let Some(ref date) = version_input.start_date {
+                body["startDate"] = json!(date);
+            }
+            if let Some(released) = version_input.released {
+                body["released"] = json!(released);
+            }
+            if let Some(archived) = version_input.archived {
+                body["archived"] = json!(archived);
+            }
+
+            let response = client
+                .post(&url)
+                .header("Authorization", provider.auth_header())
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .send()
+                .await;
+
+            match response {
+                Ok(resp) if resp.status().is_success() => {
+                    if let Ok(data) = resp.json::<Value>().await {
+                        let version_id = data.get("id").and_then(|v| v.as_str()).map(String::from);
+                        let version_name =
+                            data.get("name").and_then(|v| v.as_str()).map(String::from);
+                        results.push(BatchVersionResult {
+                            success: true,
+                            version_id,
+                            version_name,
+                            error: None,
+                            input_index: index,
+                        });
+                        created_count += 1;
+                    } else {
+                        results.push(BatchVersionResult {
+                            success: false,
+                            version_id: None,
+                            version_name: None,
+                            error: Some("Failed to parse response".to_string()),
+                            input_index: index,
+                        });
+                        failed_count += 1;
+                    }
+                }
+                Ok(resp) => {
+                    let error_text = resp.text().await.unwrap_or_default();
+                    results.push(BatchVersionResult {
+                        success: false,
+                        version_id: None,
+                        version_name: None,
+                        error: Some(error_text),
+                        input_index: index,
+                    });
+                    failed_count += 1;
+                }
+                Err(e) => {
+                    results.push(BatchVersionResult {
+                        success: false,
+                        version_id: None,
+                        version_name: None,
+                        error: Some(e.to_string()),
+                        input_index: index,
+                    });
+                    failed_count += 1;
+                }
+            }
+        }
+
+        context.set_pin_value("results", json!(results)).await?;
+        context
+            .set_pin_value("created_count", json!(created_count))
+            .await?;
+        context
+            .set_pin_value("failed_count", json!(failed_count))
+            .await?;
+
+        Ok(())
+    }
+}
 /// Update an existing version
 #[crate::register_node]
 #[derive(Default)]
@@ -358,7 +601,7 @@ impl NodeLogic for UpdateVersionNode {
             "Update an existing version",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/version.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -452,8 +695,14 @@ impl NodeLogic for UpdateVersionNode {
         let provider: AtlassianProvider = context.evaluate_pin("provider").await?;
         let version_id: String = context.evaluate_pin("version_id").await?;
         let name: String = context.evaluate_pin("name").await.unwrap_or_default();
-        let description: String = context.evaluate_pin("description").await.unwrap_or_default();
-        let release_date: String = context.evaluate_pin("release_date").await.unwrap_or_default();
+        let description: String = context
+            .evaluate_pin("description")
+            .await
+            .unwrap_or_default();
+        let release_date: String = context
+            .evaluate_pin("release_date")
+            .await
+            .unwrap_or_default();
 
         if version_id.is_empty() {
             return Err(flow_like_types::anyhow!("Version ID is required"));

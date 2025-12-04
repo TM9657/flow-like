@@ -163,9 +163,9 @@ impl NodeLogic for GetGoogleFormNode {
             "data_google_forms_get",
             "Get Form",
             "Get details of a Google Form",
-            "Data/Google Forms",
+            "Data/Google/Forms",
         );
-        node.add_icon("/flow/icons/clipboard.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -273,9 +273,9 @@ impl NodeLogic for ListGoogleFormResponsesNode {
             "data_google_forms_list_responses",
             "List Form Responses",
             "List all responses to a Google Form",
-            "Data/Google Forms",
+            "Data/Google/Forms",
         );
-        node.add_icon("/flow/icons/clipboard.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -408,9 +408,9 @@ impl NodeLogic for GetGoogleFormResponseNode {
             "data_google_forms_get_response",
             "Get Form Response",
             "Get a specific response from a Google Form",
-            "Data/Google Forms",
+            "Data/Google/Forms",
         );
-        node.add_icon("/flow/icons/clipboard.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -520,9 +520,9 @@ impl NodeLogic for CreateGoogleFormNode {
             "data_google_forms_create",
             "Create Form",
             "Create a new Google Form",
-            "Data/Google Forms",
+            "Data/Google/Forms",
         );
-        node.add_icon("/flow/icons/clipboard.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -639,9 +639,9 @@ impl NodeLogic for UpdateGoogleFormInfoNode {
             "data_google_forms_update_info",
             "Update Form Info",
             "Update title and description of a Google Form",
-            "Data/Google Forms",
+            "Data/Google/Forms",
         );
-        node.add_icon("/flow/icons/clipboard.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(

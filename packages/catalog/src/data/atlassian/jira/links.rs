@@ -1,4 +1,4 @@
-use crate::data::atlassian::provider::{AtlassianProvider, ATLASSIAN_PROVIDER_ID};
+use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -81,7 +81,7 @@ impl NodeLogic for GetLinkTypesNode {
             "Get all available issue link types",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/link.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -160,7 +160,9 @@ impl NodeLogic for GetLinkTypesNode {
             .filter_map(parse_link_type)
             .collect();
 
-        context.set_pin_value("link_types", json!(link_types)).await?;
+        context
+            .set_pin_value("link_types", json!(link_types))
+            .await?;
 
         Ok(())
     }
@@ -186,7 +188,7 @@ impl NodeLogic for GetIssueLinksNode {
             "Get all links for an issue",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/link.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -217,15 +219,10 @@ impl NodeLogic for GetIssueLinksNode {
             VariableType::String,
         );
 
-        node.add_output_pin(
-            "links",
-            "Links",
-            "Issue links",
-            VariableType::Struct,
-        )
-        .set_value_type(ValueType::Array)
-        .set_schema::<JiraIssueLink>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin("links", "Links", "Issue links", VariableType::Struct)
+            .set_value_type(ValueType::Array)
+            .set_schema::<JiraIssueLink>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin("count", "Count", "Number of links", VariableType::Integer);
 
@@ -308,7 +305,7 @@ impl NodeLogic for CreateIssueLinkNode {
             "Create a link between two issues",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/link.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -484,7 +481,7 @@ impl NodeLogic for RemoveIssueLinkNode {
             "Remove a link between issues",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/unlink.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",

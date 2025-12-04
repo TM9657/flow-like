@@ -30,7 +30,7 @@ impl NodeLogic for SearchConfluenceContentNode {
             "Search Confluence content using CQL (Confluence Query Language) or text search",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/search.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",

@@ -47,7 +47,7 @@ impl NodeLogic for CreateGoogleMeetNode {
             "Create a new Google Meet meeting",
             "Data/Google/Meet",
         );
-        node.add_icon("/flow/icons/video.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -307,7 +307,7 @@ impl NodeLogic for CreateInstantMeetNode {
             "Create an instant Google Meet meeting starting now",
             "Data/Google/Meet",
         );
-        node.add_icon("/flow/icons/video.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -457,7 +457,7 @@ impl NodeLogic for GetGoogleMeetDetailsNode {
             "Get details of a Google Meet meeting from its calendar event",
             "Data/Google/Meet",
         );
-        node.add_icon("/flow/icons/video.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -630,7 +630,7 @@ impl NodeLogic for AddMeetToEventNode {
             "Add Google Meet to an existing calendar event",
             "Data/Google/Meet",
         );
-        node.add_icon("/flow/icons/video.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(

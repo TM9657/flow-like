@@ -1,4 +1,4 @@
-use crate::data::atlassian::provider::{AtlassianProvider, ATLASSIAN_PROVIDER_ID};
+use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -33,7 +33,7 @@ impl NodeLogic for GetCurrentUserNode {
             "Get the profile of the currently authenticated user",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/user.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -57,14 +57,9 @@ impl NodeLogic for GetCurrentUserNode {
         .set_schema::<AtlassianProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin(
-            "user",
-            "User",
-            "Current user profile",
-            VariableType::Struct,
-        )
-        .set_schema::<JiraUser>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin("user", "User", "Current user profile", VariableType::Struct)
+            .set_schema::<JiraUser>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:jira-user"]);
         node.set_scores(
@@ -137,11 +132,21 @@ fn parse_changelog_item(value: &Value) -> Option<JiraChangelogItem> {
 
     Some(JiraChangelogItem {
         field: obj.get("field")?.as_str()?.to_string(),
-        field_type: obj.get("fieldtype").and_then(|f| f.as_str()).unwrap_or("").to_string(),
+        field_type: obj
+            .get("fieldtype")
+            .and_then(|f| f.as_str())
+            .unwrap_or("")
+            .to_string(),
         from: obj.get("from").and_then(|f| f.as_str()).map(String::from),
-        from_string: obj.get("fromString").and_then(|f| f.as_str()).map(String::from),
+        from_string: obj
+            .get("fromString")
+            .and_then(|f| f.as_str())
+            .map(String::from),
         to: obj.get("to").and_then(|t| t.as_str()).map(String::from),
-        to_string: obj.get("toString").and_then(|t| t.as_str()).map(String::from),
+        to_string: obj
+            .get("toString")
+            .and_then(|t| t.as_str())
+            .map(String::from),
     })
 }
 
@@ -184,7 +189,7 @@ impl NodeLogic for GetChangelogNode {
             "Get the change history for an issue",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/history.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -322,7 +327,7 @@ impl NodeLogic for BatchGetChangelogsNode {
             "Get changelogs for multiple issues at once",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/history.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -390,7 +395,9 @@ impl NodeLogic for BatchGetChangelogsNode {
             .collect();
 
         if keys.is_empty() {
-            return Err(flow_like_types::anyhow!("At least one issue key is required"));
+            return Err(flow_like_types::anyhow!(
+                "At least one issue key is required"
+            ));
         }
 
         let client = reqwest::Client::new();

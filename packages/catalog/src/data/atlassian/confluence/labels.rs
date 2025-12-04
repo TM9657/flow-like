@@ -1,4 +1,4 @@
-use crate::data::atlassian::provider::{AtlassianProvider, ATLASSIAN_PROVIDER_ID};
+use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -33,7 +33,11 @@ fn parse_label(value: &Value) -> Option<ConfluenceLabel> {
     Some(ConfluenceLabel {
         id,
         name: obj.get("name")?.as_str()?.to_string(),
-        prefix: obj.get("prefix").and_then(|p| p.as_str()).unwrap_or("global").to_string(),
+        prefix: obj
+            .get("prefix")
+            .and_then(|p| p.as_str())
+            .unwrap_or("global")
+            .to_string(),
     })
 }
 
@@ -57,7 +61,7 @@ impl NodeLogic for GetLabelsNode {
             "Get all labels for a Confluence page",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/tag.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -88,15 +92,10 @@ impl NodeLogic for GetLabelsNode {
             VariableType::String,
         );
 
-        node.add_output_pin(
-            "labels",
-            "Labels",
-            "List of labels",
-            VariableType::Struct,
-        )
-        .set_value_type(ValueType::Array)
-        .set_schema::<ConfluenceLabel>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin("labels", "Labels", "List of labels", VariableType::Struct)
+            .set_value_type(ValueType::Array)
+            .set_schema::<ConfluenceLabel>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin("count", "Count", "Number of labels", VariableType::Integer);
 
@@ -127,10 +126,7 @@ impl NodeLogic for GetLabelsNode {
 
         let labels = if provider.is_cloud {
             // Cloud v2 API
-            let url = format!(
-                "{}/wiki/api/v2/pages/{}/labels",
-                provider.base_url, page_id
-            );
+            let url = format!("{}/wiki/api/v2/pages/{}/labels", provider.base_url, page_id);
 
             let response = client
                 .get(&url)
@@ -157,10 +153,7 @@ impl NodeLogic for GetLabelsNode {
                 .collect::<Vec<_>>()
         } else {
             // Server v1 API
-            let url = format!(
-                "{}/rest/api/content/{}/label",
-                provider.base_url, page_id
-            );
+            let url = format!("{}/rest/api/content/{}/label", provider.base_url, page_id);
 
             let response = client
                 .get(&url)
@@ -216,7 +209,7 @@ impl NodeLogic for AddLabelNode {
             "Add a label to a Confluence page",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/tag.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -321,10 +314,7 @@ impl NodeLogic for AddLabelNode {
             }
         } else {
             // Server v1 API
-            let url = format!(
-                "{}/rest/api/content/{}/label",
-                provider.base_url, page_id
-            );
+            let url = format!("{}/rest/api/content/{}/label", provider.base_url, page_id);
 
             let body = json!([{
                 "prefix": "global",
@@ -376,7 +366,7 @@ impl NodeLogic for RemoveLabelNode {
             "Remove a label from a Confluence page",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/tag.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",

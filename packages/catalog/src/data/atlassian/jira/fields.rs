@@ -1,4 +1,4 @@
-use crate::data::atlassian::provider::{AtlassianProvider, ATLASSIAN_PROVIDER_ID};
+use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -33,15 +33,37 @@ fn parse_field(value: &Value) -> Option<JiraField> {
 
     Some(JiraField {
         id: obj.get("id")?.as_str()?.to_string(),
-        key: obj.get("key").and_then(|k| k.as_str()).unwrap_or_default().to_string(),
+        key: obj
+            .get("key")
+            .and_then(|k| k.as_str())
+            .unwrap_or_default()
+            .to_string(),
         name: obj.get("name")?.as_str()?.to_string(),
         is_custom: obj.get("custom").and_then(|c| c.as_bool()).unwrap_or(false),
-        searchable: obj.get("searchable").and_then(|s| s.as_bool()).unwrap_or(true),
-        navigable: obj.get("navigable").and_then(|n| n.as_bool()).unwrap_or(true),
-        orderable: obj.get("orderable").and_then(|o| o.as_bool()).unwrap_or(false),
-        schema_type: schema.and_then(|s| s.get("type")).and_then(|t| t.as_str()).map(String::from),
-        schema_system: schema.and_then(|s| s.get("system")).and_then(|t| t.as_str()).map(String::from),
-        schema_items: schema.and_then(|s| s.get("items")).and_then(|i| i.as_str()).map(String::from),
+        searchable: obj
+            .get("searchable")
+            .and_then(|s| s.as_bool())
+            .unwrap_or(true),
+        navigable: obj
+            .get("navigable")
+            .and_then(|n| n.as_bool())
+            .unwrap_or(true),
+        orderable: obj
+            .get("orderable")
+            .and_then(|o| o.as_bool())
+            .unwrap_or(false),
+        schema_type: schema
+            .and_then(|s| s.get("type"))
+            .and_then(|t| t.as_str())
+            .map(String::from),
+        schema_system: schema
+            .and_then(|s| s.get("system"))
+            .and_then(|t| t.as_str())
+            .map(String::from),
+        schema_items: schema
+            .and_then(|s| s.get("items"))
+            .and_then(|i| i.as_str())
+            .map(String::from),
     })
 }
 
@@ -65,7 +87,7 @@ impl NodeLogic for GetFieldsNode {
             "Get all available fields in Jira (system and custom fields)",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/list.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -164,12 +186,18 @@ impl NodeLogic for GetFieldsNode {
             .filter_map(parse_field)
             .collect();
 
-        let system_fields: Vec<JiraField> = fields.iter().filter(|f| !f.is_custom).cloned().collect();
-        let custom_fields: Vec<JiraField> = fields.iter().filter(|f| f.is_custom).cloned().collect();
+        let system_fields: Vec<JiraField> =
+            fields.iter().filter(|f| !f.is_custom).cloned().collect();
+        let custom_fields: Vec<JiraField> =
+            fields.iter().filter(|f| f.is_custom).cloned().collect();
 
         context.set_pin_value("fields", json!(fields)).await?;
-        context.set_pin_value("system_fields", json!(system_fields)).await?;
-        context.set_pin_value("custom_fields", json!(custom_fields)).await?;
+        context
+            .set_pin_value("system_fields", json!(system_fields))
+            .await?;
+        context
+            .set_pin_value("custom_fields", json!(custom_fields))
+            .await?;
 
         Ok(())
     }
@@ -195,7 +223,7 @@ impl NodeLogic for SearchFieldsNode {
             "Search for Jira fields by name, type, or key",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/list.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -240,15 +268,10 @@ impl NodeLogic for SearchFieldsNode {
             VariableType::String,
         );
 
-        node.add_output_pin(
-            "fields",
-            "Fields",
-            "Matching fields",
-            VariableType::Struct,
-        )
-        .set_value_type(ValueType::Array)
-        .set_schema::<JiraField>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin("fields", "Fields", "Matching fields", VariableType::Struct)
+            .set_value_type(ValueType::Array)
+            .set_schema::<JiraField>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "count",
@@ -276,7 +299,10 @@ impl NodeLogic for SearchFieldsNode {
         let provider: AtlassianProvider = context.evaluate_pin("provider").await?;
         let query: String = context.evaluate_pin("query").await.unwrap_or_default();
         let only_custom: bool = context.evaluate_pin("only_custom").await.unwrap_or(false);
-        let schema_type: String = context.evaluate_pin("schema_type").await.unwrap_or_default();
+        let schema_type: String = context
+            .evaluate_pin("schema_type")
+            .await
+            .unwrap_or_default();
 
         let client = reqwest::Client::new();
         let url = provider.jira_api_url("/field");

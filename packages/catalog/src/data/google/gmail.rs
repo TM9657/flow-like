@@ -52,7 +52,7 @@ impl NodeLogic for SendGmailNode {
             "Send an email via Gmail",
             "Data/Google/Gmail",
         );
-        node.add_icon("/flow/icons/mail.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -202,7 +202,7 @@ impl NodeLogic for CreateGmailDraftNode {
             "Create a draft email in Gmail",
             "Data/Google/Gmail",
         );
-        node.add_icon("/flow/icons/mail.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -352,7 +352,7 @@ impl NodeLogic for ListGmailLabelsNode {
             "List all labels in Gmail",
             "Data/Google/Gmail",
         );
-        node.add_icon("/flow/icons/tag.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(

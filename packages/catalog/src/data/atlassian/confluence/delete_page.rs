@@ -30,7 +30,7 @@ impl NodeLogic for DeleteConfluencePageNode {
             "Delete a Confluence page. Use with caution - this action cannot be undone.",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/delete.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",

@@ -1,7 +1,7 @@
-use crate::data::atlassian::provider::{AtlassianProvider, ATLASSIAN_PROVIDER_ID};
+use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
-        execution::{context::ExecutionContext, LogLevel},
+        execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic, NodeScores},
         pin::{PinOptions, ValueType},
         variable::VariableType,
@@ -33,7 +33,9 @@ fn parse_worklog(value: &Value, is_cloud: bool) -> Option<JiraWorklog> {
     Some(JiraWorklog {
         id: obj.get("id")?.as_str()?.to_string(),
         author: obj.get("author").and_then(|a| super::parse_jira_user(a)),
-        update_author: obj.get("updateAuthor").and_then(|a| super::parse_jira_user(a)),
+        update_author: obj
+            .get("updateAuthor")
+            .and_then(|a| super::parse_jira_user(a)),
         comment: if is_cloud {
             // Cloud uses ADF format
             obj.get("comment")
@@ -47,7 +49,9 @@ fn parse_worklog(value: &Value, is_cloud: bool) -> Option<JiraWorklog> {
                 .and_then(|t| t.as_str())
                 .map(String::from)
         } else {
-            obj.get("comment").and_then(|c| c.as_str()).map(String::from)
+            obj.get("comment")
+                .and_then(|c| c.as_str())
+                .map(String::from)
         },
         started: obj.get("started")?.as_str()?.to_string(),
         time_spent: obj
@@ -55,7 +59,10 @@ fn parse_worklog(value: &Value, is_cloud: bool) -> Option<JiraWorklog> {
             .and_then(|t| t.as_str())
             .unwrap_or("0m")
             .to_string(),
-        time_spent_seconds: obj.get("timeSpentSeconds").and_then(|t| t.as_i64()).unwrap_or(0),
+        time_spent_seconds: obj
+            .get("timeSpentSeconds")
+            .and_then(|t| t.as_i64())
+            .unwrap_or(0),
         created: obj.get("created")?.as_str()?.to_string(),
         updated: obj.get("updated")?.as_str()?.to_string(),
     })
@@ -81,7 +88,7 @@ impl NodeLogic for GetWorklogNode {
             "Get work log entries for a Jira issue",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/clock.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -211,7 +218,7 @@ impl NodeLogic for AddWorklogNode {
             "Add a work log entry to a Jira issue",
             "Data/Atlassian/Jira",
         );
-        node.add_icon("/flow/icons/clock.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",

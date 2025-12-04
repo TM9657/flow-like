@@ -1,4 +1,4 @@
-use crate::data::atlassian::provider::{AtlassianProvider, ATLASSIAN_PROVIDER_ID};
+use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -31,9 +31,19 @@ fn parse_board(value: &Value) -> Option<JiraBoard> {
     Some(JiraBoard {
         id: obj.get("id")?.as_i64()?,
         name: obj.get("name")?.as_str()?.to_string(),
-        board_type: obj.get("type").and_then(|t| t.as_str()).unwrap_or("").to_string(),
-        project_key: location.and_then(|l| l.get("projectKey")).and_then(|k| k.as_str()).map(String::from),
-        project_name: location.and_then(|l| l.get("projectName")).and_then(|n| n.as_str()).map(String::from),
+        board_type: obj
+            .get("type")
+            .and_then(|t| t.as_str())
+            .unwrap_or("")
+            .to_string(),
+        project_key: location
+            .and_then(|l| l.get("projectKey"))
+            .and_then(|k| k.as_str())
+            .map(String::from),
+        project_name: location
+            .and_then(|l| l.get("projectName"))
+            .and_then(|n| n.as_str())
+            .map(String::from),
     })
 }
 
@@ -57,7 +67,7 @@ impl NodeLogic for GetBoardsNode {
             "Get all agile boards (Scrum or Kanban)",
             "Data/Atlassian/Jira/Agile",
         );
-        node.add_icon("/flow/icons/board.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -102,15 +112,10 @@ impl NodeLogic for GetBoardsNode {
             VariableType::String,
         );
 
-        node.add_output_pin(
-            "boards",
-            "Boards",
-            "List of boards",
-            VariableType::Struct,
-        )
-        .set_value_type(ValueType::Array)
-        .set_schema::<JiraBoard>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin("boards", "Boards", "List of boards", VariableType::Struct)
+            .set_value_type(ValueType::Array)
+            .set_schema::<JiraBoard>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin("count", "Count", "Number of boards", VariableType::Integer);
 
@@ -131,7 +136,10 @@ impl NodeLogic for GetBoardsNode {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let provider: AtlassianProvider = context.evaluate_pin("provider").await?;
-        let project_key: String = context.evaluate_pin("project_key").await.unwrap_or_default();
+        let project_key: String = context
+            .evaluate_pin("project_key")
+            .await
+            .unwrap_or_default();
         let board_type: String = context.evaluate_pin("board_type").await.unwrap_or_default();
         let name: String = context.evaluate_pin("name").await.unwrap_or_default();
 
@@ -139,7 +147,10 @@ impl NodeLogic for GetBoardsNode {
 
         let mut params = vec![];
         if !project_key.is_empty() {
-            params.push(format!("projectKeyOrId={}", urlencoding::encode(&project_key)));
+            params.push(format!(
+                "projectKeyOrId={}",
+                urlencoding::encode(&project_key)
+            ));
         }
         if !board_type.is_empty() {
             params.push(format!("type={}", board_type.to_lowercase()));
@@ -151,7 +162,11 @@ impl NodeLogic for GetBoardsNode {
         let url = if params.is_empty() {
             format!("{}/rest/agile/1.0/board", provider.base_url)
         } else {
-            format!("{}/rest/agile/1.0/board?{}", provider.base_url, params.join("&"))
+            format!(
+                "{}/rest/agile/1.0/board?{}",
+                provider.base_url,
+                params.join("&")
+            )
         };
 
         let response = client
@@ -207,7 +222,7 @@ impl NodeLogic for GetBoardIssuesNode {
             "Get all issues on an agile board",
             "Data/Atlassian/Jira/Agile",
         );
-        node.add_icon("/flow/icons/board.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -269,7 +284,12 @@ impl NodeLogic for GetBoardIssuesNode {
         .set_schema::<JiraIssue>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin("total", "Total", "Total number of issues", VariableType::Integer);
+        node.add_output_pin(
+            "total",
+            "Total",
+            "Total number of issues",
+            VariableType::Integer,
+        );
 
         node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:board:jira-software"]);
         node.set_scores(
@@ -363,7 +383,7 @@ impl NodeLogic for GetBacklogNode {
             "Get backlog issues for a board",
             "Data/Atlassian/Jira/Agile",
         );
-        node.add_icon("/flow/icons/board.svg");
+        node.add_icon("/flow/icons/jira.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -401,17 +421,17 @@ impl NodeLogic for GetBacklogNode {
             VariableType::Integer,
         );
 
-        node.add_output_pin(
-            "issues",
-            "Issues",
-            "Backlog issues",
-            VariableType::Struct,
-        )
-        .set_value_type(ValueType::Array)
-        .set_schema::<JiraIssue>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin("issues", "Issues", "Backlog issues", VariableType::Struct)
+            .set_value_type(ValueType::Array)
+            .set_schema::<JiraIssue>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin("total", "Total", "Total backlog items", VariableType::Integer);
+        node.add_output_pin(
+            "total",
+            "Total",
+            "Total backlog items",
+            VariableType::Integer,
+        );
 
         node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:board:jira-software"]);
         node.set_scores(
@@ -437,9 +457,7 @@ impl NodeLogic for GetBacklogNode {
 
         let url = format!(
             "{}/rest/agile/1.0/board/{}/backlog?maxResults={}",
-            provider.base_url,
-            board_id,
-            max_results
+            provider.base_url, board_id, max_results
         );
 
         let response = client

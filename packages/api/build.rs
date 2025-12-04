@@ -42,7 +42,8 @@ fn main() -> Result<()> {
 
     // Write OAuth providers config as-is (secrets resolved at runtime from env)
     let oauth_config_json = flow_like_types::json::to_string(
-        &cfg.oauth_providers.unwrap_or(flow_like_types::json::json!({})),
+        &cfg.oauth_providers
+            .unwrap_or(flow_like_types::json::json!({})),
     )?;
     let oauth_dest = Path::new(&out_dir).join("oauth_config.json");
     fs::write(&oauth_dest, oauth_config_json)?;

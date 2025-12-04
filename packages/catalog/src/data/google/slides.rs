@@ -75,9 +75,9 @@ impl NodeLogic for CreateGoogleSlidesNode {
             "data_google_slides_create",
             "Create Presentation",
             "Create a new Google Slides presentation",
-            "Data/Google Slides",
+            "Data/Google/Slides",
         );
-        node.add_icon("/flow/icons/presentation.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -183,9 +183,9 @@ impl NodeLogic for GetGoogleSlidesNode {
             "data_google_slides_get",
             "Get Presentation",
             "Get a Google Slides presentation's metadata and slides",
-            "Data/Google Slides",
+            "Data/Google/Slides",
         );
-        node.add_icon("/flow/icons/presentation.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -297,9 +297,9 @@ impl NodeLogic for AddGoogleSlideNode {
             "data_google_slides_add_slide",
             "Add Slide",
             "Add a new slide to a Google Slides presentation",
-            "Data/Google Slides",
+            "Data/Google/Slides",
         );
-        node.add_icon("/flow/icons/plus.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -455,9 +455,9 @@ impl NodeLogic for DeleteGoogleSlideNode {
             "data_google_slides_delete_slide",
             "Delete Slide",
             "Delete a slide from a Google Slides presentation",
-            "Data/Google Slides",
+            "Data/Google/Slides",
         );
-        node.add_icon("/flow/icons/trash.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -563,9 +563,9 @@ impl NodeLogic for AddTextToSlideNode {
             "data_google_slides_add_text",
             "Add Text to Slide",
             "Add a text box with text to a Google Slide",
-            "Data/Google Slides",
+            "Data/Google/Slides",
         );
-        node.add_icon("/flow/icons/type.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -723,9 +723,9 @@ impl NodeLogic for ExportGoogleSlidesNode {
             "data_google_slides_export",
             "Export Presentation",
             "Export a Google Slides presentation to PDF or PPTX",
-            "Data/Google Slides",
+            "Data/Google/Slides",
         );
-        node.add_icon("/flow/icons/download.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(

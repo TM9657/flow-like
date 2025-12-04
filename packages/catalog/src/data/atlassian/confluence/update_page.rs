@@ -30,7 +30,7 @@ impl NodeLogic for UpdateConfluencePageNode {
             "Update an existing Confluence page's title or body",
             "Data/Atlassian/Confluence",
         );
-        node.add_icon("/flow/icons/edit.svg");
+        node.add_icon("/flow/icons/confluence.svg");
 
         node.add_input_pin(
             "exec_in",
