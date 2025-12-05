@@ -165,6 +165,15 @@
 			"pkce_required": false,
 			"requires_secret_proxy": true,
 			"userinfo_url": "https://api.linkedin.com/v2/userinfo"
+		},
+		"databricks": {
+			"name": "Databricks",
+			"client_id": "d59ae17e-a0e0-4497-af9a-f79295a3c31c",
+			"auth_url": "https://accounts.cloud.databricks.com/oidc/accounts/{account_id}/v1/authorize",
+			"token_url": "https://accounts.cloud.databricks.com/oidc/accounts/{account_id}/v1/token",
+			"scopes": ["all-apis", "offline_access"],
+			"pkce_required": true,
+			"requires_secret_proxy": false
 		}
 	}
 }
