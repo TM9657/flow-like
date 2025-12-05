@@ -52,6 +52,8 @@ export interface IOAuthProviderConfig {
 	device_auth_url?: string | null;
 	/** Whether to use device flow */
 	use_device_flow?: boolean;
+	/** Whether to use implicit flow (response_type=token) instead of authorization code flow */
+	use_implicit_flow?: boolean;
 	/** Audience claim for token validation */
 	audience?: string | null;
 }

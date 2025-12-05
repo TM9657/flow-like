@@ -176,6 +176,8 @@ pub struct OAuthProviderConfig {
     /// Whether to use device flow
     #[serde(default)]
     pub use_device_flow: bool,
+    #[serde(default)]
+    pub use_implicit_flow: bool,
     /// Optional: Audience claim for token validation
     pub audience: Option<String>,
 }

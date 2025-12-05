@@ -434,6 +434,11 @@
 					"type": "boolean",
 					"default": false
 				},
+				"use_implicit_flow": {
+					"description": "Whether to use implicit flow (response_type=token) instead of authorization code flow",
+					"type": "boolean",
+					"default": false
+				},
 				"audience": {
 					"description": "Audience claim for token validation",
 					"type": ["string", "null"]

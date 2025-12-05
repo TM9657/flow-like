@@ -62,6 +62,7 @@ export function buildOAuthProviderFromHub(
 		audience: hubConfig.audience ?? undefined,
 		device_auth_url: hubConfig.device_auth_url ?? undefined,
 		use_device_flow: hubConfig.use_device_flow ?? false,
+		use_implicit_flow: hubConfig.use_implicit_flow ?? false,
 		merged_scopes: allScopes,
 	};
 }
