@@ -1,6 +1,6 @@
 ---
 import { getCollection } from "astro:content";
-import { LuMoveRight } from "react-icons/lu";
+import { LuArrowRight } from "react-icons/lu";
 
 const posts = (
   await getCollection("blog", ({ data }) =>
@@ -11,288 +11,91 @@ const posts = (
   .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
   .slice(0, 3);
 
-// helpers
 const thumbFor = (p: any) => {
-  const img =
-    p.data.thumb ??
-    p.data.thumbnail ??
-    p.data.image ??
-    p.data.cover ??
-    p.data.hero ??
-    p.data.ogImage;
+  const img = p.data.thumb ?? p.data.thumbnail ?? p.data.image ?? p.data.cover ?? p.data.hero ?? p.data.ogImage;
   return typeof img === "string" ? img : (img?.src ?? "/og.png");
 };
 
-const descFor = (p: any) =>
-  p.data.excerpt ?? p.data.description ?? p.data.subtitle ?? "";
-
-const tagsFor = (p: any) =>
-  Array.isArray(p.data.tags) ? p.data.tags.slice(0, 3) : [];
+const descFor = (p: any) => p.data.excerpt ?? p.data.description ?? p.data.subtitle ?? "";
 
 const dateFor = (p: any) =>
   p.data?.date
-    ? new Date(p.data.date).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
+    ? new Date(p.data.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : "";
-
-const featured = posts[0];
-const rest = posts.slice(1);
-
-// accent colors (controls bg & glows) - BOLDER
-const C1 = "hsl(268 86% 62% / 0.35)"; // purple-pink
-const C2 = "hsl(199 90% 55% / 0.35)";  // cyan-blue
 ---
 
-<section
-  data-c1={C1}
-  data-c2={C2}
-  style={`--c1:${C1};--c2:${C2}`}
-  class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6 overflow-hidden md:overflow-visible"
->
-  <!-- background: grid + aurora -->
-  <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-    <div class="rr-aurora2 absolute -bottom-48 -right-24 size-[48rem] rounded-full blur-3xl"></div>
-    <div class="rr-aurora absolute -top-24 -left-16 size-[36rem] rounded-full blur-3xl"></div>
-  </div>
+<section class="relative py-24 bg-zinc-950">
+  <!-- Subtle grid overlay -->
+  <div
+    aria-hidden="true"
+    class="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-size-[64px_64px]"
+  ></div>
 
-  <div class="relative z-10">
-    <!-- header -->
-    <div class="mb-12 flex items-end justify-between gap-6 flex-wrap">
-      <div class="max-w-2xl">
-        <div class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 backdrop-blur-2xl px-4 py-1.5 text-sm font-medium text-primary/90 shadow-[0_0_40px_-8px_rgba(var(--primary),0.4)]">
-          <div class="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_12px_rgba(var(--primary),0.8)]"></div>
-          New & notable
-        </div>
-        <h2 class="mt-4 text-4xl sm:text-5xl font-extrabold leading-tight tracking-tight">
-          Recommended <span class="text-primary drop-shadow-sm">Reading</span>
-        </h2>
-        <p class="mt-3 text-lg text-muted-foreground leading-relaxed">
-          Clean, legible cards with real contrast. One featured deep-dive + two quick reads.
+  <div class="relative mx-auto max-w-6xl px-6 lg:px-8">
+    <!-- Minimal header -->
+    <div class="flex items-end justify-between mb-12">
+      <div>
+        <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-zinc-500 mb-3">
+          Journal
         </p>
+        <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-100">
+          Recommended Reading
+        </h2>
       </div>
-
       <a
         href="/blog/"
-        class="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/60 backdrop-blur-xl px-4 py-2 text-sm font-semibold hover:border-primary/50 hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+        class="hidden sm:inline-flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-zinc-100 transition-colors group"
       >
-        View all posts
-        <LuMoveRight className="w-4 h-4" />
+        All posts
+        <LuArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
       </a>
     </div>
 
-    <!-- grid: feature + two secondaries -->
-    <div class="grid gap-8 md:grid-cols-12">
-      {featured && (
+    <!-- Post grid with thumbnails -->
+    <div class="grid gap-6 md:grid-cols-3">
+      {posts.map((post) => (
         <a
-          href={`/blog/${featured.slug.split("-").slice(3).join("-")}/`}
-          aria-label={featured.data.title}
-          rel="prefetch"
-          class="rr-card rr-feature group relative overflow-hidden rounded-3xl md:col-span-7 border border-border/60 bg-card/50 backdrop-blur-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-all"
+          href={`/blog/${post.slug.split("-").slice(3).join("-")}/`}
+          class="group block"
         >
-          <div class="relative aspect-[16/10] sm:aspect-[16/9] overflow-hidden">
+          <!-- Thumbnail -->
+          <div class="relative aspect-video mb-4 overflow-hidden rounded-lg bg-zinc-900">
             <img
-              src={thumbFor(featured)}
-              alt={featured.data.title}
-              class="absolute inset-0 h-full w-full object-cover opacity-95 rr-img"
+              src={thumbFor(post)}
+              alt=""
+              class="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-[1.02] transition-all duration-300"
               loading="lazy"
-              sizes="(min-width:1024px) 60vw, 100vw"
             />
-            <!-- readable overlay -->
-            <div class="absolute inset-0 top-0 bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/45 to-transparent"></div>
+            <div class="absolute inset-0 bg-linear-to-t from-zinc-950/60 to-transparent"></div>
           </div>
 
-          <!-- conic edge glow -->
-          <div class="rr-edge absolute inset-0 rounded-[inherit] pointer-events-none"></div>
-
-          <div class="relative -mt-20 sm:-mt-24 p-6 sm:p-8">
-            <div class="flex flex-wrap items-center gap-2">
-              {tagsFor(featured).map((t: string) => (
-                <span class="rr-chip">{t}</span>
-              ))}
-              {dateFor(featured) && (
-                <span class="rr-chip rr-chip--ghost">{dateFor(featured)}</span>
-              )}
-            </div>
-
-            <h3 class="mt-4 text-2xl sm:text-3xl font-bold leading-tight">
-              {featured.data.title}
+          <!-- Content -->
+          <div class="space-y-2">
+            <p class="text-xs text-zinc-500">
+              {dateFor(post)}
+            </p>
+            <h3 class="text-base font-medium text-zinc-200 leading-snug group-hover:text-white transition-colors line-clamp-2">
+              {post.data.title}
             </h3>
-
-            {descFor(featured) && (
-              <p class="mt-3 text-sm sm:text-base text-foreground/90 max-w-[65ch]">
-                {descFor(featured)}
+            {descFor(post) && (
+              <p class="text-sm text-zinc-500 leading-relaxed line-clamp-2">
+                {descFor(post)}
               </p>
             )}
-
-            <span class="rr-cta mt-5">
-              Read post
-              <LuMoveRight className="w-4 h-4" />
-            </span>
           </div>
         </a>
-      )}
+      ))}
+    </div>
 
-      <div class="md:col-span-5 grid gap-8">
-        {rest.map((p) => (
-          <a
-            href={`/blog/${p.slug.split("-").slice(3).join("-")}/`}
-            aria-label={p.data.title}
-            rel="prefetch"
-            class="rr-card group relative overflow-hidden rounded-3xl border border-border/60 bg-card/50 backdrop-blur-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-all"
-          >
-            <div class="relative aspect-[16/10] overflow-hidden">
-              <img
-                src={thumbFor(p)}
-                alt={p.data.title}
-                class="absolute inset-0 h-full w-full object-cover rr-img"
-                loading="lazy"
-                sizes="(min-width:1024px) 40vw, 100vw"
-              />
-              <div class="absolute inset-0 bg-gradient-to-t from-black/65 via-black/40 to-transparent"></div>
-            </div>
-
-            <div class="relative -mt-16 p-6">
-              <div class="flex flex-wrap items-center gap-2">
-                {tagsFor(p).map((t: string) => (
-                  <span class="rr-chip">{t}</span>
-                ))}
-                {dateFor(p) && (
-                  <span class="rr-chip rr-chip--ghost">{dateFor(p)}</span>
-                )}
-              </div>
-
-              <h3 class="mt-3 text-lg sm:text-xl font-semibold leading-snug">
-                {p.data.title}
-              </h3>
-
-              {descFor(p) && (
-                <p class="mt-2 text-sm text-foreground/90 line-clamp-2">
-                  {descFor(p)}
-                </p>
-              )}
-
-              <span class="rr-cta mt-4">
-                Read post
-                <LuMoveRight className="w-4 h-4" />
-              </span>
-            </div>
-
-            <!-- soft hover glow -->
-            <div class="rr-glow pointer-events-none absolute inset-0 rounded-[inherit]"></div>
-          </a>
-        ))}
-      </div>
+    <!-- Mobile view all link -->
+    <div class="mt-10 sm:hidden text-center">
+      <a
+        href="/blog/"
+        class="inline-flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-zinc-100 transition-colors"
+      >
+        View all posts
+        <LuArrowRight className="w-4 h-4" />
+      </a>
     </div>
   </div>
 </section>
-
-<style>
-  /* Motion + contrast tuned for readability */
-  .rr-card {
-    isolation: isolate;
-    transform: translateZ(0) scale(1);
-    transition:
-      transform .45s cubic-bezier(.2,.8,.2,1),
-      box-shadow .45s ease,
-      border-color .3s ease,
-      background .3s ease;
-    box-shadow: 0 10px 30px -12px hsl(var(--primary) / .18);
-  }
-  .rr-card:hover {
-    /* transform: translateY(-2px); */
-    box-shadow: 0 18px 55px -18px hsl(var(--primary) / .28);
-    border-color: hsl(var(--primary) / .35);
-  }
-  /* .rr-feature:hover { transform: translateY(-3px); } */
-
-  .rr-img {
-    filter: saturate(1.02) contrast(1.02);
-    transition: transform .6s cubic-bezier(.2,.8,.2,1), filter .3s ease;
-    will-change: transform;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-    transform: translateZ(0);
-    object-position: center;
-    /* keep transform-origin centered so scaling is symmetric and doesn't pull the image away from the content */
-    transform-origin: center center;
-  }
-  /* small upward nudge on hover keeps the overlap tight without visible gap */
-  .rr-card:hover .rr-img {
-    transform: scale(1.03) translateY(-0.4%);
-    filter: saturate(1.06) contrast(1.06);
-  }
-
-  .rr-card:hover .rr-img { transform: scale(1.03); filter: saturate(1.06) contrast(1.06); }
-
-  .rr-cta {
-    display: inline-flex; align-items: center; gap: .5rem;
-    font-weight: 700; font-size: .925rem;
-    padding: .55rem .9rem; border-radius: 9999px;
-    background: linear-gradient( to right, hsl(var(--primary) / .14), hsl(var(--secondary) / .14) );
-    border: 1px solid hsl(var(--primary) / .28);
-    color: hsl(var(--primary-foreground, 0 0% 100%));
-    transition: transform .2s ease, background .3s ease, border-color .3s ease;
-  }
-  .rr-cta:hover { transform: translateX(2px); background: linear-gradient(to right, hsl(var(--primary) / .2), hsl(var(--secondary) / .2)); border-color: hsl(var(--primary) / .4); }
-
-  .rr-chip {
-    display: inline-flex; align-items: center; gap: .375rem;
-    padding: .25rem .6rem; border-radius: 9999px;
-    font-size: .75rem; font-weight: 600; letter-spacing: .01em;
-    color: hsl(var(--primary-foreground, 0 0% 100%));
-    background:
-      linear-gradient(180deg, hsl(var(--primary) / .18), hsl(var(--primary) / .10)),
-      radial-gradient(120% 120% at 20% 20%, var(--c1), transparent 42%);
-    border: 1px solid hsl(var(--primary) / .25);
-    backdrop-filter: blur(6px);
-  }
-  .rr-chip--ghost {
-    background: linear-gradient(180deg, hsl(var(--muted) / .28), hsl(var(--muted) / .14));
-    border-color: hsl(var(--muted-foreground) / .35);
-  }
-
-  /* conic edge glow for the feature */
-  .rr-edge::before {
-    content: "";
-    position: absolute; inset: -1px; border-radius: inherit;
-    background: conic-gradient(from 0deg, var(--c1), var(--c2), var(--c1));
-    opacity: .0; transition: opacity .35s ease;
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor; mask-composite: exclude; padding: 1px;
-  }
-  .rr-feature:hover .rr-edge::before { opacity: .8; }
-
-  /* soft outer glow on secondaries */
-  .rr-glow::before {
-    content: ""; position: absolute; inset: -2px; border-radius: inherit;
-    background: radial-gradient(60% 60% at 50% 100%, var(--c2), transparent 70%),
-                radial-gradient(60% 60% at 0% 0%, var(--c1), transparent 55%);
-    opacity: 0; transition: opacity .35s ease;
-  }
-  .rr-card:hover .rr-glow::before { opacity: .6; }
-
-  /* background aurora blobs (use --c1/--c2) - BIGGER & BOLDER */
-  .rr-aurora {
-    background:
-      radial-gradient(45% 45% at 30% 30%, var(--c1), transparent 70%),
-      radial-gradient(50% 50% at 70% 70%, var(--c2), transparent 70%);
-    animation: rr-float 12s ease-in-out infinite;
-    opacity: 1.4;
-  }
-  .rr-aurora2 {
-    background:
-      radial-gradient(50% 50% at 65% 35%, var(--c2), transparent 70%),
-      radial-gradient(45% 45% at 35% 65%, var(--c1), transparent 70%);
-    animation: rr-float-2 14s ease-in-out infinite;
-    opacity: 1.4;
-  }
-  @keyframes rr-float { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(12px,8px,0) scale(1.05);} }
-  @keyframes rr-float-2 { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(-10px,-12px,0) scale(1.04);} }
-
-  @media (prefers-reduced-motion: reduce) {
-    .rr-card, .rr-img, .rr-edge::before, .rr-glow::before, .rr-aurora, .rr-aurora2 { transition: none !important; animation: none !important; }
-  }
-</style>

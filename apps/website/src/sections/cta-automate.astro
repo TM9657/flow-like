@@ -1,0 +1,35 @@
+---
+import { LuArrowRight, LuDownload } from "react-icons/lu";
+---
+
+<section class="relative py-20">
+  <div class="mx-auto max-w-4xl px-6 lg:px-8 text-center">
+    <!-- Minimal CTA -->
+    <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+      Get Started
+    </p>
+    <h2 class="text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-foreground leading-[1.15] mb-6">
+      Ready to automate?
+    </h2>
+    <p class="text-lg text-muted-foreground max-w-2xl mx-auto mb-10">
+      Download Flow-Like and build your first workflow in minutes. No signup required.
+    </p>
+
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+      <a
+        href="/download"
+        class="inline-flex items-center gap-2.5 rounded-full bg-foreground text-background px-8 py-3.5 text-sm font-medium hover:bg-foreground/90 transition-colors"
+      >
+        <LuDownload className="w-4 h-4" />
+        Download for free
+      </a>
+      <a
+        href="https://docs.flow-like.com"
+        class="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors group"
+      >
+        Explore documentation
+        <LuArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+      </a>
+    </div>
+  </div>
+</section>

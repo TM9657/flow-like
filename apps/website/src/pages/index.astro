@@ -19,6 +19,8 @@ import ProblemSolution from "../sections/problem-solution.astro";
 import Reading from "../sections/reading.astro";
 import FlowPilot from "../sections/flowpilot.astro";
 import Integrations from "../sections/integrations.astro";
+import UseCases from "../sections/use-cases.astro";
+import CtaAutomate from "../sections/cta-automate.astro";
 import { BlogFooter } from "../components/blog-footer";
 
 // --- SEO constants ---
@@ -230,39 +232,48 @@ const ldWebPage = {
       <AmbientGlow />
       <BlogHeader client:load/>
       <Hero client:load/>
-      <DesignWorkflowsVisually />
+
+      <!-- Clear CTA / value prop right after hero -->
       <ZeroToProd />
 
-      <FlowPilot  />
+      <!-- CTA -->
+      <CtaAutomate />
 
-      <Integrations  />
-      <SoftSeam  />
+      <!-- Visual builder showcase -->
+      <DesignWorkflowsVisually />
 
-      <ProblemSolution  />
+      <!-- White section: Use Cases (overlays into previous dark section) -->
+      <UseCases />
 
-      <SoftSeam  />
-      <Portability  />
+      <!-- Back to dark: Core features -->
+      <Portability />
 
-      <SoftSeam  />
-      <Performance  />
+      <SoftSeam />
+      <Performance />
 
-      <SoftSeam  />
-      <Extensibility  />
+      <!-- FlowPilot - prominent AI feature -->
+      <FlowPilot />
 
-      <SoftSeam  />
-      <Theming  />
+      <Extensibility />
 
-      <SoftSeam  />
-      <ProcessCombination  />
+      <!-- White section: Why it matters (overlays into previous dark section) -->
+      <ProblemSolution />
 
-      <SoftSeam  />
-      <Storage  />
+      <!-- Dark section: Integrations -->
+      <Integrations />
 
-      <SoftSeam  />
-      <Reading  />
+      <SoftSeam />
+      <Theming />
 
-      <SoftSeam  />
-      <FAQ  />
+      <SoftSeam />
+      <ProcessCombination />
+
+      <SoftSeam />
+      <Storage />
+
+      <Reading />
+
+      <FAQ />
     </main>
 
     <BlogFooter  />
