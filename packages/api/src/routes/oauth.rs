@@ -66,6 +66,8 @@ struct ResolvedOAuthConfig {
     #[allow(dead_code)]
     use_device_flow: bool,
     #[allow(dead_code)]
+    use_implicit_flow: bool,
+    #[allow(dead_code)]
     audience: Option<String>,
 }
 
@@ -97,6 +99,7 @@ fn get_oauth_configs() -> &'static HashMap<String, ResolvedOAuthConfig> {
                     userinfo_url: cfg.userinfo_url,
                     device_auth_url: cfg.device_auth_url,
                     use_device_flow: cfg.use_device_flow,
+                    use_implicit_flow: cfg.use_implicit_flow,
                     audience: cfg.audience,
                 };
 
