@@ -93,7 +93,9 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			});
 
 			// Use implicit flow (response_type=token) if configured, otherwise authorization code flow
+			console.log("[OAuth] Provider use_implicit_flow value:", provider.use_implicit_flow, "type:", typeof provider.use_implicit_flow);
 			const responseType = provider.use_implicit_flow ? "token" : "code";
+			console.log("[OAuth] Using responseType:", responseType);
 
 			const params = new URLSearchParams({
 				client_id: provider.client_id,
