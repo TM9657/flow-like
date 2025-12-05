@@ -1,3 +1,6 @@
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use flow_like_api::construct_router;
 use flow_like_storage::object_store::aws::AmazonS3Builder;
 use flow_like_types::tokio;

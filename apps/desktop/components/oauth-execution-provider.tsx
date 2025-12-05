@@ -3,6 +3,7 @@
 import {
 	OAuthExecutionProvider as BaseOAuthExecutionProvider,
 	type IOAuthProvider,
+	type IStoredOAuthToken,
 	useBackend,
 	useInvoke,
 	useOAuthExecutionContext,
@@ -45,11 +46,6 @@ export function OAuthExecutionProvider({ children }: { children: ReactNode }) {
 		[apiBaseUrl],
 	);
 
-	// Handle OAuth callback from Tauri deep links
-	useOAuthCallbackListener((pending, _token) => {
-		// The base provider will update authorizedProviders via onOAuthCallback
-	}, []);
-
 	// Sync provider cache with the OAuth callback handler
 	const handleProviderCacheUpdate = () => {
 		if (providerCacheRef.current.size > 0) {
@@ -85,14 +81,19 @@ function OAuthCallbackSync({
 	children: ReactNode;
 	providerCacheRef: React.MutableRefObject<Map<string, IOAuthProvider>>;
 }) {
-	// Keep provider cache in sync
+	const { handleOAuthCallback } = useOAuthExecutionContext();
+
+	// Listen for OAuth callbacks and update the provider state
 	useOAuthCallbackListener(
-		(pending, _token) => {
+		(pending, token) => {
+			// Update provider cache for handler
 			if (providerCacheRef.current.size > 0) {
 				setProviderCache(providerCacheRef.current);
 			}
+			// Notify the base provider to update authorizedProviders state
+			handleOAuthCallback(pending.providerId, token as IStoredOAuthToken);
 		},
-		[providerCacheRef],
+		[providerCacheRef, handleOAuthCallback],
 	);
 
 	return <>{children}</>;

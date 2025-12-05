@@ -1151,6 +1151,7 @@ dependencies = [
  "flow-like-storage",
  "flow-like-types",
  "lambda_http",
+ "mimalloc",
  "sentry 0.45.0",
  "sentry-tower",
  "sentry-tracing 0.45.0",
@@ -1233,6 +1234,7 @@ dependencies = [
  "flow-like",
  "flow-like-types",
  "lambda_http",
+ "mimalloc",
  "sentry 0.45.0",
  "sentry-tower",
  "sentry-tracing 0.45.0",
@@ -1274,6 +1276,7 @@ dependencies = [
  "flow-like",
  "flow-like-types",
  "lambda_runtime",
+ "mimalloc",
  "tracing",
 ]
 
@@ -5238,6 +5241,7 @@ dependencies = [
  "image",
  "imageproc",
  "lazy_static",
+ "mimalloc",
  "rusqlite",
  "sentry 0.42.0",
  "sentry-tracing 0.42.0",
@@ -8119,6 +8123,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.44"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "667f4fec20f29dfc6bc7357c582d91796c169ad7e2fce709468aefeb2c099870"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "libredox"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8388,6 +8402,7 @@ dependencies = [
  "flow-like-catalog",
  "flow-like-storage",
  "flow-like-types",
+ "mimalloc",
  "oasgen",
  "sentry 0.45.0",
  "sentry-tracing 0.45.0",
@@ -8758,6 +8773,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "mimalloc"
+version = "0.1.48"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1ee66a4b64c74f4ef288bcbb9192ad9c3feaad75193129ac8509af543894fd8"
+dependencies = [
+ "libmimalloc-sys",
 ]
 
 [[package]]
@@ -9488,7 +9512,7 @@ version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51e219e79014df21a225b1860a479e2dcd7cbd9130f4defd4bd0e191ea31d67d"
 dependencies = [
- "base64 0.21.7",
+ "base64 0.22.1",
  "chrono",
  "getrandom 0.2.16",
  "http 1.3.1",

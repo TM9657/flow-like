@@ -29,6 +29,7 @@ export interface OAuthExecutionContextValue {
 		board: IBoard,
 		executor: (tokens?: Record<string, IOAuthToken>) => Promise<T>,
 	) => Promise<T>;
+	handleOAuthCallback: (providerId: string, token: IStoredOAuthToken) => void;
 }
 
 const OAuthExecutionContext = createContext<OAuthExecutionContextValue | null>(
@@ -365,7 +366,7 @@ export function OAuthExecutionProvider({
 	);
 
 	return (
-		<OAuthExecutionContext.Provider value={{ withOAuthCheck }}>
+		<OAuthExecutionContext.Provider value={{ withOAuthCheck, handleOAuthCallback: handleOAuthCallbackInternal }}>
 			{children}
 			<OAuthConsentDialog
 				open={isDialogOpen}
