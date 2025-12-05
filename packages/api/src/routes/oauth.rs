@@ -39,6 +39,8 @@ struct OAuthProviderConfig {
     device_auth_url: Option<String>,
     #[serde(default)]
     use_device_flow: bool,
+    #[serde(default)]
+    use_implicit_flow: bool,
     audience: Option<String>,
 }
 
@@ -188,13 +190,30 @@ async fn proxy_token_exchange(
     Path(provider_id): Path<String>,
     Json(request): Json<TokenExchangeRequest>,
 ) -> Result<Json<TokenResponse>, OAuthProxyError> {
+    tracing::info!(
+        provider_id = %provider_id,
+        has_code = !request.code.is_empty(),
+        has_code_verifier = request.code_verifier.is_some(),
+        redirect_uri = %request.redirect_uri,
+        "OAuth token exchange request received"
+    );
+
     let configs = get_oauth_configs();
     let provider_config = configs.get(&provider_id).ok_or_else(|| {
+        tracing::error!(provider_id = %provider_id, "OAuth provider not found in config");
         OAuthProxyError::new(
             StatusCode::NOT_FOUND,
             format!("OAuth provider '{}' not found in config", provider_id),
         )
     })?;
+
+    tracing::info!(
+        provider_id = %provider_id,
+        requires_secret_proxy = provider_config.requires_secret_proxy,
+        has_client_id = provider_config.client_id.is_some(),
+        has_client_secret = provider_config.client_secret.is_some(),
+        "Provider config loaded"
+    );
 
     // Only proxy for providers that require the secret proxy
     if !provider_config.requires_secret_proxy {
@@ -208,6 +227,7 @@ async fn proxy_token_exchange(
     }
 
     let client_id = provider_config.client_id.as_ref().ok_or_else(|| {
+        tracing::error!(provider_id = %provider_id, "Client ID not configured");
         OAuthProxyError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!(
@@ -218,6 +238,7 @@ async fn proxy_token_exchange(
     })?;
 
     let client_secret = provider_config.client_secret.as_ref().ok_or_else(|| {
+        tracing::error!(provider_id = %provider_id, "Client secret not configured - check GOOGLE_CLIENT_SECRET env var");
         OAuthProxyError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!(
@@ -237,6 +258,13 @@ async fn proxy_token_exchange(
     if let Some(code_verifier) = request.code_verifier {
         params.push(("code_verifier", code_verifier));
     }
+
+    tracing::info!(
+        provider_id = %provider_id,
+        token_url = %provider_config.token_url,
+        param_count = params.len(),
+        "Sending token exchange request to provider"
+    );
 
     let client = flow_like_types::reqwest::Client::new();
 
@@ -266,6 +294,11 @@ async fn proxy_token_exchange(
         params.push(("client_id", client_id.clone()));
         params.push(("client_secret", client_secret.clone()));
 
+        tracing::debug!(
+            provider_id = %provider_id,
+            "Sending form-urlencoded token request with client_id and client_secret"
+        );
+
         client
             .post(&provider_config.token_url)
             .header("Content-Type", "application/x-www-form-urlencoded")
@@ -282,7 +315,20 @@ async fn proxy_token_exchange(
         .await
         .map_err(|e| OAuthProxyError::new(StatusCode::BAD_GATEWAY, e.to_string()))?;
 
+    tracing::info!(
+        provider_id = %provider_id,
+        status = %status,
+        response_len = response_text.len(),
+        "Token exchange response received"
+    );
+
     if !status.is_success() {
+        tracing::error!(
+            provider_id = %provider_id,
+            status = %status,
+            response = %response_text,
+            "Token exchange failed"
+        );
         // Try to parse error response
         if let Ok(error_resp) = serde_json::from_str::<ErrorResponse>(&response_text) {
             return Err(OAuthProxyError::new(

@@ -92,29 +92,45 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				apiBaseUrl: getApiBaseUrl ? await getApiBaseUrl() ?? undefined : undefined,
 			});
 
+			// Use implicit flow (response_type=token) if configured, otherwise authorization code flow
+			const responseType = provider.use_implicit_flow ? "token" : "code";
+
 			const params = new URLSearchParams({
 				client_id: provider.client_id,
 				redirect_uri: redirectUri,
-				response_type: "code",
+				response_type: responseType,
 				scope: scopes.join(" "),
 				state,
 			});
 
-			// Add PKCE parameters for providers that require it
-			if (provider.pkce_required) {
+			// Add PKCE parameters for providers that require it (not used in implicit flow)
+			if (provider.pkce_required && !provider.use_implicit_flow) {
 				params.set("code_challenge", codeChallenge);
 				params.set("code_challenge_method", "S256");
 			}
 
 			// For providers without PKCE (like Notion), add owner=user
 			// and skip access_type/prompt which are Google-specific
-			if (!provider.pkce_required) {
+			if (!provider.pkce_required && !provider.use_implicit_flow) {
 				params.set("owner", "user");
-			} else {
-				// Google-specific parameters for refresh token
+			} else if (provider.pkce_required && !provider.use_implicit_flow) {
+				// Authorization code flow with PKCE: request offline access for refresh token
 				params.set("access_type", "offline");
 				params.set("prompt", "consent");
 			}
+			// Implicit flow: no special parameters needed (no refresh tokens available)
+
+			console.log("[OAuth] Starting authorization:", {
+				providerId: provider.id,
+				providerName: provider.name,
+				clientId: provider.client_id,
+				hasClientSecret: !!provider.client_secret,
+				pkceRequired: provider.pkce_required,
+				requiresSecretProxy: provider.requires_secret_proxy,
+				useImplicitFlow: provider.use_implicit_flow,
+				responseType,
+				scopes,
+			});
 
 			const authUrl = `${provider.auth_url}?${params.toString()}`;
 			await runtime.openUrl(authUrl);
@@ -132,6 +148,18 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			const error = url.searchParams.get("error");
 			const errorDescription = url.searchParams.get("error_description");
 
+			console.log("[OAuth] handleCallback called:", {
+				providerId: provider.id,
+				providerName: provider.name,
+				clientId: provider.client_id,
+				hasClientSecret: !!provider.client_secret,
+				pkceRequired: provider.pkce_required,
+				requiresSecretProxy: provider.requires_secret_proxy,
+				code: code ? `${code.substring(0, 10)}...` : "none",
+				state,
+				error,
+			});
+
 			if (error) {
 				throw new Error(
 					`OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ""}`,
@@ -146,6 +174,13 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			if (!pendingAuth) {
 				throw new Error("Invalid or expired OAuth state");
 			}
+
+			console.log("[OAuth] pendingAuth found:", {
+				providerId: pendingAuth.providerId,
+				hasProvider: !!pendingAuth.provider,
+				pendingProviderClientId: pendingAuth.provider?.client_id,
+				codeVerifier: pendingAuth.codeVerifier ? `${pendingAuth.codeVerifier.substring(0, 10)}...` : "none",
+			});
 
 			if (pendingAuth.providerId !== provider.id) {
 				throw new Error("Provider mismatch in OAuth callback");
@@ -250,13 +285,22 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			expires_in?: number;
 			token_type?: string;
 			id_token?: string;
-			// Notion-specific fields
 			workspace_id?: string;
 			workspace_name?: string;
 			workspace_icon?: string;
 			bot_id?: string;
 			owner?: unknown;
 		}> {
+			console.log("[OAuth] exchangeCodeForTokens called:", {
+				providerId: provider.id,
+				hasCode: !!code,
+				codeVerifierLength: codeVerifier?.length ?? 0,
+				redirectUri: callbackRedirectUri,
+				requiresSecretProxy: provider.requires_secret_proxy,
+				pkceRequired: provider.pkce_required,
+				hasClientSecret: !!provider.client_secret,
+			});
+
 			// If provider requires secret proxy, route through the API server
 			if (provider.requires_secret_proxy) {
 				// Use override URL from pending auth, or fall back to config
@@ -343,6 +387,17 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			if (provider.pkce_required) {
 				params.set("code_verifier", codeVerifier);
 			}
+
+			console.log("[OAuth] Token exchange request:", {
+				url: provider.token_url,
+				providerId: provider.id,
+				hasClientSecret: !!provider.client_secret,
+				pkceRequired: provider.pkce_required,
+				clientId: provider.client_id,
+				codeVerifier: codeVerifier ? `${codeVerifier.substring(0, 10)}...` : "none",
+				redirectUri: callbackRedirectUri,
+				params: params.toString(),
+			});
 
 			const response = await runtime.httpPost(
 				provider.token_url,

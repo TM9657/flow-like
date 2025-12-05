@@ -128,8 +128,9 @@
 			"auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
 			"token_url": "https://oauth2.googleapis.com/token",
 			"scopes": ["openid", "email", "profile"],
-			"pkce_required": true,
+			"pkce_required": false,
 			"requires_secret_proxy": false,
+			"use_implicit_flow": true,
 			"userinfo_url": "https://www.googleapis.com/oauth2/v2/userinfo",
 			"revoke_url": "https://oauth2.googleapis.com/revoke"
 		},
