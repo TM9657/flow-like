@@ -717,7 +717,7 @@ impl Tool for EmitCommandsTool {
 // ============================================================================
 
 pub struct QueryLogsTool {
-    pub state: FlowLikeState,
+    pub state: Arc<FlowLikeState>,
     pub run_context: Option<RunContext>,
 }
 

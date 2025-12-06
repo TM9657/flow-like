@@ -409,7 +409,7 @@ impl InternalRun {
         app_id: &str,
         board: Arc<Board>,
         event: Option<Event>,
-        handler: &Arc<Mutex<FlowLikeState>>,
+        handler: &Arc<FlowLikeState>,
         profile: &Profile,
         payload: &RunPayload,
         stream_state: bool,
@@ -425,8 +425,7 @@ impl InternalRun {
         let run_id = create_id();
 
         let (log_store, db) = {
-            let state = handler.lock().await;
-            let guard = state.config.read().await;
+            let guard = handler.config.read().await;
             let log_store = guard.stores.log_store.clone();
             let db = guard.callbacks.build_logs_database.clone();
             (log_store, db)
@@ -563,8 +562,6 @@ impl InternalRun {
         let mut stack = RunStack::with_capacity(1);
 
         let registry = handler
-            .lock()
-            .await
             .node_registry
             .read()
             .await
@@ -695,7 +692,7 @@ impl InternalRun {
     async fn step_parallel(
         &mut self,
         stack: Arc<RunStack>,
-        handler: &Arc<Mutex<FlowLikeState>>,
+        handler: &Arc<FlowLikeState>,
         log_level: LogLevel,
         stage: ExecutionStage,
     ) {
@@ -765,7 +762,7 @@ impl InternalRun {
     async fn step_single(
         &mut self,
         stack: Arc<RunStack>,
-        handler: &Arc<Mutex<FlowLikeState>>,
+        handler: &Arc<FlowLikeState>,
         log_level: LogLevel,
         stage: ExecutionStage,
     ) {
@@ -804,7 +801,7 @@ impl InternalRun {
         self.stack = Arc::new(new_stack);
     }
 
-    async fn step(&mut self, handler: Arc<Mutex<FlowLikeState>>) {
+    async fn step(&mut self, handler: Arc<FlowLikeState>) {
         let start = Instant::now();
 
         let (stage, log_level, stack) = {
@@ -822,7 +819,7 @@ impl InternalRun {
         }
     }
 
-    pub async fn execute(&mut self, handler: Arc<Mutex<FlowLikeState>>) -> Option<LogMeta> {
+    pub async fn execute(&mut self, handler: Arc<FlowLikeState>) -> Option<LogMeta> {
         let start = Instant::now();
 
         {
@@ -884,7 +881,7 @@ impl InternalRun {
         meta
     }
 
-    pub async fn debug_step(&mut self, handler: Arc<Mutex<FlowLikeState>>) -> bool {
+    pub async fn debug_step(&mut self, handler: Arc<FlowLikeState>) -> bool {
         let stack_hash = self.stack.hash();
         if self.stack.len() == 0 {
             let mut run = self.run.lock().await;
@@ -1018,7 +1015,7 @@ async fn step_core(
     nodes: Arc<AHashMap<String, Arc<InternalNode>>>,
     target: ExecutionTarget,
     concurrency_limit: u64,
-    handler: &Arc<Mutex<FlowLikeState>>,
+    handler: &Arc<FlowLikeState>,
     run: &Arc<Mutex<Run>>,
     variables: &Arc<Mutex<AHashMap<String, Variable>>>,
     cache: &Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,

@@ -5195,6 +5195,7 @@ dependencies = [
  "linfa-reduction",
  "linfa-svm",
  "mail-parser",
+ "mimalloc",
  "nalgebra 0.34.1",
  "ndarray",
  "once_cell",

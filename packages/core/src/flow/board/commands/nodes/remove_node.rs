@@ -33,7 +33,7 @@ impl Command for RemoveNodeCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _state: Arc<Mutex<FlowLikeState>>,
+        _state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         let node = match board.nodes.get(&self.node.id) {
             Some(node) => node,
@@ -122,7 +122,7 @@ impl Command for RemoveNodeCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _state: Arc<Mutex<FlowLikeState>>,
+        _state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         board.nodes.insert(self.node.id.clone(), self.node.clone());
 

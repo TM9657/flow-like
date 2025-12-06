@@ -27,7 +27,7 @@ impl Command for RemoveVariableCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         let old_variable = board.variables.remove(&self.variable.id);
 
@@ -48,7 +48,7 @@ impl Command for RemoveVariableCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         board
             .variables

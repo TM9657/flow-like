@@ -44,7 +44,7 @@ pub struct ExecutionContextCache {
 impl ExecutionContextCache {
     pub async fn new(
         run: &Weak<Mutex<Run>>,
-        state: &Arc<Mutex<FlowLikeState>>,
+        state: &Arc<FlowLikeState>,
         node_id: &str,
     ) -> Option<Self> {
         let (app_id, board_dir, board_id, sub) = match run.upgrade() {
@@ -58,7 +58,7 @@ impl ExecutionContextCache {
             None => return None,
         };
 
-        let stores = state.lock().await.config.read().await.stores.clone();
+        let stores = state.config.read().await.stores.clone();
 
         Some(ExecutionContextCache {
             stores,
@@ -139,7 +139,7 @@ pub struct ExecutionContext {
     pub profile: Arc<Profile>,
     pub node: Arc<InternalNode>,
     pub sub_traces: Vec<Trace>,
-    pub app_state: Arc<Mutex<FlowLikeState>>,
+    pub app_state: Arc<FlowLikeState>,
     pub variables: Arc<Mutex<AHashMap<String, Variable>>>,
     pub started_by: Option<Vec<Arc<Mutex<InternalPin>>>>,
     pub cache: Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,
@@ -165,7 +165,7 @@ impl ExecutionContext {
     pub async fn new(
         nodes: Arc<AHashMap<String, Arc<InternalNode>>>,
         run: &Weak<Mutex<Run>>,
-        state: &Arc<Mutex<FlowLikeState>>,
+        state: &Arc<FlowLikeState>,
         node: &Arc<InternalNode>,
         variables: &Arc<Mutex<AHashMap<String, Variable>>>,
         cache: &Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,
@@ -436,7 +436,7 @@ impl ExecutionContext {
     pub async fn get_model_config(
         &self,
     ) -> flow_like_types::Result<Arc<ModelProviderConfiguration>> {
-        let config = self.app_state.lock().await.model_provider_config.clone();
+        let config = self.app_state.model_provider_config.clone();
         Ok(config)
     }
 

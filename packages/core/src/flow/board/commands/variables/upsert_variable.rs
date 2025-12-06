@@ -31,7 +31,7 @@ impl Command for UpsertVariableCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         if let Some(old_variable) = board
             .variables
@@ -52,7 +52,7 @@ impl Command for UpsertVariableCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         board.variables.remove(&self.variable.id);
         if let Some(old_variable) = self.old_variable.take() {

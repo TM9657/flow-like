@@ -53,12 +53,9 @@ impl Command for CopyPasteCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
-        let node_registry = {
-            let state_guard = state.lock().await;
-            state_guard.node_registry.read().await.node_registry.clone()
-        };
+        let node_registry = state.node_registry.read().await.node_registry.clone();
         let mut translated_connection = HashMap::with_capacity(self.original_nodes.len());
         let mut intermediate_nodes = Vec::with_capacity(self.original_nodes.len());
         let mut intermediate_layers = Vec::with_capacity(self.original_layers.len());
@@ -315,7 +312,7 @@ impl Command for CopyPasteCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         for node in self.new_nodes.iter() {
             board.nodes.remove(&node.id);

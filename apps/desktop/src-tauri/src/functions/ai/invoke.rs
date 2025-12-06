@@ -52,7 +52,7 @@ pub async fn chat_completion(
 
     let model = {
         let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-        let model_factory = flow_like_state.lock().await.model_factory.clone();
+        let model_factory = flow_like_state.model_factory.clone();
         let mut model_factory = model_factory.lock().await;
 
         match model_factory
@@ -98,7 +98,7 @@ pub async fn stream_chat_completion(
 
     let model = {
         let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-        let model_factory = flow_like_state.lock().await.model_factory.clone();
+        let model_factory = flow_like_state.model_factory.clone();
         let mut model_factory = model_factory.lock().await;
 
         match model_factory

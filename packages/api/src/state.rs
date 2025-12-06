@@ -10,7 +10,6 @@ use flow_like::hub::{Environment, Hub};
 use flow_like::state::{FlowLikeConfig, FlowLikeState, FlowNodeRegistryInner};
 use flow_like::utils::http::HTTPClient;
 use flow_like_types::bail;
-use flow_like_types::sync::Mutex;
 use flow_like_types::{Result, Value};
 use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
@@ -44,7 +43,7 @@ pub struct State {
     pub provider: Arc<ModelProviderConfiguration>,
     pub permission_cache: moka::sync::Cache<String, Arc<role::Model>>,
     pub credentials_cache: moka::sync::Cache<String, Arc<RuntimeCredentials>>,
-    pub state_cache: moka::sync::Cache<String, Arc<Mutex<FlowLikeState>>>,
+    pub state_cache: moka::sync::Cache<String, Arc<FlowLikeState>>,
     pub cdn_bucket: Arc<FlowLikeStore>,
     pub response_cache: moka::sync::Cache<String, Value>,
 }
@@ -187,7 +186,7 @@ impl State {
         mode: CredentialsAccess,
     ) -> flow_like_types::Result<App> {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
-        let app_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let app_state = Arc::new(credentials.to_state(state.clone()).await?);
 
         let app = App::load(app_id.to_string(), app_state.clone()).await?;
 
@@ -212,7 +211,7 @@ impl State {
         let app_state = match app_state {
             Some(state) => state,
             None => {
-                let state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+                let state = Arc::new(credentials.to_state(state.clone()).await?);
                 self.state_cache.insert("master".to_string(), state.clone());
                 state
             }
@@ -239,7 +238,7 @@ impl State {
         mode: CredentialsAccess,
     ) -> flow_like_types::Result<Board> {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
-        let app_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let app_state = Arc::new(credentials.to_state(state.clone()).await?);
         let storage_root = Path::from("apps").child(app_id.to_string());
         let board = Board::load(storage_root, board_id, app_state, version).await?;
         Ok(board)
@@ -266,7 +265,7 @@ impl State {
         let app_state = match app_state {
             Some(state) => state,
             None => {
-                let state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+                let state = Arc::new(credentials.to_state(state.clone()).await?);
                 self.state_cache.insert("master".to_string(), state.clone());
                 state
             }
@@ -288,7 +287,7 @@ impl State {
         mode: CredentialsAccess,
     ) -> flow_like_types::Result<Board> {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
-        let app_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let app_state = Arc::new(credentials.to_state(state.clone()).await?);
 
         let storage_root = Path::from("apps").child(app_id.to_string());
 

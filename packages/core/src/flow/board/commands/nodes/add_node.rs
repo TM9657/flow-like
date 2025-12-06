@@ -1,6 +1,6 @@
 use flow_like_types::async_trait;
 use flow_like_types::create_id;
-use flow_like_types::sync::Mutex;
+
 use schemars::JsonSchema;
 use std::sync::Arc;
 
@@ -45,7 +45,7 @@ impl Command for AddNodeCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _state: Arc<Mutex<FlowLikeState>>,
+        _state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         // Validate and deduplicate fn_refs - never trust the frontend!
         if let Some(fn_refs) = &mut self.node.fn_refs {
@@ -60,7 +60,7 @@ impl Command for AddNodeCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         board.nodes.remove(&self.node.id);
         Ok(())

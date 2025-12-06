@@ -118,7 +118,7 @@ async fn execute_internal(
     let cancellation_token = CancellationToken::new();
     let run_data = RunData::new(&board_id, &payload.id, None, cancellation_token.clone());
 
-    flow_like_state.lock().await.register_run(&run_id, run_data);
+    flow_like_state.register_run(&run_id, run_data);
 
     let meta = tokio::select! {
         result = internal_run.execute(flow_like_state.clone()) => result,
@@ -150,8 +150,7 @@ async fn execute_internal(
 
     if let Some(meta) = &meta {
         let db = {
-            let guard = flow_like_state.lock().await;
-            let guard = guard.config.read().await;
+            let guard = flow_like_state.config.read().await;
 
             guard.callbacks.build_logs_database.clone()
         };
@@ -167,7 +166,7 @@ async fn execute_internal(
             .map_err(|e| flow_like_types::anyhow!("Failed to flush run: {}, {:?}", base_path, e))?;
     }
 
-    let _res = flow_like_state.lock().await.remove_and_cancel_run(&run_id);
+    let _res = flow_like_state.remove_and_cancel_run(&run_id);
 
     Ok(meta)
 }
@@ -234,7 +233,7 @@ pub async fn cancel_execution(
     run_id: String,
 ) -> Result<(), TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    let _cancel_result = flow_like_state.lock().await.remove_and_cancel_run(&run_id);
+    let _cancel_result = flow_like_state.remove_and_cancel_run(&run_id);
     Ok(())
 }
 
@@ -255,8 +254,7 @@ pub async fn list_runs(
     let offset = offset.unwrap_or(0);
     let state = TauriFlowLikeState::construct(&app_handle).await?;
     let db = {
-        let guard = state.lock().await;
-        let guard = guard.config.read().await;
+        let guard = state.config.read().await;
 
         guard.callbacks.build_logs_database.clone()
     };
@@ -384,8 +382,6 @@ pub async fn query_run(
 ) -> Result<Vec<LogMessage>, TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
     let logs = state
-        .lock()
-        .await
         .query_run(&log_meta, &query, limit, offset)
         .await?;
     Ok(logs)

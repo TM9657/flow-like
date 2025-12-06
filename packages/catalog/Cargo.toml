@@ -6,6 +6,7 @@ edition = "2024"
 [features]
 default = []
 local-ml = ["flow-like-model-provider/local-ml", "flow-like/local-ml"]
+mimalloc = ["dep:mimalloc"]
 
 [dependencies]
 flow-like.workspace = true
@@ -56,6 +57,7 @@ once_cell = "1.21.3"
 hayro = {version="0.4.0", features = ["embed-fonts"]}
 async-trait.workspace = true
 jsonschema.workspace = true
+mimalloc = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }
@@ -66,6 +68,10 @@ harness = false
 
 [[bench]]
 name = "throughput_bench"
+harness = false
+
+[[bench]]
+name = "allocator_bench"
 harness = false
 
 [profile.bench]

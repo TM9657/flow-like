@@ -48,7 +48,7 @@ pub async fn execute_commands(
                 .await?
                 .to_state(state)
                 .await?;
-            Arc::new(Mutex::new(flow_state))
+            Arc::new(flow_state)
         }
     };
 

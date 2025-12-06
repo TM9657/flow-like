@@ -31,7 +31,7 @@ impl Command for UpdateNodeCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _state: Arc<Mutex<FlowLikeState>>,
+        _state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         // Validate and deduplicate fn_refs - never trust the frontend!
         if let Some(fn_refs) = &mut self.node.fn_refs {
@@ -45,7 +45,7 @@ impl Command for UpdateNodeCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _state: Arc<Mutex<FlowLikeState>>,
+        _state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         if let Some(old_node) = self.old_node.take() {
             board.nodes.insert(old_node.id.clone(), old_node.clone());

@@ -55,7 +55,7 @@ impl NodeLogic for BitFromStringNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         let bit_id: String = context.evaluate_pin("bit_id").await?;
-        let http_client = context.app_state.lock().await.http_client.clone();
+        let http_client = context.app_state.http_client.clone();
         let bit = context.profile.find_bit(&bit_id, http_client).await;
 
         if let Ok(bit) = bit {

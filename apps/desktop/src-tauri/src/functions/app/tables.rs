@@ -33,8 +33,6 @@ async fn db_connection(
         credentials.to_db(&app_id).await?
     } else {
         flow_like_state
-            .lock()
-            .await
             .config
             .read()
             .await

@@ -45,7 +45,7 @@ use crate::flow::board::Board;
 use crate::profile::Profile;
 use crate::state::FlowLikeState;
 use flow_like_model_provider::provider::ModelProvider;
-use flow_like_types::sync::Mutex;
+
 
 use tools::{
     EmitCommandsArgs, FilterCategoryArgs, GetNodeDetailsArgs, QueryLogsArgs, SearchArgs,
@@ -54,7 +54,7 @@ use tools::{
 
 /// The main Copilot struct that provides AI-powered graph editing
 pub struct Copilot {
-    state: FlowLikeState,
+    state: Arc<FlowLikeState>,
     catalog_provider: Arc<dyn CatalogProvider>,
     profile: Option<Arc<Profile>>,
     templates: Vec<TemplateInfo>,
@@ -65,7 +65,7 @@ pub struct Copilot {
 impl Copilot {
     /// Create a new Copilot - always loads templates from profile
     pub async fn new(
-        state: FlowLikeState,
+        state: Arc<FlowLikeState>,
         catalog_provider: Arc<dyn CatalogProvider>,
         profile: Option<Arc<Profile>>,
         current_template_id: Option<String>,
@@ -89,7 +89,7 @@ impl Copilot {
 
     /// Load all templates from the user's profile apps
     async fn load_templates_from_profile(
-        state: &FlowLikeState,
+        state: &Arc<FlowLikeState>,
         profile: &Profile,
     ) -> Result<Vec<TemplateInfo>> {
         let mut templates = Vec::new();
@@ -100,11 +100,9 @@ impl Copilot {
             .map(|apps| apps.iter().map(|a| a.app_id.clone()).collect())
             .unwrap_or_default();
 
-        let state_arc = Arc::new(Mutex::new(state.clone()));
-
         for app_id in app_ids {
             // Try to load the app
-            let app = match App::load(app_id.clone(), state_arc.clone()).await {
+            let app = match App::load(app_id.clone(), state.clone()).await {
                 Ok(app) => app,
                 Err(_) => continue,
             };
@@ -1056,7 +1054,7 @@ ALWAYS emit commands in this order:
         let model = model_factory
             .lock()
             .await
-            .build(&bit, Arc::new(Mutex::new(self.state.clone())), token)
+            .build(&bit, self.state.clone(), token)
             .await?;
         let default_model = model.default_model().await.unwrap_or("gpt-4o".to_string());
         let provider = model.provider().await?;

@@ -80,7 +80,7 @@ impl Command for MoveNodeCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         if self.node_id.ends_with("-input") {
             let id = self.node_id.trim_end_matches("-input").to_string();
@@ -160,7 +160,7 @@ impl Command for MoveNodeCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         if let Some(layer) = board.layers.get_mut(&self.node_id) {
             if let Some(from_coordinates) = self.from_coordinates {

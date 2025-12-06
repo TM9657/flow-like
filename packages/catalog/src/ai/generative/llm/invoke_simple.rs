@@ -135,7 +135,7 @@ impl NodeLogic for InvokeLLMSimpleNode {
         }
         let system_prompt = context.evaluate_pin::<String>("system_prompt").await?;
         let prompt = context.evaluate_pin::<String>("prompt").await?;
-        let model_factory = context.app_state.lock().await.model_factory.clone();
+        let model_factory = context.app_state.model_factory.clone();
         let model = model_factory
             .lock()
             .await

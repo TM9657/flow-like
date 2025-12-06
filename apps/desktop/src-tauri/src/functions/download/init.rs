@@ -10,7 +10,7 @@ pub async fn init_downloads(
     app_handle: AppHandle,
 ) -> Result<HashMap<String, Bit>, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    let download_manager = flow_like_state.lock().await.download_manager().clone();
+    let download_manager = flow_like_state.download_manager().clone();
     let mut download_manager = download_manager.lock().await;
     if download_manager.resumed() {
         println!("Download already Manager Resumed");
@@ -30,7 +30,7 @@ pub async fn get_downloads(
     app_handle: AppHandle,
 ) -> Result<HashMap<String, Bit>, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    let download_manager = flow_like_state.lock().await.download_manager().clone();
+    let download_manager = flow_like_state.download_manager().clone();
     let download_manager = download_manager.lock().await;
     let list = download_manager.download_list.clone();
 

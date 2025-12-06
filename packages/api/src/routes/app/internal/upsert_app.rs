@@ -158,7 +158,7 @@ pub async fn upsert_app(
                 crate::credentials::CredentialsAccess::EditApp,
             )
             .await?;
-        let flow_like_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let flow_like_state = Arc::new(credentials.to_state(state.clone()).await?);
         let new_app = App::new(
             Some(new_id.clone()),
             metadata.clone(),

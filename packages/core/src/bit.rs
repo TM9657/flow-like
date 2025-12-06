@@ -375,9 +375,9 @@ pub struct BitPack {
 
 async fn collect_dependencies(
     bit: &Bit,
-    state: Arc<Mutex<FlowLikeState>>,
+    state: Arc<FlowLikeState>,
 ) -> flow_like_types::Result<Vec<Bit>> {
-    let http_client = state.lock().await.http_client.clone();
+    let http_client = state.http_client.clone();
     let hub = crate::hub::Hub::new(&bit.hub, http_client.clone()).await?;
     let bit_id = bit.id.clone();
     let bits = hub.get_bit_dependencies(&bit_id).await?;
@@ -387,7 +387,7 @@ async fn collect_dependencies(
 impl BitPack {
     pub async fn get_installed(
         &self,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<Vec<Bit>> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
@@ -415,7 +415,7 @@ impl BitPack {
 
     pub async fn download(
         &self,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
         callback: InterComCallback,
     ) -> flow_like_types::Result<Vec<Bit>> {
         let mut deduplicated_bits = vec![];
@@ -516,7 +516,7 @@ impl BitPack {
 
     pub async fn is_installed(
         &self,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<bool> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
         let mut installed = true;
@@ -646,7 +646,7 @@ impl Bit {
 
     pub async fn dependencies(
         &self,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<BitPack> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
@@ -679,7 +679,7 @@ impl Bit {
         Ok(bit_pack)
     }
 
-    pub async fn pack(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<BitPack> {
+    pub async fn pack(&self, state: Arc<FlowLikeState>) -> flow_like_types::Result<BitPack> {
         let mut dependencies = self.dependencies(state).await?;
         dependencies.bits.push(self.clone());
         Ok(dependencies)
@@ -687,7 +687,7 @@ impl Bit {
 
     pub async fn is_installed(
         &self,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<bool> {
         let pack = self.pack(state.clone()).await?;
         pack.is_installed(state).await
@@ -730,7 +730,7 @@ impl Bit {
         Box<dyn CompletionClientDyn + 'a>,
     )> {
         let (model_name, additional_params, completion_client) = {
-            let model_factory = context.app_state.lock().await.model_factory.clone();
+            let model_factory = context.app_state.model_factory.clone();
             let model = model_factory
                 .lock()
                 .await
@@ -767,7 +767,7 @@ mod tests {
         config.stores.bits_store = Some(FlowLikeStore::Local(store.into()));
         let (http_client, _rx) = crate::utils::http::HTTPClient::new();
         let state = FlowLikeState::new(config, http_client);
-        let state = Arc::new(Mutex::new(state));
+        let state = Arc::new(state);
 
         let proxied_bit = Bit {
             id: "proxied".into(),

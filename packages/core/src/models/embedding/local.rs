@@ -35,7 +35,7 @@ impl Cacheable for LocalEmbeddingModel {
 }
 
 impl LocalEmbeddingModel {
-    pub async fn new(bit: &Bit, app_state: Arc<Mutex<FlowLikeState>>) -> Result<Arc<Self>> {
+    pub async fn new(bit: &Bit, app_state: Arc<FlowLikeState>) -> Result<Arc<Self>> {
         let bit = Arc::new(bit.clone());
         let bit_store = FlowLikeState::bit_store(&app_state).await?;
 
@@ -233,7 +233,7 @@ mod tests {
     };
     use std::{mem, path::PathBuf, ptr};
 
-    async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
+    async fn flow_state() -> Arc<crate::state::FlowLikeState> {
         let temp_dir = tempfile::tempdir().unwrap();
         let mut config: FlowLikeConfig = FlowLikeConfig::new();
         let current_dir = temp_dir.path().to_path_buf();
@@ -243,7 +243,7 @@ mod tests {
         config.register_bits_store(FlowLikeStore::Local(store));
         let (http_client, _refetch_rx) = HTTPClient::new();
         let flow_like_state = crate::state::FlowLikeState::new(config, http_client);
-        Arc::new(Mutex::new(flow_like_state))
+        Arc::new(flow_like_state)
     }
 
     #[tokio::test]

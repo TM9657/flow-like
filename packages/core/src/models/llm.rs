@@ -164,10 +164,10 @@ impl ModelFactory {
     pub async fn build(
         &mut self,
         bit: &Bit,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
         access_token: Option<String>,
     ) -> Result<Arc<dyn ModelLogic>> {
-        let provider_config = app_state.lock().await.model_provider_config.clone();
+        let provider_config = app_state.model_provider_config.clone();
         let settings = self.execution_settings.clone();
         let provider = bit.try_to_provider();
         if provider.is_none() {

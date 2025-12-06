@@ -180,7 +180,7 @@ pub struct Board {
     pub logic_nodes: HashMap<String, Arc<dyn NodeLogic>>,
 
     #[serde(skip)]
-    pub app_state: Option<Arc<Mutex<FlowLikeState>>>,
+    pub app_state: Option<Arc<FlowLikeState>>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -192,7 +192,7 @@ pub struct BoardUndoRedoStack {
 impl Board {
     /// Create a new board with a unique ID
     /// The board is created in the base directory appended with the ID
-    pub fn new(id: Option<String>, base_dir: Path, app_state: Arc<Mutex<FlowLikeState>>) -> Self {
+    pub fn new(id: Option<String>, base_dir: Path, app_state: Arc<FlowLikeState>) -> Self {
         let id = id.unwrap_or(create_id());
         let board_dir = base_dir;
 
@@ -218,9 +218,9 @@ impl Board {
         }
     }
 
-    async fn node_updates(&mut self, state: Arc<Mutex<FlowLikeState>>) {
+    async fn node_updates(&mut self, state: Arc<FlowLikeState>) {
         let reference = Arc::new(self.clone());
-        let registry = state.lock().await.node_registry().clone();
+        let registry = state.node_registry().clone();
         let registry = registry.read().await;
         for node in self.nodes.values_mut() {
             let node_logic = match self.logic_nodes.get(&node.name) {
@@ -255,7 +255,7 @@ impl Board {
     pub async fn execute_command(
         &mut self,
         command: GenericCommand,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<GenericCommand> {
         let mut command = command;
         let cmd_json = serde_json::to_string(&command).unwrap_or_default();
@@ -274,7 +274,7 @@ impl Board {
     pub async fn execute_commands(
         &mut self,
         commands: Vec<GenericCommand>,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<Vec<GenericCommand>> {
         let mut commands = commands;
         println!("[Board] execute_commands: {} commands", commands.len());
@@ -297,7 +297,7 @@ impl Board {
     pub async fn undo(
         &mut self,
         commands: Vec<GenericCommand>,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         let mut commands = commands;
         for command in commands.iter_mut().rev() {
@@ -310,7 +310,7 @@ impl Board {
     pub async fn redo(
         &mut self,
         commands: Vec<GenericCommand>,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         let mut commands = commands;
         for command in commands.iter_mut() {
@@ -388,8 +388,6 @@ impl Board {
                 .app_state
                 .as_ref()
                 .expect("app_state should always be set")
-                .lock()
-                .await
                 .config
                 .read()
                 .await
@@ -431,8 +429,6 @@ impl Board {
                 .app_state
                 .as_ref()
                 .expect("app_state should always be set")
-                .lock()
-                .await
                 .config
                 .read()
                 .await
@@ -480,12 +476,10 @@ impl Board {
     pub async fn load(
         path: Path,
         id: &str,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
         version: Option<(u32, u32, u32)>,
     ) -> flow_like_types::Result<Self> {
         let store = app_state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -523,8 +517,6 @@ impl Board {
                 .app_state
                 .as_ref()
                 .expect("app_state should always be set")
-                .lock()
-                .await
                 .config
                 .read()
                 .await
@@ -554,8 +546,6 @@ impl Board {
                 .app_state
                 .as_ref()
                 .expect("app_state should always be set")
-                .lock()
-                .await
                 .config
                 .read()
                 .await
@@ -592,8 +582,6 @@ impl Board {
                 .app_state
                 .as_ref()
                 .expect("app_state should always be set")
-                .lock()
-                .await
                 .config
                 .read()
                 .await
@@ -641,8 +629,6 @@ impl Board {
                 .app_state
                 .as_ref()
                 .expect("app_state should always be set")
-                .lock()
-                .await
                 .config
                 .read()
                 .await
@@ -683,12 +669,10 @@ impl Board {
     pub async fn load_template(
         path: Path,
         template_id: &str,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
         version: Option<(u32, u32, u32)>,
     ) -> flow_like_types::Result<Self> {
         let store = app_state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -736,8 +720,6 @@ impl Board {
                 .app_state
                 .as_ref()
                 .expect("app_state should always be set")
-                .lock()
-                .await
                 .config
                 .read()
                 .await
@@ -866,14 +848,14 @@ mod tests {
     use flow_like_types::{Message, sync::Mutex, tokio};
     use std::sync::Arc;
 
-    async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
+    async fn flow_state() -> Arc<crate::state::FlowLikeState> {
         let mut config: FlowLikeConfig = FlowLikeConfig::new();
         config.register_app_meta_store(FlowLikeStore::Other(Arc::new(
             object_store::memory::InMemory::new(),
         )));
         let (http_client, _refetch_rx) = HTTPClient::new();
         let flow_like_state = crate::state::FlowLikeState::new(config, http_client);
-        Arc::new(Mutex::new(flow_like_state))
+        Arc::new(flow_like_state)
     }
 
     #[tokio::test]
