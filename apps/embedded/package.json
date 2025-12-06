@@ -12,9 +12,9 @@
 		"@tm9657/flow-like-ui": "workspace:*",
 		"@xyflow/react": "^12.8.2",
 		"comlink": "^4.4.2",
-		"next": "16.0.3",
-		"react": "19.2.0",
-		"react-dom": "19.2.0"
+		"next": "16.0.7",
+		"react": "19.2.1",
+		"react-dom": "19.2.1"
 	},
 	"devDependencies": {
 		"tailwindcss": "^3.4.17",
