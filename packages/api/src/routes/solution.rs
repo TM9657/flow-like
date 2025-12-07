@@ -205,16 +205,22 @@ async fn submit_solution(
         "New 24-hour solution request submitted"
     );
 
-    // Create Stripe records for tracking
-    // - With deposit: Checkout session with €500 payment
-    // - Without deposit: Just create a customer record (no checkout redirect)
+    // Create Stripe Checkout for all submissions
+    // - With deposit: Payment mode with €500 charge
+    // - Without deposit: Setup mode (collects info, no charge)
     let checkout_url = if let Some(stripe_client) = state.stripe_client.as_ref() {
         let frontend_url = std::env::var("FRONTEND_URL")
             .unwrap_or_else(|_| format!("https://{}", state.platform_config.domain));
 
+        let success_url = format!(
+            "{}/24-hour-solution?success=true&session_id={{CHECKOUT_SESSION_ID}}",
+            frontend_url
+        );
+        let cancel_url = format!("{}/24-hour-solution?canceled=true", frontend_url);
+
         let total_display = format!("€{:.2}", total_cents as f64 / 100.0);
 
-        // Build metadata (shared between both modes)
+        // Build metadata
         let mut metadata = std::collections::HashMap::new();
         metadata.insert("submission_id".to_string(), submission_id.clone());
         metadata.insert("company".to_string(), submission.company.clone());
@@ -222,19 +228,14 @@ async fn submit_solution(
         metadata.insert("storage_key".to_string(), key.clone());
         metadata.insert("total_cents".to_string(), total_cents.to_string());
 
-        if submission.pay_deposit {
-            // Payment mode: Charge €500 deposit via Checkout
-            let success_url = format!(
-                "{}/24-hour-solution?success=true&session_id={{CHECKOUT_SESSION_ID}}",
-                frontend_url
-            );
-            let cancel_url = format!("{}/24-hour-solution?canceled=true", frontend_url);
+        let mut params = stripe::CreateCheckoutSession::new();
+        params.success_url = Some(&success_url);
+        params.cancel_url = Some(&cancel_url);
+        params.customer_email = Some(&submission.email);
+        params.client_reference_id = Some(&submission_id);
 
-            let mut params = stripe::CreateCheckoutSession::new();
-            params.success_url = Some(&success_url);
-            params.cancel_url = Some(&cancel_url);
-            params.customer_email = Some(&submission.email);
-            params.client_reference_id = Some(&submission_id);
+        if submission.pay_deposit {
+            // Payment mode: Charge €500 deposit
             params.mode = Some(stripe::CheckoutSessionMode::Payment);
 
             let remainder_cents = total_cents - DEPOSIT_AMOUNT_CENTS;
@@ -267,49 +268,26 @@ async fn submit_solution(
             );
             metadata.insert("remainder_cents".to_string(), remainder_cents.to_string());
             metadata.insert("priority".to_string(), "true".to_string());
-            params.metadata = Some(metadata);
-
-            match stripe::CheckoutSession::create(stripe_client, params).await {
-                Ok(session) => session.url,
-                Err(e) => {
-                    tracing::error!(error = %e, "Failed to create Stripe checkout session");
-                    None
-                }
-            }
         } else {
-            // No deposit: Create a Stripe Customer for tracking (no checkout needed)
+            // Setup mode: No charge, just collect customer info for tracking
+            params.mode = Some(stripe::CheckoutSessionMode::Setup);
+
             metadata.insert("deposit_cents".to_string(), "0".to_string());
             metadata.insert("remainder_cents".to_string(), total_cents.to_string());
             metadata.insert("priority".to_string(), "false".to_string());
+        }
 
-            let mut customer_params = stripe::CreateCustomer::new();
-            customer_params.email = Some(&submission.email);
-            customer_params.name = Some(&submission.name);
-            let description = format!(
-                "24 Hour Solution Request - {} | {} (pay after delivery)",
-                submission.company, total_display
-            );
-            customer_params.description = Some(&description);
-            customer_params.metadata = Some(metadata);
+        params.metadata = Some(metadata);
 
-            match stripe::Customer::create(stripe_client, customer_params).await {
-                Ok(customer) => {
-                    tracing::info!(
-                        customer_id = %customer.id,
-                        email = %submission.email,
-                        "Created Stripe customer for non-deposit submission"
-                    );
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "Failed to create Stripe customer");
-                }
+        match stripe::CheckoutSession::create(stripe_client, params).await {
+            Ok(session) => session.url,
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to create Stripe checkout session");
+                None
             }
-
-            // No checkout URL - submission is complete
-            None
         }
     } else {
-        tracing::warn!("Stripe client not configured, skipping Stripe record creation");
+        tracing::warn!("Stripe client not configured, skipping checkout session creation");
         None
     };
 
