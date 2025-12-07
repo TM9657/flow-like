@@ -45,6 +45,12 @@ pub struct NodeScores {
     pub cost: u8,
 }
 
+impl Default for NodeScores {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NodeScores {
     pub fn new() -> Self {
         NodeScores {

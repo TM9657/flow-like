@@ -223,7 +223,7 @@ impl NodeLogic for ListTeamChannelsNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/teams/{}/channels",
                 team_id
             ))
@@ -352,7 +352,7 @@ impl NodeLogic for SendChannelMessageNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://graph.microsoft.com/v1.0/teams/{}/channels/{}/messages",
                 team_id, channel_id
             ))
@@ -461,7 +461,7 @@ impl NodeLogic for GetChannelMessagesNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/teams/{}/channels/{}/messages",
                 team_id, channel_id
             ))
@@ -607,7 +607,7 @@ impl NodeLogic for CreateTeamNode {
                     .headers()
                     .get("Content-Location")
                     .and_then(|v| v.to_str().ok())
-                    .and_then(|s| s.split('/').last())
+                    .and_then(|s| s.split('/').next_back())
                     .unwrap_or("")
                     .to_string();
                 context.set_pin_value("team_id", json!(team_id)).await?;
@@ -730,7 +730,7 @@ impl NodeLogic for CreateChannelNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://graph.microsoft.com/v1.0/teams/{}/channels",
                 team_id
             ))

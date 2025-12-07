@@ -2,9 +2,8 @@ use crate::state::{TauriFlowLikeState, TauriSettingsState};
 use async_trait::async_trait;
 use flow_like::flow::board::Board;
 use flow_like::flow::copilot::{
-    CatalogProvider, ChatMessage, Copilot, CopilotResponse, NodeMetadata, PinMetadata, Suggestion,
+    CatalogProvider, ChatMessage, Copilot, CopilotResponse, NodeMetadata, PinMetadata,
 };
-use flow_like::flow::node::Node;
 use flow_like::flow::pin::{Pin, PinType};
 use flow_like::flow::variable::VariableType;
 use flow_like_catalog::get_catalog;
@@ -88,7 +87,7 @@ impl CatalogProvider for DesktopCatalogProvider {
             }
 
             // Bonus for exact word boundaries
-            let name_parts: Vec<&str> = name_lower.split(|c: char| c == ':' || c == '_').collect();
+            let name_parts: Vec<&str> = name_lower.split([':', '_']).collect();
             for token in &query_tokens {
                 if name_parts.iter().any(|part| part == token) {
                     score += 15; // Exact word match in name
@@ -106,13 +105,13 @@ impl CatalogProvider for DesktopCatalogProvider {
                             .pins
                             .values()
                             .filter(|p| p.pin_type == PinType::Input)
-                            .map(|p| pin_to_metadata(p))
+                            .map(pin_to_metadata)
                             .collect(),
                         outputs: node
                             .pins
                             .values()
                             .filter(|p| p.pin_type == PinType::Output)
-                            .map(|p| pin_to_metadata(p))
+                            .map(pin_to_metadata)
                             .collect(),
                         category: Some(category.to_string()),
                     },
@@ -163,13 +162,13 @@ impl CatalogProvider for DesktopCatalogProvider {
                         .pins
                         .values()
                         .filter(|p| p.pin_type == PinType::Input)
-                        .map(|p| pin_to_metadata(p))
+                        .map(pin_to_metadata)
                         .collect(),
                     outputs: node
                         .pins
                         .values()
                         .filter(|p| p.pin_type == PinType::Output)
-                        .map(|p| pin_to_metadata(p))
+                        .map(pin_to_metadata)
                         .collect(),
                     category: Some(category.to_string()),
                 });
@@ -203,13 +202,13 @@ impl CatalogProvider for DesktopCatalogProvider {
                         .pins
                         .values()
                         .filter(|p| p.pin_type == PinType::Input)
-                        .map(|p| pin_to_metadata(p))
+                        .map(pin_to_metadata)
                         .collect(),
                     outputs: node
                         .pins
                         .values()
                         .filter(|p| p.pin_type == PinType::Output)
-                        .map(|p| pin_to_metadata(p))
+                        .map(pin_to_metadata)
                         .collect(),
                     category: Some(category.to_string()),
                 });

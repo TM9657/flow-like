@@ -9,7 +9,7 @@ use crate::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::async_trait;
 use flow_like_types::{create_id, json::from_slice};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

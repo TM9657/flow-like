@@ -148,7 +148,7 @@ impl NodeLogic for SearchUsersNode {
                 .unwrap_or(&vec![])
                 .iter()
                 .filter_map(|u| u.get("user"))
-                .filter_map(|u| super::parse_confluence_user(u))
+                .filter_map(super::parse_confluence_user)
                 .collect::<Vec<_>>()
         } else {
             // Server v1 API
@@ -180,7 +180,7 @@ impl NodeLogic for SearchUsersNode {
                 .as_array()
                 .unwrap_or(&vec![])
                 .iter()
-                .filter_map(|u| super::parse_confluence_user(u))
+                .filter_map(super::parse_confluence_user)
                 .collect::<Vec<_>>()
         };
 

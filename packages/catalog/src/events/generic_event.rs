@@ -54,11 +54,11 @@ async fn try_match_and_set_pin(
         return Ok(Some(pin_name.to_string()));
     }
 
-    if let Some(key) = find_matching_key(obj, pin_name) {
-        if let Some(value) = obj.get(&key) {
-            context.set_pin_value(pin_name, value.clone()).await?;
-            return Ok(Some(key));
-        }
+    if let Some(key) = find_matching_key(obj, pin_name)
+        && let Some(value) = obj.get(&key)
+    {
+        context.set_pin_value(pin_name, value.clone()).await?;
+        return Ok(Some(key));
     }
 
     Ok(None)

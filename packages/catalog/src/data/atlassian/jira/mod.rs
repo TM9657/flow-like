@@ -432,10 +432,10 @@ fn extract_adf_text(adf: &Value) -> Option<String> {
 fn extract_adf_text_recursive(node: &Value, texts: &mut Vec<String>) {
     if let Some(obj) = node.as_object() {
         // Check for text nodes
-        if obj.get("type").and_then(|v| v.as_str()) == Some("text") {
-            if let Some(text) = obj.get("text").and_then(|v| v.as_str()) {
-                texts.push(text.to_string());
-            }
+        if obj.get("type").and_then(|v| v.as_str()) == Some("text")
+            && let Some(text) = obj.get("text").and_then(|v| v.as_str())
+        {
+            texts.push(text.to_string());
         }
 
         // Recursively process content array

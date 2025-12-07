@@ -230,7 +230,7 @@ impl NodeLogic for GetGoogleSlidesNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://slides.googleapis.com/v1/presentations/{}",
                 presentation_id
             ))
@@ -397,7 +397,7 @@ impl NodeLogic for AddGoogleSlideNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://slides.googleapis.com/v1/presentations/{}:batchUpdate",
                 presentation_id
             ))
@@ -511,7 +511,7 @@ impl NodeLogic for DeleteGoogleSlideNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://slides.googleapis.com/v1/presentations/{}:batchUpdate",
                 presentation_id
             ))
@@ -670,7 +670,7 @@ impl NodeLogic for AddTextToSlideNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://slides.googleapis.com/v1/presentations/{}:batchUpdate",
                 presentation_id
             ))
@@ -786,7 +786,7 @@ impl NodeLogic for ExportGoogleSlidesNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/drive/v3/files/{}/export",
                 presentation_id
             ))

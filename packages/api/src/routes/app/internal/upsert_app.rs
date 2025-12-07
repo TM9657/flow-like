@@ -16,7 +16,7 @@ use axum::{
     extract::{Path, Query, State},
 };
 use flow_like::{app::App, bit::Metadata};
-use flow_like_types::{anyhow, create_id, sync::Mutex};
+use flow_like_types::{anyhow, create_id};
 use sea_orm::{
     ActiveModelTrait,
     ActiveValue::{NotSet, Set},

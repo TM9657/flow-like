@@ -1,7 +1,7 @@
 use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
 use flow_like::{
     flow::{
-        execution::{LogLevel, context::ExecutionContext},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic, NodeScores},
         pin::{PinOptions, ValueType},
         variable::VariableType,
@@ -32,10 +32,8 @@ fn parse_worklog(value: &Value, is_cloud: bool) -> Option<JiraWorklog> {
 
     Some(JiraWorklog {
         id: obj.get("id")?.as_str()?.to_string(),
-        author: obj.get("author").and_then(|a| super::parse_jira_user(a)),
-        update_author: obj
-            .get("updateAuthor")
-            .and_then(|a| super::parse_jira_user(a)),
+        author: obj.get("author").and_then(super::parse_jira_user),
+        update_author: obj.get("updateAuthor").and_then(super::parse_jira_user),
         comment: if is_cloud {
             // Cloud uses ADF format
             obj.get("comment")

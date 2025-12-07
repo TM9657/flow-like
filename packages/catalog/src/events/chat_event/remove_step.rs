@@ -2,7 +2,6 @@ use flow_like::{
     flow::{
         execution::context::ExecutionContext,
         node::{Node, NodeLogic},
-        pin::PinOptions,
         variable::VariableType,
     },
     state::FlowLikeState,

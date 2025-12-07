@@ -351,7 +351,7 @@ impl NodeLogic for ListGoogleCalendarEventsNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events",
                 urlencoding::encode(&calendar_id)
             ))
@@ -463,7 +463,7 @@ impl NodeLogic for GetGoogleCalendarEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events/{}",
                 urlencoding::encode(&calendar_id),
                 urlencoding::encode(&event_id)
@@ -684,7 +684,7 @@ impl NodeLogic for CreateGoogleCalendarEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events",
                 urlencoding::encode(&calendar_id)
             ))
@@ -873,7 +873,7 @@ impl NodeLogic for UpdateGoogleCalendarEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events/{}",
                 urlencoding::encode(&calendar_id),
                 urlencoding::encode(&event_id)
@@ -998,7 +998,7 @@ impl NodeLogic for DeleteGoogleCalendarEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .delete(&format!(
+            .delete(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events/{}",
                 urlencoding::encode(&calendar_id),
                 urlencoding::encode(&event_id)
@@ -1108,7 +1108,7 @@ impl NodeLogic for QuickAddGoogleCalendarEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events/quickAdd",
                 urlencoding::encode(&calendar_id)
             ))

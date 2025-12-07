@@ -186,7 +186,7 @@ impl NodeLogic for GetGoogleDocNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://docs.googleapis.com/v1/documents/{}",
                 document_id
             ))
@@ -241,14 +241,14 @@ fn extract_text_from_doc(body: &Value) -> String {
     let mut text = String::new();
     if let Some(content) = body["body"]["content"].as_array() {
         for element in content {
-            if let Some(paragraph) = element.get("paragraph") {
-                if let Some(elements) = paragraph["elements"].as_array() {
-                    for elem in elements {
-                        if let Some(text_run) = elem.get("textRun") {
-                            if let Some(content) = text_run["content"].as_str() {
-                                text.push_str(content);
-                            }
-                        }
+            if let Some(paragraph) = element.get("paragraph")
+                && let Some(elements) = paragraph["elements"].as_array()
+            {
+                for elem in elements {
+                    if let Some(text_run) = elem.get("textRun")
+                        && let Some(content) = text_run["content"].as_str()
+                    {
+                        text.push_str(content);
                     }
                 }
             }
@@ -301,7 +301,7 @@ impl NodeLogic for GetGoogleDocTextNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://docs.googleapis.com/v1/documents/{}",
                 document_id
             ))
@@ -409,7 +409,7 @@ impl NodeLogic for InsertGoogleDocTextNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://docs.googleapis.com/v1/documents/{}:batchUpdate",
                 document_id
             ))
@@ -522,7 +522,7 @@ impl NodeLogic for DeleteGoogleDocTextNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://docs.googleapis.com/v1/documents/{}:batchUpdate",
                 document_id
             ))
@@ -650,7 +650,7 @@ impl NodeLogic for ReplaceGoogleDocTextNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://docs.googleapis.com/v1/documents/{}:batchUpdate",
                 document_id
             ))
@@ -769,7 +769,7 @@ impl NodeLogic for ExportGoogleDocNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/drive/v3/files/{}/export",
                 document_id
             ))

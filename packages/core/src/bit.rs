@@ -10,7 +10,6 @@ use flow_like_storage::Path;
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::files::store::local_store::LocalObjectStore;
 use flow_like_types::intercom::InterComCallback;
-use flow_like_types::sync::Mutex;
 use flow_like_types::{Value, anyhow};
 
 use rig::agent::AgentBuilder;

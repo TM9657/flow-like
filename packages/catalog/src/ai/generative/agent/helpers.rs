@@ -42,11 +42,7 @@ pub async fn generate_tool_from_function(
 
     let node = referenced_node.node.lock().await;
     // Use friendly_name (user-customizable) and convert to snake_case for LLM
-    let function_name = node
-        .friendly_name
-        .to_lowercase()
-        .replace(' ', "_")
-        .replace('-', "_");
+    let function_name = node.friendly_name.to_lowercase().replace([' ', '-'], "_");
     let description = node.description.clone();
 
     // Collect all non-execution output pins to build parameter schema
@@ -98,34 +94,32 @@ pub async fn generate_tool_from_function(
     }
 
     // If no data pins exist AND the event has a payload pin defined, add it to the schema
-    if !has_data_pins {
-        if let Some(payload) = payload_pin {
-            let schema_type = match payload.data_type {
-                VariableType::String => HistoryJSONSchemaType::String,
-                VariableType::Integer => HistoryJSONSchemaType::Number,
-                VariableType::Float => HistoryJSONSchemaType::Number,
-                VariableType::Boolean => HistoryJSONSchemaType::Boolean,
-                VariableType::Struct | VariableType::Generic => HistoryJSONSchemaType::Object,
-                VariableType::Date | VariableType::PathBuf | VariableType::Byte => {
-                    HistoryJSONSchemaType::String
-                }
-                VariableType::Execution => HistoryJSONSchemaType::Object, // Fallback
-            };
+    if !has_data_pins && let Some(payload) = payload_pin {
+        let schema_type = match payload.data_type {
+            VariableType::String => HistoryJSONSchemaType::String,
+            VariableType::Integer => HistoryJSONSchemaType::Number,
+            VariableType::Float => HistoryJSONSchemaType::Number,
+            VariableType::Boolean => HistoryJSONSchemaType::Boolean,
+            VariableType::Struct | VariableType::Generic => HistoryJSONSchemaType::Object,
+            VariableType::Date | VariableType::PathBuf | VariableType::Byte => {
+                HistoryJSONSchemaType::String
+            }
+            VariableType::Execution => HistoryJSONSchemaType::Object, // Fallback
+        };
 
-            let payload_def = HistoryJSONSchemaDefine {
-                schema_type: Some(schema_type),
-                description: if payload.description.is_empty() {
-                    None
-                } else {
-                    Some(payload.description.clone())
-                },
-                enum_values: None,
-                properties: None,
-                required: None,
-                items: None,
-            };
-            properties.insert("payload".to_string(), Box::new(payload_def));
-        }
+        let payload_def = HistoryJSONSchemaDefine {
+            schema_type: Some(schema_type),
+            description: if payload.description.is_empty() {
+                None
+            } else {
+                Some(payload.description.clone())
+            },
+            enum_values: None,
+            properties: None,
+            required: None,
+            items: None,
+        };
+        properties.insert("payload".to_string(), Box::new(payload_def));
     }
 
     let parameters = HistoryFunctionParameters {
@@ -530,7 +524,7 @@ pub async fn execute_agent_streaming(
         .collect();
 
     // Generate tool definitions from function references
-    for (_tool_name, internal_node) in &tool_name_to_node {
+    for internal_node in tool_name_to_node.values() {
         let tool = generate_tool_from_function(internal_node).await?;
         let parameters =
             json::to_value(&tool.function.parameters).unwrap_or_else(|_| json::json!({}));

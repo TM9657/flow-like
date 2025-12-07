@@ -235,10 +235,10 @@ impl InternalPin {
 
     /// Check if this pin's parent node is pure (lock-free)
     pub fn is_pure(&self) -> bool {
-        if let Some(node) = self.node() {
-            if let Some(internal_node) = node.upgrade() {
-                return internal_node.is_pure_cached();
-            }
+        if let Some(node) = self.node()
+            && let Some(internal_node) = node.upgrade()
+        {
+            return internal_node.is_pure_cached();
         }
         // Pins without a parent (layer pins) report as pure
         true

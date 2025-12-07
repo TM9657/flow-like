@@ -1,7 +1,7 @@
 use super::provider::{GOOGLE_PROVIDER_ID, GoogleProvider};
 use flow_like::{
     flow::{
-        execution::{LogLevel, context::ExecutionContext},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         pin::{PinOptions, ValueType},
         variable::VariableType,
@@ -243,7 +243,7 @@ impl NodeLogic for DeleteGoogleDriveFileNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .delete(&format!(
+            .delete(format!(
                 "https://www.googleapis.com/drive/v3/files/{}",
                 file_id
             ))
@@ -366,7 +366,7 @@ impl NodeLogic for CopyGoogleDriveFileNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://www.googleapis.com/drive/v3/files/{}/copy",
                 file_id
             ))
@@ -484,7 +484,7 @@ impl NodeLogic for MoveGoogleDriveFileNode {
         // First get current parents
         let client = reqwest::Client::new();
         let meta_resp = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/drive/v3/files/{}",
                 file_id
             ))
@@ -510,7 +510,7 @@ impl NodeLogic for MoveGoogleDriveFileNode {
         };
 
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://www.googleapis.com/drive/v3/files/{}",
                 file_id
             ))
@@ -731,7 +731,7 @@ impl NodeLogic for GetGoogleDriveFileMetadataNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/drive/v3/files/{}",
                 file_id
             ))
@@ -854,7 +854,7 @@ impl NodeLogic for DownloadGoogleDriveFileNode {
 
         // First get mime type to determine if export is needed
         let meta_resp = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/drive/v3/files/{}",
                 file_id
             ))

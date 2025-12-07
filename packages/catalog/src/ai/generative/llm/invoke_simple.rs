@@ -193,7 +193,7 @@ impl NodeLogic for InvokeLLMSimpleNode {
                     context.end_trace();
 
                     // Flush logs periodically during streaming
-                    if count % FLUSH_EVERY_N_TOKENS == 0 {
+                    if count.is_multiple_of(FLUSH_EVERY_N_TOKENS) {
                         let _ = context.flush_logs().await;
                     }
 

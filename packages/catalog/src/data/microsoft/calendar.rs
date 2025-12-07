@@ -724,7 +724,7 @@ impl NodeLogic for DeleteEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .delete(&format!(
+            .delete(format!(
                 "https://graph.microsoft.com/v1.0/me/events/{}",
                 event_id
             ))
@@ -1189,7 +1189,7 @@ impl NodeLogic for UpdateEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://graph.microsoft.com/v1.0/me/events/{}",
                 event_id
             ))

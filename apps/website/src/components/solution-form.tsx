@@ -141,7 +141,7 @@ export function SolutionForm() {
 					const ext = file.name.split(".").pop() || "bin";
 
 					const presignRes = await fetch(
-						`/api/v1/solution/upload?extension=${ext}&content_type=${encodeURIComponent(file.type)}`,
+						`https://api.flow-like.com/api/v1/solution/upload?extension=${ext}&content_type=${encodeURIComponent(file.type)}`,
 						{ method: "GET" },
 					);
 
@@ -154,9 +154,6 @@ export function SolutionForm() {
 					const uploadRes = await fetch(presignData.uploadUrl, {
 						method: "PUT",
 						body: file,
-						headers: {
-							"Content-Type": file.type || "application/octet-stream",
-						},
 					});
 
 					if (!uploadRes.ok) {
@@ -198,7 +195,7 @@ export function SolutionForm() {
 		setError(null);
 
 		try {
-			const res = await fetch("/api/v1/solution", {
+			const res = await fetch("https://api.flow-like.com/api/v1/solution", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(formData),
@@ -274,8 +271,8 @@ export function SolutionForm() {
 					<h3 className="text-2xl font-semibold mb-2">Request Submitted!</h3>
 					<p className="text-muted-foreground max-w-md mx-auto">
 						We've received your project details. Our team will review your
-						requirements and get back to you within 2 hours with a project
-						assessment.
+						requirements and get back to with a project
+						assessment shortly.
 					</p>
 				</CardContent>
 			</Card>

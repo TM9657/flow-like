@@ -829,10 +829,10 @@ ALWAYS emit commands in this order:
                         .iter()
                         .filter(|t| {
                             // Skip current template being edited
-                            if let Some(ref current_id) = self.current_template_id {
-                                if &t.id == current_id {
-                                    return false;
-                                }
+                            if let Some(ref current_id) = self.current_template_id
+                                && &t.id == current_id
+                            {
+                                return false;
                             }
                             t.name.to_lowercase().contains(&query_lower)
                                 || t.description.to_lowercase().contains(&query_lower)
@@ -936,12 +936,12 @@ ALWAYS emit commands in this order:
     /// Parse commands from the agent's response
     fn parse_commands(response: &str) -> Vec<BoardCommand> {
         // Look for <commands>...</commands> tags
-        if let Some(start) = response.find("<commands>") {
-            if let Some(end) = response.find("</commands>") {
-                let json_str = &response[start + 10..end];
-                if let Ok(commands) = serde_json::from_str::<Vec<BoardCommand>>(json_str) {
-                    return commands;
-                }
+        if let Some(start) = response.find("<commands>")
+            && let Some(end) = response.find("</commands>")
+        {
+            let json_str = &response[start + 10..end];
+            if let Ok(commands) = serde_json::from_str::<Vec<BoardCommand>>(json_str) {
+                return commands;
             }
         }
         vec![]
@@ -1002,10 +1002,10 @@ ALWAYS emit commands in this order:
     fn clean_message(response: &str) -> String {
         // Remove <commands>...</commands> block
         let mut result = response.to_string();
-        if let Some(start) = result.find("<commands>") {
-            if let Some(end) = result.find("</commands>") {
-                result = format!("{}{}", &result[..start], &result[end + 11..]);
-            }
+        if let Some(start) = result.find("<commands>")
+            && let Some(end) = result.find("</commands>")
+        {
+            result = format!("{}{}", &result[..start], &result[end + 11..]);
         }
         result.trim().to_string()
     }

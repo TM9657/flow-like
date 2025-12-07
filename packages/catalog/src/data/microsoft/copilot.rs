@@ -343,7 +343,7 @@ impl NodeLogic for ListMeetingInsightsNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/beta/me/onlineMeetings/{}/aiInsights",
                 meeting_id
             ))
@@ -457,7 +457,7 @@ impl NodeLogic for GetMeetingInsightNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/beta/me/onlineMeetings/{}/aiInsights/{}",
                 meeting_id, insight_id
             ))
@@ -1408,10 +1408,9 @@ fn normalize_timezone(input: &str) -> Option<String> {
     if let Some(offset_str) = input_lower
         .strip_prefix("utc")
         .or_else(|| input_lower.strip_prefix("gmt"))
+        && let Some(offset) = parse_utc_offset(offset_str)
     {
-        if let Some(offset) = parse_utc_offset(offset_str) {
-            return Some(utc_offset_to_iana(offset));
-        }
+        return Some(utc_offset_to_iana(offset));
     }
 
     // Try fuzzy matching - find timezone containing the input
@@ -1468,7 +1467,7 @@ fn parse_utc_offset(s: &str) -> Option<i32> {
 fn utc_offset_to_iana(offset_minutes: i32) -> String {
     // Use Etc/GMT timezones (note: signs are inverted in Etc/GMT)
     let hours = offset_minutes / 60;
-    if offset_minutes % 60 == 0 && hours >= -12 && hours <= 14 {
+    if offset_minutes % 60 == 0 && (-12..=14).contains(&hours) {
         if hours == 0 {
             "Etc/UTC".to_string()
         } else if hours > 0 {
@@ -2160,18 +2159,14 @@ impl NodeLogic for CopilotChatNode {
 
     async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
         // Validate and normalize the timezone input
-        if let Some(pin) = node.get_pin_mut_by_name("timezone") {
-            if let Some(ref value_bytes) = pin.default_value {
-                if let Ok(value) = flow_like_types::json::from_slice::<Value>(value_bytes) {
-                    if let Some(input) = value.as_str() {
-                        if let Some(normalized) = normalize_timezone(input) {
-                            if normalized != input {
-                                pin.set_default_value(Some(json!(normalized)));
-                            }
-                        }
-                    }
-                }
-            }
+        if let Some(pin) = node.get_pin_mut_by_name("timezone")
+            && let Some(ref value_bytes) = pin.default_value
+            && let Ok(value) = flow_like_types::json::from_slice::<Value>(value_bytes)
+            && let Some(input) = value.as_str()
+            && let Some(normalized) = normalize_timezone(input)
+            && normalized != input
+        {
+            pin.set_default_value(Some(json!(normalized)));
         }
     }
 }

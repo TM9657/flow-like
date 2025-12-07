@@ -9,7 +9,6 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like::flow::board::commands::GenericCommand;
-use flow_like_types::sync::Mutex;
 use serde::Deserialize;
 
 #[derive(Clone, Deserialize)]

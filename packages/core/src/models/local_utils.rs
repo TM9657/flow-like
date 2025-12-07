@@ -1,7 +1,7 @@
 use crate::{bit::BitPack, state::FlowLikeState};
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_types::tokio::fs as async_fs;
-use flow_like_types::{Result, anyhow, sync::Mutex};
+use flow_like_types::{Result, anyhow};
 use std::sync::Arc;
 
 /// Ensures that local model weights are available before loading a model.

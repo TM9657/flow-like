@@ -230,10 +230,10 @@ async fn pure_parents_for_memo(
 
             // Direct access - no lock needed
             if let Some(node_weak) = dep_arc.node() {
-                if let Some(parent) = node_weak.upgrade() {
-                    if parent.is_pure().await {
-                        result.push(parent);
-                    }
+                if let Some(parent) = node_weak.upgrade()
+                    && parent.is_pure().await
+                {
+                    result.push(parent);
                 }
             } else {
                 // standalone/relay pin => follow further upstream

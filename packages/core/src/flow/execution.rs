@@ -537,7 +537,7 @@ impl InternalRun {
         }
 
         // Phase 2: Wire up connections using OnceLock init methods
-        for (_node_id, node) in &board.nodes {
+        for node in board.nodes.values() {
             for pin in node.pins.values() {
                 if let Some(internal_pin) = pins.get(&pin.id) {
                     // Build connected_to list
@@ -878,10 +878,10 @@ impl InternalRun {
                 }
 
                 let mut run = run_clone.lock().await;
-                if !run.traces.is_empty() {
-                    if let Err(err) = run.flush_logs(false).await {
-                        eprintln!("[Error] background log flush: {:?}", err);
-                    }
+                if !run.traces.is_empty()
+                    && let Err(err) = run.flush_logs(false).await
+                {
+                    eprintln!("[Error] background log flush: {:?}", err);
                 }
             }
         });

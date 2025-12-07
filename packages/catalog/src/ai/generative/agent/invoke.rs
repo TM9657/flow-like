@@ -1,4 +1,4 @@
-use super::helpers::{execute_agent, generate_tool_from_function};
+use super::helpers::execute_agent;
 use crate::ai::generative::agent::Agent;
 /// # Invoke Agent Node
 /// Executes an Agent with conversation history and returns the response.
@@ -112,7 +112,7 @@ impl NodeLogic for InvokeAgentNode {
         // Build tool name to node mapping from function_refs stored in agent
         let mut tool_name_to_node = HashMap::new();
 
-        for (node_id, _node_name) in &agent.function_refs {
+        for node_id in agent.function_refs.keys() {
             if let Some(internal_node) = context.nodes.get(node_id) {
                 let node_guard = internal_node.node.lock().await;
                 let tool_name = node_guard.name.clone();

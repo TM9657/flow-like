@@ -3,7 +3,7 @@ use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::{Path, blake3};
 use flow_like_types::intercom::{InterComCallback, InterComEvent};
 use flow_like_types::reqwest::Client;
-use flow_like_types::sync::{Mutex, mpsc};
+use flow_like_types::sync::mpsc;
 use flow_like_types::tokio::fs::{self as async_fs, OpenOptions};
 use flow_like_types::tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use flow_like_types::tokio::spawn;

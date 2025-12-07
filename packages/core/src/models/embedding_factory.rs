@@ -4,7 +4,6 @@ use flow_like_model_provider::{
     embedding::{EmbeddingModelLogic, openai::OpenAIEmbeddingModel},
     image_embedding::ImageEmbeddingModelLogic,
 };
-use flow_like_types::sync::Mutex;
 
 use crate::{bit::Bit, state::FlowLikeState};
 

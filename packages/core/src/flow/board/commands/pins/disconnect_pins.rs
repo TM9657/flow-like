@@ -1,4 +1,4 @@
-use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::async_trait;
 use schemars::JsonSchema;
 use std::sync::Arc;
 

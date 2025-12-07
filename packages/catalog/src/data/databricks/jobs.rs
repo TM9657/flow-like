@@ -411,10 +411,10 @@ impl NodeLogic for RunDatabricksJobNode {
         let url = provider.api_url_v21("/jobs/run-now");
 
         let mut body = json!({ "job_id": job_id });
-        if let Some(params) = job_parameters.as_object() {
-            if !params.is_empty() {
-                body["job_parameters"] = job_parameters;
-            }
+        if let Some(params) = job_parameters.as_object()
+            && !params.is_empty()
+        {
+            body["job_parameters"] = job_parameters;
         }
 
         let client = reqwest::Client::new();

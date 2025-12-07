@@ -747,12 +747,12 @@ impl NodeLogic for UpdateGoogleFormInfoNode {
                     .send()
                     .await;
 
-                if let Ok(form_resp) = form_response {
-                    if form_resp.status().is_success() {
-                        let form_body: Value = form_resp.json().await?;
-                        if let Some(form) = parse_form(&form_body) {
-                            context.set_pin_value("form", json!(form)).await?;
-                        }
+                if let Ok(form_resp) = form_response
+                    && form_resp.status().is_success()
+                {
+                    let form_body: Value = form_resp.json().await?;
+                    if let Some(form) = parse_form(&form_body) {
+                        context.set_pin_value("form", json!(form)).await?;
                     }
                 }
                 context.activate_exec_pin("exec_out").await?;

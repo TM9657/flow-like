@@ -70,13 +70,13 @@ async fn hub_info(
     let mut hub_value: Value = serde_json::to_value(&state.platform_config)?;
 
     // Strip sensitive OAuth fields (client_secret_env and client_secret)
-    if let Some(oauth_providers) = hub_value.get_mut("oauth_providers") {
-        if let Some(providers_obj) = oauth_providers.as_object_mut() {
-            for (_provider_id, provider_config) in providers_obj.iter_mut() {
-                if let Some(config_obj) = provider_config.as_object_mut() {
-                    config_obj.remove("client_secret_env");
-                    config_obj.remove("client_secret");
-                }
+    if let Some(oauth_providers) = hub_value.get_mut("oauth_providers")
+        && let Some(providers_obj) = oauth_providers.as_object_mut()
+    {
+        for (_provider_id, provider_config) in providers_obj.iter_mut() {
+            if let Some(config_obj) = provider_config.as_object_mut() {
+                config_obj.remove("client_secret_env");
+                config_obj.remove("client_secret");
             }
         }
     }

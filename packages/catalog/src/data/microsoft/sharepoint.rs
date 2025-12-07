@@ -1,7 +1,7 @@
 use super::provider::{MICROSOFT_PROVIDER_ID, MicrosoftGraphProvider};
 use flow_like::{
     flow::{
-        execution::{LogLevel, context::ExecutionContext},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic, NodeScores},
         pin::{PinOptions, ValueType},
         variable::VariableType,
@@ -343,12 +343,11 @@ impl NodeLogic for GetSharePointSiteNode {
         let url = if !site_id.is_empty() {
             format!("{}/sites/{}", provider.base_url, site_id)
         } else if !hostname.is_empty() {
-            let path = if site_path.is_empty() {
+            if site_path.is_empty() {
                 format!("{}/sites/{}:", provider.base_url, hostname)
             } else {
                 format!("{}/sites/{}:{}", provider.base_url, hostname, site_path)
-            };
-            path
+            }
         } else {
             context
                 .set_pin_value(

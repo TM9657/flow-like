@@ -491,52 +491,52 @@ impl NodeLogic for BatchCreateIssuesNode {
                 "issuetype": { "name": issue_input.issue_type }
             });
 
-            if let Some(ref desc) = issue_input.description {
-                if !desc.is_empty() {
-                    if provider.is_cloud {
-                        fields["description"] = json!({
-                            "type": "doc",
-                            "version": 1,
+            if let Some(ref desc) = issue_input.description
+                && !desc.is_empty()
+            {
+                if provider.is_cloud {
+                    fields["description"] = json!({
+                        "type": "doc",
+                        "version": 1,
+                        "content": [{
+                            "type": "paragraph",
                             "content": [{
-                                "type": "paragraph",
-                                "content": [{
-                                    "type": "text",
-                                    "text": desc
-                                }]
+                                "type": "text",
+                                "text": desc
                             }]
-                        });
-                    } else {
-                        fields["description"] = json!(desc);
-                    }
+                        }]
+                    });
+                } else {
+                    fields["description"] = json!(desc);
                 }
             }
 
-            if let Some(ref priority) = issue_input.priority {
-                if !priority.is_empty() {
-                    fields["priority"] = json!({ "name": priority });
+            if let Some(ref priority) = issue_input.priority
+                && !priority.is_empty()
+            {
+                fields["priority"] = json!({ "name": priority });
+            }
+
+            if let Some(ref assignee) = issue_input.assignee_id
+                && !assignee.is_empty()
+            {
+                if provider.is_cloud {
+                    fields["assignee"] = json!({ "accountId": assignee });
+                } else {
+                    fields["assignee"] = json!({ "name": assignee });
                 }
             }
 
-            if let Some(ref assignee) = issue_input.assignee_id {
-                if !assignee.is_empty() {
-                    if provider.is_cloud {
-                        fields["assignee"] = json!({ "accountId": assignee });
-                    } else {
-                        fields["assignee"] = json!({ "name": assignee });
-                    }
-                }
+            if let Some(ref labels) = issue_input.labels
+                && !labels.is_empty()
+            {
+                fields["labels"] = json!(labels);
             }
 
-            if let Some(ref labels) = issue_input.labels {
-                if !labels.is_empty() {
-                    fields["labels"] = json!(labels);
-                }
-            }
-
-            if let Some(ref parent) = issue_input.parent_key {
-                if !parent.is_empty() {
-                    fields["parent"] = json!({ "key": parent });
-                }
+            if let Some(ref parent) = issue_input.parent_key
+                && !parent.is_empty()
+            {
+                fields["parent"] = json!({ "key": parent });
             }
 
             let body = json!({ "fields": fields });

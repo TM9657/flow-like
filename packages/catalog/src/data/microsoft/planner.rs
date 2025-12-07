@@ -224,7 +224,7 @@ impl NodeLogic for GetPlanNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/planner/plans/{}",
                 plan_id
             ))
@@ -320,7 +320,7 @@ impl NodeLogic for ListPlanTasksNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/planner/plans/{}/tasks",
                 plan_id
             ))
@@ -415,7 +415,7 @@ impl NodeLogic for ListPlanBucketsNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/planner/plans/{}/buckets",
                 plan_id
             ))
@@ -681,7 +681,7 @@ impl NodeLogic for UpdatePlannerTaskNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://graph.microsoft.com/v1.0/planner/tasks/{}",
                 task_id
             ))

@@ -31,11 +31,11 @@ pub async fn evaluate_pin_value_reference(
 
         // Case 2: Pin depends on another pin
         let deps = current_pin.depends_on();
-        if let Some(first_dep) = deps.first() {
-            if let Some(dep_pin) = first_dep.upgrade() {
-                current_pin = dep_pin;
-                continue;
-            }
+        if let Some(first_dep) = deps.first()
+            && let Some(dep_pin) = first_dep.upgrade()
+        {
+            current_pin = dep_pin;
+            continue;
         }
 
         // Case 3: Use default value if available
@@ -90,11 +90,11 @@ pub async fn evaluate_pin_value(
 
         // Case 2: Pin depends on another pin
         let deps = current_pin.depends_on();
-        if let Some(first_dep) = deps.first() {
-            if let Some(dep_pin) = first_dep.upgrade() {
-                current_pin = dep_pin;
-                continue;
-            }
+        if let Some(first_dep) = deps.first()
+            && let Some(dep_pin) = first_dep.upgrade()
+        {
+            current_pin = dep_pin;
+            continue;
         }
 
         // Case 3: Use default value if available

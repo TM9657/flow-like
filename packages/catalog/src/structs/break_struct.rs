@@ -40,10 +40,10 @@ fn resolve_ref<'a>(ref_path: &str, root_schema: &'a Value) -> Option<&'a Value> 
 /// Resolve a schema that might contain $ref, anyOf, or be direct
 fn resolve_schema<'a>(schema: &'a Value, root_schema: &'a Value) -> &'a Value {
     // Handle $ref
-    if let Some(ref_path) = schema.get("$ref").and_then(|r| r.as_str()) {
-        if let Some(resolved) = resolve_ref(ref_path, root_schema) {
-            return resolved;
-        }
+    if let Some(ref_path) = schema.get("$ref").and_then(|r| r.as_str())
+        && let Some(resolved) = resolve_ref(ref_path, root_schema)
+    {
+        return resolved;
     }
 
     // Handle anyOf (often used for nullable types)
@@ -97,18 +97,18 @@ fn get_schema_type(schema: &Value, root_schema: &Value) -> (VariableType, ValueT
         // Handle array of types (e.g., ["string", "null"])
         if let Some(types) = type_val.as_array() {
             for t in types {
-                if let Some(ts) = t.as_str() {
-                    if ts != "null" {
-                        return match ts {
-                            "boolean" => (VariableType::Boolean, ValueType::Normal),
-                            "integer" => (VariableType::Integer, ValueType::Normal),
-                            "number" => (VariableType::Float, ValueType::Normal),
-                            "string" => (VariableType::String, ValueType::Normal),
-                            "array" => (VariableType::Generic, ValueType::Array),
-                            "object" => (VariableType::Struct, ValueType::Normal),
-                            _ => (VariableType::Generic, ValueType::Normal),
-                        };
-                    }
+                if let Some(ts) = t.as_str()
+                    && ts != "null"
+                {
+                    return match ts {
+                        "boolean" => (VariableType::Boolean, ValueType::Normal),
+                        "integer" => (VariableType::Integer, ValueType::Normal),
+                        "number" => (VariableType::Float, ValueType::Normal),
+                        "string" => (VariableType::String, ValueType::Normal),
+                        "array" => (VariableType::Generic, ValueType::Array),
+                        "object" => (VariableType::Struct, ValueType::Normal),
+                        _ => (VariableType::Generic, ValueType::Normal),
+                    };
                 }
             }
         }

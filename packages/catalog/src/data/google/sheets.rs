@@ -234,7 +234,7 @@ impl NodeLogic for GetGoogleSpreadsheetNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://sheets.googleapis.com/v4/spreadsheets/{}",
                 spreadsheet_id
             ))
@@ -368,7 +368,7 @@ impl NodeLogic for ReadGoogleSheetsRangeNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}",
                 spreadsheet_id,
                 urlencoding::encode(&range)
@@ -497,7 +497,7 @@ impl NodeLogic for WriteGoogleSheetsRangeNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .put(&format!(
+            .put(format!(
                 "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}",
                 spreadsheet_id,
                 urlencoding::encode(&range)
@@ -623,7 +623,7 @@ impl NodeLogic for AppendGoogleSheetsRowsNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}:append",
                 spreadsheet_id,
                 urlencoding::encode(&range)
@@ -736,7 +736,7 @@ impl NodeLogic for ClearGoogleSheetsRangeNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}:clear",
                 spreadsheet_id,
                 urlencoding::encode(&range)
@@ -848,7 +848,7 @@ impl NodeLogic for AddGoogleSheetNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://sheets.googleapis.com/v4/spreadsheets/{}:batchUpdate",
                 spreadsheet_id
             ))
@@ -956,7 +956,7 @@ impl NodeLogic for DeleteGoogleSheetNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://sheets.googleapis.com/v4/spreadsheets/{}:batchUpdate",
                 spreadsheet_id
             ))
