@@ -112,7 +112,7 @@ impl NodeLogic for BufferedCsvReaderNode {
 
         let mut records = rdr.byte_records();
         let mut chunk = Vec::with_capacity(chunk_size as usize);
-        let flow = exec_item.lock().await.get_connected_nodes().await;
+        let flow = exec_item.get_connected_nodes();
 
         while let Some(element) = records.next().await {
             let record = match element {
@@ -133,7 +133,7 @@ impl NodeLogic for BufferedCsvReaderNode {
                     });
             chunk.push(json_obj);
             if chunk.len() as u64 == chunk_size {
-                value.lock().await.set_value(to_value(&chunk)?).await;
+                value.set_value(to_value(&chunk)?).await;
                 chunk = Vec::with_capacity(chunk_size as usize);
                 for node in &flow {
                     let mut sub_context = context.create_sub_context(node).await;
@@ -150,7 +150,7 @@ impl NodeLogic for BufferedCsvReaderNode {
         }
 
         if !chunk.is_empty() {
-            value.lock().await.set_value(to_value(&chunk)?).await;
+            value.set_value(to_value(&chunk)?).await;
             for node in &flow {
                 let mut sub_context = context.create_sub_context(node).await;
                 let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;

@@ -195,7 +195,9 @@ export const oauthConsentStore: IOAuthConsentStore = {
 			}
 
 			const consentedScopes = new Set(consent.scopes ?? []);
-			const hasAllScopes = requiredScopes.every((scope) => consentedScopes.has(scope));
+			const hasAllScopes = requiredScopes.every((scope) =>
+				consentedScopes.has(scope),
+			);
 			if (hasAllScopes) {
 				validProviders.add(consent.providerId);
 			} else {

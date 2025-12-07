@@ -110,7 +110,10 @@ async fn default_state() -> Arc<FlowLikeState> {
         let registry_guard = state_ref.node_registry.clone();
         let mut registry = registry_guard.write().await;
         registry.initialize(weak_ref);
-        registry.push_nodes(catalog).await.expect("register catalog");
+        registry
+            .push_nodes(catalog)
+            .await
+            .expect("register catalog");
     }
     state_ref
 }
@@ -121,15 +124,12 @@ fn construct_profile() -> Profile {
 
 async fn open_board(id: &str, state: Arc<FlowLikeState>) -> Board {
     let path = Path::from("flow").child(&*app_id());
-    Board::load(path, id, state, None).await.expect("load board")
+    Board::load(path, id, state, None)
+        .await
+        .expect("load board")
 }
 
-async fn run_once(
-    board: Arc<Board>,
-    state: Arc<FlowLikeState>,
-    profile: &Profile,
-    start: &str,
-) {
+async fn run_once(board: Arc<Board>, state: Arc<FlowLikeState>, profile: &Profile, start: &str) {
     let buffered_sender = Arc::new(BufferedInterComHandler::new(
         Arc::new(move |_event| Box::pin(async move { Ok(()) })),
         Some(100),
@@ -277,8 +277,7 @@ fn raw_throughput_bench(c: &mut Criterion) {
 
                 let mut handles = Vec::with_capacity(max_in_flight);
                 while counter.load(Ordering::Relaxed) < target {
-                    while handles.len() < max_in_flight
-                        && counter.load(Ordering::Relaxed) < target
+                    while handles.len() < max_in_flight && counter.load(Ordering::Relaxed) < target
                     {
                         let st = state.clone();
                         let brd = board.clone();

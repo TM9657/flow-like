@@ -166,7 +166,9 @@ impl NodeLogic for ShareTextPostNode {
         let visibility: String = context.evaluate_pin("visibility").await?;
 
         if text.is_empty() {
-            context.set_pin_value("error_message", json!("Post text cannot be empty")).await?;
+            context
+                .set_pin_value("error_message", json!("Post text cannot be empty"))
+                .await?;
             context.activate_exec_pin("exec_error").await?;
             return Ok(());
         }
@@ -206,13 +208,19 @@ impl NodeLogic for ShareTextPostNode {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            context.set_pin_value("error_message", json!(format!("{} - {}", status, error_text))).await?;
+            context
+                .set_pin_value(
+                    "error_message",
+                    json!(format!("{} - {}", status, error_text)),
+                )
+                .await?;
             context.activate_exec_pin("exec_error").await?;
             return Ok(());
         }
 
         let data: Value = response.json().await?;
-        let post_id = data.get("id")
+        let post_id = data
+            .get("id")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
@@ -366,7 +374,9 @@ impl NodeLogic for ShareArticleNode {
         let visibility: String = context.evaluate_pin("visibility").await?;
 
         if url.is_empty() {
-            context.set_pin_value("error_message", json!("Article URL cannot be empty")).await?;
+            context
+                .set_pin_value("error_message", json!("Article URL cannot be empty"))
+                .await?;
             context.activate_exec_pin("exec_error").await?;
             return Ok(());
         }
@@ -419,13 +429,19 @@ impl NodeLogic for ShareArticleNode {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            context.set_pin_value("error_message", json!(format!("{} - {}", status, error_text))).await?;
+            context
+                .set_pin_value(
+                    "error_message",
+                    json!(format!("{} - {}", status, error_text)),
+                )
+                .await?;
             context.activate_exec_pin("exec_error").await?;
             return Ok(());
         }
 
         let data: Value = response.json().await?;
-        let post_id = data.get("id")
+        let post_id = data
+            .get("id")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();

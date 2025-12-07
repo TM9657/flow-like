@@ -11,7 +11,6 @@ import {
 	TriangleAlertIcon,
 } from "lucide-react";
 import {
-	type ReactNode,
 	type RefObject,
 	memo,
 	useCallback,
@@ -34,11 +33,6 @@ import { DynamicImage, EmptyState } from "../ui";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import {
-	ResizableHandle,
-	ResizablePanel,
-	ResizablePanelGroup,
-} from "../ui/resizable";
 import { TextEditor } from "../ui/text-editor";
 
 interface IEnrichedLogMessage extends ILogMessage {
@@ -50,12 +44,10 @@ export function Traces({
 	boardId,
 	board,
 	onFocusNode,
-	copilotPanel,
 }: Readonly<{
 	appId: string;
 	boardId: string;
 	board: RefObject<IBoard | undefined>;
-	copilotPanel?: ReactNode;
 	onFocusNode: (nodeId: string) => void;
 }>) {
 	const backend = useBackend();
@@ -211,96 +203,84 @@ export function Traces({
 	}
 
 	return (
-		<ResizablePanelGroup direction="horizontal" className="h-full w-full">
-			<ResizablePanel defaultSize={copilotPanel ? 60 : 100} minSize={30}>
-				<div className="transition-all h-full z-10 bg-background border rounded-lg flex flex-col w-full overflow-hidden">
-					<div className="flex flex-col h-full p-2">
-						<div className="w-full flex flex-row items-center justify-between my-1 px-2">
-							<div className="flex flex-row items-center gap-1">
-								<LogFilterBadge
-									level={ILogLevel.Debug}
-									label="Debug"
-									logFilter={logFilter}
-									toggleLogFilter={toggleLogFilter}
-								/>
-								<LogFilterBadge
-									level={ILogLevel.Info}
-									label="Info"
-									logFilter={logFilter}
-									toggleLogFilter={toggleLogFilter}
-								/>
-								<LogFilterBadge
-									level={ILogLevel.Warn}
-									label="Warning"
-									logFilter={logFilter}
-									toggleLogFilter={toggleLogFilter}
-								/>
-								<LogFilterBadge
-									level={ILogLevel.Error}
-									label="Error"
-									logFilter={logFilter}
-									toggleLogFilter={toggleLogFilter}
-								/>
-								<LogFilterBadge
-									level={ILogLevel.Fatal}
-									label="Fatal"
-									logFilter={logFilter}
-									toggleLogFilter={toggleLogFilter}
-								/>
-							</div>
-
-							<div className="flex flex-row items-center gap-2">
-								<Input
-									value={search}
-									onChange={(e) => setSearch(e.target.value)}
-									placeholder="Search..."
-									className="w-32 md:w-48"
-								/>
-							</div>
+		<div className="h-full w-full">
+			<div className="transition-all h-full z-10 bg-background border rounded-lg flex flex-col w-full overflow-hidden">
+				<div className="flex flex-col h-full p-2">
+					<div className="w-full flex flex-row items-center justify-between my-1 px-2 flex-wrap gap-2">
+						<div className="flex flex-row items-center gap-1 flex-wrap">
+							<LogFilterBadge
+								level={ILogLevel.Debug}
+								label="Debug"
+								logFilter={logFilter}
+								toggleLogFilter={toggleLogFilter}
+							/>
+							<LogFilterBadge
+								level={ILogLevel.Info}
+								label="Info"
+								logFilter={logFilter}
+								toggleLogFilter={toggleLogFilter}
+							/>
+							<LogFilterBadge
+								level={ILogLevel.Warn}
+								label="Warning"
+								logFilter={logFilter}
+								toggleLogFilter={toggleLogFilter}
+							/>
+							<LogFilterBadge
+								level={ILogLevel.Error}
+								label="Error"
+								logFilter={logFilter}
+								toggleLogFilter={toggleLogFilter}
+							/>
+							<LogFilterBadge
+								level={ILogLevel.Fatal}
+								label="Fatal"
+								logFilter={logFilter}
+								toggleLogFilter={toggleLogFilter}
+							/>
 						</div>
-						<div className="flex flex-col w-full gap-1 overflow-x-auto flex-1 min-h-0 px-2">
-							{(messages?.length ?? 0) === 0 && (
-								<EmptyState
-									className="h-full w-full max-w-full"
-									icons={[LogsIcon, ScrollIcon, CheckCircle2Icon]}
-									description="No logs found yet, start an event to see your results here!"
-									title="No Logs"
-								/>
-							)}
-							{(messages?.length ?? 0) > 0 && (
-								<AutoSizer
-									className="h-full grow flex flex-col min-h-full"
-									disableWidth
-								>
-									{({ height, width }) => (
-										<List
-											className="log-container h-full grow flex flex-col"
-											height={height}
-											itemCount={
-												(messages?.length ?? 0) + (hasNextPage ? 1 : 0)
-											}
-											itemSize={getRowHeight}
-											ref={listRef}
-											width={width}
-										>
-											{renderItem}
-										</List>
-									)}
-								</AutoSizer>
-							)}
+
+						<div className="flex flex-row items-center gap-2">
+							<Input
+								value={search}
+								onChange={(e) => setSearch(e.target.value)}
+								placeholder="Search..."
+								className="w-32 md:w-48"
+							/>
 						</div>
 					</div>
+					<div className="flex flex-col w-full gap-1 overflow-x-auto flex-1 min-h-0 px-2">
+						{(messages?.length ?? 0) === 0 && (
+							<EmptyState
+								className="h-full w-full max-w-full"
+								icons={[LogsIcon, ScrollIcon, CheckCircle2Icon]}
+								description="No logs found yet, start an event to see your results here!"
+								title="No Logs"
+							/>
+						)}
+						{(messages?.length ?? 0) > 0 && (
+							<AutoSizer
+								className="h-full grow flex flex-col min-h-full"
+								disableWidth
+							>
+								{({ height, width }) => (
+									<List
+										className="log-container h-full grow flex flex-col"
+										height={height}
+										itemCount={(messages?.length ?? 0) + (hasNextPage ? 1 : 0)}
+										itemSize={getRowHeight}
+										ref={listRef}
+										width={width}
+									>
+										{renderItem}
+									</List>
+								)}
+							</AutoSizer>
+						)}
+					</div>
 				</div>
-			</ResizablePanel>
-			{copilotPanel && (
-				<>
-					<ResizableHandle withHandle />
-					<ResizablePanel defaultSize={40} minSize={25} maxSize={50}>
-						{copilotPanel}
-					</ResizablePanel>
-				</>
-			)}
-		</ResizablePanelGroup>
+			</div>
+		</div>
 	);
 }
 
@@ -313,8 +293,10 @@ function formatLogMessage(message: string): string {
 	const trimmed = message.trim();
 
 	// Check if the entire message is JSON (starts with { or [)
-	if ((trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-	    (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+	if (
+		(trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+		(trimmed.startsWith("[") && trimmed.endsWith("]"))
+	) {
 		try {
 			const parsed = JSON.parse(trimmed);
 			const pretty = JSON.stringify(parsed, null, 2);
@@ -353,7 +335,10 @@ const LogMessage = memo(function LogMessage({
 	}, [log.node_id, board.current?.nodes]);
 
 	// Format the message - memoized to avoid re-computing on every render
-	const formattedMessage = useMemo(() => formatLogMessage(log.message), [log.message]);
+	const formattedMessage = useMemo(
+		() => formatLogMessage(log.message),
+		[log.message],
+	);
 
 	useEffect(() => {
 		if (rowRef.current) {

@@ -19,7 +19,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use flow_like::{
     flow::{
         board::Board,
-        execution::{InternalRun, RunPayload},
+        execution::{InternalRun, LogLevel, RunPayload},
     },
     num_cpus,
     profile::Profile,
@@ -81,7 +81,10 @@ async fn default_state() -> Arc<FlowLikeState> {
         let registry_guard = state_ref.node_registry.clone();
         let mut registry = registry_guard.write().await;
         registry.initialize(weak_ref);
-        registry.push_nodes(catalog).await.expect("register catalog");
+        registry
+            .push_nodes(catalog)
+            .await
+            .expect("register catalog");
     }
     state_ref
 }
@@ -92,7 +95,12 @@ fn construct_profile() -> Profile {
 
 async fn open_board(id: &str, state: Arc<FlowLikeState>) -> Board {
     let path = Path::from("flow").child(&*app_id());
-    Board::load(path, id, state, None).await.expect("load board")
+    let mut board = Board::load(path, id, state, None)
+        .await
+        .expect("load board");
+    // Disable debug logging for benchmarks
+    board.log_level = LogLevel::Error;
+    board
 }
 
 fn create_intercom() -> Arc<BufferedInterComHandler> {
@@ -163,7 +171,14 @@ fn allocator_throughput_bench(c: &mut Criterion) {
     // Warmup
     rt.block_on(async {
         for _ in 0..100 {
-            run_once(board.clone(), state.clone(), &profile, &start, intercom.clone()).await;
+            run_once(
+                board.clone(),
+                state.clone(),
+                &profile,
+                &start,
+                intercom.clone(),
+            )
+            .await;
         }
     });
 
@@ -194,7 +209,10 @@ fn allocator_throughput_bench(c: &mut Criterion) {
     let optimal_concurrency = num_cpus::get() * 2;
     group.throughput(Throughput::Elements(optimal_concurrency as u64));
     group.bench_with_input(
-        BenchmarkId::new(format!("{}/concurrent_exec", allocator_name()), optimal_concurrency),
+        BenchmarkId::new(
+            format!("{}/concurrent_exec", allocator_name()),
+            optimal_concurrency,
+        ),
         &optimal_concurrency,
         |b, &conc| {
             let intercom = intercom.clone();
@@ -251,7 +269,10 @@ fn allocator_throughput_bench(c: &mut Criterion) {
 
     group.throughput(Throughput::Elements(parallel_count as u64));
     group.bench_with_input(
-        BenchmarkId::new(format!("{}/parallel_independent", allocator_name()), parallel_count),
+        BenchmarkId::new(
+            format!("{}/parallel_independent", allocator_name()),
+            parallel_count,
+        ),
         &parallel_count,
         |b, &count| {
             b.to_async(&rt).iter_custom(|iters| {

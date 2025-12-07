@@ -23,11 +23,11 @@ import {
 	isEqual,
 } from "@tm9657/flow-like-ui";
 import type { IJwks, IRealtimeAccess } from "@tm9657/flow-like-ui";
-import { oauthService } from "../../lib/oauth-service";
 import { isObject } from "lodash-es";
 import { toast } from "sonner";
 import { fetcher } from "../../lib/api";
 import { oauthConsentStore, oauthTokenStore } from "../../lib/oauth-db";
+import { oauthService } from "../../lib/oauth-service";
 import type { TauriBackend } from "../tauri-provider";
 
 interface DiffEntry {
@@ -40,7 +40,9 @@ interface DiffEntry {
 let hubCache: IHub | undefined;
 let hubCachePromise: Promise<IHub | undefined> | undefined;
 
-async function getHubConfig(profile?: { hub?: string }): Promise<IHub | undefined> {
+async function getHubConfig(profile?: { hub?: string }): Promise<
+	IHub | undefined
+> {
 	if (hubCache) return hubCache;
 	if (hubCachePromise) return hubCachePromise;
 

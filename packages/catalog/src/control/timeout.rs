@@ -111,7 +111,7 @@ impl NodeLogic for TimeoutNode {
         context.deactivate_exec_pin_ref(&timed_out_pin).await?;
         context.activate_exec_pin_ref(&exec_body_pin).await?;
 
-        let nodes = exec_body_pin.lock().await.get_connected_nodes().await;
+        let nodes = exec_body_pin.get_connected_nodes();
 
         let (timed_out, sub_contexts) = if nodes.is_empty() {
             (false, Vec::new())

@@ -1773,7 +1773,7 @@ impl NodeLogic for CopilotChatNode {
         context.activate_exec_pin_ref(&on_stream).await?;
 
         let connected_nodes = Arc::new(DashMap::new());
-        let connected = on_stream.lock().await.get_connected_nodes().await;
+        let connected = on_stream.get_connected_nodes();
         for node in connected {
             let sub_ctx = Arc::new(Mutex::new(context.create_sub_context(&node).await));
             connected_nodes.insert(node.node.lock().await.id.clone(), sub_ctx);

@@ -51,7 +51,10 @@ fn parse_catalog(catalog: &Value) -> Option<DatabricksCatalog> {
         name: catalog["name"].as_str()?.to_string(),
         owner: catalog["owner"].as_str().map(String::from),
         comment: catalog["comment"].as_str().map(String::from),
-        catalog_type: catalog["catalog_type"].as_str().unwrap_or("MANAGED_CATALOG").to_string(),
+        catalog_type: catalog["catalog_type"]
+            .as_str()
+            .unwrap_or("MANAGED_CATALOG")
+            .to_string(),
         created_at: catalog["created_at"].as_i64(),
         updated_at: catalog["updated_at"].as_i64(),
         isolation_mode: catalog["isolation_mode"].as_str().map(String::from),
@@ -74,7 +77,10 @@ fn parse_table(table: &Value) -> Option<DatabricksTable> {
         name: table["name"].as_str()?.to_string(),
         catalog_name: table["catalog_name"].as_str()?.to_string(),
         schema_name: table["schema_name"].as_str()?.to_string(),
-        table_type: table["table_type"].as_str().unwrap_or("MANAGED").to_string(),
+        table_type: table["table_type"]
+            .as_str()
+            .unwrap_or("MANAGED")
+            .to_string(),
         data_source_format: table["data_source_format"].as_str().map(String::from),
         owner: table["owner"].as_str().map(String::from),
         comment: table["comment"].as_str().map(String::from),
@@ -191,9 +197,10 @@ impl NodeLogic for ListDatabricksCatalogsNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     let catalogs_array = data["catalogs"].as_array();
                     let catalogs: Vec<DatabricksCatalog> = catalogs_array
@@ -208,15 +215,25 @@ impl NodeLogic for ListDatabricksCatalogsNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -292,12 +309,7 @@ impl NodeLogic for ListDatabricksSchemasNode {
         .set_schema::<DatabricksSchema>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin(
-            "count",
-            "Count",
-            "Number of schemas",
-            VariableType::Integer,
-        );
+        node.add_output_pin("count", "Count", "Number of schemas", VariableType::Integer);
 
         node.add_output_pin(
             "error_message",
@@ -329,7 +341,9 @@ impl NodeLogic for ListDatabricksSchemasNode {
         let catalog_name: String = context.evaluate_pin("catalog_name").await?;
 
         if catalog_name.is_empty() {
-            context.set_pin_value("error_message", json!("Catalog name is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Catalog name is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -349,9 +363,10 @@ impl NodeLogic for ListDatabricksSchemasNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     let schemas_array = data["schemas"].as_array();
                     let schemas: Vec<DatabricksSchema> = schemas_array
@@ -366,15 +381,25 @@ impl NodeLogic for ListDatabricksSchemasNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -447,22 +472,12 @@ impl NodeLogic for ListDatabricksTablesNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin(
-            "tables",
-            "Tables",
-            "Array of tables",
-            VariableType::Struct,
-        )
-        .set_value_type(ValueType::Array)
-        .set_schema::<DatabricksTable>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin("tables", "Tables", "Array of tables", VariableType::Struct)
+            .set_value_type(ValueType::Array)
+            .set_schema::<DatabricksTable>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin(
-            "count",
-            "Count",
-            "Number of tables",
-            VariableType::Integer,
-        );
+        node.add_output_pin("count", "Count", "Number of tables", VariableType::Integer);
 
         node.add_output_pin(
             "error_message",
@@ -495,13 +510,17 @@ impl NodeLogic for ListDatabricksTablesNode {
         let schema_name: String = context.evaluate_pin("schema_name").await?;
 
         if catalog_name.is_empty() {
-            context.set_pin_value("error_message", json!("Catalog name is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Catalog name is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
 
         if schema_name.is_empty() {
-            context.set_pin_value("error_message", json!("Schema name is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Schema name is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -522,9 +541,10 @@ impl NodeLogic for ListDatabricksTablesNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     let tables_array = data["tables"].as_array();
                     let tables: Vec<DatabricksTable> = tables_array
@@ -539,15 +559,25 @@ impl NodeLogic for ListDatabricksTablesNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }

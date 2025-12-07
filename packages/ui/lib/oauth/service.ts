@@ -89,11 +89,18 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				appId: options?.appId,
 				boardId: options?.boardId,
 				provider, // Store full provider for callback handling
-				apiBaseUrl: getApiBaseUrl ? await getApiBaseUrl() ?? undefined : undefined,
+				apiBaseUrl: getApiBaseUrl
+					? ((await getApiBaseUrl()) ?? undefined)
+					: undefined,
 			});
 
 			// Use implicit flow (response_type=token) if configured, otherwise authorization code flow
-			console.log("[OAuth] Provider use_implicit_flow value:", provider.use_implicit_flow, "type:", typeof provider.use_implicit_flow);
+			console.log(
+				"[OAuth] Provider use_implicit_flow value:",
+				provider.use_implicit_flow,
+				"type:",
+				typeof provider.use_implicit_flow,
+			);
 			const responseType = provider.use_implicit_flow ? "token" : "code";
 			console.log("[OAuth] Using responseType:", responseType);
 
@@ -181,7 +188,9 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				providerId: pendingAuth.providerId,
 				hasProvider: !!pendingAuth.provider,
 				pendingProviderClientId: pendingAuth.provider?.client_id,
-				codeVerifier: pendingAuth.codeVerifier ? `${pendingAuth.codeVerifier.substring(0, 10)}...` : "none",
+				codeVerifier: pendingAuth.codeVerifier
+					? `${pendingAuth.codeVerifier.substring(0, 10)}...`
+					: "none",
 			});
 
 			if (pendingAuth.providerId !== provider.id) {
@@ -306,7 +315,8 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			// If provider requires secret proxy, route through the API server
 			if (provider.requires_secret_proxy) {
 				// Use override URL from pending auth, or fall back to config
-				const apiBaseUrl = overrideApiBaseUrl ?? (getApiBaseUrl ? await getApiBaseUrl() : null);
+				const apiBaseUrl =
+					overrideApiBaseUrl ?? (getApiBaseUrl ? await getApiBaseUrl() : null);
 				if (!apiBaseUrl) {
 					throw new Error(
 						`Provider ${provider.id} requires secret proxy but no API base URL is available`,
@@ -329,8 +339,14 @@ export function createOAuthService(config: OAuthServiceConfig) {
 
 				if (!response.ok) {
 					const errorText = await response.text();
-					console.error("[OAuth] Proxy token exchange failed:", response.status, errorText);
-					throw new Error(`Token exchange failed: ${response.status} - ${errorText}`);
+					console.error(
+						"[OAuth] Proxy token exchange failed:",
+						response.status,
+						errorText,
+					);
+					throw new Error(
+						`Token exchange failed: ${response.status} - ${errorText}`,
+					);
 				}
 
 				const tokenData = (await response.json()) as {
@@ -396,7 +412,9 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				hasClientSecret: !!provider.client_secret,
 				pkceRequired: provider.pkce_required,
 				clientId: provider.client_id,
-				codeVerifier: codeVerifier ? `${codeVerifier.substring(0, 10)}...` : "none",
+				codeVerifier: codeVerifier
+					? `${codeVerifier.substring(0, 10)}...`
+					: "none",
 				redirectUri: callbackRedirectUri,
 				params: params.toString(),
 			});
@@ -520,7 +538,9 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				if (!response.ok) {
 					const errorText = await response.text();
 					await tokenStore.deleteToken(provider.id);
-					throw new Error(`Token refresh failed: ${response.status} - ${errorText}`);
+					throw new Error(
+						`Token refresh failed: ${response.status} - ${errorText}`,
+					);
 				}
 
 				const tokenResponse = (await response.json()) as {

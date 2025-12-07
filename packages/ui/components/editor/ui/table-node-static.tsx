@@ -5,12 +5,35 @@ import type {
 	SlateElementProps,
 	TTableCellElement,
 	TTableElement,
+	TTableRowElement,
 } from "platejs";
 
 import { BaseTablePlugin } from "@platejs/table";
 import { SlateElement } from "platejs";
 
 import { cn } from "../../../lib/utils";
+import { TableViewer } from "./table-viewer";
+
+function extractTableDataStatic(element: TTableElement): string[][] {
+	const rows: string[][] = [];
+	for (const row of element.children as TTableRowElement[]) {
+		const cells: string[] = [];
+		for (const cell of row.children as TTableCellElement[]) {
+			const text = cell.children
+				?.map((child: any) => {
+					if (child.text) return child.text;
+					if (child.children) {
+						return child.children.map((c: any) => c.text || "").join("");
+					}
+					return "";
+				})
+				.join("");
+			cells.push(text || "");
+		}
+		rows.push(cells);
+	}
+	return rows;
+}
 
 export function TableElementStatic({
 	children,
@@ -18,25 +41,22 @@ export function TableElementStatic({
 }: SlateElementProps<TTableElement>) {
 	const { disableMarginLeft } = props.editor.getOptions(BaseTablePlugin);
 	const marginLeft = disableMarginLeft ? 0 : props.element.marginLeft;
+	const tableData = extractTableDataStatic(props.element);
 
 	return (
 		<SlateElement
 			{...props}
-			className="py-5"
+			className="py-3"
 			style={{ paddingLeft: marginLeft }}
 		>
-			<div className="group/table relative w-fit">
-				<table className="mr-0 ml-px table h-px table-fixed border-collapse">
-					<tbody className="min-w-full">{children}</tbody>
-				</table>
-			</div>
+			<TableViewer data={tableData}>{children}</TableViewer>
 		</SlateElement>
 	);
 }
 
 export function TableRowElementStatic(props: SlateElementProps) {
 	return (
-		<SlateElement {...props} as="tr" className="h-full">
+		<SlateElement {...props} as="tr" className="h-full group/row">
 			{props.children}
 		</SlateElement>
 	);
@@ -61,13 +81,13 @@ export function TableCellElementStatic({
 			className={cn(
 				"h-full overflow-visible border-none bg-background p-0",
 				element.background ? "bg-(--cellBackground)" : "bg-background",
-				isHeader && "text-left font-normal *:m-0",
+				isHeader && "text-left font-semibold bg-muted/50 *:m-0",
 				"before:size-full",
 				"before:absolute before:box-border before:content-[''] before:select-none",
+				// Always show borders for cleaner look in static mode
+				"before:border-b before:border-b-border before:border-r before:border-r-border",
 				borders &&
 					cn(
-						borders.bottom?.size && `before:border-b before:border-b-border`,
-						borders.right?.size && `before:border-r before:border-r-border`,
 						borders.left?.size && `before:border-l before:border-l-border`,
 						borders.top?.size && `before:border-t before:border-t-border`,
 					),
@@ -75,8 +95,8 @@ export function TableCellElementStatic({
 			style={
 				{
 					"--cellBackground": element.background,
-					maxWidth: width || 240,
-					minWidth: width || 120,
+					maxWidth: 300,
+					minWidth: 60,
 				} as React.CSSProperties
 			}
 			attributes={{
@@ -85,10 +105,7 @@ export function TableCellElementStatic({
 				rowSpan: api.table.getRowSpan(element),
 			}}
 		>
-			<div
-				className="relative z-20 box-border h-full px-4 py-2"
-				style={{ minHeight }}
-			>
+			<div className="relative z-20 box-border h-full px-2 py-1.5 text-sm">
 				{props.children}
 			</div>
 		</SlateElement>

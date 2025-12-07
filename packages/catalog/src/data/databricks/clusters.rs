@@ -37,8 +37,14 @@ fn parse_cluster(cluster: &Value) -> Option<DatabricksCluster> {
         cluster_name: cluster["cluster_name"].as_str()?.to_string(),
         state: cluster["state"].as_str().unwrap_or("UNKNOWN").to_string(),
         state_message: cluster["state_message"].as_str().map(String::from),
-        spark_version: cluster["spark_version"].as_str().unwrap_or_default().to_string(),
-        node_type_id: cluster["node_type_id"].as_str().unwrap_or_default().to_string(),
+        spark_version: cluster["spark_version"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
+        node_type_id: cluster["node_type_id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
         driver_node_type_id: cluster["driver_node_type_id"].as_str().map(String::from),
         num_workers: cluster["num_workers"].as_i64(),
         autoscale_min_workers: autoscale.and_then(|a| a["min_workers"].as_i64()),
@@ -163,9 +169,10 @@ impl NodeLogic for ListDatabricksClustersNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     let clusters_array = data["clusters"].as_array();
                     let clusters: Vec<DatabricksCluster> = clusters_array
@@ -180,15 +187,25 @@ impl NodeLogic for ListDatabricksClustersNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -293,7 +310,9 @@ impl NodeLogic for GetDatabricksClusterNode {
         let cluster_id: String = context.evaluate_pin("cluster_id").await?;
 
         if cluster_id.is_empty() {
-            context.set_pin_value("error_message", json!("Cluster ID is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Cluster ID is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -311,29 +330,42 @@ impl NodeLogic for GetDatabricksClusterNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     if let Some(cluster) = parse_cluster(&data) {
                         context.set_pin_value("cluster", json!(cluster)).await?;
                         context.set_pin_value("error_message", json!("")).await?;
                         context.activate_exec_pin("exec_out").await?;
                     } else {
-                        context.set_pin_value("error_message", json!("Failed to parse cluster data")).await?;
+                        context
+                            .set_pin_value("error_message", json!("Failed to parse cluster data"))
+                            .await?;
                         context.activate_exec_pin("error").await?;
                     }
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -429,7 +461,9 @@ impl NodeLogic for StartDatabricksClusterNode {
         let cluster_id: String = context.evaluate_pin("cluster_id").await?;
 
         if cluster_id.is_empty() {
-            context.set_pin_value("error_message", json!("Cluster ID is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Cluster ID is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -452,15 +486,25 @@ impl NodeLogic for StartDatabricksClusterNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -556,7 +600,9 @@ impl NodeLogic for StopDatabricksClusterNode {
         let cluster_id: String = context.evaluate_pin("cluster_id").await?;
 
         if cluster_id.is_empty() {
-            context.set_pin_value("error_message", json!("Cluster ID is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Cluster ID is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -579,15 +625,25 @@ impl NodeLogic for StopDatabricksClusterNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }

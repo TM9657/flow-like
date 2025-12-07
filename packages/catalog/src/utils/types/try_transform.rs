@@ -57,7 +57,7 @@ impl NodeLogic for TryTransformNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let input_value: Value = context.evaluate_pin("type_in").await?;
         let output_value = context.get_pin_by_name("type_out").await?;
-        let out_type = output_value.lock().await.pin.lock().await.data_type.clone();
+        let out_type = output_value.data_type.clone();
         let mut out_value: Value = Value::Null;
 
         let success = match out_type {

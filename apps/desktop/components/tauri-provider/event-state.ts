@@ -23,7 +23,9 @@ import type { TauriBackend } from "../tauri-provider";
 let hubCache: IHub | undefined;
 let hubCachePromise: Promise<IHub | undefined> | undefined;
 
-async function getHubConfig(profile?: { hub?: string }): Promise<IHub | undefined> {
+async function getHubConfig(profile?: { hub?: string }): Promise<
+	IHub | undefined
+> {
 	if (hubCache) return hubCache;
 	if (hubCachePromise) return hubCachePromise;
 

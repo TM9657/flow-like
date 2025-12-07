@@ -117,7 +117,7 @@ impl NodeLogic for InvokeLLM {
         context.activate_exec_pin_ref(&on_stream).await?;
 
         let connected_nodes = Arc::new(DashMap::new());
-        let connected = on_stream.lock().await.get_connected_nodes().await;
+        let connected = on_stream.get_connected_nodes();
         for node in connected {
             let context = Arc::new(Mutex::new(context.create_sub_context(&node).await));
             connected_nodes.insert(node.node.lock().await.id.clone(), context);
@@ -128,18 +128,19 @@ impl NodeLogic for InvokeLLM {
         let collection_nodes = connected_nodes.clone();
         let callback_count = Arc::new(AtomicUsize::new(0));
         let collection_callback_count = Arc::clone(&callback_count);
+        const FLUSH_EVERY_N_TOKENS: usize = 50;
         let callback: LLMCallback = Arc::new(move |input: ResponseChunk| {
             let ctx = ctx.clone();
             let parent_node_id = parent_node_id.clone();
             let connected_nodes = connected_nodes.clone();
-            let callback_count = Arc::clone(&callback_count); // Clone the Arc for use in the callback
+            let callback_count = Arc::clone(&callback_count);
             Box::pin(async move {
                 let mut recursion_guard = AHashSet::new();
                 recursion_guard.insert(parent_node_id.clone());
                 let string_token = input.get_streamed_token().unwrap_or("".to_string());
                 let mut ctx = ctx.clone();
                 ctx.set_pin_value("chunk", json!(input)).await?;
-                callback_count.fetch_add(1, Ordering::SeqCst);
+                let count = callback_count.fetch_add(1, Ordering::SeqCst);
                 for entry in connected_nodes.iter() {
                     let (id, context) = entry.pair();
                     let mut context = context.lock().await;
@@ -157,6 +158,12 @@ impl NodeLogic for InvokeLLM {
                     message.end();
                     context.log(message);
                     context.end_trace();
+
+                    // Flush logs periodically during streaming
+                    if count % FLUSH_EVERY_N_TOKENS == 0 {
+                        let _ = context.flush_logs().await;
+                    }
+
                     match run {
                         Ok(_) => {}
                         Err(_) => {

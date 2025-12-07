@@ -209,7 +209,10 @@ impl NodeLogic for SearchConfluenceContentNode {
         );
 
         context.log_message(&format!("Confluence Search URL: {}", url), LogLevel::Debug);
-        context.log_message(&format!("Auth type: {}", provider.auth_type), LogLevel::Debug);
+        context.log_message(
+            &format!("Auth type: {}", provider.auth_type),
+            LogLevel::Debug,
+        );
         context.log_message(
             &format!("Searching Confluence with CQL: {}", final_cql),
             LogLevel::Debug,
@@ -231,7 +234,10 @@ impl NodeLogic for SearchConfluenceContentNode {
             }
         };
 
-        context.log_message(&format!("Response status: {}", response.status()), LogLevel::Debug);
+        context.log_message(
+            &format!("Response status: {}", response.status()),
+            LogLevel::Debug,
+        );
 
         if !response.status().is_success() {
             let status = response.status();

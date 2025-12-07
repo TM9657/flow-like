@@ -40,8 +40,15 @@ impl AtlassianProvider {
         // For OAuth, we must use api.atlassian.com with cloud_id
         if self.auth_type == "oauth" {
             if let Some(cloud_id) = &self.cloud_id {
-                let path = if path.starts_with('/') { &path[1..] } else { path };
-                return format!("https://api.atlassian.com/ex/jira/{}/rest/api/3/{}", cloud_id, path);
+                let path = if path.starts_with('/') {
+                    &path[1..]
+                } else {
+                    path
+                };
+                return format!(
+                    "https://api.atlassian.com/ex/jira/{}/rest/api/3/{}",
+                    cloud_id, path
+                );
             }
         }
 
@@ -63,8 +70,15 @@ impl AtlassianProvider {
         // For OAuth, we must use api.atlassian.com with cloud_id
         if self.auth_type == "oauth" {
             if let Some(cloud_id) = &self.cloud_id {
-                let path = if path.starts_with('/') { &path[1..] } else { path };
-                return format!("https://api.atlassian.com/ex/confluence/{}/wiki/api/v2/{}", cloud_id, path);
+                let path = if path.starts_with('/') {
+                    &path[1..]
+                } else {
+                    path
+                };
+                return format!(
+                    "https://api.atlassian.com/ex/confluence/{}/wiki/api/v2/{}",
+                    cloud_id, path
+                );
             }
         }
 
@@ -86,7 +100,10 @@ impl AtlassianProvider {
     pub fn confluence_search_url(&self) -> String {
         if self.auth_type == "oauth" {
             if let Some(cloud_id) = &self.cloud_id {
-                return format!("https://api.atlassian.com/ex/confluence/{}/wiki/rest/api/content/search", cloud_id);
+                return format!(
+                    "https://api.atlassian.com/ex/confluence/{}/wiki/rest/api/content/search",
+                    cloud_id
+                );
             }
         }
 
@@ -347,12 +364,22 @@ impl NodeLogic for AtlassianOAuthProviderNode {
 
         // Debug: Log token info (mask the actual token for security)
         let token_preview = if token.access_token.len() > 20 {
-            format!("{}...{}", &token.access_token[..10], &token.access_token[token.access_token.len()-10..])
+            format!(
+                "{}...{}",
+                &token.access_token[..10],
+                &token.access_token[token.access_token.len() - 10..]
+            )
         } else {
             "[token too short]".to_string()
         };
-        context.log_message(&format!("OAuth token preview: {}", token_preview), LogLevel::Debug);
-        context.log_message(&format!("Token type: {:?}", token.token_type), LogLevel::Debug);
+        context.log_message(
+            &format!("OAuth token preview: {}", token_preview),
+            LogLevel::Debug,
+        );
+        context.log_message(
+            &format!("Token type: {:?}", token.token_type),
+            LogLevel::Debug,
+        );
         context.log_message(&format!("Base URL: {}", base_url), LogLevel::Debug);
 
         // For OAuth, we need to fetch the cloud ID from accessible-resources
@@ -376,7 +403,10 @@ impl NodeLogic for AtlassianOAuthProviderNode {
 
         let resources: Vec<AccessibleResource> = resources_response.json().await?;
         if let Ok(json_str) = flow_like_types::json::to_string(&resources) {
-            context.log_message(&format!("Accessible resources: {}", json_str), LogLevel::Debug);
+            context.log_message(
+                &format!("Accessible resources: {}", json_str),
+                LogLevel::Debug,
+            );
         }
 
         // Find the cloud ID for the specified base URL
@@ -386,7 +416,10 @@ impl NodeLogic for AtlassianOAuthProviderNode {
             .find(|r| r.url.trim_end_matches('/').to_lowercase() == normalized_base)
             .map(|r| r.id.clone())
             .ok_or_else(|| {
-                let available: Vec<_> = resources.iter().map(|r| format!("{} ({})", r.name, r.url)).collect();
+                let available: Vec<_> = resources
+                    .iter()
+                    .map(|r| format!("{} ({})", r.name, r.url))
+                    .collect();
                 flow_like_types::anyhow!(
                     "No accessible resource found for '{}'. Available: {:?}",
                     base_url,
@@ -406,8 +439,17 @@ impl NodeLogic for AtlassianOAuthProviderNode {
             cloud_id: Some(cloud_id),
         };
 
-        context.log_message(&format!("Jira API URL: {}", provider.jira_api_url("/myself")), LogLevel::Debug);
-        context.log_message(&format!("Confluence API URL: {}", provider.confluence_api_url("/spaces")), LogLevel::Debug);
+        context.log_message(
+            &format!("Jira API URL: {}", provider.jira_api_url("/myself")),
+            LogLevel::Debug,
+        );
+        context.log_message(
+            &format!(
+                "Confluence API URL: {}",
+                provider.confluence_api_url("/spaces")
+            ),
+            LogLevel::Debug,
+        );
 
         context.set_pin_value("provider", json!(provider)).await?;
 

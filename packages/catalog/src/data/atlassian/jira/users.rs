@@ -83,7 +83,10 @@ impl NodeLogic for GetCurrentUserNode {
         let url = provider.jira_api_url("/myself");
 
         context.log_message(&format!("Jira API URL: {}", url), LogLevel::Debug);
-        context.log_message(&format!("Auth type: {}", provider.auth_type), LogLevel::Debug);
+        context.log_message(
+            &format!("Auth type: {}", provider.auth_type),
+            LogLevel::Debug,
+        );
 
         let response = client
             .get(&url)
@@ -91,7 +94,10 @@ impl NodeLogic for GetCurrentUserNode {
             .send()
             .await?;
 
-        context.log_message(&format!("Response status: {}", response.status()), LogLevel::Debug);
+        context.log_message(
+            &format!("Response status: {}", response.status()),
+            LogLevel::Debug,
+        );
 
         if !response.status().is_success() {
             let status = response.status();

@@ -78,8 +78,9 @@ export function FlowCopilot({
 	embedded = false,
 	runContext,
 	onFocusNode,
+	onClose,
 }: FlowCopilotProps) {
-	const [isOpen, setIsOpen] = useState(false);
+	const [isOpen, setIsOpen] = useState(mode === "panel" || embedded);
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [input, setInput] = useState("");
 	const [loading, setLoading] = useState(false);
@@ -545,46 +546,45 @@ ${input}`;
 		handleSubmitRef.current = handleSubmit;
 	}, [handleSubmit]);
 
-	// Show floating button when closed
-	if (!isOpen) {
+	// Panel mode - renders directly as a panel (controlled externally)
+	if (mode === "panel") {
 		return (
-			<motion.div
-				initial={{ scale: 0, opacity: 0 }}
-				animate={{ scale: 1, opacity: 1 }}
-				className="absolute top-20 right-4 z-40"
-			>
-				<div className="relative group">
-					<div className="absolute -inset-2 bg-primary/30 rounded-full blur-xl opacity-0 group-hover:opacity-50 transition-all duration-300" />
-
-					<Button
-						className="relative rounded-full w-12 h-12 p-0 shadow-lg bg-background/90 backdrop-blur-sm border border-border/50 hover:border-primary/50 hover:bg-background hover:shadow-xl transition-all duration-200"
-						onClick={() => setIsOpen(true)}
-					>
-						<SparklesIcon className="w-5 h-5 text-primary" />
-					</Button>
-
-					{runContext && (
-						<motion.div
-							initial={{ scale: 0 }}
-							animate={{ scale: 1 }}
-							className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-amber-500 border-2 border-background rounded-full flex items-center justify-center shadow-md"
-							title="Log context available"
-						>
-							<SparklesIcon className="w-2 h-2 text-white" />
-						</motion.div>
-					)}
-
-					{autocompleteEnabled && !runContext && (
-						<motion.div
-							initial={{ scale: 0 }}
-							animate={{ scale: 1 }}
-							className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-background rounded-full flex items-center justify-center shadow-md"
-						>
-							<Wand2Icon className="w-2.5 h-2.5 text-white" />
-						</motion.div>
-					)}
-				</div>
-			</motion.div>
+			<PanelView
+				messages={messages}
+				input={input}
+				setInput={setInput}
+				loading={loading}
+				loadingPhase={loadingPhase}
+				elapsedSeconds={elapsedSeconds}
+				suggestions={suggestions}
+				pendingCommands={pendingCommands}
+				planSteps={planSteps}
+				currentToolCall={currentToolCall}
+				userScrolledUp={userScrolledUp}
+				scrollContainerRef={scrollContainerRef}
+				messagesEndRef={messagesEndRef}
+				handleScroll={handleScroll}
+				scrollToBottom={scrollToBottom}
+				handleNewChat={handleNewChat}
+				handleSubmit={handleSubmit}
+				handleExecuteCommands={handleExecuteCommands}
+				handleExecuteSingle={handleExecuteSingle}
+				handleDismissCommands={handleDismissCommands}
+				onAcceptSuggestion={onAcceptSuggestion}
+				onFocusNode={onFocusNode}
+				onClose={onClose}
+				board={board}
+				models={models}
+				selectedModelId={selectedModelId}
+				setSelectedModelId={setSelectedModelId}
+				attachedImages={attachedImages}
+				imageInputRef={imageInputRef}
+				handleImageSelect={handleImageSelect}
+				handleRemoveImage={handleRemoveImage}
+				handlePaste={handlePaste}
+				handleKeyDown={handleKeyDown}
+				runContext={runContext}
+			/>
 		);
 	}
 
@@ -625,6 +625,49 @@ ${input}`;
 				handlePaste={handlePaste}
 				handleKeyDown={handleKeyDown}
 			/>
+		);
+	}
+
+	// Legacy floating button mode (when not in panel/embedded mode)
+	if (!isOpen) {
+		return (
+			<motion.div
+				initial={{ scale: 0, opacity: 0 }}
+				animate={{ scale: 1, opacity: 1 }}
+				className="absolute bottom-4 right-4 z-40 md:top-20 md:bottom-auto"
+			>
+				<div className="relative group">
+					<div className="absolute -inset-2 bg-primary/30 rounded-full blur-xl opacity-0 group-hover:opacity-50 transition-all duration-300" />
+
+					<Button
+						className="relative rounded-full w-12 h-12 p-0 shadow-lg bg-background/90 backdrop-blur-sm border border-border/50 hover:border-primary/50 hover:bg-background hover:shadow-xl transition-all duration-200"
+						onClick={() => setIsOpen(true)}
+					>
+						<SparklesIcon className="w-5 h-5 text-primary" />
+					</Button>
+
+					{runContext && (
+						<motion.div
+							initial={{ scale: 0 }}
+							animate={{ scale: 1 }}
+							className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-amber-500 border-2 border-background rounded-full flex items-center justify-center shadow-md"
+							title="Log context available"
+						>
+							<SparklesIcon className="w-2 h-2 text-white" />
+						</motion.div>
+					)}
+
+					{autocompleteEnabled && !runContext && (
+						<motion.div
+							initial={{ scale: 0 }}
+							animate={{ scale: 1 }}
+							className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-background rounded-full flex items-center justify-center shadow-md"
+						>
+							<Wand2Icon className="w-2.5 h-2.5 text-white" />
+						</motion.div>
+					)}
+				</div>
+			</motion.div>
 		);
 	}
 
@@ -993,12 +1036,383 @@ const EmbeddedView = memo(function EmbeddedView({
 	);
 });
 
+// Panel view component - for use when opened from header button (with close button)
+interface PanelViewProps extends EmbeddedViewProps {
+	onClose?: () => void;
+	runContext?: any;
+}
+
+const PanelView = memo(function PanelView({
+	messages,
+	input,
+	setInput,
+	loading,
+	loadingPhase,
+	elapsedSeconds,
+	suggestions,
+	pendingCommands,
+	planSteps,
+	currentToolCall,
+	userScrolledUp,
+	scrollContainerRef,
+	messagesEndRef,
+	handleScroll,
+	scrollToBottom,
+	handleNewChat,
+	handleSubmit,
+	handleExecuteCommands,
+	handleExecuteSingle,
+	handleDismissCommands,
+	onAcceptSuggestion,
+	onFocusNode,
+	onClose,
+	board,
+	models,
+	selectedModelId,
+	setSelectedModelId,
+	attachedImages,
+	imageInputRef,
+	handleImageSelect,
+	handleRemoveImage,
+	handlePaste,
+	handleKeyDown,
+	runContext,
+}: PanelViewProps) {
+	return (
+		<motion.div
+			layoutId="flow-copilot-panel"
+			initial={{ opacity: 0, scale: 0.95, y: -10 }}
+			animate={{ opacity: 1, scale: 1, y: 0 }}
+			exit={{ opacity: 0, scale: 0.95, y: -10 }}
+			transition={{ type: "spring", stiffness: 400, damping: 30 }}
+			className="h-full w-full flex flex-col bg-background/95 backdrop-blur-xl border border-border/40 rounded-2xl overflow-hidden shadow-2xl"
+		>
+			{/* Header */}
+			<div className="relative overflow-hidden shrink-0">
+				<div className="absolute inset-0 bg-linear-to-br from-primary/8 via-violet-500/5 to-pink-500/5" />
+				{loading && (
+					<motion.div
+						className="absolute inset-0 opacity-30"
+						style={{
+							background:
+								"radial-gradient(circle at 30% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 70% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
+						}}
+						animate={{
+							background: [
+								"radial-gradient(circle at 30% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 70% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
+								"radial-gradient(circle at 70% 50%, rgba(139, 92, 246, 0.3), transparent 50%), radial-gradient(circle at 30% 50%, rgba(236, 72, 153, 0.3), transparent 50%)",
+							],
+						}}
+						transition={{
+							duration: 3,
+							repeat: Number.POSITIVE_INFINITY,
+							repeatType: "reverse",
+						}}
+					/>
+				)}
+
+				<div className="relative px-4 py-3 flex items-center justify-between">
+					<div className="flex items-center gap-3">
+						<div className="relative">
+							<motion.div
+								className="absolute inset-0 bg-linear-to-br from-primary to-violet-600 rounded-xl blur-lg opacity-50"
+								animate={
+									loading
+										? { scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }
+										: {}
+								}
+								transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
+							/>
+							<div className="relative p-2 bg-linear-to-br from-primary via-violet-600 to-pink-600 rounded-xl shadow-lg">
+								<SparklesIcon className="w-4 h-4 text-white" />
+							</div>
+						</div>
+						<div>
+							<h3 className="text-sm font-bold">FlowPilot</h3>
+							{loading ? (
+								<StatusPill phase={loadingPhase} elapsed={elapsedSeconds} />
+							) : (
+								<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+									<span className="relative flex h-1.5 w-1.5">
+										<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+										<span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+									</span>
+									{runContext ? "Log context active" : "Ready"}
+								</div>
+							)}
+						</div>
+					</div>
+					<div className="flex items-center gap-1">
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									variant="ghost"
+									size="icon"
+									className="h-7 w-7 rounded-lg hover:bg-accent/50"
+									onClick={handleNewChat}
+								>
+									<SquarePenIcon className="w-3.5 h-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom" className="text-xs">
+								New chat
+							</TooltipContent>
+						</Tooltip>
+						{onClose && (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										variant="ghost"
+										size="icon"
+										className="h-7 w-7 rounded-lg hover:bg-accent/50"
+										onClick={onClose}
+									>
+										<XIcon className="w-3.5 h-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom" className="text-xs">
+									Close
+								</TooltipContent>
+							</Tooltip>
+						)}
+					</div>
+				</div>
+
+				{/* Model selector */}
+				<div className="relative px-4 pb-3">
+					<Select value={selectedModelId} onValueChange={setSelectedModelId}>
+						<SelectTrigger className="h-8 text-xs bg-background/60 backdrop-blur-sm border-border/30 hover:border-primary/30 transition-all duration-200 rounded-lg focus:ring-2 focus:ring-primary/20">
+							<div className="flex items-center gap-1.5">
+								<BotIcon className="w-3.5 h-3.5 text-muted-foreground" />
+								<SelectValue placeholder="Select Model" />
+							</div>
+						</SelectTrigger>
+						<SelectContent className="rounded-lg">
+							{models.map((model) => (
+								<SelectItem
+									key={model.id}
+									value={model.id}
+									className="text-xs rounded-lg"
+								>
+									{model.meta?.en?.name || model.id}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</div>
+
+				{loading && (
+					<motion.div
+						className="absolute bottom-0 left-0 right-0 h-0.5 bg-muted/30"
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+					>
+						<motion.div
+							className="h-full bg-linear-to-r from-primary via-violet-500 to-pink-500"
+							initial={{ width: "0%" }}
+							animate={{ width: "100%" }}
+							transition={{ duration: 30, ease: "linear" }}
+						/>
+					</motion.div>
+				)}
+			</div>
+
+			{/* Chat Area */}
+			<ScrollArea
+				className="flex-1 min-h-0 p-4 flex flex-col"
+				viewportRef={scrollContainerRef}
+				onScroll={handleScroll}
+			>
+				{messages.length === 0 ? (
+					<div className="flex-1 flex items-center justify-center py-8">
+						<div className="text-center max-w-[280px]">
+							<div className="relative inline-flex p-4 rounded-2xl bg-linear-to-br from-primary/10 via-violet-500/5 to-pink-500/5 mb-4">
+								<SparklesIcon className="w-8 h-8 text-primary" />
+							</div>
+							<h4 className="font-semibold text-sm mb-1.5">
+								Welcome to FlowPilot
+							</h4>
+							<p className="text-xs text-muted-foreground leading-relaxed">
+								{runContext
+									? "I can help you analyze logs and debug your flow. Ask me anything about the current run!"
+									: "Ask questions, get help building flows, or let me analyze your workflow."}
+							</p>
+						</div>
+					</div>
+				) : (
+					<div className="space-y-4">
+						{messages.map((message, index) => (
+							<div
+								key={`${message.role}-${index}`}
+								className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+							>
+								<div
+									className={`px-3 py-2 rounded-xl text-sm wrap-break-word overflow-hidden min-w-0 ${
+										message.role === "user"
+											? "bg-muted/60 text-foreground rounded-br-sm max-w-[85%] border border-border/40"
+											: "bg-muted/40 backdrop-blur-sm rounded-bl-sm max-w-full border border-border/30"
+									}`}
+								>
+									{message.content && (
+										<MessageContent
+											content={message.content}
+											onFocusNode={onFocusNode}
+											board={board}
+										/>
+									)}
+									{/* Show loading indicator for last assistant message */}
+									{message.role === "assistant" &&
+										index === messages.length - 1 &&
+										loading &&
+										!message.content && (
+											<div className="flex items-center gap-2">
+												<div className="flex gap-0.5">
+													{[0, 1, 2].map((j) => (
+														<span
+															key={j}
+															className="w-1 h-1 bg-primary rounded-full animate-pulse"
+															style={{ animationDelay: `${j * 0.2}s` }}
+														/>
+													))}
+												</div>
+												<span className="text-xs text-muted-foreground">
+													{currentToolCall
+														? `Using ${currentToolCall.replace(/_/g, " ")}...`
+														: "Processing..."}
+												</span>
+											</div>
+										)}
+								</div>
+							</div>
+						))}
+						{/* Pending commands */}
+						{pendingCommands.length > 0 && (
+							<PendingCommandsView
+								commands={pendingCommands}
+								onExecute={handleExecuteCommands}
+								onExecuteSingle={handleExecuteSingle}
+								onDismiss={handleDismissCommands}
+							/>
+						)}
+						{/* Plan steps */}
+						{loading && planSteps.length > 0 && (
+							<PlanStepsView steps={planSteps} />
+						)}
+					</div>
+				)}
+				<div ref={messagesEndRef} />
+			</ScrollArea>
+
+			{/* Scroll to bottom button */}
+			<AnimatePresence>
+				{userScrolledUp && messages.length > 0 && (
+					<motion.div
+						initial={{ opacity: 0, y: 10 }}
+						animate={{ opacity: 1, y: 0 }}
+						exit={{ opacity: 0, y: 10 }}
+						className="absolute bottom-24 left-1/2 -translate-x-1/2"
+					>
+						<Button
+							size="sm"
+							variant="secondary"
+							onClick={() => scrollToBottom(true)}
+							className="rounded-full shadow-lg text-xs px-3 h-7"
+						>
+							<ArrowDownIcon className="w-3 h-3 mr-1" />
+							Latest
+						</Button>
+					</motion.div>
+				)}
+			</AnimatePresence>
+
+			{/* Input Area */}
+			<div className="shrink-0 p-4 border-t border-border/30 bg-background/50">
+				{/* Attached images preview */}
+				{attachedImages.length > 0 && (
+					<div className="flex flex-wrap gap-2 mb-2">
+						{attachedImages.map((img, index) => (
+							<div
+								key={`img-${index}`}
+								className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/50 group"
+							>
+								<img
+									src={img.preview}
+									alt={`Attached ${index + 1}`}
+									className="w-full h-full object-cover"
+								/>
+								<button
+									type="button"
+									onClick={() => handleRemoveImage(index)}
+									className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+								>
+									<XIcon className="w-4 h-4 text-white" />
+								</button>
+							</div>
+						))}
+					</div>
+				)}
+				<div className="relative flex items-start gap-2">
+					<input
+						type="file"
+						ref={imageInputRef}
+						accept="image/*"
+						multiple
+						onChange={handleImageSelect}
+						className="hidden"
+					/>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="h-9 w-9 shrink-0 rounded-lg hover:bg-accent/50 mt-0.5"
+								onClick={() => imageInputRef.current?.click()}
+								disabled={loading}
+							>
+								<ImageIcon className="w-4 h-4" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="top" className="text-xs">
+							Attach image
+						</TooltipContent>
+					</Tooltip>
+					<textarea
+						value={input}
+						onChange={(e) => setInput(e.target.value)}
+						onKeyDown={handleKeyDown}
+						onPaste={handlePaste}
+						placeholder={
+							runContext ? "Ask about the logs..." : "Ask anything..."
+						}
+						className="flex-1 min-h-9 max-h-[120px] text-sm py-2 px-3 pr-11 rounded-xl bg-background/80 border border-border/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary/50 resize-none"
+						disabled={loading}
+						rows={1}
+					/>
+					<Button
+						size="icon"
+						onClick={handleSubmit}
+						disabled={loading || (!input.trim() && attachedImages.length === 0)}
+						className="absolute right-1 top-0.5 h-8 w-8 rounded-lg shadow-md bg-linear-to-br from-primary to-purple-600 hover:shadow-lg hover:shadow-primary/20 transition-all duration-200 disabled:opacity-50"
+					>
+						{loading ? (
+							<Loader2Icon className="w-4 h-4 animate-spin" />
+						) : (
+							<SendIcon className="w-4 h-4" />
+						)}
+					</Button>
+				</div>
+			</div>
+		</motion.div>
+	);
+});
+
 // Floating panel view component - memoized to prevent re-renders
 interface FloatingPanelViewProps extends EmbeddedViewProps {
 	autocompleteEnabled: boolean;
 	setAutocompleteEnabled: (value: boolean) => void;
 	onClose: () => void;
-	mode: "chat" | "autocomplete";
+	mode: "chat" | "autocomplete" | "embedded";
 }
 
 const FloatingPanelView = memo(function FloatingPanelView({
@@ -1046,8 +1460,7 @@ const FloatingPanelView = memo(function FloatingPanelView({
 			animate={{ opacity: 1, y: 0, scale: 1 }}
 			exit={{ opacity: 0, y: -20, scale: 0.95 }}
 			transition={{ type: "spring", stiffness: 400, damping: 30 }}
-			className="absolute top-20 right-4 z-40"
-			style={{ width: 420, height: 560 }}
+			className="absolute top-4 right-4 left-4 z-40 md:left-auto md:top-20 md:w-[420px] h-[calc(100dvh-8rem)] md:h-[560px]"
 		>
 			{/* Subtle pulsating glow */}
 			{loading && (

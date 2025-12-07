@@ -132,9 +132,12 @@ export function OAuthExecutionProvider({
 			const requiredScopes = provider.merged_scopes ?? provider.scopes ?? [];
 
 			// Check if token exists, is not expired, AND has all required scopes
-			const tokenHasAllScopes = existingToken &&
+			const tokenHasAllScopes =
+				existingToken &&
 				!tokenStore.isExpired(existingToken) &&
-				requiredScopes.every((scope: string) => existingToken.scopes?.includes(scope));
+				requiredScopes.every((scope: string) =>
+					existingToken.scopes?.includes(scope),
+				);
 
 			if (tokenHasAllScopes) {
 				setAuthorizedProviders((prev) => {
@@ -203,16 +206,20 @@ export function OAuthExecutionProvider({
 				const requiredScopes = provider.merged_scopes ?? provider.scopes ?? [];
 
 				// Check if token exists but is missing required scopes
-				const tokenMissingScopes = existingToken &&
+				const tokenMissingScopes =
+					existingToken &&
 					!tokenStore.isExpired(existingToken) &&
-					requiredScopes.some((scope: string) => !existingToken.scopes?.includes(scope));
+					requiredScopes.some(
+						(scope: string) => !existingToken.scopes?.includes(scope),
+					);
 
 				// Check if consent exists but is missing required scopes (scope-aware consent check)
-				const hasConsentWithRequiredScopes = await consentStore.hasConsentWithScopes(
-					appId,
-					provider.id,
-					requiredScopes,
-				);
+				const hasConsentWithRequiredScopes =
+					await consentStore.hasConsentWithScopes(
+						appId,
+						provider.id,
+						requiredScopes,
+					);
 
 				if (tokenMissingScopes) {
 					// Token exists but is missing scopes - force reauthorization regardless of consent
@@ -366,7 +373,12 @@ export function OAuthExecutionProvider({
 	);
 
 	return (
-		<OAuthExecutionContext.Provider value={{ withOAuthCheck, handleOAuthCallback: handleOAuthCallbackInternal }}>
+		<OAuthExecutionContext.Provider
+			value={{
+				withOAuthCheck,
+				handleOAuthCallback: handleOAuthCallbackInternal,
+			}}
+		>
 			{children}
 			<OAuthConsentDialog
 				open={isDialogOpen}

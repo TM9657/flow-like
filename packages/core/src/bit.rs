@@ -514,10 +514,7 @@ impl BitPack {
         size
     }
 
-    pub async fn is_installed(
-        &self,
-        state: Arc<FlowLikeState>,
-    ) -> flow_like_types::Result<bool> {
+    pub async fn is_installed(&self, state: Arc<FlowLikeState>) -> flow_like_types::Result<bool> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
         let mut installed = true;
         for bit in self.bits.iter() {
@@ -685,10 +682,7 @@ impl Bit {
         Ok(dependencies)
     }
 
-    pub async fn is_installed(
-        &self,
-        state: Arc<FlowLikeState>,
-    ) -> flow_like_types::Result<bool> {
+    pub async fn is_installed(&self, state: Arc<FlowLikeState>) -> flow_like_types::Result<bool> {
         let pack = self.pack(state.clone()).await?;
         pack.is_installed(state).await
     }

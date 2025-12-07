@@ -374,14 +374,16 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		sidebarRef?.current?.pushSidebar(sidebarContent);
 	}, [toolbarElements, sidebarContent, toolbarRef, sidebarRef]);
 
-	// Reconnect to active stream when component mounts or session changes
+	// Reconnect to active stream or process completed stream when component mounts or session changes
 	useEffect(() => {
 		if (!sessionIdParameter) return;
+		// Wait for messages to be loaded from IndexedDB
+		if (messages === undefined) return;
 
 		const streamId = sessionIdParameter;
 
-		// Check if there's an active stream for this session
-		if (!executionEngine.isStreamActive(streamId)) return;
+		// Check if there's a stream (active or completed) for this session
+		if (!executionEngine.hasStream(streamId)) return;
 
 		const subscriberId = `chat-reconnect-${sessionIdParameter}`;
 
@@ -403,6 +405,35 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		let intermediateResponse = Response.default();
 		const attachments: Map<string, IAttachment> = new Map();
 
+		// If stream is already complete, save to IndexedDB directly
+		// (chatRef may not be mounted yet since Chat only renders when messages exist)
+		if (executionEngine.isStreamComplete(streamId)) {
+			const accumulatedEvents = executionEngine.getAccumulatedEvents(streamId);
+			if (accumulatedEvents.length > 0) {
+				const result = processChatEvents(accumulatedEvents, {
+					intermediateResponse,
+					responseMessage,
+					attachments,
+					tmpLocalState: null,
+					tmpGlobalState: null,
+					done: true,
+					appId,
+					eventId: event.id,
+					sessionId: sessionIdParameter,
+				});
+
+				// Save directly to IndexedDB - useLiveQuery will pick it up
+				chatDb.messages.put(result.responseMessage);
+				executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
+			}
+			return;
+		}
+
+		// For active streams, wait for Chat component to be mounted (messages.length > 0)
+		// before subscribing, since we need chatRef to push updates
+		if (messages.length === 0) return;
+
+		// For active streams, subscribe to receive events
 		executionEngine.subscribeToEventStream(
 			streamId,
 			subscriberId,
@@ -423,7 +454,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 
 				if (result.shouldUpdate) {
 					chatRef.current?.pushCurrentMessageUpdate({
-						...result.responseMessage,
+						...responseMessage,
 					});
 					chatRef.current?.scrollToBottom();
 				}
@@ -442,7 +473,14 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		return () => {
 			executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
 		};
-	}, [sessionIdParameter, appId, event.id, event.name, executionEngine]);
+	}, [
+		sessionIdParameter,
+		appId,
+		event.id,
+		event.name,
+		executionEngine,
+		messages,
+	]);
 
 	const handleSendMessage: ISendMessageFunction = useCallback(
 		async (

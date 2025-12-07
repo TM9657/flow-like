@@ -381,8 +381,6 @@ pub async fn query_run(
     offset: Option<usize>,
 ) -> Result<Vec<LogMessage>, TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
-    let logs = state
-        .query_run(&log_meta, &query, limit, offset)
-        .await?;
+    let logs = state.query_run(&log_meta, &query, limit, offset).await?;
     Ok(logs)
 }

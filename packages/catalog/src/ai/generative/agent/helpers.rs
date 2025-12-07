@@ -173,26 +173,15 @@ pub async fn execute_tool_call(
         .ok_or_else(|| anyhow!("Tool call arguments for '{}' are not an object", tool_name))?;
 
     // Set values on the referenced function's OUTPUT pins (matching call_ref.rs logic)
-    let pins = referenced_node.pins.clone();
-    for (_id, pin) in pins {
-        let guard = pin.lock().await;
-        let (pin_type, data_type, pin_name) = {
-            let pin_meta = guard.pin.lock().await;
-            (
-                pin_meta.pin_type.clone(),
-                pin_meta.data_type.clone(),
-                pin_meta.name.clone(),
-            )
-        };
-
+    for (_id, pin) in referenced_node.pins.iter() {
         // Skip input pins and execution pins
-        if pin_type == PinType::Input || data_type == VariableType::Execution {
+        if pin.pin_type == PinType::Input || pin.data_type == VariableType::Execution {
             continue;
         }
 
         // Set value if we have an argument for this pin
-        if let Some(value) = args_obj.get(&pin_name) {
-            guard.set_value(value.clone()).await;
+        if let Some(value) = args_obj.get(&pin.name) {
+            pin.set_value(value.clone()).await;
         }
     }
 
@@ -298,7 +287,7 @@ impl AgentStreamState {
         if let Ok(on_stream_pin) = context.get_pin_by_name("on_stream").await {
             on_stream_exists = true;
             context.activate_exec_pin_ref(&on_stream_pin).await?;
-            let connected = on_stream_pin.lock().await.get_connected_nodes().await;
+            let connected = on_stream_pin.get_connected_nodes();
             if !connected.is_empty() {
                 let map = Arc::new(DashMap::new());
                 for node in connected {

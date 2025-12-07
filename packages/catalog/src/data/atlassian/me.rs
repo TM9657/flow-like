@@ -65,10 +65,7 @@ fn parse_atlassian_me(value: &Value) -> Option<AtlassianMe> {
             .get("zoneinfo")
             .and_then(|v| v.as_str())
             .map(String::from),
-        locale: obj
-            .get("locale")
-            .and_then(|v| v.as_str())
-            .map(String::from),
+        locale: obj.get("locale").and_then(|v| v.as_str()).map(String::from),
     })
 }
 
@@ -117,9 +114,14 @@ impl NodeLogic for GetMeNode {
         .set_schema::<AtlassianProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin("me", "Me", "Current user's Atlassian account", VariableType::Struct)
-            .set_schema::<AtlassianMe>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin(
+            "me",
+            "Me",
+            "Current user's Atlassian account",
+            VariableType::Struct,
+        )
+        .set_schema::<AtlassianMe>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "account_id",
@@ -194,8 +196,12 @@ impl NodeLogic for GetMeNode {
         })?;
 
         context.set_pin_value("me", json!(me.clone())).await?;
-        context.set_pin_value("account_id", json!(me.account_id)).await?;
-        context.set_pin_value("email", json!(me.email.unwrap_or_default())).await?;
+        context
+            .set_pin_value("account_id", json!(me.account_id))
+            .await?;
+        context
+            .set_pin_value("email", json!(me.email.unwrap_or_default()))
+            .await?;
         context.set_pin_value("name", json!(me.name)).await?;
 
         context.activate_exec_pin("exec_out").await?;

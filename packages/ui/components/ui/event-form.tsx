@@ -6,6 +6,7 @@ import { useInvoke } from "../../hooks";
 import type { IEvent, IOAuthProvider, IOAuthToken } from "../../lib";
 import { checkOAuthTokens } from "../../lib/oauth/helpers";
 import type { IOAuthTokenStoreWithPending } from "../../lib/oauth/types";
+import type { IStoredOAuthToken } from "../../lib/oauth/types";
 import type { IHub } from "../../lib/schema/hub/hub";
 import { convertJsonToUint8Array } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
@@ -24,7 +25,6 @@ import {
 } from "./select";
 import { Separator } from "./separator";
 import { Textarea } from "./textarea";
-import type { IStoredOAuthToken } from "../../lib/oauth/types";
 
 interface EventFormProps {
 	event?: IEvent;
@@ -44,7 +44,10 @@ interface EventFormProps {
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
 	/** Optional callback to refresh expired tokens */
-	onRefreshToken?: (provider: IOAuthProvider, token: IStoredOAuthToken) => Promise<IStoredOAuthToken>;
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }
 
 export function EventForm({

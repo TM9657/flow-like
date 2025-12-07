@@ -87,12 +87,35 @@ import {
 	BorderRightIcon,
 	BorderTopIcon,
 } from "./table-icons";
+import { TableViewer } from "./table-viewer";
 import {
 	Toolbar,
 	ToolbarButton,
 	ToolbarGroup,
 	ToolbarMenuGroup,
 } from "./toolbar";
+
+function extractTableData(element: TTableElement): string[][] {
+	const rows: string[][] = [];
+	for (const row of element.children as TTableRowElement[]) {
+		const cells: string[] = [];
+		for (const cell of row.children as TTableCellElement[]) {
+			const text = cell.children
+				?.map((child: any) => {
+					if (child.text) return child.text;
+					if (child.children) {
+						return child.children.map((c: any) => c.text || "").join("");
+					}
+					return "";
+				})
+				.join("");
+			cells.push(text || "");
+		}
+		rows.push(cells);
+	}
+	return rows;
+}
+
 export const TableElement = withHOC(
 	TableProvider,
 	function TableElement({
@@ -113,25 +136,42 @@ export const TableElement = withHOC(
 
 		const isSelectingTable = useBlockSelected(props.element.id as string);
 
+		// For read-only mode, use the interactive TableViewer
+		if (readOnly) {
+			const tableData = extractTableData(props.element);
+			return (
+				<PlateElement
+					{...props}
+					className="py-3"
+					style={{ paddingLeft: marginLeft }}
+				>
+					<TableViewer data={tableData}>{children}</TableViewer>
+				</PlateElement>
+			);
+		}
+
+		// Edit mode - original table rendering
 		const content = (
 			<PlateElement
 				{...props}
 				className={cn(
-					"py-5",
+					"py-3",
 					hasControls && "-ml-2 data-[slot=block-selection]:*:left-2",
 				)}
 				style={{ paddingLeft: marginLeft }}
 			>
 				<div className="group/table relative w-fit">
-					<table
-						className={cn(
-							"mr-0 ml-px table h-px table-fixed border-collapse",
-							isSelectingCell && "selection:bg-transparent",
-						)}
-						{...tableProps}
-					>
-						<tbody className="min-w-full">{children}</tbody>
-					</table>
+					<div className="overflow-x-auto max-w-full">
+						<table
+							className={cn(
+								"mr-0 ml-px table h-px table-fixed border-collapse text-sm",
+								isSelectingCell && "selection:bg-transparent",
+							)}
+							{...tableProps}
+						>
+							<tbody className="min-w-full">{children}</tbody>
+						</table>
+					</div>
 
 					{isSelectingTable && (
 						<div className={blockSelectionVariants()} contentEditable={false} />
@@ -139,10 +179,6 @@ export const TableElement = withHOC(
 				</div>
 			</PlateElement>
 		);
-
-		if (readOnly) {
-			return content;
-		}
 
 		return <TableFloatingToolbar>{content}</TableFloatingToolbar>;
 	},
@@ -536,6 +572,11 @@ export function TableCellElement({
 			rowIndex,
 		});
 
+	// More compact sizing for read-only mode
+	const numericWidth = typeof width === "number" ? width : undefined;
+	const cellMinWidth = readOnly ? 60 : 120;
+	const cellMaxWidth = readOnly ? 300 : 240;
+
 	return (
 		<PlateElement
 			{...props}
@@ -543,7 +584,7 @@ export function TableCellElement({
 			className={cn(
 				"h-full overflow-visible border-none bg-background p-0",
 				element.background ? "bg-(--cellBackground)" : "bg-background",
-				isHeader && "text-left *:m-0",
+				isHeader && "text-left font-semibold bg-muted/50 *:m-0",
 				"before:size-full",
 				selected && "before:z-10 before:bg-brand/5",
 				"before:absolute before:box-border before:content-[''] before:select-none",
@@ -551,12 +592,15 @@ export function TableCellElement({
 				borders.right?.size && `before:border-r before:border-r-border`,
 				borders.left?.size && `before:border-l before:border-l-border`,
 				borders.top?.size && `before:border-t before:border-t-border`,
+				// Always show borders in read-only mode for cleaner look
+				readOnly &&
+					"before:border-b before:border-b-border before:border-r before:border-r-border",
 			)}
 			style={
 				{
 					"--cellBackground": element.background,
-					maxWidth: width || 240,
-					minWidth: width || 120,
+					maxWidth: cellMaxWidth,
+					minWidth: cellMinWidth,
 				} as React.CSSProperties
 			}
 			attributes={{
@@ -566,8 +610,11 @@ export function TableCellElement({
 			}}
 		>
 			<div
-				className="relative z-20 box-border h-full px-3 py-2"
-				style={{ minHeight }}
+				className={cn(
+					"relative z-20 box-border h-full",
+					readOnly ? "px-2 py-1.5 text-sm" : "px-3 py-2",
+				)}
+				style={{ minHeight: readOnly ? undefined : minHeight }}
 			>
 				{props.children}
 			</div>

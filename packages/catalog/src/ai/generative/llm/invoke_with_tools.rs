@@ -409,12 +409,12 @@ impl NodeLogic for InvokeLLMWithToolsNode {
                 }
 
                 // Set args & activate the specific tool pin
-                tool_call_args_pin.lock().await.set_value(args).await;
+                tool_call_args_pin.set_value(args).await;
                 context.activate_exec_pin(&tc.name).await?;
 
                 // Run connected subgraph
                 let tool_exec_pin = context.get_pin_by_name(&tc.name).await?;
-                let tool_flow = tool_exec_pin.lock().await.get_connected_nodes().await;
+                let tool_flow = tool_exec_pin.get_connected_nodes();
 
                 for node in &tool_flow {
                     let mut sub_ctx = context.create_sub_context(node).await;

@@ -1,4 +1,4 @@
-import { createOAuthService, type OAuthService } from "@tm9657/flow-like-ui";
+import { type OAuthService, createOAuthService } from "@tm9657/flow-like-ui";
 import { oauthTokenStore } from "./oauth-db";
 import { tauriOAuthRuntime } from "./tauri-oauth-runtime";
 

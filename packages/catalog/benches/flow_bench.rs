@@ -53,12 +53,7 @@ async fn open_board(id: &str, state: Arc<FlowLikeState>) -> Board {
     Board::load(path, id, state, None).await.unwrap()
 }
 
-async fn run_once(
-    board: Arc<Board>,
-    state: Arc<FlowLikeState>,
-    profile: &Profile,
-    start_id: &str,
-) {
+async fn run_once(board: Arc<Board>, state: Arc<FlowLikeState>, profile: &Profile, start_id: &str) {
     let buffered_sender = Arc::new(BufferedInterComHandler::new(
         Arc::new(move |_event| Box::pin(async move { Ok(()) })),
         Some(100),

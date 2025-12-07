@@ -119,7 +119,10 @@ impl NodeLogic for GetBoardsNode {
 
         node.add_output_pin("count", "Count", "Number of boards", VariableType::Integer);
 
-        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:board-scope:jira-software"]);
+        node.add_required_oauth_scopes(
+            ATLASSIAN_PROVIDER_ID,
+            vec!["read:board-scope:jira-software"],
+        );
         node.set_scores(
             NodeScores::new()
                 .set_privacy(7)
@@ -291,7 +294,10 @@ impl NodeLogic for GetBoardIssuesNode {
             VariableType::Integer,
         );
 
-        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:board-scope:jira-software"]);
+        node.add_required_oauth_scopes(
+            ATLASSIAN_PROVIDER_ID,
+            vec!["read:board-scope:jira-software"],
+        );
         node.set_scores(
             NodeScores::new()
                 .set_privacy(7)
@@ -433,7 +439,10 @@ impl NodeLogic for GetBacklogNode {
             VariableType::Integer,
         );
 
-        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:board-scope:jira-software"]);
+        node.add_required_oauth_scopes(
+            ATLASSIAN_PROVIDER_ID,
+            vec!["read:board-scope:jira-software"],
+        );
         node.set_scores(
             NodeScores::new()
                 .set_privacy(7)

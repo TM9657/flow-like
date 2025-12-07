@@ -33,16 +33,27 @@ fn parse_warehouse(warehouse: &Value) -> Option<DatabricksSqlWarehouse> {
         id: warehouse["id"].as_str()?.to_string(),
         name: warehouse["name"].as_str()?.to_string(),
         state: warehouse["state"].as_str().unwrap_or("UNKNOWN").to_string(),
-        cluster_size: warehouse["cluster_size"].as_str().unwrap_or_default().to_string(),
+        cluster_size: warehouse["cluster_size"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
         min_num_clusters: warehouse["min_num_clusters"].as_i64().unwrap_or(1),
         max_num_clusters: warehouse["max_num_clusters"].as_i64().unwrap_or(1),
         num_clusters: warehouse["num_clusters"].as_i64().unwrap_or(0),
         num_active_sessions: warehouse["num_active_sessions"].as_i64().unwrap_or(0),
         auto_stop_mins: warehouse["auto_stop_mins"].as_i64().unwrap_or(0),
         creator_name: warehouse["creator_name"].as_str().map(String::from),
-        enable_serverless_compute: warehouse["enable_serverless_compute"].as_bool().unwrap_or(false),
-        warehouse_type: warehouse["warehouse_type"].as_str().unwrap_or("CLASSIC").to_string(),
-        channel: warehouse["channel"].get("name").and_then(|n| n.as_str()).map(String::from),
+        enable_serverless_compute: warehouse["enable_serverless_compute"]
+            .as_bool()
+            .unwrap_or(false),
+        warehouse_type: warehouse["warehouse_type"]
+            .as_str()
+            .unwrap_or("CLASSIC")
+            .to_string(),
+        channel: warehouse["channel"]
+            .get("name")
+            .and_then(|n| n.as_str())
+            .map(String::from),
     })
 }
 
@@ -159,9 +170,10 @@ impl NodeLogic for ListDatabricksSqlWarehousesNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     let warehouses_array = data["warehouses"].as_array();
                     let warehouses: Vec<DatabricksSqlWarehouse> = warehouses_array
@@ -170,21 +182,33 @@ impl NodeLogic for ListDatabricksSqlWarehousesNode {
 
                     let count = warehouses.len();
 
-                    context.set_pin_value("warehouses", json!(warehouses)).await?;
+                    context
+                        .set_pin_value("warehouses", json!(warehouses))
+                        .await?;
                     context.set_pin_value("count", json!(count)).await?;
                     context.set_pin_value("error_message", json!("")).await?;
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -280,7 +304,9 @@ impl NodeLogic for StartDatabricksSqlWarehouseNode {
         let warehouse_id: String = context.evaluate_pin("warehouse_id").await?;
 
         if warehouse_id.is_empty() {
-            context.set_pin_value("error_message", json!("Warehouse ID is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Warehouse ID is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -302,15 +328,25 @@ impl NodeLogic for StartDatabricksSqlWarehouseNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -406,7 +442,9 @@ impl NodeLogic for StopDatabricksSqlWarehouseNode {
         let warehouse_id: String = context.evaluate_pin("warehouse_id").await?;
 
         if warehouse_id.is_empty() {
-            context.set_pin_value("error_message", json!("Warehouse ID is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Warehouse ID is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -428,15 +466,25 @@ impl NodeLogic for StopDatabricksSqlWarehouseNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }

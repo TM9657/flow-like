@@ -87,7 +87,10 @@ fn parse_job_run(run: &Value) -> Option<DatabricksJobRun> {
         job_id: run["job_id"].as_i64().unwrap_or(0),
         run_name: run["run_name"].as_str().map(String::from),
         state: DatabricksRunState {
-            life_cycle_state: state["life_cycle_state"].as_str().unwrap_or("UNKNOWN").to_string(),
+            life_cycle_state: state["life_cycle_state"]
+                .as_str()
+                .unwrap_or("UNKNOWN")
+                .to_string(),
             result_state: state["result_state"].as_str().map(String::from),
             state_message: state["state_message"].as_str().map(String::from),
         },
@@ -174,15 +177,10 @@ impl NodeLogic for ListDatabricksJobsNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin(
-            "jobs",
-            "Jobs",
-            "Array of jobs",
-            VariableType::Struct,
-        )
-        .set_value_type(ValueType::Array)
-        .set_schema::<DatabricksJob>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin("jobs", "Jobs", "Array of jobs", VariableType::Struct)
+            .set_value_type(ValueType::Array)
+            .set_schema::<DatabricksJob>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "count",
@@ -250,9 +248,10 @@ impl NodeLogic for ListDatabricksJobsNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     let jobs_array = data["jobs"].as_array();
                     let jobs: Vec<DatabricksJob> = jobs_array
@@ -269,15 +268,25 @@ impl NodeLogic for ListDatabricksJobsNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -386,10 +395,15 @@ impl NodeLogic for RunDatabricksJobNode {
 
         let provider: DatabricksProvider = context.evaluate_pin("provider").await?;
         let job_id: i64 = context.evaluate_pin("job_id").await?;
-        let job_parameters: Value = context.evaluate_pin("job_parameters").await.unwrap_or(json!({}));
+        let job_parameters: Value = context
+            .evaluate_pin("job_parameters")
+            .await
+            .unwrap_or(json!({}));
 
         if job_id == 0 {
-            context.set_pin_value("error_message", json!("Job ID is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Job ID is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -415,9 +429,10 @@ impl NodeLogic for RunDatabricksJobNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     let run_id = data["run_id"].as_i64().unwrap_or(0);
 
@@ -426,15 +441,25 @@ impl NodeLogic for RunDatabricksJobNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -500,14 +525,9 @@ impl NodeLogic for GetDatabricksJobRunNode {
             VariableType::Execution,
         );
 
-        node.add_output_pin(
-            "run",
-            "Run",
-            "Job run details",
-            VariableType::Struct,
-        )
-        .set_schema::<DatabricksJobRun>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin("run", "Run", "Job run details", VariableType::Struct)
+            .set_schema::<DatabricksJobRun>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "is_running",
@@ -553,7 +573,9 @@ impl NodeLogic for GetDatabricksJobRunNode {
         let run_id: i64 = context.evaluate_pin("run_id").await?;
 
         if run_id == 0 {
-            context.set_pin_value("error_message", json!("Run ID is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Run ID is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -571,9 +593,10 @@ impl NodeLogic for GetDatabricksJobRunNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     if let Some(run) = parse_job_run(&data) {
                         let is_running = matches!(
@@ -583,25 +606,41 @@ impl NodeLogic for GetDatabricksJobRunNode {
                         let is_successful = run.state.result_state.as_deref() == Some("SUCCESS");
 
                         context.set_pin_value("run", json!(run)).await?;
-                        context.set_pin_value("is_running", json!(is_running)).await?;
-                        context.set_pin_value("is_successful", json!(is_successful)).await?;
+                        context
+                            .set_pin_value("is_running", json!(is_running))
+                            .await?;
+                        context
+                            .set_pin_value("is_successful", json!(is_successful))
+                            .await?;
                         context.set_pin_value("error_message", json!("")).await?;
                         context.activate_exec_pin("exec_out").await?;
                     } else {
-                        context.set_pin_value("error_message", json!("Failed to parse run data")).await?;
+                        context
+                            .set_pin_value("error_message", json!("Failed to parse run data"))
+                            .await?;
                         context.activate_exec_pin("error").await?;
                     }
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -697,7 +736,9 @@ impl NodeLogic for CancelDatabricksJobRunNode {
         let run_id: i64 = context.evaluate_pin("run_id").await?;
 
         if run_id == 0 {
-            context.set_pin_value("error_message", json!("Run ID is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Run ID is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -720,15 +761,25 @@ impl NodeLogic for CancelDatabricksJobRunNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }

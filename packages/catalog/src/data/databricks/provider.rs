@@ -326,10 +326,7 @@ impl NodeLogic for DatabricksServicePrincipalProviderNode {
         let client_id: String = context.evaluate_pin("client_id").await?;
         let client_secret: String = context.evaluate_pin("client_secret").await?;
         let workspace_url: String = context.evaluate_pin("workspace_url").await?;
-        let account_id: String = context
-            .evaluate_pin("account_id")
-            .await
-            .unwrap_or_default();
+        let account_id: String = context.evaluate_pin("account_id").await.unwrap_or_default();
 
         if client_id.is_empty() {
             context
@@ -359,10 +356,7 @@ impl NodeLogic for DatabricksServicePrincipalProviderNode {
         // For workspace-level: https://<workspace-url>/oidc/v1/token
         // For account-level: https://accounts.cloud.databricks.com/oidc/accounts/<account-id>/v1/token
         let token_url = if account_id.is_empty() {
-            format!(
-                "{}/oidc/v1/token",
-                workspace_url.trim_end_matches('/')
-            )
+            format!("{}/oidc/v1/token", workspace_url.trim_end_matches('/'))
         } else {
             format!(
                 "https://accounts.cloud.databricks.com/oidc/accounts/{}/v1/token",
@@ -400,11 +394,17 @@ impl NodeLogic for DatabricksServicePrincipalProviderNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
                     context
                         .set_pin_value(
                             "error_message",
-                            json!(format!("Authentication failed ({}): {}", status, error_text)),
+                            json!(format!(
+                                "Authentication failed ({}): {}",
+                                status, error_text
+                            )),
                         )
                         .await?;
                     context.activate_exec_pin("error").await?;

@@ -221,29 +221,20 @@ impl NodeLogic for MakeStructFromSchemaNode {
         let mut result: HashMap<String, Value> = HashMap::new();
 
         // Get all input pins and build the struct
-        let pins = context.node.pins.clone();
-        for (_id, pin_ref) in pins {
-            let (pin_name, data_type, pin_type) = {
-                let guard = pin_ref.lock().await;
-                let pin = guard.pin.lock().await;
-                (
-                    pin.name.clone(),
-                    pin.data_type.clone(),
-                    pin.pin_type.clone(),
-                )
-            };
-
+        for (_id, pin) in context.node.pins.iter() {
             // Skip output pins and execution pins
-            if pin_type != PinType::Input || data_type == VariableType::Execution {
+            if pin.pin_type != PinType::Input || pin.data_type == VariableType::Execution {
                 continue;
             }
+
+            let pin_name = &pin.name;
 
             // Extract field name from the prefixed pin name
             let field_name = pin_name
                 .strip_prefix(MAKE_STRUCT_PIN_PREFIX)
-                .unwrap_or(&pin_name);
+                .unwrap_or(pin_name);
 
-            let value: Value = context.evaluate_pin_ref(pin_ref).await?;
+            let value: Value = context.evaluate_pin_ref(pin.clone()).await?;
             result.insert(field_name.to_string(), value);
         }
 

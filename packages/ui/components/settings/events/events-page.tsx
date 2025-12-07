@@ -43,7 +43,10 @@ import {
 } from "@tm9657/flow-like-ui";
 import type { IOAuthConsentStore } from "@tm9657/flow-like-ui/db/oauth-db";
 import { checkOAuthTokens } from "@tm9657/flow-like-ui/lib/oauth/helpers";
-import type { IOAuthTokenStoreWithPending, IStoredOAuthToken } from "@tm9657/flow-like-ui/lib/oauth/types";
+import type {
+	IOAuthTokenStoreWithPending,
+	IStoredOAuthToken,
+} from "@tm9657/flow-like-ui/lib/oauth/types";
 import type { IHub } from "@tm9657/flow-like-ui/lib/schema/hub/hub";
 import {
 	convertJsonToUint8Array,
@@ -93,7 +96,10 @@ export interface EventsPageProps {
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
 	/** Optional callback to refresh expired tokens */
-	onRefreshToken?: (provider: IOAuthProvider, token: IStoredOAuthToken) => Promise<IStoredOAuthToken>;
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }
 
 export default function EventsPage({
@@ -429,7 +435,10 @@ function EventConfiguration({
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
 	/** Optional callback to refresh expired tokens */
-	onRefreshToken?: (provider: IOAuthProvider, token: IStoredOAuthToken) => Promise<IStoredOAuthToken>;
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }>) {
 	const backend = useBackend();
 	const [isEditing, setIsEditing] = useState(false);
@@ -1268,7 +1277,10 @@ function TableActivateSinkButton({
 	consentStore?: IOAuthConsentStore;
 	hub?: IHub;
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
-	onRefreshToken?: (provider: IOAuthProvider, token: IStoredOAuthToken) => Promise<IStoredOAuthToken>;
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }) {
 	const backend = useBackend();
 	const [showDialog, setShowDialog] = useState(false);
@@ -1534,7 +1546,10 @@ interface IEventsTableProps {
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
 	/** Optional callback to refresh expired tokens */
-	onRefreshToken?: (provider: IOAuthProvider, token: IStoredOAuthToken) => Promise<IStoredOAuthToken>;
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }
 
 function EventsTable({

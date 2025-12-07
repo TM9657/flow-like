@@ -87,7 +87,10 @@ impl NodeLogic for SearchUsersNode {
             VariableType::Integer,
         );
 
-        node.add_required_oauth_scopes(ATLASSIAN_PROVIDER_ID, vec!["read:confluence-user", "read:account"]);
+        node.add_required_oauth_scopes(
+            ATLASSIAN_PROVIDER_ID,
+            vec!["read:confluence-user", "read:account"],
+        );
         node.set_scores(
             NodeScores::new()
                 .set_privacy(6)

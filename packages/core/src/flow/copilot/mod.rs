@@ -46,7 +46,6 @@ use crate::profile::Profile;
 use crate::state::FlowLikeState;
 use flow_like_model_provider::provider::ModelProvider;
 
-
 use tools::{
     EmitCommandsArgs, FilterCategoryArgs, GetNodeDetailsArgs, QueryLogsArgs, SearchArgs,
     SearchByPinArgs, SearchTemplatesArgs, ThinkingArgs,

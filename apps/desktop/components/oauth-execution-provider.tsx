@@ -41,10 +41,7 @@ export function OAuthExecutionProvider({ children }: { children: ReactNode }) {
 	}, [profile.data?.hub]);
 
 	// Create OAuth service with API base URL for secret proxy
-	const oauthService = useMemo(
-		() => getOAuthService(apiBaseUrl),
-		[apiBaseUrl],
-	);
+	const oauthService = useMemo(() => getOAuthService(apiBaseUrl), [apiBaseUrl]);
 
 	// Sync provider cache with the OAuth callback handler
 	const handleProviderCacheUpdate = () => {

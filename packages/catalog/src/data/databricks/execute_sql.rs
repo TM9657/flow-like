@@ -8,7 +8,11 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{JsonSchema, Value, async_trait, json::{json, Map}, reqwest};
+use flow_like_types::{
+    JsonSchema, Value, async_trait,
+    json::{Map, json},
+    reqwest,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -181,16 +185,23 @@ impl NodeLogic for ExecuteDatabricksSqlNode {
         let catalog: String = context.evaluate_pin("catalog").await.unwrap_or_default();
         let schema: String = context.evaluate_pin("schema").await.unwrap_or_default();
         let row_limit: i64 = context.evaluate_pin("row_limit").await.unwrap_or(10000);
-        let wait_timeout: String = context.evaluate_pin("wait_timeout").await.unwrap_or_else(|_| "50s".to_string());
+        let wait_timeout: String = context
+            .evaluate_pin("wait_timeout")
+            .await
+            .unwrap_or_else(|_| "50s".to_string());
 
         if warehouse_id.is_empty() {
-            context.set_pin_value("error_message", json!("Warehouse ID is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Warehouse ID is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
 
         if statement.is_empty() {
-            context.set_pin_value("error_message", json!("SQL statement is required")).await?;
+            context
+                .set_pin_value("error_message", json!("SQL statement is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -224,9 +235,10 @@ impl NodeLogic for ExecuteDatabricksSqlNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     let status = data["status"]["state"].as_str().unwrap_or("UNKNOWN");
 
@@ -248,7 +260,10 @@ impl NodeLogic for ExecuteDatabricksSqlNode {
                                     Some(DatabricksSqlColumn {
                                         name: col["name"].as_str()?.to_string(),
                                         type_name: col["type_name"].as_str()?.to_string(),
-                                        type_text: col["type_text"].as_str().unwrap_or_default().to_string(),
+                                        type_text: col["type_text"]
+                                            .as_str()
+                                            .unwrap_or_default()
+                                            .to_string(),
                                         position: i as i64,
                                     })
                                 })
@@ -281,10 +296,16 @@ impl NodeLogic for ExecuteDatabricksSqlNode {
                         .collect();
 
                     let result = DatabricksSqlResult {
-                        statement_id: data["statement_id"].as_str().unwrap_or_default().to_string(),
+                        statement_id: data["statement_id"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string(),
                         status: status.to_string(),
                         columns,
-                        data: data_array.iter().map(|r| r.as_array().cloned().unwrap_or_default()).collect(),
+                        data: data_array
+                            .iter()
+                            .map(|r| r.as_array().cloned().unwrap_or_default())
+                            .collect(),
                         row_count,
                         truncated,
                     };
@@ -296,15 +317,25 @@ impl NodeLogic for ExecuteDatabricksSqlNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }

@@ -218,10 +218,7 @@ impl App {
         Ok(item)
     }
 
-    pub async fn load(
-        id: String,
-        app_state: Arc<FlowLikeState>,
-    ) -> flow_like_types::Result<Self> {
+    pub async fn load(id: String, app_state: Arc<FlowLikeState>) -> flow_like_types::Result<Self> {
         let storage_root = Path::from("apps").child(id.clone());
 
         let store = FlowLikeState::project_meta_store(&app_state)
@@ -389,8 +386,7 @@ impl App {
         let board_ref = Arc::new(Mutex::new(board));
         let register = register.unwrap_or(false);
         if register && let Some(app_state) = &self.app_state {
-            app_state
-                .register_board(&board_id, board_ref.clone(), version)?;
+            app_state.register_board(&board_id, board_ref.clone(), version)?;
         }
 
         Ok(board_ref)

@@ -207,28 +207,27 @@ impl NodeLogic for BreakStructNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let struct_value: Value = context.evaluate_pin("struct_in").await?;
 
+        // Collect output pins first to avoid borrow conflict
+        let output_pins: Vec<_> = context
+            .node
+            .pins
+            .values()
+            .filter(|pin| pin.pin_type == PinType::Output)
+            .cloned()
+            .collect();
+
         // Get all output pins and extract their field values from the struct
-        let pins = context.node.pins.clone();
-        for (_id, pin_ref) in pins {
-            let pin = pin_ref.lock().await;
-            let pin_guard = pin.pin.lock().await;
-
-            if pin_guard.pin_type != PinType::Output {
-                continue;
-            }
-
-            let pin_name = pin_guard.name.clone();
-            drop(pin_guard);
-            drop(pin);
+        for pin in output_pins {
+            let pin_name = &pin.name;
 
             // Extract field name from the prefixed pin name
             let field_name = pin_name
                 .strip_prefix(BREAK_STRUCT_PIN_PREFIX)
-                .unwrap_or(&pin_name);
+                .unwrap_or(pin_name);
 
             let field_value = struct_value.get(field_name).cloned().unwrap_or(Value::Null);
 
-            context.set_pin_ref_value(&pin_ref, field_value).await?;
+            context.set_pin_ref_value(&pin, field_value).await?;
         }
 
         Ok(())

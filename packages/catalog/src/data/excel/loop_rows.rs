@@ -84,7 +84,7 @@ impl NodeLogic for RowLoopNode {
         let value = context.get_pin_by_name("value").await?;
         let exec_item = context.get_pin_by_name("exec_out").await?;
         let index = context.get_pin_by_name("index").await?;
-        let connected = exec_item.lock().await.get_connected_nodes().await;
+        let connected = exec_item.get_connected_nodes();
 
         // Activate the iteration exec pin like the generic For Each does
         context.activate_exec_pin_ref(&exec_item).await?;
@@ -100,12 +100,8 @@ impl NodeLogic for RowLoopNode {
             }
 
             // Set outputs for this iteration
-            value.lock().await.set_value(json!(obj)).await;
-            index
-                .lock()
-                .await
-                .set_value(FlowValue::from(i as i64))
-                .await;
+            value.set_value(json!(obj)).await;
+            index.set_value(FlowValue::from(i as i64)).await;
 
             // Trigger connected nodes
             for node in connected.iter() {

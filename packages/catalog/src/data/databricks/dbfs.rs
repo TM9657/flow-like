@@ -96,12 +96,7 @@ impl NodeLogic for ListDatabricksDbfsNode {
         .set_schema::<DatabricksFileInfo>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin(
-            "count",
-            "Count",
-            "Number of items",
-            VariableType::Integer,
-        );
+        node.add_output_pin("count", "Count", "Number of items", VariableType::Integer);
 
         node.add_output_pin(
             "error_message",
@@ -130,7 +125,10 @@ impl NodeLogic for ListDatabricksDbfsNode {
         context.deactivate_exec_pin("error").await?;
 
         let provider: DatabricksProvider = context.evaluate_pin("provider").await?;
-        let path: String = context.evaluate_pin("path").await.unwrap_or_else(|_| "/".to_string());
+        let path: String = context
+            .evaluate_pin("path")
+            .await
+            .unwrap_or_else(|_| "/".to_string());
 
         let url = provider.api_url("/dbfs/list");
 
@@ -145,9 +143,10 @@ impl NodeLogic for ListDatabricksDbfsNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     let files_array = data["files"].as_array();
                     let files: Vec<DatabricksFileInfo> = files_array
@@ -162,15 +161,25 @@ impl NodeLogic for ListDatabricksDbfsNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -298,7 +307,9 @@ impl NodeLogic for ReadDatabricksDbfsNode {
         let length: i64 = context.evaluate_pin("length").await.unwrap_or(1048576);
 
         if path.is_empty() {
-            context.set_pin_value("error_message", json!("File path is required")).await?;
+            context
+                .set_pin_value("error_message", json!("File path is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -320,28 +331,41 @@ impl NodeLogic for ReadDatabricksDbfsNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     let content = data["data"].as_str().unwrap_or_default();
                     let bytes_read = data["bytes_read"].as_i64().unwrap_or(0);
 
                     context.set_pin_value("content", json!(content)).await?;
-                    context.set_pin_value("bytes_read", json!(bytes_read)).await?;
+                    context
+                        .set_pin_value("bytes_read", json!(bytes_read))
+                        .await?;
                     context.set_pin_value("error_message", json!("")).await?;
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }
@@ -386,12 +410,7 @@ impl NodeLogic for GetDatabricksDbfsStatusNode {
         .set_schema::<DatabricksProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin(
-            "path",
-            "Path",
-            "DBFS path to check",
-            VariableType::String,
-        );
+        node.add_input_pin("path", "Path", "DBFS path to check", VariableType::String);
 
         node.add_output_pin(
             "exec_out",
@@ -453,7 +472,9 @@ impl NodeLogic for GetDatabricksDbfsStatusNode {
         let path: String = context.evaluate_pin("path").await?;
 
         if path.is_empty() {
-            context.set_pin_value("error_message", json!("Path is required")).await?;
+            context
+                .set_pin_value("error_message", json!("Path is required"))
+                .await?;
             context.activate_exec_pin("error").await?;
             return Ok(());
         }
@@ -471,9 +492,10 @@ impl NodeLogic for GetDatabricksDbfsStatusNode {
         match response {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    let data: Value = resp.json().await.map_err(|e| {
-                        flow_like_types::anyhow!("Failed to parse response: {}", e)
-                    })?;
+                    let data: Value = resp
+                        .json()
+                        .await
+                        .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
 
                     if let Some(file_info) = parse_file_info(&data) {
                         context.set_pin_value("file_info", json!(file_info)).await?;
@@ -482,7 +504,9 @@ impl NodeLogic for GetDatabricksDbfsStatusNode {
                         context.activate_exec_pin("exec_out").await?;
                     } else {
                         context.set_pin_value("exists", json!(false)).await?;
-                        context.set_pin_value("error_message", json!("Path not found")).await?;
+                        context
+                            .set_pin_value("error_message", json!("Path not found"))
+                            .await?;
                         context.activate_exec_pin("error").await?;
                     }
                 } else if resp.status().as_u16() == 404 {
@@ -491,15 +515,25 @@ impl NodeLogic for GetDatabricksDbfsStatusNode {
                     context.activate_exec_pin("exec_out").await?;
                 } else {
                     let status = resp.status();
-                    let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    context.log_message(&format!("Request failed ({}): {}", status, error_text), LogLevel::Error);
-                    context.set_pin_value("error_message", json!(error_text)).await?;
+                    let error_text = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    context.log_message(
+                        &format!("Request failed ({}): {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context
+                        .set_pin_value("error_message", json!(error_text))
+                        .await?;
                     context.activate_exec_pin("error").await?;
                 }
             }
             Err(e) => {
                 context.log_message(&format!("Request error: {}", e), LogLevel::Error);
-                context.set_pin_value("error_message", json!(e.to_string())).await?;
+                context
+                    .set_pin_value("error_message", json!(e.to_string()))
+                    .await?;
                 context.activate_exec_pin("error").await?;
             }
         }

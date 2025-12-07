@@ -19,7 +19,11 @@ pub struct LinkedInProvider {
 
 impl LinkedInProvider {
     pub fn api_url(&self, path: &str) -> String {
-        let path = if path.starts_with('/') { &path[1..] } else { path };
+        let path = if path.starts_with('/') {
+            &path[1..]
+        } else {
+            path
+        };
         format!("https://api.linkedin.com/v2/{}", path)
     }
 
@@ -59,10 +63,7 @@ impl NodeLogic for LinkedInOAuthProviderNode {
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_oauth_provider(LINKEDIN_PROVIDER_ID);
-        node.add_required_oauth_scopes(
-            LINKEDIN_PROVIDER_ID,
-            vec!["openid", "profile", "email"],
-        );
+        node.add_required_oauth_scopes(LINKEDIN_PROVIDER_ID, vec!["openid", "profile", "email"]);
 
         node.set_scores(
             NodeScores::new()
@@ -78,7 +79,10 @@ impl NodeLogic for LinkedInOAuthProviderNode {
         node
     }
 
-    async fn run(&self, context: &mut flow_like::flow::execution::context::ExecutionContext) -> flow_like_types::Result<()> {
+    async fn run(
+        &self,
+        context: &mut flow_like::flow::execution::context::ExecutionContext,
+    ) -> flow_like_types::Result<()> {
         let token = context
             .get_oauth_token(LINKEDIN_PROVIDER_ID)
             .ok_or_else(|| {

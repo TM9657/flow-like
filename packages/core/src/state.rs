@@ -576,9 +576,7 @@ impl FlowLikeState {
     }
 
     #[inline]
-    pub async fn bit_store(
-        state: &Arc<FlowLikeState>,
-    ) -> flow_like_types::Result<FlowLikeStore> {
+    pub async fn bit_store(state: &Arc<FlowLikeState>) -> flow_like_types::Result<FlowLikeStore> {
         state
             .config
             .read()
@@ -590,9 +588,7 @@ impl FlowLikeState {
     }
 
     #[inline]
-    pub async fn user_store(
-        state: &Arc<FlowLikeState>,
-    ) -> flow_like_types::Result<FlowLikeStore> {
+    pub async fn user_store(state: &Arc<FlowLikeState>) -> flow_like_types::Result<FlowLikeStore> {
         state
             .config
             .read()

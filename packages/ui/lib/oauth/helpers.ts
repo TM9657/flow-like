@@ -20,7 +20,9 @@ export function hasRequiredScopes(
 	}
 
 	const tokenScopes = new Set(storedToken.scopes ?? []);
-	const missingScopes = requiredScopes.filter((scope) => !tokenScopes.has(scope));
+	const missingScopes = requiredScopes.filter(
+		(scope) => !tokenScopes.has(scope),
+	);
 
 	if (missingScopes.length > 0) {
 		console.log(
@@ -201,15 +203,24 @@ export async function getOAuthTokensForProviders(
 		if (storedToken && tokenStore.isExpired(storedToken)) {
 			if (storedToken.refresh_token && options?.refreshToken) {
 				try {
-					console.log(`[OAuth] Token for ${provider.id} is expired, attempting refresh...`);
+					console.log(
+						`[OAuth] Token for ${provider.id} is expired, attempting refresh...`,
+					);
 					storedToken = await options.refreshToken(provider, storedToken);
-					console.log(`[OAuth] Token for ${provider.id} refreshed successfully`);
+					console.log(
+						`[OAuth] Token for ${provider.id} refreshed successfully`,
+					);
 				} catch (e) {
-					console.warn(`[OAuth] Failed to refresh token for ${provider.id}:`, e);
+					console.warn(
+						`[OAuth] Failed to refresh token for ${provider.id}:`,
+						e,
+					);
 					storedToken = undefined; // Mark as needing reauth
 				}
 			} else {
-				console.log(`[OAuth] Token for ${provider.id} is expired and has no refresh token`);
+				console.log(
+					`[OAuth] Token for ${provider.id} is expired and has no refresh token`,
+				);
 				storedToken = undefined;
 			}
 		}

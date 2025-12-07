@@ -29,9 +29,18 @@ fn parse_linkedin_me(value: &Value) -> Option<LinkedInMe> {
     Some(LinkedInMe {
         sub: obj.get("sub")?.as_str()?.to_string(),
         name: obj.get("name").and_then(|v| v.as_str()).map(String::from),
-        given_name: obj.get("given_name").and_then(|v| v.as_str()).map(String::from),
-        family_name: obj.get("family_name").and_then(|v| v.as_str()).map(String::from),
-        picture: obj.get("picture").and_then(|v| v.as_str()).map(String::from),
+        given_name: obj
+            .get("given_name")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        family_name: obj
+            .get("family_name")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        picture: obj
+            .get("picture")
+            .and_then(|v| v.as_str())
+            .map(String::from),
         email: obj.get("email").and_then(|v| v.as_str()).map(String::from),
         email_verified: obj.get("email_verified").and_then(|v| v.as_bool()),
         locale: obj
@@ -86,9 +95,14 @@ impl NodeLogic for GetMeNode {
         .set_schema::<LinkedInProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_output_pin("me", "Me", "Current user's LinkedIn profile", VariableType::Struct)
-            .set_schema::<LinkedInMe>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin(
+            "me",
+            "Me",
+            "Current user's LinkedIn profile",
+            VariableType::Struct,
+        )
+        .set_schema::<LinkedInMe>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "sub",
@@ -155,8 +169,12 @@ impl NodeLogic for GetMeNode {
 
         context.set_pin_value("me", json!(me.clone())).await?;
         context.set_pin_value("sub", json!(me.sub)).await?;
-        context.set_pin_value("email", json!(me.email.unwrap_or_default())).await?;
-        context.set_pin_value("name", json!(me.name.unwrap_or_default())).await?;
+        context
+            .set_pin_value("email", json!(me.email.unwrap_or_default()))
+            .await?;
+        context
+            .set_pin_value("name", json!(me.name.unwrap_or_default()))
+            .await?;
 
         context.activate_exec_pin("exec_out").await?;
 
