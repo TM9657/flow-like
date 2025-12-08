@@ -85,7 +85,7 @@
 			"max_total_size": 10000000000,
 			"max_llm_cost": 3000,
 			"max_llm_calls": 10000,
-			"llm_tiers": ["PRO", "PREMIUM"],
+			"llm_tiers": ["PRO", "PREMIUM", "FREE"],
 			"product_id": "prod_TZ7XoKK32J1SGQ"
 		},
 		"ENTERPRISE": {
@@ -95,7 +95,7 @@
 			"max_total_size": -1,
 			"max_llm_cost": -1,
 			"max_llm_calls": -1,
-			"llm_tiers": ["PRO", "PREMIUM", "ENTERPRISE"],
+			"llm_tiers": ["PRO", "PREMIUM", "ENTERPRISE", "FREE"],
 			"product_id": "prod_TZ7XZqKVwXkROi"
 		}
 	},

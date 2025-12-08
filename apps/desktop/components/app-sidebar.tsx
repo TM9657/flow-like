@@ -893,7 +893,7 @@ export function NavUser({
 						<DropdownMenuSeparator />
 						{auth?.isAuthenticated && (
 							<>
-								{(!info.data?.tier || info.data?.tier === "FREE") && (
+								{(!info.data?.tier || info.data?.tier.toUpperCase() === "FREE") && (
 									<>
 										<DropdownMenuGroup>
 											<a href="/subscription">

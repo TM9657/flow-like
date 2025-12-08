@@ -125,7 +125,16 @@ export function FlowCopilot({
 		[profile.data?.hub_profile.id],
 	);
 
-	const models = foundBits.data || [];
+	// Filter models to only include those in the user's profile
+	const models = useMemo(() => {
+		if (!foundBits.data || !profile.data?.hub_profile.bits) return [];
+		const profileBitIds = new Set(profile.data.hub_profile.bits);
+		return foundBits.data.filter((model) => {
+			// Check if model's full ID (hub:id) is in the profile bits
+			const fullId = `${model.hub}:${model.id}`;
+			return profileBitIds.has(fullId);
+		});
+	}, [foundBits.data, profile.data?.hub_profile.bits]);
 
 	// Calculate elapsed time
 	const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -880,7 +889,7 @@ const EmbeddedView = memo(function EmbeddedView({
 								<SelectValue placeholder="Select Model" />
 							</div>
 						</SelectTrigger>
-						<SelectContent className="rounded-lg">
+						<SelectContent className="rounded-lg z-150">
 							{models.map((model) => (
 								<SelectItem
 									key={model.id}
@@ -1187,7 +1196,7 @@ const PanelView = memo(function PanelView({
 								<SelectValue placeholder="Select Model" />
 							</div>
 						</SelectTrigger>
-						<SelectContent className="rounded-lg">
+						<SelectContent className="rounded-lg z-150">
 							{models.map((model) => (
 								<SelectItem
 									key={model.id}
@@ -1615,7 +1624,7 @@ const FloatingPanelView = memo(function FloatingPanelView({
 									<SelectValue placeholder="Select Model" />
 								</div>
 							</SelectTrigger>
-							<SelectContent className="rounded-xl">
+							<SelectContent className="rounded-xl z-150">
 								{models.map((model) => (
 									<SelectItem
 										key={model.id}
