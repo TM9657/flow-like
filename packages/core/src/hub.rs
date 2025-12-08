@@ -12,6 +12,36 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MailProviderType {
+    Ses,
+    Sendgrid,
+    Smtp,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct SmtpSettings {
+    pub host_env: String,
+    pub port_env: String,
+    pub username_env: String,
+    pub password_env: String,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct SendgridSettings {
+    pub api_key_env: String,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct MailConfig {
+    pub provider: MailProviderType,
+    pub from_email: String,
+    pub from_name: String,
+    pub smtp: Option<SmtpSettings>,
+    pub sendgrid: Option<SendgridSettings>,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
 pub struct UserTier {
     pub max_non_visible_projects: i32,
     pub max_remote_executions: i32,
@@ -42,6 +72,7 @@ pub struct Hub {
     pub cdn: Option<String>,
     pub app: Option<String>,
     pub web: Option<String>,
+    pub mail: Option<MailConfig>,
     pub legal_notice: String,
     pub privacy_policy: String,
     pub contact: Contact,

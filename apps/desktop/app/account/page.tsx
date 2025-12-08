@@ -66,6 +66,8 @@ const AccountPage: React.FC = () => {
 		[],
 	);
 
+	const isPremiumEnabled = hub.hub?.features?.premium ?? false;
+
 	const updateUserAttribute = useCallback(
 		async (attributeKey: string, value: string) => {
 			if (!cognito) {
@@ -189,34 +191,47 @@ const AccountPage: React.FC = () => {
 			return;
 		}
 
-		const urlRequest = await fetcher<{ url: string }>(
-			profile.data,
-			"user/billing",
-			{ method: "GET" },
-			auth,
-		);
+		try {
+			const billingSession = await backend.userState.getBillingSession();
 
-		const _view = new WebviewWindow("billing", {
-			url: urlRequest.url,
-			title: "Billing",
-			focus: true,
-			resizable: true,
-			maximized: true,
-			contentProtected: true,
-		});
-	}, [router, profile]);
+			const _view = new WebviewWindow("billing", {
+				url: billingSession.url,
+				title: "Billing",
+				focus: true,
+				resizable: true,
+				maximized: true,
+				contentProtected: true,
+			});
+		} catch (error) {
+			console.error("Failed to get billing session:", error);
+			toast.error("Failed to open billing portal");
+		}
+	}, [profile, backend.userState]);
 
 	const handlePreviewProfile = useCallback(async () => {
 		router.push(`/profile?sub=${auth.user?.profile?.sub}`);
 	}, [router, auth.user?.profile?.sub]);
 
+	const handleViewSubscription = useCallback(async () => {
+		router.push("/subscription");
+	}, [router]);
+
 	const [profileActions, setProfileActions] = useState<ProfileActions>({
 		updateEmail: undefined,
 		changePassword: undefined,
-		viewBilling: handleViewBilling,
+		viewBilling: isPremiumEnabled ? handleViewBilling : undefined,
+		viewSubscription: isPremiumEnabled ? handleViewSubscription : undefined,
 		previewProfile: handlePreviewProfile,
 		handleAttributeUpdate: updateUserAttribute,
 	});
+
+	useEffect(() => {
+		setProfileActions((prev) => ({
+			...prev,
+			viewBilling: isPremiumEnabled ? handleViewBilling : undefined,
+			viewSubscription: isPremiumEnabled ? handleViewSubscription : undefined,
+		}));
+	}, [isPremiumEnabled, handleViewBilling, handleViewSubscription]);
 
 	if (!auth.isAuthenticated) {
 		return (
@@ -233,9 +248,6 @@ const AccountPage: React.FC = () => {
 
 	return (
 		<>
-			<p>
-				{cognito ? <span>Cognito User</span> : <span>Non-Cognito User</span>}
-			</p>
 			<ProfilePage actions={profileActions} />
 
 			{!federated && (

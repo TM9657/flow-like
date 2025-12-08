@@ -32,20 +32,30 @@ futures-util.workspace = true
 moka.workspace = true
 blake3.workspace = true
 p256 = "0.13.2"
+async-trait.workspace = true
 
 # ---- AWS dependencies ----
 aws-config = {workspace = true, optional=true}
 aws-sdk-sts = {workspace = true, optional=true}
+aws-sdk-sesv2 = {workspace = true, optional=true}
 # -----
 
 # ----- Cognito dependencies ----
 aws-sdk-cognitoidentityprovider = {version="1.89.0", optional=true}
 # -----
 
+# ----- Mail dependencies ----
+lettre = {workspace = true, optional=true}
+reqwest = {workspace = true}
+# -----
+
 [features]
-default = ["aws", "cognito"]
+default = ["aws", "cognito", "ses", "smtp", "sendgrid"]
 aws = ["aws-config", "aws-sdk-sts"]
 cognito = ["aws-sdk-cognitoidentityprovider", "aws-config"]
+ses = ["aws-sdk-sesv2", "aws-config"]
+smtp = ["lettre"]
+sendgrid = []
 azure = []
 gcp = []
 local = []
@@ -54,6 +64,9 @@ full=[
     "azure",
     "gcp",
     "local",
+    "ses",
+    "smtp",
+    "sendgrid",
 ]
 
 [dev-dependencies]

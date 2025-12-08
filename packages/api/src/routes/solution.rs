@@ -1,4 +1,5 @@
 use crate::error::ApiError;
+use crate::mail::{EmailMessage, templates};
 use crate::state::AppState;
 use axum::{
     Json, Router,
@@ -271,18 +272,48 @@ async fn submit_solution(
         "New 24-hour solution request submitted and stored in database"
     );
 
-    let checkout_url = if let Some(stripe_client) = state.stripe_client.as_ref() {
-        let frontend_url = std::env::var("FRONTEND_URL").unwrap_or_else(|_| {
-            format!(
-                "https://{}",
-                state
-                    .platform_config
-                    .web
-                    .clone()
-                    .unwrap_or_else(|| state.platform_config.domain.clone())
-            )
-        });
+    let frontend_url = std::env::var("FRONTEND_URL").unwrap_or_else(|_| {
+        format!(
+            "https://{}",
+            state
+                .platform_config
+                .web
+                .clone()
+                .unwrap_or_else(|| state.platform_config.domain.clone())
+        )
+    });
 
+    let tracking_url = format!("{}/track?token={}", frontend_url, tracking_token);
+
+    if let Some(mail_client) = &state.mail_client {
+        let (html, text) = templates::solution_submission_confirmation(
+            &submission.company,
+            &tracking_url,
+            &tracking_token,
+            &submission.pricing_tier,
+            submission.pay_deposit,
+        );
+
+        let email = EmailMessage {
+            to: submission.email.clone(),
+            subject: format!(
+                "Your 24-Hour Solution Request for {} – Confirmed!",
+                submission.company
+            ),
+            body_html: Some(html),
+            body_text: Some(text),
+        };
+
+        if let Err(e) = mail_client.send(email).await {
+            tracing::warn!(
+                error = %e,
+                email = %submission.email,
+                "Failed to send confirmation email, but submission was successful"
+            );
+        }
+    }
+
+    let checkout_url = if let Some(stripe_client) = state.stripe_client.as_ref() {
         let success_url = format!("{}/track?token={}", frontend_url, tracking_token);
         let cancel_url = format!("{}/24-hour-solution?canceled=true", frontend_url);
 

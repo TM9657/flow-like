@@ -24,6 +24,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use crate::credentials::{CredentialsAccess, RuntimeCredentials};
 use crate::entity::role;
+use crate::mail::{DynMailClient, create_mail_client};
 
 pub type AppState = Arc<State>;
 
@@ -36,6 +37,7 @@ pub struct State {
     pub jwks: JwkSet,
     pub client: Client<HttpConnector, Body>,
     pub stripe_client: Option<stripe::Client>,
+    pub mail_client: Option<DynMailClient>,
     #[cfg(feature = "aws")]
     pub aws_client: Arc<SdkConfig>,
     pub catalog: Arc<Vec<Arc<dyn NodeLogic>>>,
@@ -111,12 +113,25 @@ impl State {
             .time_to_live(Duration::from_secs(60)) // 30 minutes
             .build();
 
+        let mail_client = if let Some(mail_config) = &platform_config.mail {
+            match create_mail_client(mail_config).await {
+                Ok(client) => Some(client),
+                Err(e) => {
+                    tracing::warn!("Failed to initialize mail client: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         Self {
             platform_config,
             db,
             client,
             jwks,
             stripe_client,
+            mail_client,
             #[cfg(feature = "aws")]
             aws_client: Arc::new(aws_config::load_from_env().await),
             catalog,

@@ -22,6 +22,7 @@ mod routes;
 
 pub mod credentials;
 pub mod error;
+pub mod mail;
 pub mod permission;
 pub mod state;
 pub mod user_management;

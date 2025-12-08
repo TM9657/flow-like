@@ -4,6 +4,7 @@ import {
 	Avatar,
 	AvatarFallback,
 	AvatarImage,
+	Badge,
 	Button,
 	Card,
 	CardContent,
@@ -17,7 +18,7 @@ import {
 	useBackend,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
-import { CreditCard, Edit2, Eye, Lock, Upload, User } from "lucide-react";
+import { CreditCard, Crown, Edit2, Eye, Lock, Upload, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -35,6 +36,7 @@ export interface ProfileActions {
 	changePassword?: () => Promise<void>;
 	viewBilling?: () => Promise<void>;
 	previewProfile?: () => Promise<void>;
+	viewSubscription?: () => Promise<void>;
 }
 
 interface ProfilePageProps {
@@ -171,13 +173,19 @@ export function ProfilePage({ actions = {} }: Readonly<ProfilePageProps>) {
 			<ProfileHeader />
 
 			<div className="grid gap-6 md:grid-cols-3">
-				<div className="md:col-span-1">
+				<div className="md:col-span-1 space-y-6">
 					<AvatarCard
 						avatar={formData.avatar}
 						previewName={formData.previewName}
 						getInitials={getInitials}
 						onAvatarUpload={handleAvatarUpload}
 						canEdit={true}
+					/>
+
+					<SubscriptionCard
+						tier={info.data?.tier}
+						onViewSubscription={actions.viewSubscription}
+						onViewBilling={actions.viewBilling}
 					/>
 				</div>
 
@@ -358,6 +366,69 @@ const PersonalInfoCard: React.FC<PersonalInfoCardProps> = ({
 		</CardContent>
 	</Card>
 );
+
+const TIER_COLORS: Record<string, string> = {
+	FREE: "bg-muted text-muted-foreground",
+	PREMIUM: "bg-gradient-to-r from-amber-500 to-orange-600 text-white",
+	PRO: "bg-gradient-to-r from-violet-500 to-purple-600 text-white",
+	ENTERPRISE: "bg-gradient-to-r from-blue-500 to-indigo-600 text-white",
+};
+
+interface SubscriptionCardProps {
+	tier?: string;
+	onViewSubscription?: () => Promise<void>;
+	onViewBilling?: () => Promise<void>;
+}
+
+const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
+	tier,
+	onViewSubscription,
+	onViewBilling,
+}) => {
+	if (!onViewSubscription && !onViewBilling) return null;
+
+	const tierKey = tier?.toUpperCase() || "FREE";
+	const colorClass = TIER_COLORS[tierKey] || TIER_COLORS.FREE;
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle className="flex items-center gap-2">
+					<Crown className="h-5 w-5" />
+					Subscription
+				</CardTitle>
+			</CardHeader>
+			<CardContent className="space-y-4">
+				<div className="flex items-center justify-between">
+					<span className="text-sm text-muted-foreground">Current Plan</span>
+					<Badge className={colorClass}>{tierKey}</Badge>
+				</div>
+				<div className="flex flex-col gap-2">
+					{onViewSubscription && (
+						<Button
+							variant="outline"
+							className="w-full"
+							onClick={onViewSubscription}
+						>
+							View Plans
+						</Button>
+					)}
+					{onViewBilling && tierKey !== "FREE" && (
+						<Button
+							variant="ghost"
+							size="sm"
+							className="w-full"
+							onClick={onViewBilling}
+						>
+							<CreditCard className="h-4 w-4 mr-2" />
+							Manage Billing
+						</Button>
+					)}
+				</div>
+			</CardContent>
+		</Card>
+	);
+};
 
 interface SecurityCardProps {
 	onChangePassword?: () => Promise<void>;

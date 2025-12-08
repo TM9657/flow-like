@@ -52,6 +52,11 @@
 	},
 	"max_users_prototype": -1,
 	"default_user_plan": "FREE",
+	"mail": {
+		"provider": "ses",
+		"from_email": "no-reply@flow-like.com",
+		"from_name": "Flow-Like"
+	},
 	"tiers": {
 		"FREE": {
 			"max_non_visible_projects": 10,
