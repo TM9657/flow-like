@@ -2,6 +2,8 @@
 
 import {
 	type ISolutionListResponse,
+	type ISolutionLogPayload,
+	type ISolutionRequest,
 	type ISolutionUpdatePayload,
 	SolutionStatus,
 	SolutionsPage,
@@ -107,6 +109,36 @@ export default function AdminSolutionsPage() {
 		[profile.data, auth],
 	);
 
+	const handleFetchSolution = useCallback(
+		async (id: string): Promise<ISolutionRequest | null> => {
+			if (!profile.data) throw new Error("Profile not loaded");
+			return fetcher<ISolutionRequest>(profile.data, `admin/solutions/${id}`, { method: "GET" }, auth);
+		},
+		[profile.data, auth],
+	);
+
+	const handleAddLog = useCallback(
+		async (id: string, log: ISolutionLogPayload) => {
+			if (!profile.data) throw new Error("Profile not loaded");
+
+			try {
+				await fetcher(
+					profile.data,
+					`admin/solutions/${id}/logs`,
+					{ method: "POST", body: JSON.stringify(log) },
+					auth,
+				);
+				toast.success("Log added successfully");
+			} catch (error) {
+				toast.error(
+					`Failed to add log: ${error instanceof Error ? error.message : "Unknown error"}`,
+				);
+				throw error;
+			}
+		},
+		[profile.data, auth],
+	);
+
 	return (
 		<main className="flex grow h-full bg-background max-h-full overflow-auto flex-col items-start w-full justify-start p-6">
 			<SolutionsPage
@@ -123,6 +155,9 @@ export default function AdminSolutionsPage() {
 				onSearchChange={handleSearchChange}
 				onRefresh={handleRefresh}
 				onUpdateSolution={handleUpdateSolution}
+				onFetchSolution={handleFetchSolution}
+				onAddLog={handleAddLog}
+				trackingBaseUrl="https://www.flow-like.com"
 			/>
 		</main>
 	);

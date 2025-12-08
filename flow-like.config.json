@@ -38,6 +38,7 @@
 	"cdn": "https://cdn.flow-like.com",
 	"domain": "api.alpha.flow-like.com",
 	"app": "app.flow-like.com",
+	"web": "flow-like.com",
 	"provider": "aws",
 	"region": "eu-west-1",
 	"signaling": ["wss://signaling.flow-like.com"],

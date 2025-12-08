@@ -1,8 +1,12 @@
 enum SolutionStatus {
-    PENDING_PAYMENT
+    AWAITING_DEPOSIT
     PENDING_REVIEW
+    IN_QUEUE
+    ONBOARDING_DONE
     IN_PROGRESS
     DELIVERED
+    AWAITING_PAYMENT
+    PAID
     CANCELLED
     REFUNDED
 }
@@ -36,7 +40,7 @@ model SolutionRequest {
     files       Json?
     storageKey  String?
 
-    status SolutionStatus @default(PENDING_PAYMENT)
+    status SolutionStatus @default(PENDING_REVIEW)
 
     stripeCheckoutSessionId String? @unique
     stripePaymentIntentId   String? @unique

@@ -135,7 +135,9 @@ async fn handle_checkout_completed(
     tracing::info!(
         session_id = %session_id,
         client_reference_id = ?session.client_reference_id,
-        "Processing checkout.session.completed"
+        mode = ?session.mode,
+        payment_status = ?session.payment_status,
+        "Processing checkout.session.completed for solution"
     );
 
     let submission_id = session
@@ -160,6 +162,8 @@ async fn handle_checkout_completed(
             active.stripe_setup_intent_id = Set(Some(si.id().to_string()));
         }
 
+        // Mark deposit as paid and move to PendingReview (in queue)
+        active.paid_deposit = Set(true);
         active.status = Set(crate::entity::sea_orm_active_enums::SolutionStatus::PendingReview);
         active.updated_at = Set(chrono::Utc::now().naive_utc());
 
@@ -167,7 +171,7 @@ async fn handle_checkout_completed(
 
         tracing::info!(
             submission_id = %submission_id,
-            "Solution request updated to PENDING_REVIEW after checkout completion"
+            "Solution request updated: paid_deposit=true, status=PENDING_REVIEW"
         );
     } else {
         tracing::warn!(

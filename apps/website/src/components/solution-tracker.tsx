@@ -24,6 +24,9 @@ import {
 	LuCalendar,
 	LuZap,
 	LuSparkles,
+	LuClipboardCheck,
+	LuUserCheck,
+	LuCircleDollarSign,
 } from "react-icons/lu";
 
 interface PublicSolutionLog {
@@ -49,21 +52,60 @@ interface PublicSolutionStatus {
 	logs: PublicSolutionLog[];
 }
 
-const STATUS_STEPS = [
-	{ key: "PendingPayment", label: "Payment", icon: LuCreditCard },
-	{ key: "PendingReview", label: "Review", icon: LuClock },
-	{ key: "InProgress", label: "In Progress", icon: LuLoader },
-	{ key: "Delivered", label: "Delivered", icon: LuPackage },
+// Steps for priority orders (with deposit)
+const PRIORITY_STATUS_STEPS = [
+	{ key: "AWAITING_DEPOSIT", label: "Deposit", icon: LuCreditCard },
+	{ key: "PENDING_REVIEW", label: "Review", icon: LuClipboardCheck },
+	{ key: "IN_QUEUE", label: "In Queue", icon: LuClock },
+	{ key: "ONBOARDING_DONE", label: "Onboarded", icon: LuUserCheck },
+	{ key: "IN_PROGRESS", label: "In Progress", icon: LuLoader },
+	{ key: "DELIVERED", label: "Delivered", icon: LuPackage },
+	{ key: "AWAITING_PAYMENT", label: "Payment", icon: LuCircleDollarSign },
+	{ key: "PAID", label: "Paid", icon: LuCheck },
 ];
 
-const STATUS_ORDER: Record<string, number> = {
-	PendingPayment: 0,
-	PendingReview: 1,
-	InProgress: 2,
-	Delivered: 3,
-	Cancelled: -1,
-	Refunded: -1,
-};
+// Steps for non-priority orders (no deposit)
+const STANDARD_STATUS_STEPS = [
+	{ key: "PENDING_REVIEW", label: "Review", icon: LuClipboardCheck },
+	{ key: "IN_QUEUE", label: "In Queue", icon: LuClock },
+	{ key: "ONBOARDING_DONE", label: "Onboarded", icon: LuUserCheck },
+	{ key: "IN_PROGRESS", label: "In Progress", icon: LuLoader },
+	{ key: "DELIVERED", label: "Delivered", icon: LuPackage },
+	{ key: "AWAITING_PAYMENT", label: "Payment", icon: LuCircleDollarSign },
+	{ key: "PAID", label: "Paid", icon: LuCheck },
+];
+
+function getStatusSteps(priority: boolean) {
+	return priority ? PRIORITY_STATUS_STEPS : STANDARD_STATUS_STEPS;
+}
+
+function getStatusOrder(priority: boolean): Record<string, number> {
+	if (priority) {
+		return {
+			AWAITING_DEPOSIT: 0,
+			PENDING_REVIEW: 1,
+			IN_QUEUE: 2,
+			ONBOARDING_DONE: 3,
+			IN_PROGRESS: 4,
+			DELIVERED: 5,
+			AWAITING_PAYMENT: 6,
+			PAID: 7,
+			CANCELLED: -1,
+			REFUNDED: -1,
+		};
+	}
+	return {
+		PENDING_REVIEW: 0,
+		IN_QUEUE: 1,
+		ONBOARDING_DONE: 2,
+		IN_PROGRESS: 3,
+		DELIVERED: 4,
+		AWAITING_PAYMENT: 5,
+		PAID: 6,
+		CANCELLED: -1,
+		REFUNDED: -1,
+	};
+}
 
 function formatCurrency(cents: number): string {
 	return new Intl.NumberFormat("en-US", {
@@ -84,17 +126,25 @@ function formatDate(dateStr: string): string {
 
 function getStatusColor(status: string): string {
 	switch (status) {
-		case "PendingPayment":
+		case "AWAITING_DEPOSIT":
 			return "text-yellow-500";
-		case "PendingReview":
+		case "PENDING_REVIEW":
 			return "text-blue-500";
-		case "InProgress":
+		case "IN_QUEUE":
+			return "text-cyan-500";
+		case "ONBOARDING_DONE":
+			return "text-indigo-500";
+		case "IN_PROGRESS":
 			return "text-purple-500";
-		case "Delivered":
+		case "DELIVERED":
+			return "text-emerald-500";
+		case "AWAITING_PAYMENT":
+			return "text-amber-500";
+		case "PAID":
 			return "text-green-500";
-		case "Cancelled":
+		case "CANCELLED":
 			return "text-red-500";
-		case "Refunded":
+		case "REFUNDED":
 			return "text-orange-500";
 		default:
 			return "text-muted-foreground";
@@ -136,7 +186,7 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 
 		try {
 			const apiUrl = import.meta.env.PUBLIC_API_URL || "https://api.flow-like.com";
-			const response = await fetch(`${apiUrl}/solution/track/${encodeURIComponent(trackingToken.trim())}`);
+			const response = await fetch(`${apiUrl}/api/v1/solution/track/${encodeURIComponent(trackingToken.trim())}`);
 
 			if (response.status === 404) {
 				setError("No solution found with this tracking token. Please check and try again.");
@@ -167,8 +217,10 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 		window.history.replaceState({}, "", url.toString());
 	}
 
-	const currentStep = solution ? STATUS_ORDER[solution.status] ?? -1 : -1;
-	const isCancelledOrRefunded = solution && (solution.status === "Cancelled" || solution.status === "Refunded");
+	const statusSteps = solution ? getStatusSteps(solution.priority) : STANDARD_STATUS_STEPS;
+	const statusOrder = solution ? getStatusOrder(solution.priority) : getStatusOrder(false);
+	const currentStep = solution ? statusOrder[solution.status] ?? -1 : -1;
+	const isCancelledOrRefunded = solution && (solution.status === "CANCELLED" || solution.status === "REFUNDED");
 
 	return (
 		<div className="w-full max-w-4xl mx-auto space-y-8">
@@ -259,12 +311,12 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 										<div className="absolute top-5 left-0 right-0 h-0.5 bg-muted">
 											<div
 												className="h-full bg-primary transition-all duration-500"
-												style={{ width: `${Math.max(0, (currentStep / (STATUS_STEPS.length - 1)) * 100)}%` }}
+												style={{ width: `${Math.max(0, (currentStep / (statusSteps.length - 1)) * 100)}%` }}
 											/>
 										</div>
 
 										{/* Steps */}
-										{STATUS_STEPS.map((step, index) => {
+										{statusSteps.map((step, index) => {
 											const isCompleted = index < currentStep;
 											const isCurrent = index === currentStep;
 											const Icon = step.icon;

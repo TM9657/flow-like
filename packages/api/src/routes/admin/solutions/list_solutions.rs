@@ -78,12 +78,20 @@ pub async fn list_solutions(
 
     if let Some(status_filter) = &query.status {
         let status = match status_filter.to_lowercase().as_str() {
-            "pending_payment" => {
-                crate::entity::sea_orm_active_enums::SolutionStatus::PendingPayment
+            "awaiting_deposit" => {
+                crate::entity::sea_orm_active_enums::SolutionStatus::AwaitingDeposit
             }
             "pending_review" => crate::entity::sea_orm_active_enums::SolutionStatus::PendingReview,
+            "in_queue" => crate::entity::sea_orm_active_enums::SolutionStatus::InQueue,
+            "onboarding_done" => {
+                crate::entity::sea_orm_active_enums::SolutionStatus::OnboardingDone
+            }
             "in_progress" => crate::entity::sea_orm_active_enums::SolutionStatus::InProgress,
             "delivered" => crate::entity::sea_orm_active_enums::SolutionStatus::Delivered,
+            "awaiting_payment" => {
+                crate::entity::sea_orm_active_enums::SolutionStatus::AwaitingPayment
+            }
+            "paid" => crate::entity::sea_orm_active_enums::SolutionStatus::Paid,
             "cancelled" => crate::entity::sea_orm_active_enums::SolutionStatus::Cancelled,
             "refunded" => crate::entity::sea_orm_active_enums::SolutionStatus::Refunded,
             _ => return Err(ApiError::BadRequest("Invalid status filter".to_string())),
@@ -128,7 +136,7 @@ pub async fn list_solutions(
             timeline: s.timeline,
             additional_notes: s.additional_notes,
             pricing_tier: format!("{:?}", s.pricing_tier).to_lowercase(),
-            status: format!("{:?}", s.status),
+            status: status_to_string(&s.status),
             priority: s.priority,
             paid_deposit: s.paid_deposit,
             files: s.files,
@@ -154,4 +162,20 @@ pub async fn list_solutions(
         limit,
         has_more,
     }))
+}
+
+fn status_to_string(status: &crate::entity::sea_orm_active_enums::SolutionStatus) -> String {
+    use crate::entity::sea_orm_active_enums::SolutionStatus;
+    match status {
+        SolutionStatus::AwaitingDeposit => "AWAITING_DEPOSIT".to_string(),
+        SolutionStatus::PendingReview => "PENDING_REVIEW".to_string(),
+        SolutionStatus::InQueue => "IN_QUEUE".to_string(),
+        SolutionStatus::OnboardingDone => "ONBOARDING_DONE".to_string(),
+        SolutionStatus::InProgress => "IN_PROGRESS".to_string(),
+        SolutionStatus::Delivered => "DELIVERED".to_string(),
+        SolutionStatus::AwaitingPayment => "AWAITING_PAYMENT".to_string(),
+        SolutionStatus::Paid => "PAID".to_string(),
+        SolutionStatus::Cancelled => "CANCELLED".to_string(),
+        SolutionStatus::Refunded => "REFUNDED".to_string(),
+    }
 }

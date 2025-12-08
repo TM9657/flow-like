@@ -108,7 +108,7 @@ pub async fn get_solution(
         paid_deposit: solution.paid_deposit,
         files: solution.files,
         storage_key: solution.storage_key,
-        status: format!("{:?}", solution.status),
+        status: status_to_string(&solution.status),
         stripe_checkout_session_id: solution.stripe_checkout_session_id,
         stripe_payment_intent_id: solution.stripe_payment_intent_id,
         stripe_setup_intent_id: solution.stripe_setup_intent_id,
@@ -126,4 +126,20 @@ pub async fn get_solution(
     };
 
     Ok(Json(detail))
+}
+
+fn status_to_string(status: &crate::entity::sea_orm_active_enums::SolutionStatus) -> String {
+    use crate::entity::sea_orm_active_enums::SolutionStatus;
+    match status {
+        SolutionStatus::AwaitingDeposit => "AWAITING_DEPOSIT".to_string(),
+        SolutionStatus::PendingReview => "PENDING_REVIEW".to_string(),
+        SolutionStatus::InQueue => "IN_QUEUE".to_string(),
+        SolutionStatus::OnboardingDone => "ONBOARDING_DONE".to_string(),
+        SolutionStatus::InProgress => "IN_PROGRESS".to_string(),
+        SolutionStatus::Delivered => "DELIVERED".to_string(),
+        SolutionStatus::AwaitingPayment => "AWAITING_PAYMENT".to_string(),
+        SolutionStatus::Paid => "PAID".to_string(),
+        SolutionStatus::Cancelled => "CANCELLED".to_string(),
+        SolutionStatus::Refunded => "REFUNDED".to_string(),
+    }
 }

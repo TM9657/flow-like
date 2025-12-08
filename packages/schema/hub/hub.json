@@ -10,6 +10,7 @@
 		"features",
 		"hubs",
 		"legal_notice",
+		"web",
 		"name",
 		"privacy_policy",
 		"terms_of_service",
@@ -67,6 +68,9 @@
 		},
 		"legal_notice": {
 			"type": "string"
+		},
+		"web": {
+			"type": ["string", "null"]
 		},
 		"privacy_policy": {
 			"type": "string"

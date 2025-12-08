@@ -217,6 +217,14 @@ async fn submit_solution(
 
     let files_json = serde_json::to_value(&submission.files).ok();
 
+    // If paying deposit (priority), start with AwaitingDeposit
+    // If not paying deposit, start directly with PendingReview
+    let initial_status = if submission.pay_deposit {
+        SolutionStatus::AwaitingDeposit
+    } else {
+        SolutionStatus::PendingReview
+    };
+
     let new_solution = solution_request::ActiveModel {
         id: Set(submission_id.clone()),
         name: Set(submission.name.clone()),
@@ -236,7 +244,7 @@ async fn submit_solution(
         paid_deposit: Set(false),
         files: Set(files_json),
         storage_key: Set(Some(key.clone())),
-        status: Set(SolutionStatus::PendingPayment),
+        status: Set(initial_status),
         stripe_checkout_session_id: Set(None),
         stripe_payment_intent_id: Set(None),
         stripe_setup_intent_id: Set(None),
@@ -264,13 +272,18 @@ async fn submit_solution(
     );
 
     let checkout_url = if let Some(stripe_client) = state.stripe_client.as_ref() {
-        let frontend_url = std::env::var("FRONTEND_URL")
-            .unwrap_or_else(|_| format!("https://{}", state.platform_config.domain));
+        let frontend_url = std::env::var("FRONTEND_URL").unwrap_or_else(|_| {
+            format!(
+                "https://{}",
+                state
+                    .platform_config
+                    .web
+                    .clone()
+                    .unwrap_or_else(|| state.platform_config.domain.clone())
+            )
+        });
 
-        let success_url = format!(
-            "{}/track?token={}",
-            frontend_url, tracking_token
-        );
+        let success_url = format!("{}/track?token={}", frontend_url, tracking_token);
         let cancel_url = format!("{}/24-hour-solution?canceled=true", frontend_url);
 
         let total_display = format!("€{:.2}", total_cents as f64 / 100.0);
@@ -325,12 +338,15 @@ async fn submit_solution(
             metadata.insert("remainder_cents".to_string(), remainder_cents.to_string());
             metadata.insert("priority".to_string(), "true".to_string());
         } else {
-            // Setup mode: No charge, just collect customer info for tracking
-            params.mode = Some(stripe::CheckoutSessionMode::Setup);
-
-            metadata.insert("deposit_cents".to_string(), "0".to_string());
-            metadata.insert("remainder_cents".to_string(), total_cents.to_string());
-            metadata.insert("priority".to_string(), "false".to_string());
+            // No deposit - skip Stripe checkout entirely
+            // The solution is already saved with PendingReview status
+            return Ok(Json(SubmissionResponse {
+                success: true,
+                id: submission_id,
+                tracking_token,
+                message: "Your request has been submitted successfully. We'll review and get back to you shortly.".to_string(),
+                checkout_url: None,
+            }));
         }
 
         params.metadata = Some(metadata);
@@ -401,24 +417,32 @@ pub struct PublicSolutionLog {
 
 fn get_status_label(status: &str) -> String {
     match status {
-        "PendingPayment" => "Pending Payment".to_string(),
-        "PendingReview" => "Pending Review".to_string(),
-        "InProgress" => "In Progress".to_string(),
-        "Delivered" => "Delivered".to_string(),
-        "Cancelled" => "Cancelled".to_string(),
-        "Refunded" => "Refunded".to_string(),
+        "AWAITING_DEPOSIT" => "Awaiting Deposit".to_string(),
+        "PENDING_REVIEW" => "Pending Review".to_string(),
+        "IN_QUEUE" => "In Queue".to_string(),
+        "ONBOARDING_DONE" => "Onboarding Done".to_string(),
+        "IN_PROGRESS" => "In Progress".to_string(),
+        "DELIVERED" => "Delivered".to_string(),
+        "AWAITING_PAYMENT" => "Awaiting Payment".to_string(),
+        "PAID" => "Paid".to_string(),
+        "CANCELLED" => "Cancelled".to_string(),
+        "REFUNDED" => "Refunded".to_string(),
         _ => status.to_string(),
     }
 }
 
 fn get_status_description(status: &str) -> String {
     match status {
-        "PendingPayment" => "Awaiting payment to proceed with your solution".to_string(),
-        "PendingReview" => "Payment received, your request is being reviewed".to_string(),
-        "InProgress" => "Your solution is actively being worked on".to_string(),
-        "Delivered" => "Your solution has been delivered".to_string(),
-        "Cancelled" => "This request has been cancelled".to_string(),
-        "Refunded" => "Payment has been refunded".to_string(),
+        "AWAITING_DEPOSIT" => "Awaiting priority deposit payment".to_string(),
+        "PENDING_REVIEW" => "Your request has been submitted and is pending review".to_string(),
+        "IN_QUEUE" => "Your request has been approved and is in the queue".to_string(),
+        "ONBOARDING_DONE" => "Onboarding has been completed".to_string(),
+        "IN_PROGRESS" => "Your solution is actively being worked on".to_string(),
+        "DELIVERED" => "Your solution has been delivered".to_string(),
+        "AWAITING_PAYMENT" => "Awaiting final payment".to_string(),
+        "PAID" => "Payment completed. Thank you!".to_string(),
+        "CANCELLED" => "This request has been cancelled".to_string(),
+        "REFUNDED" => "Payment has been refunded".to_string(),
         _ => "Status unknown".to_string(),
     }
 }
@@ -449,7 +473,7 @@ async fn get_solution_status(
         })
         .collect();
 
-    let status_str = format!("{:?}", solution.status);
+    let status_str = status_to_string(&solution.status);
 
     Ok(Json(PublicSolutionStatus {
         id: solution.id,
@@ -468,4 +492,20 @@ async fn get_solution_status(
         updated_at: solution.updated_at.to_string(),
         logs,
     }))
+}
+
+fn status_to_string(status: &crate::entity::sea_orm_active_enums::SolutionStatus) -> String {
+    use crate::entity::sea_orm_active_enums::SolutionStatus;
+    match status {
+        SolutionStatus::AwaitingDeposit => "AWAITING_DEPOSIT".to_string(),
+        SolutionStatus::PendingReview => "PENDING_REVIEW".to_string(),
+        SolutionStatus::InQueue => "IN_QUEUE".to_string(),
+        SolutionStatus::OnboardingDone => "ONBOARDING_DONE".to_string(),
+        SolutionStatus::InProgress => "IN_PROGRESS".to_string(),
+        SolutionStatus::Delivered => "DELIVERED".to_string(),
+        SolutionStatus::AwaitingPayment => "AWAITING_PAYMENT".to_string(),
+        SolutionStatus::Paid => "PAID".to_string(),
+        SolutionStatus::Cancelled => "CANCELLED".to_string(),
+        SolutionStatus::Refunded => "REFUNDED".to_string(),
+    }
 }

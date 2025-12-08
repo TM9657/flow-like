@@ -213,7 +213,7 @@ export function SolutionsPage({
 	}
 
 	return (
-		<div className="space-y-4">
+		<div className="space-y-4 w-full max-w-7xl mx-auto">
 			<div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
 				<div>
 					<h2 className="text-2xl font-bold tracking-tight">
@@ -426,13 +426,21 @@ function SolutionsTable({
 function StatusBadge({ status }: { status: SolutionStatus }) {
 	const getStatusIcon = () => {
 		switch (status) {
-			case SolutionStatus.PENDING_PAYMENT:
+			case SolutionStatus.AWAITING_DEPOSIT:
 				return <CreditCard className="h-3 w-3" />;
 			case SolutionStatus.PENDING_REVIEW:
 				return <Clock className="h-3 w-3" />;
+			case SolutionStatus.IN_QUEUE:
+				return <Clock className="h-3 w-3" />;
+			case SolutionStatus.ONBOARDING_DONE:
+				return <Check className="h-3 w-3" />;
 			case SolutionStatus.IN_PROGRESS:
 				return <Loader2 className="h-3 w-3 animate-spin" />;
 			case SolutionStatus.DELIVERED:
+				return <Check className="h-3 w-3" />;
+			case SolutionStatus.AWAITING_PAYMENT:
+				return <CreditCard className="h-3 w-3" />;
+			case SolutionStatus.PAID:
 				return <Check className="h-3 w-3" />;
 			case SolutionStatus.CANCELLED:
 				return <X className="h-3 w-3" />;
@@ -452,7 +460,7 @@ function StatusBadge({ status }: { status: SolutionStatus }) {
 }
 
 function PaymentBadge({ paidDeposit, status }: { paidDeposit: boolean; status: SolutionStatus }) {
-	if (status === SolutionStatus.PENDING_PAYMENT) {
+	if (status === SolutionStatus.AWAITING_DEPOSIT) {
 		return (
 			<Badge variant="outline" className="text-yellow-600 border-yellow-600/50 bg-yellow-500/10">
 				<CreditCard className="h-3 w-3 mr-1" />
@@ -721,7 +729,7 @@ function SolutionDetailView({
 			</div>
 
 			{/* Status Timeline */}
-			<StatusTimeline status={solution.status} />
+			<StatusTimeline status={solution.status} priority={solution.priority} />
 
 			{/* Main Grid */}
 			<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1012,22 +1020,33 @@ function SolutionDetailView({
 	);
 }
 
-function StatusTimeline({ status }: { status: SolutionStatus }) {
+function StatusTimeline({ status, priority }: { status: SolutionStatus; priority: boolean }) {
 	const isCancelled = status === SolutionStatus.CANCELLED || status === SolutionStatus.REFUNDED;
-	const currentIndex = SolutionStatusOrder.indexOf(status);
+
+	// For priority orders, show all steps. For standard orders, skip the AwaitingDeposit step.
+	const statusOrder = priority
+		? SolutionStatusOrder
+		: SolutionStatusOrder.filter(s => s !== SolutionStatus.AWAITING_DEPOSIT);
+
+	const currentIndex = statusOrder.indexOf(status);
+	const isPaid = status === SolutionStatus.PAID;
 
 	if (isCancelled) {
 		return (
-			<Card className="border-red-200 bg-red-50/50 dark:bg-red-950/20 dark:border-red-900">
+			<Card className="border-destructive/50 bg-destructive/5">
 				<CardContent className="py-4">
 					<div className="flex items-center justify-center gap-3">
-						<X className="h-5 w-5 text-red-500" />
-						<span className="font-medium text-red-600 dark:text-red-400">
-							{SolutionStatusLabels[status]}
-						</span>
-						<span className="text-sm text-red-500/70">
-							{SolutionStatusDescriptions[status]}
-						</span>
+						<div className="h-8 w-8 rounded-full bg-destructive/10 flex items-center justify-center">
+							<X className="h-4 w-4 text-destructive" />
+						</div>
+						<div className="flex flex-col">
+							<span className="font-medium text-destructive">
+								{SolutionStatusLabels[status]}
+							</span>
+							<span className="text-sm text-muted-foreground">
+								{SolutionStatusDescriptions[status]}
+							</span>
+						</div>
 					</div>
 				</CardContent>
 			</Card>
@@ -1036,49 +1055,52 @@ function StatusTimeline({ status }: { status: SolutionStatus }) {
 
 	return (
 		<Card>
-			<CardContent className="py-6">
-				<div className="flex items-center justify-between">
-					{SolutionStatusOrder.map((s, index) => {
-						const isCompleted = currentIndex > index;
-						const isCurrent = currentIndex === index;
-						const isPending = currentIndex < index;
+			<CardContent className="py-4 px-3">
+				<div className="flex items-start justify-between gap-1">
+					{statusOrder.map((s, index) => {
+						const isCompleted = currentIndex > index || isPaid;
+						const isCurrent = currentIndex === index && !isPaid;
+						const isLast = index === statusOrder.length - 1;
 
 						return (
-							<div key={s} className="flex items-center flex-1">
-								<div className="flex flex-col items-center">
+							<div key={s} className="flex items-start flex-1">
+								<div className="flex flex-col items-center min-w-10">
 									<div
 										className={`
-											w-10 h-10 rounded-full flex items-center justify-center
-											transition-all duration-300
-											${isCompleted ? "bg-green-500 text-white" : ""}
-											${isCurrent ? "bg-primary text-primary-foreground ring-4 ring-primary/20" : ""}
-											${isPending ? "bg-muted text-muted-foreground" : ""}
+											w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all
+											${isCompleted ? "bg-green-500 border-green-500 text-white" : ""}
+											${isCurrent ? "border-primary bg-primary/10 text-primary" : ""}
+											${!isCompleted && !isCurrent ? "border-muted-foreground/30 bg-muted/50 text-muted-foreground" : ""}
 										`}
 									>
 										{isCompleted ? (
-											<Check className="h-5 w-5" />
+											<Check className="h-3 w-3" />
 										) : isCurrent ? (
-											<Loader2 className="h-5 w-5 animate-spin" />
+											<div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
 										) : (
-											<Circle className="h-5 w-5" />
+											<span className="text-[10px] font-medium">{index + 1}</span>
 										)}
 									</div>
 									<span
 										className={`
-											mt-2 text-xs font-medium text-center max-w-20
-											${isCurrent ? "text-primary" : "text-muted-foreground"}
+											mt-1.5 text-[10px] font-medium text-center leading-tight max-w-[50px]
+											${isCompleted ? "text-green-600 dark:text-green-400" : ""}
+											${isCurrent ? "text-primary font-semibold" : ""}
+											${!isCompleted && !isCurrent ? "text-muted-foreground" : ""}
 										`}
 									>
 										{SolutionStatusLabels[s]}
 									</span>
 								</div>
-								{index < SolutionStatusOrder.length - 1 && (
-									<div
-										className={`
-											flex-1 h-1 mx-2 rounded
-											${isCompleted ? "bg-green-500" : "bg-muted"}
-										`}
-									/>
+								{!isLast && (
+									<div className="flex-1 flex items-center pt-3 px-0.5">
+										<div
+											className={`
+												flex-1 h-0.5 rounded-full transition-colors
+												${isCompleted ? "bg-green-500" : "bg-muted-foreground/20"}
+											`}
+										/>
+									</div>
 								)}
 							</div>
 						);

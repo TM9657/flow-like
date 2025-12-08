@@ -41,6 +41,7 @@ pub struct Hub {
     pub signaling: Option<Vec<String>>,
     pub cdn: Option<String>,
     pub app: Option<String>,
+    pub web: Option<String>,
     pub legal_notice: String,
     pub privacy_policy: String,
     pub contact: Contact,

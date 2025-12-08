@@ -11,6 +11,7 @@ export interface IHub {
 	hubs: string[];
 	icon?: null | string;
 	legal_notice: string;
+	web?: null | string;
 	lookup?: ILookup;
 	max_users_prototype?: number | null;
 	name: string;

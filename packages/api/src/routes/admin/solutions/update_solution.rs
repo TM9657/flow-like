@@ -48,10 +48,14 @@ pub async fn update_solution(
 
     if let Some(status_str) = &body.status {
         let new_status = match status_str.to_lowercase().as_str() {
-            "pending_payment" => SolutionStatus::PendingPayment,
+            "awaiting_deposit" => SolutionStatus::AwaitingDeposit,
             "pending_review" => SolutionStatus::PendingReview,
+            "in_queue" => SolutionStatus::InQueue,
+            "onboarding_done" => SolutionStatus::OnboardingDone,
             "in_progress" => SolutionStatus::InProgress,
             "delivered" => SolutionStatus::Delivered,
+            "awaiting_payment" => SolutionStatus::AwaitingPayment,
+            "paid" => SolutionStatus::Paid,
             "cancelled" => SolutionStatus::Cancelled,
             "refunded" => SolutionStatus::Refunded,
             _ => return Err(ApiError::BadRequest("Invalid status".to_string())),
@@ -88,6 +92,22 @@ pub async fn update_solution(
     Ok(Json(UpdateSolutionResponse {
         success: true,
         id: solution_id,
-        new_status: format!("{:?}", updated.status),
+        new_status: status_to_string(&updated.status),
     }))
+}
+
+fn status_to_string(status: &crate::entity::sea_orm_active_enums::SolutionStatus) -> String {
+    use crate::entity::sea_orm_active_enums::SolutionStatus;
+    match status {
+        SolutionStatus::AwaitingDeposit => "AWAITING_DEPOSIT".to_string(),
+        SolutionStatus::PendingReview => "PENDING_REVIEW".to_string(),
+        SolutionStatus::InQueue => "IN_QUEUE".to_string(),
+        SolutionStatus::OnboardingDone => "ONBOARDING_DONE".to_string(),
+        SolutionStatus::InProgress => "IN_PROGRESS".to_string(),
+        SolutionStatus::Delivered => "DELIVERED".to_string(),
+        SolutionStatus::AwaitingPayment => "AWAITING_PAYMENT".to_string(),
+        SolutionStatus::Paid => "PAID".to_string(),
+        SolutionStatus::Cancelled => "CANCELLED".to_string(),
+        SolutionStatus::Refunded => "REFUNDED".to_string(),
+    }
 }
