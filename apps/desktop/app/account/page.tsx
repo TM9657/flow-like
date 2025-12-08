@@ -16,7 +16,7 @@ import {
 	updateUserAttributes,
 } from "aws-amplify/auth";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type AuthContextProps, useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 import { fetcher } from "../../lib/api";
@@ -68,6 +68,13 @@ const AccountPage: React.FC = () => {
 
 	const isPremiumEnabled = hub.hub?.features?.premium ?? false;
 
+	const backendRef = useRef(backend);
+	backendRef.current = backend;
+	const authRef = useRef(auth);
+	authRef.current = auth;
+	const hubRef = useRef(hub);
+	hubRef.current = hub;
+
 	const updateUserAttribute = useCallback(
 		async (attributeKey: string, value: string) => {
 			if (!cognito) {
@@ -93,31 +100,27 @@ const AccountPage: React.FC = () => {
 		[cognito],
 	);
 
-	useEffect(() => {
-		setProfileActions((prev) => ({
-			...prev,
-			handleAttributeUpdate: cognito ? updateUserAttribute : undefined,
-		}));
-	}, [cognito]);
-
 	const handleChangePassword = useCallback(async () => {
 		setPasswordDialogOpen(true);
 	}, []);
 
-	const handleUpdateEmail = useCallback(async (email: string) => {
+	const handleUpdateEmail = useCallback(async () => {
 		setEmailDialogOpen(true);
 	}, []);
 
 	const configureAmplify = useCallback(async () => {
-		if (!auth.isAuthenticated || !auth.user?.profile) return;
-		if (hub.hub?.authentication?.openid?.cognito?.user_pool_id) {
-			const provider = new AuthTokenProvider(auth);
+		const currentAuth = authRef.current;
+		const currentHub = hubRef.current;
+
+		if (!currentAuth.isAuthenticated || !currentAuth.user?.profile) return;
+		if (currentHub.hub?.authentication?.openid?.cognito?.user_pool_id) {
+			const provider = new AuthTokenProvider(currentAuth);
 			Amplify.configure(
 				{
 					Auth: {
 						Cognito: {
-							userPoolClientId: auth.settings.client_id,
-							userPoolId: hub.hub.authentication.openid.cognito.user_pool_id,
+							userPoolClientId: currentAuth.settings.client_id,
+							userPoolId: currentHub.hub.authentication.openid.cognito.user_pool_id,
 						},
 					},
 				},
@@ -145,26 +148,14 @@ const AccountPage: React.FC = () => {
 			);
 			setFederated(isFederated);
 			setCognito(true);
-
-			setProfileActions((prev) => ({
-				...prev,
-				changePassword: isFederated ? undefined : handleChangePassword,
-				updateEmail: isFederated ? undefined : handleUpdateEmail,
-			}));
 		}
-	}, [
-		hub,
-		auth.settings.client_id,
-		auth.isAuthenticated,
-		auth.user?.profile,
-		auth,
-		handleChangePassword,
-		handleUpdateEmail,
-	]);
+	}, []);
 
 	useEffect(() => {
-		configureAmplify();
-	}, [auth.isAuthenticated, hub.hub]);
+		if (auth.isAuthenticated && hub.hub) {
+			configureAmplify();
+		}
+	}, [auth.isAuthenticated, hub.hub, configureAmplify]);
 
 	const handlePasswordChange = useCallback(
 		async (currentPassword: string, newPassword: string) => {
@@ -182,17 +173,12 @@ const AccountPage: React.FC = () => {
 				throw error;
 			}
 		},
-		[toast],
+		[],
 	);
 
 	const handleViewBilling = useCallback(async () => {
-		if (!profile.data) {
-			toast.error("Profile data not available");
-			return;
-		}
-
 		try {
-			const billingSession = await backend.userState.getBillingSession();
+			const billingSession = await backendRef.current.userState.getBillingSession();
 
 			const _view = new WebviewWindow("billing", {
 				url: billingSession.url,
@@ -206,32 +192,34 @@ const AccountPage: React.FC = () => {
 			console.error("Failed to get billing session:", error);
 			toast.error("Failed to open billing portal");
 		}
-	}, [profile, backend.userState]);
+	}, []);
 
 	const handlePreviewProfile = useCallback(async () => {
-		router.push(`/profile?sub=${auth.user?.profile?.sub}`);
-	}, [router, auth.user?.profile?.sub]);
+		router.push(`/profile?sub=${authRef.current.user?.profile?.sub}`);
+	}, [router]);
 
 	const handleViewSubscription = useCallback(async () => {
 		router.push("/subscription");
 	}, [router]);
 
-	const [profileActions, setProfileActions] = useState<ProfileActions>({
-		updateEmail: undefined,
-		changePassword: undefined,
+	const profileActions = useMemo<ProfileActions>(() => ({
+		updateEmail: cognito && !federated ? handleUpdateEmail : undefined,
+		changePassword: cognito && !federated ? handleChangePassword : undefined,
 		viewBilling: isPremiumEnabled ? handleViewBilling : undefined,
 		viewSubscription: isPremiumEnabled ? handleViewSubscription : undefined,
 		previewProfile: handlePreviewProfile,
-		handleAttributeUpdate: updateUserAttribute,
-	});
-
-	useEffect(() => {
-		setProfileActions((prev) => ({
-			...prev,
-			viewBilling: isPremiumEnabled ? handleViewBilling : undefined,
-			viewSubscription: isPremiumEnabled ? handleViewSubscription : undefined,
-		}));
-	}, [isPremiumEnabled, handleViewBilling, handleViewSubscription]);
+		handleAttributeUpdate: cognito ? updateUserAttribute : undefined,
+	}), [
+		cognito,
+		federated,
+		isPremiumEnabled,
+		handleUpdateEmail,
+		handleChangePassword,
+		handleViewBilling,
+		handleViewSubscription,
+		handlePreviewProfile,
+		updateUserAttribute,
+	]);
 
 	if (!auth.isAuthenticated) {
 		return (

@@ -1,5 +1,8 @@
 use crate::{
-    error::ApiError, middleware::jwt::AppUser, permission::global_permission::GlobalPermission,
+    error::ApiError,
+    mail::{EmailMessage, templates::solution_status_update},
+    middleware::jwt::AppUser,
+    permission::global_permission::GlobalPermission,
     state::AppState,
 };
 use axum::{
@@ -44,7 +47,12 @@ pub async fn update_solution(
         .await?
         .ok_or_else(|| anyhow!("Solution request not found"))?;
 
+    let old_status = solution.status.clone();
+    let solution_email = solution.email.clone();
+    let solution_name = solution.name.clone();
+
     let mut active: solution_request::ActiveModel = solution.into_active_model();
+    let mut new_status_value: Option<SolutionStatus> = None;
 
     if let Some(status_str) = &body.status {
         let new_status = match status_str.to_lowercase().as_str() {
@@ -61,6 +69,7 @@ pub async fn update_solution(
             _ => return Err(ApiError::BadRequest("Invalid status".to_string())),
         };
         active.status = Set(new_status.clone());
+        new_status_value = Some(new_status.clone());
 
         if new_status == SolutionStatus::Delivered {
             active.delivered_at = Set(Some(chrono::Utc::now().naive_utc()));
@@ -82,6 +91,44 @@ pub async fn update_solution(
     active.updated_at = Set(chrono::Utc::now().naive_utc());
 
     let updated = active.update(&state.db).await?;
+
+    // Send email notification if status changed
+    if let Some(new_status) = new_status_value {
+        if new_status != old_status {
+            if let Some(mail_client) = &state.mail_client {
+                let frontend_url = std::env::var("FRONTEND_URL").unwrap_or_else(|_| {
+                    format!(
+                        "https://{}",
+                        state
+                            .platform_config
+                            .web
+                            .clone()
+                            .unwrap_or_else(|| state.platform_config.domain.clone())
+                    )
+                });
+                let tracking_url = format!("{}/solutions/track/{}", frontend_url, solution_id);
+                let status_str = status_to_string(&new_status);
+                let (html, text) = solution_status_update(
+                    &solution_name,
+                    &solution_id,
+                    &status_str,
+                    &tracking_url,
+                    None,
+                );
+
+                let email = EmailMessage {
+                    to: solution_email,
+                    subject: format!("Solution Update: {}", status_str.replace('_', " ")),
+                    body_html: Some(html),
+                    body_text: Some(text),
+                };
+
+                if let Err(e) = mail_client.send(email).await {
+                    tracing::warn!(error = %e, "Failed to send status update email");
+                }
+            }
+        }
+    }
 
     tracing::info!(
         solution_id = %solution_id,

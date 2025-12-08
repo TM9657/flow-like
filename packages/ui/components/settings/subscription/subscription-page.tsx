@@ -22,7 +22,9 @@ interface TierCardProps {
 	tierKey: string;
 	tier: ITierInfo;
 	isCurrentTier: boolean;
+	currentTier: string;
 	onUpgrade: (tier: string) => Promise<void>;
+	onManageBilling: () => Promise<void>;
 	isLoading: boolean;
 }
 
@@ -62,7 +64,9 @@ function TierCard({
 	tierKey,
 	tier,
 	isCurrentTier,
+	currentTier,
 	onUpgrade,
+	onManageBilling,
 	isLoading,
 }: TierCardProps) {
 	const features = useMemo(() => {
@@ -86,6 +90,7 @@ function TierCard({
 	}, [tier]);
 
 	const isPaid = tierKey !== "FREE" && tier.product_id;
+	const hasExistingSubscription = currentTier !== "FREE";
 	const colorClass = TIER_COLORS[tierKey] || TIER_COLORS.FREE;
 	const icon = TIER_ICONS[tierKey] || TIER_ICONS.FREE;
 
@@ -131,7 +136,7 @@ function TierCard({
 				) : isPaid ? (
 					<Button
 						className="w-full"
-						onClick={() => onUpgrade(tierKey)}
+						onClick={() => hasExistingSubscription ? onManageBilling() : onUpgrade(tierKey)}
 						disabled={isLoading}
 					>
 						{isLoading ? (
@@ -139,6 +144,8 @@ function TierCard({
 								<Loader2 className="mr-2 h-4 w-4 animate-spin" />
 								Processing...
 							</>
+						) : hasExistingSubscription ? (
+							"Change Plan"
 						) : (
 							`Upgrade to ${tier.name || tierKey}`
 						)}
@@ -225,7 +232,9 @@ export function SubscriptionPage({
 						tierKey={key}
 						tier={tier}
 						isCurrentTier={pricing.current_tier === key}
+						currentTier={pricing.current_tier}
 						onUpgrade={handleUpgrade}
+						onManageBilling={onManageBilling}
 						isLoading={loadingTier === key}
 					/>
 				))}

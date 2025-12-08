@@ -257,9 +257,9 @@ const AvatarCard: React.FC<AvatarCardProps> = ({
 				</div>
 
 				{canEdit && (
-					<div className="w-full">
+					<div className="w-full flex justify-center">
 						<Label htmlFor="avatar-upload" className="cursor-pointer">
-							<div className="flex items-center justify-center gap-2 rounded-md border border-dashed p-4 hover:bg-muted transition-colors">
+							<div className="flex items-center gap-2 rounded-md border border-dashed p-4 hover:bg-muted transition-colors">
 								<Upload className="h-4 w-4" />
 								<span className="text-sm">Upload new photo</span>
 							</div>

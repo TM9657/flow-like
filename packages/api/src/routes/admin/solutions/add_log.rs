@@ -1,5 +1,8 @@
 use crate::{
-    error::ApiError, middleware::jwt::AppUser, permission::global_permission::GlobalPermission,
+    error::ApiError,
+    mail::{EmailMessage, templates::solution_log_added},
+    middleware::jwt::AppUser,
+    permission::global_permission::GlobalPermission,
     state::AppState,
 };
 use axum::{
@@ -15,6 +18,8 @@ use serde::{Deserialize, Serialize};
 pub struct AddLogBody {
     pub action: String,
     pub details: Option<String>,
+    #[serde(default)]
+    pub notify_customer: bool,
 }
 
 #[derive(Clone, Serialize, Debug)]
@@ -39,8 +44,7 @@ pub async fn add_solution_log(
     user.check_global_permission(&state, GlobalPermission::WriteSolutions)
         .await?;
 
-    // Verify solution exists
-    solution_request::Entity::find_by_id(&solution_id)
+    let solution = solution_request::Entity::find_by_id(&solution_id)
         .one(&state.db)
         .await?
         .ok_or_else(|| anyhow!("Solution request not found"))?;
@@ -51,13 +55,47 @@ pub async fn add_solution_log(
     let new_log = solution_log::ActiveModel {
         id: Set(log_id.clone()),
         solution_id: Set(solution_id.clone()),
-        action: Set(body.action),
-        details: Set(body.details),
+        action: Set(body.action.clone()),
+        details: Set(body.details.clone()),
         actor: Set(actor),
         created_at: Set(chrono::Utc::now().naive_utc()),
     };
 
     new_log.insert(&state.db).await?;
+
+    if body.notify_customer {
+        if let Some(mail_client) = &state.mail_client {
+            let frontend_url = std::env::var("FRONTEND_URL").unwrap_or_else(|_| {
+                format!(
+                    "https://{}",
+                    state
+                        .platform_config
+                        .web
+                        .clone()
+                        .unwrap_or_else(|| state.platform_config.domain.clone())
+                )
+            });
+            let tracking_url = format!("{}/solutions/track/{}", frontend_url, solution_id);
+            let (html, text) = solution_log_added(
+                &solution.name,
+                &solution_id,
+                &body.action,
+                body.details.as_deref(),
+                &tracking_url,
+            );
+
+            let email = EmailMessage {
+                to: solution.email.clone(),
+                subject: format!("Solution Update: {}", body.action),
+                body_html: Some(html),
+                body_text: Some(text),
+            };
+
+            if let Err(e) = mail_client.send(email).await {
+                tracing::warn!(error = %e, "Failed to send log notification email");
+            }
+        }
+    }
 
     tracing::info!(
         solution_id = %solution_id,

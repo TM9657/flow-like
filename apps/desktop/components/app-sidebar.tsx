@@ -893,13 +893,19 @@ export function NavUser({
 						<DropdownMenuSeparator />
 						{auth?.isAuthenticated && (
 							<>
-								<DropdownMenuGroup>
-									<DropdownMenuItem className="gap-2">
-										<Sparkles className="size-4" />
-										Upgrade to Pro
-									</DropdownMenuItem>
-								</DropdownMenuGroup>
-								<DropdownMenuSeparator />
+								{(!info.data?.tier || info.data?.tier === "FREE") && (
+									<>
+										<DropdownMenuGroup>
+											<a href="/subscription">
+												<DropdownMenuItem className="gap-2">
+													<Sparkles className="size-4" />
+													Upgrade to Pro
+												</DropdownMenuItem>
+											</a>
+										</DropdownMenuGroup>
+										<DropdownMenuSeparator />
+									</>
+								)}
 								<DropdownMenuGroup>
 									<a href="/account">
 										<DropdownMenuItem className="gap-2">
