@@ -1,0 +1,69 @@
+enum SolutionStatus {
+    PENDING_PAYMENT
+    PENDING_REVIEW
+    IN_PROGRESS
+    DELIVERED
+    CANCELLED
+    REFUNDED
+}
+
+enum SolutionPricingTier {
+    STANDARD
+    APPSTORE
+}
+
+model SolutionRequest {
+    id String @id
+
+    name        String
+    email       String
+    company     String
+    description String
+
+    applicationType String
+    dataSecurity    String
+    exampleInput    String
+    expectedOutput  String
+    userCount       String
+    userType        String
+    technicalLevel  String
+    timeline        String?
+    additionalNotes String?
+
+    pricingTier SolutionPricingTier
+    paidDeposit Boolean             @default(false)
+
+    files       Json?
+    storageKey  String?
+
+    status SolutionStatus @default(PENDING_PAYMENT)
+
+    stripeCheckoutSessionId String? @unique
+    stripePaymentIntentId   String? @unique
+    stripeSetupIntentId     String? @unique
+
+    totalCents     BigInt
+    depositCents   BigInt  @default(0)
+    remainderCents BigInt
+
+    priority Boolean @default(false)
+
+    adminNotes  String?
+    assignedTo  String?
+    deliveredAt DateTime?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([email])
+    @@index([status])
+    @@index([createdAt])
+}
+
+model StripeEvent {
+    id              String   @id
+    eventType       String
+    processedAt     DateTime @default(now())
+
+    @@index([eventType])
+}

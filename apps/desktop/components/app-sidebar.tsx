@@ -201,6 +201,19 @@ const data = {
 				},
 			],
 		},
+		{
+			title: "Solutions",
+			url: "/admin/solutions",
+			icon: Sparkles,
+			permission: true,
+			items: [
+				{
+					title: "Manage Requests",
+					url: "/admin/solutions",
+					permission: GlobalPermission.WriteSolutions,
+				},
+			],
+		},
 	],
 };
 

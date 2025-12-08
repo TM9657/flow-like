@@ -18,6 +18,8 @@ export class GlobalPermission {
 		0b00000010_00000000n,
 	);
 	static readonly WriteBits = new GlobalPermission(0b00000100_00000000n);
+	static readonly ReadSolutions = new GlobalPermission(0b00001000_00000000n);
+	static readonly WriteSolutions = new GlobalPermission(0b00010000_00000000n);
 
 	constructor(value: bigint | number = 0n) {
 		this.value = typeof value === "number" ? BigInt(value) : value;

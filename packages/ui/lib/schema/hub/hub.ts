@@ -145,5 +145,6 @@ export interface IUserTier {
 	max_non_visible_projects: number;
 	max_remote_executions: number;
 	max_total_size: number;
+	product_id?: string | null;
 	[property: string]: any;
 }

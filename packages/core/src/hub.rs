@@ -20,6 +20,7 @@ pub struct UserTier {
     pub max_llm_cost: i32,
     pub max_llm_calls: Option<i32>,
     pub llm_tiers: Vec<String>,
+    pub product_id: Option<String>,
 }
 
 pub type UserTiers = HashMap<String, UserTier>;

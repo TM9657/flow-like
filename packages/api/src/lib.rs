@@ -1,6 +1,10 @@
 use std::sync::Arc;
 
-use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
+use axum::{
+    Json, Router,
+    middleware::from_fn_with_state,
+    routing::{get, post},
+};
 use error::InternalError;
 use flow_like_types::Value;
 use middleware::jwt::jwt_middleware;
@@ -46,6 +50,7 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/admin", routes::admin::routes())
         .nest("/tmp", routes::tmp::routes())
         .nest("/solution", routes::solution::routes())
+        .route("/webhook/stripe", post(routes::webhook::stripe_webhook))
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }))
         .layer(from_fn_with_state(state.clone(), jwt_middleware))

@@ -13,6 +13,7 @@ use flow_like_types::{
     mime_guess::{self, mime},
 };
 use mime::Mime;
+use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -20,8 +21,6 @@ const UPLOAD_TTL_SECS: u64 = 60 * 60; // 1 hour
 const DOWNLOAD_TTL_SECS: u64 = 60 * 60 * 24 * 7; // 7 days
 const SIZE_LIMIT_BYTES: Option<u64> = Some(1024 * 1024 * 50); // 50 MB
 
-// Deposit model pricing in cents (EUR)
-// Customer pays deposit for priority queue, full amount invoiced after delivery
 const DEPOSIT_AMOUNT_CENTS: i64 = 50000; // €500 deposit for priority queue
 const STANDARD_TOTAL_CENTS: i64 = 240000; // €2,400 total
 const APPSTORE_TOTAL_CENTS: i64 = 199900; // €1,999 total
@@ -141,7 +140,11 @@ async fn submit_solution(
     State(state): State<AppState>,
     Json(submission): Json<SolutionSubmission>,
 ) -> Result<Json<SubmissionResponse>, ApiError> {
-    // Validate required fields
+    use crate::entity::{
+        sea_orm_active_enums::{SolutionPricingTier, SolutionStatus},
+        solution_request,
+    };
+
     if submission.name.trim().is_empty() {
         return Err(ApiError::BadRequest("Name is required".to_string()));
     }
@@ -167,10 +170,17 @@ async fn submit_solution(
         ));
     }
 
-    // Validate pricing tier and get pricing info
-    let (tier_name, total_cents) = match submission.pricing_tier.as_str() {
-        "standard" => ("24 Hour Solution - Standard", STANDARD_TOTAL_CENTS),
-        "appstore" => ("24 Hour Solution - App Store", APPSTORE_TOTAL_CENTS),
+    let (tier_name, total_cents, pricing_tier_enum) = match submission.pricing_tier.as_str() {
+        "standard" => (
+            "24 Hour Solution - Standard",
+            STANDARD_TOTAL_CENTS,
+            SolutionPricingTier::Standard,
+        ),
+        "appstore" => (
+            "24 Hour Solution - App Store",
+            APPSTORE_TOTAL_CENTS,
+            SolutionPricingTier::Appstore,
+        ),
         _ => {
             return Err(ApiError::BadRequest(
                 "Invalid pricing tier. Must be 'standard' or 'appstore'".to_string(),
@@ -178,11 +188,17 @@ async fn submit_solution(
         }
     };
 
+    let deposit_cents = if submission.pay_deposit {
+        DEPOSIT_AMOUNT_CENTS
+    } else {
+        0
+    };
+    let remainder_cents = total_cents - deposit_cents;
+
     let submission_id = create_id();
     let now_utc = Utc::now();
     let date_prefix = now_utc.format("%Y/%m/%d").to_string();
 
-    // Store the submission as JSON in object storage
     let submission_data = serde_json::to_string_pretty(&submission)?;
     let key = format!("solution-requests/{date_prefix}/submissions/{submission_id}.json");
 
@@ -196,18 +212,53 @@ async fn submit_solution(
         .await
         .map_err(|e| ApiError::BadRequest(format!("Failed to store submission: {}", e)))?;
 
+    let files_json = serde_json::to_value(&submission.files).ok();
+
+    let new_solution = solution_request::ActiveModel {
+        id: Set(submission_id.clone()),
+        name: Set(submission.name.clone()),
+        email: Set(submission.email.clone()),
+        company: Set(submission.company.clone()),
+        description: Set(submission.description.clone()),
+        application_type: Set(submission.application_type.clone()),
+        data_security: Set(submission.data_security.clone()),
+        example_input: Set(submission.example_input.clone()),
+        expected_output: Set(submission.expected_output.clone()),
+        user_count: Set(submission.user_count.clone()),
+        user_type: Set(submission.user_type.clone()),
+        technical_level: Set(submission.technical_level.clone()),
+        timeline: Set(submission.timeline.clone()),
+        additional_notes: Set(submission.additional_notes.clone()),
+        pricing_tier: Set(pricing_tier_enum),
+        paid_deposit: Set(false),
+        files: Set(files_json),
+        storage_key: Set(Some(key.clone())),
+        status: Set(SolutionStatus::PendingPayment),
+        stripe_checkout_session_id: Set(None),
+        stripe_payment_intent_id: Set(None),
+        stripe_setup_intent_id: Set(None),
+        total_cents: Set(total_cents),
+        deposit_cents: Set(deposit_cents),
+        remainder_cents: Set(remainder_cents),
+        priority: Set(submission.pay_deposit),
+        admin_notes: Set(None),
+        assigned_to: Set(None),
+        delivered_at: Set(None),
+        created_at: Set(now_utc.naive_utc()),
+        updated_at: Set(now_utc.naive_utc()),
+    };
+
+    new_solution.insert(&state.db).await?;
+
     tracing::info!(
         submission_id = %submission_id,
         email = %submission.email,
         company = %submission.company,
         pricing_tier = %submission.pricing_tier,
         pay_deposit = %submission.pay_deposit,
-        "New 24-hour solution request submitted"
+        "New 24-hour solution request submitted and stored in database"
     );
 
-    // Create Stripe Checkout for all submissions
-    // - With deposit: Payment mode with €500 charge
-    // - Without deposit: Setup mode (collects info, no charge)
     let checkout_url = if let Some(stripe_client) = state.stripe_client.as_ref() {
         let frontend_url = std::env::var("FRONTEND_URL")
             .unwrap_or_else(|_| format!("https://{}", state.platform_config.domain));

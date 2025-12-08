@@ -23,6 +23,8 @@ pub use super::profile::Entity as Profile;
 pub use super::publication_log::Entity as PublicationLog;
 pub use super::publication_request::Entity as PublicationRequest;
 pub use super::role::Entity as Role;
+pub use super::solution_request::Entity as SolutionRequest;
+pub use super::stripe_event::Entity as StripeEvent;
 pub use super::swimlane::Entity as Swimlane;
 pub use super::swimlane_item::Entity as SwimlaneItem;
 pub use super::technical_user::Entity as TechnicalUser;

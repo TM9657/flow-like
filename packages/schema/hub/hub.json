@@ -306,7 +306,8 @@
 				"max_llm_calls",
 				"max_non_visible_projects",
 				"max_remote_executions",
-				"max_total_size"
+				"max_total_size",
+				"product_id"
 			],
 			"properties": {
 				"max_non_visible_projects": {
@@ -337,6 +338,9 @@
 					"items": {
 						"type": "string"
 					}
+				},
+				"product_id": {
+					"type": ["string", "null"]
 				}
 			}
 		},

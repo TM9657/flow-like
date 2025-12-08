@@ -26,6 +26,8 @@ pub mod publication_log;
 pub mod publication_request;
 pub mod role;
 pub mod sea_orm_active_enums;
+pub mod solution_request;
+pub mod stripe_event;
 pub mod swimlane;
 pub mod swimlane_item;
 pub mod technical_user;
