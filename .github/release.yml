@@ -27,3 +27,7 @@ changelog:
 
     - title: "👑 Epic"
       labels: [epic]
+
+    - title: "📋 Other Changes"
+      labels:
+        - "*"
