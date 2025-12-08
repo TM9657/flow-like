@@ -149,6 +149,42 @@ async fn enforce_tier(
     Ok(())
 }
 
+fn deduplicate_tools(body: &mut serde_json::Value) {
+    if let Some(tools) = body.get_mut("tools").and_then(|t| t.as_array_mut()) {
+        let mut seen_names = std::collections::HashSet::new();
+        tools.retain(|tool| {
+            let name = tool
+                .get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("");
+            if name.is_empty() {
+                true
+            } else {
+                seen_names.insert(name.to_string())
+            }
+        });
+    }
+}
+
+fn ensure_user_first_message(body: &mut serde_json::Value) {
+    if let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut()) {
+        let first_non_system_idx = messages
+            .iter()
+            .position(|m| m.get("role").and_then(|r| r.as_str()) != Some("system"));
+
+        if let Some(idx) = first_non_system_idx {
+            let role = messages[idx]
+                .get("role")
+                .and_then(|r| r.as_str())
+                .unwrap_or("");
+            if role == "assistant" {
+                messages.insert(idx, json!({"role": "user", "content": ""}));
+            }
+        }
+    }
+}
+
 fn prepare_upstream_body(
     payload: &serde_json::Value,
     upstream_model_id: &str,
@@ -179,6 +215,10 @@ fn prepare_upstream_body(
             obj.insert("user".to_string(), json!(u));
         }
     }
+
+    deduplicate_tools(&mut body);
+    ensure_user_first_message(&mut body);
+
     let stream = body
         .get("stream")
         .and_then(|v| v.as_bool())
@@ -624,5 +664,47 @@ mod tests {
         let bytes = serde_json::to_vec(&body).unwrap();
         let usage = extract_usage_from_body(&bytes).unwrap();
         assert_eq!(usage, (12, 34));
+    }
+
+    #[test]
+    fn test_deduplicate_tools() {
+        let mut body = serde_json::json!({
+            "tools": [
+                {"function": {"name": "query_knowledge"}},
+                {"function": {"name": "search"}},
+                {"function": {"name": "query_knowledge"}},
+                {"function": {"name": "search"}}
+            ]
+        });
+        deduplicate_tools(&mut body);
+        let tools = body.get("tools").unwrap().as_array().unwrap();
+        assert_eq!(tools.len(), 2);
+    }
+
+    #[test]
+    fn test_ensure_user_first_message() {
+        let mut body = serde_json::json!({
+            "messages": [
+                {"role": "system", "content": "You are helpful"},
+                {"role": "assistant", "content": "Hello!"}
+            ]
+        });
+        ensure_user_first_message(&mut body);
+        let messages = body.get("messages").unwrap().as_array().unwrap();
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[1].get("role").unwrap().as_str().unwrap(), "user");
+    }
+
+    #[test]
+    fn test_ensure_user_first_message_already_valid() {
+        let mut body = serde_json::json!({
+            "messages": [
+                {"role": "system", "content": "You are helpful"},
+                {"role": "user", "content": "Hi"}
+            ]
+        });
+        ensure_user_first_message(&mut body);
+        let messages = body.get("messages").unwrap().as_array().unwrap();
+        assert_eq!(messages.len(), 2);
     }
 }
