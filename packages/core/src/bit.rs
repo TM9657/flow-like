@@ -646,8 +646,12 @@ impl Bit {
     ) -> flow_like_types::Result<BitPack> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
-        let cache_dir =
-            Path::from("deps-cache").child(format!("bit-deps-{}.bin", self.dependency_tree_hash));
+        let cache_key = if self.dependency_tree_hash.is_empty() {
+            &self.id
+        } else {
+            &self.dependency_tree_hash
+        };
+        let cache_dir = Path::from("deps-cache").child(format!("bit-deps-{}.bin", cache_key));
 
         let metadata = bits_store.head(&cache_dir).await;
 

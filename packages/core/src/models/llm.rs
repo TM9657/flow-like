@@ -258,13 +258,9 @@ impl ModelFactory {
                         "hosted:bedrock is not supported in local model factory"
                     ));
                 }
-                "vertex" => Arc::new(
-                    GeminiModel::from_provider(&model_provider)
-                        .await
-                        .map_err(|e| {
-                            flow_like_types::anyhow!("Failed to create hosted:vertex model: {}", e)
-                        })?,
-                ),
+                "vertex" => Arc::new(GeminiModel::from_provider(&model_provider).await.map_err(
+                    |e| flow_like_types::anyhow!("Failed to create hosted:vertex model: {}", e),
+                )?),
                 _ => {
                     return Err(flow_like_types::anyhow!(
                         "Unsupported hosted provider type: {}",

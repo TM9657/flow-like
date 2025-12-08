@@ -69,6 +69,7 @@ impl From<bit::Model> for Bit {
     fn from(value: bit::Model) -> Self {
         let created_string = value.created_at.and_utc().to_rfc3339();
         let updated_string = value.updated_at.and_utc().to_rfc3339();
+        let id = value.id.clone();
         Bit {
             id: value.id,
             authors: value.authors.unwrap_or_default(),
@@ -76,11 +77,11 @@ impl From<bit::Model> for Bit {
             updated: updated_string,
             created: created_string,
             dependencies: value.dependencies.unwrap_or_default(),
-            dependency_tree_hash: value.dependency_tree_hash,
+            dependency_tree_hash: value.dependency_tree_hash.unwrap_or_else(|| id.clone()),
             download_link: value.download_link,
             license: value.license,
             file_name: value.file_name,
-            hash: value.hash,
+            hash: value.hash.unwrap_or_else(|| id.clone()),
             hub: value.hub,
             meta: HashMap::new(),
             parameters: value.parameters.unwrap_or_default(),
@@ -104,11 +105,11 @@ impl From<Bit> for bit::Model {
                 .unwrap_or_default()
                 .naive_utc(),
             dependencies: Some(value.dependencies),
-            dependency_tree_hash: value.dependency_tree_hash,
+            dependency_tree_hash: Some(value.dependency_tree_hash),
             download_link: value.download_link,
             license: value.license,
             file_name: value.file_name,
-            hash: value.hash,
+            hash: Some(value.hash),
             hub: value.hub,
             parameters: Some(value.parameters),
             repository: value.repository,
