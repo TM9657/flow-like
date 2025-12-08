@@ -83,9 +83,20 @@ pub struct Model {
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]
     pub updated_at: DateTime,
+    #[sea_orm(column_name = "trackingToken", column_type = "Text", unique)]
+    pub tracking_token: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(has_many = "super::solution_log::Entity")]
+    SolutionLog,
+}
+
+impl Related<super::solution_log::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::SolutionLog.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}

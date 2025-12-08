@@ -99,7 +99,6 @@ export function SolutionForm() {
 	const [currentStep, setCurrentStep] = useState(1);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isUploading, setIsUploading] = useState(false);
-	const [submitSuccess, setSubmitSuccess] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	const [formData, setFormData] = useState<FormData>({
@@ -208,11 +207,13 @@ export function SolutionForm() {
 
 			const data = await res.json();
 
-			// Redirect to Stripe Checkout
+			// Redirect to Stripe Checkout or directly to tracking page
 			if (data.checkoutUrl) {
+				// Stripe will redirect to tracking page after successful payment
 				window.location.href = data.checkoutUrl;
-			} else {
-				setSubmitSuccess(true);
+			} else if (data.trackingToken) {
+				// No payment needed, redirect directly to tracking page
+				window.location.href = `/track?token=${data.trackingToken}`;
 			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to submit form");
@@ -260,24 +261,6 @@ export function SolutionForm() {
 			setCurrentStep((prev) => prev - 1);
 		}
 	};
-
-	if (submitSuccess) {
-		return (
-			<Card className="border-emerald-500/30 bg-emerald-500/5">
-				<CardContent className="py-12 text-center">
-					<div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-500 mb-6">
-						<LuCheck className="w-8 h-8" />
-					</div>
-					<h3 className="text-2xl font-semibold mb-2">Request Submitted!</h3>
-					<p className="text-muted-foreground max-w-md mx-auto">
-						We've received your project details. Our team will review your
-						requirements and get back to with a project
-						assessment shortly.
-					</p>
-				</CardContent>
-			</Card>
-		);
-	}
 
 	return (
 		<Card className="border-border/50 overflow-hidden">

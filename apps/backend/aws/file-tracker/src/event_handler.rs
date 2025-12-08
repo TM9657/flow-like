@@ -85,40 +85,37 @@ async fn process_s3_event(
     let key = decode(key)
         .map_err(|e| Error::from(format!("Failed to decode URL-encoded key {}: {}", key, e)))?;
 
-    let size = s3_record
-        .s3
-        .object
-        .size
-        .ok_or_else(|| Error::from("Object size is missing"))?;
-
-    let etag = s3_record
-        .s3
-        .object
-        .e_tag
-        .as_ref()
-        .ok_or_else(|| Error::from("ETag is missing"))?;
-
     let (user_id, app_id) = parse_key_identity(&key)
         .map_err(|e| Error::from(format!("Failed to parse key identity: {}", e)))?;
 
     let is_deletion = event_name.starts_with("ObjectRemoved");
 
-    let delta = match is_deletion {
-        true => {
-            let old_value = delete_dynamo(dynamo, &app_id, &key).await?;
-            if old_value == 0 {
-                tracing::warn!("No previous size found for key: {}", key);
-            }
-            -old_value
+    let delta = if is_deletion {
+        let old_value = delete_dynamo(dynamo, &app_id, &key).await?;
+        if old_value == 0 {
+            tracing::warn!("No previous size found for key: {}", key);
         }
-        false => {
-            let old_value =
-                upsert_dynamo(dynamo, &app_id, &key, user_id.as_deref(), size, etag).await?;
-            if old_value == 0 {
-                tracing::warn!("No previous size found for key: {}", key);
-            }
-            size - old_value
+        -old_value
+    } else {
+        let size = s3_record
+            .s3
+            .object
+            .size
+            .ok_or_else(|| Error::from("Object size is missing"))?;
+
+        let etag = s3_record
+            .s3
+            .object
+            .e_tag
+            .as_ref()
+            .ok_or_else(|| Error::from("ETag is missing"))?;
+
+        let old_value =
+            upsert_dynamo(dynamo, &app_id, &key, user_id.as_deref(), size, etag).await?;
+        if old_value == 0 {
+            tracing::warn!("No previous size found for key: {}", key);
         }
+        size - old_value
     };
 
     // Update Postgres totals

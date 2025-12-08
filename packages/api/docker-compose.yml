@@ -40,7 +40,7 @@ services:
         wait-for-postgres.sh &&
         bun install || true &&
         make-postgres-prisma-mirror.sh &&
-        bunx prisma db push --schema=prisma-postgres-mirror/schema || true &&
+        bunx prisma db push --schema=prisma-postgres-mirror/schema --accept-data-loss || true &&
         sea-orm-cli generate entity -o src/entity --max-connections 10 --with-serde both --ignore-tables _prisma_migrations -s public || true &&
         echo '✅ Entities generated successfully!' &&
         echo '🧹 Cleaning up...' &&

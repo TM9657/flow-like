@@ -2,39 +2,52 @@
 
 import {
 	AlertCircle,
-	ArrowUpDown,
+	ArrowLeft,
 	Building2,
 	Calendar,
+	Check,
 	ChevronLeft,
 	ChevronRight,
 	ChevronsLeft,
 	ChevronsRight,
+	Circle,
 	Clock,
-	DollarSign,
+	Copy,
+	CreditCard,
+	Download,
 	Edit,
 	ExternalLink,
+	File,
 	FileText,
 	Filter,
 	Loader2,
 	Mail,
+	MessageSquare,
+	Plus,
 	RefreshCw,
 	Search,
+	Send,
 	Star,
 	User,
 	X,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+	type ISolutionFile,
 	type ISolutionListResponse,
+	type ISolutionLog,
+	type ISolutionLogPayload,
 	type ISolutionRequest,
 	type ISolutionUpdatePayload,
 	SolutionStatus,
 	SolutionStatusColors,
+	SolutionStatusDescriptions,
 	SolutionStatusLabels,
+	SolutionStatusOrder,
 } from "../../../lib/schema/solution/solution";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -73,6 +86,12 @@ import {
 	TableRow,
 } from "../../ui/table";
 import { Textarea } from "../../ui/textarea";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "../../ui/tooltip";
 
 export interface SolutionsPageProps {
 	data: ISolutionListResponse | undefined;
@@ -91,6 +110,9 @@ export interface SolutionsPageProps {
 		id: string,
 		update: ISolutionUpdatePayload,
 	) => Promise<void>;
+	onAddLog?: (id: string, log: ISolutionLogPayload) => Promise<void>;
+	onFetchSolution?: (id: string) => Promise<ISolutionRequest | null>;
+	trackingBaseUrl?: string;
 }
 
 export function SolutionsPage({
@@ -107,27 +129,54 @@ export function SolutionsPage({
 	onSearchChange,
 	onRefresh,
 	onUpdateSolution,
+	onAddLog,
+	onFetchSolution,
+	trackingBaseUrl = "",
 }: Readonly<SolutionsPageProps>) {
-	const [selectedSolution, setSelectedSolution] =
-		useState<ISolutionRequest | null>(null);
-	const [editingSolution, setEditingSolution] =
-		useState<ISolutionRequest | null>(null);
-	const [isUpdating, setIsUpdating] = useState(false);
+	const [selectedSolutionId, setSelectedSolutionId] = useState<string | null>(null);
+	const [selectedSolution, setSelectedSolution] = useState<ISolutionRequest | null>(null);
+	const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
-	const handleUpdateSolution = useCallback(
-		async (update: ISolutionUpdatePayload) => {
-			if (!editingSolution) return;
-			setIsUpdating(true);
+	const handleViewDetails = useCallback(async (solution: ISolutionRequest) => {
+		setSelectedSolutionId(solution.id);
+		if (onFetchSolution) {
+			setIsLoadingDetail(true);
 			try {
-				await onUpdateSolution(editingSolution.id, update);
-				setEditingSolution(null);
-				onRefresh();
+				const detail = await onFetchSolution(solution.id);
+				setSelectedSolution(detail);
+			} catch {
+				setSelectedSolution(solution);
 			} finally {
-				setIsUpdating(false);
+				setIsLoadingDetail(false);
 			}
-		},
-		[editingSolution, onUpdateSolution, onRefresh],
-	);
+		} else {
+			setSelectedSolution(solution);
+		}
+	}, [onFetchSolution]);
+
+	const handleBack = useCallback(() => {
+		setSelectedSolutionId(null);
+		setSelectedSolution(null);
+	}, []);
+
+	const handleUpdateAndRefresh = useCallback(async (id: string, update: ISolutionUpdatePayload) => {
+		await onUpdateSolution(id, update);
+		onRefresh();
+		if (onFetchSolution && selectedSolutionId === id) {
+			const updated = await onFetchSolution(id);
+			setSelectedSolution(updated);
+		}
+	}, [onUpdateSolution, onRefresh, onFetchSolution, selectedSolutionId]);
+
+	const handleAddLog = useCallback(async (id: string, log: ISolutionLogPayload) => {
+		if (onAddLog) {
+			await onAddLog(id, log);
+			if (onFetchSolution) {
+				const updated = await onFetchSolution(id);
+				setSelectedSolution(updated);
+			}
+		}
+	}, [onAddLog, onFetchSolution]);
 
 	const totalPages = useMemo(() => {
 		if (!data) return 1;
@@ -147,6 +196,19 @@ export function SolutionsPage({
 					</Button>
 				</CardContent>
 			</Card>
+		);
+	}
+
+	if (selectedSolutionId && selectedSolution) {
+		return (
+			<SolutionDetailView
+				solution={selectedSolution}
+				isLoading={isLoadingDetail}
+				onBack={handleBack}
+				onUpdate={handleUpdateAndRefresh}
+				onAddLog={handleAddLog}
+				trackingBaseUrl={trackingBaseUrl}
+			/>
 		);
 	}
 
@@ -192,8 +254,7 @@ export function SolutionsPage({
 				<>
 					<SolutionsTable
 						solutions={data?.solutions ?? []}
-						onViewDetails={setSelectedSolution}
-						onEdit={setEditingSolution}
+						onViewDetails={handleViewDetails}
 					/>
 
 					<SolutionsPagination
@@ -207,22 +268,6 @@ export function SolutionsPage({
 					/>
 				</>
 			)}
-
-			<SolutionDetailsDialog
-				solution={selectedSolution}
-				onClose={() => setSelectedSolution(null)}
-				onEdit={(solution) => {
-					setSelectedSolution(null);
-					setEditingSolution(solution);
-				}}
-			/>
-
-			<SolutionEditDialog
-				solution={editingSolution}
-				onClose={() => setEditingSolution(null)}
-				onSave={handleUpdateSolution}
-				isUpdating={isUpdating}
-			/>
 		</div>
 	);
 }
@@ -304,16 +349,14 @@ function SolutionFilters({
 function SolutionsTable({
 	solutions,
 	onViewDetails,
-	onEdit,
 }: Readonly<{
 	solutions: ISolutionRequest[];
 	onViewDetails: (solution: ISolutionRequest) => void;
-	onEdit: (solution: ISolutionRequest) => void;
 }>) {
 	const formatCurrency = (cents: number) => {
 		return new Intl.NumberFormat("en-US", {
 			style: "currency",
-			currency: "USD",
+			currency: "EUR",
 		}).format(cents / 100);
 	};
 
@@ -334,10 +377,9 @@ function SolutionsTable({
 						<TableHead>Requester</TableHead>
 						<TableHead>Company</TableHead>
 						<TableHead>Status</TableHead>
-						<TableHead>Tier</TableHead>
+						<TableHead>Payment</TableHead>
 						<TableHead className="text-right">Total</TableHead>
 						<TableHead>Created</TableHead>
-						<TableHead className="w-[100px]">Actions</TableHead>
 					</TableRow>
 				</TableHeader>
 				<TableBody>
@@ -362,12 +404,10 @@ function SolutionsTable({
 							</TableCell>
 							<TableCell>{solution.company}</TableCell>
 							<TableCell>
-								<Badge className={SolutionStatusColors[solution.status]}>
-									{SolutionStatusLabels[solution.status]}
-								</Badge>
+								<StatusBadge status={solution.status} />
 							</TableCell>
 							<TableCell>
-								<Badge variant="outline">{solution.pricingTier}</Badge>
+								<PaymentBadge paidDeposit={solution.paidDeposit} status={solution.status} />
 							</TableCell>
 							<TableCell className="text-right font-medium">
 								{formatCurrency(solution.totalCents)}
@@ -375,23 +415,66 @@ function SolutionsTable({
 							<TableCell className="text-muted-foreground">
 								{formatDate(solution.createdAt)}
 							</TableCell>
-							<TableCell>
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={(e) => {
-										e.stopPropagation();
-										onEdit(solution);
-									}}
-								>
-									<Edit className="h-4 w-4" />
-								</Button>
-							</TableCell>
 						</TableRow>
 					))}
 				</TableBody>
 			</Table>
 		</Card>
+	);
+}
+
+function StatusBadge({ status }: { status: SolutionStatus }) {
+	const getStatusIcon = () => {
+		switch (status) {
+			case SolutionStatus.PENDING_PAYMENT:
+				return <CreditCard className="h-3 w-3" />;
+			case SolutionStatus.PENDING_REVIEW:
+				return <Clock className="h-3 w-3" />;
+			case SolutionStatus.IN_PROGRESS:
+				return <Loader2 className="h-3 w-3 animate-spin" />;
+			case SolutionStatus.DELIVERED:
+				return <Check className="h-3 w-3" />;
+			case SolutionStatus.CANCELLED:
+				return <X className="h-3 w-3" />;
+			case SolutionStatus.REFUNDED:
+				return <CreditCard className="h-3 w-3" />;
+			default:
+				return <Circle className="h-3 w-3" />;
+		}
+	};
+
+	return (
+		<Badge className={`${SolutionStatusColors[status]} gap-1.5`}>
+			{getStatusIcon()}
+			{SolutionStatusLabels[status]}
+		</Badge>
+	);
+}
+
+function PaymentBadge({ paidDeposit, status }: { paidDeposit: boolean; status: SolutionStatus }) {
+	if (status === SolutionStatus.PENDING_PAYMENT) {
+		return (
+			<Badge variant="outline" className="text-yellow-600 border-yellow-600/50 bg-yellow-500/10">
+				<CreditCard className="h-3 w-3 mr-1" />
+				Awaiting
+			</Badge>
+		);
+	}
+
+	if (paidDeposit) {
+		return (
+			<Badge variant="outline" className="text-green-600 border-green-600/50 bg-green-500/10">
+				<Check className="h-3 w-3 mr-1" />
+				Deposit Paid
+			</Badge>
+		);
+	}
+
+	return (
+		<Badge variant="outline" className="text-blue-600 border-blue-600/50 bg-blue-500/10">
+			<Check className="h-3 w-3 mr-1" />
+			Setup Complete
+		</Badge>
 	);
 }
 
@@ -494,10 +577,9 @@ function SolutionsTableSkeleton() {
 						<TableHead>Requester</TableHead>
 						<TableHead>Company</TableHead>
 						<TableHead>Status</TableHead>
-						<TableHead>Tier</TableHead>
+						<TableHead>Payment</TableHead>
 						<TableHead className="text-right">Total</TableHead>
 						<TableHead>Created</TableHead>
-						<TableHead className="w-[100px]">Actions</TableHead>
 					</TableRow>
 				</TableHeader>
 				<TableBody>
@@ -516,19 +598,16 @@ function SolutionsTableSkeleton() {
 								<Skeleton className="h-4 w-24" />
 							</TableCell>
 							<TableCell>
-								<Skeleton className="h-6 w-20" />
+								<Skeleton className="h-6 w-24" />
 							</TableCell>
 							<TableCell>
-								<Skeleton className="h-6 w-16" />
+								<Skeleton className="h-6 w-20" />
 							</TableCell>
 							<TableCell className="text-right">
 								<Skeleton className="h-4 w-16 ml-auto" />
 							</TableCell>
 							<TableCell>
 								<Skeleton className="h-4 w-20" />
-							</TableCell>
-							<TableCell>
-								<Skeleton className="h-8 w-8" />
 							</TableCell>
 						</TableRow>
 					))}
@@ -538,21 +617,31 @@ function SolutionsTableSkeleton() {
 	);
 }
 
-function SolutionDetailsDialog({
+// Solution Detail View Component
+function SolutionDetailView({
 	solution,
-	onClose,
-	onEdit,
+	isLoading,
+	onBack,
+	onUpdate,
+	onAddLog,
+	trackingBaseUrl,
 }: Readonly<{
-	solution: ISolutionRequest | null;
-	onClose: () => void;
-	onEdit: (solution: ISolutionRequest) => void;
+	solution: ISolutionRequest;
+	isLoading: boolean;
+	onBack: () => void;
+	onUpdate: (id: string, update: ISolutionUpdatePayload) => Promise<void>;
+	onAddLog: (id: string, log: ISolutionLogPayload) => Promise<void>;
+	trackingBaseUrl: string;
 }>) {
-	if (!solution) return null;
+	const [isEditing, setIsEditing] = useState(false);
+	const [isUpdating, setIsUpdating] = useState(false);
+	const [newLogAction, setNewLogAction] = useState("");
+	const [isAddingLog, setIsAddingLog] = useState(false);
 
 	const formatCurrency = (cents: number) => {
 		return new Intl.NumberFormat("en-US", {
 			style: "currency",
-			currency: "USD",
+			currency: "EUR",
 		}).format(cents / 100);
 	};
 
@@ -566,180 +655,471 @@ function SolutionDetailsDialog({
 		});
 	};
 
+	const formatBytes = (bytes: number) => {
+		if (bytes === 0) return "0 Bytes";
+		const k = 1024;
+		const sizes = ["Bytes", "KB", "MB", "GB"];
+		const i = Math.floor(Math.log(bytes) / Math.log(k));
+		return `${Number.parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
+	};
+
+	const handleCopyTrackingUrl = async () => {
+		const url = `${trackingBaseUrl}/solution/track/${solution.trackingToken}`;
+		await navigator.clipboard.writeText(url);
+	};
+
+	const handleAddLog = async () => {
+		if (!newLogAction.trim()) return;
+		setIsAddingLog(true);
+		try {
+			await onAddLog(solution.id, { action: newLogAction });
+			setNewLogAction("");
+		} finally {
+			setIsAddingLog(false);
+		}
+	};
+
+	if (isLoading) {
+		return (
+			<div className="space-y-4">
+				<Button variant="ghost" onClick={onBack}>
+					<ArrowLeft className="h-4 w-4 mr-2" />
+					Back to list
+				</Button>
+				<div className="flex items-center justify-center py-12">
+					<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+				</div>
+			</div>
+		);
+	}
+
 	return (
-		<Dialog open={!!solution} onOpenChange={onClose}>
-			<DialogContent className="max-w-3xl max-h-[90vh]">
-				<DialogHeader>
-					<DialogTitle className="flex items-center gap-2">
-						Solution Request Details
-						{solution.priority && (
-							<Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
-						)}
-					</DialogTitle>
-					<DialogDescription>
-						Request ID: {solution.id}
-					</DialogDescription>
-				</DialogHeader>
-
-				<ScrollArea className="max-h-[60vh] pr-4">
-					<div className="space-y-6">
-						<div className="flex items-center justify-between">
-							<Badge className={SolutionStatusColors[solution.status]}>
-								{SolutionStatusLabels[solution.status]}
-							</Badge>
-							<Badge variant="outline">{solution.pricingTier}</Badge>
-						</div>
-
-						<Separator />
-
-						<div className="grid grid-cols-2 gap-4">
-							<InfoItem icon={User} label="Name" value={solution.name} />
-							<InfoItem icon={Mail} label="Email" value={solution.email} />
-							<InfoItem
-								icon={Building2}
-								label="Company"
-								value={solution.company}
-							/>
-							<InfoItem
-								icon={Clock}
-								label="Timeline"
-								value={solution.timeline ?? "Not specified"}
-							/>
-						</div>
-
-						<Separator />
-
-						<div className="space-y-4">
-							<h4 className="font-semibold">Project Details</h4>
-							<div className="grid grid-cols-2 gap-4">
-								<InfoItem
-									label="Application Type"
-									value={solution.applicationType}
-								/>
-								<InfoItem
-									label="Data Security"
-									value={solution.dataSecurity}
-								/>
-								<InfoItem label="User Type" value={solution.userType} />
-								<InfoItem label="User Count" value={solution.userCount} />
-								<InfoItem
-									label="Technical Level"
-									value={solution.technicalLevel}
-								/>
-							</div>
-						</div>
-
-						<Separator />
-
-						<div className="space-y-2">
-							<Label className="font-semibold">Description</Label>
-							<p className="text-sm text-muted-foreground whitespace-pre-wrap">
-								{solution.description}
-							</p>
-						</div>
-
-						<div className="space-y-2">
-							<Label className="font-semibold">Example Input</Label>
-							<p className="text-sm text-muted-foreground whitespace-pre-wrap">
-								{solution.exampleInput}
-							</p>
-						</div>
-
-						<div className="space-y-2">
-							<Label className="font-semibold">Expected Output</Label>
-							<p className="text-sm text-muted-foreground whitespace-pre-wrap">
-								{solution.expectedOutput}
-							</p>
-						</div>
-
-						{solution.additionalNotes && (
-							<div className="space-y-2">
-								<Label className="font-semibold">Additional Notes</Label>
-								<p className="text-sm text-muted-foreground whitespace-pre-wrap">
-									{solution.additionalNotes}
-								</p>
-							</div>
-						)}
-
-						<Separator />
-
-						<div className="space-y-4">
-							<h4 className="font-semibold">Pricing</h4>
-							<div className="grid grid-cols-3 gap-4">
-								<InfoItem
-									icon={DollarSign}
-									label="Total"
-									value={formatCurrency(solution.totalCents)}
-								/>
-								<InfoItem
-									icon={DollarSign}
-									label="Deposit"
-									value={`${formatCurrency(solution.depositCents)} ${solution.paidDeposit ? "(Paid)" : "(Unpaid)"}`}
-								/>
-								<InfoItem
-									icon={DollarSign}
-									label="Remainder"
-									value={formatCurrency(solution.remainderCents)}
-								/>
-							</div>
-						</div>
-
-						<Separator />
-
-						<div className="space-y-4">
-							<h4 className="font-semibold">Admin Info</h4>
-							<div className="grid grid-cols-2 gap-4">
-								<InfoItem
-									label="Assigned To"
-									value={solution.assignedTo ?? "Unassigned"}
-								/>
-								<InfoItem
-									label="Delivered At"
-									value={
-										solution.deliveredAt
-											? formatDate(solution.deliveredAt)
-											: "Not delivered"
-									}
-								/>
-							</div>
-							{solution.adminNotes && (
-								<div className="space-y-2">
-									<Label className="font-semibold">Admin Notes</Label>
-									<p className="text-sm text-muted-foreground whitespace-pre-wrap">
-										{solution.adminNotes}
-									</p>
-								</div>
+		<div className="space-y-6">
+			{/* Header */}
+			<div className="flex items-center justify-between">
+				<div className="flex items-center gap-4">
+					<Button variant="ghost" size="sm" onClick={onBack}>
+						<ArrowLeft className="h-4 w-4 mr-2" />
+						Back
+					</Button>
+					<div>
+						<div className="flex items-center gap-2">
+							<h2 className="text-2xl font-bold">{solution.company}</h2>
+							{solution.priority && (
+								<Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
 							)}
 						</div>
-
-						<Separator />
-
-						<div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
-							<InfoItem
-								icon={Calendar}
-								label="Created"
-								value={formatDate(solution.createdAt)}
-							/>
-							<InfoItem
-								icon={Calendar}
-								label="Updated"
-								value={formatDate(solution.updatedAt)}
-							/>
-						</div>
+						<p className="text-sm text-muted-foreground">
+							Request from {solution.name}
+						</p>
 					</div>
-				</ScrollArea>
+				</div>
+				<Button variant="outline" onClick={() => setIsEditing(true)}>
+					<Edit className="h-4 w-4 mr-2" />
+					Edit
+				</Button>
+			</div>
 
-				<DialogFooter>
-					<Button variant="outline" onClick={onClose}>
-						Close
-					</Button>
-					<Button onClick={() => onEdit(solution)}>
-						<Edit className="h-4 w-4 mr-2" />
-						Edit
-					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
+			{/* Status Timeline */}
+			<StatusTimeline status={solution.status} />
+
+			{/* Main Grid */}
+			<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+				{/* Left Column - Main Info */}
+				<div className="lg:col-span-2 space-y-6">
+					{/* Contact Info */}
+					<Card>
+						<CardHeader>
+							<CardTitle className="text-lg">Contact Information</CardTitle>
+						</CardHeader>
+						<CardContent className="grid grid-cols-2 gap-4">
+							<InfoItem icon={User} label="Name" value={solution.name} />
+							<InfoItem icon={Mail} label="Email" value={solution.email} />
+							<InfoItem icon={Building2} label="Company" value={solution.company} />
+							<InfoItem icon={Clock} label="Timeline" value={solution.timeline ?? "Not specified"} />
+						</CardContent>
+					</Card>
+
+					{/* Project Details */}
+					<Card>
+						<CardHeader>
+							<CardTitle className="text-lg">Project Details</CardTitle>
+						</CardHeader>
+						<CardContent className="space-y-6">
+							<div className="grid grid-cols-2 gap-4">
+								<InfoItem label="Application Type" value={solution.applicationType} />
+								<InfoItem label="Data Security" value={solution.dataSecurity} />
+								<InfoItem label="User Type" value={solution.userType} />
+								<InfoItem label="User Count" value={solution.userCount} />
+								<InfoItem label="Technical Level" value={solution.technicalLevel} />
+							</div>
+
+							<Separator />
+
+							<div className="space-y-4">
+								<div>
+									<Label className="text-sm font-semibold">Description</Label>
+									<p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">
+										{solution.description}
+									</p>
+								</div>
+								<div>
+									<Label className="text-sm font-semibold">Example Input</Label>
+									<p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap bg-muted/50 p-3 rounded-md">
+										{solution.exampleInput}
+									</p>
+								</div>
+								<div>
+									<Label className="text-sm font-semibold">Expected Output</Label>
+									<p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap bg-muted/50 p-3 rounded-md">
+										{solution.expectedOutput}
+									</p>
+								</div>
+								{solution.additionalNotes && (
+									<div>
+										<Label className="text-sm font-semibold">Additional Notes</Label>
+										<p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">
+											{solution.additionalNotes}
+										</p>
+									</div>
+								)}
+							</div>
+						</CardContent>
+					</Card>
+
+					{/* Files */}
+					{solution.files && solution.files.length > 0 && (
+						<Card>
+							<CardHeader>
+								<CardTitle className="text-lg flex items-center gap-2">
+									<File className="h-5 w-5" />
+									Attached Files
+								</CardTitle>
+							</CardHeader>
+							<CardContent>
+								<div className="space-y-2">
+									{solution.files.map((file, index) => (
+										<div
+											key={`file-${file.key || index}`}
+											className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
+										>
+											<div className="flex items-center gap-3">
+												<FileText className="h-5 w-5 text-muted-foreground" />
+												<div>
+													<p className="font-medium text-sm">{file.name}</p>
+													<p className="text-xs text-muted-foreground">
+														{formatBytes(file.size)}
+													</p>
+												</div>
+											</div>
+											{file.downloadUrl && (
+												<Button variant="ghost" size="sm" asChild>
+													<a href={file.downloadUrl} target="_blank" rel="noopener noreferrer">
+														<Download className="h-4 w-4" />
+													</a>
+												</Button>
+											)}
+										</div>
+									))}
+								</div>
+							</CardContent>
+						</Card>
+					)}
+
+					{/* Admin Notes */}
+					{solution.adminNotes && (
+						<Card>
+							<CardHeader>
+								<CardTitle className="text-lg">Admin Notes</CardTitle>
+							</CardHeader>
+							<CardContent>
+								<p className="text-sm text-muted-foreground whitespace-pre-wrap">
+									{solution.adminNotes}
+								</p>
+							</CardContent>
+						</Card>
+					)}
+				</div>
+
+				{/* Right Column - Sidebar */}
+				<div className="space-y-6">
+					{/* Payment Info */}
+					<Card>
+						<CardHeader>
+							<CardTitle className="text-lg flex items-center gap-2">
+								<CreditCard className="h-5 w-5" />
+								Payment
+							</CardTitle>
+						</CardHeader>
+						<CardContent className="space-y-4">
+							<div className="flex items-center justify-between">
+								<span className="text-sm text-muted-foreground">Total</span>
+								<span className="font-semibold">{formatCurrency(solution.totalCents)}</span>
+							</div>
+							<div className="flex items-center justify-between">
+								<span className="text-sm text-muted-foreground">Deposit</span>
+								<div className="flex items-center gap-2">
+									<span className="font-medium">{formatCurrency(solution.depositCents)}</span>
+									{solution.paidDeposit ? (
+										<Badge className="bg-green-500/10 text-green-500">Paid</Badge>
+									) : (
+										<Badge className="bg-yellow-500/10 text-yellow-500">Pending</Badge>
+									)}
+								</div>
+							</div>
+							<div className="flex items-center justify-between">
+								<span className="text-sm text-muted-foreground">Remainder</span>
+								<span className="font-medium">{formatCurrency(solution.remainderCents)}</span>
+							</div>
+							<Separator />
+							<div className="flex items-center justify-between">
+								<span className="text-sm text-muted-foreground">Tier</span>
+								<Badge variant="outline">{solution.pricingTier}</Badge>
+							</div>
+						</CardContent>
+					</Card>
+
+					{/* Tracking URL */}
+					{solution.trackingToken && (
+						<Card>
+							<CardHeader>
+								<CardTitle className="text-lg flex items-center gap-2">
+									<ExternalLink className="h-5 w-5" />
+									Customer Tracking
+								</CardTitle>
+								<CardDescription>
+									Share this URL with the customer to track status
+								</CardDescription>
+							</CardHeader>
+							<CardContent>
+								<div className="flex items-center gap-2">
+									<Input
+										value={`${trackingBaseUrl}/solution/track/${solution.trackingToken}`}
+										readOnly
+										className="text-xs"
+									/>
+									<TooltipProvider>
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Button variant="outline" size="icon" onClick={handleCopyTrackingUrl}>
+													<Copy className="h-4 w-4" />
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent>Copy URL</TooltipContent>
+										</Tooltip>
+									</TooltipProvider>
+								</div>
+							</CardContent>
+						</Card>
+					)}
+
+					{/* Activity Log */}
+					<Card>
+						<CardHeader>
+							<CardTitle className="text-lg flex items-center gap-2">
+								<MessageSquare className="h-5 w-5" />
+								Activity Log
+							</CardTitle>
+						</CardHeader>
+						<CardContent className="space-y-4">
+							{/* Add log input */}
+							<div className="flex gap-2">
+								<Input
+									placeholder="Add a log entry..."
+									value={newLogAction}
+									onChange={(e) => setNewLogAction(e.target.value)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" && !e.shiftKey) {
+											e.preventDefault();
+											handleAddLog();
+										}
+									}}
+								/>
+								<Button
+									size="icon"
+									onClick={handleAddLog}
+									disabled={isAddingLog || !newLogAction.trim()}
+								>
+									{isAddingLog ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : (
+										<Send className="h-4 w-4" />
+									)}
+								</Button>
+							</div>
+
+							<ScrollArea className="h-[300px]">
+								<div className="space-y-3">
+									{solution.logs && solution.logs.length > 0 ? (
+										solution.logs.map((log) => (
+											<LogEntry key={log.id} log={log} />
+										))
+									) : (
+										<p className="text-sm text-muted-foreground text-center py-4">
+											No activity yet
+										</p>
+									)}
+								</div>
+							</ScrollArea>
+						</CardContent>
+					</Card>
+
+					{/* Metadata */}
+					<Card>
+						<CardHeader>
+							<CardTitle className="text-lg">Details</CardTitle>
+						</CardHeader>
+						<CardContent className="space-y-3 text-sm">
+							<div className="flex items-center justify-between">
+								<span className="text-muted-foreground">Assigned To</span>
+								<span>{solution.assignedTo ?? "Unassigned"}</span>
+							</div>
+							<div className="flex items-center justify-between">
+								<span className="text-muted-foreground">Created</span>
+								<span>{formatDate(solution.createdAt)}</span>
+							</div>
+							<div className="flex items-center justify-between">
+								<span className="text-muted-foreground">Updated</span>
+								<span>{formatDate(solution.updatedAt)}</span>
+							</div>
+							{solution.deliveredAt && (
+								<div className="flex items-center justify-between">
+									<span className="text-muted-foreground">Delivered</span>
+									<span>{formatDate(solution.deliveredAt)}</span>
+								</div>
+							)}
+						</CardContent>
+					</Card>
+				</div>
+			</div>
+
+			{/* Edit Dialog */}
+			<SolutionEditDialog
+				solution={isEditing ? solution : null}
+				onClose={() => setIsEditing(false)}
+				onSave={async (update) => {
+					setIsUpdating(true);
+					try {
+						await onUpdate(solution.id, update);
+						setIsEditing(false);
+					} finally {
+						setIsUpdating(false);
+					}
+				}}
+				isUpdating={isUpdating}
+			/>
+		</div>
+	);
+}
+
+function StatusTimeline({ status }: { status: SolutionStatus }) {
+	const isCancelled = status === SolutionStatus.CANCELLED || status === SolutionStatus.REFUNDED;
+	const currentIndex = SolutionStatusOrder.indexOf(status);
+
+	if (isCancelled) {
+		return (
+			<Card className="border-red-200 bg-red-50/50 dark:bg-red-950/20 dark:border-red-900">
+				<CardContent className="py-4">
+					<div className="flex items-center justify-center gap-3">
+						<X className="h-5 w-5 text-red-500" />
+						<span className="font-medium text-red-600 dark:text-red-400">
+							{SolutionStatusLabels[status]}
+						</span>
+						<span className="text-sm text-red-500/70">
+							{SolutionStatusDescriptions[status]}
+						</span>
+					</div>
+				</CardContent>
+			</Card>
+		);
+	}
+
+	return (
+		<Card>
+			<CardContent className="py-6">
+				<div className="flex items-center justify-between">
+					{SolutionStatusOrder.map((s, index) => {
+						const isCompleted = currentIndex > index;
+						const isCurrent = currentIndex === index;
+						const isPending = currentIndex < index;
+
+						return (
+							<div key={s} className="flex items-center flex-1">
+								<div className="flex flex-col items-center">
+									<div
+										className={`
+											w-10 h-10 rounded-full flex items-center justify-center
+											transition-all duration-300
+											${isCompleted ? "bg-green-500 text-white" : ""}
+											${isCurrent ? "bg-primary text-primary-foreground ring-4 ring-primary/20" : ""}
+											${isPending ? "bg-muted text-muted-foreground" : ""}
+										`}
+									>
+										{isCompleted ? (
+											<Check className="h-5 w-5" />
+										) : isCurrent ? (
+											<Loader2 className="h-5 w-5 animate-spin" />
+										) : (
+											<Circle className="h-5 w-5" />
+										)}
+									</div>
+									<span
+										className={`
+											mt-2 text-xs font-medium text-center max-w-20
+											${isCurrent ? "text-primary" : "text-muted-foreground"}
+										`}
+									>
+										{SolutionStatusLabels[s]}
+									</span>
+								</div>
+								{index < SolutionStatusOrder.length - 1 && (
+									<div
+										className={`
+											flex-1 h-1 mx-2 rounded
+											${isCompleted ? "bg-green-500" : "bg-muted"}
+										`}
+									/>
+								)}
+							</div>
+						);
+					})}
+				</div>
+			</CardContent>
+		</Card>
+	);
+}
+
+function LogEntry({ log }: { log: ISolutionLog }) {
+	const formatDate = (dateString: string) => {
+		return new Date(dateString).toLocaleString("en-US", {
+			month: "short",
+			day: "numeric",
+			hour: "2-digit",
+			minute: "2-digit",
+		});
+	};
+
+	return (
+		<div className="flex gap-3 p-3 rounded-lg bg-muted/30">
+			<div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+				<MessageSquare className="h-4 w-4 text-primary" />
+			</div>
+			<div className="flex-1 min-w-0">
+				<p className="text-sm font-medium">{log.action}</p>
+				{log.details && (
+					<p className="text-xs text-muted-foreground mt-1">{log.details}</p>
+				)}
+				<div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+					<span>{formatDate(log.createdAt)}</span>
+					{log.actor && (
+						<>
+							<span>•</span>
+							<span>{log.actor}</span>
+						</>
+					)}
+				</div>
+			</div>
+		</div>
 	);
 }
 
@@ -779,8 +1159,7 @@ function SolutionEditDialog({
 	const [assignedTo, setAssignedTo] = useState("");
 	const [priority, setPriority] = useState(false);
 
-	// Reset form when solution changes
-	useMemo(() => {
+	useEffect(() => {
 		if (solution) {
 			setStatus(solution.status);
 			setAdminNotes(solution.adminNotes ?? "");

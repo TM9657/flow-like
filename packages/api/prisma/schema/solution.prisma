@@ -52,11 +52,31 @@ model SolutionRequest {
     assignedTo  String?
     deliveredAt DateTime?
 
+    trackingToken String @unique
+
+    logs SolutionLog[]
+
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
     @@index([email])
     @@index([status])
+    @@index([createdAt])
+    @@index([trackingToken])
+}
+
+model SolutionLog {
+    id        String   @id
+    solutionId String
+    solution   SolutionRequest @relation(fields: [solutionId], references: [id], onDelete: Cascade)
+
+    action    String
+    details   String?
+    actor     String?
+
+    createdAt DateTime @default(now())
+
+    @@index([solutionId])
     @@index([createdAt])
 }
 

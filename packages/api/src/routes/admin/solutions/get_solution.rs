@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_types::anyhow;
-use sea_orm::EntityTrait;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -42,8 +42,20 @@ pub struct SolutionDetail {
     pub admin_notes: Option<String>,
     pub assigned_to: Option<String>,
     pub delivered_at: Option<String>,
+    pub tracking_token: String,
+    pub logs: Vec<SolutionLogItem>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SolutionLogItem {
+    pub id: String,
+    pub action: String,
+    pub details: Option<String>,
+    pub actor: Option<String>,
+    pub created_at: String,
 }
 
 #[tracing::instrument(name = "GET /admin/solutions/{solution_id}", skip(state, user))]
@@ -52,7 +64,7 @@ pub async fn get_solution(
     Extension(user): Extension<AppUser>,
     Path(solution_id): Path<String>,
 ) -> Result<Json<SolutionDetail>, ApiError> {
-    use crate::entity::solution_request;
+    use crate::entity::{solution_log, solution_request};
 
     user.check_global_permission(&state, GlobalPermission::ReadSolutions)
         .await?;
@@ -61,6 +73,21 @@ pub async fn get_solution(
         .one(&state.db)
         .await?
         .ok_or_else(|| anyhow!("Solution request not found"))?;
+
+    let logs = solution_log::Entity::find()
+        .filter(solution_log::Column::SolutionId.eq(&solution_id))
+        .order_by_desc(solution_log::Column::CreatedAt)
+        .all(&state.db)
+        .await?
+        .into_iter()
+        .map(|log| SolutionLogItem {
+            id: log.id,
+            action: log.action,
+            details: log.details,
+            actor: log.actor,
+            created_at: log.created_at.to_string(),
+        })
+        .collect();
 
     let detail = SolutionDetail {
         id: solution.id,
@@ -92,6 +119,8 @@ pub async fn get_solution(
         admin_notes: solution.admin_notes,
         assigned_to: solution.assigned_to,
         delivered_at: solution.delivered_at.map(|d| d.to_string()),
+        tracking_token: solution.tracking_token,
+        logs,
         created_at: solution.created_at.to_string(),
         updated_at: solution.updated_at.to_string(),
     };

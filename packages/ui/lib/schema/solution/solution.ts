@@ -14,6 +14,22 @@ export enum SolutionPricingTier {
 	APPSTORE = "APPSTORE",
 }
 
+export interface ISolutionFile {
+	name: string;
+	key: string;
+	downloadUrl: string;
+	size: number;
+}
+
+export interface ISolutionLog {
+	id: string;
+	solutionId: string;
+	action: string;
+	details: string | null;
+	actor: string | null;
+	createdAt: string;
+}
+
 export interface ISolutionRequest {
 	id: string;
 	name: string;
@@ -31,7 +47,7 @@ export interface ISolutionRequest {
 	additionalNotes: string | null;
 	pricingTier: SolutionPricingTier;
 	paidDeposit: boolean;
-	files: Record<string, string>[] | null;
+	files: ISolutionFile[] | null;
 	storageKey: string | null;
 	status: SolutionStatus;
 	stripeCheckoutSessionId: string | null;
@@ -44,6 +60,8 @@ export interface ISolutionRequest {
 	adminNotes: string | null;
 	assignedTo: string | null;
 	deliveredAt: string | null;
+	trackingToken: string;
+	logs?: ISolutionLog[];
 	createdAt: string;
 	updatedAt: string;
 }
@@ -63,6 +81,11 @@ export interface ISolutionUpdatePayload {
 	priority?: boolean;
 }
 
+export interface ISolutionLogPayload {
+	action: string;
+	details?: string;
+}
+
 export const SolutionStatusLabels: Record<SolutionStatus, string> = {
 	[SolutionStatus.PENDING_PAYMENT]: "Pending Payment",
 	[SolutionStatus.PENDING_REVIEW]: "Pending Review",
@@ -79,4 +102,20 @@ export const SolutionStatusColors: Record<SolutionStatus, string> = {
 	[SolutionStatus.DELIVERED]: "bg-green-500/10 text-green-500",
 	[SolutionStatus.CANCELLED]: "bg-red-500/10 text-red-500",
 	[SolutionStatus.REFUNDED]: "bg-orange-500/10 text-orange-500",
+};
+
+export const SolutionStatusOrder: SolutionStatus[] = [
+	SolutionStatus.PENDING_PAYMENT,
+	SolutionStatus.PENDING_REVIEW,
+	SolutionStatus.IN_PROGRESS,
+	SolutionStatus.DELIVERED,
+];
+
+export const SolutionStatusDescriptions: Record<SolutionStatus, string> = {
+	[SolutionStatus.PENDING_PAYMENT]: "Awaiting payment to proceed",
+	[SolutionStatus.PENDING_REVIEW]: "Payment received, under review",
+	[SolutionStatus.IN_PROGRESS]: "Actively being worked on",
+	[SolutionStatus.DELIVERED]: "Solution has been delivered",
+	[SolutionStatus.CANCELLED]: "Request was cancelled",
+	[SolutionStatus.REFUNDED]: "Payment has been refunded",
 };

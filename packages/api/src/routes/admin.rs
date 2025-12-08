@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    routing::{get, patch, put},
+    routing::{get, patch, post, put},
 };
 use bit::{delete_bit, push_meta, upsert_bit};
 
@@ -31,5 +31,9 @@ pub fn routes() -> Router<AppState> {
             "/solutions/{solution_id}",
             get(solutions::get_solution::get_solution)
                 .patch(solutions::update_solution::update_solution),
+        )
+        .route(
+            "/solutions/{solution_id}/logs",
+            post(solutions::add_log::add_solution_log),
         )
 }

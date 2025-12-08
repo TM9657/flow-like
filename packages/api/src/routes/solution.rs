@@ -78,6 +78,7 @@ pub struct UploadParams {
 pub struct SubmissionResponse {
     success: bool,
     id: String,
+    tracking_token: String,
     message: String,
     checkout_url: Option<String>,
 }
@@ -86,6 +87,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/upload", get(presign_solution_upload))
         .route("/", post(submit_solution))
+        .route("/track/{token}", get(get_solution_status))
 }
 
 #[tracing::instrument(name = "GET /solution/upload", skip(state))]
@@ -196,6 +198,7 @@ async fn submit_solution(
     let remainder_cents = total_cents - deposit_cents;
 
     let submission_id = create_id();
+    let tracking_token = create_id();
     let now_utc = Utc::now();
     let date_prefix = now_utc.format("%Y/%m/%d").to_string();
 
@@ -244,6 +247,7 @@ async fn submit_solution(
         admin_notes: Set(None),
         assigned_to: Set(None),
         delivered_at: Set(None),
+        tracking_token: Set(tracking_token.clone()),
         created_at: Set(now_utc.naive_utc()),
         updated_at: Set(now_utc.naive_utc()),
     };
@@ -264,8 +268,8 @@ async fn submit_solution(
             .unwrap_or_else(|_| format!("https://{}", state.platform_config.domain));
 
         let success_url = format!(
-            "{}/24-hour-solution?success=true&session_id={{CHECKOUT_SESSION_ID}}",
-            frontend_url
+            "{}/track?token={}",
+            frontend_url, tracking_token
         );
         let cancel_url = format!("{}/24-hour-solution?canceled=true", frontend_url);
 
@@ -278,6 +282,7 @@ async fn submit_solution(
         metadata.insert("pricing_tier".to_string(), submission.pricing_tier.clone());
         metadata.insert("storage_key".to_string(), key.clone());
         metadata.insert("total_cents".to_string(), total_cents.to_string());
+        metadata.insert("tracking_token".to_string(), tracking_token.clone());
 
         let mut params = stripe::CreateCheckoutSession::new();
         params.success_url = Some(&success_url);
@@ -345,6 +350,7 @@ async fn submit_solution(
     Ok(Json(SubmissionResponse {
         success: true,
         id: submission_id,
+        tracking_token,
         message: if checkout_url.is_some() {
             if submission.pay_deposit {
                 "Redirecting to payment...".to_string()
@@ -364,4 +370,102 @@ fn sanitize_ext(input: Option<&str>) -> Option<String> {
         return None;
     }
     Some(std::mem::take(&mut s))
+}
+
+#[derive(Clone, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicSolutionStatus {
+    pub id: String,
+    pub company: String,
+    pub status: String,
+    pub status_label: String,
+    pub status_description: String,
+    pub paid_deposit: bool,
+    pub priority: bool,
+    pub pricing_tier: String,
+    pub total_cents: i64,
+    pub deposit_cents: i64,
+    pub remainder_cents: i64,
+    pub delivered_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub logs: Vec<PublicSolutionLog>,
+}
+
+#[derive(Clone, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicSolutionLog {
+    pub action: String,
+    pub created_at: String,
+}
+
+fn get_status_label(status: &str) -> String {
+    match status {
+        "PendingPayment" => "Pending Payment".to_string(),
+        "PendingReview" => "Pending Review".to_string(),
+        "InProgress" => "In Progress".to_string(),
+        "Delivered" => "Delivered".to_string(),
+        "Cancelled" => "Cancelled".to_string(),
+        "Refunded" => "Refunded".to_string(),
+        _ => status.to_string(),
+    }
+}
+
+fn get_status_description(status: &str) -> String {
+    match status {
+        "PendingPayment" => "Awaiting payment to proceed with your solution".to_string(),
+        "PendingReview" => "Payment received, your request is being reviewed".to_string(),
+        "InProgress" => "Your solution is actively being worked on".to_string(),
+        "Delivered" => "Your solution has been delivered".to_string(),
+        "Cancelled" => "This request has been cancelled".to_string(),
+        "Refunded" => "Payment has been refunded".to_string(),
+        _ => "Status unknown".to_string(),
+    }
+}
+
+#[tracing::instrument(name = "GET /solution/track/{token}", skip(state))]
+async fn get_solution_status(
+    State(state): State<AppState>,
+    axum::extract::Path(token): axum::extract::Path<String>,
+) -> Result<Json<PublicSolutionStatus>, ApiError> {
+    use crate::entity::{solution_log, solution_request};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+
+    let solution = solution_request::Entity::find()
+        .filter(solution_request::Column::TrackingToken.eq(&token))
+        .one(&state.db)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+
+    let logs = solution_log::Entity::find()
+        .filter(solution_log::Column::SolutionId.eq(&solution.id))
+        .order_by_desc(solution_log::Column::CreatedAt)
+        .all(&state.db)
+        .await?
+        .into_iter()
+        .map(|log| PublicSolutionLog {
+            action: log.action,
+            created_at: log.created_at.to_string(),
+        })
+        .collect();
+
+    let status_str = format!("{:?}", solution.status);
+
+    Ok(Json(PublicSolutionStatus {
+        id: solution.id,
+        company: solution.company,
+        status: status_str.clone(),
+        status_label: get_status_label(&status_str),
+        status_description: get_status_description(&status_str),
+        paid_deposit: solution.paid_deposit,
+        priority: solution.priority,
+        pricing_tier: format!("{:?}", solution.pricing_tier).to_lowercase(),
+        total_cents: solution.total_cents,
+        deposit_cents: solution.deposit_cents,
+        remainder_cents: solution.remainder_cents,
+        delivered_at: solution.delivered_at.map(|d| d.to_string()),
+        created_at: solution.created_at.to_string(),
+        updated_at: solution.updated_at.to_string(),
+        logs,
+    }))
 }

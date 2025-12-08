@@ -13,13 +13,29 @@ pub struct SolutionListItem {
     pub name: String,
     pub email: String,
     pub company: String,
+    pub description: String,
+    pub application_type: String,
+    pub data_security: String,
+    pub example_input: String,
+    pub expected_output: String,
+    pub user_count: String,
+    pub user_type: String,
+    pub technical_level: String,
+    pub timeline: Option<String>,
+    pub additional_notes: Option<String>,
     pub pricing_tier: String,
     pub status: String,
     pub priority: bool,
     pub paid_deposit: bool,
+    pub files: Option<serde_json::Value>,
+    pub storage_key: Option<String>,
     pub total_cents: i64,
     pub deposit_cents: i64,
+    pub remainder_cents: i64,
     pub assigned_to: Option<String>,
+    pub admin_notes: Option<String>,
+    pub delivered_at: Option<String>,
+    pub tracking_token: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -29,13 +45,17 @@ pub struct SolutionListItem {
 pub struct ListSolutionsResponse {
     pub solutions: Vec<SolutionListItem>,
     pub total: u64,
+    pub page: u64,
+    pub limit: u64,
+    pub has_more: bool,
 }
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct ListSolutionsQuery {
     pub status: Option<String>,
+    pub search: Option<String>,
+    pub page: Option<u64>,
     pub limit: Option<u64>,
-    pub offset: Option<u64>,
 }
 
 #[tracing::instrument(name = "GET /admin/solutions", skip(state, user))]
@@ -49,8 +69,9 @@ pub async fn list_solutions(
     user.check_global_permission(&state, GlobalPermission::ReadSolutions)
         .await?;
 
-    let limit = query.limit.unwrap_or(50).min(100);
-    let offset = query.offset.unwrap_or(0);
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(25).min(100);
+    let offset = (page - 1) * limit;
 
     let mut select =
         solution_request::Entity::find().order_by_desc(solution_request::Column::CreatedAt);
@@ -70,6 +91,18 @@ pub async fn list_solutions(
         select = select.filter(solution_request::Column::Status.eq(status));
     }
 
+    if let Some(search) = &query.search {
+        if !search.trim().is_empty() {
+            let search_pattern = format!("%{}%", search.trim().to_lowercase());
+            select = select.filter(
+                solution_request::Column::Name
+                    .like(&search_pattern)
+                    .or(solution_request::Column::Email.like(&search_pattern))
+                    .or(solution_request::Column::Company.like(&search_pattern)),
+            );
+        }
+    }
+
     let total = select.clone().count(&state.db).await?;
 
     let solutions = select
@@ -84,20 +117,41 @@ pub async fn list_solutions(
             name: s.name,
             email: s.email,
             company: s.company,
+            description: s.description,
+            application_type: s.application_type,
+            data_security: s.data_security,
+            example_input: s.example_input,
+            expected_output: s.expected_output,
+            user_count: s.user_count,
+            user_type: s.user_type,
+            technical_level: s.technical_level,
+            timeline: s.timeline,
+            additional_notes: s.additional_notes,
             pricing_tier: format!("{:?}", s.pricing_tier).to_lowercase(),
             status: format!("{:?}", s.status),
             priority: s.priority,
             paid_deposit: s.paid_deposit,
+            files: s.files,
+            storage_key: s.storage_key,
             total_cents: s.total_cents,
             deposit_cents: s.deposit_cents,
+            remainder_cents: s.remainder_cents,
             assigned_to: s.assigned_to,
+            admin_notes: s.admin_notes,
+            delivered_at: s.delivered_at.map(|d| d.to_string()),
+            tracking_token: s.tracking_token,
             created_at: s.created_at.to_string(),
             updated_at: s.updated_at.to_string(),
         })
         .collect();
 
+    let has_more = (page * limit) < total;
+
     Ok(Json(ListSolutionsResponse {
         solutions: items,
         total,
+        page,
+        limit,
+        has_more,
     }))
 }
