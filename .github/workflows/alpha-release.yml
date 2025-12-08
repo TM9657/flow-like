@@ -24,7 +24,7 @@ jobs:
         include:
           - platform: "macos-latest"
             args: "--config src-tauri/configs/tauri.macos.arm.conf.json --verbose"
-          - platform: "macos-13"
+          - platform: "macos-15-intel"
             args: "--config src-tauri/configs/tauri.macos.intel.conf.json --verbose"
           - platform: "ubuntu-latest"
             args: "--config src-tauri/configs/tauri.linux.x64.conf.json --verbose"
