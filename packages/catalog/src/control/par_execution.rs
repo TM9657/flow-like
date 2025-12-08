@@ -70,7 +70,7 @@ impl NodeLogic for ParallelExecutionNode {
         let mut to_run = Vec::new();
         for pin in &exec_out_pins {
             context.activate_exec_pin_ref(pin).await?;
-            let nodes = pin.lock().await.get_connected_nodes().await;
+            let nodes = pin.get_connected_nodes();
             for node in nodes {
                 let sub = context.create_sub_context(&node).await;
                 to_run.push(sub);

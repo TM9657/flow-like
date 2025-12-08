@@ -1,3 +1,18 @@
+//! Peak throughput benchmark - find maximum workflow executions per second.
+//!
+//! This benchmark sweeps through different concurrency levels to find
+//! the optimal point for maximum throughput on your specific hardware.
+//!
+//! Environment variables:
+//!   FL_BOARD_ID          - Board ID to benchmark (default: o4wqrpzkx1cp4svxe91yordw)
+//!   FL_START_ID          - Start node ID (default: ek4tee4s3nufw3drfnwd20hw)
+//!   FL_APP_ID            - App ID (default: q99s8hb4z56mpwz8dscz7qmz)
+//!   FL_TESTS_DIR         - Tests directory path (default: ../../tests)
+//!   FL_WORKER_THREADS    - Tokio worker threads (default: CPU count)
+//!   FL_CONCURRENCY_LIST  - Comma-separated concurrency levels (e.g., "1,2,4,8,16")
+//!   FL_MAX_CONCURRENCY   - Max concurrency for auto-sweep (default: CPU * 8)
+//!   FL_MEASURE_SECS      - Measurement duration per level (default: 10)
+
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use flow_like::{
     flow::{
@@ -13,27 +28,29 @@ use flow_like_storage::{
     Path,
     files::store::{FlowLikeStore, local_store::LocalObjectStore},
 };
-use flow_like_types::{intercom::BufferedInterComHandler, sync::Mutex, tokio};
+use flow_like_types::{intercom::BufferedInterComHandler, tokio};
 use std::collections::HashMap;
 use std::{
     path::PathBuf,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 
-/// -------- CONFIG (override via env) -----------------------------------------
 fn env_or<T: std::str::FromStr>(key: &str, default: T) -> T {
     std::env::var(key)
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(default)
 }
+
 fn env_or_string(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
 fn concurrency_list() -> Vec<usize> {
-    // e.g. FL_CONCURRENCY_LIST=1,2,4,8,16,32 or leave unset to sweep powers of 2
     if let Ok(raw) = std::env::var("FL_CONCURRENCY_LIST") {
         return raw
             .split(',')
@@ -42,16 +59,25 @@ fn concurrency_list() -> Vec<usize> {
             .collect();
     }
     let max = env_or("FL_MAX_CONCURRENCY", num_cpus::get() * 8);
-    let mut v = Vec::new();
-    let mut n = 1;
+    let mut v = vec![1];
+    let mut n = 2;
     while n <= max {
         v.push(n);
-        n <<= 1;
+        n *= 2;
     }
+    // Add some intermediate points for better resolution
+    let cpus = num_cpus::get();
+    for factor in [1, 2, 3, 4, 6] {
+        let val = cpus * factor;
+        if val <= max && !v.contains(&val) {
+            v.push(val);
+        }
+    }
+    v.sort_unstable();
+    v.dedup();
     v
 }
 
-/// -------- Your IDs; override with env if needed -----------------------------
 fn board_id() -> String {
     env_or_string("FL_BOARD_ID", "o4wqrpzkx1cp4svxe91yordw")
 }
@@ -65,8 +91,7 @@ fn tests_dir() -> PathBuf {
     PathBuf::from(env_or_string("FL_TESTS_DIR", "../../tests"))
 }
 
-/// -------- Engine bootstrap (reused across runs) -----------------------------
-async fn default_state() -> Arc<Mutex<FlowLikeState>> {
+async fn default_state() -> Arc<FlowLikeState> {
     let mut config: FlowLikeConfig = FlowLikeConfig::new();
     let store = LocalObjectStore::new(tests_dir()).expect("LocalObjectStore");
     let store = FlowLikeStore::Local(Arc::new(store));
@@ -77,14 +102,12 @@ async fn default_state() -> Arc<Mutex<FlowLikeState>> {
 
     let (http_client, _refetch_rx) = HTTPClient::new();
     let state = FlowLikeState::new(config, http_client);
-    let state_ref = Arc::new(Mutex::new(state));
+    let state_ref = Arc::new(state);
     let weak_ref = Arc::downgrade(&state_ref);
     let catalog = flow_like_catalog::get_catalog();
 
     {
-        let state = state_ref.lock().await;
-        let registry_guard = state.node_registry.clone();
-        drop(state);
+        let registry_guard = state_ref.node_registry.clone();
         let mut registry = registry_guard.write().await;
         registry.initialize(weak_ref);
         registry
@@ -96,27 +119,19 @@ async fn default_state() -> Arc<Mutex<FlowLikeState>> {
 }
 
 fn construct_profile() -> Profile {
-    Profile {
-        ..Default::default()
-    }
+    Profile::default()
 }
 
-async fn open_board(id: &str, state: Arc<Mutex<FlowLikeState>>) -> Board {
+async fn open_board(id: &str, state: Arc<FlowLikeState>) -> Board {
     let path = Path::from("flow").child(&*app_id());
     Board::load(path, id, state, None)
         .await
         .expect("load board")
 }
 
-/// Run a single execution (from a Start node) on an already-open board/state.
-async fn run_once(
-    board: Arc<Board>,
-    state: Arc<Mutex<FlowLikeState>>,
-    profile: &Profile,
-    start: &str,
-) {
+async fn run_once(board: Arc<Board>, state: Arc<FlowLikeState>, profile: &Profile, start: &str) {
     let buffered_sender = Arc::new(BufferedInterComHandler::new(
-        Arc::new(move |_event| Box::pin({ async move { Ok(()) } })),
+        Arc::new(move |_event| Box::pin(async move { Ok(()) })),
         Some(100),
         Some(400),
         Some(true),
@@ -143,9 +158,7 @@ async fn run_once(
     run.execute(state).await;
 }
 
-/// -------- Throughput benchmark ---------------------------------------------
 fn throughput_bench(c: &mut Criterion) {
-    // Multi-thread runtime pinned to CPU count (tweak via FL_WORKER_THREADS)
     let worker_threads = env_or("FL_WORKER_THREADS", num_cpus::get());
     let max_blocking = env_or("FL_MAX_BLOCKING_THREADS", worker_threads * 4);
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -155,29 +168,35 @@ fn throughput_bench(c: &mut Criterion) {
         .build()
         .expect("tokio runtime");
 
-    // Preload state/board/profile ONCE to measure pure execution throughput.
     let state = rt.block_on(default_state());
     let board = Arc::new(rt.block_on(open_board(&board_id(), state.clone())));
     let profile = construct_profile();
     let start = start_id();
 
-    // Warm up the engine/JIT/caches a bit outside of measurement.
+    // Warmup phase - important for JIT and cache warming
+    eprintln!("[throughput] Warming up...");
     rt.block_on(async {
-        for _ in 0..64 {
+        for _ in 0..200 {
             run_once(board.clone(), state.clone(), &profile, &start).await;
         }
     });
 
-    let mut group = c.benchmark_group("flow_like_throughput");
-    group.warm_up_time(Duration::from_secs(env_or("FL_WARMUP_SECS", 3)));
-    group.measurement_time(Duration::from_secs(env_or("FL_MEASURE_SECS", 15)));
-    group.sample_size(env_or("FL_SAMPLE_SIZE", 12u64) as usize);
+    let mut group = c.benchmark_group("peak_throughput");
+    group.warm_up_time(Duration::from_secs(2));
+    group.measurement_time(Duration::from_secs(env_or("FL_MEASURE_SECS", 10)));
+    group.sample_size(20);
 
     let concs = concurrency_list();
+    eprintln!(
+        "[throughput] Testing {} concurrency levels: {:?}",
+        concs.len(),
+        concs
+    );
+
     for &concurrency in &concs {
         group.throughput(Throughput::Elements(concurrency as u64));
         group.bench_with_input(
-            BenchmarkId::new("exec_from_start", concurrency),
+            BenchmarkId::new("executions", concurrency),
             &concurrency,
             |b, &conc| {
                 b.to_async(&rt).iter_custom(|iters| {
@@ -187,8 +206,6 @@ fn throughput_bench(c: &mut Criterion) {
                     let start = start.clone();
 
                     async move {
-                        // Each "iteration" launches `conc` executions concurrently.
-                        // Total ops = iters * conc; Criterion uses throughput to show ops/sec.
                         let begin = Instant::now();
                         for _ in 0..iters {
                             let mut tasks = Vec::with_capacity(conc);
@@ -202,7 +219,6 @@ fn throughput_bench(c: &mut Criterion) {
                                 }));
                             }
                             for t in tasks {
-                                // If your engine never panics, ignoring JoinError is ok; else unwrap.
                                 let _ = t.await;
                             }
                         }
@@ -214,10 +230,84 @@ fn throughput_bench(c: &mut Criterion) {
     }
 
     group.finish();
-
-    // Optional: print the tested concurrencies so you can spot your peak easily in output
-    eprintln!("[flow_like_throughput] tested concurrencies: {:?}", concs);
 }
 
-criterion_group!(benches, throughput_bench);
+/// Raw throughput test - measures absolute maximum executions in a fixed time window.
+fn raw_throughput_bench(c: &mut Criterion) {
+    let worker_threads = env_or("FL_WORKER_THREADS", num_cpus::get());
+    let max_blocking = env_or("FL_MAX_BLOCKING_THREADS", worker_threads * 4);
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(worker_threads)
+        .max_blocking_threads(max_blocking)
+        .enable_all()
+        .build()
+        .expect("tokio runtime");
+
+    let state = rt.block_on(default_state());
+    let board = Arc::new(rt.block_on(open_board(&board_id(), state.clone())));
+    let profile = construct_profile();
+    let start = start_id();
+
+    // Warmup
+    rt.block_on(async {
+        for _ in 0..100 {
+            run_once(board.clone(), state.clone(), &profile, &start).await;
+        }
+    });
+
+    let mut group = c.benchmark_group("raw_throughput");
+    group.warm_up_time(Duration::from_secs(2));
+    group.measurement_time(Duration::from_secs(15));
+    group.sample_size(10);
+
+    let max_in_flight = env_or("FL_MAX_IN_FLIGHT", num_cpus::get() * 4);
+    group.throughput(Throughput::Elements(1));
+
+    group.bench_function("max_throughput", |b| {
+        b.to_async(&rt).iter_custom(|iters| {
+            let state = state.clone();
+            let board = board.clone();
+            let profile = profile.clone();
+            let start = start.clone();
+
+            async move {
+                let counter = Arc::new(AtomicU64::new(0));
+                let target = iters * (max_in_flight as u64);
+                let begin = Instant::now();
+
+                let mut handles = Vec::with_capacity(max_in_flight);
+                while counter.load(Ordering::Relaxed) < target {
+                    while handles.len() < max_in_flight && counter.load(Ordering::Relaxed) < target
+                    {
+                        let st = state.clone();
+                        let brd = board.clone();
+                        let pr = profile.clone();
+                        let sid = start.clone();
+                        let cnt = counter.clone();
+                        handles.push(tokio::spawn(async move {
+                            run_once(brd, st, &pr, &sid).await;
+                            cnt.fetch_add(1, Ordering::Relaxed);
+                        }));
+                    }
+                    if let Some(h) = handles.pop() {
+                        let _ = h.await;
+                    }
+                }
+                for h in handles {
+                    let _ = h.await;
+                }
+                begin.elapsed()
+            }
+        });
+    });
+
+    group.finish();
+
+    eprintln!(
+        "\n[raw_throughput] Workers: {}, Max in-flight: {}",
+        worker_threads, max_in_flight
+    );
+}
+
+criterion_group!(benches, throughput_bench, raw_throughput_bench);
 criterion_main!(benches);

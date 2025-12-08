@@ -10,6 +10,7 @@
 		"features",
 		"hubs",
 		"legal_notice",
+		"web",
 		"name",
 		"privacy_policy",
 		"terms_of_service",
@@ -68,6 +69,9 @@
 		"legal_notice": {
 			"type": "string"
 		},
+		"web": {
+			"type": ["string", "null"]
+		},
 		"privacy_policy": {
 			"type": "string"
 		},
@@ -106,6 +110,13 @@
 					"$ref": "#/definitions/Lookup"
 				}
 			]
+		},
+		"oauth_providers": {
+			"type": "object",
+			"additionalProperties": {
+				"$ref": "#/definitions/OAuthProviderConfig"
+			},
+			"default": {}
 		}
 	},
 	"definitions": {
@@ -299,7 +310,8 @@
 				"max_llm_calls",
 				"max_non_visible_projects",
 				"max_remote_executions",
-				"max_total_size"
+				"max_total_size",
+				"product_id"
 			],
 			"properties": {
 				"max_non_visible_projects": {
@@ -330,6 +342,9 @@
 					"items": {
 						"type": "string"
 					}
+				},
+				"product_id": {
+					"type": ["string", "null"]
 				}
 			}
 		},
@@ -369,6 +384,72 @@
 				},
 				"created_at": {
 					"type": "boolean"
+				}
+			}
+		},
+		"OAuthProviderConfig": {
+			"type": "object",
+			"required": ["name", "auth_url", "token_url"],
+			"properties": {
+				"name": {
+					"description": "Display name shown to users",
+					"type": "string"
+				},
+				"client_id": {
+					"description": "The resolved client ID (populated at runtime)",
+					"type": ["string", "null"]
+				},
+				"auth_url": {
+					"description": "OAuth authorization endpoint URL",
+					"type": "string"
+				},
+				"token_url": {
+					"description": "OAuth token endpoint URL",
+					"type": "string"
+				},
+				"scopes": {
+					"description": "Base OAuth scopes",
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": []
+				},
+				"pkce_required": {
+					"description": "Whether PKCE is required",
+					"type": "boolean",
+					"default": false
+				},
+				"requires_secret_proxy": {
+					"description": "Whether this provider requires the secret proxy for token exchange",
+					"type": "boolean",
+					"default": false
+				},
+				"revoke_url": {
+					"description": "URL for token revocation",
+					"type": ["string", "null"]
+				},
+				"userinfo_url": {
+					"description": "URL for user info endpoint",
+					"type": ["string", "null"]
+				},
+				"device_auth_url": {
+					"description": "Device authorization URL for device flow",
+					"type": ["string", "null"]
+				},
+				"use_device_flow": {
+					"description": "Whether to use device flow",
+					"type": "boolean",
+					"default": false
+				},
+				"use_implicit_flow": {
+					"description": "Whether to use implicit flow (response_type=token) instead of authorization code flow",
+					"type": "boolean",
+					"default": false
+				},
+				"audience": {
+					"description": "Audience claim for token validation",
+					"type": ["string", "null"]
 				}
 			}
 		}

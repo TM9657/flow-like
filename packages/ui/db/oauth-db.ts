@@ -78,6 +78,12 @@ function toDexieFormat(token: IStoredOAuthToken): IDexieOAuthToken {
 export interface IOAuthConsentStore {
 	/** Check if user has consented to a provider for a specific app/workflow */
 	hasConsent(appId: string, providerId: string): Promise<boolean>;
+	/** Check if user has consented to a provider with all required scopes */
+	hasConsentWithScopes(
+		appId: string,
+		providerId: string,
+		requiredScopes: string[],
+	): Promise<boolean>;
 	/** Save consent for a provider in a specific app/workflow */
 	setConsent(
 		appId: string,
@@ -99,6 +105,11 @@ export interface IOAuthConsentStore {
 	>;
 	/** Get consented provider IDs for a specific app/workflow */
 	getConsentedProviderIds(appId: string): Promise<Set<string>>;
+	/** Get consented provider IDs that have all required scopes */
+	getConsentedProviderIdsWithScopes(
+		appId: string,
+		requiredScopesMap: Map<string, string[]>,
+	): Promise<Set<string>>;
 }
 
 export const oauthConsentStore: IOAuthConsentStore = {
@@ -149,6 +160,57 @@ export const oauthConsentStore: IOAuthConsentStore = {
 			.equals(appId)
 			.toArray();
 		return new Set(consents.map((c) => c.providerId));
+	},
+
+	async hasConsentWithScopes(
+		appId: string,
+		providerId: string,
+		requiredScopes: string[],
+	): Promise<boolean> {
+		const id = `${appId}:${providerId}`;
+		const consent = await oauthDB.consents.get(id);
+		if (!consent) return false;
+
+		// Check if all required scopes are in the consented scopes
+		const consentedScopes = new Set(consent.scopes ?? []);
+		return requiredScopes.every((scope) => consentedScopes.has(scope));
+	},
+
+	async getConsentedProviderIdsWithScopes(
+		appId: string,
+		requiredScopesMap: Map<string, string[]>,
+	): Promise<Set<string>> {
+		const consents = await oauthDB.consents
+			.where("appId")
+			.equals(appId)
+			.toArray();
+
+		const validProviders = new Set<string>();
+		for (const consent of consents) {
+			const requiredScopes = requiredScopesMap.get(consent.providerId);
+			if (!requiredScopes || requiredScopes.length === 0) {
+				// No specific scopes required, consent is valid
+				validProviders.add(consent.providerId);
+				continue;
+			}
+
+			const consentedScopes = new Set(consent.scopes ?? []);
+			const hasAllScopes = requiredScopes.every((scope) =>
+				consentedScopes.has(scope),
+			);
+			if (hasAllScopes) {
+				validProviders.add(consent.providerId);
+			} else {
+				console.log(
+					`[OAuth] Consent for ${consent.providerId} is missing scopes. Required:`,
+					requiredScopes,
+					"Consented:",
+					consent.scopes,
+				);
+			}
+		}
+
+		return validProviders;
 	},
 };
 

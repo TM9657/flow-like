@@ -118,11 +118,11 @@ impl NodeLogic for ForEachWithBreakNode {
 
         'outer: for (i, item) in array.iter().enumerate() {
             // Publish per-iteration values
-            value.lock().await.set_value(item.to_owned()).await;
-            index.lock().await.set_value(Value::from(i)).await;
+            value.set_value(item.to_owned()).await;
+            index.set_value(Value::from(i)).await;
 
             // Trigger connected body nodes sequentially
-            let connected = exec_item.lock().await.get_connected_nodes().await;
+            let connected = exec_item.get_connected_nodes();
             for node in connected.iter() {
                 let mut sub_context = context.create_sub_context(node).await;
                 let run = InternalNode::trigger(

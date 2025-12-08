@@ -86,3 +86,4 @@ export type {
 
 export * from "./profile/profile";
 export * from "./app/app";
+export * from "./solution/solution";

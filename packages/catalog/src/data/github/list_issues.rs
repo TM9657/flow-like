@@ -210,7 +210,7 @@ impl NodeLogic for ListGitHubIssuesNode {
 
         node.add_output_pin("issues", "Issues", "Array of issues", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<GitHubIssue>>()
+            .set_schema::<GitHubIssue>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(

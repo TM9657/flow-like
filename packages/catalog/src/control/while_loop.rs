@@ -82,7 +82,7 @@ impl NodeLogic for WhileLoopNode {
         let condition_pin = context.get_pin_by_name("condition").await?;
 
         context.activate_exec_pin_ref(&exec_item).await?;
-        let flow = exec_item.lock().await.get_connected_nodes().await;
+        let flow = exec_item.get_connected_nodes();
 
         for i in 0..max_iter {
             let condition = context
@@ -91,10 +91,7 @@ impl NodeLogic for WhileLoopNode {
             if !condition {
                 break;
             }
-            iter.lock()
-                .await
-                .set_value(flow_like_types::json::json!(i))
-                .await;
+            iter.set_value(flow_like_types::json::json!(i)).await;
             for node in &flow {
                 let mut sub_context = context.create_sub_context(node).await;
                 let run = InternalNode::trigger(&mut sub_context, &mut None, true).await;

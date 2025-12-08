@@ -10,7 +10,6 @@ use flow_like::hub::{Environment, Hub};
 use flow_like::state::{FlowLikeConfig, FlowLikeState, FlowNodeRegistryInner};
 use flow_like::utils::http::HTTPClient;
 use flow_like_types::bail;
-use flow_like_types::sync::Mutex;
 use flow_like_types::{Result, Value};
 use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
@@ -25,6 +24,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use crate::credentials::{CredentialsAccess, RuntimeCredentials};
 use crate::entity::role;
+use crate::mail::{DynMailClient, create_mail_client};
 
 pub type AppState = Arc<State>;
 
@@ -37,6 +37,7 @@ pub struct State {
     pub jwks: JwkSet,
     pub client: Client<HttpConnector, Body>,
     pub stripe_client: Option<stripe::Client>,
+    pub mail_client: Option<DynMailClient>,
     #[cfg(feature = "aws")]
     pub aws_client: Arc<SdkConfig>,
     pub catalog: Arc<Vec<Arc<dyn NodeLogic>>>,
@@ -44,7 +45,7 @@ pub struct State {
     pub provider: Arc<ModelProviderConfiguration>,
     pub permission_cache: moka::sync::Cache<String, Arc<role::Model>>,
     pub credentials_cache: moka::sync::Cache<String, Arc<RuntimeCredentials>>,
-    pub state_cache: moka::sync::Cache<String, Arc<Mutex<FlowLikeState>>>,
+    pub state_cache: moka::sync::Cache<String, Arc<FlowLikeState>>,
     pub cdn_bucket: Arc<FlowLikeStore>,
     pub response_cache: moka::sync::Cache<String, Value>,
 }
@@ -112,12 +113,25 @@ impl State {
             .time_to_live(Duration::from_secs(60)) // 30 minutes
             .build();
 
+        let mail_client = if let Some(mail_config) = &platform_config.mail {
+            match create_mail_client(mail_config).await {
+                Ok(client) => Some(client),
+                Err(e) => {
+                    tracing::warn!("Failed to initialize mail client: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         Self {
             platform_config,
             db,
             client,
             jwks,
             stripe_client,
+            mail_client,
             #[cfg(feature = "aws")]
             aws_client: Arc::new(aws_config::load_from_env().await),
             catalog,
@@ -187,7 +201,7 @@ impl State {
         mode: CredentialsAccess,
     ) -> flow_like_types::Result<App> {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
-        let app_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let app_state = Arc::new(credentials.to_state(state.clone()).await?);
 
         let app = App::load(app_id.to_string(), app_state.clone()).await?;
 
@@ -212,7 +226,7 @@ impl State {
         let app_state = match app_state {
             Some(state) => state,
             None => {
-                let state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+                let state = Arc::new(credentials.to_state(state.clone()).await?);
                 self.state_cache.insert("master".to_string(), state.clone());
                 state
             }
@@ -239,7 +253,7 @@ impl State {
         mode: CredentialsAccess,
     ) -> flow_like_types::Result<Board> {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
-        let app_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let app_state = Arc::new(credentials.to_state(state.clone()).await?);
         let storage_root = Path::from("apps").child(app_id.to_string());
         let board = Board::load(storage_root, board_id, app_state, version).await?;
         Ok(board)
@@ -266,7 +280,7 @@ impl State {
         let app_state = match app_state {
             Some(state) => state,
             None => {
-                let state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+                let state = Arc::new(credentials.to_state(state.clone()).await?);
                 self.state_cache.insert("master".to_string(), state.clone());
                 state
             }
@@ -288,7 +302,7 @@ impl State {
         mode: CredentialsAccess,
     ) -> flow_like_types::Result<Board> {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
-        let app_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let app_state = Arc::new(credentials.to_state(state.clone()).await?);
 
         let storage_root = Path::from("apps").child(app_id.to_string());
 

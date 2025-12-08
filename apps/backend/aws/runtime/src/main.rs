@@ -1,4 +1,8 @@
 // https://github.com/awslabs/aws-lambda-rust-runtime/tree/main/examples/http-axum
+
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use axum::http::StatusCode;
 use axum::{routing::get, Router};
 use flow_like_types::tokio;

@@ -4,11 +4,12 @@ use flow_like::{
     flow::{
         execution::{context::ExecutionContext, internal_pin::InternalPin},
         node::{Node, NodeLogic},
+        pin::PinType,
         variable::VariableType,
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, json::json, sync::Mutex};
+use flow_like_types::{async_trait, json::json};
 pub mod push_generic_result;
 
 fn normalize_key(key: &str) -> String {
@@ -26,16 +27,14 @@ fn find_matching_key(
         .cloned()
 }
 
-async fn collect_pins(context: &ExecutionContext) -> (Vec<Arc<Mutex<InternalPin>>>, Vec<String>) {
+fn collect_pins(context: &ExecutionContext) -> (Vec<Arc<InternalPin>>, Vec<String>) {
     let mut exec_pins = Vec::new();
     let mut output_pins = Vec::new();
 
-    for (_, pin_ref) in context.node.pins.iter() {
-        let pin_ref_guard = pin_ref.lock().await;
-        let pin = pin_ref_guard.pin.lock().await;
-        if pin.pin_type == flow_like::flow::pin::PinType::Output {
+    for (_, pin) in context.node.pins.iter() {
+        if pin.pin_type == PinType::Output {
             if pin.data_type == VariableType::Execution {
-                exec_pins.push(pin_ref.clone());
+                exec_pins.push(pin.clone());
             } else if pin.name != "payload" {
                 output_pins.push(pin.name.clone());
             }
@@ -55,11 +54,11 @@ async fn try_match_and_set_pin(
         return Ok(Some(pin_name.to_string()));
     }
 
-    if let Some(key) = find_matching_key(obj, pin_name) {
-        if let Some(value) = obj.get(&key) {
-            context.set_pin_value(pin_name, value.clone()).await?;
-            return Ok(Some(key));
-        }
+    if let Some(key) = find_matching_key(obj, pin_name)
+        && let Some(value) = obj.get(&key)
+    {
+        context.set_pin_value(pin_name, value.clone()).await?;
+        return Ok(Some(key));
     }
 
     Ok(None)
@@ -87,7 +86,7 @@ async fn map_payload_to_pins(
 
 async fn activate_all_exec_pins(
     context: &ExecutionContext,
-    exec_pins: Vec<Arc<Mutex<InternalPin>>>,
+    exec_pins: Vec<Arc<InternalPin>>,
 ) -> flow_like_types::Result<()> {
     for exec_pin in exec_pins {
         context.activate_exec_pin_ref(&exec_pin).await?;
@@ -156,7 +155,7 @@ impl NodeLogic for GenericEventNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        let (exec_pins, output_pins) = collect_pins(context).await;
+        let (exec_pins, output_pins) = collect_pins(context);
 
         if context.delegated {
             return activate_all_exec_pins(context, exec_pins).await;

@@ -7,7 +7,7 @@ use flow_like_model_provider::llm::{ModelLogic, llamacpp::LlamaCppModel};
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_types::{
     Result, reqwest,
-    tokio::{self, sync::Mutex as TokioMutex, task::JoinHandle, time::sleep},
+    tokio::{self, task::JoinHandle, time::sleep},
 };
 use portpicker::pick_unused_port;
 use std::{
@@ -61,7 +61,7 @@ impl LocalModel {
 
     pub async fn new(
         bit: &Bit,
-        app_state: Arc<TokioMutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
         execution_settings: &ExecutionSettings,
     ) -> flow_like_types::Result<LocalModel> {
         let bit_store = FlowLikeState::bit_store(&app_state).await?;

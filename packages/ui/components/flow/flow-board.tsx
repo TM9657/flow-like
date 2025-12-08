@@ -28,12 +28,14 @@ import {
 	useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { useMediaQuery } from "@uidotdev/usehooks";
 import {
 	ArrowBigLeftDashIcon,
 	HistoryIcon,
 	NotebookPenIcon,
 	PlayCircleIcon,
 	ScrollIcon,
+	SparklesIcon,
 	SquareChevronUpIcon,
 	VariableIcon,
 	WifiIcon,
@@ -283,6 +285,23 @@ export function FlowBoard({
 			</Button>,
 		);
 
+		// FlowPilot button with fancy styling
+		right.push(
+			<Button
+				variant={"outline"}
+				size={"icon"}
+				aria-label="Open FlowPilot"
+				onClick={() => setCopilotOpen(true)}
+				className="relative group border-primary/30 hover:border-primary/60 hover:bg-primary/5"
+			>
+				<div className="absolute inset-0 rounded-md bg-linear-to-br from-primary/20 via-violet-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+				<SparklesIcon className="w-4 h-4 text-primary relative z-10" />
+				{currentMetadata && (
+					<span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full" />
+				)}
+			</Button>,
+		);
+
 		if (currentLayer) {
 			left.push(
 				<Button
@@ -383,6 +402,8 @@ export function FlowBoard({
 	const [varsOpen, setVarsOpen] = useState(false);
 	const [runsOpen, setRunsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
+	const [copilotOpen, setCopilotOpen] = useState(false);
+	const isMobile = useMediaQuery("(max-width: 767px)");
 
 	const { toggleVars, toggleRunHistory, toggleLogs } = useFlowPanels({
 		varPanelRef,
@@ -1265,18 +1286,24 @@ export function FlowBoard({
 
 	return (
 		<div className="w-full flex-1 grow flex-col min-h-0 relative">
-			{/* Show floating FlowCopilot only when logs panel is NOT visible */}
-			{!currentMetadata && (
-				<FlowCopilot
-					board={board.data}
-					selectedNodeIds={Array.from(selected.current)}
-					onAcceptSuggestion={onAcceptSuggestion}
-					onFocusNode={focusNode}
-					onGhostNodesChange={handleGhostNodesChange}
-					onExecuteCommands={handleExecuteCommands}
-					runContext={currentMetadata}
-					onClearRunContext={() => setCurrentMetadata(undefined)}
-				/>
+			{/* Desktop FlowPilot floating panel */}
+			{copilotOpen && (
+				<div className="hidden md:block fixed inset-0 z-100 pointer-events-none">
+					<div className="absolute top-4 right-4 w-[420px] h-[calc(100%-2rem)] max-h-[700px] pointer-events-auto">
+						<FlowCopilot
+							board={board.data}
+							selectedNodeIds={Array.from(selected.current)}
+							onAcceptSuggestion={onAcceptSuggestion}
+							onFocusNode={focusNode}
+							onGhostNodesChange={handleGhostNodesChange}
+							onExecuteCommands={handleExecuteCommands}
+							runContext={currentMetadata}
+							onClearRunContext={() => setCurrentMetadata(undefined)}
+							onClose={() => setCopilotOpen(false)}
+							mode="panel"
+						/>
+					</div>
+				</div>
 			)}
 			{/* Realtime connection status indicator */}
 			{awareness && connectionStatus === "connected" && (
@@ -1386,6 +1413,13 @@ export function FlowBoard({
 									},
 								]
 							: []),
+						{
+							icon: <SparklesIcon className="text-white" />,
+							title: "FlowPilot",
+							separator: "left",
+							special: true,
+							onClick: () => setCopilotOpen(true),
+						},
 					]}
 				/>
 			</div>
@@ -1641,19 +1675,6 @@ export function FlowBoard({
 									boardId={boardId}
 									board={boardRef}
 									onFocusNode={focusNode}
-									copilotPanel={
-										<FlowCopilot
-											board={board.data}
-											selectedNodeIds={Array.from(selected.current)}
-											onAcceptSuggestion={onAcceptSuggestion}
-											onFocusNode={focusNode}
-											onGhostNodesChange={handleGhostNodesChange}
-											onExecuteCommands={handleExecuteCommands}
-											runContext={currentMetadata}
-											onClearRunContext={() => setCurrentMetadata(undefined)}
-											embedded
-										/>
-									}
 								/>
 							)}
 						</ResizablePanel>
@@ -1728,19 +1749,6 @@ export function FlowBoard({
 									boardId={boardId}
 									board={boardRef}
 									onFocusNode={focusNode}
-									copilotPanel={
-										<FlowCopilot
-											board={board.data}
-											selectedNodeIds={Array.from(selected.current)}
-											onAcceptSuggestion={onAcceptSuggestion}
-											onFocusNode={focusNode}
-											onGhostNodesChange={handleGhostNodesChange}
-											onExecuteCommands={handleExecuteCommands}
-											runContext={currentMetadata}
-											onClearRunContext={() => setCurrentMetadata(undefined)}
-											embedded
-										/>
-									}
 								/>
 							</div>
 						)}
@@ -1749,6 +1757,25 @@ export function FlowBoard({
 								No run selected yet. Start a run to view logs here.
 							</div>
 						)}
+					</SheetContent>
+				</Sheet>
+				{/* Mobile FlowPilot Sheet */}
+				<Sheet open={copilotOpen && isMobile} onOpenChange={setCopilotOpen}>
+					<SheetContent side="bottom" className="h-[85dvh] w-full p-0">
+						<div className="h-full w-full">
+							<FlowCopilot
+								board={board.data}
+								selectedNodeIds={Array.from(selected.current)}
+								onAcceptSuggestion={onAcceptSuggestion}
+								onFocusNode={focusNode}
+								onGhostNodesChange={handleGhostNodesChange}
+								onExecuteCommands={handleExecuteCommands}
+								runContext={currentMetadata}
+								onClearRunContext={() => setCurrentMetadata(undefined)}
+								onClose={() => setCopilotOpen(false)}
+								mode="panel"
+							/>
+						</div>
 					</SheetContent>
 				</Sheet>
 			</ResizablePanelGroup>

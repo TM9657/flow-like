@@ -1,7 +1,7 @@
 use super::provider::{GOOGLE_PROVIDER_ID, GoogleProvider};
 use flow_like::{
     flow::{
-        execution::{LogLevel, context::ExecutionContext},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic},
         pin::{PinOptions, ValueType},
         variable::VariableType,
@@ -72,9 +72,9 @@ impl NodeLogic for CreateGoogleDriveFolderNode {
             "data_google_drive_create_folder",
             "Create Folder",
             "Create a new folder in Google Drive",
-            "Data/Google Drive",
+            "Data/Google/Drive",
         );
-        node.add_icon("/flow/icons/folder-plus.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -202,9 +202,9 @@ impl NodeLogic for DeleteGoogleDriveFileNode {
             "data_google_drive_delete_file",
             "Delete File",
             "Delete a file or folder from Google Drive",
-            "Data/Google Drive",
+            "Data/Google/Drive",
         );
-        node.add_icon("/flow/icons/trash.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -243,7 +243,7 @@ impl NodeLogic for DeleteGoogleDriveFileNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .delete(&format!(
+            .delete(format!(
                 "https://www.googleapis.com/drive/v3/files/{}",
                 file_id
             ))
@@ -293,9 +293,9 @@ impl NodeLogic for CopyGoogleDriveFileNode {
             "data_google_drive_copy_file",
             "Copy File",
             "Copy a file in Google Drive",
-            "Data/Google Drive",
+            "Data/Google/Drive",
         );
-        node.add_icon("/flow/icons/copy.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -366,7 +366,7 @@ impl NodeLogic for CopyGoogleDriveFileNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://www.googleapis.com/drive/v3/files/{}/copy",
                 file_id
             ))
@@ -433,9 +433,9 @@ impl NodeLogic for MoveGoogleDriveFileNode {
             "data_google_drive_move_file",
             "Move File",
             "Move a file to a different folder in Google Drive",
-            "Data/Google Drive",
+            "Data/Google/Drive",
         );
-        node.add_icon("/flow/icons/move.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -484,7 +484,7 @@ impl NodeLogic for MoveGoogleDriveFileNode {
         // First get current parents
         let client = reqwest::Client::new();
         let meta_resp = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/drive/v3/files/{}",
                 file_id
             ))
@@ -510,7 +510,7 @@ impl NodeLogic for MoveGoogleDriveFileNode {
         };
 
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://www.googleapis.com/drive/v3/files/{}",
                 file_id
             ))
@@ -577,9 +577,9 @@ impl NodeLogic for SearchGoogleDriveNode {
             "data_google_drive_search",
             "Search Drive",
             "Search for files in Google Drive",
-            "Data/Google Drive",
+            "Data/Google/Drive",
         );
-        node.add_icon("/flow/icons/search.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -608,7 +608,7 @@ impl NodeLogic for SearchGoogleDriveNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("files", "Files", "Search results", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<GoogleDriveItem>>();
+            .set_schema::<GoogleDriveItem>();
         node.add_output_pin("count", "Count", "Number of results", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -693,9 +693,9 @@ impl NodeLogic for GetGoogleDriveFileMetadataNode {
             "data_google_drive_get_metadata",
             "Get File Metadata",
             "Get detailed metadata for a Google Drive file",
-            "Data/Google Drive",
+            "Data/Google/Drive",
         );
-        node.add_icon("/flow/icons/info.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -731,7 +731,7 @@ impl NodeLogic for GetGoogleDriveFileMetadataNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/drive/v3/files/{}",
                 file_id
             ))
@@ -794,9 +794,9 @@ impl NodeLogic for DownloadGoogleDriveFileNode {
             "data_google_drive_download",
             "Download File",
             "Download file content from Google Drive",
-            "Data/Google Drive",
+            "Data/Google/Drive",
         );
-        node.add_icon("/flow/icons/download.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -854,7 +854,7 @@ impl NodeLogic for DownloadGoogleDriveFileNode {
 
         // First get mime type to determine if export is needed
         let meta_resp = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/drive/v3/files/{}",
                 file_id
             ))

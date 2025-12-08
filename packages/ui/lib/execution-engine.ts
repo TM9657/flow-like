@@ -217,6 +217,15 @@ export class ExecutionEngineProvider {
 		return stream ? !stream.isComplete : false;
 	}
 
+	hasStream(streamId: string): boolean {
+		return this.eventStreams.has(streamId);
+	}
+
+	isStreamComplete(streamId: string): boolean {
+		const stream = this.eventStreams.get(streamId);
+		return stream?.isComplete ?? false;
+	}
+
 	getAccumulatedEvents(streamId: string): IIntercomEvent[] {
 		return this.eventStreams.get(streamId)?.accumulatedEvents ?? [];
 	}

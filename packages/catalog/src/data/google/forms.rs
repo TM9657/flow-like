@@ -163,9 +163,9 @@ impl NodeLogic for GetGoogleFormNode {
             "data_google_forms_get",
             "Get Form",
             "Get details of a Google Form",
-            "Data/Google Forms",
+            "Data/Google/Forms",
         );
-        node.add_icon("/flow/icons/clipboard.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -194,7 +194,7 @@ impl NodeLogic for GetGoogleFormNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GoogleFormQuestion>>();
+        .set_schema::<GoogleFormQuestion>();
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
         node.add_required_oauth_scopes(
@@ -273,9 +273,9 @@ impl NodeLogic for ListGoogleFormResponsesNode {
             "data_google_forms_list_responses",
             "List Form Responses",
             "List all responses to a Google Form",
-            "Data/Google Forms",
+            "Data/Google/Forms",
         );
-        node.add_icon("/flow/icons/clipboard.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -309,7 +309,7 @@ impl NodeLogic for ListGoogleFormResponsesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GoogleFormResponse>>();
+        .set_schema::<GoogleFormResponse>();
         node.add_output_pin(
             "next_page_token",
             "Next Page Token",
@@ -408,9 +408,9 @@ impl NodeLogic for GetGoogleFormResponseNode {
             "data_google_forms_get_response",
             "Get Form Response",
             "Get a specific response from a Google Form",
-            "Data/Google Forms",
+            "Data/Google/Forms",
         );
-        node.add_icon("/flow/icons/clipboard.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -520,9 +520,9 @@ impl NodeLogic for CreateGoogleFormNode {
             "data_google_forms_create",
             "Create Form",
             "Create a new Google Form",
-            "Data/Google Forms",
+            "Data/Google/Forms",
         );
-        node.add_icon("/flow/icons/clipboard.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -639,9 +639,9 @@ impl NodeLogic for UpdateGoogleFormInfoNode {
             "data_google_forms_update_info",
             "Update Form Info",
             "Update title and description of a Google Form",
-            "Data/Google Forms",
+            "Data/Google/Forms",
         );
-        node.add_icon("/flow/icons/clipboard.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -747,12 +747,12 @@ impl NodeLogic for UpdateGoogleFormInfoNode {
                     .send()
                     .await;
 
-                if let Ok(form_resp) = form_response {
-                    if form_resp.status().is_success() {
-                        let form_body: Value = form_resp.json().await?;
-                        if let Some(form) = parse_form(&form_body) {
-                            context.set_pin_value("form", json!(form)).await?;
-                        }
+                if let Ok(form_resp) = form_response
+                    && form_resp.status().is_success()
+                {
+                    let form_body: Value = form_resp.json().await?;
+                    if let Some(form) = parse_form(&form_body) {
+                        context.set_pin_value("form", json!(form)).await?;
                     }
                 }
                 context.activate_exec_pin("exec_out").await?;

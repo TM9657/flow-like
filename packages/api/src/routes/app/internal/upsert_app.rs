@@ -16,7 +16,7 @@ use axum::{
     extract::{Path, Query, State},
 };
 use flow_like::{app::App, bit::Metadata};
-use flow_like_types::{anyhow, create_id, sync::Mutex};
+use flow_like_types::{anyhow, create_id};
 use sea_orm::{
     ActiveModelTrait,
     ActiveValue::{NotSet, Set},
@@ -158,7 +158,7 @@ pub async fn upsert_app(
                 crate::credentials::CredentialsAccess::EditApp,
             )
             .await?;
-        let flow_like_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let flow_like_state = Arc::new(credentials.to_state(state.clone()).await?);
         let new_app = App::new(
             Some(new_id.clone()),
             metadata.clone(),

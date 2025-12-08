@@ -13,7 +13,8 @@ pub mod todo;
 // Re-export types for external use
 pub use calendar::{Calendar, CalendarEvent, MeetingTimeSuggestion};
 pub use copilot::{
-    ActionItem, CopilotInteraction, CopilotSearchResult, MeetingInsight, MeetingNote,
+    ActionItem, CopilotInteraction, GraphSearchHit, GraphSearchResource, MeetingInsight,
+    MeetingNote,
 };
 pub use excel::ExcelWorksheet;
 pub use onedrive::{OneDriveItem, OneDriveParentReference};

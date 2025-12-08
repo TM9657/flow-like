@@ -2,7 +2,6 @@ use flow_like::{
     flow::{
         execution::context::ExecutionContext,
         node::{Node, NodeLogic, NodeScores},
-        oauth::OAuthProvider,
         pin::PinOptions,
         variable::VariableType,
     },
@@ -12,9 +11,6 @@ use flow_like_types::{JsonSchema, async_trait, json::json};
 use serde::{Deserialize, Serialize};
 
 pub const NOTION_PROVIDER_ID: &str = "notion";
-
-const NOTION_CLIENT_ID: Option<&str> = option_env!("NOTION_CLIENT_ID");
-const NOTION_CLIENT_SECRET: Option<&str> = option_env!("NOTION_CLIENT_SECRET");
 
 /// Notion provider - works with both OAuth and Internal Integration tokens
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -48,7 +44,7 @@ impl NodeLogic for NotionApiKeyProviderNode {
             "Connect to Notion using an Internal Integration token. Create an integration at notion.so/my-integrations and paste the token here.",
             "Data/Notion",
         );
-        node.add_icon("/flow/icons/cloud.svg");
+        node.add_icon("/flow/icons/notion.svg");
 
         node.add_input_pin(
             "integration_token",
@@ -123,13 +119,10 @@ impl NodeLogic for NotionOAuthProviderNode {
         let mut node = Node::new(
             "data_notion_provider_oauth",
             "Notion (OAuth)",
-            "Connect to Notion using OAuth. Requires NOTION_CLIENT_ID and NOTION_CLIENT_SECRET environment variables to be set at build time.",
+            "Connect to Notion using OAuth. Requires OAuth provider configuration in flow-like.config.json.",
             "Data/Notion",
         );
-        node.add_icon("/flow/icons/cloud.svg");
-
-        let env_client_id = NOTION_CLIENT_ID.unwrap_or_default();
-        let env_client_secret = NOTION_CLIENT_SECRET.unwrap_or_default();
+        node.add_icon("/flow/icons/notion.svg");
 
         node.add_output_pin(
             "provider",
@@ -140,18 +133,8 @@ impl NodeLogic for NotionOAuthProviderNode {
         .set_schema::<NotionProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        // Only add OAuth provider if credentials are available
-        if !env_client_id.is_empty() && !env_client_secret.is_empty() {
-            let oauth_provider = OAuthProvider::new(NOTION_PROVIDER_ID, "Notion")
-                .set_auth_url("https://api.notion.com/v1/oauth/authorize")
-                .set_token_url("https://api.notion.com/v1/oauth/token")
-                .set_client_id(env_client_id)
-                .set_client_secret(env_client_secret)
-                .set_scopes(vec![])
-                .set_pkce_required(false);
-
-            node.add_oauth_provider(oauth_provider);
-        }
+        // Add OAuth provider reference - full config comes from Hub
+        node.add_oauth_provider(NOTION_PROVIDER_ID);
 
         node.set_scores(
             NodeScores::new()
@@ -168,16 +151,6 @@ impl NodeLogic for NotionOAuthProviderNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        let env_client_id = NOTION_CLIENT_ID.unwrap_or_default();
-        let env_client_secret = NOTION_CLIENT_SECRET.unwrap_or_default();
-
-        if env_client_id.is_empty() || env_client_secret.is_empty() {
-            return Err(flow_like_types::anyhow!(
-                "Notion OAuth requires NOTION_CLIENT_ID and NOTION_CLIENT_SECRET environment variables. \
-                Please set these at build time or use the 'Notion (API Key)' node instead."
-            ));
-        }
-
         let token = context
             .get_oauth_token(NOTION_PROVIDER_ID)
             .ok_or_else(|| {

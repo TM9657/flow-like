@@ -169,7 +169,7 @@ impl FlowNodeRegistryInner {
 #[cfg(feature = "flow-runtime")]
 pub struct FlowNodeRegistry {
     pub node_registry: Arc<FlowNodeRegistryInner>,
-    pub parent: Option<Weak<Mutex<FlowLikeState>>>,
+    pub parent: Option<Weak<FlowLikeState>>,
 }
 
 #[cfg(feature = "flow-runtime")]
@@ -187,7 +187,7 @@ impl FlowNodeRegistry {
         }
     }
 
-    pub fn initialize(&mut self, parent: Weak<Mutex<FlowLikeState>>) {
+    pub fn initialize(&mut self, parent: Weak<FlowLikeState>) {
         self.parent = Some(parent);
     }
 
@@ -202,11 +202,10 @@ impl FlowNodeRegistry {
             .as_ref()
             .and_then(|weak| weak.upgrade())
             .ok_or(flow_like_types::anyhow!("Parent not found"))?;
-        let guard = state.lock().await;
         let mut registry = FlowNodeRegistryInner {
             registry: self.node_registry.registry.clone(),
         };
-        let node = logic.get_node(&guard).await;
+        let node = logic.get_node(&state).await;
         registry.insert(node, logic);
         self.node_registry = Arc::new(registry);
         Ok(())
@@ -221,14 +220,13 @@ impl FlowNodeRegistry {
             .as_ref()
             .and_then(|weak| weak.upgrade())
             .ok_or(flow_like_types::anyhow!("Parent not found"))?;
-        let guard = state.lock().await;
 
         let mut registry = FlowNodeRegistryInner {
             registry: self.node_registry.registry.clone(),
         };
 
         for logic in nodes {
-            let node = logic.get_node(&guard).await;
+            let node = logic.get_node(&state).await;
             registry.insert(node, logic);
         }
         self.node_registry = Arc::new(registry);
@@ -545,17 +543,15 @@ impl FlowLikeState {
     }
 
     #[inline]
-    pub async fn stores(state: &Arc<Mutex<FlowLikeState>>) -> FlowLikeStores {
-        state.lock().await.config.read().await.stores.clone()
+    pub async fn stores(state: &Arc<FlowLikeState>) -> FlowLikeStores {
+        state.config.read().await.stores.clone()
     }
 
     #[inline]
     pub async fn project_storage_store(
-        state: &Arc<Mutex<FlowLikeState>>,
+        state: &Arc<FlowLikeState>,
     ) -> flow_like_types::Result<FlowLikeStore> {
         state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -567,11 +563,9 @@ impl FlowLikeState {
 
     #[inline]
     pub async fn project_meta_store(
-        state: &Arc<Mutex<FlowLikeState>>,
+        state: &Arc<FlowLikeState>,
     ) -> flow_like_types::Result<FlowLikeStore> {
         state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -582,12 +576,8 @@ impl FlowLikeState {
     }
 
     #[inline]
-    pub async fn bit_store(
-        state: &Arc<Mutex<FlowLikeState>>,
-    ) -> flow_like_types::Result<FlowLikeStore> {
+    pub async fn bit_store(state: &Arc<FlowLikeState>) -> flow_like_types::Result<FlowLikeStore> {
         state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -598,12 +588,8 @@ impl FlowLikeState {
     }
 
     #[inline]
-    pub async fn user_store(
-        state: &Arc<Mutex<FlowLikeState>>,
-    ) -> flow_like_types::Result<FlowLikeStore> {
+    pub async fn user_store(state: &Arc<FlowLikeState>) -> flow_like_types::Result<FlowLikeStore> {
         state
-            .lock()
-            .await
             .config
             .read()
             .await

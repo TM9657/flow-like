@@ -64,7 +64,7 @@ impl NodeLogic for ListExcelWorksheetsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("worksheets", "Worksheets", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<ExcelWorksheet>>();
+            .set_schema::<ExcelWorksheet>();
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
         node.add_required_oauth_scopes(MICROSOFT_PROVIDER_ID, vec!["Files.Read.All"]);
@@ -81,7 +81,7 @@ impl NodeLogic for ListExcelWorksheetsNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}:/workbook/worksheets",
                 file_path
             ))
@@ -203,7 +203,7 @@ impl NodeLogic for ReadExcelRangeNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}:/workbook/worksheets/{}/range(address='{}')",
                 file_path, urlencoding::encode(&worksheet), urlencoding::encode(&range)
             ))
@@ -310,7 +310,7 @@ impl NodeLogic for WriteExcelRangeNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}:/workbook/worksheets/{}/range(address='{}')",
                 file_path, urlencoding::encode(&worksheet), urlencoding::encode(&range)
             ))
@@ -416,7 +416,7 @@ impl NodeLogic for GetExcelUsedRangeNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}:/workbook/worksheets/{}/usedRange",
                 file_path, urlencoding::encode(&worksheet)
             ))
@@ -519,7 +519,7 @@ impl NodeLogic for GetExcelTableNode {
         let client = reqwest::Client::new();
 
         let headers_response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}:/workbook/tables/{}/headerRowRange",
                 file_path, urlencoding::encode(&table_name)
             ))
@@ -543,7 +543,7 @@ impl NodeLogic for GetExcelTableNode {
         };
 
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}:/workbook/tables/{}/dataBodyRange",
                 file_path, urlencoding::encode(&table_name)
             ))
@@ -675,7 +675,7 @@ impl NodeLogic for AddExcelTableRowNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}:/workbook/tables/{}/rows/add",
                 file_path,
                 urlencoding::encode(&table_name)

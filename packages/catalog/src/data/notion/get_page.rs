@@ -92,7 +92,7 @@ impl NodeLogic for GetNotionPageNode {
             "Retrieves a Notion page with its content and blocks",
             "Data/Notion",
         );
-        node.add_icon("/flow/icons/file-text.svg");
+        node.add_icon("/flow/icons/notion.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -164,7 +164,7 @@ impl NodeLogic for GetNotionPageNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<NotionBlock>>()
+        .set_schema::<NotionBlock>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_required_oauth_scopes(NOTION_PROVIDER_ID, vec![]);
@@ -206,7 +206,7 @@ impl NodeLogic for GetNotionPageNode {
         );
 
         let page_response = client
-            .get(&format!("https://api.notion.com/v1/pages/{}", page_id))
+            .get(format!("https://api.notion.com/v1/pages/{}", page_id))
             .header("Authorization", format!("Bearer {}", access_token))
             .header("Notion-Version", NOTION_API_VERSION)
             .send()
@@ -251,7 +251,7 @@ impl NodeLogic for GetNotionPageNode {
 
         if include_content {
             let blocks_response = client
-                .get(&format!(
+                .get(format!(
                     "https://api.notion.com/v1/blocks/{}/children",
                     page_id
                 ))
@@ -260,26 +260,24 @@ impl NodeLogic for GetNotionPageNode {
                 .send()
                 .await;
 
-            if let Ok(resp) = blocks_response {
-                if resp.status().is_success() {
-                    if let Ok(blocks_data) = resp.json::<BlocksResponse>().await {
-                        for block in blocks_data.results {
-                            let block_type =
-                                block["type"].as_str().unwrap_or("unknown").to_string();
-                            let text = extract_block_text(&block);
+            if let Ok(resp) = blocks_response
+                && resp.status().is_success()
+                && let Ok(blocks_data) = resp.json::<BlocksResponse>().await
+            {
+                for block in blocks_data.results {
+                    let block_type = block["type"].as_str().unwrap_or("unknown").to_string();
+                    let text = extract_block_text(&block);
 
-                            if !text.is_empty() {
-                                plain_text_parts.push(text);
-                            }
-
-                            blocks.push(NotionBlock {
-                                id: block["id"].as_str().unwrap_or("").to_string(),
-                                block_type: block_type.clone(),
-                                has_children: block["has_children"].as_bool().unwrap_or(false),
-                                content: block[&block_type].clone(),
-                            });
-                        }
+                    if !text.is_empty() {
+                        plain_text_parts.push(text);
                     }
+
+                    blocks.push(NotionBlock {
+                        id: block["id"].as_str().unwrap_or("").to_string(),
+                        block_type: block_type.clone(),
+                        has_children: block["has_children"].as_bool().unwrap_or(false),
+                        content: block[&block_type].clone(),
+                    });
                 }
             }
         }

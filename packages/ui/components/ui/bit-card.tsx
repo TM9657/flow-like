@@ -8,6 +8,7 @@ import {
 	FileIcon,
 	FileSearch,
 	ImageIcon,
+	LockIcon,
 	MessagesSquareIcon,
 	MinusIcon,
 	MoreVerticalIcon,
@@ -29,6 +30,7 @@ import {
 	useState,
 } from "react";
 import { Progress } from "../../components/ui/progress";
+import { useHub } from "../../hooks/use-hub";
 import { useInvoke } from "../../hooks/use-invoke";
 import { type IBit, IBitTypes } from "../../lib/schema/bit/bit";
 import { humanFileSize } from "../../lib/utils";
@@ -50,8 +52,10 @@ import {
 export function BitCard({
 	bit,
 	wide = false,
-}: Readonly<{ bit: IBit; wide: boolean }>) {
+	subscriptionsPath = "/subscription",
+}: Readonly<{ bit: IBit; wide: boolean; subscriptionsPath?: string }>) {
 	const backend = useBackend();
+	const { hub } = useHub();
 	const download = useDownloadManager((s) => s.download);
 	const onProgress = useDownloadManager((s) => s.onProgress);
 	const isQueued = useDownloadManager((s) => s.isQueued);
@@ -126,6 +130,36 @@ export function BitCard({
 		backend.userState,
 		[],
 	);
+
+	const userInfo = useInvoke(backend.userState.getInfo, backend.userState, []);
+
+	// Check if the model requires a higher tier than the user has
+	// Model tier is stored in bit.parameters.provider.params.tier (e.g., "FREE", "PREMIUM", "PRO", "ENTERPRISE")
+	// User tier is stored in userInfo.data.tier (e.g., "FREE", "PREMIUM", "PRO", "ENTERPRISE")
+	// Hub tiers config shows which llm_tiers each user tier can access
+	const tierInfo = useMemo(() => {
+		const params = bit.parameters as { provider?: { params?: { tier?: string } } };
+		const modelTier = params?.provider?.params?.tier;
+
+		// No tier restriction for local models (no tier specified) or if hub config not loaded
+		if (!modelTier || !hub?.tiers) {
+			return { isRestricted: false, requiredTier: null };
+		}
+
+		// Default to FREE tier if user is not logged in or tier not available
+		const userTierKey = (userInfo.data?.tier ?? "FREE").toUpperCase();
+		const userTierConfig = hub.tiers[userTierKey];
+
+		// If user tier config not found, assume restricted
+		if (!userTierConfig) {
+			return { isRestricted: true, requiredTier: modelTier };
+		}
+
+		const allowedModelTiers = userTierConfig.llm_tiers ?? [];
+		const isRestricted = !allowedModelTiers.includes(modelTier);
+
+		return { isRestricted, requiredTier: isRestricted ? modelTier : null };
+	}, [bit.parameters, hub?.tiers, userInfo.data?.tier]);
 
 	// A bit is considered "virtual" if it has no download link OR its size resolves to 0.
 	// These represent hosted / proxied models (no local artifact). We immediately treat
@@ -390,6 +424,22 @@ export function BitCard({
 										? "Hosted"
 										: humanFileSize(bitSize.data ?? 0)}
 								</Badge>
+
+								{tierInfo.isRestricted && tierInfo.requiredTier && (
+									<a
+										href={subscriptionsPath}
+										onClick={(e) => e.stopPropagation()}
+										className="inline-flex"
+									>
+										<Badge
+											variant="outline"
+											className="text-xs font-medium bg-amber-500/10 text-amber-600 border-amber-500/30 hover:bg-amber-500/20 transition-colors cursor-pointer"
+										>
+											<LockIcon className="h-3 w-3 mr-1" />
+											{tierInfo.requiredTier}
+										</Badge>
+									</a>
+								)}
 							</div>
 						</div>
 					</div>

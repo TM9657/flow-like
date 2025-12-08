@@ -4,7 +4,7 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { BsDiscord, BsGithub, BsTwitterX } from "react-icons/bs";
-import { LuBookHeart, LuBookMarked, LuDownload } from "react-icons/lu";
+import { LuBookHeart, LuBookMarked, LuDownload, LuZap } from "react-icons/lu";
 
 export function BlogHeader() {
 	const [open, setOpen] = useState(false);
@@ -105,6 +105,20 @@ export function BlogHeader() {
 						</div>
 
 						<nav className="px-6 pb-6 space-y-4">
+							<a
+								href="/24-hour-solution"
+								onClick={handleNavLinkClick}
+								className={`flex items-center gap-3 px-4 py-3 rounded-md border border-primary/50 text-primary font-medium transition transform ${
+									open
+										? "opacity-100 translate-x-0"
+										: "opacity-0 -translate-x-2"
+								}`}
+								style={{ transitionDelay: open ? "30ms" : "0ms" }}
+							>
+								<LuZap className="w-5 h-5" />
+								<span>24h Solution</span>
+							</a>
+
 							<a
 								href="/blog/"
 								onClick={handleNavLinkClick}
@@ -213,6 +227,15 @@ export function BlogHeader() {
 
 				{/* Desktop / tablet nav */}
 				<div className="hidden sm:flex flex-row items-center gap-2">
+					<a href="/24-hour-solution">
+						<Button
+							variant={"outline"}
+							className="border-primary/50 text-primary hover:bg-primary/10"
+						>
+							<LuZap className="w-5 h-5" />
+							24h Solution
+						</Button>
+					</a>
 					<a href="/blog/">
 						<Button variant={"outline"}>
 							<LuBookHeart className="w-5 h-5" />

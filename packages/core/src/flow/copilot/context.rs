@@ -168,7 +168,7 @@ pub fn prepare_context(board: &Board, selected_node_ids: &[String]) -> Result<Gr
 
     let mut process_edges = |nodes: &std::collections::HashMap<String, Node>| {
         for node in nodes.values() {
-            for (_, pin) in &node.pins {
+            for pin in node.pins.values() {
                 // We only care about outgoing connections to avoid duplicates
                 if pin.pin_type == PinType::Output {
                     for connected_pin_id in &pin.connected_to {

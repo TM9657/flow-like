@@ -10,7 +10,6 @@ use flow_like_storage::Path;
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::files::store::local_store::LocalObjectStore;
 use flow_like_types::intercom::InterComCallback;
-use flow_like_types::sync::Mutex;
 use flow_like_types::{Value, anyhow};
 
 use rig::agent::AgentBuilder;
@@ -375,9 +374,9 @@ pub struct BitPack {
 
 async fn collect_dependencies(
     bit: &Bit,
-    state: Arc<Mutex<FlowLikeState>>,
+    state: Arc<FlowLikeState>,
 ) -> flow_like_types::Result<Vec<Bit>> {
-    let http_client = state.lock().await.http_client.clone();
+    let http_client = state.http_client.clone();
     let hub = crate::hub::Hub::new(&bit.hub, http_client.clone()).await?;
     let bit_id = bit.id.clone();
     let bits = hub.get_bit_dependencies(&bit_id).await?;
@@ -387,7 +386,7 @@ async fn collect_dependencies(
 impl BitPack {
     pub async fn get_installed(
         &self,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<Vec<Bit>> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
@@ -415,7 +414,7 @@ impl BitPack {
 
     pub async fn download(
         &self,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
         callback: InterComCallback,
     ) -> flow_like_types::Result<Vec<Bit>> {
         let mut deduplicated_bits = vec![];
@@ -514,10 +513,7 @@ impl BitPack {
         size
     }
 
-    pub async fn is_installed(
-        &self,
-        state: Arc<Mutex<FlowLikeState>>,
-    ) -> flow_like_types::Result<bool> {
+    pub async fn is_installed(&self, state: Arc<FlowLikeState>) -> flow_like_types::Result<bool> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
         let mut installed = true;
         for bit in self.bits.iter() {
@@ -646,12 +642,16 @@ impl Bit {
 
     pub async fn dependencies(
         &self,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<BitPack> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
-        let cache_dir =
-            Path::from("deps-cache").child(format!("bit-deps-{}.bin", self.dependency_tree_hash));
+        let cache_key = if self.dependency_tree_hash.is_empty() {
+            &self.id
+        } else {
+            &self.dependency_tree_hash
+        };
+        let cache_dir = Path::from("deps-cache").child(format!("bit-deps-{}.bin", cache_key));
 
         let metadata = bits_store.head(&cache_dir).await;
 
@@ -679,16 +679,13 @@ impl Bit {
         Ok(bit_pack)
     }
 
-    pub async fn pack(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<BitPack> {
+    pub async fn pack(&self, state: Arc<FlowLikeState>) -> flow_like_types::Result<BitPack> {
         let mut dependencies = self.dependencies(state).await?;
         dependencies.bits.push(self.clone());
         Ok(dependencies)
     }
 
-    pub async fn is_installed(
-        &self,
-        state: Arc<Mutex<FlowLikeState>>,
-    ) -> flow_like_types::Result<bool> {
+    pub async fn is_installed(&self, state: Arc<FlowLikeState>) -> flow_like_types::Result<bool> {
         let pack = self.pack(state.clone()).await?;
         pack.is_installed(state).await
     }
@@ -730,7 +727,7 @@ impl Bit {
         Box<dyn CompletionClientDyn + 'a>,
     )> {
         let (model_name, additional_params, completion_client) = {
-            let model_factory = context.app_state.lock().await.model_factory.clone();
+            let model_factory = context.app_state.model_factory.clone();
             let model = model_factory
                 .lock()
                 .await
@@ -767,7 +764,7 @@ mod tests {
         config.stores.bits_store = Some(FlowLikeStore::Local(store.into()));
         let (http_client, _rx) = crate::utils::http::HTTPClient::new();
         let state = FlowLikeState::new(config, http_client);
-        let state = Arc::new(Mutex::new(state));
+        let state = Arc::new(state);
 
         let proxied_bit = Bit {
             id: "proxied".into(),

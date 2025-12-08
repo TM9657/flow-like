@@ -67,9 +67,9 @@ impl NodeLogic for ListGoogleDriveFilesNode {
             "data_google_drive_list_files",
             "List Google Drive Files",
             "Lists files from a Google Drive folder",
-            "Data/Google Drive",
+            "Data/Google/Drive",
         );
-        node.add_icon("/flow/icons/folder.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         // Execution pins
         node.add_input_pin(
@@ -144,7 +144,7 @@ impl NodeLogic for ListGoogleDriveFilesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GoogleDriveFile>>()
+        .set_schema::<GoogleDriveFile>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(

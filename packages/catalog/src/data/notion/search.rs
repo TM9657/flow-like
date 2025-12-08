@@ -50,7 +50,7 @@ impl NodeLogic for SearchNotionNode {
             "Searches across all pages and databases the integration has access to",
             "Data/Notion",
         );
-        node.add_icon("/flow/icons/search.svg");
+        node.add_icon("/flow/icons/notion.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -129,7 +129,7 @@ impl NodeLogic for SearchNotionNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<NotionSearchResult>>()
+        .set_schema::<NotionSearchResult>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(

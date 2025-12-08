@@ -15,5 +15,7 @@ bitflags! {
         const ReadTransactions  =   0b00000001_00000000;
         const WriteTransactions =   0b00000010_00000000;
         const WriteBits         =   0b00000100_00000000;
+        const ReadSolutions     =   0b00001000_00000000;
+        const WriteSolutions    =   0b00010000_00000000;
     }
 }

@@ -43,7 +43,11 @@ import {
 } from "@tm9657/flow-like-ui";
 import type { IOAuthConsentStore } from "@tm9657/flow-like-ui/db/oauth-db";
 import { checkOAuthTokens } from "@tm9657/flow-like-ui/lib/oauth/helpers";
-import type { IOAuthTokenStoreWithPending } from "@tm9657/flow-like-ui/lib/oauth/types";
+import type {
+	IOAuthTokenStoreWithPending,
+	IStoredOAuthToken,
+} from "@tm9657/flow-like-ui/lib/oauth/types";
+import type { IHub } from "@tm9657/flow-like-ui/lib/schema/hub/hub";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,
@@ -87,15 +91,24 @@ export interface EventsPageProps {
 	tokenStore?: IOAuthTokenStoreWithPending;
 	/** Consent store for OAuth consent tracking. */
 	consentStore?: IOAuthConsentStore;
+	/** Hub configuration for OAuth provider resolution */
+	hub?: IHub;
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
+	/** Optional callback to refresh expired tokens */
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }
 
 export default function EventsPage({
 	eventMapping,
 	tokenStore,
 	consentStore,
+	hub,
 	onStartOAuth,
+	onRefreshToken,
 }: Readonly<EventsPageProps>) {
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
@@ -310,7 +323,9 @@ export default function EventsPage({
 				}}
 				tokenStore={tokenStore}
 				consentStore={consentStore}
+				hub={hub}
 				onStartOAuth={onStartOAuth}
+				onRefreshToken={onRefreshToken}
 			/>
 		);
 	}
@@ -350,7 +365,9 @@ export default function EventsPage({
 							onCreateEvent={() => setIsCreateDialogOpen(true)}
 							tokenStore={tokenStore}
 							consentStore={consentStore}
+							hub={hub}
 							onStartOAuth={onStartOAuth}
+							onRefreshToken={onRefreshToken}
 						/>
 					)}
 				</div>
@@ -372,7 +389,9 @@ export default function EventsPage({
 							onCancel={() => setIsCreateDialogOpen(false)}
 							tokenStore={tokenStore}
 							consentStore={consentStore}
+							hub={hub}
 							onStartOAuth={onStartOAuth}
+							onRefreshToken={onRefreshToken}
 						/>
 					)}
 				</DialogContent>
@@ -398,7 +417,9 @@ function EventConfiguration({
 	onReload,
 	tokenStore,
 	consentStore,
+	hub,
 	onStartOAuth,
+	onRefreshToken,
 }: Readonly<{
 	eventMapping: IEventMapping;
 	event: IEvent;
@@ -409,8 +430,15 @@ function EventConfiguration({
 	tokenStore?: IOAuthTokenStoreWithPending;
 	/** Consent store for OAuth consent tracking. */
 	consentStore?: IOAuthConsentStore;
+	/** Hub configuration for OAuth provider resolution */
+	hub?: IHub;
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
+	/** Optional callback to refresh expired tokens */
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }>) {
 	const backend = useBackend();
 	const [isEditing, setIsEditing] = useState(false);
@@ -550,7 +578,9 @@ function EventConfiguration({
 			onStartOAuth &&
 			!oauthTokens
 		) {
-			const oauthResult = await checkOAuthTokens(board.data, tokenStore);
+			const oauthResult = await checkOAuthTokens(board.data, tokenStore, hub, {
+				refreshToken: onRefreshToken,
+			});
 
 			if (oauthResult.requiredProviders.length > 0) {
 				// Check consent for providers that have tokens but might not have consent for this app
@@ -1236,14 +1266,21 @@ function TableActivateSinkButton({
 	onActivated,
 	tokenStore,
 	consentStore,
+	hub,
 	onStartOAuth,
+	onRefreshToken,
 }: {
 	event: IEvent;
 	appId: string;
 	onActivated: () => void;
 	tokenStore?: IOAuthTokenStoreWithPending;
 	consentStore?: IOAuthConsentStore;
+	hub?: IHub;
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }) {
 	const backend = useBackend();
 	const [showDialog, setShowDialog] = useState(false);
@@ -1302,7 +1339,9 @@ function TableActivateSinkButton({
 					event.board_version as [number, number, number] | undefined,
 				);
 				if (board) {
-					const oauthResult = await checkOAuthTokens(board, tokenStore);
+					const oauthResult = await checkOAuthTokens(board, tokenStore, hub, {
+						refreshToken: onRefreshToken,
+					});
 
 					if (oauthResult.requiredProviders.length > 0) {
 						// Check consent for providers that have tokens but might not have consent for this app
@@ -1502,8 +1541,15 @@ interface IEventsTableProps {
 	tokenStore?: IOAuthTokenStoreWithPending;
 	/** Consent store for OAuth consent tracking. */
 	consentStore?: IOAuthConsentStore;
+	/** Hub configuration for OAuth provider resolution */
+	hub?: IHub;
 	/** Callback to start OAuth authorization for a provider */
 	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
+	/** Optional callback to refresh expired tokens */
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }
 
 function EventsTable({
@@ -1517,7 +1563,9 @@ function EventsTable({
 	onCreateEvent,
 	tokenStore,
 	consentStore,
+	hub,
 	onStartOAuth,
+	onRefreshToken,
 }: Readonly<IEventsTableProps>) {
 	const backend = useBackend();
 	const [currentPage, setCurrentPage] = useState(1);
@@ -1726,7 +1774,9 @@ function EventsTable({
 						event.board_version as [number, number, number] | undefined,
 					);
 					if (board) {
-						const oauthResult = await checkOAuthTokens(board, tokenStore);
+						const oauthResult = await checkOAuthTokens(board, tokenStore, hub, {
+							refreshToken: onRefreshToken,
+						});
 
 						if (oauthResult.requiredProviders.length > 0) {
 							// Check consent for providers that have tokens but might not have consent for this app
@@ -2127,7 +2177,9 @@ function EventsTable({
 																	appId={appId}
 																	tokenStore={tokenStore}
 																	consentStore={consentStore}
+																	hub={hub}
 																	onStartOAuth={onStartOAuth}
+																	onRefreshToken={onRefreshToken}
 																	onActivated={async () => {
 																		// Refresh sink status after activation
 																		try {

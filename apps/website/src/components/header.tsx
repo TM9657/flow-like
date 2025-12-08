@@ -1,6 +1,6 @@
 import { Button } from "@tm9657/flow-like-ui";
 import { BsDiscord, BsGithub, BsTwitterX } from "react-icons/bs";
-import { LuBookHeart, LuBookMarked, LuDownload } from "react-icons/lu";
+import { LuBookHeart, LuBookMarked, LuDownload, LuZap } from "react-icons/lu";
 
 export function Header() {
 	return (
@@ -10,6 +10,15 @@ export function Header() {
 				<h3 className="hidden sm:block">Flow Like</h3>
 			</a>
 			<div className="flex flex-row items-center px-2 gap-2">
+				<a href="/24-hour-solution">
+					<Button
+						variant={"outline"}
+						className="border-primary/50 text-primary hover:bg-primary/10"
+					>
+						<LuZap className="w-5 h-5" />
+						<span className="hidden md:inline">24h Solution</span>
+					</Button>
+				</a>
 				<a href="/blog/">
 					<Button variant={"outline"}>
 						<LuBookHeart width={5} height={5} className="w-5 h-5" />

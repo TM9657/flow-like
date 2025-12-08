@@ -36,7 +36,7 @@ impl Cacheable for LocalImageEmbeddingModel {
 impl LocalImageEmbeddingModel {
     pub async fn new(
         bit: &Bit,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
         factory: &mut EmbeddingFactory,
     ) -> flow_like_types::Result<Arc<Self>> {
         let bit = Arc::new(bit.clone());

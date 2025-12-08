@@ -5,6 +5,8 @@ use axum::{
 };
 use billing::get_billing_session;
 use info::user_info;
+use pricing::get_pricing;
+use subscribe::create_subscription_checkout;
 
 pub async fn sign_avatar(
     sub: &str,
@@ -31,6 +33,8 @@ pub mod lookup;
 pub mod manage_invite;
 pub mod notifications;
 pub mod pat;
+pub mod pricing;
+pub mod subscribe;
 pub mod templates;
 pub mod upsert_info;
 
@@ -44,6 +48,8 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/info", get(user_info).put(upsert_info::upsert_info))
         .route("/billing", get(get_billing_session))
+        .route("/pricing", get(get_pricing))
+        .route("/subscribe", post(create_subscription_checkout))
         .route("/lookup/{sub}", get(lookup::user_lookup))
         .route("/search/{query}", get(lookup::user_search))
         .route("/invites", get(get_invites::get_invites))

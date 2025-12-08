@@ -11,6 +11,11 @@ article,
 	widows: 3;
 }
 
+/* Hide first h1 in article content (shown in header already) */
+.first-h1-hidden > h1:first-child {
+	display: none;
+}
+
 article > :first-child,
 .prose > :first-child {
 	margin-top: 0;

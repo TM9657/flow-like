@@ -254,10 +254,10 @@ impl Tool for SearchTemplatesTool {
             .iter()
             .filter(|t| {
                 // Skip the current template being edited
-                if let Some(ref current_id) = self.current_template_id {
-                    if &t.id == current_id {
-                        return false;
-                    }
+                if let Some(ref current_id) = self.current_template_id
+                    && &t.id == current_id
+                {
+                    return false;
                 }
                 t.name.to_lowercase().contains(&query_lower)
                     || t.description.to_lowercase().contains(&query_lower)
@@ -717,7 +717,7 @@ impl Tool for EmitCommandsTool {
 // ============================================================================
 
 pub struct QueryLogsTool {
-    pub state: FlowLikeState,
+    pub state: Arc<FlowLikeState>,
     pub run_context: Option<RunContext>,
 }
 

@@ -62,7 +62,7 @@ impl NodeLogic for RegisterMcpToolsNode {
 
         if !read_pin_string(node, "mode")
             .as_deref()
-            .map_or(false, is_manual_mode)
+            .is_some_and(is_manual_mode)
         {
             cleanup_tool_pins(node, &HashSet::new());
             return;
@@ -211,10 +211,10 @@ async fn collect_manual_tool_selection(context: &mut ExecutionContext) -> HashSe
 
     let mut selected = HashSet::new();
     for (pin_name, tool_name) in pin_info {
-        if let Ok(include) = context.evaluate_pin::<bool>(&pin_name).await {
-            if include {
-                selected.insert(tool_name);
-            }
+        if let Ok(include) = context.evaluate_pin::<bool>(&pin_name).await
+            && include
+        {
+            selected.insert(tool_name);
         }
     }
 

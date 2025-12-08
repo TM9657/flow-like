@@ -1,7 +1,7 @@
 use super::provider::{MICROSOFT_PROVIDER_ID, MicrosoftGraphProvider};
 use flow_like::{
     flow::{
-        execution::{LogLevel, context::ExecutionContext},
+        execution::context::ExecutionContext,
         node::{Node, NodeLogic, NodeScores},
         pin::{PinOptions, ValueType},
         variable::VariableType,
@@ -190,7 +190,7 @@ impl NodeLogic for SearchSharePointSitesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<SharePointSite>>();
+        .set_schema::<SharePointSite>();
         node.add_output_pin(
             "count",
             "Count",
@@ -343,12 +343,11 @@ impl NodeLogic for GetSharePointSiteNode {
         let url = if !site_id.is_empty() {
             format!("{}/sites/{}", provider.base_url, site_id)
         } else if !hostname.is_empty() {
-            let path = if site_path.is_empty() {
+            if site_path.is_empty() {
                 format!("{}/sites/{}:", provider.base_url, hostname)
             } else {
                 format!("{}/sites/{}:{}", provider.base_url, hostname, site_path)
-            };
-            path
+            }
         } else {
             context
                 .set_pin_value(
@@ -457,7 +456,7 @@ impl NodeLogic for ListSharePointDrivesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<SharePointDrive>>();
+        .set_schema::<SharePointDrive>();
         node.add_output_pin("count", "Count", "Number of drives", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -584,7 +583,7 @@ impl NodeLogic for ListSharePointDriveItemsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<SharePointDriveItem>>();
+        .set_schema::<SharePointDriveItem>();
         node.add_output_pin("count", "Count", "Number of items", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -867,7 +866,7 @@ impl NodeLogic for ListSharePointListsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<SharePointList>>();
+        .set_schema::<SharePointList>();
         node.add_output_pin("count", "Count", "Number of lists", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -988,7 +987,7 @@ impl NodeLogic for GetSharePointListItemsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("items", "Items", "List items", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<SharePointListItem>>();
+            .set_schema::<SharePointListItem>();
         node.add_output_pin("count", "Count", "Number of items", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 

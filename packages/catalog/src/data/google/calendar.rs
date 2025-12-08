@@ -124,7 +124,7 @@ impl NodeLogic for ListGoogleCalendarsNode {
             "List all Google Calendars",
             "Data/Google/Calendar",
         );
-        node.add_icon("/flow/icons/calendar.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -145,7 +145,7 @@ impl NodeLogic for ListGoogleCalendarsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GoogleCalendar>>();
+        .set_schema::<GoogleCalendar>();
         node.add_output_pin(
             "primary_calendar_id",
             "Primary Calendar ID",
@@ -247,7 +247,7 @@ impl NodeLogic for ListGoogleCalendarEventsNode {
             "List events from a Google Calendar",
             "Data/Google/Calendar",
         );
-        node.add_icon("/flow/icons/calendar.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -298,7 +298,7 @@ impl NodeLogic for ListGoogleCalendarEventsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("events", "Events", "List of events", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<GoogleCalendarEvent>>();
+            .set_schema::<GoogleCalendarEvent>();
         node.add_output_pin(
             "next_page_token",
             "Next Page Token",
@@ -351,7 +351,7 @@ impl NodeLogic for ListGoogleCalendarEventsNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events",
                 urlencoding::encode(&calendar_id)
             ))
@@ -415,7 +415,7 @@ impl NodeLogic for GetGoogleCalendarEventNode {
             "Get a specific calendar event",
             "Data/Google/Calendar",
         );
-        node.add_icon("/flow/icons/calendar.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -463,7 +463,7 @@ impl NodeLogic for GetGoogleCalendarEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events/{}",
                 urlencoding::encode(&calendar_id),
                 urlencoding::encode(&event_id)
@@ -526,7 +526,7 @@ impl NodeLogic for CreateGoogleCalendarEventNode {
             "Create a new calendar event",
             "Data/Google/Calendar",
         );
-        node.add_icon("/flow/icons/calendar-plus.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -684,7 +684,7 @@ impl NodeLogic for CreateGoogleCalendarEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events",
                 urlencoding::encode(&calendar_id)
             ))
@@ -760,7 +760,7 @@ impl NodeLogic for UpdateGoogleCalendarEventNode {
             "Update an existing calendar event",
             "Data/Google/Calendar",
         );
-        node.add_icon("/flow/icons/calendar.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -873,7 +873,7 @@ impl NodeLogic for UpdateGoogleCalendarEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events/{}",
                 urlencoding::encode(&calendar_id),
                 urlencoding::encode(&event_id)
@@ -937,7 +937,7 @@ impl NodeLogic for DeleteGoogleCalendarEventNode {
             "Delete a calendar event",
             "Data/Google/Calendar",
         );
-        node.add_icon("/flow/icons/trash.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -998,7 +998,7 @@ impl NodeLogic for DeleteGoogleCalendarEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .delete(&format!(
+            .delete(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events/{}",
                 urlencoding::encode(&calendar_id),
                 urlencoding::encode(&event_id)
@@ -1055,7 +1055,7 @@ impl NodeLogic for QuickAddGoogleCalendarEventNode {
             "Create an event from natural language text",
             "Data/Google/Calendar",
         );
-        node.add_icon("/flow/icons/calendar-plus.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -1108,7 +1108,7 @@ impl NodeLogic for QuickAddGoogleCalendarEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events/quickAdd",
                 urlencoding::encode(&calendar_id)
             ))
@@ -1168,7 +1168,7 @@ impl NodeLogic for QueryFreeBusyNode {
             "Query free/busy information for calendars",
             "Data/Google/Calendar",
         );
-        node.add_icon("/flow/icons/calendar.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(

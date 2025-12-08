@@ -50,7 +50,7 @@ impl NodeLogic for ListNotionDatabasesNode {
             "Lists all databases the integration has access to",
             "Data/Notion",
         );
-        node.add_icon("/flow/icons/database.svg");
+        node.add_icon("/flow/icons/notion.svg");
 
         node.add_input_pin(
             "exec_in",
@@ -105,7 +105,7 @@ impl NodeLogic for ListNotionDatabasesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<NotionDatabase>>()
+        .set_schema::<NotionDatabase>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(

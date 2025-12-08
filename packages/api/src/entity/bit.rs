@@ -17,8 +17,8 @@ pub struct Model {
     pub download_link: Option<String>,
     #[sea_orm(column_name = "fileName", column_type = "Text", nullable)]
     pub file_name: Option<String>,
-    #[sea_orm(column_type = "Text")]
-    pub hash: String,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub hash: Option<String>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub parameters: Option<Json>,
     pub size: Option<i64>,
@@ -29,8 +29,13 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub license: Option<String>,
     pub dependencies: Option<Vec<String>>,
-    #[sea_orm(column_name = "dependencyTreeHash", column_type = "Text", unique)]
-    pub dependency_tree_hash: String,
+    #[sea_orm(
+        column_name = "dependencyTreeHash",
+        column_type = "Text",
+        nullable,
+        unique
+    )]
+    pub dependency_tree_hash: Option<String>,
     #[sea_orm(column_name = "createdAt")]
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]

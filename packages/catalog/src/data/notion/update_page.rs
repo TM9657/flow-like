@@ -39,7 +39,7 @@ impl NodeLogic for UpdateNotionPageNode {
             "Updates properties of an existing Notion page",
             "Data/Notion",
         );
-        node.add_icon("/flow/icons/file-edit.svg");
+        node.add_icon("/flow/icons/notion.svg");
 
         node.add_input_pin(
             "exec_in",

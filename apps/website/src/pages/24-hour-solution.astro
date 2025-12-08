@@ -1,0 +1,601 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import PostHog from "../components/posthog.astro";
+import { SolutionForm } from "../components/solution-form";
+import { BlogHeader } from "../components/blog-header";
+import { BlogFooter } from "../components/blog-footer";
+
+const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
+const canonical = new URL(Astro.url.pathname, site).toString();
+
+const title = "The 24 Hour Solution | Flow-Like";
+const desc = "We build your fully functional automation or GenAI application within 24 hours. €2,400. No prototype phase.";
+const cover = "/og.png";
+---
+
+<!doctype html>
+<html lang="en" class="scroll-smooth" style="overflow-x: hidden;">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="generator" content={Astro.generator} />
+
+    <title>{title}</title>
+    <meta name="description" content={desc} />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href={canonical} />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Flow-Like" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={desc} />
+    <meta property="og:image" content={cover} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={desc} />
+    <meta name="twitter:image" content={cover} />
+
+    <PostHog />
+
+    <style is:global>
+      @media (max-width: 768px) {
+        * { scroll-snap-type: none !important; }
+        html { scroll-behavior: auto !important; }
+        html, body, main, section, [role="region"] { overflow: visible !important; }
+        .sticky, [style*="position: sticky"] { position: static !important; }
+      }
+
+      html, body { min-height: 100%; }
+      html, body {
+        overflow-y: auto;
+        overflow-x: hidden !important;
+        max-width: 100vw;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
+      }
+      :root, body, #content { overscroll-behavior: auto; }
+    </style>
+  </head>
+  <body class="bg-background text-foreground antialiased overflow-x-hidden max-w-full"
+        style="overflow-y: auto !important;"
+  >
+    <BlogHeader client:load />
+
+    <main class="pt-16">
+      <!-- Hero Section -->
+      <section class="relative min-h-[90vh] flex items-center">
+        <div class="mx-auto max-w-6xl px-6 lg:px-8 py-24 w-full">
+          <!-- Central 24 -->
+          <div class="text-center mb-16 lg:mb-20">
+            <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-6">
+              From Idea to Production
+            </p>
+            <div class="relative inline-block">
+              <span class="text-[12rem] sm:text-[16rem] lg:text-[20rem] font-bold tracking-tighter leading-none text-primary/10">
+                24
+              </span>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <span class="text-6xl sm:text-7xl lg:text-8xl font-semibold tracking-tight text-primary">
+                  24
+                </span>
+              </div>
+            </div>
+            <p class="text-xl sm:text-2xl text-muted-foreground -mt-4 mb-2">hours</p>
+            <h1 class="text-2xl sm:text-3xl lg:text-4xl font-semibold tracking-tight mt-6 mb-6">
+              Your automation, <span class="text-primary">built overnight.</span>
+            </h1>
+            <p class="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto mb-4">
+              We take your idea and deliver a production-ready automation or GenAI application. No prototype. No waiting.
+            </p>
+            <p class="text-sm font-medium text-primary mb-10">
+              Batteries included — Infrastructure, hosting, and everything you need to run.
+            </p>
+
+            <!-- CTA -->
+            <div class="flex flex-wrap items-center justify-center gap-6">
+              <a
+                href="#form"
+                class="inline-flex items-center gap-3 text-sm font-medium group"
+              >
+                <span class="flex items-center justify-center w-12 h-12 rounded-full border border-primary text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </span>
+                <span class="border-b border-transparent group-hover:border-foreground transition-colors">Start your project</span>
+              </a>
+              <a
+                href="#process"
+                class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                How it works
+              </a>
+            </div>
+          </div>
+
+          <!-- Pricing Cards -->
+          <div class="max-w-3xl mx-auto">
+            <div class="grid md:grid-cols-2 gap-6">
+              <!-- Standard Tier -->
+              <div class="relative group">
+                <div class="absolute -inset-px bg-linear-to-br from-primary/20 via-primary/5 to-transparent rounded-2xl group-hover:from-primary/30 transition-all duration-300" />
+                <div class="relative h-full p-8 border border-border rounded-2xl bg-background/80 backdrop-blur-sm flex flex-col">
+                  <div class="mb-6">
+                    <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-3">
+                      Standard
+                    </p>
+                    <div class="flex items-baseline gap-2">
+                      <span class="text-4xl lg:text-5xl font-bold tracking-tight text-primary">€2,400</span>
+                    </div>
+                    <p class="text-sm text-muted-foreground mt-2">
+                      Pay after delivery
+                    </p>
+                    <p class="text-xs text-muted-foreground mt-1">
+                      Full ownership, deploy anywhere
+                    </p>
+                  </div>
+
+                  <div class="space-y-3 mb-8 flex-1">
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>24h development sprint</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span class="font-medium">Unlimited users & API calls</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span class="font-medium">Infrastructure included</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Full source code ownership</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>30 days support</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Documentation & handover</span>
+                    </div>
+                  </div>
+
+                  <a
+                    href="#form"
+                    class="flex items-center justify-center gap-2 w-full py-3.5 px-6 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+                  >
+                    Get started
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+
+              <!-- App Store Tier -->
+              <div class="relative group">
+                <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 text-xs font-medium bg-emerald-500 text-white rounded-full z-10">
+                  Save €401
+                </div>
+                <div class="absolute -inset-px bg-linear-to-br from-emerald-500/20 via-emerald-500/5 to-transparent rounded-2xl group-hover:from-emerald-500/30 transition-all duration-300" />
+                <div class="relative h-full p-8 border-2 border-emerald-500/50 rounded-2xl bg-background/80 backdrop-blur-sm flex flex-col">
+                  <div class="mb-6">
+                    <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-emerald-500 mb-3">
+                      App Store
+                    </p>
+                    <div class="flex items-baseline gap-2">
+                      <span class="text-4xl lg:text-5xl font-bold tracking-tight text-emerald-500">€1,999</span>
+                      <span class="text-lg text-muted-foreground line-through">€2,400</span>
+                    </div>
+                    <p class="text-sm text-muted-foreground mt-2">
+                      Pay after delivery
+                    </p>
+                    <p class="text-xs text-muted-foreground mt-1">
+                      Published in Flow-Like App Store
+                    </p>
+                  </div>
+
+                  <div class="space-y-3 mb-8 flex-1">
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>24h development sprint</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span class="font-medium">Unlimited users & API calls</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span class="font-medium">Infrastructure included</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>30 days support</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span class="font-medium">Published in App Store</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                      <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span class="font-medium">Community visibility</span>
+                    </div>
+                  </div>
+
+                  <a
+                    href="#form"
+                    class="flex items-center justify-center gap-2 w-full py-3.5 px-6 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors"
+                  >
+                    Get started
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <p class="text-xs text-center text-muted-foreground mt-6">
+              Pay after delivery • Optional €500 deposit for priority queue • 100% satisfaction guarantee
+            </p>
+          </div>
+
+          <!-- Onsite Hackaflow Option -->
+          <div class="max-w-3xl mx-auto mt-8">
+            <div class="relative">
+              <div class="absolute -inset-px bg-linear-to-br from-amber-500/10 via-transparent to-transparent rounded-2xl" />
+              <div class="relative p-8 lg:p-10 border border-border rounded-2xl bg-background">
+                <div class="flex items-center gap-3 mb-4">
+                  <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground">
+                    Team Option
+                  </p>
+                </div>
+                <h3 class="text-xl font-semibold mb-3">Onsite Hackaflow</h3>
+                <p class="text-sm text-muted-foreground mb-6 leading-relaxed">
+                  Want to build with your team? We come to your office in the Munich area for an intensive hands-on session. Learn Flow-Like while we build your solution together.
+                </p>
+                <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                  <span class="flex items-center gap-2">
+                    <span class="w-1 h-1 rounded-full bg-amber-500" />
+                    Team training included
+                  </span>
+                  <span class="flex items-center gap-2">
+                    <span class="w-1 h-1 rounded-full bg-amber-500" />
+                    Collaborative building
+                  </span>
+                  <span class="flex items-center gap-2">
+                    <span class="w-1 h-1 rounded-full bg-amber-500" />
+                    Munich area
+                  </span>
+                </div>
+                <a href="#form" class="mt-6 inline-flex items-center gap-2 text-sm font-medium text-amber-500 hover:text-amber-400 transition-colors">
+                  Inquire about onsite sessions
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Process Section -->
+      <section id="process" class="relative py-32">
+        <div class="absolute top-0 left-0 right-0 h-px bg-border" />
+
+        <div class="mx-auto max-w-5xl px-6 lg:px-8">
+          <div class="mb-20 lg:mb-28">
+            <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+              Process
+            </p>
+            <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">
+              From idea to production
+            </h2>
+          </div>
+
+          <!-- Timeline -->
+          <div class="relative">
+            <div class="absolute left-0 lg:left-20 top-0 bottom-0 w-px bg-border" />
+
+            <div class="space-y-20">
+              <!-- Step 1 -->
+              <div class="relative pl-10 lg:pl-40">
+                <div class="absolute left-0 lg:left-20 top-2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-background" />
+                <div class="absolute left-0 lg:left-6 top-0 w-12 text-right hidden lg:block">
+                  <span class="text-2xl font-semibold text-primary">30</span>
+                  <span class="text-xs text-muted-foreground block">min</span>
+                </div>
+                <span class="lg:hidden text-sm font-medium text-primary mb-2 block">30 min</span>
+                <h3 class="text-xl font-semibold mb-3">Onboarding</h3>
+                <p class="text-muted-foreground max-w-lg leading-relaxed">
+                  A focused deep-dive into your use case. We cover requirements, data flows, integrations, and success criteria. By the end, we're fully aligned.
+                </p>
+              </div>
+
+              <!-- Step 2 -->
+              <div class="relative pl-10 lg:pl-40">
+                <div class="absolute left-0 lg:left-20 top-2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-muted-foreground/50 ring-4 ring-background" />
+                <div class="absolute left-0 lg:left-6 top-0 w-12 text-right hidden lg:block">
+                  <span class="text-2xl font-semibold">23</span>
+                  <span class="text-xs text-muted-foreground block">hours</span>
+                </div>
+                <span class="lg:hidden text-sm font-medium mb-2 block">23 hours</span>
+                <h3 class="text-xl font-semibold mb-3">Building</h3>
+                <p class="text-muted-foreground max-w-lg leading-relaxed">
+                  Our team builds your solution using Flow-Like. You'll receive real-time progress updates. Production-ready code, not a demo.
+                </p>
+              </div>
+
+              <!-- Step 3 -->
+              <div class="relative pl-10 lg:pl-40">
+                <div class="absolute left-0 lg:left-20 top-2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-background" />
+                <div class="absolute left-0 lg:left-6 top-0 w-12 text-right hidden lg:block">
+                  <span class="text-2xl font-semibold text-emerald-500">30</span>
+                  <span class="text-xs text-muted-foreground block">min</span>
+                </div>
+                <span class="lg:hidden text-sm font-medium text-emerald-500 mb-2 block">30 min</span>
+                <h3 class="text-xl font-semibold mb-3">Handover</h3>
+                <p class="text-muted-foreground max-w-lg leading-relaxed">
+                  Complete walkthrough of your application. Knowledge transfer, documentation, and deployment guidance. You're ready to run and scale.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Why Section -->
+      <section class="relative py-32 bg-muted/30">
+        <div class="absolute top-0 left-0 right-0 h-px bg-border" />
+
+        <div class="mx-auto max-w-6xl px-6 lg:px-8">
+          <div class="mb-20">
+            <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+              Why it works
+            </p>
+            <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight max-w-md">
+              Experience meets execution
+            </h2>
+          </div>
+
+          <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-6">
+            <div class="space-y-4">
+              <span class="text-5xl font-light text-primary/30">01</span>
+              <h3 class="text-lg font-semibold">Batteries Included</h3>
+              <p class="text-sm text-muted-foreground leading-relaxed">
+                Infrastructure onboard. No separate cloud setup, no DevOps headaches. Everything you need to run is included from day one.
+              </p>
+            </div>
+
+            <div class="space-y-4">
+              <span class="text-5xl font-light text-primary/30">02</span>
+              <h3 class="text-lg font-semibold">10x Faster</h3>
+              <p class="text-sm text-muted-foreground leading-relaxed">
+                Flow-Like's visual workflow platform gives us unprecedented execution speed. What takes weeks elsewhere takes hours with us.
+              </p>
+            </div>
+
+            <div class="space-y-4">
+              <span class="text-5xl font-light text-primary/30">03</span>
+              <h3 class="text-lg font-semibold">Production Ready</h3>
+              <p class="text-sm text-muted-foreground leading-relaxed">
+                Not a prototype. Not a demo. A fully functional application you can deploy and scale immediately.
+              </p>
+            </div>
+
+            <div class="space-y-4">
+              <span class="text-5xl font-light text-primary/30">04</span>
+              <h3 class="text-lg font-semibold">Your Data, Your Code</h3>
+              <p class="text-sm text-muted-foreground leading-relaxed">
+                Local-first architecture. Full source code ownership. No vendor lock-in. Enterprise-grade security.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Use Cases -->
+      <section class="relative py-28">
+        <div class="mx-auto max-w-4xl px-6 lg:px-8 text-center">
+          <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+            Common Projects
+          </p>
+          <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-14">
+            What we build
+          </h2>
+
+          <div class="flex flex-wrap justify-center gap-3">
+            {["Document Processing", "RAG Pipelines", "Data Automation", "AI Agents", "Internal Tools", "Workflow Orchestration", "Report Generation", "ETL Pipelines", "Knowledge Bases", "Customer Service AI"].map((useCase) => (
+              <span class="px-5 py-2.5 text-sm border border-border rounded-full text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors cursor-default">
+                {useCase}
+              </span>
+            ))}
+          </div>
+
+          <p class="text-sm text-muted-foreground mt-12">
+            Don't see your use case? <a href="#form" class="text-primary hover:underline">Tell us about it</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- Form Section -->
+      <section id="form" class="relative py-32">
+        <div class="absolute top-0 left-0 right-0 h-px bg-border" />
+
+        <div class="mx-auto max-w-4xl px-6 lg:px-8">
+          <div class="mb-16 lg:mb-20">
+            <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+              Get Started
+            </p>
+            <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-4">
+              Tell us about your project
+            </h2>
+            <p class="text-muted-foreground max-w-lg">
+              Share your requirements. We'll respond with a project assessment.
+            </p>
+          </div>
+
+          <SolutionForm client:load />
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="relative py-28 bg-muted/30">
+        <div class="absolute top-0 left-0 right-0 h-px bg-border" />
+
+        <div class="mx-auto max-w-2xl px-6 lg:px-8">
+          <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-14 text-center">
+            Questions
+          </p>
+
+          <div class="divide-y divide-border">
+            <details class="group py-6">
+              <summary class="flex cursor-pointer items-center justify-between font-medium">
+                What if my project is too complex?
+                <span class="text-muted-foreground text-xl group-open:rotate-45 transition-transform duration-200">+</span>
+              </summary>
+              <p class="mt-4 text-muted-foreground leading-relaxed pr-8">
+                We'll tell you upfront. If your project needs more time, we'll propose a realistic timeline and adjusted pricing. No surprises.
+              </p>
+            </details>
+
+            <details class="group py-6">
+              <summary class="flex cursor-pointer items-center justify-between font-medium">
+                Do I need to be available during the build?
+                <span class="text-muted-foreground text-xl group-open:rotate-45 transition-transform duration-200">+</span>
+              </summary>
+              <p class="mt-4 text-muted-foreground leading-relaxed pr-8">
+                Only for the 30-minute onboarding and handover. We schedule these at times that work for you. Please let us know if you're not available — it helps us answer any questions along the way.
+              </p>
+            </details>
+
+            <details class="group py-6">
+              <summary class="flex cursor-pointer items-center justify-between font-medium">
+                What if I'm not satisfied?
+                <span class="text-muted-foreground text-xl group-open:rotate-45 transition-transform duration-200">+</span>
+              </summary>
+              <p class="mt-4 text-muted-foreground leading-relaxed pr-8">
+                100% satisfaction guarantee. If the delivery doesn't meet the agreed requirements, we fix it or refund you. Simple.
+              </p>
+            </details>
+
+            <details class="group py-6">
+              <summary class="flex cursor-pointer items-center justify-between font-medium">
+                Can I request changes after delivery?
+                <span class="text-muted-foreground text-xl group-open:rotate-45 transition-transform duration-200">+</span>
+              </summary>
+              <p class="mt-4 text-muted-foreground leading-relaxed pr-8">
+                30 days of support is included. For larger changes or new features, we can discuss additional 24-hour sprints.
+              </p>
+            </details>
+
+            <details class="group py-6">
+              <summary class="flex cursor-pointer items-center justify-between font-medium">
+                Do you offer on-site support?
+                <span class="text-muted-foreground text-xl group-open:rotate-45 transition-transform duration-200">+</span>
+              </summary>
+              <p class="mt-4 text-muted-foreground leading-relaxed pr-8">
+                Yes! For companies in the Munich area, we offer on-site Q&A sessions and onsite Hackaflows. Perfect for teams who want hands-on guidance or prefer to build together with us in person.
+              </p>
+            </details>
+
+            <details class="group py-6">
+              <summary class="flex cursor-pointer items-center justify-between font-medium">
+                Is the work outsourced?
+                <span class="text-muted-foreground text-xl group-open:rotate-45 transition-transform duration-200">+</span>
+              </summary>
+              <p class="mt-4 text-muted-foreground leading-relaxed pr-8">
+                No. All use cases are built by Flow-Like professionals based in Munich. We don't outsource any development work — you get direct access to the people who build Flow-Like.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- Contact -->
+      <section class="relative py-24">
+        <div class="mx-auto max-w-2xl px-6 lg:px-8 text-center">
+          <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+            Prefer to talk first?
+          </p>
+          <h2 class="text-2xl font-semibold tracking-tight mb-4">
+            Reach out directly
+          </h2>
+          <p class="text-muted-foreground mb-10">
+            Have questions before submitting? We're happy to chat.
+          </p>
+          <div class="flex flex-col sm:flex-row items-center justify-center gap-6 text-sm">
+            <a
+              href="mailto:24h@great-co.de"
+              class="font-medium text-primary hover:underline"
+            >
+              24h@great-co.de
+            </a>
+            <span class="hidden sm:block text-border">·</span>
+            <a
+              href="https://discord.com/invite/KTWMrS2/"
+              target="_blank"
+              rel="noreferrer"
+              class="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Join our Discord
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <BlogFooter />
+  </body>
+</html>
+
+<style>
+  html {
+    scroll-behavior: smooth;
+    overflow-y: auto;
+    overflow-x: hidden !important;
+    max-width: 100vw;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+  html, body {
+    margin: 0;
+    width: 100%;
+    overscroll-behavior: auto;
+  }
+</style>

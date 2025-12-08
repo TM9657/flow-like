@@ -9,6 +9,10 @@ import type {
 	IUserLookup,
 } from "@tm9657/flow-like-ui/state/backend-state/types";
 import type {
+	IBillingSession,
+	IPricingResponse,
+	ISubscribeRequest,
+	ISubscribeResponse,
 	IUserInfo,
 	IUserUpdate,
 } from "@tm9657/flow-like-ui/state/backend-state/user-state";
@@ -64,6 +68,18 @@ export class EmptyUserState implements IUserState {
 	}
 
 	deletePAT(id: string): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
+
+	getPricing(): Promise<IPricingResponse> {
+		throw new Error("Method not implemented.");
+	}
+
+	createSubscription(request: ISubscribeRequest): Promise<ISubscribeResponse> {
+		throw new Error("Method not implemented.");
+	}
+
+	getBillingSession(): Promise<IBillingSession> {
 		throw new Error("Method not implemented.");
 	}
 }

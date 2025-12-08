@@ -7,6 +7,7 @@ import {
 	IConnectionMode,
 	type IExecutionStage,
 	type IGenericCommand,
+	type IHub,
 	type IIntercomEvent,
 	type ILog,
 	type ILogLevel,
@@ -26,12 +27,40 @@ import { isObject } from "lodash-es";
 import { toast } from "sonner";
 import { fetcher } from "../../lib/api";
 import { oauthConsentStore, oauthTokenStore } from "../../lib/oauth-db";
+import { oauthService } from "../../lib/oauth-service";
 import type { TauriBackend } from "../tauri-provider";
 
 interface DiffEntry {
 	path: string;
 	local: any;
 	remote: any;
+}
+
+// Hub configuration cache
+let hubCache: IHub | undefined;
+let hubCachePromise: Promise<IHub | undefined> | undefined;
+
+async function getHubConfig(profile?: { hub?: string }): Promise<
+	IHub | undefined
+> {
+	if (hubCache) return hubCache;
+	if (hubCachePromise) return hubCachePromise;
+
+	const hubUrl = profile?.hub;
+	if (!hubUrl) return undefined;
+
+	hubCachePromise = fetch(`https://${hubUrl}/api/v1`)
+		.then((res) => res.json() as Promise<IHub>)
+		.then((hub) => {
+			hubCache = hub;
+			return hub;
+		})
+		.catch((e) => {
+			console.warn("[OAuth] Failed to fetch Hub config:", e);
+			return undefined;
+		});
+
+	return hubCachePromise;
 }
 
 const getDeepDifferences = (
@@ -506,7 +535,10 @@ export class BoardState implements IBoardState {
 			  >
 			| undefined;
 		const board = await this.getBoard(appId, boardId);
-		const oauthResult = await checkOAuthTokens(board, oauthTokenStore);
+		const hub = await getHubConfig(this.backend.profile);
+		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub, {
+			refreshToken: oauthService.refreshToken.bind(oauthService),
+		});
 
 		console.log("[OAuth] Board check result:", {
 			requiredProviders: oauthResult.requiredProviders.map((p) => p.id),

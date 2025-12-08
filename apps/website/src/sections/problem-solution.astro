@@ -1,178 +1,75 @@
 ---
-import { LuEye, LuCheck, LuTrendingUp } from "react-icons/lu";
+import { LuEye, LuShield, LuZap } from "react-icons/lu";
+
+const features = [
+  {
+    icon: LuEye,
+    title: "Full Visibility",
+    description: "Every step captures inputs, changes, and outputs.",
+  },
+  {
+    icon: LuShield,
+    title: "Explainable Results",
+    description: "Easier reviews, faster debugging, fewer surprises.",
+  },
+  {
+    icon: LuZap,
+    title: "Any Scale",
+    description: "Solo to production — same visibility throughout.",
+  },
+];
 ---
 
-<section
-    id="why-this-matters"
-    class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 overflow-visible"
->
-    <!-- Background decorations -->
-    <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-        <div class="absolute inset-0 [mask-image:radial-gradient(60%_60%_at_50%_40%,black,transparent)]">
-            <div class="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.border/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.border/.12)_1px,transparent_1px)] bg-[size:36px_36px]"></div>
-        </div>
-        <div class="ps-glow ps-glow-1"></div>
-        <div class="ps-glow ps-glow-2"></div>
-    </div>
+<!-- Sharp tilted white section with bottom edge going back to dark -->
+<section class="relative pb-32 pt-16 -mb-16">
+  <!-- White background with sharp tilted bottom edge -->
+  <div
+    class="absolute inset-0 bg-[#fafafa]"
+    style="clip-path: polygon(0 0, 100% 0, 100% calc(100% - 60px), 0 100%);"
+  ></div>
 
-    <div class="relative z-10 mx-auto max-w-5xl text-center space-y-8">
-        <!-- Badge -->
-        <div class="inline-flex items-center gap-2.5 rounded-full border border-primary/30 bg-primary/10 backdrop-blur-xl px-5 py-2.5 text-sm font-semibold text-primary shadow-[0_0_30px_-8px_hsl(var(--primary)/.4)] hover:shadow-[0_0_40px_-5px_hsl(var(--primary)/.5)] transition-all duration-500 group">
-            <div class="relative">
-                <span class="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping left-0"></span>
-                <span class="relative flex h-2 w-2 rounded-full bg-primary"></span>
-            </div>
-            <span>Why this matters</span>
-        </div>
+  <!-- Horizontal accent line - offset left -->
+  <div
+    aria-hidden="true"
+    class="pointer-events-none absolute left-[8%] top-1/2 w-24 h-px bg-neutral-300"
+  ></div>
 
-        <!-- Heading with gradient -->
-        <h2 class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight">
-            The hard part isn't making something run —
-            <br class="hidden sm:block" />
-            <span class="bg-gradient-to-r from-primary via-violet-500 to-cyan-500 bg-clip-text text-transparent">it's knowing what happened</span>.
-        </h2>
-
-        <!-- Subtext -->
-        <p class="text-muted-foreground text-lg sm:text-xl max-w-3xl mx-auto leading-relaxed">
-            Most tools show a green checkmark and move on. You're left guessing
-            where the data came from, what got filtered or transformed, and why
-            the result looks the way it does.
+  <!-- Content -->
+  <div class="relative z-10 mx-auto max-w-6xl px-6 lg:px-8">
+    <div class="grid lg:grid-cols-2 gap-16 lg:gap-24 items-start">
+      <!-- Left: Copy -->
+      <div class="lg:sticky lg:top-32">
+        <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-neutral-400 mb-4">
+          Why this matters
         </p>
+        <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight text-neutral-900 leading-[1.2] mb-6">
+          The hard part isn't making something run —
+          <span class="text-primary"> it's knowing what happened.</span>
+        </h2>
+        <p class="text-neutral-500 leading-relaxed">
+          Most tools show a green checkmark and move on. You're left guessing
+          where the data came from and why the result looks the way it does.
+        </p>
+      </div>
 
-        <!-- Feature cards -->
-        <div class="grid gap-5 sm:grid-cols-3 text-left mt-12 pt-4">
-            <div class="ps-card group">
-                <div class="ps-card-glow ps-card-glow-emerald"></div>
-                <div class="relative z-10">
-                    <div class="flex items-center gap-3 mb-4">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
-                            <LuEye className="w-5 h-5 text-white" />
-                        </div>
-                        <h3 class="text-lg font-bold text-foreground">Full Visibility</h3>
-                    </div>
-                    <p class="text-muted-foreground leading-relaxed">
-                        Flow-Like adds a <span class="text-emerald-500 font-semibold">built-in data trail</span> — every step captures inputs, changes, and outputs.
-                    </p>
-                </div>
+      <!-- Right: Minimal feature list -->
+      <div class="space-y-0 divide-y divide-neutral-200">
+        {features.map((feature) => (
+          <div class="py-8 first:pt-0 last:pb-0">
+            <div class="flex items-start gap-4">
+              <feature.icon className="w-5 h-5 text-neutral-400 mt-0.5 shrink-0" />
+              <div>
+                <h3 class="text-base font-medium text-neutral-900 mb-1">
+                  {feature.title}
+                </h3>
+                <p class="text-sm text-neutral-500">
+                  {feature.description}
+                </p>
+              </div>
             </div>
-
-            <div class="ps-card group">
-                <div class="ps-card-glow ps-card-glow-violet"></div>
-                <div class="relative z-10">
-                    <div class="flex items-center gap-3 mb-4">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
-                            <LuCheck className="w-5 h-5 text-white" />
-                        </div>
-                        <h3 class="text-lg font-bold text-foreground">Clear Results</h3>
-                    </div>
-                    <p class="text-muted-foreground leading-relaxed">
-                        <span class="text-violet-500 font-semibold">Explainable outcomes.</span> Easier reviews, faster debugging, and fewer surprises.
-                    </p>
-                </div>
-            </div>
-
-            <div class="ps-card group">
-                <div class="ps-card-glow ps-card-glow-cyan"></div>
-                <div class="relative z-10">
-                    <div class="flex items-center gap-3 mb-4">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/25">
-                            <LuTrendingUp className="w-5 h-5 text-white" />
-                        </div>
-                        <h3 class="text-lg font-bold text-foreground">Any Scale</h3>
-                    </div>
-                    <p class="text-muted-foreground leading-relaxed">
-                        Start solo, share with your team, and run in production — the <span class="text-cyan-500 font-semibold">same visibility</span> stays with you.
-                    </p>
-                </div>
-            </div>
-        </div>
+          </div>
+        ))}
+      </div>
     </div>
+  </div>
 </section>
-
-<style>
-    /* Background glows */
-    .ps-glow {
-        position: absolute;
-        border-radius: 50%;
-        filter: blur(100px);
-        opacity: 0.25;
-        animation: ps-float 12s ease-in-out infinite;
-    }
-
-    .ps-glow-1 {
-        width: 700px;
-        height: 700px;
-        background: radial-gradient(circle, hsl(var(--primary) / 0.5) 0%, transparent 60%);
-        top: -15%;
-        left: -10%;
-    }
-
-    .ps-glow-2 {
-        width: 600px;
-        height: 600px;
-        background: radial-gradient(circle, rgba(6, 182, 212, 0.4) 0%, transparent 60%);
-        bottom: -20%;
-        right: -10%;
-        animation-delay: 6s;
-    }
-
-    @keyframes ps-float {
-        0%, 100% { transform: translate(0, 0) scale(1); }
-        33% { transform: translate(25px, -25px) scale(1.08); }
-        66% { transform: translate(-15px, 10px) scale(0.95); }
-    }
-
-    /* Cards */
-    .ps-card {
-        position: relative;
-        border-radius: 1.5rem;
-        border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
-        background: linear-gradient(
-            135deg,
-            color-mix(in oklch, var(--card) 85%, transparent),
-            color-mix(in oklch, var(--card) 60%, transparent)
-        );
-        backdrop-filter: blur(20px);
-        padding: 2rem;
-        overflow: hidden;
-        transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-    }
-
-    .ps-card:hover {
-        transform: translateY(-8px) scale(1.02);
-        border-color: color-mix(in oklch, var(--border) 100%, transparent);
-        box-shadow:
-            0 25px 80px -20px rgba(0, 0, 0, 0.35),
-            0 0 40px -15px rgba(139, 92, 246, 0.2);
-    }
-
-    /* Card hover glows */
-    .ps-card-glow {
-        position: absolute;
-        inset: -2px;
-        border-radius: inherit;
-        opacity: 0;
-        transition: opacity 0.4s ease;
-    }
-
-    .ps-card:hover .ps-card-glow {
-        opacity: 1;
-    }
-
-    .ps-card-glow-emerald {
-        background: radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.25) 0%, transparent 60%);
-    }
-
-    .ps-card-glow-violet {
-        background: radial-gradient(circle at 20% 20%, rgba(139, 92, 246, 0.25) 0%, transparent 60%);
-    }
-
-    .ps-card-glow-cyan {
-        background: radial-gradient(circle at 20% 20%, rgba(6, 182, 212, 0.25) 0%, transparent 60%);
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-        .ps-glow { animation: none; }
-        .ps-card { transition: none; }
-    }
-</style>

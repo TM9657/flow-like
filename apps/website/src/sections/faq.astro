@@ -1,483 +1,107 @@
 ---
-import {
-  LuChevronDown,
-  LuSearch,
-  LuFilter,
-  LuExpand,
-  LuShrink,
-  LuLock,
-  LuServer,
-  LuRocket,
-  LuPlug2,
-  LuGitBranch,
-  LuDatabase,
-  LuBadgeInfo,
-  LuGlobe,
-  LuShield,
-  LuCodeXml,
-  LuBuilding2,
-  LuUsers,
-  LuHeart,
-  LuScroll,
-} from "react-icons/lu";
+import { LuChevronDown } from "react-icons/lu";
+
+const faqs = [
+  {
+    q: "Where can I run Flow-Like?",
+    a: "Locally on macOS, Windows, and Linux; in containers; on the edge; or in any cloud. Start offline on your laptop, move to production later without changing the graph.",
+  },
+  {
+    q: "Can I run fully offline / air-gapped?",
+    a: "Yes. Flow-Like is local-first. You can run completely offline or in air-gapped environments. Sync to cloud later if you choose.",
+  },
+  {
+    q: "How do I integrate with my stack?",
+    a: "Wrap systems as typed nodes with explicit input/output types. Embed or white-label the editor, or run the engine headless inside your app.",
+  },
+  {
+    q: "What languages can I use for nodes?",
+    a: "Nodes are authored in Rust today. A WASM node SDK is planned to broaden language support.",
+  },
+  {
+    q: "Is there governance?",
+    a: "Yes — approvals, policy guardrails, roles, and versioned flows with audit trails are first-class to meet operational and compliance needs.",
+  },
+  {
+    q: "How is data stored and searched?",
+    a: "Object-store-centric by design (e.g., S3/local). For vector search we use LanceDB behind the scenes; graphs interact via nodes — no raw SQL required.",
+  },
+  {
+    q: "Does it support versioning & reviews?",
+    a: "Flows are versioned. You can stage changes, request approvals, and roll back safely. Git-based workflows integrate smoothly.",
+  },
+  {
+    q: "How fast is it?",
+    a: "The runtime is written in Rust for high throughput and low latency. Many workloads run dramatically faster than typical scripting-based stacks.",
+  },
+  {
+    q: "Is my data private?",
+    a: "You control where data lives. Local-first by default, no forced telemetry, and encryption in transit. Keep everything on-prem if needed.",
+  },
+  {
+    q: "What license does Flow-Like use?",
+    a: "Business Source License (BSL) 1.1 with an Additional Use Grant, and a Change Date after which each version becomes MPL 2.0.",
+  },
+  {
+    q: "Do I need to code to use it?",
+    a: "No. Build visually with typed nodes. Coding is optional for custom nodes or advanced logic.",
+  },
+  {
+    q: "How is Flow-Like different from typical workflow tools?",
+    a: "Types on nodes & edges, local-first design, Rust performance, and governance built-in. Safer changes, faster execution, portable deployments.",
+  },
+];
 ---
 
-<section
-  id="faq"
-  data-c1="hsl(35 96% 55% / .10)"
-  data-c2="hsl(18 94% 52% / .10)"
-  class="relative mx-auto max-w-5xl px-4 py-28 lg:px-8 mb-10"
->
-  <!-- soft background accents -->
-  <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-    <div class="absolute inset-0 [mask-image:radial-gradient(60%_60%_at_50%_30%,black,transparent)]">
-      <div class="absolute inset-0 bg-[radial-gradient(500px_300px_at_20%_10%,var(--c1,theme(colors.amber.500/12)),transparent),radial-gradient(600px_400px_at_80%_30%,var(--c2,theme(colors.orange.500/10)),transparent)]"></div>
-    </div>
-  </div>
+<section class="relative py-24">
+  <!-- Horizontal accent line -->
+  <div
+    aria-hidden="true"
+    class="pointer-events-none absolute top-1/3 right-0 w-1/4 h-px bg-linear-to-l from-transparent via-border to-transparent"
+  ></div>
 
-  <div class="relative z-10">
-    <div class="text-center mb-10">
-      <div
-        class="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-amber-600 dark:text-amber-400 mb-4"
-      >
-        <div class="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-        Questions & Answers
-      </div>
-      <h2
-        class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-amber-600 to-orange-600 bg-clip-text text-transparent"
-      >
-        Frequently Asked <span class="text-amber-600">Questions</span>
-      </h2>
-      <p class="mt-3 text-muted-foreground max-w-2xl mx-auto">
-        Search, filter, and deep‑link to answers. Built for individuals and enterprises alike.
+  <div class="mx-auto max-w-3xl px-6 lg:px-8">
+    <!-- Minimal header -->
+    <div class="mb-16">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+        FAQ
       </p>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground leading-[1.2]">
+        Frequently Asked Questions
+      </h2>
     </div>
 
-    <!-- Controls: search + filters + expand/collapse -->
-    <div class="sticky top-2 z-10 mb-6">
-      <div
-        class="flex flex-col gap-3 rounded-2xl border border-border/40 bg-card/70 backdrop-blur-md p-3 shadow-sm"
-      >
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div class="relative flex-1 min-w-0">
-            <input
-              id="faq-search"
-              type="text"
-              placeholder="Search answers… (press / to focus)"
-              class="w-full rounded-xl border border-border/50 bg-background/70 px-10 py-3 text-sm outline-none ring-0 focus:border-amber-500/40 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
-            />
-            <div class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
-              <LuSearch className="w-5 h-5 text-muted-foreground" />
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            <button
-              id="faq-expand-all"
-              class="inline-flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-medium hover:bg-amber-500/15 active:scale-[.98] transition"
-              aria-label="Expand all questions"
-            >
-              <LuExpand className="w-4 h-4" /> Expand all
-            </button>
-            <button
-              id="faq-collapse-all"
-              class="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-xs font-medium hover:bg-muted/30 active:scale-[.98] transition"
-              aria-label="Collapse all questions"
-            >
-              <LuShrink className="w-4 h-4" /> Collapse all
-            </button>
-          </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="inline-flex items-center gap-2 text-xs text-muted-foreground"><LuFilter className="w-4 h-4"/>Filter:</span>
-          <button data-filter="all" class="faq-chip inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium hover:bg-muted/30 transition border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 is-active">All</button>
-          <button data-filter="individuals" class="faq-chip inline-flex items-center gap-2 rounded-full border border-border/40 bg-background/60 px-3 py-1.5 text-xs font-medium hover:bg-muted/30 transition">Individuals</button>
-          <button data-filter="enterprise" class="faq-chip inline-flex items-center gap-2 rounded-full border border-border/40 bg-background/60 px-3 py-1.5 text-xs font-medium hover:bg-muted/30 transition">Teams / Enterprise</button>
-          <button data-filter="security" class="faq-chip inline-flex items-center gap-2 rounded-full border border-border/40 bg-background/60 px-3 py-1.5 text-xs font-medium hover:bg-muted/30 transition">Security & Privacy</button>
-          <button data-filter="devops" class="faq-chip inline-flex items-center gap-2 rounded-full border border-border/40 bg-background/60 px-3 py-1.5 text-xs font-medium hover:bg-muted/30 transition">Dev & Ops</button>
-          <button data-filter="pricing" class="faq-chip inline-flex items-center gap-2 rounded-full border border-border/40 bg-background/60 px-3 py-1.5 text-xs font-medium hover:bg-muted/30 transition">Pricing & Licensing</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- FAQ list -->
-    <div id="faq-accordion" class="rounded-3xl border border-border/40 bg-card/40 backdrop-blur-sm p-2 sm:p-4 divide-y divide-border/40">
-      <!-- Each item: add data-tags and a unique id for deep-links -->
-
-      <!-- Where can I run Flow-Like? -->
-      <details id="faq-run" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="individuals,enterprise,devops" open>
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuRocket className="w-4 h-4"/>Where can I run Flow‑Like?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content">
-          <div class="min-h-0">
-            <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-              Locally on macOS, Windows, and Linux; in containers; on the edge; or in any cloud. Start offline on your laptop, move to production later without changing the graph.
+    <!-- Minimal accordion -->
+    <div class="divide-y divide-border/50">
+      {faqs.map((faq, i) => (
+        <details class="group py-6 first:pt-0" open={i === 0}>
+          <summary class="flex cursor-pointer list-none items-center justify-between text-left">
+            <span class="text-base font-medium text-foreground pr-8">
+              {faq.q}
+            </span>
+            <LuChevronDown className="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 group-open:rotate-180" />
+          </summary>
+          <div class="faq-content">
+            <p class="pt-4 text-sm text-muted-foreground leading-relaxed">
+              {faq.a}
             </p>
           </div>
-        </div>
-      </details>
-
-      <!-- Do I need the cloud? -->
-      <details id="faq-offline" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="individuals,security">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuLock className="w-4 h-4"/>Can I run fully offline / air‑gapped?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            Yes. Flow‑Like is local‑first. You can run completely offline or in air‑gapped environments. Sync to cloud later if you choose.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- Integrations -->
-      <details id="faq-integrate" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="individuals,enterprise,devops">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuPlug2 className="w-4 h-4"/>How do I integrate with my stack?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-secondary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            Wrap systems as <strong>typed nodes</strong> with explicit input/output types. Embed or white‑label the editor, or run the engine headless inside your app.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- Languages -->
-      <details id="faq-languages" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="devops">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuCodeXml className="w-4 h-4"/>What languages can I use for nodes?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-tertiary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            Nodes are authored in <strong>Rust</strong> today. A WASM node SDK is planned to broaden language support.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- Governance -->
-      <details id="faq-governance" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="enterprise,security">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuShield className="w-4 h-4"/>Is there governance?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-emerald-500 group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            Yes — approvals, policy guardrails, roles, and <strong>versioned flows</strong> with audit trails are first‑class to meet operational and compliance needs.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- Storage & Search -->
-      <details id="faq-storage" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="devops,enterprise">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuDatabase className="w-4 h-4"/>How is data stored and searched?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            Object‑store–centric by design (e.g., S3/local). For vector search we use <strong>LanceDB</strong> behind the scenes; graphs interact via nodes — no raw SQL required.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- Versioning & Git -->
-      <details id="faq-versioning" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="devops,enterprise">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuGitBranch className="w-4 h-4"/>Does it support versioning & reviews?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            Flows are versioned. You can stage changes, request approvals, and roll back safely. Git‑based workflows integrate smoothly.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- Deployments -->
-      <details id="faq-deploy" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="enterprise,devops">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuServer className="w-4 h-4"/>How do I go from dev to prod?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            The same typed graph runs locally and in production. Package as a container, deploy to edge/cloud, and promote versions via approvals.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- Performance -->
-      <details id="faq-performance" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="individuals,enterprise,devops">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuRocket className="w-4 h-4"/>How fast is it?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            The runtime is written in Rust for high throughput and low latency. Many workloads run dramatically faster than typical scripting‑based stacks.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- Privacy -->
-      <details id="faq-privacy" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="security,individuals,enterprise">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuLock className="w-4 h-4"/>Is my data private?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            You control where data lives. Local‑first by default, no forced telemetry, and encryption in transit. Keep everything on‑prem if needed.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- SSO / Identity -->
-      <details id="faq-sso" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="enterprise,security">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuGlobe className="w-4 h-4"/>Do you support SSO / identity providers?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            Yes we support OIDC, just configure your provider in the flow-like.config.json
-          </p>
-        </div></div>
-      </details>
-
-      <!-- Pricing & License -->
-      <details id="faq-pricing" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="pricing,individuals,enterprise">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuScroll className="w-4 h-4"/>What license does Flow-Like use?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            Business Source License (BSL) 1.1 with an Additional Use Grant, and a Change Date after which each version becomes MPL 2.0.
-          </p>
-        </div></div>
-      </details>
-
-      <details id="faq-pricing" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="pricing,individuals,enterprise">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuHeart className="w-4 h-4"/>What does the Additional Use Grant allow?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            You may use the software (including production use) as long as you do not use it to develop, offer, or provide a product or service that competes with Flow-Like or with products/services from TM9657 GmbH that are substantially similar to Flow-Like’s functionality.
-          </p>
-        </div></div>
-      </details>
-
-      <details id="faq-pricing" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="pricing,individuals,enterprise">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuUsers className="w-4 h-4"/>Are there organization-size restrictions?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            Yes. A Large Entity—defined as an organization with >2,000 employees or >€300M annual revenue—is not eligible to use Flow-Like under the BSL terms in any capacity and must obtain a commercial license from TM9657 GmbH.
-          </p>
-        </div></div>
-      </details>
-
-      <details id="faq-pricing" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="pricing,individuals,enterprise">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuBuilding2 className="w-4 h-4"/>Can agencies/consultants use Flow-Like for clients?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            Yes, if neither the agency nor the client is a Large Entity and the delivered solution is not a Competitive Product or Service. Large Entity clients require a commercial license.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- For Individuals: Do I need to code? -->
-      <details id="faq-code" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="individuals">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuBadgeInfo className="w-4 h-4"/>Do I need to code to use it?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            No. Build visually with typed nodes. Coding is optional for custom nodes or advanced logic.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- Backups & Migrations -->
-      <details id="faq-backups" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="devops,enterprise">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuServer className="w-4 h-4"/>How do I back up or migrate?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            Projects are file‑based with object‑store artifacts. Use your existing backup tooling and promote versions between environments.
-          </p>
-        </div></div>
-      </details>
-
-      <!-- Comparison -->
-      <details id="faq-compare" class="faq-item group py-2 sm:py-3 first:pt-1 last:pb-1 px-2" data-tags="individuals,enterprise">
-        <summary class="faq-summary flex cursor-pointer list-none items-center justify-between text-left font-semibold text-base sm:text-lg transition-colors duration-200 rounded-2xl px-3 py-3 hover:text-primary">
-          <span class="flex items-center gap-2"><LuBadgeInfo className="w-4 h-4"/>How is Flow‑Like different from typical workflow tools?</span>
-          <div class="faq-chevron w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center transition-all duration-300$1">
-            <LuChevronDown className="h-4 w-4 text-primary group-open:text-primary-foreground transition-all duration-300 group-open:rotate-180" />
-          </div>
-        </summary>
-        <div class="faq-content"><div class="min-h-0">
-          <p class="faq-answer mt-3 text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-            <strong>Types</strong> on nodes & edges, <strong>local‑first</strong> design, Rust performance, and governance built‑in. Safer changes, faster execution, portable deployments.
-          </p>
-        </div></div>
-      </details>
-
+        </details>
+      ))}
     </div>
   </div>
-
-  <style>
-  /* Content animation without Tailwind @apply */
-  .faq-content{ display:grid; grid-template-rows:0fr; transition:grid-template-rows .3s ease; }
-  details[open] .faq-content{ grid-template-rows:1fr; }
-  .faq-content > * { min-height:0; overflow:hidden; }
-</style>
-
-  <script is:inline>
-  // Vanilla JS: search, filter, expand/collapse, deep-links, and open-highlighting
-  const $ = (sel, root=document) => /** @type {HTMLElement} */(root.querySelector(sel));
-  const $$ = (sel, root=document) => /** @type {HTMLElement[]} */(Array.from(root.querySelectorAll(sel)));
-
-  const search = /** @type {HTMLInputElement} */ ($('#faq-search'));
-  const chips = /** @type {HTMLButtonElement[]} */ ($$('.faq-chip'));
-  const items = /** @type {HTMLDetailsElement[]} */ ($$('#faq-accordion details'));
-
-  // Active chip visuals without @apply
-  function setChipActive(btn, active){
-    const activeClasses = ['border-amber-500/30','bg-amber-500/10','text-amber-700','dark:text-amber-300','is-active'];
-    activeClasses.forEach(c => btn.classList.toggle(c, active));
-  }
-
-  // Initialize active tag from any pre-marked chip
-  let activeTag = 'all';
-  for(const b of chips){ if(b.classList.contains('is-active')) { activeTag = b.getAttribute('data-filter') || 'all'; break; } }
-
-  function matchesFilter(el){
-    if(activeTag === 'all') return true;
-    const tags = (el.getAttribute('data-tags')||'').split(',').map(t=>t.trim());
-    return tags.includes(activeTag);
-  }
-  function matchesQuery(el, q){
-    if(!q) return true;
-    const txt = el.textContent?.toLowerCase() || '';
-    return txt.includes(q);
-  }
-  function applyFilters(){
-    const q = search.value.trim().toLowerCase();
-    let anyVisible = false;
-    for(const d of items){
-      const show = matchesFilter(d) && matchesQuery(d, q);
-      d.classList.toggle('hidden', !show);
-      if(show) anyVisible = true;
-    }
-    $('#faq-accordion')?.classList.toggle('empty', !anyVisible);
-  }
-
-  // Chip click handlers
-  chips.forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      chips.forEach(b=>setChipActive(b,false));
-      setChipActive(btn,true);
-      activeTag = btn.getAttribute('data-filter') || 'all';
-      applyFilters();
-    });
-  });
-
-  // Search input
-  search?.addEventListener('input', applyFilters);
-
-  // Keyboard: focus with '/'
-  window.addEventListener('keydown', (e)=>{
-    if(e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA'){
-      e.preventDefault(); search?.focus();
-    }
-  });
-
-  // Expand / Collapse all (respect current filters)
-  $('#faq-expand-all')?.addEventListener('click', ()=>{
-    for(const d of items){ if(!d.classList.contains('hidden')) d.open = true; }
-  });
-  $('#faq-collapse-all')?.addEventListener('click', ()=>{ for(const d of items){ d.open = false; } });
-
-  // Highlight open items without @apply (add Tailwind utility classes directly)
-  function wireOpenHighlights(){
-    for(const d of items){
-      const s = /** @type {HTMLElement|null} */ (d.querySelector('.faq-summary'));
-      const update = () => {
-        ['ring-1','ring-amber-500/20','bg-amber-500/5'].forEach(c => s?.classList.toggle(c, d.open));
-      };
-      d.addEventListener('toggle', update);
-      update();
-    }
-  }
-
-  // Deep link: open and scroll to item if hash present
-  function openFromHash(){
-    const id = location.hash?.slice(1);
-    if(!id) return;
-    const target = /** @type {HTMLDetailsElement|null} */ (document.getElementById(id));
-    if(target){
-      target.open = true;
-      target.scrollIntoView({behavior:'smooth', block:'start'});
-      const s = target.querySelector('.faq-summary');
-      s?.classList.add('ring-2','ring-amber-500/30');
-      setTimeout(()=>s?.classList.remove('ring-2','ring-amber-500/30'), 1600);
-    }
-  }
-  window.addEventListener('hashchange', openFromHash);
-
-  // Initial render
-  wireOpenHighlights();
-  applyFilters();
-  openFromHash();
-</script>
 </section>
+
+<style>
+  .faq-content {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.2s ease;
+  }
+  details[open] .faq-content {
+    grid-template-rows: 1fr;
+  }
+  .faq-content > * {
+    overflow: hidden;
+  }
+</style>

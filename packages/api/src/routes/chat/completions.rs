@@ -17,13 +17,95 @@ use sea_orm::{ActiveModelTrait, Set};
 use serde_json::Value as JsonValue;
 use std::convert::Infallible;
 
-// We now always return a plain AxumResponse (JSON for non-stream, raw event stream for stream=true)
+#[derive(Debug, Clone, PartialEq)]
+enum HostedProvider {
+    OpenRouter,
+    OpenAI,
+    Anthropic,
+    Bedrock,
+    Azure,
+    Vertex,
+}
+
+impl HostedProvider {
+    fn from_provider_name(name: &str) -> Option<Self> {
+        let name_lower = name.to_lowercase();
+        match name_lower.as_str() {
+            "hosted" | "hosted:openrouter" => Some(Self::OpenRouter),
+            "hosted:openai" => Some(Self::OpenAI),
+            "hosted:anthropic" => Some(Self::Anthropic),
+            "hosted:bedrock" => Some(Self::Bedrock),
+            "hosted:azure" => Some(Self::Azure),
+            "hosted:vertex" => Some(Self::Vertex),
+            _ => None,
+        }
+    }
+
+    fn env_endpoint_key(&self) -> &'static str {
+        match self {
+            Self::OpenRouter => "OPENROUTER_ENDPOINT",
+            Self::OpenAI => "HOSTED_OPENAI_ENDPOINT",
+            Self::Anthropic => "HOSTED_ANTHROPIC_ENDPOINT",
+            Self::Bedrock => "HOSTED_BEDROCK_ENDPOINT",
+            Self::Azure => "HOSTED_AZURE_ENDPOINT",
+            Self::Vertex => "HOSTED_VERTEX_ENDPOINT",
+        }
+    }
+
+    fn env_api_key(&self) -> &'static str {
+        match self {
+            Self::OpenRouter => "OPENROUTER_API_KEY",
+            Self::OpenAI => "HOSTED_OPENAI_API_KEY",
+            Self::Anthropic => "HOSTED_ANTHROPIC_API_KEY",
+            Self::Bedrock => "HOSTED_BEDROCK_API_KEY",
+            Self::Azure => "HOSTED_AZURE_API_KEY",
+            Self::Vertex => "HOSTED_VERTEX_API_KEY",
+        }
+    }
+
+    fn default_endpoint(&self) -> Option<&'static str> {
+        match self {
+            Self::OpenRouter => Some("https://openrouter.ai/api"),
+            Self::OpenAI => Some("https://api.openai.com"),
+            Self::Anthropic => Some("https://api.anthropic.com"),
+            Self::Bedrock => None,
+            Self::Azure => None,
+            Self::Vertex => None,
+        }
+    }
+
+    fn completions_path(&self) -> &'static str {
+        match self {
+            Self::OpenRouter | Self::OpenAI | Self::Azure | Self::Bedrock | Self::Vertex => {
+                "/v1/chat/completions"
+            }
+            Self::Anthropic => "/v1/messages",
+        }
+    }
+
+    fn auth_header_name(&self) -> &'static str {
+        match self {
+            Self::Anthropic => "x-api-key",
+            _ => "Authorization",
+        }
+    }
+
+    fn uses_bearer_auth(&self) -> bool {
+        !matches!(self, Self::Anthropic)
+    }
+}
 
 // --- helpers ---
 async fn fetch_provider(
     state: &AppState,
     model_field: &str,
-) -> Result<flow_like::flow_like_model_provider::provider::ModelProvider, ApiError> {
+) -> Result<
+    (
+        flow_like::flow_like_model_provider::provider::ModelProvider,
+        HostedProvider,
+    ),
+    ApiError,
+> {
     let bit_model = bit::Entity::find_by_id(model_field)
         .one(&state.db)
         .await?
@@ -32,12 +114,17 @@ async fn fetch_provider(
     let provider = bit_model
         .try_to_provider()
         .ok_or_else(|| anyhow!("Bit is not a model provider"))?;
-    if provider.provider_name != "Hosted" {
-        return Err(ApiError::BadRequest(
-            "Only 'Hosted' models are supported via this endpoint".into(),
-        ));
-    }
-    Ok(provider)
+
+    let hosted_provider = HostedProvider::from_provider_name(&provider.provider_name).ok_or_else(
+        || {
+            ApiError::BadRequest(format!(
+                "Unsupported provider: {}. Supported: Hosted, hosted:openrouter, hosted:openai, hosted:anthropic, hosted:bedrock, hosted:azure, hosted:vertex",
+                provider.provider_name
+            ))
+        },
+    )?;
+
+    Ok((provider, hosted_provider))
 }
 
 async fn enforce_tier(
@@ -62,27 +149,76 @@ async fn enforce_tier(
     Ok(())
 }
 
+fn deduplicate_tools(body: &mut serde_json::Value) {
+    if let Some(tools) = body.get_mut("tools").and_then(|t| t.as_array_mut()) {
+        let mut seen_names = std::collections::HashSet::new();
+        tools.retain(|tool| {
+            let name = tool
+                .get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("");
+            if name.is_empty() {
+                true
+            } else {
+                seen_names.insert(name.to_string())
+            }
+        });
+    }
+}
+
+fn ensure_user_first_message(body: &mut serde_json::Value) {
+    if let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut()) {
+        let first_non_system_idx = messages
+            .iter()
+            .position(|m| m.get("role").and_then(|r| r.as_str()) != Some("system"));
+
+        if let Some(idx) = first_non_system_idx {
+            let role = messages[idx]
+                .get("role")
+                .and_then(|r| r.as_str())
+                .unwrap_or("");
+            if role == "assistant" {
+                messages.insert(idx, json!({"role": "user", "content": ""}));
+            }
+        }
+    }
+}
+
 fn prepare_upstream_body(
     payload: &serde_json::Value,
     upstream_model_id: &str,
     tracking_user: Option<&str>,
+    hosted_provider: &HostedProvider,
 ) -> (serde_json::Value, bool) {
     let mut body = payload.clone();
     if let Some(obj) = body.as_object_mut() {
         obj.insert("model".to_string(), json!(upstream_model_id));
-        // Ensure usage.include=true for OpenRouter usage tokens & cost reporting
-        let usage = obj.entry("usage").or_insert_with(|| json!({}));
-        if usage.is_object() {
-            usage
-                .as_object_mut()
-                .unwrap()
-                .insert("include".to_string(), json!(true));
+
+        match hosted_provider {
+            HostedProvider::OpenRouter => {
+                let usage = obj.entry("usage").or_insert_with(|| json!({}));
+                if usage.is_object() {
+                    usage
+                        .as_object_mut()
+                        .unwrap()
+                        .insert("include".to_string(), json!(true));
+                }
+            }
+            HostedProvider::Anthropic => {
+                obj.insert("max_tokens".to_string(), json!(4096));
+            }
+            _ => {}
         }
-        // OpenRouter supports a top-level `user` field (same as OpenAI) for end-user identification / abuse monitoring.
+
         if let Some(u) = tracking_user {
             obj.insert("user".to_string(), json!(u));
         }
     }
+
+    deduplicate_tools(&mut body);
+    ensure_user_first_message(&mut body);
+
     let stream = body
         .get("stream")
         .and_then(|v| v.as_bool())
@@ -90,16 +226,26 @@ fn prepare_upstream_body(
     (body, stream)
 }
 
-fn build_openai_url() -> Result<(String, String), ApiError> {
-    let endpoint = std::env::var("OPENAI_ENDPOINT").unwrap_or_default();
-    if endpoint.is_empty() {
-        return Err(anyhow!("OPENAI_ENDPOINT not configured").into());
-    }
-    let api_key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
+fn build_provider_url(hosted_provider: &HostedProvider) -> Result<(String, String), ApiError> {
+    let endpoint_key = hosted_provider.env_endpoint_key();
+    let api_key_key = hosted_provider.env_api_key();
+
+    let endpoint = std::env::var(endpoint_key)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| hosted_provider.default_endpoint().map(String::from))
+        .ok_or_else(|| anyhow!("{} not configured", endpoint_key))?;
+
+    let api_key = std::env::var(api_key_key).unwrap_or_default();
     if api_key.is_empty() {
-        return Err(anyhow!("OPENAI_API_KEY not configured").into());
+        return Err(anyhow!("{} not configured", api_key_key).into());
     }
-    let url = format!("{}/v1/chat/completions", endpoint.trim_end_matches('/'));
+
+    let url = format!(
+        "{}{}",
+        endpoint.trim_end_matches('/'),
+        hosted_provider.completions_path()
+    );
     Ok((url, api_key))
 }
 
@@ -317,26 +463,47 @@ pub async fn invoke_llm(
         .get("model")
         .and_then(|v| v.as_str())
         .ok_or_else(|| ApiError::BadRequest("Missing 'model' field".into()))?;
-    let provider = fetch_provider(&state, model_field).await?;
+    let (provider, hosted_provider) = fetch_provider(&state, model_field).await?;
     enforce_tier(&user, &state, &provider).await?;
     let upstream_model_id = provider
         .model_id
         .clone()
         .unwrap_or_else(|| model_field.to_string());
     let tracking_id_opt = user.tracking_id(&state).await.ok().flatten();
-    let (upstream_body, stream) =
-        prepare_upstream_body(&payload, &upstream_model_id, tracking_id_opt.as_deref());
-    let (url, api_key) = build_openai_url()?;
+    let (upstream_body, stream) = prepare_upstream_body(
+        &payload,
+        &upstream_model_id,
+        tracking_id_opt.as_deref(),
+        &hosted_provider,
+    );
+    let (url, api_key) = build_provider_url(&hosted_provider)?;
     let client = flow_like_types::reqwest::Client::new();
-    let mut request_builder = client.post(&url).bearer_auth(api_key).json(&upstream_body);
-    // Inject OpenRouter recommended headers for attribution & user tracking
-    request_builder = request_builder
-        .header("HTTP-Referer", "https://flow-like.com")
-        .header("X-Title", "Flow-Like");
+
+    let mut request_builder = if hosted_provider.uses_bearer_auth() {
+        client.post(&url).bearer_auth(&api_key).json(&upstream_body)
+    } else {
+        client
+            .post(&url)
+            .header(hosted_provider.auth_header_name(), &api_key)
+            .json(&upstream_body)
+    };
+
+    if hosted_provider == HostedProvider::OpenRouter {
+        request_builder = request_builder
+            .header("HTTP-Referer", "https://flow-like.com")
+            .header("X-Title", "Flow-Like");
+    }
+
+    if hosted_provider == HostedProvider::Anthropic {
+        request_builder = request_builder
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json");
+    }
+
     if let Some(tracking_id) = &tracking_id_opt {
-        // Pass header variant too (OpenRouter extra_headers style)
         request_builder = request_builder.header("X-User-Id", tracking_id);
     }
+
     let user_sub = user.sub()?;
     if stream {
         handle_streaming(request_builder, state, user_sub, upstream_model_id).await
@@ -408,9 +575,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_prepare_upstream_body_rewrites_model() {
+    fn test_prepare_upstream_body_rewrites_model_openrouter() {
         let payload = serde_json::json!({"model": "bit_123", "messages": [], "stream": false});
-        let (rewritten, stream) = prepare_upstream_body(&payload, "gpt-4o-mini", Some("user_123"));
+        let (rewritten, stream) = prepare_upstream_body(
+            &payload,
+            "gpt-4o-mini",
+            Some("user_123"),
+            &HostedProvider::OpenRouter,
+        );
         assert!(!stream);
         assert_eq!(
             rewritten.get("model").unwrap().as_str().unwrap(),
@@ -429,6 +601,61 @@ mod tests {
     }
 
     #[test]
+    fn test_prepare_upstream_body_rewrites_model_openai() {
+        let payload = serde_json::json!({"model": "bit_123", "messages": [], "stream": false});
+        let (rewritten, stream) = prepare_upstream_body(
+            &payload,
+            "gpt-4o",
+            Some("user_123"),
+            &HostedProvider::OpenAI,
+        );
+        assert!(!stream);
+        assert_eq!(rewritten.get("model").unwrap().as_str().unwrap(), "gpt-4o");
+        assert!(rewritten.get("usage").is_none());
+    }
+
+    #[test]
+    fn test_prepare_upstream_body_anthropic_adds_max_tokens() {
+        let payload = serde_json::json!({"model": "bit_123", "messages": [], "stream": false});
+        let (rewritten, _) =
+            prepare_upstream_body(&payload, "claude-3-opus", None, &HostedProvider::Anthropic);
+        assert_eq!(rewritten.get("max_tokens").unwrap().as_i64().unwrap(), 4096);
+    }
+
+    #[test]
+    fn test_hosted_provider_from_name() {
+        assert_eq!(
+            HostedProvider::from_provider_name("Hosted"),
+            Some(HostedProvider::OpenRouter)
+        );
+        assert_eq!(
+            HostedProvider::from_provider_name("hosted:openrouter"),
+            Some(HostedProvider::OpenRouter)
+        );
+        assert_eq!(
+            HostedProvider::from_provider_name("hosted:openai"),
+            Some(HostedProvider::OpenAI)
+        );
+        assert_eq!(
+            HostedProvider::from_provider_name("hosted:anthropic"),
+            Some(HostedProvider::Anthropic)
+        );
+        assert_eq!(
+            HostedProvider::from_provider_name("hosted:bedrock"),
+            Some(HostedProvider::Bedrock)
+        );
+        assert_eq!(
+            HostedProvider::from_provider_name("hosted:azure"),
+            Some(HostedProvider::Azure)
+        );
+        assert_eq!(
+            HostedProvider::from_provider_name("hosted:vertex"),
+            Some(HostedProvider::Vertex)
+        );
+        assert_eq!(HostedProvider::from_provider_name("unknown"), None);
+    }
+
+    #[test]
     fn test_extract_usage_from_body() {
         let body = serde_json::json!({
             "id": "chatcmpl-test",
@@ -437,5 +664,47 @@ mod tests {
         let bytes = serde_json::to_vec(&body).unwrap();
         let usage = extract_usage_from_body(&bytes).unwrap();
         assert_eq!(usage, (12, 34));
+    }
+
+    #[test]
+    fn test_deduplicate_tools() {
+        let mut body = serde_json::json!({
+            "tools": [
+                {"function": {"name": "query_knowledge"}},
+                {"function": {"name": "search"}},
+                {"function": {"name": "query_knowledge"}},
+                {"function": {"name": "search"}}
+            ]
+        });
+        deduplicate_tools(&mut body);
+        let tools = body.get("tools").unwrap().as_array().unwrap();
+        assert_eq!(tools.len(), 2);
+    }
+
+    #[test]
+    fn test_ensure_user_first_message() {
+        let mut body = serde_json::json!({
+            "messages": [
+                {"role": "system", "content": "You are helpful"},
+                {"role": "assistant", "content": "Hello!"}
+            ]
+        });
+        ensure_user_first_message(&mut body);
+        let messages = body.get("messages").unwrap().as_array().unwrap();
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[1].get("role").unwrap().as_str().unwrap(), "user");
+    }
+
+    #[test]
+    fn test_ensure_user_first_message_already_valid() {
+        let mut body = serde_json::json!({
+            "messages": [
+                {"role": "system", "content": "You are helpful"},
+                {"role": "user", "content": "Hi"}
+            ]
+        });
+        ensure_user_first_message(&mut body);
+        let messages = body.get("messages").unwrap().as_array().unwrap();
+        assert_eq!(messages.len(), 2);
     }
 }

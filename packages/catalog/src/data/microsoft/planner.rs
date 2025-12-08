@@ -117,7 +117,7 @@ impl NodeLogic for ListMyPlansNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("plans", "Plans", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<PlannerPlan>>();
+            .set_schema::<PlannerPlan>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -224,7 +224,7 @@ impl NodeLogic for GetPlanNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/planner/plans/{}",
                 plan_id
             ))
@@ -302,7 +302,7 @@ impl NodeLogic for ListPlanTasksNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("tasks", "Tasks", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<PlannerTask>>();
+            .set_schema::<PlannerTask>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -320,7 +320,7 @@ impl NodeLogic for ListPlanTasksNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/planner/plans/{}/tasks",
                 plan_id
             ))
@@ -397,7 +397,7 @@ impl NodeLogic for ListPlanBucketsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("buckets", "Buckets", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<PlannerBucket>>();
+            .set_schema::<PlannerBucket>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -415,7 +415,7 @@ impl NodeLogic for ListPlanBucketsNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/planner/plans/{}/buckets",
                 plan_id
             ))
@@ -681,7 +681,7 @@ impl NodeLogic for UpdatePlannerTaskNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://graph.microsoft.com/v1.0/planner/tasks/{}",
                 task_id
             ))
@@ -853,7 +853,7 @@ impl NodeLogic for ListMyTasksNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("tasks", "Tasks", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<PlannerTask>>();
+            .set_schema::<PlannerTask>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 

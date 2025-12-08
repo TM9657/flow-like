@@ -61,7 +61,8 @@ cron = "0.15.0"
 chrono = "0.4"
 axum = "0.8.6"
 tower = "0.5.2"
-chrono-tz = "0.10.4"
+chrono-tz.workspace = true
+mimalloc.workspace = true
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2.3.4", features = ["deep-link"] }

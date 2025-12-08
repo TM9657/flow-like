@@ -11,6 +11,7 @@ import type {
 	IStoredOAuthToken,
 } from "../lib/oauth/types";
 import type { IBoard } from "../lib/schema/flow/board";
+import type { IHub } from "../lib/schema/hub/hub";
 
 export interface OAuthExecutionState {
 	/** Whether OAuth consent is pending */
@@ -26,6 +27,8 @@ export interface OAuthExecutionState {
 export interface UseOAuthExecutionOptions {
 	/** OAuth runtime for platform-specific operations */
 	runtime: IOAuthRuntime;
+	/** Optional hub configuration for OAuth provider resolution */
+	hub?: IHub;
 }
 
 export interface UseOAuthExecutionResult {
@@ -69,34 +72,45 @@ export function useOAuthExecution(
 		[options.runtime],
 	);
 
-	const checkBoardOAuth = useCallback(async (board: IBoard) => {
-		const result = await checkOAuthTokens(board, oauthTokenStore);
+	const checkBoardOAuth = useCallback(
+		async (board: IBoard) => {
+			const result = await checkOAuthTokens(
+				board,
+				oauthTokenStore,
+				options.hub,
+				{
+					refreshToken: oauthService.refreshToken.bind(oauthService),
+				},
+			);
 
-		if (result.missingProviders.length > 0) {
+			if (result.missingProviders.length > 0) {
+				setState({
+					isPending: true,
+					missingProviders: result.missingProviders,
+					authorizingProvider: null,
+					deviceFlowProvider: null,
+				});
+				return {
+					tokens: undefined,
+					missingProviders: result.missingProviders,
+				};
+			}
+
 			setState({
-				isPending: true,
-				missingProviders: result.missingProviders,
+				isPending: false,
+				missingProviders: [],
 				authorizingProvider: null,
 				deviceFlowProvider: null,
 			});
+
 			return {
-				tokens: undefined,
-				missingProviders: result.missingProviders,
+				tokens:
+					Object.keys(result.tokens).length > 0 ? result.tokens : undefined,
+				missingProviders: [],
 			};
-		}
-
-		setState({
-			isPending: false,
-			missingProviders: [],
-			authorizingProvider: null,
-			deviceFlowProvider: null,
-		});
-
-		return {
-			tokens: Object.keys(result.tokens).length > 0 ? result.tokens : undefined,
-			missingProviders: [],
-		};
-	}, []);
+		},
+		[options.hub, oauthService],
+	);
 
 	const authorizeProvider = useCallback(
 		async (providerId: string) => {

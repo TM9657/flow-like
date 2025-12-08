@@ -20,6 +20,7 @@ import type {
 	IStoredOAuthToken,
 } from "../../lib/oauth/types";
 import type { IBoard } from "../../lib/schema/flow/board";
+import type { IHub } from "../../lib/schema/hub/hub";
 import { DeviceFlowDialog } from "./device-flow-dialog";
 import { OAuthConsentDialog } from "./oauth-consent-dialog";
 
@@ -28,6 +29,7 @@ export interface OAuthExecutionContextValue {
 		board: IBoard,
 		executor: (tokens?: Record<string, IOAuthToken>) => Promise<T>,
 	) => Promise<T>;
+	handleOAuthCallback: (providerId: string, token: IStoredOAuthToken) => void;
 }
 
 const OAuthExecutionContext = createContext<OAuthExecutionContextValue | null>(
@@ -67,6 +69,7 @@ export interface OAuthExecutionProviderProps {
 	runtime: IOAuthRuntime;
 	tokenStore: IOAuthTokenStoreWithPending;
 	consentStore: IOAuthConsentStore;
+	hub?: IHub;
 	onOAuthCallback?: (providerId: string, token: IStoredOAuthToken) => void;
 	providerCacheRef?: React.MutableRefObject<Map<string, IOAuthProvider>>;
 }
@@ -77,6 +80,7 @@ export function OAuthExecutionProvider({
 	runtime,
 	tokenStore,
 	consentStore,
+	hub,
 	onOAuthCallback,
 	providerCacheRef,
 }: OAuthExecutionProviderProps) {
@@ -125,13 +129,30 @@ export function OAuthExecutionProvider({
 			setPendingAutoConsent(remainingProviders);
 
 			const existingToken = await tokenStore.getToken(provider.id);
-			if (existingToken && !tokenStore.isExpired(existingToken)) {
+			const requiredScopes = provider.merged_scopes ?? provider.scopes ?? [];
+
+			// Check if token exists, is not expired, AND has all required scopes
+			const tokenHasAllScopes =
+				existingToken &&
+				!tokenStore.isExpired(existingToken) &&
+				requiredScopes.every((scope: string) =>
+					existingToken.scopes?.includes(scope),
+				);
+
+			if (tokenHasAllScopes) {
 				setAuthorizedProviders((prev) => {
 					const next = new Set(prev);
 					next.add(provider.id);
 					return next;
 				});
 				return;
+			}
+
+			// Token is missing or expired or missing scopes - need to reauthorize
+			if (existingToken && !tokenStore.isExpired(existingToken)) {
+				console.log(
+					`[OAuth] Auto-consent: Token for ${provider.id} is missing scopes. Reauthorizing...`,
+				);
 			}
 
 			if (provider.use_device_flow && provider.device_auth_url) {
@@ -175,17 +196,45 @@ export function OAuthExecutionProvider({
 			setCurrentAppId(appId);
 			setPendingExecution({ appId, boardId, nodeId, payload });
 
-			const consentedIds = await consentStore.getConsentedProviderIds(appId);
-
 			const autoConsentProviders: IOAuthProvider[] = [];
 			const needsDialogProviders: IOAuthProvider[] = [];
 			const hasTokenNeedsConsent: Set<string> = new Set();
+			const needsScopeUpgrade: Set<string> = new Set();
 
 			for (const provider of allMissing) {
-				if (consentedIds.has(provider.id)) {
+				const existingToken = await tokenStore.getToken(provider.id);
+				const requiredScopes = provider.merged_scopes ?? provider.scopes ?? [];
+
+				// Check if token exists but is missing required scopes
+				const tokenMissingScopes =
+					existingToken &&
+					!tokenStore.isExpired(existingToken) &&
+					requiredScopes.some(
+						(scope: string) => !existingToken.scopes?.includes(scope),
+					);
+
+				// Check if consent exists but is missing required scopes (scope-aware consent check)
+				const hasConsentWithRequiredScopes =
+					await consentStore.hasConsentWithScopes(
+						appId,
+						provider.id,
+						requiredScopes,
+					);
+
+				if (tokenMissingScopes) {
+					// Token exists but is missing scopes - force reauthorization regardless of consent
+					console.log(
+						`[OAuth] Provider ${provider.id} needs scope upgrade. Required:`,
+						requiredScopes,
+						"Has:",
+						existingToken.scopes,
+					);
+					needsScopeUpgrade.add(provider.id);
+					needsDialogProviders.push(provider);
+				} else if (hasConsentWithRequiredScopes) {
+					// User previously consented AND consent covers all required scopes
 					autoConsentProviders.push(provider);
 				} else {
-					const existingToken = await tokenStore.getToken(provider.id);
 					if (existingToken && !tokenStore.isExpired(existingToken)) {
 						hasTokenNeedsConsent.add(provider.id);
 						needsDialogProviders.push(provider);
@@ -292,7 +341,9 @@ export function OAuthExecutionProvider({
 			board: IBoard,
 			executor: (tokens?: Record<string, IOAuthToken>) => Promise<T>,
 		): Promise<T> => {
-			const result = await checkOAuthTokens(board, tokenStore);
+			const result = await checkOAuthTokens(board, tokenStore, hub, {
+				refreshToken: oauthService.refreshToken.bind(oauthService),
+			});
 
 			if (result.missingProviders.length === 0) {
 				const tokens =
@@ -305,7 +356,7 @@ export function OAuthExecutionProvider({
 
 			throw new Error("OAuth authorization required");
 		},
-		[tokenStore],
+		[tokenStore, hub, oauthService],
 	);
 
 	// Register callback handler for OAuth callbacks
@@ -322,7 +373,12 @@ export function OAuthExecutionProvider({
 	);
 
 	return (
-		<OAuthExecutionContext.Provider value={{ withOAuthCheck }}>
+		<OAuthExecutionContext.Provider
+			value={{
+				withOAuthCheck,
+				handleOAuthCallback: handleOAuthCallbackInternal,
+			}}
+		>
 			{children}
 			<OAuthConsentDialog
 				open={isDialogOpen}

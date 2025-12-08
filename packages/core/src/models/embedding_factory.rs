@@ -4,7 +4,6 @@ use flow_like_model_provider::{
     embedding::{EmbeddingModelLogic, openai::OpenAIEmbeddingModel},
     image_embedding::ImageEmbeddingModelLogic,
 };
-use flow_like_types::sync::Mutex;
 
 use crate::{bit::Bit, state::FlowLikeState};
 
@@ -37,9 +36,9 @@ impl EmbeddingFactory {
     pub async fn build_text(
         &mut self,
         bit: &Bit,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<Arc<dyn EmbeddingModelLogic>> {
-        let provider_config = app_state.lock().await.model_provider_config.clone();
+        let provider_config = app_state.model_provider_config.clone();
 
         let provider = bit
             .try_to_embedding_provider()
@@ -85,7 +84,7 @@ impl EmbeddingFactory {
     pub async fn build_image(
         &mut self,
         bit: &Bit,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<Arc<dyn ImageEmbeddingModelLogic>> {
         let provider = bit.try_to_image_embedding();
         if provider.is_none() {

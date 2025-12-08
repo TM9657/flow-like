@@ -33,6 +33,46 @@ export interface IUserInfo {
 	updated_at?: string;
 }
 
+export interface IPriceInfo {
+	amount: number;
+	currency: string;
+	interval?: string;
+}
+
+export interface ITierInfo {
+	name: string;
+	product_id?: string;
+	max_non_visible_projects: number;
+	max_remote_executions: number;
+	execution_tier: string;
+	max_total_size: number;
+	max_llm_cost: number;
+	max_llm_calls?: number;
+	llm_tiers: string[];
+	price?: IPriceInfo;
+}
+
+export interface IPricingResponse {
+	current_tier: string;
+	tiers: Record<string, ITierInfo>;
+}
+
+export interface ISubscribeRequest {
+	tier: string;
+	success_url: string;
+	cancel_url: string;
+}
+
+export interface ISubscribeResponse {
+	checkout_url: string;
+	session_id: string;
+}
+
+export interface IBillingSession {
+	session_id: string;
+	url: string;
+}
+
 export interface IUserState {
 	lookupUser(userId: string): Promise<IUserLookup>;
 	searchUsers(query: string): Promise<IUserLookup[]>;
@@ -61,4 +101,7 @@ export interface IUserState {
 		}[]
 	>;
 	deletePAT(id: string): Promise<void>;
+	getPricing(): Promise<IPricingResponse>;
+	createSubscription(request: ISubscribeRequest): Promise<ISubscribeResponse>;
+	getBillingSession(): Promise<IBillingSession>;
 }

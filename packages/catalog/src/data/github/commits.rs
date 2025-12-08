@@ -201,7 +201,7 @@ impl NodeLogic for ListGitHubCommitsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GitHubCommit>>();
+        .set_schema::<GitHubCommit>();
 
         node.add_output_pin(
             "count",

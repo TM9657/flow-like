@@ -77,7 +77,7 @@ impl NodeLogic for FindLLMNode {
         let mut preference: BitModelPreference = context.evaluate_pin("preferences").await?;
         preference.enforce_bounds();
 
-        let http_client = context.app_state.lock().await.http_client.clone();
+        let http_client = context.app_state.http_client.clone();
         let bit = context
             .profile
             .get_best_model(&preference, false, false, http_client)

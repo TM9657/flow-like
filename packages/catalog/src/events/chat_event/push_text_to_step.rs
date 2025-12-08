@@ -2,7 +2,6 @@ use flow_like::{
     flow::{
         execution::context::ExecutionContext,
         node::{Node, NodeLogic},
-        pin::PinOptions,
         variable::VariableType,
     },
     state::FlowLikeState,
@@ -65,7 +64,7 @@ impl NodeLogic for PushTextToStepNode {
         {
             let mut mutable_reasoning = cached_response.reasoning.lock().await;
             if !mutable_reasoning.current_message.is_empty() {
-                mutable_reasoning.current_message.push_str(" ");
+                mutable_reasoning.current_message.push(' ');
             }
             mutable_reasoning.current_message.push_str(&text);
         }

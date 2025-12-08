@@ -47,7 +47,7 @@ impl NodeLogic for CreateGoogleMeetNode {
             "Create a new Google Meet meeting",
             "Data/Google/Meet",
         );
-        node.add_icon("/flow/icons/video.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -269,7 +269,7 @@ impl NodeLogic for CreateGoogleMeetNode {
 }
 
 fn calculate_end_time(start_time: &str, duration_minutes: i64) -> String {
-    use chrono::{DateTime, Duration, FixedOffset};
+    use chrono::{DateTime, Duration};
 
     if let Ok(dt) = DateTime::parse_from_rfc3339(start_time) {
         let end = dt + Duration::minutes(duration_minutes);
@@ -307,7 +307,7 @@ impl NodeLogic for CreateInstantMeetNode {
             "Create an instant Google Meet meeting starting now",
             "Data/Google/Meet",
         );
-        node.add_icon("/flow/icons/video.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -457,7 +457,7 @@ impl NodeLogic for GetGoogleMeetDetailsNode {
             "Get details of a Google Meet meeting from its calendar event",
             "Data/Google/Meet",
         );
-        node.add_icon("/flow/icons/video.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -526,7 +526,7 @@ impl NodeLogic for GetGoogleMeetDetailsNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events/{}",
                 urlencoding::encode(&calendar_id),
                 urlencoding::encode(&event_id)
@@ -630,7 +630,7 @@ impl NodeLogic for AddMeetToEventNode {
             "Add Google Meet to an existing calendar event",
             "Data/Google/Meet",
         );
-        node.add_icon("/flow/icons/video.svg");
+        node.add_icon("/flow/icons/google.svg");
 
         node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
         node.add_input_pin(
@@ -697,7 +697,7 @@ impl NodeLogic for AddMeetToEventNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://www.googleapis.com/calendar/v3/calendars/{}/events/{}",
                 urlencoding::encode(&calendar_id),
                 urlencoding::encode(&event_id)

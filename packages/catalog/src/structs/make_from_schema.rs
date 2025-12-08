@@ -40,10 +40,10 @@ fn resolve_ref<'a>(ref_path: &str, root_schema: &'a Value) -> Option<&'a Value> 
 /// Resolve a schema that might contain $ref, anyOf, or be direct
 fn resolve_schema<'a>(schema: &'a Value, root_schema: &'a Value) -> &'a Value {
     // Handle $ref
-    if let Some(ref_path) = schema.get("$ref").and_then(|r| r.as_str()) {
-        if let Some(resolved) = resolve_ref(ref_path, root_schema) {
-            return resolved;
-        }
+    if let Some(ref_path) = schema.get("$ref").and_then(|r| r.as_str())
+        && let Some(resolved) = resolve_ref(ref_path, root_schema)
+    {
+        return resolved;
     }
 
     // Handle anyOf (often used for nullable types)
@@ -97,18 +97,18 @@ fn get_schema_type(schema: &Value, root_schema: &Value) -> (VariableType, ValueT
         // Handle array of types (e.g., ["string", "null"])
         if let Some(types) = type_val.as_array() {
             for t in types {
-                if let Some(ts) = t.as_str() {
-                    if ts != "null" {
-                        return match ts {
-                            "boolean" => (VariableType::Boolean, ValueType::Normal),
-                            "integer" => (VariableType::Integer, ValueType::Normal),
-                            "number" => (VariableType::Float, ValueType::Normal),
-                            "string" => (VariableType::String, ValueType::Normal),
-                            "array" => (VariableType::Generic, ValueType::Array),
-                            "object" => (VariableType::Struct, ValueType::Normal),
-                            _ => (VariableType::Generic, ValueType::Normal),
-                        };
-                    }
+                if let Some(ts) = t.as_str()
+                    && ts != "null"
+                {
+                    return match ts {
+                        "boolean" => (VariableType::Boolean, ValueType::Normal),
+                        "integer" => (VariableType::Integer, ValueType::Normal),
+                        "number" => (VariableType::Float, ValueType::Normal),
+                        "string" => (VariableType::String, ValueType::Normal),
+                        "array" => (VariableType::Generic, ValueType::Array),
+                        "object" => (VariableType::Struct, ValueType::Normal),
+                        _ => (VariableType::Generic, ValueType::Normal),
+                    };
                 }
             }
         }
@@ -221,29 +221,20 @@ impl NodeLogic for MakeStructFromSchemaNode {
         let mut result: HashMap<String, Value> = HashMap::new();
 
         // Get all input pins and build the struct
-        let pins = context.node.pins.clone();
-        for (_id, pin_ref) in pins {
-            let (pin_name, data_type, pin_type) = {
-                let guard = pin_ref.lock().await;
-                let pin = guard.pin.lock().await;
-                (
-                    pin.name.clone(),
-                    pin.data_type.clone(),
-                    pin.pin_type.clone(),
-                )
-            };
-
+        for (_id, pin) in context.node.pins.iter() {
             // Skip output pins and execution pins
-            if pin_type != PinType::Input || data_type == VariableType::Execution {
+            if pin.pin_type != PinType::Input || pin.data_type == VariableType::Execution {
                 continue;
             }
+
+            let pin_name = &pin.name;
 
             // Extract field name from the prefixed pin name
             let field_name = pin_name
                 .strip_prefix(MAKE_STRUCT_PIN_PREFIX)
-                .unwrap_or(&pin_name);
+                .unwrap_or(pin_name);
 
-            let value: Value = context.evaluate_pin_ref(pin_ref).await?;
+            let value: Value = context.evaluate_pin_ref(pin.clone()).await?;
             result.insert(field_name.to_string(), value);
         }
 
@@ -286,7 +277,7 @@ impl NodeLogic for MakeStructFromSchemaNode {
                 if connected_pin
                     .options
                     .as_ref()
-                    .map_or(false, |o| o.enforce_schema == Some(true))
+                    .is_some_and(|o| o.enforce_schema == Some(true))
                 {
                     node.error = Some("Connected pin enforces schema but has none".to_string());
                 }

@@ -8,10 +8,10 @@ use tauri::{AppHandle, Manager};
 use crate::{event_bus::EventBus, profile::UserProfile, settings::Settings};
 
 #[derive(Clone)]
-pub struct TauriFlowLikeState(pub Arc<Mutex<FlowLikeState>>);
+pub struct TauriFlowLikeState(pub Arc<FlowLikeState>);
 impl TauriFlowLikeState {
     #[inline]
-    pub async fn construct(app_handle: &AppHandle) -> anyhow::Result<Arc<Mutex<FlowLikeState>>> {
+    pub async fn construct(app_handle: &AppHandle) -> anyhow::Result<Arc<FlowLikeState>> {
         app_handle
             .try_state::<TauriFlowLikeState>()
             .map(|state| state.0.clone())
@@ -21,7 +21,7 @@ impl TauriFlowLikeState {
     #[inline]
     pub async fn http_client(app_handle: &AppHandle) -> anyhow::Result<Arc<HTTPClient>> {
         let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
-        let http_client = flow_like_state.lock().await.http_client.clone();
+        let http_client = flow_like_state.http_client.clone();
         Ok(http_client)
     }
 
@@ -31,8 +31,6 @@ impl TauriFlowLikeState {
     ) -> anyhow::Result<Arc<dyn ObjectStore>> {
         let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
         let project_store = flow_like_state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -50,8 +48,6 @@ impl TauriFlowLikeState {
     ) -> anyhow::Result<Arc<dyn ObjectStore>> {
         let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
         let project_store = flow_like_state
-            .lock()
-            .await
             .config
             .read()
             .await

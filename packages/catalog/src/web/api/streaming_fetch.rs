@@ -105,7 +105,7 @@ impl NodeLogic for StreamingHttpFetchNode {
         let request: HttpRequest = context.evaluate_pin("request").await?;
         let client = reqwest::Client::new();
         let connected_nodes = Arc::new(DashMap::new());
-        let connected = streaming_pin.lock().await.get_connected_nodes().await;
+        let connected = streaming_pin.get_connected_nodes();
         for node in connected {
             let context = Arc::new(Mutex::new(context.create_sub_context(&node).await));
             connected_nodes.insert(node.node.lock().await.id.clone(), context);
@@ -121,11 +121,7 @@ impl NodeLogic for StreamingHttpFetchNode {
             Box::pin(async move {
                 let mut recursion_guard = AHashSet::new();
                 recursion_guard.insert(parent_node_id.clone());
-                streaming_response_pin
-                    .lock()
-                    .await
-                    .set_value(json!(response))
-                    .await;
+                streaming_response_pin.set_value(json!(response)).await;
                 for entry in connected_nodes.iter() {
                     let (_id, context) = entry.pair();
                     let mut context = context.lock().await;

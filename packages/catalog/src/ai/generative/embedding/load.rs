@@ -74,7 +74,7 @@ impl NodeLogic for LoadModelNode {
         }
 
         let app_state = context.app_state.clone();
-        let model_factory = context.app_state.lock().await.embedding_factory.clone();
+        let model_factory = context.app_state.embedding_factory.clone();
 
         let model = match bit.bit_type {
             BitTypes::Embedding => {

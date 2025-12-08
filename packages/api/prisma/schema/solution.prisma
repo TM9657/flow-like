@@ -1,0 +1,93 @@
+enum SolutionStatus {
+    AWAITING_DEPOSIT
+    PENDING_REVIEW
+    IN_QUEUE
+    ONBOARDING_DONE
+    IN_PROGRESS
+    DELIVERED
+    AWAITING_PAYMENT
+    PAID
+    CANCELLED
+    REFUNDED
+}
+
+enum SolutionPricingTier {
+    STANDARD
+    APPSTORE
+}
+
+model SolutionRequest {
+    id String @id
+
+    name        String
+    email       String
+    company     String
+    description String
+
+    applicationType String
+    dataSecurity    String
+    exampleInput    String
+    expectedOutput  String
+    userCount       String
+    userType        String
+    technicalLevel  String
+    timeline        String?
+    additionalNotes String?
+
+    pricingTier SolutionPricingTier
+    paidDeposit Boolean             @default(false)
+
+    files       Json?
+    storageKey  String?
+
+    status SolutionStatus @default(PENDING_REVIEW)
+
+    stripeCheckoutSessionId String? @unique
+    stripePaymentIntentId   String? @unique
+    stripeSetupIntentId     String? @unique
+
+    totalCents     BigInt
+    depositCents   BigInt  @default(0)
+    remainderCents BigInt
+
+    priority Boolean @default(false)
+
+    adminNotes  String?
+    assignedTo  String?
+    deliveredAt DateTime?
+
+    trackingToken String @unique
+
+    logs SolutionLog[]
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([email])
+    @@index([status])
+    @@index([createdAt])
+    @@index([trackingToken])
+}
+
+model SolutionLog {
+    id        String   @id
+    solutionId String
+    solution   SolutionRequest @relation(fields: [solutionId], references: [id], onDelete: Cascade)
+
+    action    String
+    details   String?
+    actor     String?
+
+    createdAt DateTime @default(now())
+
+    @@index([solutionId])
+    @@index([createdAt])
+}
+
+model StripeEvent {
+    id              String   @id
+    eventType       String
+    processedAt     DateTime @default(now())
+
+    @@index([eventType])
+}

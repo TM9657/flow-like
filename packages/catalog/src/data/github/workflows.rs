@@ -121,7 +121,7 @@ impl NodeLogic for ListWorkflowsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GitHubWorkflow>>();
+        .set_schema::<GitHubWorkflow>();
         node.add_output_pin(
             "error_message",
             "Error Message",
@@ -407,7 +407,7 @@ impl NodeLogic for ListWorkflowRunsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GitHubWorkflowRun>>();
+        .set_schema::<GitHubWorkflowRun>();
         node.add_output_pin(
             "error_message",
             "Error Message",

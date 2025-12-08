@@ -110,7 +110,7 @@ impl NodeLogic for ListGitHubBranchesNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<GitHubBranch>>();
+        .set_schema::<GitHubBranch>();
 
         node.add_output_pin(
             "count",

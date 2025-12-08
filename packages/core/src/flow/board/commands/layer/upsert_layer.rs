@@ -1,5 +1,5 @@
 use flow_like_types::async_trait;
-use flow_like_types::sync::Mutex;
+
 use schemars::JsonSchema;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -35,7 +35,7 @@ impl Command for UpsertLayerCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _state: Arc<Mutex<FlowLikeState>>,
+        _state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         let nodes_set: HashSet<String> = HashSet::from_iter(self.node_ids.iter().cloned());
 
@@ -100,7 +100,7 @@ impl Command for UpsertLayerCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         let mut old_layer_id = None;
         if let Some(old_layer) = self.old_layer.take() {

@@ -125,7 +125,7 @@ impl NodeLogic for ListNotebooksNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("notebooks", "Notebooks", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<OneNoteNotebook>>();
+            .set_schema::<OneNoteNotebook>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -323,7 +323,7 @@ impl NodeLogic for ListSectionsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("sections", "Sections", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<OneNoteSection>>();
+            .set_schema::<OneNoteSection>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -341,7 +341,7 @@ impl NodeLogic for ListSectionsNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/onenote/notebooks/{}/sections",
                 notebook_id
             ))
@@ -450,7 +450,7 @@ impl NodeLogic for CreateSectionNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://graph.microsoft.com/v1.0/me/onenote/notebooks/{}/sections",
                 notebook_id
             ))
@@ -535,7 +535,7 @@ impl NodeLogic for ListPagesNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("pages", "Pages", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<OneNotePage>>();
+            .set_schema::<OneNotePage>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -553,7 +553,7 @@ impl NodeLogic for ListPagesNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/onenote/sections/{}/pages",
                 section_id
             ))
@@ -674,7 +674,7 @@ impl NodeLogic for CreatePageNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://graph.microsoft.com/v1.0/me/onenote/sections/{}/pages",
                 section_id
             ))
@@ -774,7 +774,7 @@ impl NodeLogic for GetPageContentNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/onenote/pages/{}/content",
                 page_id
             ))
@@ -859,7 +859,7 @@ impl NodeLogic for DeletePageNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .delete(&format!(
+            .delete(format!(
                 "https://graph.microsoft.com/v1.0/me/onenote/pages/{}",
                 page_id
             ))

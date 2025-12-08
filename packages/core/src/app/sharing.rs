@@ -7,8 +7,8 @@ use flow_like_storage::{
     Path, blake3,
     object_store::{ObjectStore, PutPayload},
 };
+use flow_like_types::anyhow;
 use flow_like_types::{Bytes, bail, rand::TryRngCore, tokio::task};
-use flow_like_types::{anyhow, sync::Mutex};
 use futures::{StreamExt, TryStreamExt};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -573,7 +573,7 @@ impl App {
     }
 
     pub async fn import_archive(
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
         source_file: PathBuf,
         password: Option<String>,
     ) -> flow_like_types::Result<Self> {
@@ -993,7 +993,7 @@ mod tests {
     use std::{fs::File, io::Read, sync::Arc, time::SystemTime};
     use tempfile::NamedTempFile;
 
-    fn setup_state() -> (Arc<Mutex<FlowLikeState>>, Arc<InMemory>, Arc<InMemory>) {
+    fn setup_state() -> (Arc<FlowLikeState>, Arc<InMemory>, Arc<InMemory>) {
         let mut config = FlowLikeConfig::new();
         let meta_store = Arc::new(InMemory::new());
         let storage_store = Arc::new(InMemory::new());
@@ -1001,10 +1001,10 @@ mod tests {
         config.register_app_storage_store(FlowLikeStore::Memory(storage_store.clone()));
         let (http_client, _rx) = HTTPClient::new();
         let state = FlowLikeState::new(config, http_client);
-        (Arc::new(Mutex::new(state)), meta_store, storage_store)
+        (Arc::new(state), meta_store, storage_store)
     }
 
-    fn make_app(id: &str, state: Arc<Mutex<FlowLikeState>>) -> App {
+    fn make_app(id: &str, state: Arc<FlowLikeState>) -> App {
         App {
             id: id.to_string(),
             status: AppStatus::Active,

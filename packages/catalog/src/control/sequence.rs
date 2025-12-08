@@ -47,7 +47,7 @@ impl NodeLogic for SequenceNode {
             let exec_out_pins = context.get_pins_by_name("exec_out").await?;
             let mut pin_indices = Vec::with_capacity(exec_out_pins.len());
             for pin in exec_out_pins {
-                let index = pin.lock().await.pin.lock().await.index;
+                let index = pin.index;
                 pin_indices.push((pin.clone(), index));
             }
             pin_indices
@@ -61,10 +61,7 @@ impl NodeLogic for SequenceNode {
             for (pin, _) in pin_indices {
                 let _ = context.activate_exec_pin_ref(&pin).await;
 
-                let connected_nodes = {
-                    let guard = pin.lock().await;
-                    guard.get_connected_nodes().await
-                };
+                let connected_nodes = pin.get_connected_nodes();
 
                 for node in connected_nodes {
                     let key = std::sync::Arc::as_ptr(&node) as usize;

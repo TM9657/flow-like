@@ -2,7 +2,6 @@ use flow_like_types::{FromProto, ToProto};
 
 use crate::flow::{
     node::{FnRefs, Node, NodeScores},
-    oauth::OAuthProvider,
     pin::Pin,
 };
 
@@ -52,50 +51,6 @@ impl FromProto<flow_like_types::proto::FnRefs> for FnRefs {
     }
 }
 
-impl ToProto<flow_like_types::proto::OAuthProvider> for OAuthProvider {
-    fn to_proto(&self) -> flow_like_types::proto::OAuthProvider {
-        flow_like_types::proto::OAuthProvider {
-            id: self.id.clone(),
-            name: self.name.clone(),
-            auth_url: self.auth_url.clone(),
-            token_url: self.token_url.clone(),
-            client_id: self.client_id.clone(),
-            client_secret: self.client_secret.clone(),
-            scopes: self.scopes.clone(),
-            pkce_required: self.pkce_required,
-            revoke_url: self.revoke_url.clone(),
-            userinfo_url: self.userinfo_url.clone(),
-            oidc_discovery_url: self.oidc_discovery_url.clone(),
-            jwks_url: self.jwks_url.clone(),
-            audience: self.audience.clone(),
-            device_auth_url: self.device_auth_url.clone(),
-            use_device_flow: self.use_device_flow,
-        }
-    }
-}
-
-impl FromProto<flow_like_types::proto::OAuthProvider> for OAuthProvider {
-    fn from_proto(proto: flow_like_types::proto::OAuthProvider) -> Self {
-        OAuthProvider {
-            id: proto.id,
-            name: proto.name,
-            auth_url: proto.auth_url,
-            token_url: proto.token_url,
-            client_id: proto.client_id,
-            client_secret: proto.client_secret,
-            scopes: proto.scopes,
-            pkce_required: proto.pkce_required,
-            revoke_url: proto.revoke_url,
-            userinfo_url: proto.userinfo_url,
-            oidc_discovery_url: proto.oidc_discovery_url,
-            jwks_url: proto.jwks_url,
-            audience: proto.audience,
-            device_auth_url: proto.device_auth_url,
-            use_device_flow: proto.use_device_flow,
-        }
-    }
-}
-
 impl ToProto<flow_like_types::proto::Node> for Node {
     fn to_proto(&self) -> flow_like_types::proto::Node {
         let (coord_x, coord_y, coord_z) = self.coordinates.unwrap_or((0.0, 0.0, 0.0));
@@ -124,11 +79,7 @@ impl ToProto<flow_like_types::proto::Node> for Node {
             event_callback: self.event_callback.unwrap_or(false),
             hash: self.hash,
             fn_refs: self.fn_refs.as_ref().map(|f| f.to_proto()),
-            oauth_providers: self
-                .oauth_providers
-                .as_ref()
-                .map(|providers| providers.iter().map(|p| p.to_proto()).collect())
-                .unwrap_or_default(),
+            oauth_providers: self.oauth_providers.clone().unwrap_or_default(),
             required_oauth_scopes: self
                 .required_oauth_scopes
                 .as_ref()
@@ -184,13 +135,7 @@ impl FromProto<flow_like_types::proto::Node> for Node {
             oauth_providers: if proto.oauth_providers.is_empty() {
                 None
             } else {
-                Some(
-                    proto
-                        .oauth_providers
-                        .into_iter()
-                        .map(OAuthProvider::from_proto)
-                        .collect(),
-                )
+                Some(proto.oauth_providers)
             },
             required_oauth_scopes: if proto.required_oauth_scopes.is_empty() {
                 None

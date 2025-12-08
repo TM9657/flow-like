@@ -33,8 +33,6 @@ async fn presign_meta(
 ) -> Result<(), TauriFunctionError> {
     let state = TauriFlowLikeState::construct(app_handle).await?;
     let store = state
-        .lock()
-        .await
         .config
         .read()
         .await
@@ -316,8 +314,6 @@ pub async fn push_app_media(
 ) -> Result<String, TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
     let project_store = state
-        .lock()
-        .await
         .config
         .read()
         .await
@@ -383,8 +379,6 @@ pub async fn remove_app_media(
 ) -> Result<(), TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
     let project_store = state
-        .lock()
-        .await
         .config
         .read()
         .await
@@ -439,8 +433,6 @@ pub async fn transform_media(
     println!("Transforming media item: {}", media_item);
     let state = TauriFlowLikeState::construct(&app_handle).await?;
     let project_store = state
-        .lock()
-        .await
         .config
         .read()
         .await

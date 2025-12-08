@@ -104,7 +104,7 @@ impl NodeLogic for ListOneDriveItemsNode {
             VariableType::Struct,
         )
         .set_value_type(ValueType::Array)
-        .set_schema::<Vec<OneDriveItem>>();
+        .set_schema::<OneDriveItem>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -234,7 +234,7 @@ impl NodeLogic for GetOneDriveItemNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}",
                 item_path
             ))
@@ -337,7 +337,7 @@ impl NodeLogic for DownloadOneDriveFileNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}:/content",
                 item_path
             ))
@@ -468,7 +468,7 @@ impl NodeLogic for UploadOneDriveFileNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .put(&format!(
+            .put(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}:/content",
                 file_path
             ))
@@ -700,7 +700,7 @@ impl NodeLogic for DeleteOneDriveItemNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .delete(&format!(
+            .delete(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}",
                 item_path
             ))
@@ -845,7 +845,7 @@ impl NodeLogic for MoveOneDriveItemNode {
         }
 
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}",
                 item_path
             ))
@@ -1011,7 +1011,7 @@ impl NodeLogic for CopyOneDriveItemNode {
         }
 
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root:{}:/copy",
                 item_path
             ))
@@ -1082,7 +1082,7 @@ impl NodeLogic for SearchOneDriveNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("items", "Items", "Search results", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<OneDriveItem>>();
+            .set_schema::<OneDriveItem>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -1100,7 +1100,7 @@ impl NodeLogic for SearchOneDriveNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/drive/root/search(q='{}')",
                 urlencoding::encode(&query)
             ))

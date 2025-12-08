@@ -10,6 +10,10 @@ import type {
 	IUserLookup,
 } from "@tm9657/flow-like-ui/state/backend-state/types";
 import type {
+	IBillingSession,
+	IPricingResponse,
+	ISubscribeRequest,
+	ISubscribeResponse,
 	IUserInfo,
 	IUserUpdate,
 } from "@tm9657/flow-like-ui/state/backend-state/user-state";
@@ -215,5 +219,55 @@ export class UserState implements IUserState {
 		);
 
 		return;
+	}
+
+	async getPricing(): Promise<IPricingResponse> {
+		if (!this.backend.profile || !this.backend.auth) {
+			throw new Error("Profile or auth context not available");
+		}
+
+		const result = await fetcher<IPricingResponse>(
+			this.backend.profile,
+			"user/pricing",
+			{ method: "GET" },
+			this.backend.auth,
+		);
+
+		return result;
+	}
+
+	async createSubscription(
+		request: ISubscribeRequest,
+	): Promise<ISubscribeResponse> {
+		if (!this.backend.profile || !this.backend.auth) {
+			throw new Error("Profile or auth context not available");
+		}
+
+		const result = await fetcher<ISubscribeResponse>(
+			this.backend.profile,
+			"user/subscribe",
+			{
+				method: "POST",
+				body: JSON.stringify(request),
+			},
+			this.backend.auth,
+		);
+
+		return result;
+	}
+
+	async getBillingSession(): Promise<IBillingSession> {
+		if (!this.backend.profile || !this.backend.auth) {
+			throw new Error("Profile or auth context not available");
+		}
+
+		const result = await fetcher<IBillingSession>(
+			this.backend.profile,
+			"user/billing",
+			{ method: "GET" },
+			this.backend.auth,
+		);
+
+		return result;
 	}
 }

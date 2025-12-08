@@ -100,7 +100,7 @@ impl NodeLogic for ListTaskListsNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("task_lists", "Task Lists", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<TodoTaskList>>();
+            .set_schema::<TodoTaskList>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -298,7 +298,7 @@ impl NodeLogic for ListTasksNode {
         node.add_output_pin("error", "Error", "", VariableType::Execution);
         node.add_output_pin("tasks", "Tasks", "", VariableType::Struct)
             .set_value_type(ValueType::Array)
-            .set_schema::<Vec<TodoTask>>();
+            .set_schema::<TodoTask>();
         node.add_output_pin("count", "Count", "", VariableType::Integer);
         node.add_output_pin("error_message", "Error Message", "", VariableType::String);
 
@@ -316,7 +316,7 @@ impl NodeLogic for ListTasksNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!(
+            .get(format!(
                 "https://graph.microsoft.com/v1.0/me/todo/lists/{}/tasks",
                 list_id
             ))
@@ -466,7 +466,7 @@ impl NodeLogic for CreateTaskNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "https://graph.microsoft.com/v1.0/me/todo/lists/{}/tasks",
                 list_id
             ))
@@ -622,7 +622,7 @@ impl NodeLogic for UpdateTaskNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://graph.microsoft.com/v1.0/me/todo/lists/{}/tasks/{}",
                 list_id, task_id
             ))
@@ -729,7 +729,7 @@ impl NodeLogic for CompleteTaskNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .patch(&format!(
+            .patch(format!(
                 "https://graph.microsoft.com/v1.0/me/todo/lists/{}/tasks/{}",
                 list_id, task_id
             ))
@@ -830,7 +830,7 @@ impl NodeLogic for DeleteTaskNode {
 
         let client = reqwest::Client::new();
         let response = client
-            .delete(&format!(
+            .delete(format!(
                 "https://graph.microsoft.com/v1.0/me/todo/lists/{}/tasks/{}",
                 list_id, task_id
             ))
