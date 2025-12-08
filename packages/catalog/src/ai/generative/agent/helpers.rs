@@ -535,6 +535,10 @@ pub async fn execute_agent_streaming(
         });
     }
 
+    // Deduplicate tools by name, keeping the first occurrence
+    let mut seen_tool_names = std::collections::HashSet::new();
+    tool_definitions.retain(|tool| seen_tool_names.insert(tool.name.clone()));
+
     let (prompt, history_msgs) = history
         .extract_prompt_and_history()
         .map_err(|e| anyhow!("Failed to convert history: {e}"))?;

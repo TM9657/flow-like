@@ -233,6 +233,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	const setQueryParams = useSetQueryParams();
 	const chatRef = useRef<IChatRef>(null);
 	const activeSubscriptions = useRef<string[]>([]);
+	const processedCompletedStreams = useRef<Set<string>>(new Set());
 	const [isSendingFromWelcome, setIsSendingFromWelcome] = useState(false);
 
 	useEffect(() => {
@@ -385,6 +386,14 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		// Check if there's a stream (active or completed) for this session
 		if (!executionEngine.hasStream(streamId)) return;
 
+		// Prevent processing the same completed stream multiple times
+		if (
+			executionEngine.isStreamComplete(streamId) &&
+			processedCompletedStreams.current.has(streamId)
+		) {
+			return;
+		}
+
 		const subscriberId = `chat-reconnect-${sessionIdParameter}`;
 
 		const responseMessage: IMessage = {
@@ -408,15 +417,20 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		// If stream is already complete, save to IndexedDB directly
 		// (chatRef may not be mounted yet since Chat only renders when messages exist)
 		if (executionEngine.isStreamComplete(streamId)) {
+			// Mark as processed before saving to prevent duplicate processing
+			processedCompletedStreams.current.add(streamId);
+
 			const accumulatedEvents = executionEngine.getAccumulatedEvents(streamId);
 			if (accumulatedEvents.length > 0) {
+				// Pass done: false so that chat_stream_partial and chat_stream events are processed
+				// to extract the message content from the accumulated events
 				const result = processChatEvents(accumulatedEvents, {
 					intermediateResponse,
 					responseMessage,
 					attachments,
 					tmpLocalState: null,
 					tmpGlobalState: null,
-					done: true,
+					done: false,
 					appId,
 					eventId: event.id,
 					sessionId: sessionIdParameter,
@@ -473,14 +487,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		return () => {
 			executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
 		};
-	}, [
-		sessionIdParameter,
-		appId,
-		event.id,
-		event.name,
-		executionEngine,
-		messages,
-	]);
+	}, [sessionIdParameter, appId, event.id, event.name, executionEngine, messages]);
 
 	const handleSendMessage: ISendMessageFunction = useCallback(
 		async (
