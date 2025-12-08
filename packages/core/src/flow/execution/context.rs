@@ -7,6 +7,7 @@ use crate::{
     flow::{
         board::ExecutionStage,
         node::{Node, NodeState},
+        oauth::OAuthToken,
         pin::PinType,
         utils::{evaluate_pin_value, evaluate_pin_value_reference},
         variable::{Variable, VariableType},
@@ -43,7 +44,7 @@ pub struct ExecutionContextCache {
 impl ExecutionContextCache {
     pub async fn new(
         run: &Weak<Mutex<Run>>,
-        state: &Arc<Mutex<FlowLikeState>>,
+        state: &Arc<FlowLikeState>,
         node_id: &str,
     ) -> Option<Self> {
         let (app_id, board_dir, board_id, sub) = match run.upgrade() {
@@ -57,7 +58,7 @@ impl ExecutionContextCache {
             None => return None,
         };
 
-        let stores = state.lock().await.config.read().await.stores.clone();
+        let stores = state.config.read().await.stores.clone();
 
         Some(ExecutionContextCache {
             stores,
@@ -67,6 +68,24 @@ impl ExecutionContextCache {
             node_id: node_id.to_string(),
             sub,
         })
+    }
+
+    /// Create ExecutionContextCache from cached RunMeta to avoid locking
+    pub async fn from_meta(
+        meta: &super::RunMeta,
+        state: &Arc<FlowLikeState>,
+        node_id: &str,
+    ) -> Self {
+        let stores = state.config.read().await.stores.clone();
+
+        ExecutionContextCache {
+            stores,
+            app_id: meta.app_id.clone(),
+            board_dir: meta.board_dir.clone(),
+            board_id: meta.board_id.clone(),
+            node_id: node_id.to_string(),
+            sub: meta.sub.clone(),
+        }
     }
 
     pub fn get_user_dir(&self, node: bool) -> flow_like_types::Result<Path> {
@@ -138,9 +157,9 @@ pub struct ExecutionContext {
     pub profile: Arc<Profile>,
     pub node: Arc<InternalNode>,
     pub sub_traces: Vec<Trace>,
-    pub app_state: Arc<Mutex<FlowLikeState>>,
+    pub app_state: Arc<FlowLikeState>,
     pub variables: Arc<Mutex<AHashMap<String, Variable>>>,
-    pub started_by: Option<Vec<Arc<Mutex<InternalPin>>>>,
+    pub started_by: Option<Vec<Arc<InternalPin>>>,
     pub cache: Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,
     pub stage: ExecutionStage,
     pub log_level: LogLevel,
@@ -154,6 +173,7 @@ pub struct ExecutionContext {
     pub context_state: BTreeMap<String, Value>,
     pub context_pin_overrides: Option<BTreeMap<String, Value>>,
     pub result: Option<Value>,
+    pub oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
     run_id: String,
     state: NodeState,
     callback: InterComCallback,
@@ -163,7 +183,7 @@ impl ExecutionContext {
     pub async fn new(
         nodes: Arc<AHashMap<String, Arc<InternalNode>>>,
         run: &Weak<Mutex<Run>>,
-        state: &Arc<Mutex<FlowLikeState>>,
+        state: &Arc<FlowLikeState>,
         node: &Arc<InternalNode>,
         variables: &Arc<Mutex<AHashMap<String, Variable>>>,
         cache: &Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,
@@ -174,12 +194,11 @@ impl ExecutionContext {
         completion_callbacks: Arc<RwLock<Vec<EventTrigger>>>,
         credentials: Option<Arc<SharedCredentials>>,
         token: Option<String>,
+        oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
     ) -> Self {
-        let (id, execution_cache) = {
-            let node_id = node.node.lock().await.id.clone();
-            let execution_cache = ExecutionContextCache::new(run, state, &node_id).await;
-            (node_id, execution_cache)
-        };
+        // Use cached node_id instead of locking
+        let id = node.node_id().to_string();
+        let execution_cache = ExecutionContextCache::new(run, state, &id).await;
 
         let mut trace = Trace::new(&id);
         if log_level == LogLevel::Debug {
@@ -220,11 +239,70 @@ impl ExecutionContext {
             context_pin_overrides: None,
             result: None,
             delegated: false,
+            oauth_tokens,
+        }
+    }
+
+    /// Create ExecutionContext using cached RunMeta to avoid locking Run
+    pub async fn with_meta(
+        nodes: Arc<AHashMap<String, Arc<InternalNode>>>,
+        run: &Weak<Mutex<Run>>,
+        run_meta: &super::RunMeta,
+        state: &Arc<FlowLikeState>,
+        node: &Arc<InternalNode>,
+        variables: &Arc<Mutex<AHashMap<String, Variable>>>,
+        cache: &Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,
+        log_level: LogLevel,
+        stage: ExecutionStage,
+        profile: Arc<Profile>,
+        callback: InterComCallback,
+        completion_callbacks: Arc<RwLock<Vec<EventTrigger>>>,
+        credentials: Option<Arc<SharedCredentials>>,
+        token: Option<String>,
+        oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
+    ) -> Self {
+        // Use cached node_id instead of locking
+        let id = node.node_id().to_string();
+        // Use RunMeta directly instead of locking Run
+        let execution_cache = ExecutionContextCache::from_meta(run_meta, state, &id).await;
+
+        let mut trace = Trace::new(&id);
+        if log_level == LogLevel::Debug {
+            trace.snapshot_variables(variables).await;
+        }
+
+        ExecutionContext {
+            id,
+            run_id: run_meta.run_id.clone(),
+            started_by: None,
+            run: run.clone(),
+            app_state: state.clone(),
+            node: node.clone(),
+            variables: variables.clone(),
+            cache: cache.clone(),
+            log_level,
+            stage,
+            sub_traces: vec![],
+            trace,
+            profile,
+            callback,
+            token,
+            execution_cache: Some(execution_cache),
+            stream_state: run_meta.stream_state,
+            state: NodeState::Idle,
+            context_state: BTreeMap::new(),
+            nodes,
+            completion_callbacks,
+            credentials,
+            context_pin_overrides: None,
+            result: None,
+            delegated: false,
+            oauth_tokens,
         }
     }
 
     #[inline]
-    pub fn started_by_first(&self) -> Option<Arc<Mutex<InternalPin>>> {
+    pub fn started_by_first(&self) -> Option<Arc<InternalPin>> {
         self.started_by.as_ref().and_then(|v| v.first().cloned())
     }
 
@@ -269,6 +347,7 @@ impl ExecutionContext {
             self.completion_callbacks.clone(),
             self.credentials.clone(),
             self.token.clone(),
+            self.oauth_tokens.clone(),
         )
         .await;
 
@@ -348,6 +427,26 @@ impl ExecutionContext {
         cache.insert(key.to_string(), value);
     }
 
+    /// Get an OAuth token for a specific provider.
+    /// Returns the token if found and not expired.
+    pub fn get_oauth_token(&self, provider_id: &str) -> Option<&OAuthToken> {
+        self.oauth_tokens
+            .get(provider_id)
+            .filter(|token| !token.is_expired())
+    }
+
+    /// Get an OAuth access token string for a specific provider.
+    /// Returns None if the token is not found or expired.
+    pub fn get_oauth_access_token(&self, provider_id: &str) -> Option<&str> {
+        self.get_oauth_token(provider_id)
+            .map(|token| token.access_token.as_str())
+    }
+
+    /// Check if a valid OAuth token exists for a specific provider.
+    pub fn has_oauth_token(&self, provider_id: &str) -> bool {
+        self.get_oauth_token(provider_id).is_some()
+    }
+
     pub fn log(&mut self, log: LogMessage) {
         if log.log_level < self.log_level {
             return;
@@ -400,10 +499,7 @@ impl ExecutionContext {
         self.state.clone()
     }
 
-    pub async fn get_pin_by_name(
-        &self,
-        name: &str,
-    ) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
+    pub async fn get_pin_by_name(&self, name: &str) -> flow_like_types::Result<Arc<InternalPin>> {
         let pin = self.node.get_pin_by_name(name).await?;
         Ok(pin)
     }
@@ -411,7 +507,7 @@ impl ExecutionContext {
     pub async fn get_model_config(
         &self,
     ) -> flow_like_types::Result<Arc<ModelProviderConfiguration>> {
-        let config = self.app_state.lock().await.model_provider_config.clone();
+        let config = self.app_state.model_provider_config.clone();
         Ok(config)
     }
 
@@ -436,7 +532,7 @@ impl ExecutionContext {
 
     pub async fn evaluate_pin_ref<T: DeserializeOwned>(
         &self,
-        reference: Arc<Mutex<InternalPin>>,
+        reference: Arc<InternalPin>,
     ) -> flow_like_types::Result<T> {
         let value = evaluate_pin_value(reference, &self.context_pin_overrides).await?;
         let value = from_value(value)?;
@@ -446,49 +542,43 @@ impl ExecutionContext {
     pub async fn get_pins_by_name(
         &self,
         name: &str,
-    ) -> flow_like_types::Result<Vec<Arc<Mutex<InternalPin>>>> {
+    ) -> flow_like_types::Result<Vec<Arc<InternalPin>>> {
         let pins = self.node.get_pins_by_name(name).await?;
         Ok(pins)
     }
 
-    pub async fn get_pin_by_id(
-        &self,
-        id: &str,
-    ) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
+    pub async fn get_pin_by_id(&self, id: &str) -> flow_like_types::Result<Arc<InternalPin>> {
         let pin = self.node.get_pin_by_id(id)?;
         Ok(pin)
     }
 
     pub async fn set_pin_ref_value(
         &mut self,
-        pin: &Arc<Mutex<InternalPin>>,
+        pin: &Arc<InternalPin>,
         value: Value,
     ) -> flow_like_types::Result<()> {
-        let pin_id = {
-            let pin_guard = pin.lock().await;
-            let pin_meta = pin_guard.pin.lock().await;
-            pin_meta.id.clone()
-        };
+        // Direct access - no lock needed for id
+        let pin_id = pin.id();
 
         // CRITICAL: If this specific pin was overridden in the context,
         // we should update the override map instead of the actual pin value
         // to prevent race conditions in parallel execution
         if let Some(overrides) = &self.context_pin_overrides
-            && overrides.contains_key(&pin_id)
+            && overrides.contains_key(pin_id)
         {
             // This pin was already overridden, so update the override
-            self.override_pin_value(&pin_id, value);
+            self.override_pin_value(pin_id, value);
             return Ok(());
         }
 
         // For pins that haven't been overridden, set the actual pin value
         // BUT if we're in an override context, also add it to overrides to maintain isolation
         if self.context_pin_overrides.is_some() {
-            self.override_pin_value(&pin_id, value.clone());
+            self.override_pin_value(pin_id, value.clone());
         }
 
-        let pin_guard = pin.lock().await;
-        pin_guard.set_value(value).await;
+        // Only value access needs locking
+        pin.set_value(value).await;
         Ok(())
     }
 
@@ -504,10 +594,9 @@ impl ExecutionContext {
 
     pub async fn activate_exec_pin_ref(
         &self,
-        pin: &Arc<Mutex<InternalPin>>,
+        pin: &Arc<InternalPin>,
     ) -> flow_like_types::Result<()> {
-        let pin_guard = pin.lock().await;
-        let pin = pin_guard.pin.lock().await;
+        // Direct access - no lock needed for type checks
         if pin.data_type != VariableType::Execution {
             return Err(flow_like_types::anyhow!("Pin is not of type Execution"));
         }
@@ -516,10 +605,8 @@ impl ExecutionContext {
             return Err(flow_like_types::anyhow!("Pin is not of type Output"));
         }
 
-        drop(pin);
-        pin_guard
-            .set_value(flow_like_types::json::json!(true))
-            .await;
+        // Only value access needs locking
+        pin.set_value(flow_like_types::json::json!(true)).await;
 
         Ok(())
     }
@@ -531,10 +618,9 @@ impl ExecutionContext {
 
     pub async fn deactivate_exec_pin_ref(
         &self,
-        pin: &Arc<Mutex<InternalPin>>,
+        pin: &Arc<InternalPin>,
     ) -> flow_like_types::Result<()> {
-        let pin_guard = pin.lock().await;
-        let pin = pin_guard.pin.lock().await;
+        // Direct access - no lock needed for type checks
         if pin.data_type != VariableType::Execution {
             return Err(flow_like_types::anyhow!("Pin is not of type Execution"));
         }
@@ -543,10 +629,8 @@ impl ExecutionContext {
             return Err(flow_like_types::anyhow!("Pin is not of type Output"));
         }
 
-        drop(pin);
-        pin_guard
-            .set_value(flow_like_types::json::json!(false))
-            .await;
+        // Only value access needs locking
+        pin.set_value(flow_like_types::json::json!(false)).await;
 
         Ok(())
     }
@@ -576,6 +660,32 @@ impl ExecutionContext {
         }
 
         Err(flow_like_types::anyhow!("Run not found"))
+    }
+
+    /// Flush logs to the database during long-running operations.
+    /// This pushes the current trace's logs to the Run and triggers a flush.
+    /// Call this periodically during long-running node operations to ensure
+    /// logs are visible to users in real-time.
+    pub async fn flush_logs(&mut self) -> flow_like_types::Result<()> {
+        let run = self.try_get_run()?;
+        let mut run = run.lock().await;
+
+        // Push current trace logs to run
+        if !self.trace.logs.is_empty() {
+            let mut trace_copy = self.trace.clone();
+            trace_copy.finish();
+            run.traces.push(trace_copy);
+            self.trace.logs.clear();
+        }
+
+        // Also push any sub-traces
+        for trace in self.sub_traces.drain(..) {
+            run.traces.push(trace);
+        }
+
+        // Flush to database
+        run.flush_logs(false).await?;
+        Ok(())
     }
 
     pub async fn read_node(&self) -> Node {

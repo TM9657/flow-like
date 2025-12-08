@@ -1,3 +1,7 @@
+#[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios")))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use dotenv::dotenv;
 use flow_like_api::axum;
 use flow_like_api::construct_router;

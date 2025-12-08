@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    routing::{get, put},
+    routing::{get, patch, post, put},
 };
 use bit::{delete_bit, push_meta, upsert_bit};
 
@@ -8,6 +8,7 @@ use crate::state::AppState;
 
 pub mod bit;
 pub mod profiles;
+pub mod solutions;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -24,5 +25,15 @@ pub fn routes() -> Router<AppState> {
             "/profiles/{profile_id}",
             put(profiles::upsert_profile_template::upsert_profile_template)
                 .delete(profiles::delete_profile_template::delete_profile_template),
+        )
+        .route("/solutions", get(solutions::list_solutions::list_solutions))
+        .route(
+            "/solutions/{solution_id}",
+            get(solutions::get_solution::get_solution)
+                .patch(solutions::update_solution::update_solution),
+        )
+        .route(
+            "/solutions/{solution_id}/logs",
+            post(solutions::add_log::add_solution_log),
         )
 }

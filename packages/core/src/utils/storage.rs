@@ -1,18 +1,16 @@
 use std::sync::Arc;
 
 use flow_like_storage::{Path, files::store::FlowLikeStore};
-use flow_like_types::{Result, anyhow, sync::Mutex};
+use flow_like_types::{Result, anyhow};
 
 use crate::state::FlowLikeState;
 
 pub async fn construct_storage(
-    state: &Arc<Mutex<FlowLikeState>>,
+    state: &Arc<FlowLikeState>,
     app_id: &str,
     prefix: &str,
 ) -> Result<(FlowLikeStore, Path)> {
     let project_store = state
-        .lock()
-        .await
         .config
         .read()
         .await

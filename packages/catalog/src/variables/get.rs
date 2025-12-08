@@ -61,13 +61,11 @@ impl NodeLogic for GetVariable {
 
         let value_pin = context.get_pin_by_name("value_ref").await?;
         let value = variable.get_value();
+        let value_cloned = value.lock().await.clone();
 
-        context.log_message(
-            &format!("Got Value: {}", value.lock().await),
-            LogLevel::Debug,
-        );
+        context.log_message(&format!("Got Value: {}", value_cloned), LogLevel::Debug);
 
-        value_pin.lock().await.set_pin_by_ref(value).await;
+        value_pin.set_value(value_cloned).await;
         Ok(())
     }
 

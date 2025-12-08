@@ -14,7 +14,7 @@
 	"devDependencies": {
 		"@types/node": "^22.10.10",
 		"dotenv": "^17.2.2",
-		"drizzle-kit": "^0.31.4",
+		"drizzle-kit": "^0.31.8",
 		"drizzle-orm": "^0.44.5",
 		"pg": "^8.16.3",
 		"prisma": "^6.8.2",

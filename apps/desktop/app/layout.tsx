@@ -43,6 +43,8 @@ import { useEffect } from "react";
 import { AppSidebar } from "../components/app-sidebar";
 import { DesktopAuthProvider } from "../components/auth-provider";
 import GlobalAnchorHandler from "../components/global-anchor-component";
+import { OAuthCallbackHandler } from "../components/oauth-callback-handler";
+import { OAuthExecutionProvider } from "../components/oauth-execution-provider";
 import { TauriProvider } from "../components/tauri-provider";
 import { ThemeLoader } from "../components/theme-loader";
 import ToastProvider from "../components/toast-provider";
@@ -172,13 +174,17 @@ export default function RootLayout({
 										<Toaster />
 										<ToastProvider />
 										<TauriProvider>
-											<DesktopAuthProvider>
-												<ExecutionEngineProviderComponent>
-													<PostHogPageView />
-													<ThemeLoader />
-													<AppSidebar>{children}</AppSidebar>
-												</ExecutionEngineProviderComponent>
-											</DesktopAuthProvider>
+											<OAuthCallbackHandler>
+												<OAuthExecutionProvider>
+													<DesktopAuthProvider>
+														<ExecutionEngineProviderComponent>
+															<PostHogPageView />
+															<ThemeLoader />
+															<AppSidebar>{children}</AppSidebar>
+														</ExecutionEngineProviderComponent>
+													</DesktopAuthProvider>
+												</OAuthExecutionProvider>
+											</OAuthCallbackHandler>
 										</TauriProvider>
 									</TooltipProvider>
 								</ThemeProvider>

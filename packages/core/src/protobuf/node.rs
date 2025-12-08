@@ -79,6 +79,22 @@ impl ToProto<flow_like_types::proto::Node> for Node {
             event_callback: self.event_callback.unwrap_or(false),
             hash: self.hash,
             fn_refs: self.fn_refs.as_ref().map(|f| f.to_proto()),
+            oauth_providers: self.oauth_providers.clone().unwrap_or_default(),
+            required_oauth_scopes: self
+                .required_oauth_scopes
+                .as_ref()
+                .map(|scopes| {
+                    scopes
+                        .iter()
+                        .map(|(k, v)| {
+                            (
+                                k.clone(),
+                                flow_like_types::proto::StringList { values: v.clone() },
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 }
@@ -116,6 +132,22 @@ impl FromProto<flow_like_types::proto::Node> for Node {
             layer: proto.layer,
             hash: proto.hash,
             fn_refs: proto.fn_refs.map(FnRefs::from_proto),
+            oauth_providers: if proto.oauth_providers.is_empty() {
+                None
+            } else {
+                Some(proto.oauth_providers)
+            },
+            required_oauth_scopes: if proto.required_oauth_scopes.is_empty() {
+                None
+            } else {
+                Some(
+                    proto
+                        .required_oauth_scopes
+                        .into_iter()
+                        .map(|(k, v)| (k, v.values))
+                        .collect(),
+                )
+            },
         }
     }
 }

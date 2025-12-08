@@ -196,10 +196,10 @@ impl NodeLogic for SimpleAgentNode {
         let run_result = self.run_internal(context, &stream_state).await;
         let finalize_result = stream_state.finalize(context).await;
 
-        if let Err(finalize_err) = finalize_result {
-            if run_result.is_ok() {
-                return Err(finalize_err);
-            }
+        if let Err(finalize_err) = finalize_result
+            && run_result.is_ok()
+        {
+            return Err(finalize_err);
         }
 
         run_result

@@ -20,3 +20,4 @@ export * from "./theme";
 export * from "./sync-db";
 export * from "./realtime/types";
 export * from "./realtime/webrtc";
+export * from "./oauth";

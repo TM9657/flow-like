@@ -1,14 +1,14 @@
 use crate::{bit::BitPack, state::FlowLikeState};
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_types::tokio::fs as async_fs;
-use flow_like_types::{Result, anyhow, sync::Mutex};
+use flow_like_types::{Result, anyhow};
 use std::sync::Arc;
 
 /// Ensures that local model weights are available before loading a model.
 /// Attempts to redownload missing files, but falls back to cached weights when present.
 pub async fn ensure_local_weights(
     pack: &BitPack,
-    app_state: &Arc<Mutex<FlowLikeState>>,
+    app_state: &Arc<FlowLikeState>,
     bit_id: &str,
     model_kind: &str,
 ) -> Result<()> {
@@ -48,13 +48,13 @@ pub async fn ensure_local_weights(
     ))
 }
 
-async fn is_pack_installed(pack: &BitPack, app_state: &Arc<Mutex<FlowLikeState>>) -> bool {
+async fn is_pack_installed(pack: &BitPack, app_state: &Arc<FlowLikeState>) -> bool {
     pack.is_installed(app_state.clone()).await.unwrap_or(false)
 }
 
 async fn missing_local_artifacts(
     pack: &BitPack,
-    app_state: &Arc<Mutex<FlowLikeState>>,
+    app_state: &Arc<FlowLikeState>,
 ) -> Result<Vec<String>> {
     let store = FlowLikeState::bit_store(app_state).await?;
     let FlowLikeStore::Local(local_store) = store else {

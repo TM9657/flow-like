@@ -18,8 +18,11 @@ import {
 	EventTypeConfiguration,
 	type IEvent,
 	type IEventMapping,
+	type IOAuthProvider,
+	type IOAuthToken,
 	Input,
 	Label,
+	OAuthConsentDialog,
 	PatSelectorDialog,
 	Select,
 	SelectContent,
@@ -38,6 +41,13 @@ import {
 	useBackend,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
+import type { IOAuthConsentStore } from "@tm9657/flow-like-ui/db/oauth-db";
+import { checkOAuthTokens } from "@tm9657/flow-like-ui/lib/oauth/helpers";
+import type {
+	IOAuthTokenStoreWithPending,
+	IStoredOAuthToken,
+} from "@tm9657/flow-like-ui/lib/oauth/types";
+import type { IHub } from "@tm9657/flow-like-ui/lib/schema/hub/hub";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,
@@ -75,9 +85,31 @@ function eventRequiresSink(
 	return eventTypeConfig?.withSink.includes(event.event_type) ?? false;
 }
 
+export interface EventsPageProps {
+	eventMapping: IEventMapping;
+	/** Token store for OAuth checks. If not provided, OAuth checks are skipped. */
+	tokenStore?: IOAuthTokenStoreWithPending;
+	/** Consent store for OAuth consent tracking. */
+	consentStore?: IOAuthConsentStore;
+	/** Hub configuration for OAuth provider resolution */
+	hub?: IHub;
+	/** Callback to start OAuth authorization for a provider */
+	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
+	/** Optional callback to refresh expired tokens */
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
+}
+
 export default function EventsPage({
 	eventMapping,
-}: Readonly<{ eventMapping: IEventMapping }>) {
+	tokenStore,
+	consentStore,
+	hub,
+	onStartOAuth,
+	onRefreshToken,
+}: Readonly<EventsPageProps>) {
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
 	const eventId = searchParams.get("eventId");
@@ -126,11 +158,24 @@ export default function EventsPage({
 	}, [id, backend]);
 
 	const handleCreateEvent = useCallback(
-		async (newEvent: Partial<IEvent>, selectedPat?: string) => {
+		async (
+			newEvent: Partial<IEvent>,
+			selectedPatOrOAuthTokens?: string | Record<string, IOAuthToken>,
+		) => {
 			if (!id) {
 				console.error("App ID is required to create an event");
 				return;
 			}
+
+			// Determine if we got a PAT string or OAuth tokens
+			const selectedPat =
+				typeof selectedPatOrOAuthTokens === "string"
+					? selectedPatOrOAuthTokens
+					: undefined;
+			const oauthTokens =
+				typeof selectedPatOrOAuthTokens === "object"
+					? selectedPatOrOAuthTokens
+					: undefined;
 
 			const event: IEvent = {
 				id: createId(),
@@ -185,7 +230,13 @@ export default function EventsPage({
 				}
 			}
 
-			await backend.eventState.upsertEvent(id, event, undefined, selectedPat);
+			await backend.eventState.upsertEvent(
+				id,
+				event,
+				undefined,
+				selectedPat,
+				oauthTokens,
+			);
 			await events.refetch();
 			setIsCreateDialogOpen(false);
 			setShowCreatePatDialog(false);
@@ -270,6 +321,11 @@ export default function EventsPage({
 				onReload={async () => {
 					await events.refetch();
 				}}
+				tokenStore={tokenStore}
+				consentStore={consentStore}
+				hub={hub}
+				onStartOAuth={onStartOAuth}
+				onRefreshToken={onRefreshToken}
 			/>
 		);
 	}
@@ -307,6 +363,11 @@ export default function EventsPage({
 							onDelete={handleDeleteEvent}
 							onNavigateToNode={handleNavigateToNode}
 							onCreateEvent={() => setIsCreateDialogOpen(true)}
+							tokenStore={tokenStore}
+							consentStore={consentStore}
+							hub={hub}
+							onStartOAuth={onStartOAuth}
+							onRefreshToken={onRefreshToken}
 						/>
 					)}
 				</div>
@@ -326,6 +387,11 @@ export default function EventsPage({
 							appId={id}
 							onSubmit={handleCreateEvent}
 							onCancel={() => setIsCreateDialogOpen(false)}
+							tokenStore={tokenStore}
+							consentStore={consentStore}
+							hub={hub}
+							onStartOAuth={onStartOAuth}
+							onRefreshToken={onRefreshToken}
 						/>
 					)}
 				</DialogContent>
@@ -349,18 +415,50 @@ function EventConfiguration({
 	appId,
 	onDone,
 	onReload,
+	tokenStore,
+	consentStore,
+	hub,
+	onStartOAuth,
+	onRefreshToken,
 }: Readonly<{
 	eventMapping: IEventMapping;
 	event: IEvent;
 	appId: string;
 	onDone?: () => void;
 	onReload?: () => void;
+	/** Token store for OAuth checks. If not provided, OAuth checks are skipped. */
+	tokenStore?: IOAuthTokenStoreWithPending;
+	/** Consent store for OAuth consent tracking. */
+	consentStore?: IOAuthConsentStore;
+	/** Hub configuration for OAuth provider resolution */
+	hub?: IHub;
+	/** Callback to start OAuth authorization for a provider */
+	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
+	/** Optional callback to refresh expired tokens */
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }>) {
 	const backend = useBackend();
 	const [isEditing, setIsEditing] = useState(false);
 	const [formData, setFormData] = useState<IEvent>(event);
 	const [showPatDialog, setShowPatDialog] = useState(false);
 	const [isOffline, setIsOffline] = useState<boolean | null>(null);
+
+	// OAuth consent state
+	const [showOAuthConsent, setShowOAuthConsent] = useState(false);
+	const [oauthMissingProviders, setOauthMissingProviders] = useState<
+		IOAuthProvider[]
+	>([]);
+	const [oauthAuthorizedProviders, setOauthAuthorizedProviders] = useState<
+		Set<string>
+	>(new Set());
+	const [oauthPreAuthorizedProviders, setOauthPreAuthorizedProviders] =
+		useState<Set<string>>(new Set());
+	const [pendingOAuthTokens, setPendingOAuthTokens] = useState<
+		Record<string, IOAuthToken>
+	>({});
 
 	const boards = useInvoke(
 		backend.boardState.getBoards,
@@ -396,6 +494,61 @@ function EventConfiguration({
 		}
 	}, [appId, backend]);
 
+	// Poll for OAuth token updates while the consent dialog is open
+	useEffect(() => {
+		if (
+			!showOAuthConsent ||
+			!tokenStore ||
+			oauthMissingProviders.length === 0
+		) {
+			return;
+		}
+
+		const checkTokens = async () => {
+			const newlyAuthorized = new Set(oauthAuthorizedProviders);
+			const newTokens = { ...pendingOAuthTokens };
+
+			for (const provider of oauthMissingProviders) {
+				if (
+					newlyAuthorized.has(provider.id) ||
+					oauthPreAuthorizedProviders.has(provider.id)
+				) {
+					continue;
+				}
+
+				const token = await tokenStore.getToken(provider.id);
+				if (token && !tokenStore.isExpired(token)) {
+					newlyAuthorized.add(provider.id);
+					newTokens[provider.id] = {
+						access_token: token.access_token,
+						refresh_token: token.refresh_token,
+						expires_at: token.expires_at
+							? Math.floor(token.expires_at / 1000)
+							: undefined,
+						token_type: token.token_type ?? "Bearer",
+					};
+				}
+			}
+
+			if (newlyAuthorized.size !== oauthAuthorizedProviders.size) {
+				setOauthAuthorizedProviders(newlyAuthorized);
+				setPendingOAuthTokens(newTokens);
+			}
+		};
+
+		// Check immediately and then poll every second
+		checkTokens();
+		const interval = setInterval(checkTokens, 1000);
+		return () => clearInterval(interval);
+	}, [
+		showOAuthConsent,
+		tokenStore,
+		oauthMissingProviders,
+		oauthAuthorizedProviders,
+		oauthPreAuthorizedProviders,
+		pendingOAuthTokens,
+	]);
+
 	const handleInputChange = (field: keyof IEvent, value: any) => {
 		console.dir({
 			field,
@@ -411,8 +564,62 @@ function EventConfiguration({
 		return eventTypeConfig?.withSink.includes(formData.event_type);
 	};
 
-	const handleSave = async (selectedPat?: string) => {
+	const handleSave = async (
+		selectedPat?: string,
+		oauthTokens?: Record<string, IOAuthToken>,
+	) => {
 		const requiresSink = checkRequiresSink();
+
+		// Check OAuth requirements first if we have the stores
+		if (
+			board.data &&
+			tokenStore &&
+			consentStore &&
+			onStartOAuth &&
+			!oauthTokens
+		) {
+			const oauthResult = await checkOAuthTokens(board.data, tokenStore, hub, {
+				refreshToken: onRefreshToken,
+			});
+
+			if (oauthResult.requiredProviders.length > 0) {
+				// Check consent for providers that have tokens but might not have consent for this app
+				const consentedIds = await consentStore.getConsentedProviderIds(appId);
+				const providersNeedingConsent: IOAuthProvider[] = [];
+				const hasTokenNeedsConsent: Set<string> = new Set();
+				const alreadyAuthorized: Set<string> = new Set();
+
+				// Add providers that are missing tokens
+				providersNeedingConsent.push(...oauthResult.missingProviders);
+
+				// Also add providers that have tokens but no consent for this specific app
+				for (const provider of oauthResult.requiredProviders) {
+					const hasToken = oauthResult.tokens[provider.id] !== undefined;
+					const hasConsent = consentedIds.has(provider.id);
+
+					if (hasToken && !hasConsent) {
+						hasTokenNeedsConsent.add(provider.id);
+						providersNeedingConsent.push(provider);
+					} else if (hasToken && hasConsent) {
+						alreadyAuthorized.add(provider.id);
+					}
+				}
+
+				if (providersNeedingConsent.length > 0) {
+					setOauthMissingProviders(providersNeedingConsent);
+					setOauthAuthorizedProviders(alreadyAuthorized);
+					setOauthPreAuthorizedProviders(hasTokenNeedsConsent);
+					setPendingOAuthTokens(oauthResult.tokens);
+					setShowOAuthConsent(true);
+					return;
+				}
+			}
+
+			// If we have tokens but no missing providers, use those tokens
+			if (Object.keys(oauthResult.tokens).length > 0) {
+				oauthTokens = oauthResult.tokens;
+			}
+		}
 
 		if (requiresSink && !isOffline && !selectedPat) {
 			// Show PAT selector dialog
@@ -420,16 +627,62 @@ function EventConfiguration({
 			return;
 		}
 
-		// Save the event with the PAT if provided
+		// Save the event with the PAT and OAuth tokens if provided
 		await backend.eventState.upsertEvent(
 			appId,
 			formData,
 			undefined,
 			selectedPat,
+			oauthTokens,
 		);
 		onReload?.();
 		setIsEditing(false);
 		setShowPatDialog(false);
+	};
+
+	const handleOAuthAuthorize = async (providerId: string) => {
+		const provider = oauthMissingProviders.find((p) => p.id === providerId);
+		if (!provider || !onStartOAuth) return;
+		await onStartOAuth(provider);
+	};
+
+	const handleOAuthConfirmAll = async (rememberConsent: boolean) => {
+		if (rememberConsent && consentStore) {
+			for (const provider of oauthMissingProviders) {
+				await consentStore.setConsent(appId, provider.id, provider.scopes);
+			}
+		}
+
+		setShowOAuthConsent(false);
+
+		// Collect all tokens (pending + newly authorized)
+		const allTokens = { ...pendingOAuthTokens };
+		for (const providerId of oauthAuthorizedProviders) {
+			if (tokenStore) {
+				const token = await tokenStore.getToken(providerId);
+				if (token && !tokenStore.isExpired(token)) {
+					allTokens[providerId] = {
+						access_token: token.access_token,
+						refresh_token: token.refresh_token,
+						expires_at: token.expires_at
+							? Math.floor(token.expires_at / 1000)
+							: undefined,
+						token_type: token.token_type ?? "Bearer",
+					};
+				}
+			}
+		}
+
+		// Continue with save, passing the OAuth tokens
+		await handleSave(undefined, allTokens);
+	};
+
+	const handleOAuthCancel = () => {
+		setShowOAuthConsent(false);
+		setOauthMissingProviders([]);
+		setOauthAuthorizedProviders(new Set());
+		setOauthPreAuthorizedProviders(new Set());
+		setPendingOAuthTokens({});
 	};
 
 	const handleCancel = () => {
@@ -991,6 +1244,17 @@ function EventConfiguration({
 					handleSave(token);
 				}}
 			/>
+			{/* OAuth Consent Dialog */}
+			<OAuthConsentDialog
+				open={showOAuthConsent}
+				onOpenChange={setShowOAuthConsent}
+				providers={oauthMissingProviders}
+				authorizedProviders={oauthAuthorizedProviders}
+				preAuthorizedProviders={oauthPreAuthorizedProviders}
+				onAuthorize={handleOAuthAuthorize}
+				onConfirmAll={handleOAuthConfirmAll}
+				onCancel={handleOAuthCancel}
+			/>
 		</div>
 	);
 }
@@ -1000,20 +1264,63 @@ function TableActivateSinkButton({
 	event,
 	appId,
 	onActivated,
+	tokenStore,
+	consentStore,
+	hub,
+	onStartOAuth,
+	onRefreshToken,
 }: {
 	event: IEvent;
 	appId: string;
 	onActivated: () => void;
+	tokenStore?: IOAuthTokenStoreWithPending;
+	consentStore?: IOAuthConsentStore;
+	hub?: IHub;
+	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }) {
 	const backend = useBackend();
 	const [showDialog, setShowDialog] = useState(false);
 
-	const handleActivate = async (pat?: string) => {
+	// OAuth consent dialog state
+	const [showOAuthConsent, setShowOAuthConsent] = useState(false);
+	const [missingProviders, setMissingProviders] = useState<IOAuthProvider[]>(
+		[],
+	);
+	const [authorizedProviders, setAuthorizedProviders] = useState<Set<string>>(
+		new Set(),
+	);
+	const [preAuthorizedProviders, setPreAuthorizedProviders] = useState<
+		Set<string>
+	>(new Set());
+	const [pendingOAuthTokens, setPendingOAuthTokens] = useState<
+		Record<string, IOAuthToken>
+	>({});
+
+	const handleActivate = async (
+		patOrOAuthTokens?: string | Record<string, IOAuthToken>,
+	) => {
 		try {
+			// Determine if we got a PAT string or OAuth tokens
+			const pat =
+				typeof patOrOAuthTokens === "string" ? patOrOAuthTokens : undefined;
+			const oauthTokens =
+				typeof patOrOAuthTokens === "object" ? patOrOAuthTokens : undefined;
+
 			// Ensure the event is set to active before upserting
 			const activeEvent = { ...event, active: true };
-			await backend.eventState.upsertEvent(appId, activeEvent, undefined, pat);
+			await backend.eventState.upsertEvent(
+				appId,
+				activeEvent,
+				undefined,
+				pat,
+				oauthTokens,
+			);
 			setShowDialog(false);
+			setShowOAuthConsent(false);
 			onActivated();
 		} catch (error) {
 			console.error("Failed to activate sink:", error);
@@ -1022,6 +1329,64 @@ function TableActivateSinkButton({
 
 	const handleClick = async () => {
 		const isOffline = await backend.isOffline(appId);
+
+		// Check OAuth requirements if tokenStore is provided
+		if (!isOffline && tokenStore) {
+			try {
+				const board = await backend.boardState.getBoard(
+					appId,
+					event.board_id,
+					event.board_version as [number, number, number] | undefined,
+				);
+				if (board) {
+					const oauthResult = await checkOAuthTokens(board, tokenStore, hub, {
+						refreshToken: onRefreshToken,
+					});
+
+					if (oauthResult.requiredProviders.length > 0) {
+						// Check consent for providers that have tokens but might not have consent for this app
+						const consentedIds = consentStore
+							? await consentStore.getConsentedProviderIds(appId)
+							: new Set<string>();
+						const providersNeedingConsent: IOAuthProvider[] = [];
+						const hasTokenNeedsConsent: Set<string> = new Set();
+
+						// Add providers that are missing tokens
+						providersNeedingConsent.push(...oauthResult.missingProviders);
+
+						// Also add providers that have tokens but no consent for this specific app
+						for (const provider of oauthResult.requiredProviders) {
+							const hasToken = oauthResult.tokens[provider.id] !== undefined;
+							const hasConsent = consentedIds.has(provider.id);
+
+							if (hasToken && !hasConsent) {
+								hasTokenNeedsConsent.add(provider.id);
+								providersNeedingConsent.push(provider);
+							}
+						}
+
+						if (providersNeedingConsent.length > 0) {
+							// Store tokens for later use and show OAuth consent dialog
+							setPendingOAuthTokens(oauthResult.tokens);
+							setMissingProviders(providersNeedingConsent);
+							setPreAuthorizedProviders(hasTokenNeedsConsent);
+							setAuthorizedProviders(new Set());
+							setShowOAuthConsent(true);
+							return;
+						}
+
+						// All OAuth is satisfied, proceed with activation
+						if (Object.keys(oauthResult.tokens).length > 0) {
+							await handleActivate(oauthResult.tokens);
+							return;
+						}
+					}
+				}
+			} catch (error) {
+				console.error("Failed to check OAuth:", error);
+			}
+		}
+
 		if (!isOffline) {
 			// Online project - show PAT dialog
 			setShowDialog(true);
@@ -1030,6 +1395,106 @@ function TableActivateSinkButton({
 			await handleActivate();
 		}
 	};
+
+	const handleOAuthAuthorize = async (providerId: string) => {
+		const provider = missingProviders.find((p) => p.id === providerId);
+		if (!provider || !onStartOAuth) return;
+		await onStartOAuth(provider);
+	};
+
+	const handleOAuthConfirmAll = async (rememberConsent: boolean) => {
+		if (rememberConsent && consentStore) {
+			for (const provider of missingProviders) {
+				await consentStore.setConsent(appId, provider.id, provider.scopes);
+			}
+		}
+
+		setShowOAuthConsent(false);
+
+		// Collect all tokens (pending + newly authorized)
+		const allTokens = { ...pendingOAuthTokens };
+		for (const providerId of authorizedProviders) {
+			if (tokenStore) {
+				const token = await tokenStore.getToken(providerId);
+				if (token && !tokenStore.isExpired(token)) {
+					allTokens[providerId] = {
+						access_token: token.access_token,
+						refresh_token: token.refresh_token,
+						expires_at: token.expires_at
+							? Math.floor(token.expires_at / 1000)
+							: undefined,
+						token_type: token.token_type ?? "Bearer",
+					};
+				}
+			}
+		}
+
+		if (Object.keys(allTokens).length > 0) {
+			await handleActivate(allTokens);
+		} else {
+			// No OAuth tokens needed, show PAT dialog
+			setShowDialog(true);
+		}
+	};
+
+	const handleOAuthCancel = () => {
+		setShowOAuthConsent(false);
+		setMissingProviders([]);
+		setAuthorizedProviders(new Set());
+		setPreAuthorizedProviders(new Set());
+		setPendingOAuthTokens({});
+	};
+
+	// Poll for OAuth token updates while the consent dialog is open
+	useEffect(() => {
+		if (!showOAuthConsent || !tokenStore || missingProviders.length === 0) {
+			return;
+		}
+
+		const checkTokens = async () => {
+			const newlyAuthorized = new Set(authorizedProviders);
+			const newTokens = { ...pendingOAuthTokens };
+
+			for (const provider of missingProviders) {
+				if (
+					newlyAuthorized.has(provider.id) ||
+					preAuthorizedProviders.has(provider.id)
+				) {
+					continue;
+				}
+
+				const token = await tokenStore.getToken(provider.id);
+				if (token && !tokenStore.isExpired(token)) {
+					newlyAuthorized.add(provider.id);
+					newTokens[provider.id] = {
+						access_token: token.access_token,
+						refresh_token: token.refresh_token,
+						expires_at: token.expires_at
+							? Math.floor(token.expires_at / 1000)
+							: undefined,
+						token_type: token.token_type ?? "Bearer",
+					};
+				}
+			}
+
+			if (newlyAuthorized.size !== authorizedProviders.size) {
+				setAuthorizedProviders(newlyAuthorized);
+				setPendingOAuthTokens(newTokens);
+			}
+		};
+
+		// Check immediately and then poll every second
+		checkTokens();
+		const interval = setInterval(checkTokens, 1000);
+		return () => clearInterval(interval);
+	}, [
+		showOAuthConsent,
+		tokenStore,
+		missingProviders,
+		authorizedProviders,
+		preAuthorizedProviders,
+		pendingOAuthTokens,
+	]);
 
 	return (
 		<>
@@ -1049,6 +1514,16 @@ function TableActivateSinkButton({
 				title="Activate Event Sink"
 				description="Select or create a Personal Access Token to activate this event sink."
 			/>
+			<OAuthConsentDialog
+				open={showOAuthConsent}
+				onOpenChange={setShowOAuthConsent}
+				providers={missingProviders}
+				authorizedProviders={authorizedProviders}
+				preAuthorizedProviders={preAuthorizedProviders}
+				onAuthorize={handleOAuthAuthorize}
+				onConfirmAll={handleOAuthConfirmAll}
+				onCancel={handleOAuthCancel}
+			/>
 		</>
 	);
 }
@@ -1062,6 +1537,19 @@ interface IEventsTableProps {
 	onDelete: (eventId: string) => void;
 	onNavigateToNode: (event: IEvent, nodeId: string) => void;
 	onCreateEvent: () => void;
+	/** Token store for OAuth checks. If not provided, OAuth checks are skipped. */
+	tokenStore?: IOAuthTokenStoreWithPending;
+	/** Consent store for OAuth consent tracking. */
+	consentStore?: IOAuthConsentStore;
+	/** Hub configuration for OAuth provider resolution */
+	hub?: IHub;
+	/** Callback to start OAuth authorization for a provider */
+	onStartOAuth?: (provider: IOAuthProvider) => Promise<void>;
+	/** Optional callback to refresh expired tokens */
+	onRefreshToken?: (
+		provider: IOAuthProvider,
+		token: IStoredOAuthToken,
+	) => Promise<IStoredOAuthToken>;
 }
 
 function EventsTable({
@@ -1073,6 +1561,11 @@ function EventsTable({
 	onDelete,
 	onNavigateToNode,
 	onCreateEvent,
+	tokenStore,
+	consentStore,
+	hub,
+	onStartOAuth,
+	onRefreshToken,
 }: Readonly<IEventsTableProps>) {
 	const backend = useBackend();
 	const [currentPage, setCurrentPage] = useState(1);
@@ -1205,8 +1698,31 @@ function EventsTable({
 		const sinkActive = sinkStatuses.get(event.id);
 		const [showActivateDialog, setShowActivateDialog] = useState(false);
 
-		const handleActivateSink = async (pat?: string) => {
+		// OAuth consent dialog state
+		const [showOAuthConsent, setShowOAuthConsent] = useState(false);
+		const [missingProviders, setMissingProviders] = useState<IOAuthProvider[]>(
+			[],
+		);
+		const [authorizedProviders, setAuthorizedProviders] = useState<Set<string>>(
+			new Set(),
+		);
+		const [preAuthorizedProviders, setPreAuthorizedProviders] = useState<
+			Set<string>
+		>(new Set());
+		const [pendingOAuthTokens, setPendingOAuthTokens] = useState<
+			Record<string, IOAuthToken>
+		>({});
+
+		const handleActivateSink = async (
+			patOrOAuthTokens?: string | Record<string, IOAuthToken>,
+		) => {
 			try {
+				// Determine if we got a PAT string or OAuth tokens
+				const pat =
+					typeof patOrOAuthTokens === "string" ? patOrOAuthTokens : undefined;
+				const oauthTokens =
+					typeof patOrOAuthTokens === "object" ? patOrOAuthTokens : undefined;
+
 				// Ensure the event is set to active before upserting
 				const activeEvent = { ...event, active: true };
 				await backend.eventState.upsertEvent(
@@ -1214,8 +1730,10 @@ function EventsTable({
 					activeEvent,
 					undefined,
 					pat,
+					oauthTokens,
 				);
 				setShowActivateDialog(false);
+				setShowOAuthConsent(false);
 				// Trigger a re-check of sink statuses
 				const checkStatus = async () => {
 					const statuses = new Map<string, boolean>();
@@ -1246,6 +1764,64 @@ function EventsTable({
 
 		const handleActivateClick = async () => {
 			const isOffline = await backend.isOffline(appId);
+
+			// Check OAuth requirements if tokenStore is provided
+			if (!isOffline && tokenStore) {
+				try {
+					const board = await backend.boardState.getBoard(
+						appId,
+						event.board_id,
+						event.board_version as [number, number, number] | undefined,
+					);
+					if (board) {
+						const oauthResult = await checkOAuthTokens(board, tokenStore, hub, {
+							refreshToken: onRefreshToken,
+						});
+
+						if (oauthResult.requiredProviders.length > 0) {
+							// Check consent for providers that have tokens but might not have consent for this app
+							const consentedIds = consentStore
+								? await consentStore.getConsentedProviderIds(appId)
+								: new Set<string>();
+							const providersNeedingConsent: IOAuthProvider[] = [];
+							const hasTokenNeedsConsent: Set<string> = new Set();
+
+							// Add providers that are missing tokens
+							providersNeedingConsent.push(...oauthResult.missingProviders);
+
+							// Also add providers that have tokens but no consent for this specific app
+							for (const provider of oauthResult.requiredProviders) {
+								const hasToken = oauthResult.tokens[provider.id] !== undefined;
+								const hasConsent = consentedIds.has(provider.id);
+
+								if (hasToken && !hasConsent) {
+									hasTokenNeedsConsent.add(provider.id);
+									providersNeedingConsent.push(provider);
+								}
+							}
+
+							if (providersNeedingConsent.length > 0) {
+								// Store tokens for later use and show OAuth consent dialog
+								setPendingOAuthTokens(oauthResult.tokens);
+								setMissingProviders(providersNeedingConsent);
+								setPreAuthorizedProviders(hasTokenNeedsConsent);
+								setAuthorizedProviders(new Set());
+								setShowOAuthConsent(true);
+								return;
+							}
+
+							// All OAuth is satisfied, proceed with activation
+							if (Object.keys(oauthResult.tokens).length > 0) {
+								await handleActivateSink(oauthResult.tokens);
+								return;
+							}
+						}
+					}
+				} catch (error) {
+					console.error("Failed to check OAuth:", error);
+				}
+			}
+
 			if (!isOffline) {
 				// Online project - show PAT dialog
 				setShowActivateDialog(true);
@@ -1254,6 +1830,106 @@ function EventsTable({
 				await handleActivateSink();
 			}
 		};
+
+		const handleOAuthAuthorize = async (providerId: string) => {
+			const provider = missingProviders.find((p) => p.id === providerId);
+			if (!provider || !onStartOAuth) return;
+			await onStartOAuth(provider);
+		};
+
+		const handleOAuthConfirmAll = async (rememberConsent: boolean) => {
+			if (rememberConsent && consentStore) {
+				for (const provider of missingProviders) {
+					await consentStore.setConsent(appId, provider.id, provider.scopes);
+				}
+			}
+
+			setShowOAuthConsent(false);
+
+			// Collect all tokens (pending + newly authorized)
+			const allTokens = { ...pendingOAuthTokens };
+			for (const providerId of authorizedProviders) {
+				if (tokenStore) {
+					const token = await tokenStore.getToken(providerId);
+					if (token && !tokenStore.isExpired(token)) {
+						allTokens[providerId] = {
+							access_token: token.access_token,
+							refresh_token: token.refresh_token,
+							expires_at: token.expires_at
+								? Math.floor(token.expires_at / 1000)
+								: undefined,
+							token_type: token.token_type ?? "Bearer",
+						};
+					}
+				}
+			}
+
+			if (Object.keys(allTokens).length > 0) {
+				await handleActivateSink(allTokens);
+			} else {
+				// No OAuth tokens needed, show PAT dialog
+				setShowActivateDialog(true);
+			}
+		};
+
+		const handleOAuthCancel = () => {
+			setShowOAuthConsent(false);
+			setMissingProviders([]);
+			setAuthorizedProviders(new Set());
+			setPreAuthorizedProviders(new Set());
+			setPendingOAuthTokens({});
+		};
+
+		// Poll for OAuth token updates while the consent dialog is open
+		useEffect(() => {
+			if (!showOAuthConsent || !tokenStore || missingProviders.length === 0) {
+				return;
+			}
+
+			const checkTokens = async () => {
+				const newlyAuthorized = new Set(authorizedProviders);
+				const newTokens = { ...pendingOAuthTokens };
+
+				for (const provider of missingProviders) {
+					if (
+						newlyAuthorized.has(provider.id) ||
+						preAuthorizedProviders.has(provider.id)
+					) {
+						continue;
+					}
+
+					const token = await tokenStore.getToken(provider.id);
+					if (token && !tokenStore.isExpired(token)) {
+						newlyAuthorized.add(provider.id);
+						newTokens[provider.id] = {
+							access_token: token.access_token,
+							refresh_token: token.refresh_token,
+							expires_at: token.expires_at
+								? Math.floor(token.expires_at / 1000)
+								: undefined,
+							token_type: token.token_type ?? "Bearer",
+						};
+					}
+				}
+
+				if (newlyAuthorized.size !== authorizedProviders.size) {
+					setAuthorizedProviders(newlyAuthorized);
+					setPendingOAuthTokens(newTokens);
+				}
+			};
+
+			// Check immediately and then poll every second
+			checkTokens();
+			const interval = setInterval(checkTokens, 1000);
+			return () => clearInterval(interval);
+		}, [
+			showOAuthConsent,
+			tokenStore,
+			missingProviders,
+			authorizedProviders,
+			preAuthorizedProviders,
+			pendingOAuthTokens,
+		]);
 
 		return (
 			<>
@@ -1293,7 +1969,7 @@ function EventsTable({
 								</div>
 							</div>
 						</div>
-						<div className="flex items-center gap-2 flex-shrink-0">
+						<div className="flex items-center gap-2 shrink-0">
 							<div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
 								{event.event_type}
 							</div>
@@ -1309,7 +1985,7 @@ function EventsTable({
 									? truncateText(event.description, 100)
 									: "No description"}
 							</div>
-							<div className="text-xs text-muted-foreground flex-shrink-0 text-right">
+							<div className="text-xs text-muted-foreground shrink-0 text-right">
 								<div>{boardsMap.get(event.board_id) ?? "Unknown"}</div>
 								<div>
 									{event.board_version
@@ -1354,14 +2030,26 @@ function EventsTable({
 					title="Activate Event Sink"
 					description="Select or create a Personal Access Token to activate this event sink."
 				/>
+
+				{/* OAuth Consent Dialog for Activation */}
+				<OAuthConsentDialog
+					open={showOAuthConsent}
+					onOpenChange={setShowOAuthConsent}
+					providers={missingProviders}
+					onAuthorize={handleOAuthAuthorize}
+					onConfirmAll={handleOAuthConfirmAll}
+					onCancel={handleOAuthCancel}
+					authorizedProviders={authorizedProviders}
+					preAuthorizedProviders={preAuthorizedProviders}
+				/>
 			</>
 		);
 	};
 
 	return (
 		<div className="flex flex-col h-full min-h-0">
-			<div className="flex items-center justify-between gap-4 mb-4 flex-shrink-0 flex-wrap">
-				<div className="flex items-center gap-2 flex-1 min-w-[240px]">
+			<div className="flex items-center justify-between gap-4 mb-4 shrink-0 flex-wrap">
+				<div className="flex items-center gap-2 flex-1 min-w-60">
 					<Input
 						placeholder="Search events..."
 						value={searchTerm}
@@ -1487,6 +2175,11 @@ function EventsTable({
 																<TableActivateSinkButton
 																	event={event}
 																	appId={appId}
+																	tokenStore={tokenStore}
+																	consentStore={consentStore}
+																	hub={hub}
+																	onStartOAuth={onStartOAuth}
+																	onRefreshToken={onRefreshToken}
 																	onActivated={async () => {
 																		// Refresh sink status after activation
 																		try {
@@ -1581,7 +2274,7 @@ function EventsTable({
 				)}
 
 				{totalPages > 1 && (
-					<div className="border-t bg-background p-4 flex-shrink-0">
+					<div className="border-t bg-background p-4 shrink-0">
 						<div className="flex items-center justify-between">
 							<div className="text-sm text-muted-foreground">
 								Showing {startIndex + 1} to{" "}

@@ -12,6 +12,36 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MailProviderType {
+    Ses,
+    Sendgrid,
+    Smtp,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct SmtpSettings {
+    pub host_env: String,
+    pub port_env: String,
+    pub username_env: String,
+    pub password_env: String,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct SendgridSettings {
+    pub api_key_env: String,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct MailConfig {
+    pub provider: MailProviderType,
+    pub from_email: String,
+    pub from_name: String,
+    pub smtp: Option<SmtpSettings>,
+    pub sendgrid: Option<SendgridSettings>,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
 pub struct UserTier {
     pub max_non_visible_projects: i32,
     pub max_remote_executions: i32,
@@ -20,6 +50,7 @@ pub struct UserTier {
     pub max_llm_cost: i32,
     pub max_llm_calls: Option<i32>,
     pub llm_tiers: Vec<String>,
+    pub product_id: Option<String>,
 }
 
 pub type UserTiers = HashMap<String, UserTier>;
@@ -40,6 +71,8 @@ pub struct Hub {
     pub signaling: Option<Vec<String>>,
     pub cdn: Option<String>,
     pub app: Option<String>,
+    pub web: Option<String>,
+    pub mail: Option<MailConfig>,
     pub legal_notice: String,
     pub privacy_policy: String,
     pub contact: Contact,
@@ -49,6 +82,9 @@ pub struct Hub {
     pub tiers: UserTiers,
     #[serde(default)]
     pub lookup: Lookup,
+    /// OAuth provider configurations
+    #[serde(default)]
+    pub oauth_providers: OAuthProviderConfigs,
 
     #[serde(skip)]
     recursion_guard: Option<Arc<Mutex<RecursionGuard>>>,
@@ -133,6 +169,53 @@ pub struct OAuth2Config {
     pub token_endpoint: String,
     pub client_id: String,
 }
+
+/// OAuth provider configuration from the config file.
+/// This is used to configure OAuth providers centrally.
+/// The client_secret is resolved from environment variables at build time for providers that need it.
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct OAuthProviderConfig {
+    /// Display name shown to users
+    pub name: String,
+    /// The client ID (public, not secret)
+    #[serde(default)]
+    pub client_id: String,
+    /// Environment variable name containing the client secret (resolved at build time)
+    /// If null, no secret is needed (PKCE-based flow)
+    pub client_secret_env: Option<String>,
+    /// The resolved client secret (populated at build time from the env var)
+    #[serde(default)]
+    pub client_secret: Option<String>,
+    /// OAuth authorization endpoint URL
+    pub auth_url: String,
+    /// OAuth token endpoint URL
+    pub token_url: String,
+    /// Base OAuth scopes (node-specific scopes will be added by the frontend)
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    /// Whether PKCE is required
+    #[serde(default)]
+    pub pkce_required: bool,
+    /// Whether this provider requires the secret proxy for token exchange
+    /// If true, token exchange requests go through the API server which adds the secret
+    #[serde(default)]
+    pub requires_secret_proxy: bool,
+    /// Optional: URL for token revocation
+    pub revoke_url: Option<String>,
+    /// Optional: URL for user info endpoint
+    pub userinfo_url: Option<String>,
+    /// Optional: Device authorization URL for device flow
+    pub device_auth_url: Option<String>,
+    /// Whether to use device flow
+    #[serde(default)]
+    pub use_device_flow: bool,
+    #[serde(default)]
+    pub use_implicit_flow: bool,
+    /// Optional: Audience claim for token validation
+    pub audience: Option<String>,
+}
+
+pub type OAuthProviderConfigs = HashMap<String, OAuthProviderConfig>;
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct Features {

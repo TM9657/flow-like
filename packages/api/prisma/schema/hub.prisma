@@ -29,7 +29,7 @@ model Bit {
   repository String?
   downloadLink String?
   fileName String?
-  hash String
+  hash String?
   parameters Json?
 
   size BigInt?
@@ -39,7 +39,7 @@ model Bit {
   license String?
 
   dependencies String[]
-  dependencyTreeHash String @unique
+  dependencyTreeHash String? @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

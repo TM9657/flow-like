@@ -349,6 +349,33 @@ impl Response {
         Self::default()
     }
 
+    /// Creates a Response from a simple text content
+    pub fn from_text(text: impl Into<String>, model: impl Into<String>) -> Self {
+        Response {
+            id: None,
+            choices: vec![Choice {
+                index: 0,
+                finish_reason: "stop".to_string(),
+                message: ResponseMessage {
+                    role: "assistant".to_string(),
+                    content: Some(text.into()),
+                    refusal: None,
+                    annotations: None,
+                    audio: None,
+                    reasoning: None,
+                    tool_calls: vec![],
+                },
+                logprobs: None,
+            }],
+            created: None,
+            model: Some(model.into()),
+            service_tier: None,
+            system_fingerprint: None,
+            object: None,
+            usage: Usage::default(),
+        }
+    }
+
     pub fn last_message(&self) -> Option<&ResponseMessage> {
         self.choices.last().map(|c| &c.message)
     }

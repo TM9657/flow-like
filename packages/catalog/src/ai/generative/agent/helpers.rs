@@ -42,11 +42,7 @@ pub async fn generate_tool_from_function(
 
     let node = referenced_node.node.lock().await;
     // Use friendly_name (user-customizable) and convert to snake_case for LLM
-    let function_name = node
-        .friendly_name
-        .to_lowercase()
-        .replace(' ', "_")
-        .replace('-', "_");
+    let function_name = node.friendly_name.to_lowercase().replace([' ', '-'], "_");
     let description = node.description.clone();
 
     // Collect all non-execution output pins to build parameter schema
@@ -98,34 +94,32 @@ pub async fn generate_tool_from_function(
     }
 
     // If no data pins exist AND the event has a payload pin defined, add it to the schema
-    if !has_data_pins {
-        if let Some(payload) = payload_pin {
-            let schema_type = match payload.data_type {
-                VariableType::String => HistoryJSONSchemaType::String,
-                VariableType::Integer => HistoryJSONSchemaType::Number,
-                VariableType::Float => HistoryJSONSchemaType::Number,
-                VariableType::Boolean => HistoryJSONSchemaType::Boolean,
-                VariableType::Struct | VariableType::Generic => HistoryJSONSchemaType::Object,
-                VariableType::Date | VariableType::PathBuf | VariableType::Byte => {
-                    HistoryJSONSchemaType::String
-                }
-                VariableType::Execution => HistoryJSONSchemaType::Object, // Fallback
-            };
+    if !has_data_pins && let Some(payload) = payload_pin {
+        let schema_type = match payload.data_type {
+            VariableType::String => HistoryJSONSchemaType::String,
+            VariableType::Integer => HistoryJSONSchemaType::Number,
+            VariableType::Float => HistoryJSONSchemaType::Number,
+            VariableType::Boolean => HistoryJSONSchemaType::Boolean,
+            VariableType::Struct | VariableType::Generic => HistoryJSONSchemaType::Object,
+            VariableType::Date | VariableType::PathBuf | VariableType::Byte => {
+                HistoryJSONSchemaType::String
+            }
+            VariableType::Execution => HistoryJSONSchemaType::Object, // Fallback
+        };
 
-            let payload_def = HistoryJSONSchemaDefine {
-                schema_type: Some(schema_type),
-                description: if payload.description.is_empty() {
-                    None
-                } else {
-                    Some(payload.description.clone())
-                },
-                enum_values: None,
-                properties: None,
-                required: None,
-                items: None,
-            };
-            properties.insert("payload".to_string(), Box::new(payload_def));
-        }
+        let payload_def = HistoryJSONSchemaDefine {
+            schema_type: Some(schema_type),
+            description: if payload.description.is_empty() {
+                None
+            } else {
+                Some(payload.description.clone())
+            },
+            enum_values: None,
+            properties: None,
+            required: None,
+            items: None,
+        };
+        properties.insert("payload".to_string(), Box::new(payload_def));
     }
 
     let parameters = HistoryFunctionParameters {
@@ -173,26 +167,15 @@ pub async fn execute_tool_call(
         .ok_or_else(|| anyhow!("Tool call arguments for '{}' are not an object", tool_name))?;
 
     // Set values on the referenced function's OUTPUT pins (matching call_ref.rs logic)
-    let pins = referenced_node.pins.clone();
-    for (_id, pin) in pins {
-        let guard = pin.lock().await;
-        let (pin_type, data_type, pin_name) = {
-            let pin_meta = guard.pin.lock().await;
-            (
-                pin_meta.pin_type.clone(),
-                pin_meta.data_type.clone(),
-                pin_meta.name.clone(),
-            )
-        };
-
+    for (_id, pin) in referenced_node.pins.iter() {
         // Skip input pins and execution pins
-        if pin_type == PinType::Input || data_type == VariableType::Execution {
+        if pin.pin_type == PinType::Input || pin.data_type == VariableType::Execution {
             continue;
         }
 
         // Set value if we have an argument for this pin
-        if let Some(value) = args_obj.get(&pin_name) {
-            guard.set_value(value.clone()).await;
+        if let Some(value) = args_obj.get(&pin.name) {
+            pin.set_value(value.clone()).await;
         }
     }
 
@@ -298,7 +281,7 @@ impl AgentStreamState {
         if let Ok(on_stream_pin) = context.get_pin_by_name("on_stream").await {
             on_stream_exists = true;
             context.activate_exec_pin_ref(&on_stream_pin).await?;
-            let connected = on_stream_pin.lock().await.get_connected_nodes().await;
+            let connected = on_stream_pin.get_connected_nodes();
             if !connected.is_empty() {
                 let map = Arc::new(DashMap::new());
                 for node in connected {
@@ -541,7 +524,7 @@ pub async fn execute_agent_streaming(
         .collect();
 
     // Generate tool definitions from function references
-    for (_tool_name, internal_node) in &tool_name_to_node {
+    for internal_node in tool_name_to_node.values() {
         let tool = generate_tool_from_function(internal_node).await?;
         let parameters =
             json::to_value(&tool.function.parameters).unwrap_or_else(|_| json::json!({}));
@@ -551,6 +534,10 @@ pub async fn execute_agent_streaming(
             parameters,
         });
     }
+
+    // Deduplicate tools by name, keeping the first occurrence
+    let mut seen_tool_names = std::collections::HashSet::new();
+    tool_definitions.retain(|tool| seen_tool_names.insert(tool.name.clone()));
 
     let (prompt, history_msgs) = history
         .extract_prompt_and_history()

@@ -87,21 +87,15 @@ impl NodeLogic for ParLoopNode {
         let value_pin = context.get_pin_by_name("value").await?;
         let index_pin = context.get_pin_by_name("index").await?;
         let exec_item = context.get_pin_by_name("exec_out").await?;
-        let connected = exec_item.lock().await.get_connected_nodes().await;
+        let connected = exec_item.get_connected_nodes();
         let max_concurrent: i64 = context.evaluate_pin("max_concurrent").await?;
 
         // Initialize pins with dummy values so dependency system sees them as "having a value"
-        value_pin.lock().await.set_value(Value::Null).await;
-        index_pin.lock().await.set_value(Value::from(0)).await;
+        value_pin.set_value(Value::Null).await;
+        index_pin.set_value(Value::from(0)).await;
 
-        let value_pin_id = {
-            let guard = value_pin.lock().await;
-            guard.pin.lock().await.id.clone()
-        };
-        let index_pin_id = {
-            let guard = index_pin.lock().await;
-            guard.pin.lock().await.id.clone()
-        };
+        let value_pin_id = value_pin.id.clone();
+        let index_pin_id = index_pin.id.clone();
 
         let array_value: Value = context.evaluate_pin_ref(array).await?;
         let array_value = array_value

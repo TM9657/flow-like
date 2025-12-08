@@ -7,6 +7,7 @@ edition = "2021"
 flow-like.workspace = true
 flow-like-types.workspace = true
 lambda_http.workspace = true
+mimalloc.workspace = true
 axum.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json.workspace = true

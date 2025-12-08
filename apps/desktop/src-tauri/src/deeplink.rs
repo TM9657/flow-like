@@ -52,6 +52,9 @@ pub fn handle_deep_link(app_handle: &AppHandle, urls: &Vec<Url>) {
             Some("auth") => {
                 handle_auth(app_handle, url_str);
             }
+            Some("thirdparty") => {
+                handle_thirdparty_callback(app_handle, url);
+            }
             Some("trigger") => {
                 handle_trigger(app_handle, url);
             }
@@ -69,6 +72,73 @@ fn handle_auth(app_handle: &AppHandle, url: &str) {
         crate::utils::UiEmitTarget::All,
         "oidc/url",
         json::json!({ "url": url }),
+        std::time::Duration::from_millis(200),
+    );
+}
+
+fn handle_thirdparty_callback(app_handle: &AppHandle, url: &Url) {
+    // Parse URL: flow-like://thirdparty/callback?code=...&state=...
+    // Supports both OAuth (code flow) and OIDC (implicit flow with id_token)
+    let path = url.path();
+
+    // Check if this is the callback path
+    if path.trim_start_matches('/') != "callback" {
+        println!("Unknown thirdparty path: {}", path);
+        return;
+    }
+
+    // Parse query parameters (handles both query string and fragment params)
+    let mut params = serde_json::Map::new();
+    if let Some(query) = url.query() {
+        for pair in query.split('&') {
+            if let Some((key, value)) = pair.split_once('=') {
+                let decoded_key = urlencoding::decode(key).unwrap_or_default().into_owned();
+                let decoded_value = urlencoding::decode(value).unwrap_or_default().into_owned();
+                params.insert(decoded_key, serde_json::Value::String(decoded_value));
+            }
+        }
+    }
+
+    // Also parse fragment (some OIDC providers return tokens in fragment)
+    if let Some(fragment) = url.fragment() {
+        for pair in fragment.split('&') {
+            if let Some((key, value)) = pair.split_once('=') {
+                let decoded_key = urlencoding::decode(key).unwrap_or_default().into_owned();
+                let decoded_value = urlencoding::decode(value).unwrap_or_default().into_owned();
+                // Don't overwrite query params with fragment params
+                if !params.contains_key(&decoded_key) {
+                    params.insert(decoded_key, serde_json::Value::String(decoded_value));
+                }
+            }
+        }
+    }
+
+    println!(
+        "Thirdparty OAuth/OIDC callback received with params: {:?}",
+        params
+    );
+
+    // Emit the callback URL to the frontend for processing
+    // Includes both OAuth (code) and OIDC (id_token, access_token) fields
+    crate::utils::emit_throttled(
+        app_handle,
+        crate::utils::UiEmitTarget::All,
+        "thirdparty/callback",
+        json::json!({
+            "url": url.as_str(),
+            // OAuth Authorization Code flow
+            "code": params.get("code"),
+            "state": params.get("state"),
+            // OIDC Implicit/Hybrid flow
+            "id_token": params.get("id_token"),
+            "access_token": params.get("access_token"),
+            "token_type": params.get("token_type"),
+            "expires_in": params.get("expires_in"),
+            "scope": params.get("scope"),
+            // Error handling
+            "error": params.get("error"),
+            "error_description": params.get("error_description")
+        }),
         std::time::Duration::from_millis(200),
     );
 }

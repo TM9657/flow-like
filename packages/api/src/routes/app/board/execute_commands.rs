@@ -9,7 +9,6 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like::flow::board::commands::GenericCommand;
-use flow_like_types::sync::Mutex;
 use serde::Deserialize;
 
 #[derive(Clone, Deserialize)]
@@ -48,7 +47,7 @@ pub async fn execute_commands(
                 .await?
                 .to_state(state)
                 .await?;
-            Arc::new(Mutex::new(flow_state))
+            Arc::new(flow_state)
         }
     };
 

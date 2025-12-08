@@ -1,9 +1,8 @@
-use std::sync::Arc;
-
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
         node::{Node, NodeLogic},
+        pin::PinType,
         variable::VariableType,
     },
     state::FlowLikeState,
@@ -68,10 +67,8 @@ impl NodeLogic for GenericEventNode {
 
         if let Some(obj) = payload.as_object_mut() {
             let mut output_pins = Vec::new();
-            for (_, pin_ref) in context.node.pins.iter() {
-                let pin_ref_guard = pin_ref.lock().await;
-                let pin = pin_ref_guard.pin.lock().await;
-                if pin.pin_type == flow_like::flow::pin::PinType::Output
+            for (_, pin) in context.node.pins.iter() {
+                if pin.pin_type == PinType::Output
                     && pin.data_type != VariableType::Execution
                     && pin.name != "payload"
                 {

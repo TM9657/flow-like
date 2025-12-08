@@ -2,9 +2,8 @@ use crate::state::{TauriFlowLikeState, TauriSettingsState};
 use async_trait::async_trait;
 use flow_like::flow::board::Board;
 use flow_like::flow::copilot::{
-    CatalogProvider, ChatMessage, Copilot, CopilotResponse, NodeMetadata, PinMetadata, Suggestion,
+    CatalogProvider, ChatMessage, Copilot, CopilotResponse, NodeMetadata, PinMetadata,
 };
-use flow_like::flow::node::Node;
 use flow_like::flow::pin::{Pin, PinType};
 use flow_like::flow::variable::VariableType;
 use flow_like_catalog::get_catalog;
@@ -45,10 +44,10 @@ impl CatalogProvider for DesktopCatalogProvider {
         let query_tokens: Vec<&str> = query_lower.split_whitespace().collect();
 
         let mut scored_matches: Vec<(i32, NodeMetadata)> = Vec::new();
-        let state_guard = self.state.0.lock().await;
+        let state_guard = &self.state.0;
 
         for logic in catalog {
-            let node = logic.get_node(&state_guard).await;
+            let node = logic.get_node(state_guard).await;
             let name_lower = node.name.to_lowercase();
             let friendly_lower = node.friendly_name.to_lowercase();
             let desc_lower = node.description.to_lowercase();
@@ -88,7 +87,7 @@ impl CatalogProvider for DesktopCatalogProvider {
             }
 
             // Bonus for exact word boundaries
-            let name_parts: Vec<&str> = name_lower.split(|c: char| c == ':' || c == '_').collect();
+            let name_parts: Vec<&str> = name_lower.split([':', '_']).collect();
             for token in &query_tokens {
                 if name_parts.iter().any(|part| part == token) {
                     score += 15; // Exact word match in name
@@ -106,13 +105,13 @@ impl CatalogProvider for DesktopCatalogProvider {
                             .pins
                             .values()
                             .filter(|p| p.pin_type == PinType::Input)
-                            .map(|p| pin_to_metadata(p))
+                            .map(pin_to_metadata)
                             .collect(),
                         outputs: node
                             .pins
                             .values()
                             .filter(|p| p.pin_type == PinType::Output)
-                            .map(|p| pin_to_metadata(p))
+                            .map(pin_to_metadata)
                             .collect(),
                         category: Some(category.to_string()),
                     },
@@ -135,10 +134,10 @@ impl CatalogProvider for DesktopCatalogProvider {
         let catalog = get_catalog();
         let pin_type = pin_type.to_lowercase();
         let mut matches = Vec::new();
-        let state_guard = self.state.0.lock().await;
+        let state_guard = &self.state.0;
 
         for logic in catalog {
-            let node = logic.get_node(&state_guard).await;
+            let node = logic.get_node(state_guard).await;
             let name_lower = node.name.to_lowercase();
             let category = name_lower.split("::").nth(1).unwrap_or("");
 
@@ -163,13 +162,13 @@ impl CatalogProvider for DesktopCatalogProvider {
                         .pins
                         .values()
                         .filter(|p| p.pin_type == PinType::Input)
-                        .map(|p| pin_to_metadata(p))
+                        .map(pin_to_metadata)
                         .collect(),
                     outputs: node
                         .pins
                         .values()
                         .filter(|p| p.pin_type == PinType::Output)
-                        .map(|p| pin_to_metadata(p))
+                        .map(pin_to_metadata)
                         .collect(),
                     category: Some(category.to_string()),
                 });
@@ -185,10 +184,10 @@ impl CatalogProvider for DesktopCatalogProvider {
         let catalog = get_catalog();
         let category_prefix = category_prefix.to_lowercase();
         let mut matches = Vec::new();
-        let state_guard = self.state.0.lock().await;
+        let state_guard = &self.state.0;
 
         for logic in catalog {
-            let node = logic.get_node(&state_guard).await;
+            let node = logic.get_node(state_guard).await;
             let name_lower = node.name.to_lowercase();
             // Extract category from name (e.g., "flow_like_catalog::string::concat" -> "string")
             let category = name_lower.split("::").nth(1).unwrap_or("");
@@ -203,13 +202,13 @@ impl CatalogProvider for DesktopCatalogProvider {
                         .pins
                         .values()
                         .filter(|p| p.pin_type == PinType::Input)
-                        .map(|p| pin_to_metadata(p))
+                        .map(pin_to_metadata)
                         .collect(),
                     outputs: node
                         .pins
                         .values()
                         .filter(|p| p.pin_type == PinType::Output)
-                        .map(|p| pin_to_metadata(p))
+                        .map(pin_to_metadata)
                         .collect(),
                     category: Some(category.to_string()),
                 });
@@ -223,10 +222,10 @@ impl CatalogProvider for DesktopCatalogProvider {
 
     async fn get_all_nodes(&self) -> Vec<String> {
         let catalog = get_catalog();
-        let state_guard = self.state.0.lock().await;
+        let state_guard = &self.state.0;
         let mut names = Vec::new();
         for logic in catalog {
-            let node = logic.get_node(&state_guard).await;
+            let node = logic.get_node(state_guard).await;
             names.push(node.name);
         }
         names
@@ -255,9 +254,7 @@ pub async fn flowpilot_chat(
     let selected_node_ids = selected_node_ids.unwrap_or_default();
     let history = history.unwrap_or_default();
 
-    let state_guard = state.0.lock().await;
-    let state_clone = state_guard.clone();
-    drop(state_guard);
+    let state_clone = state.0.clone();
 
     let profile = TauriSettingsState::current_profile(&app_handle)
         .await

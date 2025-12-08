@@ -7,15 +7,18 @@ import {
 	IConnectionMode,
 	type IExecutionStage,
 	type IGenericCommand,
+	type IHub,
 	type IIntercomEvent,
 	type ILog,
 	type ILogLevel,
 	type ILogMetadata,
 	type INode,
+	type IOAuthProvider,
 	type IRunContext,
 	type IRunPayload,
 	type ISettingsProfile,
 	type IVersionType,
+	checkOAuthTokens,
 	injectDataFunction,
 	isEqual,
 } from "@tm9657/flow-like-ui";
@@ -23,12 +26,41 @@ import type { IJwks, IRealtimeAccess } from "@tm9657/flow-like-ui";
 import { isObject } from "lodash-es";
 import { toast } from "sonner";
 import { fetcher } from "../../lib/api";
+import { oauthConsentStore, oauthTokenStore } from "../../lib/oauth-db";
+import { oauthService } from "../../lib/oauth-service";
 import type { TauriBackend } from "../tauri-provider";
 
 interface DiffEntry {
 	path: string;
 	local: any;
 	remote: any;
+}
+
+// Hub configuration cache
+let hubCache: IHub | undefined;
+let hubCachePromise: Promise<IHub | undefined> | undefined;
+
+async function getHubConfig(profile?: { hub?: string }): Promise<
+	IHub | undefined
+> {
+	if (hubCache) return hubCache;
+	if (hubCachePromise) return hubCachePromise;
+
+	const hubUrl = profile?.hub;
+	if (!hubUrl) return undefined;
+
+	hubCachePromise = fetch(`https://${hubUrl}/api/v1`)
+		.then((res) => res.json() as Promise<IHub>)
+		.then((hub) => {
+			hubCache = hub;
+			return hub;
+		})
+		.catch((e) => {
+			console.warn("[OAuth] Failed to fetch Hub config:", e);
+			return undefined;
+		});
+
+	return hubCachePromise;
 }
 
 const getDeepDifferences = (
@@ -466,6 +498,7 @@ export class BoardState implements IBoardState {
 		streamState?: boolean,
 		eventId?: (id: string) => void,
 		cb?: (event: IIntercomEvent[]) => void,
+		skipConsentCheck?: boolean,
 	): Promise<ILogMetadata | undefined> {
 		const channel = new Channel<IIntercomEvent[]>();
 		let closed = false;
@@ -487,6 +520,79 @@ export class BoardState implements IBoardState {
 			} catch (e) {
 				console.warn(e);
 			}
+		}
+
+		// Collect OAuth tokens from board nodes using shared helper
+		let oauthTokens:
+			| Record<
+					string,
+					{
+						access_token: string;
+						refresh_token?: string;
+						expires_at?: number;
+						token_type?: string;
+					}
+			  >
+			| undefined;
+		const board = await this.getBoard(appId, boardId);
+		const hub = await getHubConfig(this.backend.profile);
+		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub, {
+			refreshToken: oauthService.refreshToken.bind(oauthService),
+		});
+
+		console.log("[OAuth] Board check result:", {
+			requiredProviders: oauthResult.requiredProviders.map((p) => p.id),
+			missingProviders: oauthResult.missingProviders.map((p) => p.id),
+			hasTokens: Object.keys(oauthResult.tokens),
+			skipConsentCheck,
+		});
+
+		// Check consent for providers that have tokens but might not have consent for this app
+		// Skip this check if explicitly told to (e.g., after user consented in dialog)
+		if (!skipConsentCheck) {
+			const consentedIds =
+				await oauthConsentStore.getConsentedProviderIds(appId);
+			const providersNeedingConsent: IOAuthProvider[] = [];
+
+			// Add providers that are missing tokens
+			providersNeedingConsent.push(...oauthResult.missingProviders);
+
+			// Also add providers that have tokens but no consent for this specific app
+			for (const provider of oauthResult.requiredProviders) {
+				const hasToken = oauthResult.tokens[provider.id] !== undefined;
+				const hasConsent = consentedIds.has(provider.id);
+
+				if (hasToken && !hasConsent) {
+					console.log(
+						`[OAuth] Provider ${provider.id} has token but no consent for app ${appId}`,
+					);
+					providersNeedingConsent.push(provider);
+				}
+			}
+
+			if (providersNeedingConsent.length > 0) {
+				// Throw a special error that the UI can catch to show consent dialog
+				const error = new Error(
+					`Missing OAuth authorization for: ${providersNeedingConsent.map((p) => p.name).join(", ")}`,
+				);
+				(error as any).missingProviders = providersNeedingConsent;
+				(error as any).isOAuthError = true;
+				throw error;
+			}
+		} else {
+			// Still need to check for missing tokens even if skipping consent
+			if (oauthResult.missingProviders.length > 0) {
+				const error = new Error(
+					`Missing OAuth tokens for: ${oauthResult.missingProviders.map((p) => p.name).join(", ")}`,
+				);
+				(error as any).missingProviders = oauthResult.missingProviders;
+				(error as any).isOAuthError = true;
+				throw error;
+			}
+		}
+
+		if (Object.keys(oauthResult.tokens).length > 0) {
+			oauthTokens = oauthResult.tokens;
 		}
 
 		channel.onmessage = (events: IIntercomEvent[]) => {
@@ -526,6 +632,7 @@ export class BoardState implements IBoardState {
 			streamState: streamState,
 			credentials,
 			token,
+			oauthTokens,
 		});
 
 		closed = true;

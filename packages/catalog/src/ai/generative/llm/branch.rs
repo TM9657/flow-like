@@ -175,7 +175,7 @@ impl NodeLogic for LLMBranchNode {
         // generate response
         let response = {
             // load model
-            let model_factory = context.app_state.lock().await.model_factory.clone();
+            let model_factory = context.app_state.model_factory.clone();
             let model = model_factory
                 .lock()
                 .await

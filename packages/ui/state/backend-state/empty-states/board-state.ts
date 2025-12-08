@@ -68,6 +68,7 @@ export class EmptyBoardState implements IBoardState {
 		streamState?: boolean,
 		eventId?: (id: string) => void,
 		cb?: (event: IIntercomEvent[]) => void,
+		skipConsentCheck?: boolean,
 	): Promise<ILogMetadata | undefined> {
 		throw new Error("Method not implemented.");
 	}

@@ -164,10 +164,10 @@ impl ModelFactory {
     pub async fn build(
         &mut self,
         bit: &Bit,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
         access_token: Option<String>,
     ) -> Result<Arc<dyn ModelLogic>> {
-        let provider_config = app_state.lock().await.model_provider_config.clone();
+        let provider_config = app_state.model_provider_config.clone();
         let settings = self.execution_settings.clone();
         let provider = bit.try_to_provider();
         if provider.is_none() {
@@ -198,7 +198,7 @@ impl ModelFactory {
                 .await;
         }
 
-        if provider.to_lowercase() == "hosted" {
+        if provider.to_lowercase() == "hosted" || provider.to_lowercase().starts_with("hosted:") {
             if let Some(model) = self.cached_models.get(&bit.id) {
                 self.ttl_list.insert(bit.id.clone(), SystemTime::now());
                 return Ok(model.clone());
@@ -220,10 +220,55 @@ impl ModelFactory {
             model_provider.model_id = Some(bit.id.clone());
             model_provider.params = Some(params.clone());
 
-            let model = OpenRouterModel::from_provider(&model_provider)
-                .await
-                .map_err(|e| flow_like_types::anyhow!("Failed to create hosted model: {}", e))?;
-            let model = Arc::new(model);
+            let hosted_type = if provider.contains(':') {
+                provider.split(':').nth(1).unwrap_or("openrouter")
+            } else {
+                "openrouter"
+            };
+
+            let model: Arc<dyn ModelLogic> = match hosted_type.to_lowercase().as_str() {
+                "openrouter" => Arc::new(
+                    OpenRouterModel::from_provider(&model_provider)
+                        .await
+                        .map_err(|e| {
+                            flow_like_types::anyhow!(
+                                "Failed to create hosted:openrouter model: {}",
+                                e
+                            )
+                        })?,
+                ),
+                "openai" => Arc::new(OpenAIModel::from_provider(&model_provider).await.map_err(
+                    |e| flow_like_types::anyhow!("Failed to create hosted:openai model: {}", e),
+                )?),
+                "anthropic" => Arc::new(
+                    AnthropicModel::from_provider(&model_provider)
+                        .await
+                        .map_err(|e| {
+                            flow_like_types::anyhow!(
+                                "Failed to create hosted:anthropic model: {}",
+                                e
+                            )
+                        })?,
+                ),
+                "azure" => Arc::new(OpenAIModel::from_provider(&model_provider).await.map_err(
+                    |e| flow_like_types::anyhow!("Failed to create hosted:azure model: {}", e),
+                )?),
+                "bedrock" => {
+                    return Err(flow_like_types::anyhow!(
+                        "hosted:bedrock is not supported in local model factory"
+                    ));
+                }
+                "vertex" => Arc::new(GeminiModel::from_provider(&model_provider).await.map_err(
+                    |e| flow_like_types::anyhow!("Failed to create hosted:vertex model: {}", e),
+                )?),
+                _ => {
+                    return Err(flow_like_types::anyhow!(
+                        "Unsupported hosted provider type: {}",
+                        hosted_type
+                    ));
+                }
+            };
+
             self.ttl_list.insert(bit.id.clone(), SystemTime::now());
             self.cached_models.insert(bit.id.clone(), model.clone());
             return Ok(model);

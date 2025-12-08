@@ -45,6 +45,12 @@ pub struct NodeScores {
     pub cost: u8,
 }
 
+impl Default for NodeScores {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NodeScores {
     pub fn new() -> Self {
         NodeScores {
@@ -113,6 +119,10 @@ pub struct Node {
     pub layer: Option<String>,
     pub hash: Option<u64>,
     pub fn_refs: Option<FnRefs>,
+    /// OAuth provider IDs this node requires (references Hub's oauth_providers config)
+    pub oauth_providers: Option<Vec<String>>,
+    /// OAuth scopes required by this node (provider_id -> scopes)
+    pub required_oauth_scopes: Option<HashMap<String, Vec<String>>>,
 }
 
 impl Node {
@@ -136,6 +146,8 @@ impl Node {
             layer: None,
             hash: None,
             fn_refs: None,
+            oauth_providers: None,
+            required_oauth_scopes: None,
         }
     }
 
@@ -177,6 +189,52 @@ impl Node {
                 can_be_referenced_by_fns: false,
             });
         }
+    }
+
+    /// Add an OAuth provider ID requirement to this node
+    pub fn add_oauth_provider(&mut self, provider_id: &str) {
+        if let Some(providers) = &mut self.oauth_providers {
+            if !providers.contains(&provider_id.to_string()) {
+                providers.push(provider_id.to_string());
+            }
+        } else {
+            self.oauth_providers = Some(vec![provider_id.to_string()]);
+        }
+    }
+
+    /// Get all OAuth provider IDs required by this node
+    pub fn get_oauth_provider_ids(&self) -> Vec<String> {
+        self.oauth_providers.clone().unwrap_or_default()
+    }
+
+    /// Add required OAuth scopes for a specific provider.
+    /// These scopes will be merged with the provider's base scopes when OAuth is initiated.
+    pub fn add_required_oauth_scopes(&mut self, provider_id: &str, scopes: Vec<&str>) {
+        let scopes: Vec<String> = scopes.into_iter().map(|s| s.to_string()).collect();
+        if let Some(ref mut required_scopes) = self.required_oauth_scopes {
+            if let Some(existing) = required_scopes.get_mut(provider_id) {
+                for scope in scopes {
+                    if !existing.contains(&scope) {
+                        existing.push(scope);
+                    }
+                }
+            } else {
+                required_scopes.insert(provider_id.to_string(), scopes);
+            }
+        } else {
+            let mut map = HashMap::new();
+            map.insert(provider_id.to_string(), scopes);
+            self.required_oauth_scopes = Some(map);
+        }
+    }
+
+    /// Get required OAuth scopes for a specific provider
+    pub fn get_required_oauth_scopes(&self, provider_id: &str) -> Vec<String> {
+        self.required_oauth_scopes
+            .as_ref()
+            .and_then(|scopes| scopes.get(provider_id))
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub fn add_input_pin(

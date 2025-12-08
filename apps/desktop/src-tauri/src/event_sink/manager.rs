@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
+use flow_like::flow::oauth::OAuthToken;
 use flow_like_types::intercom::BufferedInterComHandler;
 use rusqlite::{Connection, params};
 use serde_json;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -50,10 +51,25 @@ impl RegistrationStorage {
                 offline INTEGER NOT NULL,
                 app_id TEXT NOT NULL,
                 default_payload TEXT,
-                personal_access_token TEXT
+                personal_access_token TEXT,
+                oauth_tokens TEXT
             )",
             [],
         )?;
+
+        // Migration: add oauth_tokens column if it doesn't exist
+        let has_oauth_tokens: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('event_registrations') WHERE name='oauth_tokens'")?
+            .query_row([], |row| row.get::<_, i32>(0))
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_oauth_tokens {
+            conn.execute(
+                "ALTER TABLE event_registrations ADD COLUMN oauth_tokens TEXT",
+                [],
+            )?;
+        }
 
         Ok(())
     }
@@ -65,6 +81,11 @@ impl RegistrationStorage {
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
+        let oauth_tokens_json = if registration.oauth_tokens.is_empty() {
+            None
+        } else {
+            Some(serde_json::to_string(&registration.oauth_tokens)?)
+        };
 
         let updated_at = registration
             .updated_at
@@ -87,8 +108,8 @@ impl RegistrationStorage {
 
             conn.execute(
                 "INSERT OR REPLACE INTO event_registrations
-                 (event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                 (event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token, oauth_tokens)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     registration.event_id,
                     registration.name,
@@ -100,6 +121,7 @@ impl RegistrationStorage {
                     registration.app_id,
                     default_payload_json,
                     registration.personal_access_token,
+                    oauth_tokens_json,
                 ],
             )?;
         }
@@ -116,7 +138,7 @@ impl RegistrationStorage {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token
+            "SELECT event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token, oauth_tokens
              FROM event_registrations WHERE event_id = ?1"
         )?;
 
@@ -142,6 +164,19 @@ impl RegistrationStorage {
                     )
                 })?;
 
+            let oauth_tokens_json: Option<String> = row.get(10)?;
+            let oauth_tokens: HashMap<String, OAuthToken> = oauth_tokens_json
+                .map(|json| serde_json::from_str(&json))
+                .transpose()
+                .map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        10,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?
+                .unwrap_or_default();
+
             let updated_at_secs: i64 = row.get(3)?;
             let created_at_secs: i64 = row.get(4)?;
 
@@ -158,6 +193,7 @@ impl RegistrationStorage {
                 app_id: row.get(7)?,
                 default_payload,
                 personal_access_token: row.get(9)?,
+                oauth_tokens,
             })
         });
 
@@ -172,7 +208,7 @@ impl RegistrationStorage {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token
+            "SELECT event_id, name, type, updated_at, created_at, config, offline, app_id, default_payload, personal_access_token, oauth_tokens
              FROM event_registrations ORDER BY created_at DESC"
         )?;
 
@@ -199,6 +235,19 @@ impl RegistrationStorage {
                         )
                     })?;
 
+                let oauth_tokens_json: Option<String> = row.get(10)?;
+                let oauth_tokens: HashMap<String, OAuthToken> = oauth_tokens_json
+                    .map(|json| serde_json::from_str(&json))
+                    .transpose()
+                    .map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            10,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    })?
+                    .unwrap_or_default();
+
                 let updated_at_secs: i64 = row.get(3)?;
                 let created_at_secs: i64 = row.get(4)?;
 
@@ -215,6 +264,7 @@ impl RegistrationStorage {
                     app_id: row.get(7)?,
                     default_payload,
                     personal_access_token: row.get(9)?,
+                    oauth_tokens,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -297,7 +347,7 @@ impl EventSinkManager {
     }
 
     /// Fire an event by retrieving its configuration and pushing it to the event bus
-    /// This is a centralized method that handles offline status, personal_access_token, etc.
+    /// This is a centralized method that handles offline status, personal_access_token, oauth_tokens, etc.
     pub fn fire_event(
         &self,
         app_handle: &AppHandle,
@@ -310,18 +360,32 @@ impl EventSinkManager {
         let conn = self.db.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT app_id, offline, personal_access_token FROM event_registrations WHERE event_id = ?1",
+            "SELECT app_id, offline, personal_access_token, oauth_tokens FROM event_registrations WHERE event_id = ?1",
         )?;
 
         let query_result = stmt.query_row(params![event_id], |row| {
+            let oauth_tokens_json: Option<String> = row.get(3)?;
+            let oauth_tokens: HashMap<String, OAuthToken> = oauth_tokens_json
+                .map(|json| serde_json::from_str(&json))
+                .transpose()
+                .map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        3,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?
+                .unwrap_or_default();
+
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, bool>(1)?,
                 row.get::<_, Option<String>>(2)?,
+                oauth_tokens,
             ))
         });
 
-        let (app_id, offline, personal_access_token) = match query_result {
+        let (app_id, offline, personal_access_token, oauth_tokens) = match query_result {
             Ok(result) => result,
             Err(e) => {
                 drop(stmt);
@@ -333,28 +397,25 @@ impl EventSinkManager {
         drop(stmt);
         drop(conn);
 
+        // Convert oauth_tokens to Option if empty
+        let oauth_tokens_opt = if oauth_tokens.is_empty() {
+            None
+        } else {
+            Some(oauth_tokens)
+        };
+
         if let Some(event_bus_state) = app_handle.try_state::<crate::state::TauriEventBusState>() {
             let event_bus = &event_bus_state.0;
 
-            let push_result = if let Some(token) = personal_access_token {
-                event_bus.push_event_with_token(
-                    payload,
-                    app_id.clone(),
-                    event_id.to_string(),
-                    offline,
-                    Some(token),
-                    callback,
-                )
-            } else {
-                event_bus.push_event_with_token(
-                    payload,
-                    app_id.clone(),
-                    event_id.to_string(),
-                    offline,
-                    personal_access_token,
-                    callback,
-                )
-            };
+            let push_result = event_bus.push_event_with_token(
+                payload,
+                app_id.clone(),
+                event_id.to_string(),
+                offline,
+                personal_access_token,
+                callback,
+                oauth_tokens_opt,
+            );
 
             match push_result {
                 Ok(_) => Ok(true),
@@ -580,6 +641,7 @@ impl EventSinkManager {
         event: &flow_like::flow::event::Event,
         offline: Option<bool>,
         personal_access_token: Option<String>,
+        oauth_tokens: Option<HashMap<String, OAuthToken>>,
     ) -> Result<()> {
         // Check if this event type supports sink registration
         if !Self::supports_sink_registration(&event.event_type) {
@@ -622,6 +684,18 @@ impl EventSinkManager {
 
         match config_result {
             Ok(event_config) => {
+                // Merge oauth_tokens from existing registration with new tokens
+                let final_oauth_tokens =
+                    if let Some(existing_reg) = self.storage.get_registration(&event.id)? {
+                        let mut merged = existing_reg.oauth_tokens.clone();
+                        if let Some(new_tokens) = oauth_tokens {
+                            merged.extend(new_tokens);
+                        }
+                        merged
+                    } else {
+                        oauth_tokens.unwrap_or_default()
+                    };
+
                 let registration = EventRegistration {
                     event_id: event.id.clone(),
                     name: event.name.clone(),
@@ -633,6 +707,7 @@ impl EventSinkManager {
                     app_id: app_id.to_string(),
                     default_payload: None, // TODO: Parse from event if needed
                     personal_access_token: final_pat.clone(),
+                    oauth_tokens: final_oauth_tokens,
                 };
 
                 self.register_event(app_handle, registration).await?;

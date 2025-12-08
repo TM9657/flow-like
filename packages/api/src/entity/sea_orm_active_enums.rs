@@ -130,6 +130,42 @@ pub enum PublicationRequestStatus {
     Rejected,
 }
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(
+    rs_type = "String",
+    db_type = "Enum",
+    enum_name = "SolutionPricingTier"
+)]
+pub enum SolutionPricingTier {
+    #[sea_orm(string_value = "STANDARD")]
+    Standard,
+    #[sea_orm(string_value = "APPSTORE")]
+    Appstore,
+}
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "SolutionStatus")]
+pub enum SolutionStatus {
+    #[sea_orm(string_value = "AWAITING_DEPOSIT")]
+    AwaitingDeposit,
+    #[sea_orm(string_value = "PENDING_REVIEW")]
+    PendingReview,
+    #[sea_orm(string_value = "IN_QUEUE")]
+    InQueue,
+    #[sea_orm(string_value = "ONBOARDING_DONE")]
+    OnboardingDone,
+    #[sea_orm(string_value = "IN_PROGRESS")]
+    InProgress,
+    #[sea_orm(string_value = "DELIVERED")]
+    Delivered,
+    #[sea_orm(string_value = "AWAITING_PAYMENT")]
+    AwaitingPayment,
+    #[sea_orm(string_value = "PAID")]
+    Paid,
+    #[sea_orm(string_value = "CANCELLED")]
+    Cancelled,
+    #[sea_orm(string_value = "REFUNDED")]
+    Refunded,
+}
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "Status")]
 pub enum Status {
     #[sea_orm(string_value = "ACTIVE")]

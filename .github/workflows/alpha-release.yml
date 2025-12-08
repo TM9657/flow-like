@@ -137,7 +137,7 @@ jobs:
         with:
           tagName: alpha-v__VERSION__
           releaseName: "Flow Like - Alpha v__VERSION__"
-          releaseBody: "Alpha release for testing purposes. Please do not distribute."
+          releaseBody: ""
           releaseDraft: true
           prerelease: true
           projectPath: "./apps/desktop"

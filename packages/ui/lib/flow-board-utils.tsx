@@ -178,6 +178,29 @@ function invertPinType(type: IPinType): IPinType {
 	return type === IPinType.Input ? IPinType.Output : IPinType.Input;
 }
 
+/** Prefix for break struct field pins */
+const BREAK_STRUCT_PIN_PREFIX = "__break_struct_field__";
+/** Prefix for make struct field pins */
+const MAKE_STRUCT_PIN_PREFIX = "__make_struct_field__";
+
+/**
+ * Check if a pin is a break/make struct field pin.
+ * These pins have special connection rules for schema matching.
+ */
+function isStructFieldPin(pin: IPin): boolean {
+	return (
+		pin.name.startsWith(BREAK_STRUCT_PIN_PREFIX) ||
+		pin.name.startsWith(MAKE_STRUCT_PIN_PREFIX)
+	);
+}
+
+/**
+ * Check if this is a struct_in or struct_out pin from break/make struct nodes.
+ */
+function isStructIOPin(pin: IPin): boolean {
+	return pin.name === "struct_in" || pin.name === "struct_out";
+}
+
 export function doPinsMatch(
 	sourcePin: IPin,
 	targetPin: IPin,
@@ -250,6 +273,21 @@ export function doPinsMatch(
 		targetPin.data_type !== "Execution"
 	)
 		return true;
+
+	// Special handling for break/make struct I/O pins
+	// These pins (struct_in, struct_out) should be able to connect to any struct with a schema
+	// The schema will be adopted dynamically via on_update
+	if (
+		(isStructIOPin(sourcePin) || isStructIOPin(targetPin)) &&
+		sourcePin.data_type === IVariableType.Struct &&
+		targetPin.data_type === IVariableType.Struct
+	) {
+		// Allow connection if one side has a schema (the break/make node will adopt it)
+		if (sourcePin.schema || targetPin.schema) {
+			if (sourcePin.value_type !== targetPin.value_type) return false;
+			return true;
+		}
+	}
 
 	if (
 		(targetPin.options?.enforce_schema || sourcePin.options?.enforce_schema) &&

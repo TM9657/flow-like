@@ -6,6 +6,7 @@ mod profile;
 mod settings;
 mod state;
 pub mod utils;
+
 use flow_like::{
     flow_like_storage::{
         Path,
@@ -166,7 +167,7 @@ pub fn run() {
     let settings_state = Arc::new(Mutex::new(settings_state));
     let (http_client, refetch_rx) = HTTPClient::new();
     let state = FlowLikeState::new(config, http_client);
-    let state_ref = Arc::new(Mutex::new(state));
+    let state_ref = Arc::new(state);
 
     let initialized_state = state_ref.clone();
     tauri::async_runtime::spawn(async move {
@@ -175,9 +176,7 @@ pub fn run() {
 
         let weak_ref = Arc::downgrade(&initialized_state);
         let catalog = flow_like_catalog::get_catalog();
-        let state = initialized_state.lock().await;
-        let registry_guard = state.node_registry.clone();
-        drop(state);
+        let registry_guard = initialized_state.node_registry.clone();
         let mut registry = registry_guard.write().await;
         registry.initialize(weak_ref);
         if let Err(e) = registry.push_nodes(catalog).await {
@@ -368,7 +367,6 @@ pub fn run() {
                             return;
                         }
                     };
-                    let flow_like_state = flow_like_state.lock().await;
 
                     flow_like_state.model_factory.clone()
                 };
@@ -404,7 +402,6 @@ pub fn run() {
                             return;
                         }
                     };
-                    let flow_like_state = flow_like_state.lock().await;
                     flow_like_state.http_client.clone()
                 };
 
@@ -468,7 +465,7 @@ pub fn run() {
                     };
 
                     let hub_url = settings.lock().await.default_hub.clone();
-                    let http_client = flow_like_state.lock().await.http_client.clone();
+                    let http_client = flow_like_state.http_client.clone();
 
                     (flow_like_state, hub_url, http_client)
                 };

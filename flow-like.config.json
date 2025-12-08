@@ -38,6 +38,7 @@
 	"cdn": "https://cdn.flow-like.com",
 	"domain": "api.alpha.flow-like.com",
 	"app": "app.flow-like.com",
+	"web": "flow-like.com",
 	"provider": "aws",
 	"region": "eu-west-1",
 	"signaling": ["wss://signaling.flow-like.com"],
@@ -51,6 +52,11 @@
 	},
 	"max_users_prototype": -1,
 	"default_user_plan": "FREE",
+	"mail": {
+		"provider": "ses",
+		"from_email": "no-reply@flow-like.com",
+		"from_name": "Flow-Like"
+	},
 	"tiers": {
 		"FREE": {
 			"max_non_visible_projects": 10,
@@ -59,7 +65,8 @@
 			"max_total_size": 100000000,
 			"max_llm_cost": 0,
 			"max_llm_calls": 100,
-			"llm_tiers": ["FREE"]
+			"llm_tiers": ["FREE"],
+			"product_id": "prod_TZ7WqEqV6Hu55X"
 		},
 		"PREMIUM": {
 			"max_non_visible_projects": 200,
@@ -68,7 +75,8 @@
 			"max_total_size": 1000000000,
 			"max_llm_cost": 300,
 			"max_llm_calls": 1000,
-			"llm_tiers": ["PRO", "FREE"]
+			"llm_tiers": ["PREMIUM", "FREE"],
+			"product_id": "prod_TZ7WZDjKG5GML7"
 		},
 		"PRO": {
 			"max_non_visible_projects": -1,
@@ -77,7 +85,8 @@
 			"max_total_size": 10000000000,
 			"max_llm_cost": 3000,
 			"max_llm_calls": 10000,
-			"llm_tiers": ["PRO", "PREMIUM"]
+			"llm_tiers": ["PRO", "PREMIUM", "FREE"],
+			"product_id": "prod_TZ7XoKK32J1SGQ"
 		},
 		"ENTERPRISE": {
 			"max_non_visible_projects": -1,
@@ -86,7 +95,8 @@
 			"max_total_size": -1,
 			"max_llm_cost": -1,
 			"max_llm_calls": -1,
-			"llm_tiers": ["PRO", "PREMIUM", "ENTERPRISE"]
+			"llm_tiers": ["PRO", "PREMIUM", "ENTERPRISE", "FREE"],
+			"product_id": "prod_TZ7XZqKVwXkROi"
 		}
 	},
 	"environment": "Staging",
@@ -99,5 +109,81 @@
 		"additional_information": true,
 		"description": true,
 		"created_at": true
+	},
+	"oauth_providers": {
+		"notion": {
+			"name": "Notion",
+			"client_id": "2bcd872b-594c-803d-893c-0037e9662703",
+			"client_secret_env": "NOTION_CLIENT_SECRET",
+			"auth_url": "https://api.notion.com/v1/oauth/authorize",
+			"token_url": "https://api.notion.com/v1/oauth/token",
+			"scopes": [],
+			"pkce_required": false,
+			"requires_secret_proxy": true
+		},
+		"atlassian": {
+			"name": "Atlassian",
+			"client_id": "eobHfVJUiONqdPr1RZCKZBGlG4K9oPV7",
+			"client_secret_env": "ATLASSIAN_CLIENT_SECRET",
+			"auth_url": "https://auth.atlassian.com/authorize",
+			"token_url": "https://auth.atlassian.com/oauth/token",
+			"scopes": ["offline_access"],
+			"pkce_required": true,
+			"requires_secret_proxy": true,
+			"audience": "api.atlassian.com"
+		},
+		"google": {
+			"name": "Google",
+			"client_id": "290832386845-thpbvl5av7u4c4m02egdtgvcf2rrc00j.apps.googleusercontent.com",
+			"auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+			"token_url": "https://oauth2.googleapis.com/token",
+			"scopes": ["openid", "email", "profile"],
+			"pkce_required": false,
+			"requires_secret_proxy": false,
+			"use_implicit_flow": true,
+			"userinfo_url": "https://www.googleapis.com/oauth2/v2/userinfo",
+			"revoke_url": "https://oauth2.googleapis.com/revoke"
+		},
+		"github": {
+			"name": "GitHub",
+			"client_id": "Ov23lizsysUhDlNMfrTO",
+			"auth_url": "https://github.com/login/oauth/authorize",
+			"token_url": "https://github.com/login/oauth/access_token",
+			"device_auth_url": "https://github.com/login/device/code",
+			"scopes": [],
+			"pkce_required": false,
+			"requires_secret_proxy": false,
+			"use_device_flow": true
+		},
+		"microsoft": {
+			"name": "Microsoft",
+			"client_id": "c2f4f10c-2867-43a1-9558-ccae12f84bde",
+			"auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+			"token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+			"scopes": ["openid", "profile", "email", "offline_access"],
+			"pkce_required": true,
+			"requires_secret_proxy": false,
+			"userinfo_url": "https://graph.microsoft.com/oidc/userinfo"
+		},
+		"linkedin": {
+			"name": "LinkedIn",
+			"client_id": "77glup50dqcazr",
+			"client_secret_env": "LINKEDIN_CLIENT_SECRET",
+			"auth_url": "https://www.linkedin.com/oauth/v2/authorization",
+			"token_url": "https://www.linkedin.com/oauth/v2/accessToken",
+			"scopes": ["openid", "profile", "email"],
+			"pkce_required": false,
+			"requires_secret_proxy": true,
+			"userinfo_url": "https://api.linkedin.com/v2/userinfo"
+		},
+		"databricks": {
+			"name": "Databricks",
+			"client_id": "d59ae17e-a0e0-4497-af9a-f79295a3c31c",
+			"auth_url": "https://accounts.cloud.databricks.com/oidc/accounts/{account_id}/v1/authorize",
+			"token_url": "https://accounts.cloud.databricks.com/oidc/accounts/{account_id}/v1/token",
+			"scopes": ["all-apis", "offline_access"],
+			"pkce_required": true,
+			"requires_secret_proxy": false
+		}
 	}
 }

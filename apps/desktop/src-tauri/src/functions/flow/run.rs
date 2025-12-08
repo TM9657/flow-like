@@ -3,6 +3,7 @@ use flow_like::credentials::SharedCredentials;
 use flow_like::flow::execution::InternalRun;
 use flow_like::flow::execution::log::LogMessage;
 use flow_like::flow::execution::{LogLevel, LogMeta, RunPayload};
+use flow_like::flow::oauth::OAuthToken;
 use flow_like::flow_like_storage::lancedb::query::{ExecutableQuery, QueryBase};
 use flow_like::flow_like_storage::{Path, serde_arrow};
 use flow_like::state::RunData;
@@ -10,6 +11,7 @@ use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
 use flow_like_types::tokio_util::sync::CancellationToken;
 use flow_like_types::{json, tokio};
 use futures::TryStreamExt;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::AppHandle;
@@ -30,6 +32,7 @@ async fn execute_internal(
     stream_state: bool,
     credentials: Option<SharedCredentials>,
     token: Option<String>,
+    oauth_tokens: Option<HashMap<String, OAuthToken>>,
 ) -> Result<Option<LogMeta>, TauriFunctionError> {
     let mut event = None;
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
@@ -100,6 +103,7 @@ async fn execute_internal(
         buffered_sender.into_callback(),
         credentials,
         token,
+        oauth_tokens.unwrap_or_default().into_iter().collect(),
     )
     .await?;
     let run_id = internal_run.run.lock().await.id.clone();
@@ -114,7 +118,7 @@ async fn execute_internal(
     let cancellation_token = CancellationToken::new();
     let run_data = RunData::new(&board_id, &payload.id, None, cancellation_token.clone());
 
-    flow_like_state.lock().await.register_run(&run_id, run_data);
+    flow_like_state.register_run(&run_id, run_data);
 
     let meta = tokio::select! {
         result = internal_run.execute(flow_like_state.clone()) => result,
@@ -146,8 +150,7 @@ async fn execute_internal(
 
     if let Some(meta) = &meta {
         let db = {
-            let guard = flow_like_state.lock().await;
-            let guard = guard.config.read().await;
+            let guard = flow_like_state.config.read().await;
 
             guard.callbacks.build_logs_database.clone()
         };
@@ -163,7 +166,7 @@ async fn execute_internal(
             .map_err(|e| flow_like_types::anyhow!("Failed to flush run: {}, {:?}", base_path, e))?;
     }
 
-    let _res = flow_like_state.lock().await.remove_and_cancel_run(&run_id);
+    let _res = flow_like_state.remove_and_cancel_run(&run_id);
 
     Ok(meta)
 }
@@ -178,6 +181,7 @@ pub async fn execute_board(
     events: tauri::ipc::Channel<Vec<InterComEvent>>,
     credentials: Option<SharedCredentials>,
     token: Option<String>,
+    oauth_tokens: Option<HashMap<String, OAuthToken>>,
 ) -> Result<Option<LogMeta>, TauriFunctionError> {
     let stream_state = stream_state.unwrap_or(true);
     execute_internal(
@@ -190,6 +194,7 @@ pub async fn execute_board(
         stream_state,
         credentials,
         token,
+        oauth_tokens,
     )
     .await
 }
@@ -204,6 +209,7 @@ pub async fn execute_event(
     events: tauri::ipc::Channel<Vec<InterComEvent>>,
     credentials: Option<SharedCredentials>,
     token: Option<String>,
+    oauth_tokens: Option<HashMap<String, OAuthToken>>,
 ) -> Result<Option<LogMeta>, TauriFunctionError> {
     let stream_state = stream_state.unwrap_or(false);
     execute_internal(
@@ -216,6 +222,7 @@ pub async fn execute_event(
         stream_state,
         credentials,
         token,
+        oauth_tokens,
     )
     .await
 }
@@ -226,7 +233,7 @@ pub async fn cancel_execution(
     run_id: String,
 ) -> Result<(), TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
-    let _cancel_result = flow_like_state.lock().await.remove_and_cancel_run(&run_id);
+    let _cancel_result = flow_like_state.remove_and_cancel_run(&run_id);
     Ok(())
 }
 
@@ -247,8 +254,7 @@ pub async fn list_runs(
     let offset = offset.unwrap_or(0);
     let state = TauriFlowLikeState::construct(&app_handle).await?;
     let db = {
-        let guard = state.lock().await;
-        let guard = guard.config.read().await;
+        let guard = state.config.read().await;
 
         guard.callbacks.build_logs_database.clone()
     };
@@ -375,10 +381,6 @@ pub async fn query_run(
     offset: Option<usize>,
 ) -> Result<Vec<LogMessage>, TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
-    let logs = state
-        .lock()
-        .await
-        .query_run(&log_meta, &query, limit, offset)
-        .await?;
+    let logs = state.query_run(&log_meta, &query, limit, offset).await?;
     Ok(logs)
 }

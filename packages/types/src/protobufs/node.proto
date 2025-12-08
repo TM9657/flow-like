@@ -41,5 +41,11 @@ message Node {
     bool event_callback = 18;
     optional uint64 hash = 19;
     optional FnRefs fn_refs = 20;
+    repeated string oauth_providers = 21;
+    map<string, StringList> required_oauth_scopes = 22;
+}
+
+message StringList {
+    repeated string values = 1;
 }
 

@@ -132,8 +132,6 @@ impl NodeLogic for CreateLocalDatabaseNode {
             } else {
                 context
                     .app_state
-                    .lock()
-                    .await
                     .config
                     .read()
                     .await

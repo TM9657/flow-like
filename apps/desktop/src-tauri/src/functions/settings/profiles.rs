@@ -140,8 +140,6 @@ pub async fn get_current_profile(app_handle: AppHandle) -> Result<UserProfile, T
         .clone();
 
     state
-        .lock()
-        .await
         .model_factory
         .lock()
         .await

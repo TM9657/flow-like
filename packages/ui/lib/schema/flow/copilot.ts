@@ -57,6 +57,8 @@ export type BoardCommand =
 			ref_id?: string; // Reference ID for this node (e.g., "$0", "$1") used in connections
 			position?: { x: number; y: number };
 			friendly_name?: string;
+			/** Target layer ID to place the node in. If undefined, uses current layer. */
+			target_layer?: string;
 			summary?: string;
 	  }
 	| {
@@ -65,6 +67,8 @@ export type BoardCommand =
 			ref_id?: string;
 			position?: { x: number; y: number };
 			pins?: PlaceholderPinDef[];
+			/** Target layer ID to place the placeholder in. If undefined, uses current layer. */
+			target_layer?: string;
 			summary?: string;
 	  }
 	| { command_type: "RemoveNode"; node_id: string; summary?: string }
@@ -95,6 +99,8 @@ export type BoardCommand =
 			command_type: "MoveNode";
 			node_id: string;
 			position: { x: number; y: number };
+			/** Target layer ID to move the node to. If undefined, moves within current layer. */
+			target_layer?: string;
 			summary?: string;
 	  }
 	| {
@@ -120,6 +126,8 @@ export type BoardCommand =
 			width?: number;
 			height?: number;
 			color?: string;
+			/** Target layer ID to place the comment in. If undefined, uses current layer. */
+			target_layer?: string;
 			summary?: string;
 	  }
 	| {
@@ -135,6 +143,8 @@ export type BoardCommand =
 			name: string;
 			color?: string;
 			node_ids?: string[];
+			/** Parent layer ID for nesting. If undefined, creates at current layer. */
+			target_layer?: string;
 			summary?: string;
 	  }
 	| {

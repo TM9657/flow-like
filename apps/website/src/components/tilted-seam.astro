@@ -1,0 +1,26 @@
+<!-- Tilted transition element (Stripe-style) that creates visual separation between sections -->
+<div class="relative -my-2 h-16 sm:h-20 pointer-events-none touch-none select-none overflow-hidden" aria-hidden="true">
+  <div class="absolute inset-0">
+    <!-- Tilted divider with gradient -->
+    <svg
+      class="absolute inset-0 w-full h-full"
+      viewBox="0 0 1440 80"
+      preserveAspectRatio="none"
+      fill="none"
+    >
+      <path
+        d="M0 80L1440 20V80H0Z"
+        class="fill-slate-50/50 dark:fill-zinc-900/30"
+      />
+      <path
+        d="M0 80L1440 30V80H0Z"
+        class="fill-white/80 dark:fill-zinc-950/50"
+      />
+    </svg>
+    <!-- Subtle line at the angle -->
+    <div
+      class="absolute top-0 left-0 right-0 h-full"
+      style="background: linear-gradient(168deg, transparent 45%, rgba(0,0,0,0.03) 50%, transparent 55%);"
+    ></div>
+  </div>
+</div>

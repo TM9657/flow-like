@@ -1,4 +1,4 @@
-use flow_like_types::{async_trait, create_id, sync::Mutex};
+use flow_like_types::{async_trait, create_id};
 use schemars::JsonSchema;
 use std::sync::Arc;
 
@@ -33,7 +33,7 @@ impl Command for UpsertPinCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         let node = match board.nodes.get_mut(&self.node_id) {
             Some(node) => node,
@@ -65,7 +65,7 @@ impl Command for UpsertPinCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         let node = match board.nodes.get_mut(&self.node_id) {
             Some(node) => node,

@@ -1,10 +1,11 @@
-use flow_like_types::{Result, reqwest::blocking::get};
+use flow_like_types::{Result, Value, reqwest::blocking::get};
 use serde::Deserialize;
 use std::{env, fs, path::Path};
 
 #[derive(Deserialize)]
 struct ApiConfig {
     authentication: Option<Authentication>,
+    oauth_providers: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -38,6 +39,14 @@ fn main() -> Result<()> {
     let out_dir = env::var("OUT_DIR")?;
     let dest = Path::new(&out_dir).join("jwks.json");
     fs::write(&dest, jwks_body)?;
+
+    // Write OAuth providers config as-is (secrets resolved at runtime from env)
+    let oauth_config_json = flow_like_types::json::to_string(
+        &cfg.oauth_providers
+            .unwrap_or(flow_like_types::json::json!({})),
+    )?;
+    let oauth_dest = Path::new(&out_dir).join("oauth_config.json");
+    fs::write(&oauth_dest, oauth_config_json)?;
 
     Ok(())
 }

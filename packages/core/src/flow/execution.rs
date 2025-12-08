@@ -1,5 +1,6 @@
 use super::board::ExecutionStage;
 use super::event::Event;
+use super::oauth::OAuthToken;
 use super::{board::Board, node::NodeState, variable::Variable};
 use crate::credentials::SharedCredentials;
 use crate::flow::execution::internal_node::ExecutionTarget;
@@ -376,24 +377,40 @@ impl RunStack {
 pub type EventTrigger =
     Arc<dyn Fn(&InternalRun) -> BoxFuture<'_, flow_like_types::Result<()>> + Send + Sync>;
 
+/// Cached immutable fields from Run to avoid locking during hot path execution
+#[derive(Clone)]
+pub struct RunMeta {
+    pub run_id: String,
+    pub app_id: String,
+    pub board_id: String,
+    pub board_dir: Path,
+    pub sub: String,
+    pub stream_state: bool,
+}
+
 #[derive(Clone)]
 pub struct InternalRun {
     pub run: Arc<Mutex<Run>>,
     pub nodes: Arc<AHashMap<String, Arc<InternalNode>>>,
     pub dependencies: AHashMap<String, Vec<Arc<InternalNode>>>,
-    pub pins: AHashMap<String, Arc<Mutex<InternalPin>>>,
+    pub pins: AHashMap<String, Arc<InternalPin>>,
     pub variables: Arc<Mutex<AHashMap<String, Variable>>>,
     pub cache: Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,
     pub profile: Arc<Profile>,
     pub callback: InterComCallback,
     pub credentials: Option<Arc<SharedCredentials>>,
     pub token: Option<String>,
+    pub oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
 
     stack: Arc<RunStack>,
     concurrency_limit: u64,
     cpus: usize,
     log_level: LogLevel,
     completion_callbacks: Arc<RwLock<Vec<EventTrigger>>>,
+
+    // Cached immutable fields from Run to avoid locking
+    pub meta: RunMeta,
+    pub board: Arc<Board>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -407,20 +424,23 @@ impl InternalRun {
         app_id: &str,
         board: Arc<Board>,
         event: Option<Event>,
-        handler: &Arc<Mutex<FlowLikeState>>,
+        handler: &Arc<FlowLikeState>,
         profile: &Profile,
         payload: &RunPayload,
         stream_state: bool,
         callback: InterComCallback,
         credentials: Option<SharedCredentials>,
         token: Option<String>,
+        oauth_tokens: std::collections::HashMap<String, OAuthToken>,
     ) -> flow_like_types::Result<Self> {
+        // Convert to AHashMap for internal use
+        let oauth_tokens: AHashMap<String, OAuthToken> = oauth_tokens.into_iter().collect();
+
         let before = Instant::now();
         let run_id = create_id();
 
         let (log_store, db) = {
-            let state = handler.lock().await;
-            let guard = state.config.read().await;
+            let guard = handler.config.read().await;
             let log_store = guard.stores.log_store.clone();
             let db = guard.callbacks.build_logs_database.clone();
             (log_store, db)
@@ -442,7 +462,7 @@ impl InternalRun {
             log_level: board.log_level,
             board: board.clone(),
             payload: Arc::new(payload.clone()),
-            sub: sub_value,
+            sub: sub_value.clone(),
             highest_log_level: LogLevel::Debug,
             log_initialized: false,
             logs: 0,
@@ -492,20 +512,15 @@ impl InternalRun {
         }));
 
         let mut pin_to_node = AHashMap::with_capacity(board.nodes.len() * 3);
-        let mut pins = AHashMap::with_capacity(board.nodes.len() * 3);
+        let mut pins: AHashMap<String, Arc<InternalPin>> =
+            AHashMap::with_capacity(board.nodes.len() * 3);
 
+        // Phase 1: Create all pins without connections
         for (node_id, node) in &board.nodes {
             for (pin_id, pin) in &node.pins {
-                let internal_pin = InternalPin {
-                    pin: Arc::new(Mutex::new(pin.clone())),
-                    node: Some(Weak::new()),
-                    connected_to: vec![],
-                    depends_on: vec![],
-                    layer_pin: false,
-                };
-
+                let internal_pin = InternalPin::new(pin, false);
                 pin_to_node.insert(pin_id, (node_id, node.is_pure()));
-                pins.insert(pin.id.clone(), Arc::new(Mutex::new(internal_pin)));
+                pins.insert(pin.id.clone(), Arc::new(internal_pin));
             }
         }
 
@@ -516,38 +531,51 @@ impl InternalRun {
                     continue;
                 }
 
-                let internal_pin = InternalPin {
-                    pin: Arc::new(Mutex::new(pin.clone())),
-                    node: None,
-                    connected_to: vec![],
-                    depends_on: vec![],
-                    layer_pin: true,
-                };
-
-                pins.insert(pin.id.clone(), Arc::new(Mutex::new(internal_pin)));
+                let internal_pin = InternalPin::new(pin, true);
+                pins.insert(pin.id.clone(), Arc::new(internal_pin));
             }
         }
 
-        for pin_arc in pins.values() {
-            let mut internal_pin = pin_arc.lock().await;
-            let (connected_to, depends_on) = {
-                let inner = internal_pin.pin.lock().await;
-                let connected_to = inner.connected_to.clone();
-                let depends_on = inner.depends_on.clone();
-                (connected_to, depends_on)
-            };
+        // Phase 2: Wire up connections using OnceLock init methods
+        for node in board.nodes.values() {
+            for pin in node.pins.values() {
+                if let Some(internal_pin) = pins.get(&pin.id) {
+                    // Build connected_to list
+                    let connected: Vec<Weak<InternalPin>> = pin
+                        .connected_to
+                        .iter()
+                        .filter_map(|id| pins.get(id).map(Arc::downgrade))
+                        .collect();
+                    internal_pin.init_connected_to(connected);
 
-            for connected_pin_id in connected_to {
-                if let Some(connected_pin) = pins.get(&connected_pin_id) {
-                    let connected = Arc::downgrade(connected_pin);
-                    internal_pin.connected_to.push(connected);
+                    // Build depends_on list
+                    let depends: Vec<Weak<InternalPin>> = pin
+                        .depends_on
+                        .iter()
+                        .filter_map(|id| pins.get(id).map(Arc::downgrade))
+                        .collect();
+                    internal_pin.init_depends_on(depends);
                 }
             }
+        }
 
-            for depends_on_pin_id in depends_on {
-                if let Some(depends_on_pin) = pins.get(&depends_on_pin_id) {
-                    let depends_on = Arc::downgrade(depends_on_pin);
-                    internal_pin.depends_on.push(depends_on);
+        // Also wire connections for layer pins
+        for layer in board.layers.values() {
+            for pin in layer.pins.values() {
+                if let Some(internal_pin) = pins.get(&pin.id) {
+                    let connected: Vec<Weak<InternalPin>> = pin
+                        .connected_to
+                        .iter()
+                        .filter_map(|id| pins.get(id).map(Arc::downgrade))
+                        .collect();
+                    internal_pin.init_connected_to(connected);
+
+                    let depends: Vec<Weak<InternalPin>> = pin
+                        .depends_on
+                        .iter()
+                        .filter_map(|id| pins.get(id).map(Arc::downgrade))
+                        .collect();
+                    internal_pin.init_depends_on(depends);
                 }
             }
         }
@@ -556,14 +584,7 @@ impl InternalRun {
         let mut nodes = AHashMap::with_capacity(board.nodes.len());
         let mut stack = RunStack::with_capacity(1);
 
-        let registry = handler
-            .lock()
-            .await
-            .node_registry
-            .read()
-            .await
-            .node_registry
-            .clone();
+        let registry = handler.node_registry.read().await.node_registry.clone();
         for (node_id, node) in &board.nodes {
             let logic = registry.instantiate(node)?;
             let mut node_pins = AHashMap::new();
@@ -597,9 +618,9 @@ impl InternalRun {
                 pin_cache.clone(),
             ));
 
+            // Set node reference on all pins using OnceLock init method
             for internal_pin in node_pins.values() {
-                let mut pin_guard = internal_pin.lock().await;
-                pin_guard.node = Some(Arc::downgrade(&internal_node));
+                internal_pin.init_node(Arc::downgrade(&internal_node));
             }
 
             if payload.id == node.id {
@@ -647,10 +668,21 @@ impl InternalRun {
             callback,
             credentials: credentials.map(Arc::new),
             token,
+            oauth_tokens: Arc::new(oauth_tokens),
             dependencies,
             log_level: board.log_level,
             profile: Arc::new(profile.clone()),
             completion_callbacks: Arc::new(RwLock::new(vec![])),
+            // Cached immutable fields from Run
+            meta: RunMeta {
+                run_id: run_id.clone(),
+                app_id: app_id.to_string(),
+                board_id: board.id.clone(),
+                board_dir: board.board_dir.clone(),
+                sub: sub_value.clone(),
+                stream_state,
+            },
+            board: board.clone(),
         })
     }
 
@@ -670,8 +702,9 @@ impl InternalRun {
         self.run.lock().await.start = SystemTime::now();
         self.run.lock().await.end = SystemTime::now();
         for node in self.nodes.values() {
-            for (_, pin) in node.pins.iter() {
-                pin.lock().await.reset().await;
+            for pin in node.pins.values() {
+                // Reset is async but pin access is lock-free
+                pin.reset().await;
             }
         }
         for variable in self.variables.lock().await.values_mut() {
@@ -688,7 +721,7 @@ impl InternalRun {
     async fn step_parallel(
         &mut self,
         stack: Arc<RunStack>,
-        handler: &Arc<Mutex<FlowLikeState>>,
+        handler: &Arc<FlowLikeState>,
         log_level: LogLevel,
         stage: ExecutionStage,
     ) {
@@ -699,6 +732,7 @@ impl InternalRun {
         let profile = self.profile.clone();
         let concurrency_limit = self.concurrency_limit;
         let callback = self.callback.clone();
+        let meta = self.meta.clone();
 
         let new_stack = futures::stream::iter(stack.stack.clone())
             .map(|target| {
@@ -706,6 +740,7 @@ impl InternalRun {
                 let dependencies = dependencies.clone();
                 let handler = handler.clone();
                 let run = run.clone();
+                let meta = meta.clone();
                 let profile = profile.clone();
                 let callback = callback.clone();
                 let stage = stage.clone();
@@ -714,6 +749,7 @@ impl InternalRun {
                 let credentials = self.credentials.clone();
                 let token = self.token.clone();
                 let nodes = self.nodes.clone();
+                let oauth_tokens = self.oauth_tokens.clone();
 
                 async move {
                     step_core(
@@ -722,6 +758,7 @@ impl InternalRun {
                         concurrency_limit,
                         &handler,
                         &run,
+                        &meta,
                         variables,
                         cache,
                         log_level,
@@ -732,6 +769,7 @@ impl InternalRun {
                         &completion_callbacks,
                         credentials,
                         token,
+                        oauth_tokens,
                     )
                     .await
                 }
@@ -756,7 +794,7 @@ impl InternalRun {
     async fn step_single(
         &mut self,
         stack: Arc<RunStack>,
-        handler: &Arc<Mutex<FlowLikeState>>,
+        handler: &Arc<FlowLikeState>,
         log_level: LogLevel,
         stage: ExecutionStage,
     ) {
@@ -771,6 +809,7 @@ impl InternalRun {
             concurrency_limit,
             handler,
             &self.run,
+            &self.meta,
             variables,
             cache,
             log_level,
@@ -781,6 +820,7 @@ impl InternalRun {
             &self.completion_callbacks,
             self.credentials.clone(),
             self.token.clone(),
+            self.oauth_tokens.clone(),
         )
         .await;
 
@@ -794,13 +834,13 @@ impl InternalRun {
         self.stack = Arc::new(new_stack);
     }
 
-    async fn step(&mut self, handler: Arc<Mutex<FlowLikeState>>) {
+    async fn step(&mut self, handler: Arc<FlowLikeState>) {
         let start = Instant::now();
 
-        let (stage, log_level, stack) = {
-            let run = self.run.lock().await;
-            (run.board.stage.clone(), run.log_level, self.stack.clone())
-        };
+        // Use cached values instead of locking Run
+        let stage = self.board.stage.clone();
+        let log_level = self.log_level;
+        let stack = self.stack.clone();
 
         match stack.len() {
             1 => self.step_single(stack, &handler, log_level, stage).await,
@@ -812,29 +852,46 @@ impl InternalRun {
         }
     }
 
-    pub async fn execute(&mut self, handler: Arc<Mutex<FlowLikeState>>) -> Option<LogMeta> {
+    pub async fn execute(&mut self, handler: Arc<FlowLikeState>) -> Option<LogMeta> {
         let start = Instant::now();
+        const FLUSH_INTERVAL_SECS: u64 = 5;
 
         {
             let mut run = self.run.lock().await;
             run.start = SystemTime::now();
         }
 
+        // Spawn background flush task for long-running nodes
+        let run_clone = self.run.clone();
+        let flush_cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flush_cancel_clone = flush_cancel.clone();
+        let flush_task = flow_like_types::tokio::spawn(async move {
+            let mut interval = flow_like_types::tokio::time::interval(
+                std::time::Duration::from_secs(FLUSH_INTERVAL_SECS),
+            );
+            interval.tick().await; // Skip first immediate tick
+
+            while !flush_cancel_clone.load(Ordering::Relaxed) {
+                interval.tick().await;
+                if flush_cancel_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                let mut run = run_clone.lock().await;
+                if !run.traces.is_empty()
+                    && let Err(err) = run.flush_logs(false).await
+                {
+                    eprintln!("[Error] background log flush: {:?}", err);
+                }
+            }
+        });
+
         let mut stack_hash = self.stack.hash();
         let mut current_stack_len = self.stack.len();
         let mut errored = false;
-        let mut iter = 0;
 
         while current_stack_len > 0 {
             self.step(handler.clone()).await;
-            iter += 1;
-
-            if iter % 20 == 0 {
-                let mut run = self.run.lock().await;
-                if let Err(err) = run.flush_logs(false).await {
-                    eprintln!("[Error] flushing logs: {:?}", err);
-                }
-            }
 
             current_stack_len = self.stack.len();
             let new_stack_hash = self.stack.hash();
@@ -845,6 +902,10 @@ impl InternalRun {
             }
             stack_hash = new_stack_hash;
         }
+
+        // Stop background flush task
+        flush_cancel.store(true, Ordering::Relaxed);
+        let _ = flush_task.await;
 
         self.trigger_completion_callbacks().await;
         self.drop_nodes().await;
@@ -874,7 +935,7 @@ impl InternalRun {
         meta
     }
 
-    pub async fn debug_step(&mut self, handler: Arc<Mutex<FlowLikeState>>) -> bool {
+    pub async fn debug_step(&mut self, handler: Arc<FlowLikeState>) -> bool {
         let stack_hash = self.stack.hash();
         if self.stack.len() == 0 {
             let mut run = self.run.lock().await;
@@ -1008,8 +1069,9 @@ async fn step_core(
     nodes: Arc<AHashMap<String, Arc<InternalNode>>>,
     target: ExecutionTarget,
     concurrency_limit: u64,
-    handler: &Arc<Mutex<FlowLikeState>>,
+    handler: &Arc<FlowLikeState>,
     run: &Arc<Mutex<Run>>,
+    run_meta: &RunMeta,
     variables: &Arc<Mutex<AHashMap<String, Variable>>>,
     cache: &Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>,
     log_level: LogLevel,
@@ -1020,6 +1082,7 @@ async fn step_core(
     completion_callbacks: &Arc<RwLock<Vec<EventTrigger>>>,
     credentials: Option<Arc<SharedCredentials>>,
     token: Option<String>,
+    oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
 ) -> flow_like_types::Result<Vec<ExecutionTarget>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
     {
@@ -1030,9 +1093,11 @@ async fn step_core(
     }
 
     let weak_run = Arc::downgrade(run);
-    let mut context = ExecutionContext::new(
+    // Use with_meta to avoid locking Run
+    let mut context = ExecutionContext::with_meta(
         nodes,
         &weak_run,
+        run_meta,
         handler,
         &target.node,
         variables,
@@ -1044,6 +1109,7 @@ async fn step_core(
         completion_callbacks.clone(),
         credentials,
         token,
+        oauth_tokens,
     )
     .await;
     context.started_by = if target.through_pins.is_empty() {

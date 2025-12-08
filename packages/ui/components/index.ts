@@ -8,3 +8,4 @@ export * from "./interfaces/index";
 export * from "./settings/index";
 export * from "./pages/index";
 export * from "./pat-selector-dialog";
+export * from "./oauth/index";

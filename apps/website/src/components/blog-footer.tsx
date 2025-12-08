@@ -5,14 +5,10 @@ export function BlogFooter() {
 				<small>© 2025 Flow-Like - Made with ❤️ in Munich</small>
 			</div>
 			<div className="flex flex-row items-center gap-2">
-				<a href="https://great-co.de/eula" target="_blank" rel="noreferrer">
+				<a href="/eula">
 					<small>EULA</small>
 				</a>
-				<a
-					href="https://great-co.de/privacy-policy"
-					target="_blank"
-					rel="noreferrer"
-				>
+				<a href="/privacy-policy">
 					<small>Privacy Policy</small>
 				</a>
 				<a

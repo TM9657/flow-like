@@ -32,6 +32,30 @@
         },
         {
           "url": "https://s3.*.amazonaws.com"
+        },
+        {
+          "url": "https://github.com/*"
+        },
+        {
+          "url": "https://api.github.com/*"
+        },
+        {
+          "url": "https://api.notion.com/*"
+        },
+        {
+          "url": "https://www.googleapis.com/*"
+        },
+        {
+          "url": "https://oauth2.googleapis.com/*"
+        },
+        {
+          "url": "https://accounts.google.com/*"
+        },
+        {
+          "url": "https://login.microsoftonline.com/*"
+        },
+        {
+          "url": "https://graph.microsoft.com/*"
         }
       ]
     },

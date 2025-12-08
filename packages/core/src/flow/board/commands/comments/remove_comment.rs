@@ -1,4 +1,4 @@
-use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::async_trait;
 use schemars::JsonSchema;
 use std::sync::Arc;
 
@@ -24,7 +24,7 @@ impl Command for RemoveCommentCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         board.comments.remove(&self.comment.id);
         Ok(())
@@ -33,7 +33,7 @@ impl Command for RemoveCommentCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         board
             .comments

@@ -3,7 +3,7 @@ use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::{Path, blake3};
 use flow_like_types::intercom::{InterComCallback, InterComEvent};
 use flow_like_types::reqwest::Client;
-use flow_like_types::sync::{Mutex, mpsc};
+use flow_like_types::sync::mpsc;
 use flow_like_types::tokio::fs::{self as async_fs, OpenOptions};
 use flow_like_types::tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use flow_like_types::tokio::spawn;
@@ -42,7 +42,7 @@ fn global_download_semaphore() -> &'static Semaphore {
 // Download job queue and dispatcher.
 struct DownloadJob {
     bit: crate::bit::Bit,
-    app_state: Arc<Mutex<FlowLikeState>>,
+    app_state: Arc<FlowLikeState>,
     retries: usize,
     callback: InterComCallback,
     respond_to: oneshot::Sender<flow_like_types::Result<Path>>,
@@ -151,14 +151,14 @@ async fn feed_hasher_with_existing(
     Ok(total)
 }
 
-async fn remove_download(bit: &crate::bit::Bit, app_state: &Arc<Mutex<FlowLikeState>>) {
-    let manager = app_state.lock().await.download_manager();
+async fn remove_download(bit: &crate::bit::Bit, app_state: &Arc<FlowLikeState>) {
+    let manager = app_state.download_manager();
     manager.lock().await.remove_download(bit);
 }
 
 pub async fn download_bit(
     bit: &crate::bit::Bit,
-    app_state: Arc<Mutex<FlowLikeState>>,
+    app_state: Arc<FlowLikeState>,
     retries: usize,
     callback: &InterComCallback,
 ) -> flow_like_types::Result<Path> {
@@ -181,7 +181,7 @@ pub async fn download_bit(
 
 async fn process_download_bit(
     bit: &crate::bit::Bit,
-    app_state: Arc<Mutex<FlowLikeState>>,
+    app_state: Arc<FlowLikeState>,
     retries: usize,
     callback: &InterComCallback,
 ) -> flow_like_types::Result<Path> {
@@ -209,7 +209,7 @@ async fn process_download_bit(
 
     // Another download of that type already exists
     let exists = {
-        let manager = app_state.lock().await.download_manager();
+        let manager = app_state.download_manager();
         let manager = manager.lock().await;
         manager.download_exists(bit)
     };
@@ -219,7 +219,7 @@ async fn process_download_bit(
     }
 
     let client = {
-        let manager = app_state.lock().await.download_manager();
+        let manager = app_state.download_manager();
         let mut manager = manager.lock().await;
         manager.add_download(bit)
     };

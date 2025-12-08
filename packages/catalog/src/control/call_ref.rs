@@ -58,17 +58,21 @@ impl NodeLogic for CallReferenceNode {
         context.deactivate_exec_pin("exec_out").await?;
         let fn_ref: String = context.evaluate_pin("fn_ref").await?;
 
-        let mut content_pins = HashMap::with_capacity(context.node.pins.len());
-        let input_pins = context.node.pins.clone();
+        let pins_to_evaluate: Vec<_> = context.node.pins.values().cloned().collect();
+        let mut content_pins = HashMap::with_capacity(pins_to_evaluate.len());
+        let mut failed_pins = Vec::new();
 
-        for (_id, pin) in input_pins {
-            let value = context.evaluate_pin_ref::<Value>(pin.clone()).await;
-            let name = pin.lock().await.pin.lock().await.name.clone();
+        for pin in pins_to_evaluate {
+            let name = pin.name.clone();
+            let value = context.evaluate_pin_ref::<Value>(pin).await;
             if let Ok(value) = value {
                 content_pins.insert(name, value);
-                continue;
+            } else {
+                failed_pins.push((name, value));
             }
+        }
 
+        for (name, value) in failed_pins {
             context.log_message(
                 &format!("Failed to evaluate pin {}: {:?}", name, value),
                 LogLevel::Warn,
@@ -82,23 +86,13 @@ impl NodeLogic for CallReferenceNode {
 
         let node_ref = reference_function.node.clone();
 
-        let pins = reference_function.pins.clone();
-        for (_id, pin) in pins {
-            let guard = pin.lock().await;
-            let (pin_type, data_type, name) = {
-                let pin = guard.pin.lock().await;
-                (
-                    pin.pin_type.clone(),
-                    pin.data_type.clone(),
-                    pin.name.clone(),
-                )
-            };
-            if pin_type == PinType::Input || data_type == VariableType::Execution {
+        for (_id, pin) in reference_function.pins.iter() {
+            if pin.pin_type == PinType::Input || pin.data_type == VariableType::Execution {
                 continue;
             }
 
-            if let Some(value) = content_pins.get(&name) {
-                guard.set_value(value.clone()).await;
+            if let Some(value) = content_pins.get(&pin.name) {
+                pin.set_value(value.clone()).await;
             }
         }
 

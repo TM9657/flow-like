@@ -1,7 +1,8 @@
 use flow_like::{
     app::App,
-    flow::{board::VersionType, event::Event},
+    flow::{board::VersionType, event::Event, oauth::OAuthToken},
 };
+use std::collections::HashMap;
 use tauri::AppHandle;
 
 use crate::{functions::TauriFunctionError, state::TauriFlowLikeState};
@@ -73,6 +74,7 @@ pub async fn upsert_event(
     enforce_id: Option<bool>,
     offline: Option<bool>,
     pat: Option<String>,
+    oauth_tokens: Option<HashMap<String, OAuthToken>>,
 ) -> Result<Event, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
 
@@ -84,7 +86,7 @@ pub async fn upsert_event(
             Ok(event_sink_manager) => {
                 let manager = event_sink_manager.lock().await;
                 if let Err(e) = manager
-                    .register_from_flow_event(&handler, &app_id, &event, offline, pat)
+                    .register_from_flow_event(&handler, &app_id, &event, offline, pat, oauth_tokens)
                     .await
                 {
                     println!(

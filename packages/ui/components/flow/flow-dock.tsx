@@ -19,9 +19,10 @@ import { cn } from "../../lib/utils";
 type IFlowDockItem = {
 	title: string;
 	icon: React.ReactNode;
-	onClick: () => Promise<void>;
+	onClick: () => Promise<void> | void;
 	separator?: string;
 	highlight?: boolean;
+	special?: boolean;
 };
 
 export const FlowDock = memo(
@@ -311,13 +312,15 @@ const IconContainer = memo(
 		title,
 		icon,
 		highlight,
+		special,
 		onClick,
 	}: Readonly<{
 		mouseX: MotionValue;
 		title: string;
 		highlight?: boolean;
+		special?: boolean;
 		icon: React.ReactNode;
-		onClick: () => Promise<void>;
+		onClick: () => Promise<void> | void;
 	}>) => {
 		const ref = useRef<HTMLDivElement>(null);
 
@@ -364,7 +367,50 @@ const IconContainer = memo(
 		const handleMouseLeave = useCallback(() => setHovered(false), []);
 
 		return (
-			<button onClick={onClick}>
+			<button onClick={onClick} className="relative group">
+				{special && (
+					<>
+						{/* Outer glow */}
+						<motion.div
+							className="absolute -inset-1.5 rounded-full blur-xl"
+							style={{
+								background:
+									"conic-gradient(from 180deg, #8b5cf6, #ec4899, #8b5cf6)",
+							}}
+							animate={{
+								opacity: hovered ? [0.6, 0.9, 0.6] : [0.3, 0.5, 0.3],
+								rotate: [0, 360],
+							}}
+							transition={{
+								opacity: {
+									duration: 2,
+									repeat: Number.POSITIVE_INFINITY,
+									ease: "easeInOut",
+								},
+								rotate: {
+									duration: 8,
+									repeat: Number.POSITIVE_INFINITY,
+									ease: "linear",
+								},
+							}}
+						/>
+						{/* Spinning border gradient */}
+						<motion.div
+							className="absolute -inset-0.5 rounded-full"
+							style={{
+								background:
+									"conic-gradient(from 0deg, #8b5cf6, #ec4899, #f97316, #8b5cf6)",
+								padding: "2px",
+							}}
+							animate={{ rotate: [0, 360] }}
+							transition={{
+								duration: 4,
+								repeat: Number.POSITIVE_INFINITY,
+								ease: "linear",
+							}}
+						/>
+					</>
+				)}
 				<motion.div
 					ref={ref}
 					style={{ width, height }}
@@ -374,11 +420,30 @@ const IconContainer = memo(
 						"aspect-square rounded-full bg-secondary hover:bg-secondary/80 text-secondary-foreground flex items-center justify-center relative transition-colors",
 						highlight &&
 							"bg-primary hover:bg-primary/90 text-primary-foreground",
+						special &&
+							"bg-[radial-gradient(ellipse_at_top_left,_#7c3aed_0%,_#6d28d9_30%,_#4c1d95_100%)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] text-white",
 					)}
 				>
 					<motion.div
 						style={{ width: widthIcon, height: heightIcon }}
-						className="flex items-center justify-center"
+						className={cn(
+							"flex items-center justify-center",
+							special && "drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]",
+						)}
+						animate={
+							special
+								? {
+										filter: hovered
+											? [
+													"drop-shadow(0 0 8px rgba(255,255,255,0.5))",
+													"drop-shadow(0 0 12px rgba(255,255,255,0.8))",
+													"drop-shadow(0 0 8px rgba(255,255,255,0.5))",
+												]
+											: "drop-shadow(0 0 4px rgba(255,255,255,0.3))",
+									}
+								: {}
+						}
+						transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
 					>
 						{icon}
 					</motion.div>
@@ -388,7 +453,11 @@ const IconContainer = memo(
 								initial={{ opacity: 0, y: 10, x: "-50%" }}
 								animate={{ opacity: 1, y: 0, x: "-50%" }}
 								exit={{ opacity: 0, y: 2, x: "-50%" }}
-								className="px-2 py-0.5 whitespace-pre rounded-md bg-popover text-popover-foreground border absolute left-1/2  -bottom-8 w-fit text-xs"
+								className={cn(
+									"px-2 py-0.5 whitespace-pre rounded-md bg-popover text-popover-foreground border absolute left-1/2 -bottom-8 w-fit text-xs",
+									special &&
+										"bg-[#1a1625] text-white border-violet-500/50 shadow-[0_0_10px_rgba(139,92,246,0.3)]",
+								)}
 							>
 								{title}
 							</motion.div>

@@ -11,9 +11,11 @@ export interface IHub {
 	hubs: string[];
 	icon?: null | string;
 	legal_notice: string;
+	web?: null | string;
 	lookup?: ILookup;
 	max_users_prototype?: number | null;
 	name: string;
+	oauth_providers?: { [key: string]: IOAuthProviderConfig };
 	privacy_policy: string;
 	provider?: null | string;
 	region?: null | string;
@@ -22,6 +24,39 @@ export interface IHub {
 	thumbnail?: null | string;
 	tiers: { [key: string]: IUserTier };
 	[property: string]: any;
+}
+
+/**
+ * OAuth provider configuration from Hub.
+ * This is the full configuration used to construct OAuth requests.
+ */
+export interface IOAuthProviderConfig {
+	/** Display name shown to users */
+	name: string;
+	/** The resolved client ID (populated at runtime) */
+	client_id?: string | null;
+	/** OAuth authorization endpoint URL */
+	auth_url: string;
+	/** OAuth token endpoint URL */
+	token_url: string;
+	/** Base OAuth scopes */
+	scopes?: string[];
+	/** Whether PKCE is required */
+	pkce_required?: boolean;
+	/** Whether this provider requires the secret proxy for token exchange */
+	requires_secret_proxy?: boolean;
+	/** URL for token revocation */
+	revoke_url?: string | null;
+	/** URL for user info endpoint */
+	userinfo_url?: string | null;
+	/** Device authorization URL for device flow */
+	device_auth_url?: string | null;
+	/** Whether to use device flow */
+	use_device_flow?: boolean;
+	/** Whether to use implicit flow (response_type=token) instead of authorization code flow */
+	use_implicit_flow?: boolean;
+	/** Audience claim for token validation */
+	audience?: string | null;
 }
 
 export interface IAuthentication {
@@ -111,5 +146,6 @@ export interface IUserTier {
 	max_non_visible_projects: number;
 	max_remote_executions: number;
 	max_total_size: number;
+	product_id?: string | null;
 	[property: string]: any;
 }

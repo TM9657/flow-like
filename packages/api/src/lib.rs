@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
-use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
+use axum::{
+    Json, Router,
+    middleware::from_fn_with_state,
+    routing::{get, post},
+};
 use error::InternalError;
-use flow_like::hub::Hub;
+use flow_like_types::Value;
 use middleware::jwt::jwt_middleware;
 use state::{AppState, State};
 use tower::ServiceBuilder;
@@ -18,6 +22,7 @@ mod routes;
 
 pub mod credentials;
 pub mod error;
+pub mod mail;
 pub mod permission;
 pub mod state;
 pub mod user_management;
@@ -41,9 +46,12 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/bit", routes::bit::routes())
         .nest("/store", routes::store::routes())
         .nest("/auth", routes::auth::routes())
+        .nest("/oauth", routes::oauth::routes())
         .nest("/chat", routes::chat::routes())
         .nest("/admin", routes::admin::routes())
         .nest("/tmp", routes::tmp::routes())
+        .nest("/solution", routes::solution::routes())
+        .route("/webhook/stripe", post(routes::webhook::stripe_webhook))
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }))
         .layer(from_fn_with_state(state.clone(), jwt_middleware))
@@ -63,6 +71,21 @@ pub fn construct_router(state: Arc<State>) -> Router {
 #[tracing::instrument(name = "GET /", skip(state))]
 async fn hub_info(
     axum::extract::State(state): axum::extract::State<AppState>,
-) -> Result<Json<Hub>, InternalError> {
-    Ok(Json(state.platform_config.clone()))
+) -> Result<Json<Value>, InternalError> {
+    // Serialize hub to JSON value so we can modify it
+    let mut hub_value: Value = serde_json::to_value(&state.platform_config)?;
+
+    // Strip sensitive OAuth fields (client_secret_env and client_secret)
+    if let Some(oauth_providers) = hub_value.get_mut("oauth_providers")
+        && let Some(providers_obj) = oauth_providers.as_object_mut()
+    {
+        for (_provider_id, provider_config) in providers_obj.iter_mut() {
+            if let Some(config_obj) = provider_config.as_object_mut() {
+                config_obj.remove("client_secret_env");
+                config_obj.remove("client_secret");
+            }
+        }
+    }
+
+    Ok(Json(hub_value))
 }

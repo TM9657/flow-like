@@ -20,7 +20,7 @@ export interface LoadingPhaseInfo {
 	color: string;
 }
 
-export type Mode = "chat" | "autocomplete";
+export type Mode = "chat" | "autocomplete" | "panel" | "embedded";
 
 export interface CopilotMessage {
 	role: "user" | "assistant";
@@ -37,6 +37,7 @@ export interface FlowCopilotProps {
 	onExecuteCommands?: (commands: BoardCommand[]) => void;
 	onGhostNodesChange?: (suggestions: Suggestion[]) => void;
 	onClearRunContext?: () => void;
+	onClose?: () => void;
 	mode?: Mode;
 	embedded?: boolean;
 	runContext?: ILogMetadata;

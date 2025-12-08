@@ -18,6 +18,10 @@ import Storage from "../sections/storage.astro";
 import ProblemSolution from "../sections/problem-solution.astro";
 import Reading from "../sections/reading.astro";
 import FlowPilot from "../sections/flowpilot.astro";
+import Integrations from "../sections/integrations.astro";
+import UseCases from "../sections/use-cases.astro";
+import CtaAutomate from "../sections/cta-automate.astro";
+import TwentyFourHourBanner from "../sections/24-hour-solution-banner.astro";
 import { BlogFooter } from "../components/blog-footer";
 
 // --- SEO constants ---
@@ -229,36 +233,51 @@ const ldWebPage = {
       <AmbientGlow />
       <BlogHeader client:load/>
       <Hero client:load/>
-      <DesignWorkflowsVisually />
+
+      <!-- Clear CTA / value prop right after hero -->
       <ZeroToProd />
 
-      <FlowPilot  />
+      <!-- CTA -->
+      <CtaAutomate />
 
-      <ProblemSolution  />
+      <!-- 24 Hour Solution Banner -->
+      <TwentyFourHourBanner />
 
-      <SoftSeam  />
-      <Portability  />
+      <!-- Visual builder showcase -->
+      <DesignWorkflowsVisually />
 
-      <SoftSeam  />
-      <Performance  />
+      <!-- White section: Use Cases (overlays into previous dark section) -->
+      <UseCases />
 
-      <SoftSeam  />
-      <Extensibility  />
+      <!-- Back to dark: Core features -->
+      <Portability />
 
-      <SoftSeam  />
-      <Theming  />
+      <SoftSeam />
+      <Performance />
 
-      <SoftSeam  />
-      <ProcessCombination  />
+      <!-- FlowPilot - prominent AI feature -->
+      <FlowPilot />
 
-      <SoftSeam  />
-      <Storage  />
+      <Extensibility />
 
-      <SoftSeam  />
-      <Reading  />
+      <!-- White section: Why it matters (overlays into previous dark section) -->
+      <ProblemSolution />
 
-      <SoftSeam  />
-      <FAQ  />
+      <!-- Dark section: Integrations -->
+      <Integrations />
+
+      <SoftSeam />
+      <Theming />
+
+      <SoftSeam />
+      <ProcessCombination />
+
+      <SoftSeam />
+      <Storage />
+
+      <Reading />
+
+      <FAQ />
     </main>
 
     <BlogFooter  />

@@ -7,7 +7,7 @@
 		"dev:desktop": "bun run --cwd ./apps/desktop dev:auto",
 		"dev:ios": "bun run --cwd ./apps/desktop dev:ios",
 		"dev:ios:host": "bun run --cwd ./apps/desktop dev:ios:host",
-		"dev:desktop:mac:arm": "bun run --cwd ./apps/desktop dev:mac:arm",
+		"dev:desktop:mac:arm": "dotenv -e ./apps/desktop/.env -- bun run --cwd ./apps/desktop dev:mac:arm",
 		"dev:desktop:mac:intel": "bun run --cwd ./apps/desktop dev:mac:intel",
 		"dev:desktop:win:arm": "bun run --cwd ./apps/desktop dev:win:arm",
 		"dev:desktop:win:x64": "bun run --cwd ./apps/desktop dev:win:x64",

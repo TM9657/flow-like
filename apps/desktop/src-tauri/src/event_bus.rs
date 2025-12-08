@@ -1,13 +1,14 @@
 use crate::{state::TauriSettingsState, utils::UiEmitTarget};
 use flow_like::app::App;
 use flow_like::flow::execution::{InternalRun, LogMeta};
+use flow_like::flow::oauth::OAuthToken;
 use flow_like::flow_like_storage::Path;
 use flow_like::hub::Hub;
 use flow_like::state::RunData;
 use flow_like::{flow::execution::RunPayload, state::FlowLikeState};
 use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
 use flow_like_types::tokio_util::sync::CancellationToken;
-use flow_like_types::{Value, sync::mpsc, tokio::sync::Mutex};
+use flow_like_types::{Value, sync::mpsc};
 use flow_like_types::{json, tokio};
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
@@ -27,13 +28,16 @@ pub struct EventBusEvent {
     pub token: Option<String>,
 
     pub callback: Option<Arc<BufferedInterComHandler>>,
+
+    /// OAuth tokens for third-party services
+    pub oauth_tokens: std::collections::HashMap<String, OAuthToken>,
 }
 
 impl EventBusEvent {
     pub async fn execute(
         &self,
         app_handle: &AppHandle,
-        flow_like_state: Arc<Mutex<FlowLikeState>>,
+        flow_like_state: Arc<FlowLikeState>,
         hub: &Hub,
     ) -> flow_like_types::Result<Option<LogMeta>> {
         let Ok(app) = App::load(self.app_id.clone(), flow_like_state.clone()).await else {
@@ -109,6 +113,7 @@ impl EventBusEvent {
             buffered_sender.into_callback(),
             credentials,
             self.token.clone(),
+            self.oauth_tokens.clone(),
         )
         .await?;
 
@@ -124,7 +129,7 @@ impl EventBusEvent {
         let cancellation_token = CancellationToken::new();
         let run_data = RunData::new(&board_id, &payload.id, None, cancellation_token.clone());
 
-        flow_like_state.lock().await.register_run(&run_id, run_data);
+        flow_like_state.register_run(&run_id, run_data);
 
         let meta = tokio::select! {
             result = internal_run.execute(flow_like_state.clone()) => result,
@@ -158,8 +163,7 @@ impl EventBusEvent {
 
         if let Some(meta) = &meta {
             let db = {
-                let guard = flow_like_state.lock().await;
-                let guard = guard.config.read().await;
+                let guard = flow_like_state.config.read().await;
 
                 guard.callbacks.build_logs_database.clone()
             };
@@ -175,7 +179,7 @@ impl EventBusEvent {
             })?;
         }
 
-        let _res = flow_like_state.lock().await.remove_and_cancel_run(&run_id);
+        let _res = flow_like_state.remove_and_cancel_run(&run_id);
 
         Ok(meta)
     }
@@ -201,6 +205,7 @@ impl EventBus {
         offline: bool,
         token: Option<String>,
         callback: Option<Arc<BufferedInterComHandler>>,
+        oauth_tokens: Option<std::collections::HashMap<String, OAuthToken>>,
     ) -> Result<(), String> {
         if !offline && token.is_none() {
             return Err("No token registered, cannot send online events".to_string());
@@ -213,6 +218,7 @@ impl EventBus {
             token,
             offline,
             callback,
+            oauth_tokens: oauth_tokens.unwrap_or_default(),
         };
 
         self.sender

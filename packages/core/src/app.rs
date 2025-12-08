@@ -140,7 +140,7 @@ pub struct App {
     pub price: Option<u32>,
 
     #[serde(skip)]
-    pub app_state: Option<Arc<Mutex<FlowLikeState>>>,
+    pub app_state: Option<Arc<FlowLikeState>>,
 }
 
 impl Clone for App {
@@ -179,7 +179,7 @@ impl App {
         id: Option<String>,
         meta: Metadata,
         bits: Vec<String>,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<Self> {
         let id = id.unwrap_or(create_id());
 
@@ -218,10 +218,7 @@ impl App {
         Ok(item)
     }
 
-    pub async fn load(
-        id: String,
-        app_state: Arc<Mutex<FlowLikeState>>,
-    ) -> flow_like_types::Result<Self> {
+    pub async fn load(id: String, app_state: Arc<FlowLikeState>) -> flow_like_types::Result<Self> {
         let storage_root = Path::from("apps").child(id.clone());
 
         let store = FlowLikeState::project_meta_store(&app_state)
@@ -251,7 +248,7 @@ impl App {
 
     pub async fn get_meta(
         id: String,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
         language: Option<String>,
         template_id: Option<String>,
     ) -> flow_like_types::Result<Metadata> {
@@ -290,7 +287,7 @@ impl App {
     pub async fn push_meta(
         id: String,
         metadata: Metadata,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
         language: Option<String>,
         template_id: Option<String>,
     ) -> flow_like_types::Result<()> {
@@ -373,7 +370,7 @@ impl App {
     ) -> flow_like_types::Result<Arc<Mutex<Board>>> {
         let storage_root = Path::from("apps").child(self.id.clone());
         if let Some(app_state) = &self.app_state {
-            let board = app_state.lock().await.get_board(&board_id, version);
+            let board = app_state.get_board(&board_id, version);
 
             if let Ok(board) = board {
                 return Ok(board);
@@ -389,10 +386,7 @@ impl App {
         let board_ref = Arc::new(Mutex::new(board));
         let register = register.unwrap_or(false);
         if register && let Some(app_state) = &self.app_state {
-            app_state
-                .lock()
-                .await
-                .register_board(&board_id, board_ref.clone(), version)?;
+            app_state.register_board(&board_id, board_ref.clone(), version)?;
         }
 
         Ok(board_ref)
@@ -414,7 +408,7 @@ impl App {
         store.delete(&board_dir).await?;
 
         if let Some(app_state) = &self.app_state {
-            app_state.lock().await.remove_board(board_id)?;
+            app_state.remove_board(board_id)?;
         }
 
         // Remove all versions of the board
@@ -712,11 +706,10 @@ impl App {
                 .as_generic();
 
             let board_refs = {
-                let guard = app_state.lock().await;
                 let mut refs = Vec::with_capacity(self.boards.len());
 
                 for board_id in &self.boards {
-                    if let Ok(board) = guard.get_board(board_id, None) {
+                    if let Ok(board) = app_state.get_board(board_id, None) {
                         refs.push(board.clone());
                     }
                 }
@@ -759,14 +752,14 @@ mod tests {
     use flow_like_types::{Message, tokio};
     use std::sync::Arc;
 
-    async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
+    async fn flow_state() -> Arc<crate::state::FlowLikeState> {
         let mut config: FlowLikeConfig = FlowLikeConfig::new();
         config.register_app_meta_store(FlowLikeStore::Other(Arc::new(
             flow_like_storage::object_store::memory::InMemory::new(),
         )));
         let (http_client, _refetch_rx) = HTTPClient::new();
         let flow_like_state = crate::state::FlowLikeState::new(config, http_client);
-        Arc::new(Mutex::new(flow_like_state))
+        Arc::new(flow_like_state)
     }
 
     #[tokio::test]
