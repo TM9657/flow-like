@@ -30,7 +30,7 @@ If you need more abstract memory, like a thread-handle or database connections y
 - Set the Options to offer the user enum drop downs, set a schema for struct pins, it is super helpful.
 - If you can, set default values.
 - You can abstract inputs using JsonSchemar Structs (and use their schema in the Pin Options) to created typed interactions.
-- Success and Error pins should be offered when we leave the workflow system (e.g API calls, Database Connections, etc.). The workflow offers an explicit way to handle errors and success cases out of the box, which can be used in the other cases.
+- Success and Error pins should be offered when we leave the workflow system (e.g API calls, Database Connections, etc.). The workflow offers an explicit way to handle errors and success cases out of the box, which can be used in the other cases. IN MOST CASES YOU DO NOT NEED AN ERROR PIN WITH ERROR MESSAGE; JUST RETURN THE ERR()!
 
 ## Types to Use
 - for Images use: NodeImage

@@ -18,7 +18,15 @@ import {
 	useBackend,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
-import { CreditCard, Crown, Edit2, Eye, Lock, Upload, User } from "lucide-react";
+import {
+	CreditCard,
+	Crown,
+	Edit2,
+	Eye,
+	Lock,
+	Upload,
+	User,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
