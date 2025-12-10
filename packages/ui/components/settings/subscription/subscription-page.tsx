@@ -2,6 +2,10 @@
 
 import { Check, Crown, Loader2, Sparkles, Zap } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import type {
+	IPricingResponse,
+	ITierInfo,
+} from "../../../state/backend-state/user-state";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import {
@@ -13,10 +17,6 @@ import {
 	CardTitle,
 } from "../../ui/card";
 import { Separator } from "../../ui/separator";
-import type {
-	IPricingResponse,
-	ITierInfo,
-} from "../../../state/backend-state/user-state";
 
 interface TierCardProps {
 	tierKey: string;
@@ -51,7 +51,11 @@ function formatBytes(bytes: number): string {
 	return `${Number.parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
 }
 
-function formatPrice(amount: number, currency: string, interval?: string): string {
+function formatPrice(
+	amount: number,
+	currency: string,
+	interval?: string,
+): string {
 	const formatter = new Intl.NumberFormat("en-US", {
 		style: "currency",
 		currency: currency.toUpperCase(),
@@ -99,19 +103,28 @@ function TierCard({
 			className={`relative flex flex-col ${isCurrentTier ? "border-primary border-2" : ""}`}
 		>
 			{isCurrentTier && (
-				<Badge className="absolute -top-2 left-1/2 -translate-x-1/2" variant="default">
+				<Badge
+					className="absolute -top-2 left-1/2 -translate-x-1/2"
+					variant="default"
+				>
 					Current Plan
 				</Badge>
 			)}
 			<CardHeader>
-				<div className={`w-12 h-12 rounded-lg flex items-center justify-center text-white mb-4 ${colorClass}`}>
+				<div
+					className={`w-12 h-12 rounded-lg flex items-center justify-center text-white mb-4 ${colorClass}`}
+				>
 					{icon}
 				</div>
 				<CardTitle className="text-xl">{tier.name || tierKey}</CardTitle>
 				<CardDescription>
 					{tier.price ? (
 						<span className="text-2xl font-bold text-foreground">
-							{formatPrice(tier.price.amount, tier.price.currency, tier.price.interval)}
+							{formatPrice(
+								tier.price.amount,
+								tier.price.currency,
+								tier.price.interval,
+							)}
 						</span>
 					) : (
 						<span className="text-2xl font-bold text-foreground">Free</span>
@@ -136,7 +149,9 @@ function TierCard({
 				) : isPaid ? (
 					<Button
 						className="w-full"
-						onClick={() => hasExistingSubscription ? onManageBilling() : onUpgrade(tierKey)}
+						onClick={() =>
+							hasExistingSubscription ? onManageBilling() : onUpgrade(tierKey)
+						}
 						disabled={isLoading}
 					>
 						{isLoading ? (
@@ -216,12 +231,10 @@ export function SubscriptionPage({
 	return (
 		<div className="container max-w-6xl mx-auto p-6 space-y-8">
 			<div className="text-center space-y-2">
-				<h1 className="text-3xl font-bold tracking-tight">
-					Choose Your Plan
-				</h1>
+				<h1 className="text-3xl font-bold tracking-tight">Choose Your Plan</h1>
 				<p className="text-muted-foreground max-w-2xl mx-auto">
-					Unlock more features and capabilities with our premium plans.
-					All plans include access to the core FlowLike platform.
+					Unlock more features and capabilities with our premium plans. All
+					plans include access to the core FlowLike platform.
 				</p>
 			</div>
 

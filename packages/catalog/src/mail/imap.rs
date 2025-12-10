@@ -18,6 +18,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{self, net::TcpStream, sync::Mutex};
+pub mod calendar;
 pub mod inbox;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]

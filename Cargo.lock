@@ -1265,7 +1265,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "tracing",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -2529,7 +2529,7 @@ checksum = "d38f2da7a0a2c4ccf0065be06397cc26a81f4e528be095826eee9d4adbb8c60f"
 dependencies = [
  "byteorder",
  "fnv",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -2540,7 +2540,7 @@ checksum = "d8a4f8e55be323b378facfcf1f06aa97f6ec17cf4ac84fb17325093aaf62da41"
 dependencies = [
  "byteorder",
  "fnv",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -3504,7 +3504,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -3755,7 +3755,7 @@ dependencies = [
  "regex",
  "sha2",
  "unicode-segmentation",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -4047,7 +4047,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef552e6f588e446098f6ba40d89ac146c8c7b64aade83c051ee00bb5d2bc18d"
 dependencies = [
  "serde",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -5230,6 +5230,7 @@ dependencies = [
  "hayro",
  "htmd",
  "iana-time-zone",
+ "icalendar",
  "inventory",
  "jsonschema",
  "linfa",
@@ -5257,6 +5258,7 @@ dependencies = [
  "tract-tflite",
  "umya-spreadsheet",
  "urlencoding",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -6787,6 +6789,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "icalendar"
+version = "0.17.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ba0022b8bccc442a1192b80231dfe543be615d0c042983bc8957a8a28158666"
+dependencies = [
+ "chrono",
+ "iso8601",
+ "nom 8.0.0",
+ "nom-language",
+ "uuid 1.19.0",
+]
+
+[[package]]
 name = "ico"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7162,6 +7177,15 @@ name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
+
+[[package]]
+name = "iso8601"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1082f0c48f143442a1ac6122f67e360ceee130b967af4d50996e5154a45df46"
+dependencies = [
+ "nom 8.0.0",
+]
 
 [[package]]
 name = "itertools"
@@ -7599,7 +7623,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -7843,7 +7867,7 @@ dependencies = [
  "tokio",
  "tracing",
  "twox-hash",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -7947,7 +7971,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -8959,7 +8983,7 @@ dependencies = [
  "rustc_version",
  "smallvec 1.15.1",
  "tagptr",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -10092,7 +10116,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -11169,7 +11193,7 @@ dependencies = [
  "polars-utils",
  "rayon",
  "smartstring",
- "uuid 1.18.1",
+ "uuid 1.19.0",
  "version_check",
 ]
 
@@ -12487,7 +12511,7 @@ dependencies = [
  "rkyv_derive",
  "seahash",
  "tinyvec",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -12531,7 +12555,7 @@ dependencies = [
  "tower-service",
  "tracing",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -12595,7 +12619,7 @@ dependencies = [
  "smallvec 1.15.1",
  "time",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -12942,7 +12966,7 @@ dependencies = [
  "serde",
  "serde_json",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -13083,7 +13107,7 @@ dependencies = [
  "time",
  "tracing",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -13114,7 +13138,7 @@ dependencies = [
  "rust_decimal",
  "serde_json",
  "time",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -13130,7 +13154,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "time",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -13527,7 +13551,7 @@ dependencies = [
  "thiserror 2.0.17",
  "time",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -13544,7 +13568,7 @@ dependencies = [
  "thiserror 2.0.17",
  "time",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -13561,7 +13585,7 @@ dependencies = [
  "thiserror 2.0.17",
  "time",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -14388,7 +14412,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -14472,7 +14496,7 @@ dependencies = [
  "thiserror 2.0.17",
  "time",
  "tracing",
- "uuid 1.18.1",
+ "uuid 1.19.0",
  "whoami",
 ]
 
@@ -14515,7 +14539,7 @@ dependencies = [
  "thiserror 2.0.17",
  "time",
  "tracing",
- "uuid 1.18.1",
+ "uuid 1.19.0",
  "whoami",
 ]
 
@@ -14543,7 +14567,7 @@ dependencies = [
  "time",
  "tracing",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -14947,7 +14971,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "time",
- "uuid 1.18.1",
+ "uuid 1.19.0",
  "winapi",
 ]
 
@@ -15224,7 +15248,7 @@ dependencies = [
  "thiserror 2.0.17",
  "time",
  "url",
- "uuid 1.18.1",
+ "uuid 1.19.0",
  "walkdir",
 ]
 
@@ -15620,7 +15644,7 @@ dependencies = [
  "toml 0.9.8",
  "url",
  "urlpattern",
- "uuid 1.18.1",
+ "uuid 1.19.0",
  "walkdir",
 ]
 
@@ -16281,7 +16305,7 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
- "uuid 1.18.1",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -16926,13 +16950,13 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.18.1"
+version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f87b8aa10b915a06587d0dec516c282ff295b475d94abf425d62b57710070a2"
+checksum = "e2e054861b4bd027cd373e18e8d8d8e6548085000e41290d95ce0c373a654b4a"
 dependencies = [
  "getrandom 0.3.4",
  "js-sys",
- "serde",
+ "serde_core",
  "wasm-bindgen",
 ]
 
@@ -16943,7 +16967,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b082222b4f6619906941c17eb2297fff4c2fb96cb60164170522942a200bd8"
 dependencies = [
  "outref",
- "uuid 1.18.1",
+ "uuid 1.19.0",
  "vsimd",
 ]
 
@@ -18201,7 +18225,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uds_windows",
- "uuid 1.18.1",
+ "uuid 1.19.0",
  "windows-sys 0.61.2",
  "winnow 0.7.13",
  "zbus_macros",

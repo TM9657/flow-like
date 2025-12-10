@@ -321,79 +321,83 @@ fn value_to_byte(input: &Value, target: &mut Value) -> bool {
 }
 
 fn value_to_date(input: &Value, target: &mut Value) -> bool {
+    use chrono::{DateTime, Utc};
+
+    // If input is already a string (RFC3339), validate and use it
     if input.is_string()
         && let Some(s) = input.as_str()
     {
-        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
-            let timestamp_millis = dt.timestamp_millis();
-            let secs = timestamp_millis / 1000;
-
-            let date_obj = json!({
-                "secs_since_epoch": secs,
-                "nanos_since_epoch": timestamp_millis * 1_000_000
-            });
-
-            *target = date_obj;
+        // Try parsing as RFC3339 to validate
+        if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+            let dt_utc: DateTime<Utc> = dt.with_timezone(&Utc);
+            *target = json!(dt_utc);
             return true;
         }
 
+        // Try other common formats and convert to DateTime<Utc>
         for format in &["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d %H:%M:%S"] {
             if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, format) {
-                let timestamp_millis = dt.and_utc().timestamp_millis();
-
-                let date_obj = json!({
-                    "secs_since_epoch": timestamp_millis / 1000,
-                    "nanos_since_epoch": timestamp_millis * 1_000_000
-                });
-
-                *target = date_obj;
+                let dt_utc = dt.and_utc();
+                *target = json!(dt_utc);
                 return true;
             } else if let Ok(d) = chrono::NaiveDate::parse_from_str(s, format) {
                 let dt = d.and_time(chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap());
-                let timestamp_millis = dt.and_utc().timestamp_millis();
-
-                let date_obj = json!({
-                    "secs_since_epoch": timestamp_millis / 1000,
-                    "nanos_since_epoch": timestamp_millis * 1_000_000
-                });
-
-                *target = date_obj;
+                let dt_utc = dt.and_utc();
+                *target = json!(dt_utc);
                 return true;
             }
         }
+
+        return false;
     }
 
+    // Convert numbers to RFC3339 strings
     if input.is_number() {
-        let mut timestamp_millis: i64 = 0;
+        let dt_utc: Option<DateTime<Utc>>;
 
         if let Some(val) = input.as_i64() {
+            // If value is greater than year 2000 in milliseconds, treat as milliseconds
             if val > 946684800 * 1000 {
-                timestamp_millis = val;
+                dt_utc = DateTime::from_timestamp_millis(val);
             } else {
-                timestamp_millis = val * 1000;
+                // Treat as seconds
+                dt_utc = DateTime::from_timestamp(val, 0);
             }
         } else if let Some(val) = input.as_f64() {
             if val > 946684800.0 * 1000.0 {
-                timestamp_millis = val as i64;
+                // Treat as milliseconds
+                dt_utc = DateTime::from_timestamp_millis(val as i64);
             } else {
-                timestamp_millis = (val * 1000.0) as i64;
+                // Treat as seconds with fractional part as nanos
+                let secs = val.floor() as i64;
+                let nanos = (val.fract() * 1_000_000_000.0) as u32;
+                dt_utc = DateTime::from_timestamp(secs, nanos);
             }
+        } else {
+            return false;
         }
 
-        let date_obj = json!({
-            "secs_since_epoch": timestamp_millis / 1000,
-            "nanos_since_epoch": timestamp_millis * 1_000_000
-        });
+        if let Some(dt) = dt_utc {
+            *target = json!(dt);
+            return true;
+        }
 
-        *target = date_obj;
-        return true;
+        return false;
     }
 
+    // Handle old SystemTime format for backward compatibility
     if input.is_object() {
         let obj = input.as_object().unwrap();
         if obj.contains_key("secs_since_epoch") && obj.contains_key("nanos_since_epoch") {
-            *target = input.clone();
-            return true;
+            if let (Some(secs), Some(nanos)) = (
+                obj.get("secs_since_epoch").and_then(|v| v.as_i64()),
+                obj.get("nanos_since_epoch").and_then(|v| v.as_u64()),
+            ) {
+                if let Some(dt) = DateTime::<Utc>::from_timestamp(secs, nanos as u32) {
+                    *target = json!(dt);
+                    return true;
+                }
+            }
         }
     }
 

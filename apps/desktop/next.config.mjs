@@ -8,6 +8,7 @@ const nextConfig = {
 	images: {
 		unoptimized: true,
 	},
+	transpilePackages: ["@tm9657/flow-like-ui"],
 	staticPageGenerationTimeout: 120,
 	reactCompiler: true,
 	missingSuspenseWithCSRBailout: false,

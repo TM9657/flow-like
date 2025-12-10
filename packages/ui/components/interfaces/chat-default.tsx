@@ -487,7 +487,14 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		return () => {
 			executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
 		};
-	}, [sessionIdParameter, appId, event.id, event.name, executionEngine, messages]);
+	}, [
+		sessionIdParameter,
+		appId,
+		event.id,
+		event.name,
+		executionEngine,
+		messages,
+	]);
 
 	const handleSendMessage: ISendMessageFunction = useCallback(
 		async (

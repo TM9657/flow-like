@@ -3,6 +3,7 @@ import { createId } from "@paralleldrive/cuid2";
 import * as Sentry from "@sentry/nextjs";
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
 	Avatar,
 	AvatarFallback,
@@ -90,6 +91,7 @@ import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 import { fetcher } from "../lib/api";
 import { CreateProfileDialog } from "./add-profile";
+import { Shortcuts } from "./shortcuts";
 import { useTauriInvoke } from "./useInvoke";
 
 const data = {
@@ -265,6 +267,7 @@ function InnerSidebar() {
 			</SidebarHeader>
 			<SidebarContent>
 				<NavMain items={data.navMain} />
+				<Shortcuts />
 				<Flows />
 			</SidebarContent>
 			<SidebarFooter>
@@ -893,7 +896,8 @@ export function NavUser({
 						<DropdownMenuSeparator />
 						{auth?.isAuthenticated && (
 							<>
-								{(!info.data?.tier || info.data?.tier.toUpperCase() === "FREE") && (
+								{(!info.data?.tier ||
+									info.data?.tier.toUpperCase() === "FREE") && (
 									<>
 										<DropdownMenuGroup>
 											<a href="/subscription">
@@ -924,14 +928,7 @@ export function NavUser({
 													auth,
 												);
 
-												const _view = new WebviewWindow("billing", {
-													url: urlRequest.url,
-													title: "Billing",
-													focus: true,
-													resizable: true,
-													maximized: true,
-													contentProtected: true,
-												});
+												await openUrl(urlRequest.url);
 											}}
 										>
 											<CreditCard className="size-4" />

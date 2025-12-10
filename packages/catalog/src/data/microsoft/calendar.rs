@@ -1,4 +1,5 @@
 use super::provider::{MICROSOFT_PROVIDER_ID, MicrosoftGraphProvider};
+use chrono::{DateTime, Utc};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -374,18 +375,8 @@ impl NodeLogic for ListEventsNode {
             VariableType::String,
         )
         .set_default_value(Some(json!("")));
-        node.add_input_pin(
-            "start_date",
-            "Start Date",
-            "Start date (ISO format)",
-            VariableType::String,
-        );
-        node.add_input_pin(
-            "end_date",
-            "End Date",
-            "End date (ISO format)",
-            VariableType::String,
-        );
+        node.add_input_pin("start_date", "Start Date", "Start date", VariableType::Date);
+        node.add_input_pin("end_date", "End Date", "End date", VariableType::Date);
         node.add_input_pin(
             "top",
             "Top",
@@ -416,8 +407,8 @@ impl NodeLogic for ListEventsNode {
             .evaluate_pin("calendar_id")
             .await
             .unwrap_or_default();
-        let start_date: String = context.evaluate_pin("start_date").await.unwrap_or_default();
-        let end_date: String = context.evaluate_pin("end_date").await.unwrap_or_default();
+        let start_date: DateTime<Utc> = context.evaluate_pin("start_date").await?;
+        let end_date: DateTime<Utc> = context.evaluate_pin("end_date").await?;
         let top: i64 = context.evaluate_pin("top").await.unwrap_or(50);
 
         let url = if calendar_id.is_empty() {
@@ -434,8 +425,8 @@ impl NodeLogic for ListEventsNode {
             .get(&url)
             .header("Authorization", format!("Bearer {}", provider.access_token))
             .query(&[
-                ("startDateTime", start_date.as_str()),
-                ("endDateTime", end_date.as_str()),
+                ("startDateTime", &start_date.to_rfc3339()),
+                ("endDateTime", &end_date.to_rfc3339()),
                 ("$top", &top.to_string()),
             ])
             .send()
@@ -515,14 +506,14 @@ impl NodeLogic for CreateEventNode {
         node.add_input_pin(
             "start_date_time",
             "Start DateTime",
-            "Start date/time (ISO format)",
-            VariableType::String,
+            "Start date/time",
+            VariableType::Date,
         );
         node.add_input_pin(
             "end_date_time",
             "End DateTime",
-            "End date/time (ISO format)",
-            VariableType::String,
+            "End date/time",
+            VariableType::Date,
         );
         node.add_input_pin("time_zone", "Time Zone", "Time zone", VariableType::String)
             .set_default_value(Some(json!("UTC")));
@@ -566,8 +557,8 @@ impl NodeLogic for CreateEventNode {
         let provider: MicrosoftGraphProvider = context.evaluate_pin("provider").await?;
         let subject: String = context.evaluate_pin("subject").await?;
         let body: String = context.evaluate_pin("body").await.unwrap_or_default();
-        let start_date_time: String = context.evaluate_pin("start_date_time").await?;
-        let end_date_time: String = context.evaluate_pin("end_date_time").await?;
+        let start_date_time: DateTime<Utc> = context.evaluate_pin("start_date_time").await?;
+        let end_date_time: DateTime<Utc> = context.evaluate_pin("end_date_time").await?;
         let time_zone: String = context
             .evaluate_pin("time_zone")
             .await
@@ -803,15 +794,16 @@ impl NodeLogic for FindMeetingTimesNode {
         node.add_input_pin(
             "start_date",
             "Start Date",
-            "Start of search window (ISO format)",
-            VariableType::String,
+            "Start of search window",
+            VariableType::Date,
         );
         node.add_input_pin(
             "end_date",
             "End Date",
-            "End of search window (ISO format)",
-            VariableType::String,
+            "End of search window",
+            VariableType::Date,
         );
+
         node.add_input_pin("time_zone", "Time Zone", "Time zone", VariableType::String)
             .set_default_value(Some(json!("UTC")));
 
@@ -835,8 +827,8 @@ impl NodeLogic for FindMeetingTimesNode {
         let provider: MicrosoftGraphProvider = context.evaluate_pin("provider").await?;
         let attendees: String = context.evaluate_pin("attendees").await?;
         let duration_minutes: i64 = context.evaluate_pin("duration_minutes").await.unwrap_or(30);
-        let start_date: String = context.evaluate_pin("start_date").await?;
-        let end_date: String = context.evaluate_pin("end_date").await?;
+        let start_date: DateTime<Utc> = context.evaluate_pin("start_date").await?;
+        let end_date: DateTime<Utc> = context.evaluate_pin("end_date").await?;
         let time_zone: String = context
             .evaluate_pin("time_zone")
             .await
@@ -862,11 +854,11 @@ impl NodeLogic for FindMeetingTimesNode {
                 "activityDomain": "work",
                 "timeSlots": [{
                     "start": {
-                        "dateTime": start_date,
+                        "dateTime": start_date.to_rfc3339(),
                         "timeZone": time_zone
                     },
                     "end": {
-                        "dateTime": end_date,
+                        "dateTime": end_date.to_rfc3339(),
                         "timeZone": time_zone
                     }
                 }]
@@ -957,14 +949,14 @@ impl NodeLogic for GetScheduleNode {
         node.add_input_pin(
             "start_date_time",
             "Start DateTime",
-            "Start date/time (ISO format)",
-            VariableType::String,
+            "Start date/time",
+            VariableType::Date,
         );
         node.add_input_pin(
             "end_date_time",
             "End DateTime",
-            "End date/time (ISO format)",
-            VariableType::String,
+            "End date/time",
+            VariableType::Date,
         );
         node.add_input_pin("time_zone", "Time Zone", "Time zone", VariableType::String)
             .set_default_value(Some(json!("UTC")));
@@ -997,8 +989,8 @@ impl NodeLogic for GetScheduleNode {
 
         let provider: MicrosoftGraphProvider = context.evaluate_pin("provider").await?;
         let schedules: String = context.evaluate_pin("schedules").await?;
-        let start_date_time: String = context.evaluate_pin("start_date_time").await?;
-        let end_date_time: String = context.evaluate_pin("end_date_time").await?;
+        let start_date_time: DateTime<Utc> = context.evaluate_pin("start_date_time").await?;
+        let end_date_time: DateTime<Utc> = context.evaluate_pin("end_date_time").await?;
         let time_zone: String = context
             .evaluate_pin("time_zone")
             .await
@@ -1014,11 +1006,11 @@ impl NodeLogic for GetScheduleNode {
         let request_body = json!({
             "schedules": schedule_list,
             "startTime": {
-                "dateTime": start_date_time,
+                "dateTime": start_date_time.to_rfc3339(),
                 "timeZone": time_zone
             },
             "endTime": {
-                "dateTime": end_date_time,
+                "dateTime": end_date_time.to_rfc3339(),
                 "timeZone": time_zone
             },
             "availabilityViewInterval": interval_minutes
@@ -1107,16 +1099,14 @@ impl NodeLogic for UpdateEventNode {
             "start_date_time",
             "Start DateTime",
             "New start (leave empty to keep)",
-            VariableType::String,
-        )
-        .set_default_value(Some(json!("")));
+            VariableType::Date,
+        );
         node.add_input_pin(
             "end_date_time",
             "End DateTime",
             "New end (leave empty to keep)",
-            VariableType::String,
-        )
-        .set_default_value(Some(json!("")));
+            VariableType::Date,
+        );
         node.add_input_pin(
             "time_zone",
             "Time Zone",
@@ -1150,14 +1140,9 @@ impl NodeLogic for UpdateEventNode {
         let provider: MicrosoftGraphProvider = context.evaluate_pin("provider").await?;
         let event_id: String = context.evaluate_pin("event_id").await?;
         let subject: String = context.evaluate_pin("subject").await.unwrap_or_default();
-        let start_date_time: String = context
-            .evaluate_pin("start_date_time")
-            .await
-            .unwrap_or_default();
-        let end_date_time: String = context
-            .evaluate_pin("end_date_time")
-            .await
-            .unwrap_or_default();
+        let start_date_time: Option<DateTime<Utc>> =
+            context.evaluate_pin("start_date_time").await.ok();
+        let end_date_time: Option<DateTime<Utc>> = context.evaluate_pin("end_date_time").await.ok();
         let time_zone: String = context
             .evaluate_pin("time_zone")
             .await
@@ -1169,15 +1154,15 @@ impl NodeLogic for UpdateEventNode {
         if !subject.is_empty() {
             request_body["subject"] = json!(subject);
         }
-        if !start_date_time.is_empty() {
+        if let Some(start_date_time) = start_date_time {
             request_body["start"] = json!({
-                "dateTime": start_date_time,
+                "dateTime": start_date_time.to_rfc3339(),
                 "timeZone": time_zone
             });
         }
-        if !end_date_time.is_empty() {
+        if let Some(end_date_time) = end_date_time {
             request_body["end"] = json!({
-                "dateTime": end_date_time,
+                "dateTime": end_date_time.to_rfc3339(),
                 "timeZone": time_zone
             });
         }

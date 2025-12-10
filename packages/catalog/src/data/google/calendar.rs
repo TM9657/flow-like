@@ -1,4 +1,5 @@
 use super::provider::{GOOGLE_PROVIDER_ID, GoogleProvider};
+use chrono::{DateTime, Utc};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -559,18 +560,8 @@ impl NodeLogic for CreateGoogleCalendarEventNode {
             VariableType::String,
         )
         .set_default_value(Some(json!("")));
-        node.add_input_pin(
-            "start_time",
-            "Start Time",
-            "Start time (RFC3339, e.g., 2024-01-01T10:00:00-05:00)",
-            VariableType::String,
-        );
-        node.add_input_pin(
-            "end_time",
-            "End Time",
-            "End time (RFC3339)",
-            VariableType::String,
-        );
+        node.add_input_pin("start_time", "Start Time", "Start time", VariableType::Date);
+        node.add_input_pin("end_time", "End Time", "End time", VariableType::Date);
         node.add_input_pin(
             "time_zone",
             "Time Zone",
@@ -629,8 +620,8 @@ impl NodeLogic for CreateGoogleCalendarEventNode {
             .await
             .unwrap_or_default();
         let location: String = context.evaluate_pin("location").await.unwrap_or_default();
-        let start_time: String = context.evaluate_pin("start_time").await?;
-        let end_time: String = context.evaluate_pin("end_time").await?;
+        let start_time: DateTime<Utc> = context.evaluate_pin("start_time").await?;
+        let end_time: DateTime<Utc> = context.evaluate_pin("end_time").await?;
         let time_zone: String = context.evaluate_pin("time_zone").await.unwrap_or_default();
         let attendees_str: String = context.evaluate_pin("attendees").await.unwrap_or_default();
         let add_meet: bool = context.evaluate_pin("add_meet").await.unwrap_or(false);
@@ -638,10 +629,10 @@ impl NodeLogic for CreateGoogleCalendarEventNode {
         let mut event_body = json!({
             "summary": summary,
             "start": {
-                "dateTime": start_time
+                "dateTime": start_time.to_rfc3339()
             },
             "end": {
-                "dateTime": end_time
+                "dateTime": end_time.to_rfc3339()
             }
         });
 
@@ -805,20 +796,20 @@ impl NodeLogic for UpdateGoogleCalendarEventNode {
             VariableType::String,
         )
         .set_default_value(Some(json!("")));
+
         node.add_input_pin(
             "start_time",
             "Start Time",
-            "Start time (empty to keep)",
-            VariableType::String,
-        )
-        .set_default_value(Some(json!("")));
+            "Start time (leave empty to keep)",
+            VariableType::Date,
+        );
+
         node.add_input_pin(
             "end_time",
             "End Time",
-            "End time (empty to keep)",
-            VariableType::String,
-        )
-        .set_default_value(Some(json!("")));
+            "End time (leave empty to keep)",
+            VariableType::Date,
+        );
 
         node.add_output_pin("exec_out", "Success", "", VariableType::Execution);
         node.add_output_pin("error", "Error", "", VariableType::Execution);
@@ -850,8 +841,6 @@ impl NodeLogic for UpdateGoogleCalendarEventNode {
             .await
             .unwrap_or_default();
         let location: String = context.evaluate_pin("location").await.unwrap_or_default();
-        let start_time: String = context.evaluate_pin("start_time").await.unwrap_or_default();
-        let end_time: String = context.evaluate_pin("end_time").await.unwrap_or_default();
 
         let mut event_body = json!({});
 
@@ -864,11 +853,15 @@ impl NodeLogic for UpdateGoogleCalendarEventNode {
         if !location.is_empty() {
             event_body["location"] = json!(location);
         }
-        if !start_time.is_empty() {
-            event_body["start"] = json!({"dateTime": start_time});
+
+        // Handle optional start_time
+        if let Ok(start_time) = context.evaluate_pin::<DateTime<Utc>>("start_time").await {
+            event_body["start"] = json!({"dateTime": start_time.to_rfc3339()});
         }
-        if !end_time.is_empty() {
-            event_body["end"] = json!({"dateTime": end_time});
+
+        // Handle optional end_time
+        if let Ok(end_time) = context.evaluate_pin::<DateTime<Utc>>("end_time").await {
+            event_body["end"] = json!({"dateTime": end_time.to_rfc3339()});
         }
 
         let client = reqwest::Client::new();

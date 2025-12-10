@@ -5,7 +5,7 @@ import {
 	type ISolutionLogPayload,
 	type ISolutionRequest,
 	type ISolutionUpdatePayload,
-	SolutionStatus,
+	type SolutionStatus,
 	SolutionsPage,
 	useBackend,
 	useInvoke,
@@ -112,7 +112,12 @@ export default function AdminSolutionsPage() {
 	const handleFetchSolution = useCallback(
 		async (id: string): Promise<ISolutionRequest | null> => {
 			if (!profile.data) throw new Error("Profile not loaded");
-			return fetcher<ISolutionRequest>(profile.data, `admin/solutions/${id}`, { method: "GET" }, auth);
+			return fetcher<ISolutionRequest>(
+				profile.data,
+				`admin/solutions/${id}`,
+				{ method: "GET" },
+				auth,
+			);
 		},
 		[profile.data, auth],
 	);
