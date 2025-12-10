@@ -1,5 +1,5 @@
 import { Input } from "../../../components/ui/input";
-import { Textarea } from "../../../components/ui/textarea";
+import { MonacoTextEditor } from "../../../components/ui/monaco-text-editor";
 import type { IVariable } from "../../../lib/schema/flow/variable";
 import {
 	convertJsonToUint8Array,
@@ -31,22 +31,21 @@ export function StringVariable({
 							default_value: convertJsonToUint8Array(e.target.value),
 						});
 					}}
-					type={variable.secret ? "password" : "text"}
+					type="password"
 					id="default_value"
 					placeholder="Default Value"
 				/>
 			) : (
-				<Textarea
+				<MonacoTextEditor
 					disabled={disabled}
-					rows={6}
+					height="300px"
 					value={parseUint8ArrayToJson(variable.default_value)}
-					onChange={(e) => {
+					onChange={(newValue) => {
 						onChange({
 							...variable,
-							default_value: convertJsonToUint8Array(e.target.value),
+							default_value: convertJsonToUint8Array(newValue),
 						});
 					}}
-					id="default_value"
 					placeholder="Default Value"
 				/>
 			)}
