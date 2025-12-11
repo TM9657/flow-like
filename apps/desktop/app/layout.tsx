@@ -45,6 +45,7 @@ import { DesktopAuthProvider } from "../components/auth-provider";
 import GlobalAnchorHandler from "../components/global-anchor-component";
 import { OAuthCallbackHandler } from "../components/oauth-callback-handler";
 import { OAuthExecutionProvider } from "../components/oauth-execution-provider";
+import { SpotlightWrapper } from "../components/spotlight-wrapper";
 import { TauriProvider } from "../components/tauri-provider";
 import { ThemeLoader } from "../components/theme-loader";
 import ToastProvider from "../components/toast-provider";
@@ -178,9 +179,11 @@ export default function RootLayout({
 												<OAuthExecutionProvider>
 													<DesktopAuthProvider>
 														<ExecutionEngineProviderComponent>
-															<PostHogPageView />
-															<ThemeLoader />
-															<AppSidebar>{children}</AppSidebar>
+															<SpotlightWrapper>
+																<PostHogPageView />
+																<ThemeLoader />
+																<AppSidebar>{children}</AppSidebar>
+															</SpotlightWrapper>
 														</ExecutionEngineProviderComponent>
 													</DesktopAuthProvider>
 												</OAuthExecutionProvider>

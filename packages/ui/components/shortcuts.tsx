@@ -11,7 +11,9 @@ import {
 	Globe,
 	Loader2,
 	type LucideIcon,
+	PinIcon,
 	Plus,
+	PlusIcon,
 	Sparkles,
 	Trash2,
 	WifiOff,
@@ -255,8 +257,8 @@ export function Shortcuts<TBackend, TAppMetadata>({
 		? [
 				{
 					id: "start-coding",
-					label: "Start Coding",
-					icon: Code2,
+					label: "Create Flow",
+					icon: PlusIcon,
 					action: () => {
 						if (!auth?.isAuthenticated) {
 							setIsOnline(false);
@@ -361,7 +363,7 @@ export function Shortcuts<TBackend, TAppMetadata>({
 							onClick={handleAddCurrentLocation}
 							tooltip="Add Current Location"
 						>
-							<Plus />
+							<PinIcon />
 							<span>Add Current Location</span>
 						</SidebarMenuButton>
 					</SidebarMenuItem>
@@ -373,8 +375,8 @@ export function Shortcuts<TBackend, TAppMetadata>({
 					<DialogContent>
 						<DialogHeader>
 							<DialogTitle className="flex items-center gap-2">
-								<Code2 className="h-5 w-5" />
-								Start Coding
+								<PlusIcon className="h-5 w-5" />
+								Create Flow
 							</DialogTitle>
 							<DialogDescription>
 								Create a new project with all embedding models from your current

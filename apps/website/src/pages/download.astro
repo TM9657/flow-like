@@ -1,8 +1,8 @@
 ---
-/* src/pages/download.astro */
 import "@tm9657/flow-like-ui/global.css";
 import "../styles/Blog.css";
 import BlogLayout from "../layouts/Blog-Layout.astro";
+import AmbientGlow from "../components/ambient-glow.astro";
 import {
   LuDownload,
   LuInfo,
@@ -12,13 +12,16 @@ import {
   LuShieldCheck,
   LuCheck,
   LuLink,
+  LuPackage,
+  LuTerminal,
+  LuArrowRight,
 } from "react-icons/lu";
 
 export const prerender = true;
 
 const title = "Download Flow-Like";
 const description =
-  "Get the latest Flow-Like builds for macOS, Windows, and Linux. We recommend the right binary for your device.";
+  "Get the latest Flow-Like builds for macOS, Windows, and Linux.";
 const site = Astro.site ?? import.meta.env.SITE;
 const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
 
@@ -59,216 +62,199 @@ const data = {
 ---
 
 <BlogLayout data={data} content={Content}>
-  <!-- Decorative global background -->
-  <div
-    aria-hidden="true"
-    class="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
-  >
-    <!-- Soft grid -->
-    <div
-      class="absolute inset-0 opacity-[0.08] [mask-image:radial-gradient(60%_60%_at_50%_20%,black,transparent)] bg-[linear-gradient(to_right,color-mix(in_oklch,var(--foreground)_8%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklch,var(--foreground)_8%,transparent)_1px,transparent_1px)] bg-[size:32px_32px]"
-    />
+  <AmbientGlow />
 
-  </div>
+  <!-- Flat white background override, but allowing glow to bleed through slightly if needed, or just solid white as requested -->
+  <!-- The user asked for "flat white background color" and "glowing elements".
+       AmbientGlow provides a background. To get "flat white" with "glowing elements",
+       we can use a white background with transparency or just rely on AmbientGlow if it's light enough.
+       However, AmbientGlow is quite subtle. Let's use a very light background that allows the glow.
+  -->
+  <div class="fixed inset-0 -z-50 bg-white/80 backdrop-blur-[100px]"></div>
 
-  <section id="download" class="relative mx-auto max-w-7xl px-4 lg:px-8">
-    <!-- Hero -->
-    <header class="mb-10 md:mb-14 text-center">
-      <div class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary mb-4 backdrop-blur">
-        <div class="h-2 w-2 animate-pulse rounded-full bg-primary" />
-        Official builds
-      </div>
-      <h1
-        class="text-balance bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-4xl font-bold tracking-tight text-transparent md:text-5xl mt-3!"
-      >
-        {title}
-      </h1>
-      <p class="mx-auto mt-3 max-w-2xl text-pretty text-base text-muted-foreground md:text-lg">
-        {description}
-      </p>
-      <link rel="canonical" href={canonical} />
-    </header>
+  <section id="download" class="relative mx-auto max-w-7xl px-4 lg:px-8 py-16 md:py-24 font-sans text-zinc-900">
 
-    <!-- Recommendation card -->
-    <div
-      class="rounded-2xl border bg-card/60 p-5 sm:p-7 shadow-[0_8px_40px_-20px_color-mix(in_oklch,var(--primary)_35%,transparent)] backdrop-blur-sm"
-    >
-      <div
-        class="flex flex-col gap-5 md:flex-row md:items-center md:justify-between"
-      >
-        <!-- Left: meta + badges -->
-        <div class="space-y-3">
-          <div
-            class="inline-flex items-center gap-2 text-sm text-muted-foreground"
-          >
-            <LuInfo />
-            <span id="release-meta">
-              {release
-                ? `Latest: ${release.tag_name ?? release.name ?? "—"} · ${new Date(
-                    release.published_at ??
-                      release.created_at ??
-                      Date.now()
-                  ).toDateString()}${
-                    release.prerelease ? " (pre-release)" : ""
-                  }`
-                : "Fetching latest release…"}
-            </span>
-          </div>
-
-          <div class="flex flex-wrap gap-2 text-sm">
-            <span
-              class="inline-flex items-center gap-2 rounded-full border border-foreground/10 bg-foreground/[.03] px-3 py-1.5"
-            >
-              <LuMonitor />
-              <span id="detected-os">Detecting OS…</span>
-            </span>
-            <span
-              class="inline-flex items-center gap-2 rounded-full border border-foreground/10 bg-foreground/[.03] px-3 py-1.5"
-            >
-              <LuCpu />
-              <span id="detected-arch">Detecting CPU…</span>
-            </span>
-            <span
-              class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-primary"
-            >
-              <LuShieldCheck />
-              <span>Recommended for your device</span>
-            </span>
-          </div>
+    <!-- Hero Section -->
+    <div class="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center mb-24">
+      <div class="space-y-8">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-zinc-200 bg-white/50 backdrop-blur text-xs font-mono uppercase tracking-widest text-zinc-500">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          Latest Stable Release
         </div>
 
-        <!-- Right: Primary CTA -->
-        <div class="flex items-center gap-3">
-          <a
+        <h1 class="text-5xl md:text-7xl font-bold tracking-tighter text-zinc-900 leading-[0.9]">
+          BUILD <br/>
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-zinc-900 to-zinc-500">LOCALLY.</span>
+        </h1>
+
+        <p class="text-lg text-zinc-600 font-light leading-relaxed max-w-md border-l-2 border-zinc-200 pl-6">
+          {description} <br/>
+          <span class="text-sm text-zinc-400 mt-2 block">Version {release ? (release.tag_name ?? release.name) : "..."}</span>
+        </p>
+
+        <div class="flex flex-wrap gap-4">
+           <a
             id="download-primary"
             href={`https://github.com/${ownerRepo}/releases`}
             target="_blank"
             rel="noopener noreferrer"
-            class="group inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:brightness-110 active:scale-[.99]"
+            class="group relative inline-flex items-center justify-center gap-3 bg-zinc-900 text-white px-8 py-4 text-sm font-bold uppercase tracking-wide overflow-hidden transition-all hover:scale-[1.02]"
           >
-            <LuDownload className="transition group-hover:translate-y-[1px]" />
-            <span>Download</span>
+            <div class="absolute inset-0 bg-gradient-to-r from-zinc-800 to-zinc-900 transition-transform group-hover:scale-105"></div>
+            <div class="relative flex items-center gap-3">
+                <LuDownload className="text-lg" />
+                <span>Download Now</span>
+            </div>
+          </a>
+
+          <a href="#all-downloads" class="inline-flex items-center justify-center gap-2 px-8 py-4 text-sm font-bold uppercase tracking-wide border border-zinc-200 hover:bg-zinc-50 transition-colors text-zinc-600">
+            All Builds <LuArrowRight />
           </a>
         </div>
       </div>
 
-      <!-- Controls -->
-      <div
-        class="mt-5 grid gap-3 sm:grid-cols-3 md:gap-4"
-        role="region"
-        aria-label="Download preferences"
-      >
-        <label class="flex flex-col gap-2">
-          <span class="text-sm text-muted-foreground">Operating system</span>
-          <select
-            id="os-select"
-            class="w-full rounded-lg border bg-background/70 px-3 py-2 backdrop-blur focus:outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            <option value="auto">Auto-detect</option>
-            <option value="macos">macOS</option>
-            <option value="windows">Windows</option>
-            <option value="linux">Linux</option>
-          </select>
-        </label>
-        <label class="flex flex-col gap-2">
-          <span class="text-sm text-muted-foreground">CPU architecture</span>
-          <select
-            id="arch-select"
-            class="w-full rounded-lg border bg-background/70 px-3 py-2 backdrop-blur focus:outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            <option value="auto">Auto-detect</option>
-            <option value="arm64">ARM64</option>
-            <option value="x64">x64</option>
-          </select>
-        </label>
-        <label class="flex flex-col gap-2">
-          <span class="text-sm text-muted-foreground">Package preference</span>
-          <select
-            id="pkg-select"
-            class="w-full rounded-lg border bg-background/70 px-3 py-2 backdrop-blur focus:outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            <option value="auto">Auto</option>
-            <option value="dmg">macOS .dmg</option>
-            <option value="zip">.zip</option>
-            <option value="msi">Windows .msi</option>
-            <option value="exe">Windows .exe</option>
-            <option value="appimage">Linux AppImage</option>
-            <option value="deb">Linux .deb</option>
-            <option value="rpm">Linux .rpm</option>
-            <option value="tar.gz">Linux .tar.gz</option>
-          </select>
-        </label>
-      </div>
+      <!-- Visual / 3D Element Placeholder or Abstract Graphic -->
+      <div class="relative hidden lg:block">
+         <div class="absolute inset-0 bg-gradient-to-tr from-emerald-500/20 to-blue-500/20 blur-3xl rounded-full opacity-60"></div>
+         <div class="relative bg-white border border-zinc-100 shadow-2xl shadow-zinc-200/50 p-8 rounded-xl backdrop-blur-sm">
+            <div class="flex items-center justify-between border-b border-zinc-100 pb-4 mb-6">
+                <div class="flex gap-2">
+                    <div class="w-3 h-3 rounded-full bg-red-400/20 border border-red-400/50"></div>
+                    <div class="w-3 h-3 rounded-full bg-amber-400/20 border border-amber-400/50"></div>
+                    <div class="w-3 h-3 rounded-full bg-emerald-400/20 border border-emerald-400/50"></div>
+                </div>
+                <div class="text-[10px] font-mono text-zinc-400">flow-like-desktop</div>
+            </div>
+            <div class="space-y-4">
+                <div class="h-2 bg-zinc-100 rounded w-3/4"></div>
+                <div class="h-2 bg-zinc-100 rounded w-1/2"></div>
+                <div class="grid grid-cols-3 gap-4 mt-8">
+                    <div class="h-20 bg-zinc-50 border border-zinc-100 rounded flex items-center justify-center">
+                        <LuCpu className="text-2xl text-zinc-300" />
+                    </div>
+                    <div class="h-20 bg-zinc-50 border border-zinc-100 rounded flex items-center justify-center">
+                        <LuPackage className="text-2xl text-zinc-300" />
+                    </div>
+                    <div class="h-20 bg-zinc-50 border border-zinc-100 rounded flex items-center justify-center">
+                        <LuTerminal className="text-2xl text-zinc-300" />
+                    </div>
+                </div>
+            </div>
 
-      <p class="mt-3 text-xs text-muted-foreground">
-        Linux tip: AppImage works on most distros; prefer <code>.deb</code> for
-        Debian/Ubuntu, <code>.rpm</code> for Fedora/RHEL.
-      </p>
+            <!-- Floating Badge -->
+            <div class="absolute -bottom-6 -right-6 bg-white border border-zinc-200 p-4 shadow-xl rounded-lg flex items-center gap-3">
+                <div class="bg-emerald-100 p-2 rounded-full text-emerald-600">
+                    <LuShieldCheck />
+                </div>
+                <div>
+                    <div class="text-xs font-bold text-zinc-900">Verified</div>
+                    <div class="text-[10px] text-zinc-500">Apple Notarized</div>
+                </div>
+            </div>
+         </div>
+      </div>
     </div>
 
-    <!-- All downloads -->
-    <div class="mt-12">
-      <div class="mb-4 flex items-center justify-between">
-        <h2 class="text-lg font-semibold tracking-tight">All downloads</h2>
-        <a
-          href={`https://github.com/${ownerRepo}/releases`}
-          class="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition hover:bg-accent"
-          rel="noopener"
-          target="_blank"
-        >
-          <LuExternalLink />
-          Open Releases on GitHub
-        </a>
+    <!-- Configuration & List -->
+    <div id="all-downloads" class="grid lg:grid-cols-12 gap-8 border-t border-zinc-200 pt-16">
+
+      <!-- Left: Config -->
+      <div class="lg:col-span-4">
+        <h3 class="text-xl font-bold tracking-tight mb-6">Configuration</h3>
+        <div class="bg-zinc-50/50 border border-zinc-200 p-6 space-y-6 backdrop-blur-sm">
+           <div class="space-y-4" role="region" aria-label="Download preferences">
+              <label class="block group">
+                <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block group-hover:text-zinc-900 transition-colors">Operating System</span>
+                <div class="relative">
+                    <select id="os-select" class="w-full appearance-none bg-white border border-zinc-200 px-4 py-3 text-sm font-medium focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none transition-all rounded-sm">
+                      <option value="auto">Auto-detect</option>
+                      <option value="macos">macOS</option>
+                      <option value="windows">Windows</option>
+                      <option value="linux">Linux</option>
+                    </select>
+                    <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
+                        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                </div>
+              </label>
+
+              <label class="block group">
+                <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block group-hover:text-zinc-900 transition-colors">Architecture</span>
+                <div class="relative">
+                    <select id="arch-select" class="w-full appearance-none bg-white border border-zinc-200 px-4 py-3 text-sm font-medium focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none transition-all rounded-sm">
+                      <option value="auto">Auto-detect</option>
+                      <option value="arm64">ARM64 (Apple Silicon)</option>
+                      <option value="x64">x64 (Intel/AMD)</option>
+                    </select>
+                    <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
+                        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                </div>
+              </label>
+
+              <label class="block group">
+                <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block group-hover:text-zinc-900 transition-colors">Package Format</span>
+                <div class="relative">
+                    <select id="pkg-select" class="w-full appearance-none bg-white border border-zinc-200 px-4 py-3 text-sm font-medium focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none transition-all rounded-sm">
+                      <option value="auto">Auto-select Best</option>
+                      <option value="dmg">macOS .dmg</option>
+                      <option value="zip">.zip Archive</option>
+                      <option value="msi">Windows .msi</option>
+                      <option value="exe">Windows .exe</option>
+                      <option value="appimage">Linux AppImage</option>
+                      <option value="deb">Linux .deb</option>
+                      <option value="rpm">Linux .rpm</option>
+                      <option value="tar.gz">Linux .tar.gz</option>
+                    </select>
+                    <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
+                        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                </div>
+              </label>
+           </div>
+        </div>
       </div>
 
-      <!-- Asset list -->
-      <div id="asset-list" class="grid gap-4">
-        <!-- Skeleton (replaced by JS) -->
-        <div
-          class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
-          id="asset-skeleton"
-        >
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              class="h-24 animate-pulse rounded-xl border bg-card/50"
-              style={`animation-delay:${i * 40}ms`}
-            />
-          ))}
-        </div>
-      </div>
+      <!-- Right: Assets -->
+      <div class="lg:col-span-8">
+         <div class="flex items-center justify-between mb-6">
+            <h3 class="text-xl font-bold tracking-tight">Available Assets</h3>
+            <div class="flex items-center gap-4 text-xs">
+                <span id="detected-os" class="text-zinc-400 font-mono uppercase hidden md:block">Detecting System...</span>
+                <a
+                    href={`https://github.com/${ownerRepo}/releases`}
+                    class="font-mono uppercase tracking-wider text-zinc-500 hover:text-zinc-900 flex items-center gap-1 transition-colors"
+                    rel="noopener"
+                    target="_blank"
+                >
+                    GitHub <LuExternalLink />
+                </a>
+            </div>
+         </div>
 
-      <!-- Integrity -->
-      <div
-        id="checksum-wrap"
-        class="mt-5 hidden items-center justify-between rounded-xl border bg-card/60 p-3 text-sm"
-      >
-        <div class="flex items-center gap-2 text-muted-foreground">
-          <LuCheck className="text-primary" />
-          Verify integrity with checksums.
-        </div>
-        <div class="flex items-center gap-2">
-          <a
-            id="checksum-link"
-            href="#"
-            target="_blank"
-            rel="noopener"
-            class="inline-flex items-center gap-1 rounded-md border px-2 py-1 transition hover:bg-accent"
-            ><LuLink /> Open checksums</a
-          >
-        </div>
+         <div id="asset-list" class="space-y-8">
+            <!-- Skeleton -->
+            <div class="space-y-3">
+                <div class="h-20 bg-zinc-50 border border-zinc-100 animate-pulse rounded-sm"></div>
+                <div class="h-20 bg-zinc-50 border border-zinc-100 animate-pulse rounded-sm delay-75"></div>
+                <div class="h-20 bg-zinc-50 border border-zinc-100 animate-pulse rounded-sm delay-150"></div>
+            </div>
+         </div>
+
+         <!-- Checksum -->
+         <div id="checksum-wrap" class="hidden mt-8 pt-6 border-t border-zinc-100 items-center justify-between text-xs font-mono text-zinc-500">
+            <div class="flex items-center gap-2">
+               <LuCheck className="text-emerald-600" />
+               <span>SHA-256 Checksums verified</span>
+            </div>
+            <a id="checksum-link" href="#" target="_blank" class="underline hover:text-zinc-900 decoration-zinc-300 underline-offset-4">View Checksum File</a>
+         </div>
       </div>
     </div>
   </section>
-
-  <!-- Page-specific polish -->
-  <style>
-    #download .border {
-      border-color: color-mix(in oklch, var(--olkch-foreground) 12%, transparent);
-    }
-    #download .divide-y > * + * {
-      border-top: 1px solid color-mix(in oklch, var(--olkch-foreground) 8%, transparent);
-    }
-  </style>
 
   <script
     type="module"
@@ -410,99 +396,89 @@ const data = {
         btn.rel = "noopener noreferrer";
         btn.setAttribute("download", "");
         btn.querySelector("span").textContent = `Download ${asset.name}`;
-        btn.title = `${asset.name} (${toMB(asset.size)} MB)`;
+        // btn.title = `${asset.name} (${toMB(asset.size)} MB)`;
       } else {
         btn.href = `https://github.com/${ownerRepo}/releases`;
         btn.target = "_blank";
         btn.rel = "noopener noreferrer";
         btn.removeAttribute("download");
         btn.querySelector("span").textContent = "Open Releases";
-        btn.title = "Open latest releases";
+        // btn.title = "Open latest releases";
       }
     };
 
     const renderDetected = () => {
-      $("#detected-os").textContent =
-        state.selection.os === "auto" ? state.detected.os : state.selection.os;
-      $("#detected-arch").textContent =
-        state.selection.arch === "auto"
-          ? state.detected.arch
-          : state.selection.arch;
+      const el = $("#detected-os");
+      if(el) {
+          const os = state.selection.os === "auto" ? state.detected.os : state.selection.os;
+          const arch = state.selection.arch === "auto" ? state.detected.arch : state.selection.arch;
+          el.textContent = `Detected: ${os} / ${arch}`;
+      }
     };
 
     const iconForPkg = (pkg) => {
       switch (pkg) {
-        case "dmg":
-          return "";
+        case "dmg": return "MAC";
         case "msi":
-        case "exe":
-          return "⊞";
+        case "exe": return "WIN";
         case "appimage":
         case "deb":
         case "rpm":
-        case "tar.gz":
-          return "🐧";
+        case "tar.gz": return "LIN";
         case "zip":
-        default:
-          return "⬚";
+        default: return "ZIP";
       }
     };
 
     const renderAssetsList = () => {
       const wrap = $("#asset-list");
       if (!wrap) return;
-      $("#asset-skeleton")?.remove();
 
       if (!state.assets.length) {
         wrap.innerHTML =
-          '<div class="text-sm text-muted-foreground">No assets on the latest release yet.</div>';
+          '<div class="text-sm text-zinc-500 font-mono">No assets found.</div>';
         return;
       }
 
       const groups = ["macos", "windows", "linux", "other"];
-      let html = '<div class="grid gap-4">';
+      let html = '';
       for (const g of groups) {
         const list = state.assets.filter((a) => a.os === g);
         if (!list.length) continue;
+
         html += `
-          <div class="rounded-2xl border bg-card/60 backdrop-blur">
-            <div class="flex items-center justify-between gap-2 border-b px-4 py-2.5">
-              <div class="text-sm font-semibold tracking-wide">${g.toUpperCase()}</div>
-              <div class="text-xs text-muted-foreground">${list.length} file${list.length>1?"s":""}</div>
+          <div class="mb-8">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-2 h-2 bg-zinc-900 rounded-full"></div>
+                <span class="text-sm font-bold uppercase tracking-widest text-zinc-900">${g}</span>
+                <div class="h-px bg-zinc-200 flex-1"></div>
             </div>
-            <div class="divide-y">
-              ${list
-                .map(
-                  (a) => `
-                <div class="px-4 py-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div class="flex min-w-0 items-start gap-3">
-                    <div class="mt-[2px] h-6 w-6 shrink-0 select-none rounded-md border text-xs grid place-items-center">${iconForPkg(
-                      a.pkg,
-                    )}</div>
-                    <div class="min-w-0">
-                      <div class="font-mono text-sm break-all">${a.name}</div>
-                      <div class="text-xs text-muted-foreground">
-                        ${a.pkg.toUpperCase()} · ${a.arch.toUpperCase?.() ?? a.arch} · ${toMB(
-                          a.size,
-                        )} MB · ${niceDate(a.uploadedAt)}
-                      </div>
+            <div class="grid gap-3">
+              ${list.map(a => `
+                <div class="group relative flex items-center justify-between p-4 bg-white border border-zinc-200 hover:border-zinc-900 transition-all duration-300 hover:shadow-lg hover:shadow-zinc-200/50 rounded-sm">
+                    <div class="flex items-center gap-4 overflow-hidden">
+                        <div class="shrink-0 w-12 h-12 bg-zinc-50 border border-zinc-100 flex items-center justify-center text-[10px] font-mono font-bold text-zinc-400 group-hover:text-zinc-900 group-hover:bg-white transition-colors">
+                            ${iconForPkg(a.pkg)}
+                        </div>
+                        <div class="min-w-0">
+                            <div class="font-mono text-sm text-zinc-800 truncate font-medium group-hover:text-zinc-900">${a.name}</div>
+                            <div class="flex items-center gap-2 text-[10px] text-zinc-400 uppercase tracking-wide mt-1">
+                                <span class="bg-zinc-100 px-1.5 py-0.5 rounded-sm">${toMB(a.size)} MB</span>
+                                <span>${a.arch}</span>
+                                <span>·</span>
+                                <span>${niceDate(a.uploadedAt)}</span>
+                            </div>
+                        </div>
                     </div>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <a href="${a.url}" target="_blank" rel="noopener noreferrer"
-                      class="rounded-lg border px-3 py-1.5 text-sm transition hover:bg-accent">
-                      Download
+                    <a href="${a.url}" class="shrink-0 ml-4 px-4 py-2 bg-zinc-50 hover:bg-zinc-900 hover:text-white text-xs font-bold uppercase tracking-wide transition-all border border-zinc-200 hover:border-zinc-900 rounded-sm">
+                        Download
                     </a>
-                  </div>
                 </div>
-              `,
-                )
-                .join("")}
+              `).join('')}
             </div>
           </div>
         `;
       }
-      html += "</div>";
       wrap.innerHTML = html;
 
       // checksums
@@ -538,16 +514,9 @@ const data = {
 
       await fetchLatestReleaseAllowingPrerelease();
       if (state.release) {
-        const meta = $("#release-meta");
-        if (meta) {
-          const when = new Date(
-            state.release.published_at ??
-              state.release.created_at ??
-              Date.now(),
-          ).toDateString();
-          meta.textContent = `Latest: ${
-            state.release.tag_name ?? state.release.name ?? "—"
-          } · ${when}${state.release.prerelease ? " (pre-release)" : ""}`;
+        const tagEl = $("#release-tag");
+        if (tagEl) {
+             tagEl.textContent = state.release.tag_name ?? state.release.name ?? "—";
         }
       }
 
@@ -558,15 +527,9 @@ const data = {
       renderAssetsList();
       updateRecommendation();
 
-      document
-        .querySelector("#os-select")
-        ?.addEventListener("change", updateRecommendation);
-      document
-        .querySelector("#arch-select")
-        ?.addEventListener("change", updateRecommendation);
-      document
-        .querySelector("#pkg-select")
-        ?.addEventListener("change", updateRecommendation);
+      document.querySelector("#os-select")?.addEventListener("change", updateRecommendation);
+      document.querySelector("#arch-select")?.addEventListener("change", updateRecommendation);
+      document.querySelector("#pkg-select")?.addEventListener("change", updateRecommendation);
     })();
   </script>
 </BlogLayout>

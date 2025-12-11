@@ -49,6 +49,7 @@ import {
 	SidebarMenuSubItem,
 	SidebarProvider,
 	SidebarRail,
+	SpotlightTrigger,
 	Textarea,
 	useBackend,
 	useInvalidateInvoke,
@@ -264,6 +265,7 @@ function InnerSidebar() {
 		<Sidebar collapsible="icon" side="left">
 			<SidebarHeader>
 				<Profiles />
+				<SpotlightTrigger />
 			</SidebarHeader>
 			<SidebarContent>
 				<NavMain items={data.navMain} />
