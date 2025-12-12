@@ -1,7 +1,7 @@
-import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
 import type { LucideIcon } from "lucide-react";
 import type React from "react";
+import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 export type SpotlightItemType =
 	| "navigation"
@@ -108,7 +108,14 @@ export const useSpotlightStore = create<SpotlightState>()(
 			expandedProjectId: null,
 
 			open: () => set({ isOpen: true, selectedIndex: 0, mode: "search" }),
-			close: () => set({ isOpen: false, searchQuery: "", selectedIndex: 0, expandedProjectId: null, mode: "search" }),
+			close: () =>
+				set({
+					isOpen: false,
+					searchQuery: "",
+					selectedIndex: 0,
+					expandedProjectId: null,
+					mode: "search",
+				}),
 			toggle: () => {
 				const current = get().isOpen;
 				set({
@@ -116,7 +123,7 @@ export const useSpotlightStore = create<SpotlightState>()(
 					searchQuery: current ? "" : get().searchQuery,
 					selectedIndex: 0,
 					expandedProjectId: current ? null : get().expandedProjectId,
-					mode: current ? "search" : get().mode
+					mode: current ? "search" : get().mode,
 				});
 			},
 

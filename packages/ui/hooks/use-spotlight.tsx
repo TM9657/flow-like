@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import {
-	type SpotlightItem,
 	type SpotlightGroup,
+	type SpotlightItem,
 	useSpotlightStore,
 } from "../state/spotlight-state";
 
@@ -14,7 +14,10 @@ export function useSpotlightKeyboard() {
 
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key === SPOTLIGHT_SHORTCUT_KEY && (event.metaKey || event.ctrlKey)) {
+			if (
+				event.key === SPOTLIGHT_SHORTCUT_KEY &&
+				(event.metaKey || event.ctrlKey)
+			) {
 				event.preventDefault();
 				event.stopPropagation();
 				toggle();

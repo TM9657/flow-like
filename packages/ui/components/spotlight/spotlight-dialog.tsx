@@ -61,7 +61,10 @@ const typeLabels: Record<string, string> = {
 function highlightMatch(text: string, query: string): React.ReactNode {
 	if (!query.trim()) return text;
 
-	const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+	const regex = new RegExp(
+		`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+		"gi",
+	);
 	const parts = text.split(regex);
 
 	return parts.map((part, i) =>
@@ -78,7 +81,10 @@ function highlightMatch(text: string, query: string): React.ReactNode {
 interface SpotlightDialogProps {
 	className?: string;
 	onFlowPilotMessage?: (message: string) => Promise<string>;
-	onQuickCreateProject?: (name: string, isOffline: boolean) => Promise<{ appId: string; boardId: string } | null>;
+	onQuickCreateProject?: (
+		name: string,
+		isOffline: boolean,
+	) => Promise<{ appId: string; boardId: string } | null>;
 }
 
 export function SpotlightDialog({
@@ -115,7 +121,9 @@ export function SpotlightDialog({
 			const countB = frecencyData[b.id]?.count ?? 0;
 			return countB - countA;
 		});
-		return sorted.slice(0, 3).filter((item) => (frecencyData[item.id]?.count ?? 0) > 0);
+		return sorted
+			.slice(0, 3)
+			.filter((item) => (frecencyData[item.id]?.count ?? 0) > 0);
 	}, [allItems, frecencyData]);
 
 	interface SearchableItem {
@@ -263,7 +271,11 @@ export function SpotlightDialog({
 		if (item.iconUrl) {
 			return (
 				<Avatar className="h-6 w-6 rounded-md">
-					<AvatarImage src={item.iconUrl} alt={item.label} className="object-cover" />
+					<AvatarImage
+						src={item.iconUrl}
+						alt={item.label}
+						className="object-cover"
+					/>
 					<AvatarFallback className="text-[10px] rounded-md bg-gradient-to-br from-primary/20 to-primary/5">
 						{item.label.substring(0, 2).toUpperCase()}
 					</AvatarFallback>
@@ -329,7 +341,10 @@ export function SpotlightDialog({
 								<Bot className="h-4 w-4" />
 							</button>
 						)}
-						<Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 h-5 font-mono bg-muted/50">
+						<Badge
+							variant="secondary"
+							className="text-[10px] px-1.5 py-0.5 h-5 font-mono bg-muted/50"
+						>
 							<CommandIcon className="h-3 w-3 mr-0.5" />K
 						</Badge>
 					</div>
@@ -349,127 +364,129 @@ export function SpotlightDialog({
 										<Sparkles className="h-6 w-6 text-muted-foreground/50" />
 									</div>
 									<div>
-										<p className="text-sm font-medium text-muted-foreground">No results found</p>
+										<p className="text-sm font-medium text-muted-foreground">
+											No results found
+										</p>
 										<p className="text-xs text-muted-foreground/60 mt-1">
 											Try a different search term
 										</p>
-											</div>
-										</motion.div>
-									</CommandEmpty>
+									</div>
+								</motion.div>
+							</CommandEmpty>
 
-									{showSuggestions && (
-										<motion.div
-											initial={{ opacity: 0 }}
-											animate={{ opacity: 1 }}
-											exit={{ opacity: 0 }}
-											key="suggestions"
-										>
-											<CommandGroup
-												heading={
-													<span className="flex items-center gap-1.5">
-														<TrendingUp className="h-3 w-3" />
-														Suggested
-													</span>
-												}
-											>
-												{suggestedItems.map((item, index) => (
-													<SpotlightCommandItem
-														key={`suggested-${item.id}`}
-														item={item}
-														onSelect={handleSelect}
-														renderIcon={renderIcon}
-														searchQuery=""
-														index={index}
-													/>
-												))}
-											</CommandGroup>
-										</motion.div>
-									)}
+							{showSuggestions && (
+								<motion.div
+									initial={{ opacity: 0 }}
+									animate={{ opacity: 1 }}
+									exit={{ opacity: 0 }}
+									key="suggestions"
+								>
+									<CommandGroup
+										heading={
+											<span className="flex items-center gap-1.5">
+												<TrendingUp className="h-3 w-3" />
+												Suggested
+											</span>
+										}
+									>
+										{suggestedItems.map((item, index) => (
+											<SpotlightCommandItem
+												key={`suggested-${item.id}`}
+												item={item}
+												onSelect={handleSelect}
+												renderIcon={renderIcon}
+												searchQuery=""
+												index={index}
+											/>
+										))}
+									</CommandGroup>
+								</motion.div>
+							)}
 
-									{showRecent && (
-										<motion.div
-											initial={{ opacity: 0 }}
-											animate={{ opacity: 1 }}
-											exit={{ opacity: 0 }}
-											key="recent"
-										>
-											<CommandGroup
-												heading={
-													<span className="flex items-center gap-1.5">
-														<Clock className="h-3 w-3" />
-														Recent
-													</span>
-												}
-											>
-												{recentItemsData.map((item, index) => (
-													<SpotlightCommandItem
-														key={`recent-${item.id}`}
-														item={item}
-														onSelect={handleSelect}
-														renderIcon={renderIcon}
-														searchQuery=""
-														index={index}
-													/>
-												))}
-											</CommandGroup>
-										</motion.div>
-									)}
+							{showRecent && (
+								<motion.div
+									initial={{ opacity: 0 }}
+									animate={{ opacity: 1 }}
+									exit={{ opacity: 0 }}
+									key="recent"
+								>
+									<CommandGroup
+										heading={
+											<span className="flex items-center gap-1.5">
+												<Clock className="h-3 w-3" />
+												Recent
+											</span>
+										}
+									>
+										{recentItemsData.map((item, index) => (
+											<SpotlightCommandItem
+												key={`recent-${item.id}`}
+												item={item}
+												onSelect={handleSelect}
+												renderIcon={renderIcon}
+												searchQuery=""
+												index={index}
+											/>
+										))}
+									</CommandGroup>
+								</motion.div>
+							)}
 
-									{groupedItems.map(([groupKey, items]) => (
-										<motion.div
-											initial={{ opacity: 0 }}
-											animate={{ opacity: 1 }}
-											exit={{ opacity: 0 }}
-											key={groupKey}
-										>
-											<CommandGroup heading={getGroupLabel(groupKey)}>
-												{items.map((item, index) => (
-													<SpotlightCommandItem
-														key={item.id}
-														item={item}
-														onSelect={handleSelect}
-														renderIcon={renderIcon}
-														searchQuery={searchQuery}
-														index={index}
-													/>
-												))}
-											</CommandGroup>
-										</motion.div>
-									))}
-								</AnimatePresence>
-							</CommandList>
-						</div>
+							{groupedItems.map(([groupKey, items]) => (
+								<motion.div
+									initial={{ opacity: 0 }}
+									animate={{ opacity: 1 }}
+									exit={{ opacity: 0 }}
+									key={groupKey}
+								>
+									<CommandGroup heading={getGroupLabel(groupKey)}>
+										{items.map((item, index) => (
+											<SpotlightCommandItem
+												key={item.id}
+												item={item}
+												onSelect={handleSelect}
+												renderIcon={renderIcon}
+												searchQuery={searchQuery}
+												index={index}
+											/>
+										))}
+									</CommandGroup>
+								</motion.div>
+							))}
+						</AnimatePresence>
+					</CommandList>
+				</div>
 
-						<div className="border-t border-border/40 px-4 py-2.5 text-[10px] text-muted-foreground/80 flex items-center justify-between bg-muted/20">
-							<div className="hidden sm:flex items-center gap-4">
-								<span className="flex items-center gap-1.5">
-									<kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded-md border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground shadow-sm">
-										↑↓
-									</kbd>
-									<span>Navigate</span>
-								</span>
-								<span className="flex items-center gap-1.5">
-									<kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded-md border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground shadow-sm">
-										↵
-									</kbd>
-									<span>Select</span>
-								</span>
-								<span className="flex items-center gap-1.5">
-									<kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded-md border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground shadow-sm">
-										esc
-									</kbd>
-									<span>Close</span>
-								</span>
-							</div>
-							<div className="sm:hidden flex items-center gap-2">
-								<span>Swipe down to close</span>
-							</div>
-							<span className="text-muted-foreground/50 flex items-center gap-1">
-								<Sparkles className="h-3 w-3" />
-								Flow-Like
-							</span>
-						</div>
-					</Command>
+				<div className="border-t border-border/40 px-4 py-2.5 text-[10px] text-muted-foreground/80 flex items-center justify-between bg-muted/20">
+					<div className="hidden sm:flex items-center gap-4">
+						<span className="flex items-center gap-1.5">
+							<kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded-md border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground shadow-sm">
+								↑↓
+							</kbd>
+							<span>Navigate</span>
+						</span>
+						<span className="flex items-center gap-1.5">
+							<kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded-md border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground shadow-sm">
+								↵
+							</kbd>
+							<span>Select</span>
+						</span>
+						<span className="flex items-center gap-1.5">
+							<kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded-md border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground shadow-sm">
+								esc
+							</kbd>
+							<span>Close</span>
+						</span>
+					</div>
+					<div className="sm:hidden flex items-center gap-2">
+						<span>Swipe down to close</span>
+					</div>
+					<span className="text-muted-foreground/50 flex items-center gap-1">
+						<Sparkles className="h-3 w-3" />
+						Flow-Like
+					</span>
+				</div>
+			</Command>
 		);
 	};
 
@@ -477,7 +494,9 @@ export function SpotlightDialog({
 		<Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
 			<DialogHeader className="sr-only">
 				<DialogTitle>Command Palette</DialogTitle>
-				<DialogDescription>Search for commands, projects, and actions</DialogDescription>
+				<DialogDescription>
+					Search for commands, projects, and actions
+				</DialogDescription>
 			</DialogHeader>
 			<DialogContent
 				className={cn(
@@ -547,7 +566,10 @@ function SpotlightCommandItem({
 							{highlightMatch(item.label, searchQuery)}
 						</span>
 						{item.type === "action" && (
-							<Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0 bg-primary/10 text-primary border-0">
+							<Badge
+								variant="secondary"
+								className="text-[9px] px-1.5 py-0 h-4 shrink-0 bg-primary/10 text-primary border-0"
+							>
 								Action
 							</Badge>
 						)}

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "../../../components/ui/input";
 import type { IVariable } from "../../../lib/schema/flow/variable";
-import { cn } from "../../../lib/utils";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,
 } from "../../../lib/uint8";
+import { cn } from "../../../lib/utils";
 
 const MIN_ROWS = 1;
 const MAX_ROWS = 15;
@@ -112,8 +112,7 @@ export function StringVariable({
 				{value.length > 0 && (
 					<div className="absolute bottom-1 right-2 text-[10px] text-muted-foreground/60 font-mono select-none pointer-events-none">
 						{value.length} chars
-						{value.includes("\n") &&
-							` · ${value.split("\n").length} lines`}
+						{value.includes("\n") && ` · ${value.split("\n").length} lines`}
 					</div>
 				)}
 			</div>

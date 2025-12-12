@@ -10,7 +10,7 @@ import {
 	Rocket,
 	Sparkles,
 } from "lucide-react";
-import * as React from "react";
+import type * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 import { useSpotlightStore } from "../../state/spotlight-state";
@@ -18,10 +18,15 @@ import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 
 interface QuickProjectCreateProps {
-	onCreateProject: (name: string, isOffline: boolean) => Promise<{ appId: string; boardId: string } | null>;
+	onCreateProject: (
+		name: string,
+		isOffline: boolean,
+	) => Promise<{ appId: string; boardId: string } | null>;
 }
 
-export function QuickProjectCreate({ onCreateProject }: QuickProjectCreateProps) {
+export function QuickProjectCreate({
+	onCreateProject,
+}: QuickProjectCreateProps) {
 	const { setMode, close } = useSpotlightStore();
 	const [name, setName] = useState("");
 	const [isOffline, setIsOffline] = useState(true);
@@ -136,7 +141,12 @@ export function QuickProjectCreate({ onCreateProject }: QuickProjectCreateProps)
 									)}
 								/>
 								<div className="text-center">
-									<p className={cn("text-sm font-medium", isOffline && "text-primary")}>
+									<p
+										className={cn(
+											"text-sm font-medium",
+											isOffline && "text-primary",
+										)}
+									>
 										Offline
 									</p>
 									<p className="text-[10px] text-muted-foreground">
@@ -164,7 +174,12 @@ export function QuickProjectCreate({ onCreateProject }: QuickProjectCreateProps)
 									)}
 								/>
 								<div className="text-center">
-									<p className={cn("text-sm font-medium", !isOffline && "text-primary")}>
+									<p
+										className={cn(
+											"text-sm font-medium",
+											!isOffline && "text-primary",
+										)}
+									>
 										Online
 									</p>
 									<p className="text-[10px] text-muted-foreground">

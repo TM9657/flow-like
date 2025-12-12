@@ -12,9 +12,9 @@ import {
 	ZoomIn,
 	ZoomOut,
 } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import type { SpotlightItem } from "../state/spotlight-state";
-import { useSpotlightItems, useSpotlightGroup } from "./use-spotlight";
+import { useSpotlightGroup, useSpotlightItems } from "./use-spotlight";
 
 export interface FlowBoardSpotlightOptions {
 	boardId: string;

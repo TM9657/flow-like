@@ -9,7 +9,6 @@ import {
 	Heart,
 	Home,
 	Library,
-	type LucideIcon,
 	Moon,
 	Plus,
 	Search,
@@ -19,9 +18,15 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { useEffect, useMemo } from "react";
-import type { SpotlightItem, SpotlightGroup } from "../../state/spotlight-state";
+import {
+	useSpotlightKeyboard,
+	useSpotlightStaticItems,
+} from "../../hooks/use-spotlight";
+import type {
+	SpotlightGroup,
+	SpotlightItem,
+} from "../../state/spotlight-state";
 import { useSpotlightStore } from "../../state/spotlight-state";
-import { useSpotlightKeyboard, useSpotlightStaticItems, useSpotlightGroup } from "../../hooks/use-spotlight";
 import { SpotlightDialog } from "./spotlight-dialog";
 
 const SPOTLIGHT_GROUPS: SpotlightGroup[] = [
@@ -59,7 +64,10 @@ export interface SpotlightProviderProps {
 	onReportBug?: () => void;
 	additionalStaticItems?: SpotlightItem[];
 	onFlowPilotMessage?: (message: string) => Promise<string>;
-	onQuickCreateProject?: (name: string, isOffline: boolean) => Promise<{ appId: string; boardId: string } | null>;
+	onQuickCreateProject?: (
+		name: string,
+		isOffline: boolean,
+	) => Promise<{ appId: string; boardId: string } | null>;
 	className?: string;
 }
 
@@ -255,7 +263,8 @@ export function SpotlightProvider({
 				group: "projects",
 				priority: 150,
 				keywords: [project.name.toLowerCase(), "project", "app"],
-				action: () => navigate(project.links.settings || project.links.flows || "/library"),
+				action: () =>
+					navigate(project.links.settings || project.links.flows || "/library"),
 				subItems: [
 					project.links.flows && {
 						id: `project-${project.id}-flows`,
