@@ -494,7 +494,7 @@ export function Variable({
 						<Label htmlFor="secret">Is Secret?</Label>
 					</div>
 					<small className="text-[0.8rem] text-muted-foreground">
-						A secret Variable will be covered for input (e.g passwords)
+						A secret variable will be covered for input (e.g passwords)
 					</small>
 				</div>
 
