@@ -519,7 +519,8 @@ export default function Page() {
 	}, [bit.download_link, textEmbeddingModel?.download_link]);
 
 	return (
-		<main className="flex flex-grow h-full bg-background max-h-full overflow-hidden flex-col items-start w-full justify-start p-4">
+		<main className="flex grow h-full min-h-0 bg-background overflow-hidden flex-col w-full">
+			<div className="flex-1 min-h-0 overflow-y-auto p-4">
 			<h1>Add a new Bit</h1>
 			<p className="max-w-screen-md">
 				This page is for adding new bits, which are the building blocks of extra
@@ -840,6 +841,7 @@ export default function Page() {
 					"Add Bit"
 				)}
 			</Button>
+			</div>
 		</main>
 	);
 }

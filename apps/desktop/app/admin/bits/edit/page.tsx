@@ -141,7 +141,8 @@ export default function EditPage() {
 	};
 
 	return (
-		<main className="flex flex-grow h-full bg-background max-h-full overflow-hidden flex-col items-start w-full justify-start p-6 space-y-6">
+		<main className="flex grow h-full min-h-0 bg-background overflow-hidden flex-col w-full">
+			<div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
 			{/* Search and Filters */}
 			<Card className="w-full">
 				<CardContent className="p-6 space-y-4">
@@ -299,6 +300,7 @@ export default function EditPage() {
 					</CardContent>
 				</Card>
 			)}
+			</div>
 		</main>
 	);
 }
