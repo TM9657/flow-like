@@ -642,7 +642,7 @@ export function ModalityIcons({
 	type,
 }: Readonly<{ type: IBitTypes }>): JSX.Element {
 	const iconClass = "h-3 w-3";
-	const arrowClass = "h-2.5 w-2.5 text-muted-foreground/50";
+	const arrowClass = "h-2.5 w-2.5 text-foreground";
 
 	switch (type) {
 		case IBitTypes.Llm:

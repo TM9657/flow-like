@@ -35,6 +35,7 @@ import {
 import { Progress } from "./progress";
 import {
 	Sheet,
+	SheetClose,
 	SheetContent,
 	SheetDescription,
 	SheetHeader,
@@ -258,6 +259,7 @@ export function ModelDetailSheet({
 							</SheetDescription>
 						</div>
 					</div>
+					<SheetClose />
 				</SheetHeader>
 
 				<div className="space-y-6">

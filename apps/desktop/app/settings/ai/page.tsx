@@ -34,8 +34,8 @@ import {
 	ChevronDown,
 	Code2,
 	Cpu,
-	Database,
 	DollarSign,
+	FileSearchIcon,
 	Filter,
 	Globe,
 	Grid3X3,
@@ -488,18 +488,22 @@ export default function ModelCatalogPage() {
 							/>
 						</FilterSection>
 
-						<FilterSection title="Output" icon={Zap}>
+						<FilterSection
+							title="Output"
+							icon={MessageSquare}
+							className="-scale-x-100"
+						>
 							<FilterCheckbox
 								checked={outputModalities.has("text")}
 								onCheckedChange={() => toggleOutputModality("text")}
-								icon={MessageSquare}
+								icon={Type}
 								iconColor="text-green-500"
 								label="Text"
 							/>
 							<FilterCheckbox
 								checked={outputModalities.has("embedding")}
 								onCheckedChange={() => toggleOutputModality("embedding")}
-								icon={Database}
+								icon={FileSearchIcon}
 								iconColor="text-orange-500"
 								label="Embedding"
 								count={modalityCounts.embedding}
@@ -802,11 +806,17 @@ function FilterSection({
 	title,
 	icon: Icon,
 	children,
-}: { title: string; icon: LucideIcon; children: React.ReactNode }) {
+	className,
+}: {
+	title: string;
+	icon: LucideIcon;
+	children: React.ReactNode;
+	className?: string;
+}) {
 	return (
 		<div className="space-y-2">
 			<p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-2 flex items-center gap-2">
-				<Icon className="h-3 w-3" />
+				<Icon className={"h-3 w-3 " + (className ?? "")} />
 				{title}
 			</p>
 			<div className="space-y-1.5 px-2">{children}</div>
