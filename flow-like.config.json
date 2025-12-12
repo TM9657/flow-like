@@ -66,7 +66,7 @@
 			"max_llm_cost": 0,
 			"max_llm_calls": 100,
 			"llm_tiers": ["FREE"],
-			"product_id": "prod_TZ7WqEqV6Hu55X"
+			"product_id": "prod_SMc24OtmYkjXw3"
 		},
 		"PREMIUM": {
 			"max_non_visible_projects": 200,
@@ -76,7 +76,7 @@
 			"max_llm_cost": 300,
 			"max_llm_calls": 1000,
 			"llm_tiers": ["PREMIUM", "FREE"],
-			"product_id": "prod_TZ7WZDjKG5GML7"
+			"product_id": "prod_SMbz3Vu1QJdaJz"
 		},
 		"PRO": {
 			"max_non_visible_projects": -1,
@@ -86,7 +86,7 @@
 			"max_llm_cost": 3000,
 			"max_llm_calls": 10000,
 			"llm_tiers": ["PRO", "PREMIUM", "FREE"],
-			"product_id": "prod_TZ7XoKK32J1SGQ"
+			"product_id": "prod_SMc0bsZ39gPx3a"
 		},
 		"ENTERPRISE": {
 			"max_non_visible_projects": -1,
@@ -96,7 +96,7 @@
 			"max_llm_cost": -1,
 			"max_llm_calls": -1,
 			"llm_tiers": ["PRO", "PREMIUM", "ENTERPRISE", "FREE"],
-			"product_id": "prod_TZ7XZqKVwXkROi"
+			"product_id": "prod_SMcT3OZthxvLk0"
 		}
 	},
 	"environment": "Staging",
