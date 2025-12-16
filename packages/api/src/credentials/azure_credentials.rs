@@ -227,8 +227,8 @@ mod sas_tests {
     use urlencoding;
 
     /// Test that our SAS signature generation matches Azure CLI output
-    /// Azure CLI command: az storage account generate-sas --account-name flowliketest --services b --resource-types sco --permissions rwdlac --expiry 2025-12-17T00:00:00Z --https-only
-    /// Expected output: se=2025-12-17T00%3A00%3A00Z&sp=rwdlac&spr=https&sv=2022-11-02&ss=b&srt=sco&sig=JO6AAHrnBV16gF2eQDIXEaR67JxD4hLD8D1Et5m8nyw%3D
+    /// Run: az storage account generate-sas --account-name <your-account> --services b --resource-types sco --permissions rwdlac --expiry <date> --https-only
+    /// Then compare the generated signature with the test output
     #[test]
     #[ignore]
     fn test_sas_signature_matches_azure_cli() {
@@ -274,7 +274,6 @@ mod sas_tests {
         let signature = STANDARD.encode(mac.finalize().into_bytes());
 
         eprintln!("Generated signature: {}", signature);
-        eprintln!("Expected signature: JO6AAHrnBV16gF2eQDIXEaR67JxD4hLD8D1Et5m8nyw=");
 
         // The signature won't match because the account key might be different
         // But we can verify the format is correct by testing the SAS works
