@@ -13,293 +13,245 @@ interface Props {
 const { kicker, title, subtitle, primary, secondary } = Astro.props as Props;
 ---
 
-<section
-    id="cta"
-    data-c1="hsl(35 96% 55% / .10)"
-    data-c2="hsl(18 94% 52% / .10)"
-    class="cta-section"
->
-    <!-- background accents echoing website header -->
+<section id="cta" class="cta-section">
     <div aria-hidden="true" class="bg">
-        <div class="bg-mask"><div class="bg-fills"></div></div>
+        <div class="bg-glow bg-glow-1"></div>
+        <div class="bg-glow bg-glow-2"></div>
     </div>
 
     <div class="container">
         <div class="card">
-            {
-                kicker && (
-                    <div class="badge" role="note">
-                        <span class="dot" aria-hidden="true" />
-                        {kicker}
-                    </div>
-                )
-            }
-
-            <h2 class="title">{title}</h2>
-            {subtitle && <p class="subtitle">{subtitle}</p>}
-
-            <div class="actions">
-                <a
-                    class="btn primary"
-                    href={primary.href}
-                    aria-label={primary.label}
-                >
-                    <span class="btn__label">{primary.label}</span>
-                    <svg
-                        class="btn__icon"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                        ><path
-                            fill="currentColor"
-                            d="M14 3h7v7h-2V6.41l-9.3 9.3-1.4-1.41 9.3-9.3H14V3Z"
-                        ></path></svg
-                    >
-                </a>
+            <div class="card-gradient"></div>
+            <div class="card-content">
                 {
-                    secondary && (
-                        <a
-                            class="btn ghost"
-                            href={secondary.href}
-                            aria-label={secondary.label}
-                        >
-                            <span class="btn__label">{secondary.label}</span>
-                        </a>
+                    kicker && (
+                        <div class="badge" role="note">
+                            <span class="dot" aria-hidden="true" />
+                            {kicker}
+                        </div>
                     )
                 }
+
+                <h2 class="title">{title}</h2>
+                {subtitle && <p class="subtitle">{subtitle}</p>}
+
+                <div class="actions">
+                    <a class="btn primary" href={primary.href} aria-label={primary.label}>
+                        <span>{primary.label}</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M14 3h7v7h-2V6.41l-9.3 9.3-1.4-1.41 9.3-9.3H14V3Z"/>
+                        </svg>
+                    </a>
+                    {
+                        secondary && (
+                            <a class="btn secondary" href={secondary.href} aria-label={secondary.label}>
+                                <span>{secondary.label}</span>
+                            </a>
+                        )
+                    }
+                </div>
             </div>
         </div>
     </div>
 </section>
 
 <style>
-    :root {
-        --flx-border: var(--sl-color-gray-5, rgba(255, 255, 255, 0.14));
-        --flx-text: var(--sl-color-text, #e6e6e6);
-    }
-
     .cta-section {
         position: relative;
         isolation: isolate;
         overflow: clip;
-        margin: 4rem 0 2rem;
-        padding: clamp(2rem, 6vw, 3.5rem) 1rem;
-    }
-    .container {
-        margin: 0 auto;
-        max-width: 1000px;
+        margin: 3rem 0 2rem;
+        padding: clamp(2rem, 5vw, 3rem) 1rem;
     }
 
-    /* background accents */
+    .container {
+        margin: 0 auto;
+        max-width: 900px;
+    }
+
+    /* Background */
     .bg {
         position: absolute;
         inset: 0;
         pointer-events: none;
         z-index: -1;
     }
-    .bg-mask {
+
+    .bg-glow {
         position: absolute;
-        inset: 0;
-        -webkit-mask-image: radial-gradient(
-            60% 60% at 50% 20%,
-            black,
-            transparent
-        );
-        mask-image: radial-gradient(60% 60% at 50% 20%, black, transparent);
-    }
-    .bg-fills {
-        position: absolute;
-        inset: 0;
-        background: radial-gradient(
-                520px 320px at 20% 0%,
-                var(--c1, var(--flx-amber-flows) / 0.1),
-                transparent
-            ),
-            radial-gradient(
-                680px 420px at 80% 10%,
-                var(--c2, var(--flx-orange-flows) / 0.1),
-                transparent
-            );
-        filter: saturate(110%);
+        border-radius: 50%;
+        filter: blur(100px);
+        opacity: 0.4;
     }
 
-    /* card with gradient ring & glass */
-    .card {
-        text-align: center;
-        padding: clamp(1.6rem, 4vw, 2.4rem);
-        border-radius: 18px;
-        position: relative;
-        overflow: hidden;
-        background: color-mix(in oklab, var(--sl-color-bg) 10%, transparent);
-        border: 1px solid
-            color-mix(in oklab, var(--flx-border) 78%, transparent);
+    .bg-glow-1 {
+        width: 400px;
+        height: 300px;
+        background: hsl(var(--sl-color-accent));
+        top: -100px;
+        left: 50%;
+        transform: translateX(-80%);
     }
+
+    .bg-glow-2 {
+        width: 350px;
+        height: 250px;
+        background: hsl(142 76% 36%);
+        bottom: -80px;
+        left: 50%;
+        transform: translateX(-20%);
+    }
+
+    /* Card */
+    .card {
+        position: relative;
+        border-radius: 1.25rem;
+        border: 1px solid var(--sl-color-gray-5);
+        background: var(--sl-color-bg-nav);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        overflow: hidden;
+    }
+
     .card::before {
         content: "";
         position: absolute;
-        inset: -1px;
-        border-radius: 20px;
+        inset: 0;
+        border-radius: 1.25rem;
         padding: 1px;
-        pointer-events: none;
-        opacity: 0.38;
-        transition: opacity 0.2s ease;
-        background: linear-gradient(
-            120deg,
-            color-mix(in oklab, var(--flx-amber-flows) 40%, transparent),
-            transparent 30%,
-            color-mix(in oklab, var(--flx-orange-flows) 40%, transparent)
-        );
-        -webkit-mask:
-            linear-gradient(#000 0 0) content-box,
-            linear-gradient(#000 0 0);
+        background: linear-gradient(135deg, hsl(var(--sl-color-accent) / 0.4), transparent, hsl(142 76% 36% / 0.4));
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
         -webkit-mask-composite: xor;
         mask-composite: exclude;
-    }
-    .card:hover::before {
-        opacity: 0.6;
+        pointer-events: none;
+        opacity: 0.5;
+        transition: opacity 0.2s ease;
     }
 
-    /* heading */
+    .card:hover::before {
+        opacity: 0.8;
+    }
+
+    .card-gradient {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, hsl(var(--sl-color-accent) / 0.05), transparent, hsl(142 76% 36% / 0.05));
+        pointer-events: none;
+    }
+
+    .card-content {
+        position: relative;
+        padding: clamp(2rem, 5vw, 3rem);
+        text-align: center;
+    }
+
+    /* Badge */
     .badge {
         display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
-        border: 1px solid
-            color-mix(in oklab, var(--flx-border) 55%, transparent);
-        background: color-mix(
-            in oklab,
-            var(--flx-amber-flows) 10%,
-            transparent
-        );
-        color: color-mix(in oklab, var(--flx-amber-flows) 65%, var(--flx-text));
-        padding: 0.42rem 0.8rem;
-        border-radius: 999px;
-        font-size: 0.82rem;
+        gap: 0.625rem;
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        border: 1px solid hsl(var(--sl-color-accent) / 0.3);
+        background: hsl(var(--sl-color-accent) / 0.1);
+        color: hsl(var(--sl-color-accent));
+        font-size: 0.875rem;
         font-weight: 600;
-        backdrop-filter: blur(4px);
-        margin-bottom: 0.75rem;
+        margin-bottom: 1.25rem;
+        backdrop-filter: blur(8px);
     }
+
     .dot {
         width: 0.5rem;
         height: 0.5rem;
-        border-radius: 999px;
-        background: color-mix(
-            in oklab,
-            var(--flx-amber-flows) 80%,
-            var(--flx-orange-flows)
-        );
-        animation: pulse 1.8s infinite ease-in-out;
+        border-radius: 50%;
+        background: hsl(var(--sl-color-accent));
+        box-shadow: 0 0 8px hsl(var(--sl-color-accent) / 0.6);
+        animation: pulse 2s infinite ease-in-out;
     }
+
     @keyframes pulse {
-        0%,
-        100% {
-            transform: scale(0.9);
-            opacity: 0.75;
-        }
-        50% {
-            transform: scale(1);
-            opacity: 1;
-        }
+        0%, 100% { transform: scale(0.9); opacity: 0.75; }
+        50% { transform: scale(1); opacity: 1; }
     }
 
+    /* Title */
     .title {
-        margin: 0.15rem 0;
-        font-size: clamp(1.6rem, 3.2vw, 2.1rem);
-        font-weight: 800;
-        letter-spacing: -0.01em;
-        background: linear-gradient(
-            90deg,
-            var(--sl-color-text),
-            color-mix(
-                in oklab,
-                var(--flx-amber-flows) 65%,
-                var(--sl-color-text)
-            ),
-            color-mix(
-                in oklab,
-                var(--flx-orange-flows) 65%,
-                var(--sl-color-text)
-            )
-        );
+        margin: 0;
+        font-size: clamp(1.75rem, 4vw, 2.5rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        background: linear-gradient(135deg, var(--sl-color-text), hsl(var(--sl-color-accent)), hsl(142 76% 36%));
         -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         background-clip: text;
-        color: transparent;
-    }
-    .subtitle {
-        margin: 0.35rem auto 1rem;
-        max-width: 60ch;
-        color: color-mix(in oklab, var(--flx-text) 86%, transparent);
     }
 
-    /* actions */
+    .subtitle {
+        margin: 0.75rem auto 0;
+        max-width: 50ch;
+        font-size: 1rem;
+        color: var(--sl-color-gray-2);
+        line-height: 1.6;
+    }
+
+    /* Actions */
     .actions {
         display: flex;
         gap: 0.75rem;
         justify-content: center;
         flex-wrap: wrap;
-        margin-top: 0.65rem;
-    }
-    .btn {
-        --pad-x: 1rem;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.72rem var(--pad-x);
-        border-radius: 0.85rem;
-        border: 1px solid transparent;
-        font-weight: 700;
-        text-decoration: none;
-        line-height: 1;
-        transition:
-            transform 0.16s ease,
-            box-shadow 0.16s ease,
-            border-color 0.16s ease,
-            background 0.16s ease;
-    }
-    .btn__icon {
-        flex: 0 0 auto;
-    }
-    .btn.primary {
-        color: #fff;
-        background: linear-gradient(
-            100deg,
-            color-mix(
-                in oklab,
-                var(--flx-amber-flows) 70%,
-                var(--sl-color-accent, #ff5a3c)
-            ),
-            color-mix(
-                in oklab,
-                var(--flx-orange-flows) 70%,
-                var(--sl-color-accent, #ff5a3c)
-            )
-        );
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
-    }
-    .btn.primary:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 12px 34px rgba(0, 0, 0, 0.32);
-    }
-    .btn.ghost {
-        color: var(--sl-color-text);
-        border-color: color-mix(in oklab, var(--flx-border) 65%, transparent);
-        background: color-mix(in oklab, var(--sl-color-bg) 10%, transparent);
-    }
-    .btn.ghost:hover {
-        border-color: color-mix(
-            in oklab,
-            var(--flx-border) 45%,
-            var(--flx-orange-flows)
-        );
-        background: color-mix(in oklab, var(--sl-color-bg) 18%, transparent);
+        margin-top: 1.5rem;
     }
 
-    /* motion safety */
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        border-radius: 9999px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s ease;
+    }
+
+    .btn.primary {
+        background: var(--sl-color-text);
+        color: var(--sl-color-bg);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    }
+
+    .btn.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn.primary svg {
+        transition: transform 0.2s ease;
+    }
+
+    .btn.primary:hover svg {
+        transform: translate(2px, -2px);
+    }
+
+    .btn.secondary {
+        background: transparent;
+        border: 1px solid var(--sl-color-gray-5);
+        color: var(--sl-color-text);
+    }
+
+    .btn.secondary:hover {
+        background: var(--sl-color-gray-6);
+        border-color: var(--sl-color-gray-4);
+    }
+
     @media (prefers-reduced-motion: reduce) {
-        .card::before,
-        .btn {
+        .card::before, .btn, .dot {
             transition: none;
+            animation: none;
         }
     }
 </style>

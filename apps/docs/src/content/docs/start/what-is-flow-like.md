@@ -1,16 +1,65 @@
 ---
 title: What is Flow-Like?
-description: Your Next-Generation Workflow OS
+description: Build typed, scalable workflows with visual design and Rust performance
 sidebar:
   order: 10
 ---
 
-Flow-Like is a **Workflow Builder and Operating System**:
-- It supports *workflows*, allowing you to automate *any* process.
-- It is a full-stack *builder suite*, enabling you to implement automations as *flows* and create interfaces to interact with them *without writing code*.
-- It is an *operating system*, providing OS-grade, standalone functionalities such as storage, databases, and user management. You can even run it completely offline if desired.
+import { Card, CardGrid, Aside, LinkCard } from '@astrojs/starlight/components';
 
-Flow-Like includes *but is not limited to* AI capabilities for automations:
-- You can embed advanced reasoning models like Large Language Models (LLMs) as routers, agents, or transformers within your flows.
+Flow-Like is a **visual workflow platform** that lets you design, execute, and ship typed workflows — from local prototyping to production deployment.
 
-We've designed Flow-Like not only for AI but, first and foremost, for uncompromising performance, efficiency, and security. It comes with built-in infrastructure — because, in our experience, this is the truly missing cornerstone to scale your AI transformation *for any flow you like*.
+<Aside type="tip">
+**TL;DR:** Drag-and-drop nodes, connect typed pins, see your data flow. What you build is what you ship — same graph, same visibility, from dev to prod.
+</Aside>
+
+## Why Flow-Like?
+
+<CardGrid>
+  <Card title="🎛️ Visual First" icon="pencil">
+    Build workflows by connecting nodes visually. No code required to get started, but fully extensible when you need it.
+  </Card>
+  <Card title="🔒 Type-Safe" icon="approve-check">
+    Every connection is typed. Catch errors before runtime, not after your pipeline crashes at 3am.
+  </Card>
+  <Card title="⚡ Rust Performance" icon="rocket">
+    The runtime is built in Rust. Run thousands of flows without breaking a sweat.
+  </Card>
+  <Card title="🌍 Run Anywhere" icon="laptop">
+    Local, edge, cloud, or air-gapped. Same flow works everywhere without vendor lock-in.
+  </Card>
+</CardGrid>
+
+## Core Concepts
+
+### Flows
+A **flow** is a directed graph of nodes. Data enters through input pins, flows through transformations, and exits through output pins. Each step is recorded, so you always know what went in and what came out.
+
+### Nodes
+**Nodes** are the building blocks. Each node has:
+- **Input pins** — typed data coming in
+- **Output pins** — typed data going out
+- **Execution pins** — control flow (when to run)
+
+### Type Safety
+Every pin has a type. When you connect two pins, Flow-Like checks that types match. Incompatible connections are blocked at design time — not runtime.
+
+### Local-First
+Flow-Like is designed to work offline. Start on your laptop, sync to the cloud when ready, or stay completely air-gapped. Your data, your rules.
+
+## What Can You Build?
+
+- **ETL Pipelines** — Transform and move data between systems
+- **AI Agents** — Embed LLMs, vector search, and reasoning models
+- **Automations** — React to events, schedule tasks, orchestrate services
+- **Data Processing** — Parse, validate, enrich, and route data
+- **Custom Apps** — Build interfaces on top of your flows
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="Download Flow-Like" href="/start/get/" description="Get the desktop app for Windows, macOS, or Linux" />
+  <LinkCard title="Your First Flow" href="/start/first-use/" description="Build something in 5 minutes" />
+  <LinkCard title="Explore Nodes" href="/nodes/overview/" description="See all available nodes" />
+  <LinkCard title="Self-Hosting" href="/self-hosting/overview/" description="Run Flow-Like on your infrastructure" />
+</CardGrid>

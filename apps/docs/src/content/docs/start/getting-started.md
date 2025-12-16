@@ -1,0 +1,86 @@
+---
+title: Getting Started
+description: Get up and running with Flow-Like in 5 minutes
+sidebar:
+  order: 5
+  badge:
+    text: Start Here
+    variant: tip
+---
+
+import { Steps, Aside, Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Welcome to Flow-Like! This guide will have you building your first workflow in minutes.
+
+## Quick Start
+
+<Steps>
+
+1. **Download Flow-Like**
+
+   Get the desktop app for your platform:
+   - [Windows](https://flow-like.com/download) — `.exe` installer
+   - [macOS](https://flow-like.com/download) — `.dmg` for Intel and Apple Silicon
+   - [Linux](https://flow-like.com/download) — AppImage or `.deb`
+
+2. **Launch and Create Your First App**
+
+   Open Flow-Like, click **New App**, and give it a name. You'll land in the Studio — your visual workspace for building flows.
+
+3. **Add Your First Nodes**
+
+   Right-click the canvas to open the node picker. Try adding:
+   - A **Text** node (to input some data)
+   - A **Log** node (to see output)
+
+   Connect them by dragging from the output pin to the input pin.
+
+4. **Run Your Flow**
+
+   Click the **Play** button. You'll see your text flow through the graph, with each step recorded in the log panel.
+
+</Steps>
+
+<Aside type="tip">
+**Pro tip:** Press `Space` to open the quick node picker, or use `Ctrl/Cmd + K` for command palette.
+</Aside>
+
+## What's Next?
+
+<CardGrid>
+  <LinkCard
+    title="Understand the Concepts"
+    href="/start/what-is-flow-like/"
+    description="Learn about flows, nodes, and type safety"
+  />
+  <LinkCard
+    title="Studio Overview"
+    href="/studio/overview/"
+    description="Master the visual workflow editor"
+  />
+  <LinkCard
+    title="Explore Nodes"
+    href="/nodes/overview/"
+    description="Discover all available building blocks"
+  />
+  <LinkCard
+    title="Connect AI Models"
+    href="/start/models/"
+    description="Set up LLMs and embedding models"
+  />
+</CardGrid>
+
+## Need Help?
+
+<CardGrid>
+  <Card title="Discord Community" icon="discord">
+    Join 1000+ developers building with Flow-Like. Get help, share your flows, and stay updated.
+
+    [Join Discord →](https://discord.gg/KTWMrS2)
+  </Card>
+  <Card title="GitHub Issues" icon="github">
+    Found a bug or have a feature request? Open an issue on GitHub.
+
+    [Open Issue →](https://github.com/TM9657/flow-like/issues)
+  </Card>
+</CardGrid>
