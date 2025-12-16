@@ -628,3 +628,131 @@ fn read_logs_policy(
 
     policy
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(all(test, feature = "aws"))]
+mod tests {
+    use super::*;
+    use crate::credentials::RuntimeCredentialsTrait;
+    use flow_like::credentials::SharedCredentialsTrait;
+    use flow_like_storage::Path;
+    use flow_like_storage::object_store::ObjectStore;
+    use flow_like_types::json::{from_str, to_string};
+    use flow_like_types::tokio;
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_aws_master_credentials_setup() {
+        let creds = AwsRuntimeCredentials::from_env();
+        assert!(
+            creds.access_key_id.is_some(),
+            "AWS_ACCESS_KEY_ID must be set"
+        );
+        assert!(
+            creds.secret_access_key.is_some(),
+            "AWS_SECRET_ACCESS_KEY must be set"
+        );
+        assert!(
+            !creds.meta_bucket.is_empty(),
+            "META_BUCKET_NAME must be set"
+        );
+        assert!(
+            !creds.content_bucket.is_empty(),
+            "CONTENT_BUCKET_NAME must be set"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_aws_master_credentials_can_write() {
+        let creds = AwsRuntimeCredentials::from_env();
+        let shared = creds.into_shared_credentials();
+        let store = shared
+            .to_store(false)
+            .await
+            .expect("Failed to create store from master credentials");
+
+        let test_path = format!(
+            "test/master-write-test-{}.txt",
+            flow_like_types::create_id()
+        );
+        let path = Path::from(test_path.as_str());
+
+        match &store {
+            flow_like::flow_like_storage::files::store::FlowLikeStore::AWS(s) => {
+                s.put(&path, b"test content".to_vec().into())
+                    .await
+                    .expect("Master credentials should be able to write");
+                s.delete(&path).await.ok();
+            }
+            _ => panic!("Expected AWS store"),
+        }
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_aws_master_credentials_can_read() {
+        let creds = AwsRuntimeCredentials::from_env();
+        let shared = creds.into_shared_credentials();
+        let store = shared
+            .to_store(false)
+            .await
+            .expect("Failed to create store from master credentials");
+
+        let test_path = format!("test/master-read-test-{}.txt", flow_like_types::create_id());
+        let path = Path::from(test_path.as_str());
+        let content = b"read test content";
+
+        match &store {
+            flow_like::flow_like_storage::files::store::FlowLikeStore::AWS(s) => {
+                s.put(&path, content.to_vec().into())
+                    .await
+                    .expect("Setup: write should succeed");
+
+                let result = s.get(&path).await.expect("Read should succeed");
+                let bytes = result.bytes().await.expect("Should get bytes");
+                assert_eq!(bytes.as_ref(), content);
+
+                s.delete(&path).await.ok();
+            }
+            _ => panic!("Expected AWS store"),
+        }
+    }
+
+    #[test]
+    fn test_aws_runtime_credentials_serialization() {
+        let creds = AwsRuntimeCredentials {
+            access_key_id: Some("AKIATEST".to_string()),
+            secret_access_key: Some("secret".to_string()),
+            session_token: Some("token".to_string()),
+            meta_bucket: "meta".to_string(),
+            content_bucket: "content".to_string(),
+            region: "us-east-1".to_string(),
+            expiration: None,
+        };
+
+        let json = to_string(&creds).expect("Failed to serialize");
+        let deserialized: AwsRuntimeCredentials = from_str(&json).expect("Failed to deserialize");
+
+        assert_eq!(creds.access_key_id, deserialized.access_key_id);
+        assert_eq!(creds.region, deserialized.region);
+    }
+
+    #[test]
+    fn test_credentials_access_display() {
+        use crate::credentials::CredentialsAccess;
+
+        assert_eq!(format!("{}", CredentialsAccess::EditApp), "edit_app");
+        assert_eq!(format!("{}", CredentialsAccess::ReadApp), "read_app");
+        assert_eq!(format!("{}", CredentialsAccess::InvokeNone), "invoke_none");
+        assert_eq!(format!("{}", CredentialsAccess::InvokeRead), "invoke_read");
+        assert_eq!(
+            format!("{}", CredentialsAccess::InvokeWrite),
+            "invoke_write"
+        );
+        assert_eq!(format!("{}", CredentialsAccess::ReadLogs), "read_logs");
+    }
+}

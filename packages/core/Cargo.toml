@@ -50,6 +50,7 @@ zeroize = "1.8.1"
 thiserror.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
+percent-encoding.workspace = true
 
 [features]
 tauri = ["flow-like-storage/tauri"]

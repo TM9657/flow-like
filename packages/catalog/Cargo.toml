@@ -61,6 +61,9 @@ async-trait.workspace = true
 jsonschema.workspace = true
 mimalloc = { workspace = true, optional = true }
 markitdown.workspace = true
+rake = "0.3.6"
+yake-rust = "1.0.3"
+whatlang = "0.18.0"
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }

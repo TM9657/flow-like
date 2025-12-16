@@ -4,12 +4,13 @@ members = [
     "apps/desktop/src-tauri",
     "apps/backend/local/api",
     "apps/schema-gen",
-    "apps/benchmark",
     "apps/backend/aws/runtime",
     "apps/backend/aws/runtime-async",
     "apps/backend/aws/api",
     "apps/backend/aws/media-transformer",
     "apps/backend/aws/file-tracker",
+    "apps/backend/kubernetes/api",
+    "apps/backend/kubernetes/executor",
     "packages/core",
     "packages/model-provider",
     "packages/bits",
@@ -83,6 +84,9 @@ mimalloc = { version = "0.1.48", default-features = false }
 lettre = { version = "0.11.17", features = ["tokio1-native-tls"] }
 reqwest = { version = "0.12.15", features = ["json"] }
 markitdown = { git = "https://github.com/TM9657/markitdown-rs.git", branch = "master" }
+kube = { version = "0.98", features = ["runtime", "derive"] }
+k8s-openapi = { version = "0.24", features = ["v1_32"] }
+percent-encoding = "2.3.2"
 
 [profile.dev]
 split-debuginfo = "unpacked"

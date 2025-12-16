@@ -23,7 +23,7 @@ urlencoding.workspace = true
 schemars.workspace = true
 base64.workspace = true
 datafusion = { version = "49.0.2", default-features = false, features = ["recursive_protection", "regex_expressions", "string_expressions", "unicode_expressions", "array_expressions", "nested_expressions", "math_expressions", "datetime_expressions"]}
-percent-encoding = "2.3.2"
+percent-encoding.workspace = true
 infer = "0.19.0"
 rig-core.workspace = true
 rmcp.workspace = true

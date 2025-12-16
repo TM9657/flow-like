@@ -1,12 +1,17 @@
 use std::fmt::Display;
 
+#[cfg(feature = "aws")]
 use aws_credentials::AwsRuntimeCredentials;
+#[cfg(feature = "azure")]
+use azure_credentials::AzureRuntimeCredentials;
 use flow_like::credentials::SharedCredentials;
 use flow_like::flow_like_storage::files::store::FlowLikeStore;
 use flow_like::state::FlowLikeState;
 use flow_like_storage::lancedb::connection::ConnectBuilder;
 use flow_like_types::Result;
 use flow_like_types::async_trait;
+#[cfg(feature = "gcp")]
+use gcp_credentials::GcpRuntimeCredentials;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -14,6 +19,9 @@ use crate::state::AppState;
 use crate::state::State;
 
 pub mod aws_credentials;
+pub mod azure_credentials;
+pub mod gcp_credentials;
+pub mod local_credentials;
 
 #[async_trait]
 pub trait RuntimeCredentialsTrait {
@@ -49,6 +57,10 @@ impl Display for CredentialsAccess {
 pub enum RuntimeCredentials {
     #[cfg(feature = "aws")]
     Aws(AwsRuntimeCredentials),
+    #[cfg(feature = "azure")]
+    Azure(AzureRuntimeCredentials),
+    #[cfg(feature = "gcp")]
+    Gcp(GcpRuntimeCredentials),
 }
 
 impl RuntimeCredentials {
@@ -64,6 +76,28 @@ impl RuntimeCredentials {
                 .scoped_credentials(sub, app_id, state, mode)
                 .await?,
         ));
+
+        #[cfg(all(feature = "azure", not(feature = "aws")))]
+        return Ok(RuntimeCredentials::Azure(
+            AzureRuntimeCredentials::from_env()
+                .scoped_credentials(sub, app_id, state, mode)
+                .await?,
+        ));
+
+        #[cfg(all(feature = "gcp", not(feature = "aws"), not(feature = "azure")))]
+        return Ok(RuntimeCredentials::Gcp(
+            GcpRuntimeCredentials::from_env()
+                .scoped_credentials(sub, app_id, state, mode)
+                .await?,
+        ));
+
+        #[cfg(not(any(feature = "aws", feature = "azure", feature = "gcp")))]
+        {
+            let _ = (sub, app_id, state, mode);
+            Err(flow_like_types::anyhow!(
+                "No storage backend feature enabled"
+            ))
+        }
     }
 
     pub async fn master_credentials() -> Result<Self> {
@@ -71,12 +105,35 @@ impl RuntimeCredentials {
         return Ok(RuntimeCredentials::Aws(
             AwsRuntimeCredentials::from_env().master_credentials().await,
         ));
+
+        #[cfg(all(feature = "azure", not(feature = "aws")))]
+        return Ok(RuntimeCredentials::Azure(
+            AzureRuntimeCredentials::from_env()
+                .master_credentials()
+                .await,
+        ));
+
+        #[cfg(all(feature = "gcp", not(feature = "aws"), not(feature = "azure")))]
+        return Ok(RuntimeCredentials::Gcp(
+            GcpRuntimeCredentials::from_env().master_credentials().await,
+        ));
+
+        #[cfg(not(any(feature = "aws", feature = "azure", feature = "gcp")))]
+        Err(flow_like_types::anyhow!(
+            "No storage backend feature enabled"
+        ))
     }
 
     pub async fn to_store(&self, meta: bool) -> Result<FlowLikeStore> {
         match self {
             #[cfg(feature = "aws")]
             RuntimeCredentials::Aws(aws) => aws.into_shared_credentials().to_store(meta).await,
+            #[cfg(feature = "azure")]
+            RuntimeCredentials::Azure(azure) => {
+                azure.into_shared_credentials().to_store(meta).await
+            }
+            #[cfg(feature = "gcp")]
+            RuntimeCredentials::Gcp(gcp) => gcp.into_shared_credentials().to_store(meta).await,
         }
     }
 
@@ -84,6 +141,10 @@ impl RuntimeCredentials {
         match self {
             #[cfg(feature = "aws")]
             RuntimeCredentials::Aws(aws) => aws.to_db(app_id).await,
+            #[cfg(feature = "azure")]
+            RuntimeCredentials::Azure(azure) => azure.to_db(app_id).await,
+            #[cfg(feature = "gcp")]
+            RuntimeCredentials::Gcp(gcp) => gcp.to_db(app_id).await,
         }
     }
 
@@ -92,6 +153,10 @@ impl RuntimeCredentials {
         match self {
             #[cfg(feature = "aws")]
             RuntimeCredentials::Aws(aws) => aws.to_state(state).await,
+            #[cfg(feature = "azure")]
+            RuntimeCredentials::Azure(azure) => azure.to_state(state).await,
+            #[cfg(feature = "gcp")]
+            RuntimeCredentials::Gcp(gcp) => gcp.to_state(state).await,
         }
     }
 
@@ -100,6 +165,10 @@ impl RuntimeCredentials {
         match self {
             #[cfg(feature = "aws")]
             RuntimeCredentials::Aws(aws) => aws.into_shared_credentials(),
+            #[cfg(feature = "azure")]
+            RuntimeCredentials::Azure(azure) => azure.into_shared_credentials(),
+            #[cfg(feature = "gcp")]
+            RuntimeCredentials::Gcp(gcp) => gcp.into_shared_credentials(),
         }
     }
 }
