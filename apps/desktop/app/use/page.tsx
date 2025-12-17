@@ -157,20 +157,20 @@ export default function Page() {
 		if (!usableEvents) return <LoadingScreen />;
 
 		if (usableEvents.has(currentEvent.event_type)) {
-			const innerItem = usableEvents.get(currentEvent.event_type);
-			if (innerItem)
+			const InterfaceComponent = usableEvents.get(currentEvent.event_type);
+			if (InterfaceComponent)
 				return (
 					<div
 						key={currentEvent.id}
 						className="flex flex-col flex-grow h-full w-full max-h-full overflow-hidden"
 					>
-						{innerItem({
-							appId,
-							event: currentEvent,
-							config,
-							toolbarRef: headerRef,
-							sidebarRef: sidebarRef,
-						})}
+						<InterfaceComponent
+							appId={appId}
+							event={currentEvent}
+							config={config}
+							toolbarRef={headerRef}
+							sidebarRef={sidebarRef}
+						/>
 					</div>
 				);
 		}

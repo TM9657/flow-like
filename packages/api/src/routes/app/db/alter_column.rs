@@ -7,20 +7,21 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
-use std::collections::HashMap;
+use flow_like_storage::lancedb::table::ColumnAlteration;
 
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct UpdatePayload {
-    pub filter: String,
-    pub updates: HashMap<String, flow_like_types::Value>,
+pub struct AlterColumnPayload {
+    pub column: String,
+    pub rename: Option<String>,
+    pub nullable: Option<bool>,
 }
 
-#[tracing::instrument(name = "PUT /apps/{app_id}/db/{table}/update", skip(state, user))]
-pub async fn update_table(
+#[tracing::instrument(name = "PUT /apps/{app_id}/db/{table}/columns", skip(state, user))]
+pub async fn alter_column(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Path((app_id, table)): Path<(String, String)>,
-    Json(payload): Json<UpdatePayload>,
+    Json(payload): Json<AlterColumnPayload>,
 ) -> Result<Json<()>, ApiError> {
     ensure_permission!(user, &app_id, &state, RolePermissions::WriteFiles);
 
@@ -28,7 +29,17 @@ pub async fn update_table(
     let connection = credentials.to_db(&app_id).await?.execute().await?;
     let db = LanceDBVectorStore::from_connection(connection, table).await;
 
-    db.update(&payload.filter, payload.updates).await?;
+    let mut alteration = ColumnAlteration::new(payload.column.clone());
+
+    if let Some(new_name) = payload.rename {
+        alteration = alteration.rename(new_name);
+    }
+
+    if let Some(nullable) = payload.nullable {
+        alteration = alteration.set_nullable(nullable);
+    }
+
+    db.alter_column(&[alteration]).await?;
 
     Ok(Json(()))
 }

@@ -376,6 +376,7 @@ export class EventState implements IEventState {
 		streamState?: boolean,
 		onEventId?: (id: string) => void,
 		cb?: (event: IIntercomEvent[]) => void,
+		skipConsentCheck?: boolean,
 	): Promise<ILogMetadata | undefined> {
 		const channel = new Channel<IIntercomEvent[]>();
 		let closed = false;
@@ -442,7 +443,7 @@ export class EventState implements IEventState {
 			}
 		}
 
-		if (providersNeedingConsent.length > 0) {
+		if (providersNeedingConsent.length > 0 && !skipConsentCheck) {
 			const error = new Error(
 				`Missing OAuth authorization for: ${providersNeedingConsent.map((p) => p.name).join(", ")}`,
 			);
@@ -526,8 +527,15 @@ export class EventState implements IEventState {
 			refreshToken: oauthService.refreshToken.bind(oauthService),
 		});
 
+		console.log("[checkEventOAuth] oauthResult:", {
+			requiredProviders: oauthResult.requiredProviders?.map((p) => p.id),
+			missingProviders: oauthResult.missingProviders?.map((p) => p.id),
+			tokens: Object.keys(oauthResult.tokens || {}),
+		});
+
 		// Check consent for providers that have tokens but might not have consent for this app
 		const consentedIds = await oauthConsentStore.getConsentedProviderIds(appId);
+		console.log("[checkEventOAuth] consentedIds:", [...consentedIds]);
 		const providersNeedingConsent: IOAuthProvider[] = [];
 
 		// Add providers that are missing tokens

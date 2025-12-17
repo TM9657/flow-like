@@ -65,6 +65,7 @@ export class EmptyEventState implements IEventState {
 		streamState?: boolean,
 		onEventId?: (id: string) => void,
 		cb?: (event: IIntercomEvent[]) => void,
+		skipConsentCheck?: boolean,
 	): Promise<ILogMetadata | undefined> {
 		throw new Error("Method not implemented.");
 	}

@@ -7,20 +7,15 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
-use std::collections::HashMap;
 
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct UpdatePayload {
-    pub filter: String,
-    pub updates: HashMap<String, flow_like_types::Value>,
-}
-
-#[tracing::instrument(name = "PUT /apps/{app_id}/db/{table}/update", skip(state, user))]
-pub async fn update_table(
+#[tracing::instrument(
+    name = "DELETE /apps/{app_id}/db/{table}/index/{index_name}",
+    skip(state, user)
+)]
+pub async fn drop_index(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
-    Path((app_id, table)): Path<(String, String)>,
-    Json(payload): Json<UpdatePayload>,
+    Path((app_id, table, index_name)): Path<(String, String, String)>,
 ) -> Result<Json<()>, ApiError> {
     ensure_permission!(user, &app_id, &state, RolePermissions::WriteFiles);
 
@@ -28,7 +23,7 @@ pub async fn update_table(
     let connection = credentials.to_db(&app_id).await?.execute().await?;
     let db = LanceDBVectorStore::from_connection(connection, table).await;
 
-    db.update(&payload.filter, payload.updates).await?;
+    db.drop_index(&index_name).await?;
 
     Ok(Json(()))
 }

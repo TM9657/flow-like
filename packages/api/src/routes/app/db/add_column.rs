@@ -7,20 +7,19 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct UpdatePayload {
-    pub filter: String,
-    pub updates: HashMap<String, flow_like_types::Value>,
+pub struct AddColumnPayload {
+    pub name: String,
+    pub sql_expression: String,
 }
 
-#[tracing::instrument(name = "PUT /apps/{app_id}/db/{table}/update", skip(state, user))]
-pub async fn update_table(
+#[tracing::instrument(name = "POST /apps/{app_id}/db/{table}/columns", skip(state, user))]
+pub async fn add_column(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Path((app_id, table)): Path<(String, String)>,
-    Json(payload): Json<UpdatePayload>,
+    Json(payload): Json<AddColumnPayload>,
 ) -> Result<Json<()>, ApiError> {
     ensure_permission!(user, &app_id, &state, RolePermissions::WriteFiles);
 
@@ -28,7 +27,8 @@ pub async fn update_table(
     let connection = credentials.to_db(&app_id).await?.execute().await?;
     let db = LanceDBVectorStore::from_connection(connection, table).await;
 
-    db.update(&payload.filter, payload.updates).await?;
+    db.add_column(&payload.name, &payload.sql_expression)
+        .await?;
 
     Ok(Json(()))
 }

@@ -6,21 +6,20 @@ use axum::{
     Extension, Json,
     extract::{Path, State},
 };
-use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
-use std::collections::HashMap;
+use flow_like_storage::databases::vector::{VectorStore, lancedb::LanceDBVectorStore};
 
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct UpdatePayload {
-    pub filter: String,
-    pub updates: HashMap<String, flow_like_types::Value>,
+pub struct OptimizePayload {
+    #[serde(default)]
+    pub keep_versions: bool,
 }
 
-#[tracing::instrument(name = "PUT /apps/{app_id}/db/{table}/update", skip(state, user))]
-pub async fn update_table(
+#[tracing::instrument(name = "POST /apps/{app_id}/db/{table}/optimize", skip(state, user))]
+pub async fn optimize_table(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Path((app_id, table)): Path<(String, String)>,
-    Json(payload): Json<UpdatePayload>,
+    Json(payload): Json<OptimizePayload>,
 ) -> Result<Json<()>, ApiError> {
     ensure_permission!(user, &app_id, &state, RolePermissions::WriteFiles);
 
@@ -28,7 +27,7 @@ pub async fn update_table(
     let connection = credentials.to_db(&app_id).await?.execute().await?;
     let db = LanceDBVectorStore::from_connection(connection, table).await;
 
-    db.update(&payload.filter, payload.updates).await?;
+    db.optimize(payload.keep_versions).await?;
 
     Ok(Json(()))
 }

@@ -1,3 +1,4 @@
+#[cfg(feature = "aws")]
 use aws_config::SdkConfig;
 use axum::body::Body;
 use flow_like::app::App;

@@ -110,7 +110,7 @@ impl NodeLogic for YakeExtractionNode {
             "keywords",
             "Keywords",
             "Extracted keywords as a string set",
-            VariableType::Generic,
+            VariableType::String,
         )
         .set_value_type(ValueType::HashSet);
 

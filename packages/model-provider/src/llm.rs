@@ -1,7 +1,8 @@
 use flow_like_types::async_trait;
 use flow_like_types::{Result, anyhow};
 use futures::StreamExt;
-use rig::client::{ProviderClient, completion::CompletionModelHandle};
+use rig::client::ProviderClient;
+pub use rig::client::completion::CompletionModelHandle;
 use rig::completion::{CompletionModel, CompletionRequestBuilder, Message, Usage as RigUsage};
 use rig::streaming::StreamedAssistantContent;
 use std::{future::Future, pin::Pin, sync::Arc};
@@ -49,6 +50,30 @@ pub trait ModelLogic: Send + Sync {
     }
 
     fn transform_history(&self, _history: &mut History) {}
+
+    /// Get the underlying rig CompletionModelHandle for use with external libraries
+    async fn completion_model_handle(
+        &self,
+        model_name: Option<&str>,
+    ) -> Result<CompletionModelHandle<'static>> {
+        let default = self.default_model().await;
+        let model_name = model_name
+            .map(|s| s.to_string())
+            .or(default)
+            .ok_or_else(|| anyhow!("No model name provided and no default model available"))?;
+
+        let constructor = self.provider().await?;
+        let client = constructor.client();
+        let completion_client = client
+            .as_ref()
+            .as_completion()
+            .ok_or_else(|| anyhow!("Provider does not support completion"))?;
+
+        let completion_model = completion_client.completion_model(&model_name);
+        Ok(CompletionModelHandle {
+            inner: Arc::from(completion_model),
+        })
+    }
 
     async fn invoke(&self, history: &History, lambda: Option<LLMCallback>) -> Result<Response> {
         let model_name = self

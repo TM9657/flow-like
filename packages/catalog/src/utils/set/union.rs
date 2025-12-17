@@ -46,10 +46,10 @@ impl NodeLogic for UnionSetNode {
         )
         .set_value_type(ValueType::HashSet);
 
+        node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
+
         node.add_output_pin("set_out", "Set", "Combined Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
-
-        node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
 
         return node;
     }

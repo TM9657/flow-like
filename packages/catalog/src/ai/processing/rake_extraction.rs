@@ -2291,7 +2291,7 @@ impl NodeLogic for RakeExtractionNode {
             "stop_words",
             "Stop Words",
             "Custom stop words to filter out (optional). Overrides language-based stop words if provided.",
-            VariableType::Generic,
+            VariableType::String,
         )
         .set_value_type(ValueType::HashSet)
         .set_default_value(Some(json!([])));
@@ -2316,7 +2316,7 @@ impl NodeLogic for RakeExtractionNode {
             "keywords",
             "Keywords",
             "Extracted keywords as a string set",
-            VariableType::Generic,
+            VariableType::String,
         )
         .set_value_type(ValueType::HashSet);
 

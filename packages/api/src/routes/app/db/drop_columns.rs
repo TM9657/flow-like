@@ -7,20 +7,18 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct UpdatePayload {
-    pub filter: String,
-    pub updates: HashMap<String, flow_like_types::Value>,
+pub struct DropColumnsPayload {
+    pub columns: Vec<String>,
 }
 
-#[tracing::instrument(name = "PUT /apps/{app_id}/db/{table}/update", skip(state, user))]
-pub async fn update_table(
+#[tracing::instrument(name = "DELETE /apps/{app_id}/db/{table}/columns", skip(state, user))]
+pub async fn drop_columns(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Path((app_id, table)): Path<(String, String)>,
-    Json(payload): Json<UpdatePayload>,
+    Json(payload): Json<DropColumnsPayload>,
 ) -> Result<Json<()>, ApiError> {
     ensure_permission!(user, &app_id, &state, RolePermissions::WriteFiles);
 
@@ -28,7 +26,8 @@ pub async fn update_table(
     let connection = credentials.to_db(&app_id).await?.execute().await?;
     let db = LanceDBVectorStore::from_connection(connection, table).await;
 
-    db.update(&payload.filter, payload.updates).await?;
+    let column_refs: Vec<&str> = payload.columns.iter().map(|s| s.as_str()).collect();
+    db.drop_columns(&column_refs).await?;
 
     Ok(Json(()))
 }

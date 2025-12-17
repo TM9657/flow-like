@@ -10,22 +10,14 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
-use flow_like_model_provider::{
-    history::{Content, ContentType, History, HistoryMessage, ImageUrl, MessageContent, Role},
-    llm::ModelLogic,
-};
+use flow_like_model_provider::llm::ModelLogic;
 use flow_like_storage::Path;
 use flow_like_types::image::ImageReader;
-use flow_like_types::{Bytes, async_trait, base64::Engine, json::json, tokio::sync::RwLock};
-use markitdown::{
-    ConversionOptions, Document, ExtractedImage, MarkItDown,
-    error::MarkitdownError,
-    llm::{LlmClient, LlmConfig},
-};
+use flow_like_types::{Bytes, async_trait, json::json};
+use markitdown::{ConversionOptions, Document, ExtractedImage, MarkItDown, create_llm_client};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
-use std::sync::Arc;
 
 /// Represents a single page extracted from a document
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -128,257 +120,6 @@ async fn extracted_image_to_node_image(
 
     let node_image = NodeImage::new(context, dynamic_image).await;
     Ok(Some(node_image))
-}
-
-struct FlowLikeLlmClient {
-    model: Arc<RwLock<Arc<dyn ModelLogic>>>,
-    model_name: String,
-    config: LlmConfig,
-}
-
-impl FlowLikeLlmClient {
-    fn new(model: Arc<dyn ModelLogic>, model_name: String) -> Self {
-        Self {
-            model: Arc::new(RwLock::new(model)),
-            model_name,
-            config: LlmConfig::default(),
-        }
-    }
-
-    fn build_image_data_url(&self, image_data: &[u8], mime_type: &str) -> String {
-        let base64 = flow_like_types::base64::engine::general_purpose::STANDARD.encode(image_data);
-        format!("data:{};base64,{}", mime_type, base64)
-    }
-
-    async fn invoke_with_image(
-        &self,
-        system_prompt: &str,
-        user_prompt: &str,
-        image_data_url: &str,
-    ) -> Result<String, MarkitdownError> {
-        println!(
-            "[MARKITDOWN DEBUG] invoke_with_image called with user_prompt: {}",
-            user_prompt
-        );
-        let mut history = History::new(
-            self.model_name.clone(),
-            vec![
-                HistoryMessage {
-                    role: Role::System,
-                    content: MessageContent::String(system_prompt.to_string()),
-                    name: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                    annotations: None,
-                },
-                HistoryMessage {
-                    role: Role::User,
-                    content: MessageContent::Contents(vec![
-                        Content::Image {
-                            content_type: ContentType::ImageUrl,
-                            image_url: ImageUrl {
-                                url: image_data_url.to_string(),
-                                detail: Some("auto".to_string()),
-                            },
-                        },
-                        Content::Text {
-                            content_type: ContentType::Text,
-                            text: user_prompt.to_string(),
-                        },
-                    ]),
-                    name: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                    annotations: None,
-                },
-            ],
-        );
-        history.temperature = Some(self.config.temperature as f32);
-
-        println!(
-            "[MARKITDOWN DEBUG] About to invoke model: {}",
-            self.model_name
-        );
-        let model = self.model.read().await;
-        model.transform_history(&mut history);
-
-        println!(
-            "[MARKITDOWN DEBUG] History after transform: messages={}",
-            history.messages.len()
-        );
-        println!("[MARKITDOWN DEBUG] Calling model.invoke()...");
-        println!(
-            "[MARKITDOWN DEBUG] Image data URL length: {}",
-            image_data_url.len()
-        );
-        let response = model
-            .invoke(&history, None)
-            .await
-            .map_err(|e| {
-                let error_msg = format!("{}", e);
-                println!("[MARKITDOWN ERROR] Model invocation failed: {}", error_msg);
-                println!("[MARKITDOWN ERROR] Model name: {}", self.model_name);
-
-                if error_msg.contains("JsonError") || error_msg.contains("expected value at line 1") {
-                    println!("[MARKITDOWN ERROR] CRITICAL: The model returned invalid JSON. This usually means:");
-                    println!("[MARKITDOWN ERROR] 1. The model doesn't support vision/image inputs");
-                    println!("[MARKITDOWN ERROR] 2. The model provider's API returned an error (check API quotas/limits)");
-                    println!("[MARKITDOWN ERROR] 3. The image is too large ({} chars in base64)", image_data_url.len());
-                    println!("[MARKITDOWN ERROR] Try using a vision-capable model like GPT-4o, Claude 3.5 Sonnet, or Gemini Pro Vision");
-                }
-
-                MarkitdownError::LlmError(error_msg)
-            })?;
-
-        println!("[MARKITDOWN DEBUG] Model invocation successful, extracting text...");
-        println!(
-            "[MARKITDOWN DEBUG] Response has {} choices",
-            response.choices.len()
-        );
-        let text = response
-            .choices
-            .first()
-            .and_then(|c| {
-                println!(
-                    "[MARKITDOWN DEBUG] First choice message content: {:?}",
-                    c.message.content
-                );
-                c.message.content.clone()
-            })
-            .unwrap_or_default();
-
-        println!(
-            "[MARKITDOWN DEBUG] LLM response text (length: {}): {}",
-            text.len(),
-            text
-        );
-
-        Ok(text)
-    }
-
-    async fn invoke_text(
-        &self,
-        system_prompt: &str,
-        user_prompt: &str,
-    ) -> Result<String, MarkitdownError> {
-        let mut history = History::new(
-            self.model_name.clone(),
-            vec![
-                HistoryMessage {
-                    role: Role::System,
-                    content: MessageContent::String(system_prompt.to_string()),
-                    name: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                    annotations: None,
-                },
-                HistoryMessage {
-                    role: Role::User,
-                    content: MessageContent::String(user_prompt.to_string()),
-                    name: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                    annotations: None,
-                },
-            ],
-        );
-        history.temperature = Some(self.config.temperature as f32);
-
-        let model = self.model.read().await;
-        let response = model
-            .invoke(&history, None)
-            .await
-            .map_err(|e| MarkitdownError::LlmError(e.to_string()))?;
-
-        let text = response
-            .choices
-            .first()
-            .and_then(|c| c.message.content.clone())
-            .unwrap_or_default();
-
-        Ok(text)
-    }
-}
-
-#[async_trait]
-impl LlmClient for FlowLikeLlmClient {
-    async fn describe_image(
-        &self,
-        image_data: &[u8],
-        mime_type: &str,
-    ) -> Result<String, MarkitdownError> {
-        println!(
-            "[MARKITDOWN DEBUG] describe_image called with mime_type: {}, data size: {} bytes",
-            mime_type,
-            image_data.len()
-        );
-        let data_url = self.build_image_data_url(image_data, mime_type);
-        self.invoke_with_image(
-            &self.config.image_description_prompt,
-            "Describe this image in detail.",
-            &data_url,
-        )
-        .await
-    }
-
-    async fn describe_image_base64(
-        &self,
-        base64_data: &str,
-        mime_type: &str,
-    ) -> Result<String, MarkitdownError> {
-        println!(
-            "[MARKITDOWN DEBUG] describe_image_base64 called with mime_type: {}, base64 length: {}",
-            mime_type,
-            base64_data.len()
-        );
-        let data_url = format!("data:{};base64,{}", mime_type, base64_data);
-        self.invoke_with_image(
-            &self.config.image_description_prompt,
-            "Describe this image in detail.",
-            &data_url,
-        )
-        .await
-    }
-
-    async fn describe_images_batch(
-        &self,
-        images: &[(&[u8], &str)],
-    ) -> Result<Vec<String>, MarkitdownError> {
-        let mut results = Vec::with_capacity(images.len());
-        for (data, mime_type) in images {
-            let desc = self.describe_image(*data, *mime_type).await?;
-            results.push(desc);
-        }
-        Ok(results)
-    }
-
-    async fn convert_page_image(
-        &self,
-        image_data: &[u8],
-        mime_type: &str,
-    ) -> Result<String, MarkitdownError> {
-        println!(
-            "[MARKITDOWN DEBUG] convert_page_image called with mime_type: {}, data size: {} bytes",
-            mime_type,
-            image_data.len()
-        );
-        let data_url = self.build_image_data_url(image_data, mime_type);
-        self.invoke_with_image(
-            &self.config.page_conversion_prompt,
-            "Convert this document page to clean, well-structured markdown.",
-            &data_url,
-        )
-        .await
-    }
-
-    async fn complete(&self, prompt: &str) -> Result<String, MarkitdownError> {
-        self.invoke_text("You are a helpful assistant.", prompt)
-            .await
-    }
-
-    fn config(&self) -> &LlmConfig {
-        &self.config
-    }
 }
 
 #[crate::register_node]
@@ -601,12 +342,8 @@ impl NodeLogic for ExtractDocumentAiNode {
             .build(&model_bit, context.app_state.clone(), context.token.clone())
             .await?;
 
-        let default_model = model
-            .default_model()
-            .await
-            .unwrap_or_else(|| "gpt-4o".to_string());
-
-        let llm_client: Arc<dyn LlmClient> = Arc::new(FlowLikeLlmClient::new(model, default_model));
+        let completion_handle = model.completion_model_handle(None).await?;
+        let llm_client = create_llm_client(completion_handle);
 
         println!(
             "[MARKITDOWN DEBUG] Starting AI document extraction with extension: {}, extract_images: {}",
@@ -860,12 +597,8 @@ impl NodeLogic for ExtractDocumentsAiNode {
             .build(&model_bit, context.app_state.clone(), context.token.clone())
             .await?;
 
-        let default_model = model
-            .default_model()
-            .await
-            .unwrap_or_else(|| "gpt-4o".to_string());
-
-        let llm_client: Arc<dyn LlmClient> = Arc::new(FlowLikeLlmClient::new(model, default_model));
+        let completion_handle = model.completion_model_handle(None).await?;
+        let llm_client = create_llm_client(completion_handle);
 
         let md = MarkItDown::new();
         let mut all_results: Vec<Vec<DocumentPage>> = Vec::with_capacity(files.len());
