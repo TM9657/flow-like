@@ -20,6 +20,7 @@ export default defineConfig({
 				"Build typed, scalable workflows with visual design, Rust performance, and production-ready governance.",
 			components: {
 				Hero: "./src/components/docs/Hero.astro",
+				SiteTitle: "./src/components/docs/SiteTitle.astro",
 			},
 			head: [
 				{

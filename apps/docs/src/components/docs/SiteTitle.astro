@@ -1,0 +1,60 @@
+---
+import type { Props } from '@astrojs/starlight/props';
+import Logo from "../../assets/app-logo.webp"
+import { Image } from 'astro:assets';
+
+const { siteTitle, siteTitleHref, logos } = Astro.props;
+---
+
+<a href={"/"} class="site-title cursor-pointer">
+    <Image src={Logo} alt="Flow Like Logo" class="min-w-10 min-h-10 -mr-2" width={45} height={45} />
+	<span class="text-black dark:text-white">
+        Flow Like <span class="text-sm">Docs</span>
+	</span>
+</a>
+
+<style>
+	.site-title {
+        display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		font-size: var(--sl-text-h4);
+		font-weight: 600;
+		color: var(--sl-color-text-accent);
+		text-decoration: none;
+		white-space: nowrap;
+	}
+	img {
+		height: 1.75rem;
+		width: auto;
+		max-width: 100%;
+		object-fit: contain;
+		object-position: 0 50%;
+	}
+
+    /* Explicitly handle light/dark mode visibility */
+    :global([data-theme='light']) .logo-dark {
+        display: none;
+    }
+    :global([data-theme='dark']) .logo-light {
+        display: none;
+    }
+    /* Fallback for system preference if data-theme not set */
+    @media (prefers-color-scheme: light) {
+        :global(:root:not([data-theme='dark'])) .logo-dark {
+            display: none;
+        }
+    }
+    @media (prefers-color-scheme: dark) {
+        :global(:root:not([data-theme='light'])) .logo-light {
+            display: none;
+        }
+    }
+
+    .site-title-text {
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        font-size: 1.25rem;
+        color: var(--sl-color-text);
+    }
+</style>
