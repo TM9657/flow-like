@@ -1,6 +1,6 @@
 use anyhow::Result;
 use flow_like::flow_like_model_provider::response::Response;
-use flow_like_catalog::events::chat_event::{Attachment, ChatResponse, ChatStreamingResponse};
+use flow_like_catalog_data::events::chat_event::{Attachment, ChatResponse, ChatStreamingResponse};
 use flow_like_types::{intercom::BufferedInterComHandler, sync::Mutex};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};

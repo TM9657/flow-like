@@ -1155,8 +1155,17 @@ name = "aws-api"
 version = "0.1.0"
 dependencies = [
  "axum 0.8.6",
+ "flow-like",
  "flow-like-api",
- "flow-like-catalog",
+ "flow-like-catalog-core",
+ "flow-like-catalog-data",
+ "flow-like-catalog-llm",
+ "flow-like-catalog-media",
+ "flow-like-catalog-ml",
+ "flow-like-catalog-onnx",
+ "flow-like-catalog-processing",
+ "flow-like-catalog-std",
+ "flow-like-catalog-web",
  "flow-like-storage",
  "flow-like-types",
  "lambda_http",
@@ -5391,62 +5400,99 @@ dependencies = [
 name = "flow-like-catalog"
 version = "0.1.0"
 dependencies = [
- "ahash 0.8.12",
- "async-imap",
- "async-native-tls",
- "async-smtp",
- "async-trait",
- "base64 0.22.1",
- "calamine",
- "chrono",
- "chrono-tz 0.10.4",
  "criterion",
- "csv",
- "csv-async",
- "dirs-next",
- "fasteval",
+ "flow-like-catalog-core",
+ "flow-like-catalog-data",
+ "flow-like-catalog-llm",
+ "flow-like-catalog-media",
+ "flow-like-catalog-ml",
+ "flow-like-catalog-onnx",
+ "flow-like-catalog-processing",
+ "flow-like-catalog-std",
+ "flow-like-catalog-web",
+ "mimalloc",
+]
+
+[[package]]
+name = "flow-like-catalog-core"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "async-trait",
  "flow-like",
  "flow-like-catalog-macros",
  "flow-like-model-provider",
  "flow-like-storage",
  "flow-like-types",
  "futures",
- "hayro",
- "htmd",
+ "inventory",
+ "schemars 1.1.0",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid 1.19.0",
+]
+
+[[package]]
+name = "flow-like-catalog-data"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "async-trait",
+ "base64 0.22.1",
+ "calamine",
+ "chrono",
+ "chrono-tz 0.10.4",
+ "csv",
+ "csv-async",
+ "dirs-next",
+ "flow-like",
+ "flow-like-catalog-core",
+ "flow-like-catalog-macros",
+ "flow-like-model-provider",
+ "flow-like-storage",
+ "flow-like-types",
+ "futures",
  "iana-time-zone",
- "icalendar",
  "inventory",
  "jsonschema",
- "linfa",
- "linfa-clustering",
- "linfa-datasets",
- "linfa-linear",
- "linfa-nn",
- "linfa-reduction",
- "linfa-svm",
- "mail-parser",
- "markitdown",
- "mimalloc",
- "nalgebra 0.34.1",
- "ndarray",
  "once_cell",
- "rake",
  "rayon",
  "regex",
- "rig-core",
- "rmcp",
  "schemars 1.1.0",
- "scraper",
  "serde",
  "strsim",
  "tokio",
  "tracing",
- "tract-tflite",
  "umya-spreadsheet",
  "urlencoding",
  "uuid 1.19.0",
- "whatlang",
- "yake-rust",
+]
+
+[[package]]
+name = "flow-like-catalog-llm"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "async-trait",
+ "flow-like",
+ "flow-like-catalog-core",
+ "flow-like-catalog-data",
+ "flow-like-catalog-macros",
+ "flow-like-model-provider",
+ "flow-like-storage",
+ "flow-like-types",
+ "futures",
+ "inventory",
+ "jsonschema",
+ "regex",
+ "rig-core",
+ "rmcp",
+ "schemars 1.1.0",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -5456,6 +5502,173 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.107",
+]
+
+[[package]]
+name = "flow-like-catalog-media"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "async-trait",
+ "flow-like",
+ "flow-like-catalog-core",
+ "flow-like-catalog-macros",
+ "flow-like-model-provider",
+ "flow-like-storage",
+ "flow-like-types",
+ "futures",
+ "hayro",
+ "inventory",
+ "nalgebra 0.34.1",
+ "rayon",
+ "schemars 1.1.0",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid 1.19.0",
+]
+
+[[package]]
+name = "flow-like-catalog-ml"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "async-trait",
+ "flow-like",
+ "flow-like-catalog-core",
+ "flow-like-catalog-macros",
+ "flow-like-model-provider",
+ "flow-like-storage",
+ "flow-like-types",
+ "futures",
+ "inventory",
+ "linfa",
+ "linfa-clustering",
+ "linfa-datasets",
+ "linfa-linear",
+ "linfa-nn",
+ "linfa-reduction",
+ "linfa-svm",
+ "ndarray",
+ "schemars 1.1.0",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid 1.19.0",
+]
+
+[[package]]
+name = "flow-like-catalog-onnx"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "async-trait",
+ "flow-like",
+ "flow-like-catalog-core",
+ "flow-like-catalog-macros",
+ "flow-like-model-provider",
+ "flow-like-storage",
+ "flow-like-types",
+ "futures",
+ "inventory",
+ "ndarray",
+ "schemars 1.1.0",
+ "serde",
+ "tokio",
+ "tracing",
+ "tract-tflite",
+ "uuid 1.19.0",
+]
+
+[[package]]
+name = "flow-like-catalog-processing"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "async-trait",
+ "dirs-next",
+ "flow-like",
+ "flow-like-catalog-core",
+ "flow-like-catalog-macros",
+ "flow-like-model-provider",
+ "flow-like-storage",
+ "flow-like-types",
+ "futures",
+ "inventory",
+ "markitdown",
+ "rake",
+ "rig-core",
+ "schemars 1.1.0",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid 1.19.0",
+ "whatlang",
+ "yake-rust",
+]
+
+[[package]]
+name = "flow-like-catalog-std"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "async-trait",
+ "chrono",
+ "chrono-tz 0.10.4",
+ "csv",
+ "csv-async",
+ "fasteval",
+ "flow-like",
+ "flow-like-catalog-core",
+ "flow-like-catalog-macros",
+ "flow-like-model-provider",
+ "flow-like-storage",
+ "flow-like-types",
+ "futures",
+ "htmd",
+ "iana-time-zone",
+ "inventory",
+ "nalgebra 0.34.1",
+ "once_cell",
+ "regex",
+ "schemars 1.1.0",
+ "serde",
+ "strsim",
+ "tokio",
+ "tracing",
+ "uuid 1.19.0",
+]
+
+[[package]]
+name = "flow-like-catalog-web"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "async-imap",
+ "async-native-tls",
+ "async-smtp",
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "chrono-tz 0.10.4",
+ "flow-like",
+ "flow-like-catalog-core",
+ "flow-like-catalog-macros",
+ "flow-like-model-provider",
+ "flow-like-storage",
+ "flow-like-types",
+ "futures",
+ "htmd",
+ "icalendar",
+ "inventory",
+ "mail-parser",
+ "regex",
+ "schemars 1.1.0",
+ "scraper",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid 1.19.0",
 ]
 
 [[package]]
@@ -5471,7 +5684,15 @@ dependencies = [
  "cron",
  "dirs-next",
  "flow-like",
- "flow-like-catalog",
+ "flow-like-catalog-core",
+ "flow-like-catalog-data",
+ "flow-like-catalog-llm",
+ "flow-like-catalog-media",
+ "flow-like-catalog-ml",
+ "flow-like-catalog-onnx",
+ "flow-like-catalog-processing",
+ "flow-like-catalog-std",
+ "flow-like-catalog-web",
  "flow-like-types",
  "futures",
  "image",
@@ -7796,7 +8017,15 @@ dependencies = [
  "chrono",
  "flow-like",
  "flow-like-api",
- "flow-like-catalog",
+ "flow-like-catalog-core",
+ "flow-like-catalog-data",
+ "flow-like-catalog-llm",
+ "flow-like-catalog-media",
+ "flow-like-catalog-ml",
+ "flow-like-catalog-onnx",
+ "flow-like-catalog-processing",
+ "flow-like-catalog-std",
+ "flow-like-catalog-web",
  "flow-like-storage",
  "flow-like-types",
  "hyper 1.7.0",
@@ -7822,7 +8051,15 @@ dependencies = [
  "axum 0.7.9",
  "base64 0.22.1",
  "flow-like",
- "flow-like-catalog",
+ "flow-like-catalog-core",
+ "flow-like-catalog-data",
+ "flow-like-catalog-llm",
+ "flow-like-catalog-media",
+ "flow-like-catalog-ml",
+ "flow-like-catalog-onnx",
+ "flow-like-catalog-processing",
+ "flow-like-catalog-std",
+ "flow-like-catalog-web",
  "flow-like-storage",
  "flow-like-types",
  "mimalloc",
@@ -9037,8 +9274,17 @@ name = "local-api"
 version = "0.1.0"
 dependencies = [
  "dotenv",
+ "flow-like",
  "flow-like-api",
- "flow-like-catalog",
+ "flow-like-catalog-core",
+ "flow-like-catalog-data",
+ "flow-like-catalog-llm",
+ "flow-like-catalog-media",
+ "flow-like-catalog-ml",
+ "flow-like-catalog-onnx",
+ "flow-like-catalog-processing",
+ "flow-like-catalog-std",
+ "flow-like-catalog-web",
  "flow-like-storage",
  "flow-like-types",
  "mimalloc",
@@ -9272,7 +9518,7 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 [[package]]
 name = "markitdown"
 version = "0.2.0"
-source = "git+https://github.com/TM9657/markitdown-rs.git?branch=master#8e6c79ffb2f4d4111fe5bfc4fd279df11a7bc7aa"
+source = "git+https://github.com/TM9657/markitdown-rs.git?rev=4e61ed6#4e61ed658c2d9fcc36916db9b04bed12abf087a4"
 dependencies = [
  "async-trait",
  "base64 0.22.1",

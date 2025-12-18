@@ -5,65 +5,30 @@ edition = "2024"
 
 [features]
 default = []
-local-ml = ["flow-like-model-provider/local-ml", "flow-like/local-ml"]
+local-ml = [
+    "flow-like-catalog-core/local-ml",
+    "flow-like-catalog-std/local-ml",
+    "flow-like-catalog-data/local-ml",
+    "flow-like-catalog-web/local-ml",
+    "flow-like-catalog-media/local-ml",
+    "flow-like-catalog-ml/local-ml",
+    "flow-like-catalog-onnx/local-ml",
+    "flow-like-catalog-llm/local-ml",
+    "flow-like-catalog-processing/local-ml",
+]
 mimalloc = ["dep:mimalloc"]
 
 [dependencies]
-flow-like.workspace = true
-flow-like-types.workspace = true
-flow-like-model-provider.workspace = true
-flow-like-storage.workspace = true
-flow-like-catalog-macros.workspace = true
-rig-core.workspace = true
-rmcp.workspace = true
-inventory = "0.3"
-ahash.workspace = true
-base64.workspace=true
-urlencoding.workspace = true
-tracing.workspace = true
-fasteval = "0.2.4"
-strsim = "0.11.1"
-regex.workspace = true
-chrono.workspace = true
-chrono-tz.workspace = true
-iana-time-zone.workspace = true
-calamine = { version = "0.30", default-features = false, features = ["dates"] }
-umya-spreadsheet = "2.3.2"
-nalgebra = "0.34.0"
-schemars.workspace = true
-futures.workspace = true
-serde = { workspace = true, features = ["derive", "rc"] }
-csv-async = {version="1.3.0", features = ["tokio"]}
-csv = "1.3"
-htmd = "0.3.0"
-scraper = "0.23.1"
-async-imap = {version = "0.11.1", default-features = false, features = ["runtime-tokio", "tokio"]}
-async-native-tls = { version = "0.5", default-features = false, features = ["runtime-tokio"] }
-async-smtp = { version = "0.10.2", default-features = false, features = ["runtime-tokio", "tokio"] }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-mail-parser = "0.11.0"
-icalendar.workspace = true
-uuid.workspace = true
-tract-tflite = { git = "https://github.com/TM9657/tract", rev = "ed3b020" }
-linfa = { version="0.8.0", features = ["serde"]}
-linfa-datasets = { version="0.8.0", features = ["generate"]}
-linfa-clustering = { version="0.8.0", features = ["serde"]}
-linfa-nn = { version="0.8.0", features = ["serde"]}
-linfa-linear = { version="0.8.0", features = ["serde"]}
-linfa-reduction = { version="0.8.0", features = ["serde"]}
-linfa-svm = { version="0.8.0", features = ["serde"]}
-ndarray.workspace = true
-dirs-next.workspace = true
-rayon = "1.11.0"
-once_cell = "1.21.3"
-hayro = {version="0.4.0", features = ["embed-fonts"]}
-async-trait.workspace = true
-jsonschema.workspace = true
+flow-like-catalog-core.workspace = true
+flow-like-catalog-std.workspace = true
+flow-like-catalog-data.workspace = true
+flow-like-catalog-web.workspace = true
+flow-like-catalog-media.workspace = true
+flow-like-catalog-ml.workspace = true
+flow-like-catalog-onnx.workspace = true
+flow-like-catalog-llm.workspace = true
+flow-like-catalog-processing.workspace = true
 mimalloc = { workspace = true, optional = true }
-markitdown.workspace = true
-rake = "0.3.6"
-yake-rust = "1.0.3"
-whatlang = "0.18.0"
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }

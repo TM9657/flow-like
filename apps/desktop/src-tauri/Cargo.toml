@@ -21,7 +21,15 @@ tauri-build = { version = "2.4.1", features = [] }
 
 [dependencies]
 flow-like = { workspace = true, features = ["tauri", "local-ml"] }
-flow-like-catalog = { workspace = true, features = ["local-ml"] }
+flow-like-catalog-core = { workspace = true, features = ["local-ml"] }
+flow-like-catalog-std = { workspace = true, features = ["local-ml"] }
+flow-like-catalog-data = { workspace = true, features = ["local-ml"] }
+flow-like-catalog-web = { workspace = true, features = ["local-ml"] }
+flow-like-catalog-media = { workspace = true, features = ["local-ml"] }
+flow-like-catalog-ml = { workspace = true, features = ["local-ml"] }
+flow-like-catalog-onnx = { workspace = true, features = ["local-ml"] }
+flow-like-catalog-llm = { workspace = true, features = ["local-ml"] }
+flow-like-catalog-processing = { workspace = true, features = ["local-ml"] }
 flow-like-types.workspace = true
 tauri = { version = "2.8.5", features = [
     "protocol-asset",
