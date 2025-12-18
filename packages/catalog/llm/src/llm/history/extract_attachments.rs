@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use flow_like_catalog_core::FlowPath;
-use flow_like_catalog_data::events::chat_event::Attachment;
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -11,6 +9,8 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_catalog_core::FlowPath;
+use flow_like_catalog_data::events::chat_event::Attachment;
 use flow_like_model_provider::history::{Content, History, MessageContent};
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_types::Cacheable;

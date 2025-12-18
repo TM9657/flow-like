@@ -3,6 +3,7 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use dotenv::dotenv;
+use flow_like::flow::node::NodeLogic;
 use flow_like_api::axum;
 use flow_like_api::construct_router;
 use flow_like_storage::object_store::aws::AmazonS3Builder;
@@ -15,6 +16,19 @@ use std::{
     time::Duration,
 };
 use tracing_subscriber::prelude::*;
+
+fn get_full_catalog() -> Vec<Arc<dyn NodeLogic>> {
+    let mut catalog = flow_like_catalog_core::get_catalog();
+    catalog.extend(flow_like_catalog_std::get_catalog());
+    catalog.extend(flow_like_catalog_data::get_catalog());
+    catalog.extend(flow_like_catalog_web::get_catalog());
+    catalog.extend(flow_like_catalog_media::get_catalog());
+    catalog.extend(flow_like_catalog_ml::get_catalog());
+    catalog.extend(flow_like_catalog_onnx::get_catalog());
+    catalog.extend(flow_like_catalog_llm::get_catalog());
+    catalog.extend(flow_like_catalog_processing::get_catalog());
+    catalog
+}
 
 #[flow_like_types::tokio::main]
 async fn main() {
@@ -66,7 +80,7 @@ async fn main() {
     let cdn_bucket =
         flow_like_storage::files::store::FlowLikeStore::AWS(Arc::new(cdn_bucket.build().unwrap()));
 
-    let catalog = Arc::new(flow_like_catalog::get_catalog());
+    let catalog = Arc::new(get_full_catalog());
     let state = Arc::new(flow_like_api::state::State::new(catalog, Arc::new(cdn_bucket)).await);
 
     let app = construct_router(state);

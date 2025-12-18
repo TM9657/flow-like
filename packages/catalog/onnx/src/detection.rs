@@ -1,6 +1,5 @@
 /// # ONNX Object Detection Nodes
 use crate::onnx::{NodeOnnxSession, Provider};
-use flow_like_catalog_core::{BoundingBox, NodeImage};
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -10,6 +9,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_catalog_core::{BoundingBox, NodeImage};
 #[cfg(feature = "local-ml")]
 use flow_like_model_provider::ml::{
     ndarray::{Array2, Array3, Array4, ArrayView1, Axis, s},
@@ -245,13 +245,14 @@ fn bounding_box_from_array(arr: ArrayView1<f32>) -> BoundingBox {
     let (class_idx, conf) = confs
         .iter()
         .enumerate()
-        .filter_map(|(idx, &num)| {
-            if num.is_nan() { None } else { Some((idx, num)) }
-        })
+        .filter_map(
+            |(idx, &num)| {
+                if num.is_nan() { None } else { Some((idx, num)) }
+            },
+        )
         .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal))
         .unwrap();
-    let (x1, y1, x2, y2) =
-        xywh_to_xyxy(&bbox_xywh[0], &bbox_xywh[1], &bbox_xywh[2], &bbox_xywh[3]);
+    let (x1, y1, x2, y2) = xywh_to_xyxy(&bbox_xywh[0], &bbox_xywh[1], &bbox_xywh[2], &bbox_xywh[3]);
     BoundingBox {
         x1,
         y1,

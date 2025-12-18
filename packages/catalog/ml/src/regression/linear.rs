@@ -7,7 +7,6 @@ use crate::ml::{
     MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array1_f64,
     values_to_array2_f64,
 };
-use flow_like_catalog_core::NodeDBConnection;
 use flow_like::{
     flow::{
         board::Board,
@@ -18,6 +17,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_catalog_core::NodeDBConnection;
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_types::{Value, anyhow, async_trait, json::json};
 use linfa::DatasetBase;

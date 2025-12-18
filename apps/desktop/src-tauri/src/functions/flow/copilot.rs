@@ -1,5 +1,5 @@
-use crate::state::{TauriFlowLikeState, TauriSettingsState};
 use crate::get_full_catalog;
+use crate::state::{TauriFlowLikeState, TauriSettingsState};
 use async_trait::async_trait;
 use flow_like::flow::board::Board;
 use flow_like::flow::copilot::{

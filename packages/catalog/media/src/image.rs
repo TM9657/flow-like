@@ -65,7 +65,11 @@ impl BoundingBox {
         };
 
         let union = self.area() + other.area() - intersection;
-        if union > 0.0 { intersection / union } else { 0.0 }
+        if union > 0.0 {
+            intersection / union
+        } else {
+            0.0
+        }
     }
 
     pub fn scale(&mut self, scale_w: f32, scale_h: f32) {

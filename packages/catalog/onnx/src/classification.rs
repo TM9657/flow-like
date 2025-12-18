@@ -1,5 +1,4 @@
 use crate::onnx::{NodeOnnxSession, Provider};
-use flow_like_catalog_core::NodeImage;
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -9,6 +8,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_catalog_core::NodeImage;
 use flow_like_types::{
     Error, JsonSchema, Result, anyhow, async_trait,
     image::{DynamicImage, GenericImageView, imageops::FilterType},

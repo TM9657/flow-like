@@ -1,4 +1,3 @@
-use flow_like_catalog_core::{FlowPath, NodeImage};
 use flow_like::{
     bit::Bit,
     flow::{
@@ -9,6 +8,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_catalog_core::{FlowPath, NodeImage};
 use flow_like_model_provider::llm::ModelLogic;
 use flow_like_storage::Path;
 use flow_like_types::image::ImageReader;

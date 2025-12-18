@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use flow_like_catalog_core::{FlowPath, NodeImage};
 use flow_like::{
     flow::{
         board::Board,
@@ -11,6 +10,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_catalog_core::{FlowPath, NodeImage};
 use flow_like_types::{
     anyhow, async_trait,
     image::{

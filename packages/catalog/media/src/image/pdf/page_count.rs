@@ -1,10 +1,10 @@
-use flow_like_catalog_core::FlowPath;
 use crate::image::pdf::load_pdf_from_flowpath;
 use flow_like::flow::execution::context::ExecutionContext;
 use flow_like::flow::node::{Node, NodeLogic};
 use flow_like::flow::pin::PinOptions;
 use flow_like::flow::variable::VariableType;
 use flow_like::state::FlowLikeState;
+use flow_like_catalog_core::FlowPath;
 use flow_like_types::{async_trait, json::json};
 
 #[crate::register_node]

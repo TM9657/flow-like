@@ -1,6 +1,5 @@
 /// # ONNX Model Loader Nodes
 use crate::onnx::{NodeOnnxSession, Provider, SessionWithMeta, classification, detection};
-use flow_like_catalog_core::FlowPath;
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -10,6 +9,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_catalog_core::FlowPath;
 #[cfg(feature = "local-ml")]
 use flow_like_model_provider::ml::ort::session::Session;
 use flow_like_types::{Error, Result, anyhow, async_trait, json::json};

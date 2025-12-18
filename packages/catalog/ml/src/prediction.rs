@@ -6,7 +6,6 @@
 //! Adds / upserts predictions back into the Database.
 
 use crate::ml::{MAX_ML_PREDICTION_RECORDS, MLPrediction, NodeMLModel, make_new_field};
-use flow_like_catalog_core::NodeDBConnection;
 use flow_like::flow::pin::ValueType;
 use flow_like::{
     flow::{
@@ -18,6 +17,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_catalog_core::NodeDBConnection;
 use flow_like_storage::arrow_schema::Schema;
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_storage::lancedb::table::NewColumnTransform;

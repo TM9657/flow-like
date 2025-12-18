@@ -4,10 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-flow-like-api = {workspace = true, features = ["aws"]}
+flow-like.workspace = true
+flow-like-api = { workspace = true, features = ["aws"] }
 flow-like-types.workspace = true
 flow-like-storage.workspace = true
-flow-like-catalog.workspace = true
+flow-like-catalog-core.workspace = true
+flow-like-catalog-std.workspace = true
+flow-like-catalog-data.workspace = true
+flow-like-catalog-web.workspace = true
+flow-like-catalog-media.workspace = true
+flow-like-catalog-ml.workspace = true
+flow-like-catalog-onnx.workspace = true
+flow-like-catalog-llm.workspace = true
+flow-like-catalog-processing.workspace = true
 mimalloc.workspace = true
 socket2 = "0.6.0"
 tracing.workspace = true

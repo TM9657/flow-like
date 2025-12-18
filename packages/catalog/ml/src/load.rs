@@ -4,7 +4,6 @@
 //! Wraps the MLModel in a cached NodeMLModel.
 
 use crate::ml::{MLModel, NodeMLModel};
-use flow_like_catalog_core::FlowPath;
 use flow_like::{
     flow::{
         execution::{LogLevel, context::ExecutionContext},
@@ -14,6 +13,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_catalog_core::FlowPath;
 use flow_like_types::{Result, async_trait, json};
 
 #[crate::register_node]

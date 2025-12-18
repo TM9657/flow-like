@@ -1,4 +1,3 @@
-use flow_like_catalog_core::FlowPath;
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -8,6 +7,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_catalog_core::FlowPath;
 use flow_like_storage::Path;
 use flow_like_types::{
     Cacheable, async_trait,

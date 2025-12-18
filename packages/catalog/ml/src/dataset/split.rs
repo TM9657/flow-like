@@ -1,4 +1,3 @@
-use flow_like_catalog_core::NodeDBConnection;
 use flow_like::{
     flow::{
         execution::context::ExecutionContext,
@@ -8,6 +7,7 @@ use flow_like::{
     },
     state::FlowLikeState,
 };
+use flow_like_catalog_core::NodeDBConnection;
 use flow_like_storage::arrow_utils::record_batch_to_value;
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_storage::lancedb::query::ExecutableQuery;
