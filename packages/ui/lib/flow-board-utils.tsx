@@ -323,6 +323,7 @@ export function parseBoard(
 	boardRef?: RefObject<IBoard | undefined>,
 	version?: [number, number, number],
 	onOpenInfo?: (node: INode) => void,
+	onExplain?: (nodeIds: string[]) => void,
 ) {
 	const nodes: any[] = [];
 	const edges: any[] = [];
@@ -385,6 +386,7 @@ export function parseBoard(
 						handleCopy();
 					},
 					onOpenInfo: onOpenInfo,
+					onExplain: onExplain,
 				},
 				selected: selected.has(node.id),
 			});
@@ -554,6 +556,7 @@ export function parseBoard(
 						});
 						await executeCommand(command, false);
 					},
+					onExplain: onExplain,
 				},
 				selected: selected.has(layer.id),
 			});

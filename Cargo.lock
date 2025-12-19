@@ -5401,6 +5401,7 @@ name = "flow-like-catalog"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "flow-like",
  "flow-like-catalog-core",
  "flow-like-catalog-data",
  "flow-like-catalog-llm",
@@ -5410,6 +5411,8 @@ dependencies = [
  "flow-like-catalog-processing",
  "flow-like-catalog-std",
  "flow-like-catalog-web",
+ "flow-like-storage",
+ "flow-like-types",
  "mimalloc",
 ]
 

@@ -32,6 +32,7 @@ import { useMediaQuery } from "@uidotdev/usehooks";
 import {
 	ArrowBigLeftDashIcon,
 	HistoryIcon,
+	LayoutTemplateIcon,
 	NotebookPenIcon,
 	PlayCircleIcon,
 	ScrollIcon,
@@ -137,6 +138,7 @@ import { useUndoRedo } from "./flow-history";
 import { FlowLayerIndicators } from "./flow-layer-indicators";
 import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowRuns } from "./flow-runs";
+import { FlowTemplateSelector } from "./flow-template-selector";
 import { FlowVeilEdge } from "./flow-veil-edge";
 import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
@@ -210,6 +212,7 @@ export function FlowBoard({
 	const [editBoard, setEditBoard] = useState(false);
 	const [currentLayer, setCurrentLayer] = useState<string | undefined>();
 	const [layerPath, setLayerPath] = useState<string | undefined>();
+	const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false);
 	const colorMode = useMemo(
 		() => (resolvedTheme === "dark" ? "dark" : "light"),
 		[resolvedTheme],
@@ -249,6 +252,15 @@ export function FlowBoard({
 					}}
 				>
 					<VariableIcon />
+				</Button>,
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={() => {
+						setTemplateSelectorOpen(true);
+					}}
+				>
+					<LayoutTemplateIcon />
 				</Button>,
 				<Button
 					variant={"outline"}
@@ -399,10 +411,79 @@ export function FlowBoard({
 		[nodeId, initialized, focusNode],
 	);
 
+	// Check if board is empty (no nodes) for showing template selector
+	const isBoardEmpty = useMemo(() => {
+		if (!board.data) return false;
+		const nodeCount = Object.keys(board.data.nodes).length;
+		const commentCount = Object.keys(board.data.comments).length;
+		const layerCount = Object.keys(board.data.layers).length;
+		return nodeCount === 0 && commentCount === 0 && layerCount === 0;
+	}, [board.data]);
+
+	// Handler for applying a template to the board
+	const handleApplyTemplate = useCallback(
+		async (templateAppId: string, templateId: string) => {
+			if (typeof version !== "undefined") {
+				toastError("Cannot modify old version", <XIcon />);
+				return;
+			}
+
+			try {
+				const templateBoard = await backend.templateState.getTemplate(
+					templateAppId,
+					templateId,
+				);
+
+				if (!templateBoard) {
+					toastError("Template not found", <XIcon />);
+					return;
+				}
+
+				// Convert template nodes to the format expected by copyPasteCommand
+				const templateNodes = Object.values(templateBoard.nodes);
+				const templateComments = Object.values(templateBoard.comments);
+				const templateLayers = Object.values(templateBoard.layers);
+
+				if (
+					templateNodes.length === 0 &&
+					templateComments.length === 0 &&
+					templateLayers.length === 0
+				) {
+					toastError("Template is empty", <XIcon />);
+					return;
+				}
+
+				// Create a copy-paste command to insert template contents
+				const command = {
+					command_type: "CopyPaste" as const,
+					original_nodes: templateNodes,
+					original_comments: templateComments,
+					original_layers: templateLayers,
+					new_nodes: [],
+					new_comments: [],
+					new_layers: [],
+					current_layer: currentLayer,
+					offset: [100, 100, 0],
+					old_mouse: undefined,
+				};
+
+				await executeCommand(command as any);
+				setTemplateSelectorOpen(false);
+			} catch (error) {
+				console.error("Failed to apply template:", error);
+				toastError("Failed to apply template", <XIcon />);
+			}
+		},
+		[backend.templateState, executeCommand, currentLayer, version],
+	);
+
 	const [varsOpen, setVarsOpen] = useState(false);
 	const [runsOpen, setRunsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
 	const [copilotOpen, setCopilotOpen] = useState(false);
+	const [copilotInitialPrompt, setCopilotInitialPrompt] = useState<
+		string | undefined
+	>();
 	const isMobile = useMediaQuery("(max-width: 767px)");
 
 	const { toggleVars, toggleRunHistory, toggleLogs } = useFlowPanels({
@@ -600,6 +681,31 @@ export function FlowBoard({
 		nodeInfoOverlayRef.current?.openNodeInfo(node);
 	}, []);
 
+	const handleExplainNodes = useCallback(
+		(nodeIds: string[]) => {
+			// Select the nodes for context
+			const nodeIdSet = new Set(nodeIds);
+			setNodes((nds) =>
+				nds.map((node) => ({
+					...node,
+					selected: nodeIdSet.has(node.id),
+				})),
+			);
+			selected.current = nodeIdSet;
+
+			// Build the explain prompt
+			const nodeCount = nodeIds.length;
+			const prompt =
+				nodeCount === 1
+					? "Explain what this node does and how it works in the context of this flow."
+					: `Explain what these ${nodeCount} selected nodes do and how they work together in this flow.`;
+
+			setCopilotInitialPrompt(prompt);
+			setCopilotOpen(true);
+		},
+		[setNodes],
+	);
+
 	const placeNodeShortcut = useCallback(
 		async (node: INode) => {
 			await placeNode(node, {
@@ -758,12 +864,20 @@ export function FlowBoard({
 			boardRef,
 			version,
 			openNodeInfo,
+			handleExplainNodes,
 		);
 
 		setNodes(parsed.nodes);
 		setEdges(parsed.edges);
 		setPinCache(new Map(parsed.cache));
-	}, [board.data, currentLayer, currentProfile.data, version, openNodeInfo]);
+	}, [
+		board.data,
+		currentLayer,
+		currentProfile.data,
+		version,
+		openNodeInfo,
+		handleExplainNodes,
+	]);
 
 	const nodeTypes = useMemo(
 		() => ({
@@ -810,6 +924,20 @@ export function FlowBoard({
 			awareness.setLocalStateField("selection", { nodes: nodeIds });
 		},
 		[awareness],
+	);
+
+	const selectNodes = useCallback(
+		(nodeIds: string[]) => {
+			const nodeIdSet = new Set(nodeIds);
+			setNodes((nds) =>
+				nds.map((node) => ({
+					...node,
+					selected: nodeIdSet.has(node.id),
+				})),
+			);
+			selected.current = nodeIdSet;
+		},
+		[setNodes],
 	);
 
 	const onConnectEnd = useCallback(
@@ -1295,51 +1423,59 @@ export function FlowBoard({
 							selectedNodeIds={Array.from(selected.current)}
 							onAcceptSuggestion={onAcceptSuggestion}
 							onFocusNode={focusNode}
+							onSelectNodes={selectNodes}
 							onGhostNodesChange={handleGhostNodesChange}
 							onExecuteCommands={handleExecuteCommands}
 							runContext={currentMetadata}
 							onClearRunContext={() => setCurrentMetadata(undefined)}
-							onClose={() => setCopilotOpen(false)}
+							onClose={() => {
+								setCopilotOpen(false);
+								setCopilotInitialPrompt(undefined);
+							}}
 							mode="panel"
+							initialPrompt={copilotInitialPrompt}
 						/>
 					</div>
 				</div>
 			)}
-			{/* Realtime connection status indicator */}
-			{awareness && connectionStatus === "connected" && (
-				<div className="fixed right-3 top-16 z-50 flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--primary)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm sm:right-4 sm:top-16 md:right-6 md:top-6">
-					<WifiIcon className="h-3.5 w-3.5 text-primary animate-pulse" />
-					<span className="text-xs font-medium text-primary">Live</span>
-				</div>
-			)}
-			{awareness && connectionStatus === "reconnecting" && (
-				<div className="fixed right-3 top-16 z-50 flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--yellow-500)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm sm:right-4 sm:top-16 md:right-6 md:top-6">
-					<WifiIcon className="h-3.5 w-3.5 text-yellow-500 animate-pulse" />
-					<span className="text-xs font-medium text-yellow-500">
-						Reconnecting...
-					</span>
-				</div>
-			)}
-			{awareness && connectionStatus === "disconnected" && (
-				<button
-					type="button"
-					onClick={() => reconnect()}
-					className="fixed right-3 top-16 z-50 flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--destructive)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm sm:right-4 sm:top-16 md:right-6 md:top-6 hover:bg-[color-mix(in_oklch,var(--background)_85%,transparent)] transition-colors cursor-pointer"
-				>
-					<WifiOffIcon className="h-3.5 w-3.5 text-destructive" />
-					<span className="text-xs font-medium text-destructive">
-						Disconnected - Click to reconnect
-					</span>
-				</button>
-			)}
-			{!awareness && (
-				<div className="fixed right-3 top-16 z-50 flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--muted-foreground)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm sm:right-4 sm:top-16 md:right-6 md:top-6">
-					<WifiOffIcon className="h-3.5 w-3.5 text-muted-foreground" />
-					<span className="text-xs font-medium text-muted-foreground">
-						Offline
-					</span>
-				</div>
-			)}
+			{/* Top-right toolbar - Figma style with connection status */}
+			<div className="fixed right-3 top-16 z-50 flex items-center gap-2 sm:right-4 sm:top-16 md:right-6 md:top-6">
+				{/* Connection status indicator */}
+				{awareness && connectionStatus === "connected" && (
+					<div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--primary)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm">
+						<WifiIcon className="h-3.5 w-3.5 text-primary animate-pulse" />
+						<span className="text-xs font-medium text-primary">Live</span>
+					</div>
+				)}
+				{awareness && connectionStatus === "reconnecting" && (
+					<div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--yellow-500)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm">
+						<WifiIcon className="h-3.5 w-3.5 text-yellow-500 animate-pulse" />
+						<span className="text-xs font-medium text-yellow-500">
+							Reconnecting...
+						</span>
+					</div>
+				)}
+				{awareness && connectionStatus === "disconnected" && (
+					<button
+						type="button"
+						onClick={() => reconnect()}
+						className="flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--destructive)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm hover:bg-[color-mix(in_oklch,var(--background)_85%,transparent)] transition-colors cursor-pointer"
+					>
+						<WifiOffIcon className="h-3.5 w-3.5 text-destructive" />
+						<span className="text-xs font-medium text-destructive">
+							Disconnected - Click to reconnect
+						</span>
+					</button>
+				)}
+				{!awareness && (
+					<div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--muted-foreground)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm">
+						<WifiOffIcon className="h-3.5 w-3.5 text-muted-foreground" />
+						<span className="text-xs font-medium text-muted-foreground">
+							Offline
+						</span>
+					</div>
+				)}
+			</div>
 			<div className="flex items-center justify-center absolute translate-x-[-50%] mt-5 left-[50dvw] z-40">
 				{board.data && editBoard && (
 					<BoardMeta
@@ -1372,6 +1508,13 @@ export function FlowBoard({
 							title: "Variables",
 							onClick: async () => {
 								toggleVars();
+							},
+						},
+						{
+							icon: <LayoutTemplateIcon />,
+							title: "Templates",
+							onClick: async () => {
+								setTemplateSelectorOpen(true);
 							},
 						},
 						{
@@ -1423,6 +1566,15 @@ export function FlowBoard({
 					]}
 				/>
 			</div>
+
+			{/* Template Selector Overlay - FigJam style centered overlay */}
+			{(templateSelectorOpen || (isBoardEmpty && !currentLayer)) && (
+				<FlowTemplateSelector
+					onSelectTemplate={handleApplyTemplate}
+					onDismiss={() => setTemplateSelectorOpen(false)}
+				/>
+			)}
+
 			<ResizablePanelGroup
 				direction="horizontal"
 				className="flex grow min-h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] md:min-h-dvh md:h-dvh overscroll-contain"
@@ -1760,7 +1912,13 @@ export function FlowBoard({
 					</SheetContent>
 				</Sheet>
 				{/* Mobile FlowPilot Sheet */}
-				<Sheet open={copilotOpen && isMobile} onOpenChange={setCopilotOpen}>
+				<Sheet
+					open={copilotOpen && isMobile}
+					onOpenChange={(open) => {
+						setCopilotOpen(open);
+						if (!open) setCopilotInitialPrompt(undefined);
+					}}
+				>
 					<SheetContent side="bottom" className="h-[85dvh] w-full p-0">
 						<div className="h-full w-full">
 							<FlowCopilot
@@ -1768,12 +1926,17 @@ export function FlowBoard({
 								selectedNodeIds={Array.from(selected.current)}
 								onAcceptSuggestion={onAcceptSuggestion}
 								onFocusNode={focusNode}
+								onSelectNodes={selectNodes}
 								onGhostNodesChange={handleGhostNodesChange}
 								onExecuteCommands={handleExecuteCommands}
 								runContext={currentMetadata}
 								onClearRunContext={() => setCurrentMetadata(undefined)}
-								onClose={() => setCopilotOpen(false)}
+								onClose={() => {
+									setCopilotOpen(false);
+									setCopilotInitialPrompt(undefined);
+								}}
 								mode="panel"
+								initialPrompt={copilotInitialPrompt}
 							/>
 						</div>
 					</SheetContent>

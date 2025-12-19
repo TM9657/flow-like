@@ -32,6 +32,9 @@ mimalloc = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }
+flow-like.workspace = true
+flow-like-types.workspace = true
+flow-like-storage.workspace = true
 
 [[bench]]
 name = "flow_bench"

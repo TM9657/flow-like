@@ -33,7 +33,6 @@ import { DynamicImage, EmptyState } from "../ui";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { TextEditor } from "../ui/text-editor";
 
 interface IEnrichedLogMessage extends ILogMessage {
 	node_id: string;
@@ -71,7 +70,7 @@ export function Traces({
 			backend.boardState.queryRun,
 			backend.boardState,
 			[currentMetadata!, query],
-			1000,
+			100,
 			typeof currentMetadata !== "undefined",
 		);
 
@@ -286,10 +285,13 @@ export function Traces({
 
 /**
  * Attempts to format a message with pretty-printed JSON.
- * If the entire message is valid JSON, wraps it in a markdown code block.
+ * If the entire message is valid JSON, returns the parsed JSON and formatted string.
  * Otherwise returns the original message.
  */
-function formatLogMessage(message: string): string {
+function formatLogMessage(message: string): {
+	isJson: boolean;
+	content: string;
+} {
 	const trimmed = message.trim();
 
 	// Check if the entire message is JSON (starts with { or [)
@@ -300,14 +302,30 @@ function formatLogMessage(message: string): string {
 		try {
 			const parsed = JSON.parse(trimmed);
 			const pretty = JSON.stringify(parsed, null, 2);
-			return `\`\`\`json\n${pretty}\n\`\`\``;
+			return { isJson: true, content: pretty };
 		} catch {
 			// Not valid JSON, return as-is
 		}
 	}
 
-	return message;
+	return { isJson: false, content: message };
 }
+
+/**
+ * Lightweight log message renderer - avoids heavy TextEditor for simple messages
+ */
+const LogMessageContent = memo(function LogMessageContent({
+	message,
+}: Readonly<{ message: { isJson: boolean; content: string } }>) {
+	if (message.isJson) {
+		return (
+			<pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/30 p-2 rounded max-h-48 overflow-y-auto w-full">
+				<code className="break-all">{message.content}</code>
+			</pre>
+		);
+	}
+	return <span className="text-sm break-all">{message.content}</span>;
+});
 
 const LogMessage = memo(function LogMessage({
 	log,
@@ -358,13 +376,8 @@ const LogMessage = memo(function LogMessage({
 			>
 				<div className="flex p-1 px-2  flex-row items-center gap-2 w-full">
 					<LogIndicator logLevel={log.log_level} />
-					<div className="text-start text-wrap break-all">
-						<TextEditor
-							initialContent={formattedMessage}
-							isMarkdown={true}
-							editable={false}
-							minimal={true}
-						/>
+					<div className="text-start text-wrap break-all flex-1 min-w-0">
+						<LogMessageContent message={formattedMessage} />
 					</div>
 				</div>
 				<div className="flex flex-row items-center gap-1 w-full px-2 py-1 border-t justify-between">

@@ -31,7 +31,18 @@ export const useLogAggregation = create<ILogAggregationState>((set, get) => ({
 	filter: undefined,
 	currentMetadata: undefined,
 	setFilter: async (backend: IBackendState, filter: ILogAggregationFilter) => {
-		set({ filter });
+		const currentFilter = get().filter;
+		const boardChanged =
+			currentFilter?.appId !== filter.appId ||
+			currentFilter?.boardId !== filter.boardId;
+
+		// Clear currentMetadata when board changes to avoid showing stale logs
+		if (boardChanged) {
+			set({ filter, currentMetadata: undefined });
+		} else {
+			set({ filter });
+		}
+
 		const runs = await backend.boardState.listRuns(
 			filter.appId,
 			filter.boardId,
