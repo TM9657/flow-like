@@ -1,5 +1,18 @@
 ---
 import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -34,20 +47,17 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
         class="inline-flex items-center gap-2.5 rounded-full border border-primary/30 bg-primary/10 backdrop-blur-xl px-5 py-2.5 text-sm font-semibold text-primary mb-8 shadow-[0_0_30px_-8px_hsl(var(--primary)/.4)] hover:shadow-[0_0_40px_-5px_hsl(var(--primary)/.5)] transition-all duration-500 group"
       >
         <span class="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.6)]"></span>
-        <span>Prototype → Ship</span>
+        <span>{t("zerotoprod.tagline")}</span>
       </div>
 
       <h2
         class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-primary to-secondary bg-clip-text text-transparent leading-tight"
       >
-        Zero-to-prod, <span class="text-primary">without the rewrite</span>
+        {t("zerotoprod.headline")} <span class="text-primary">{t("zerotoprod.headline.highlight")}</span>
       </h2>
 
       <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
-        The flow you sketch is the flow you ship. Built-in checks keep
-        connections valid, every change is easy to review, and each step records
-        inputs and outputs — so you can move from first draft to production with
-        confidence, not glue code.
+        {t("zerotoprod.description")}
       </p>
     </div>
 
@@ -58,7 +68,7 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
       >
         <li class="flex items-center gap-2">
           <span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="text-sm font-medium">Dev</span>
+          <span class="text-sm font-medium">{t("zerotoprod.stages.dev")}</span>
         </li>
         <div class="relative h-1 flex-1">
           <div class="absolute inset-0 rounded-full bg-muted/50"></div>
@@ -73,7 +83,7 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
           <span
             class="size-2 rounded-full bg-amber-500 animate-pulse [animation-delay:.2s]"
           ></span>
-          <span class="text-sm font-medium">Staging</span>
+          <span class="text-sm font-medium">{t("zerotoprod.stages.staging")}</span>
         </li>
         <div class="relative h-1 flex-1">
           <div class="absolute inset-0 rounded-full bg-muted/50"></div>
@@ -88,11 +98,11 @@ import { LuCircleCheck, LuTrendingUp, LuZap } from "react-icons/lu";
           <span
             class="size-2 rounded-full bg-primary animate-pulse [animation-delay:.4s]"
           ></span>
-          <span class="text-sm font-medium">Prod</span>
+          <span class="text-sm font-medium">{t("zerotoprod.stages.prod")}</span>
         </li>
       </ol>
       <p class="mt-2 text-center text-xs text-muted-foreground reveal">
-        Same flow, same visibility — from draft to run.
+        {t("zerotoprod.stages.note")}
       </p>
     </div>
 

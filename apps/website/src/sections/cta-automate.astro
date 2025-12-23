@@ -1,35 +1,56 @@
 ---
-import { LuArrowRight, LuDownload } from "react-icons/lu";
+import { LuArrowRight, LuCalendar } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
+
+const enterpriseContact = "mailto:enterprise@flow-like.com?subject=Automation%20Risk%20Review";
 ---
 
-<section class="relative py-20">
+<section class="relative py-24">
+  <!-- Subtle background gradient -->
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+    <div class="absolute inset-0 bg-[radial-gradient(50%_50%_at_50%_50%,hsl(var(--primary)/.06),transparent)]"></div>
+  </div>
+
   <div class="mx-auto max-w-4xl px-6 lg:px-8 text-center">
     <!-- Minimal CTA -->
     <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
-      Get Started
+      {t("cta.tagline")}
     </p>
     <h2 class="text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-foreground leading-[1.15] mb-6">
-      Ready to automate?
+      {t("cta.headline")}
     </h2>
     <p class="text-lg text-muted-foreground max-w-2xl mx-auto mb-10">
-      Download Flow-Like and build your first workflow in minutes. No signup required.
+      {t("cta.description")}
     </p>
 
     <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
       <a
-        href="/download"
-        class="inline-flex items-center gap-2.5 rounded-full bg-foreground text-background px-8 py-3.5 text-sm font-medium hover:bg-foreground/90 transition-colors"
+        href={enterpriseContact}
+        class="inline-flex items-center gap-2.5 rounded-full bg-foreground text-background px-8 py-4 text-base font-medium hover:bg-foreground/90 transition-colors"
       >
-        <LuDownload className="w-4 h-4" />
-        Download for free
+        <LuCalendar className="w-5 h-5" />
+        {t("cta.button")}
       </a>
       <a
-        href="https://docs.flow-like.com"
+        href="/download"
         class="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors group"
       >
-        Explore documentation
+        {t("hero.cta.download")}
         <LuArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
       </a>
     </div>
+    <p class="mt-4 text-xs text-muted-foreground/60">{t("cta.note")}</p>
   </div>
 </section>

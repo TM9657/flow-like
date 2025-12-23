@@ -1,5 +1,18 @@
 ---
 import { LuArrowRight } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section class="relative py-16">
@@ -11,13 +24,13 @@ import { LuArrowRight } from "react-icons/lu";
       <!-- Left: Minimal text -->
       <div class="flex-1">
         <p class="text-[10px] font-medium tracking-[0.4em] uppercase text-muted-foreground mb-3">
-          New
+          {t("banner24.tagline")}
         </p>
         <h3 class="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight mb-3">
-          24 Hour <span class="text-primary">Solution</span>
+          {t("banner24.headline")} <span class="text-primary">{t("banner24.headline.highlight")}</span>
         </h3>
         <p class="text-muted-foreground max-w-md">
-          We build your automation in 24 hours. €2,400. Production-ready.
+          {t("banner24.description")}
         </p>
       </div>
 
@@ -30,7 +43,7 @@ import { LuArrowRight } from "react-icons/lu";
           <LuArrowRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
         </span>
         <span class="text-muted-foreground group-hover:text-foreground transition-colors">
-          Learn more
+          {t("banner24.learnmore")}
         </span>
       </a>
     </div>

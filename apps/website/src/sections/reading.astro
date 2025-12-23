@@ -1,6 +1,19 @@
 ---
 import { getCollection } from "astro:content";
 import { LuArrowRight } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 
 const posts = (
   await getCollection("blog", ({ data }) =>
@@ -20,7 +33,7 @@ const descFor = (p: any) => p.data.excerpt ?? p.data.description ?? p.data.subti
 
 const dateFor = (p: any) =>
   p.data?.date
-    ? new Date(p.data.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    ? new Date(p.data.date).toLocaleDateString(lang === "de" ? "de-DE" : lang === "es" ? "es-ES" : lang === "fr" ? "fr-FR" : "en-US", { month: "short", day: "numeric", year: "numeric" })
     : "";
 ---
 
@@ -36,17 +49,17 @@ const dateFor = (p: any) =>
     <div class="flex items-end justify-between mb-12">
       <div>
         <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-zinc-500 mb-3">
-          Journal
+          {t("reading.tagline")}
         </p>
         <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-100">
-          Recommended Reading
+          {t("reading.headline")}
         </h2>
       </div>
       <a
         href="/blog/"
         class="hidden sm:inline-flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-zinc-100 transition-colors group"
       >
-        All posts
+        {t("reading.viewall")}
         <LuArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
       </a>
     </div>
@@ -93,7 +106,7 @@ const dateFor = (p: any) =>
         href="/blog/"
         class="inline-flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-zinc-100 transition-colors"
       >
-        View all posts
+        {t("reading.viewall.mobile")}
         <LuArrowRight className="w-4 h-4" />
       </a>
     </div>

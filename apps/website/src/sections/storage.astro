@@ -10,6 +10,19 @@ import {
     LuLink,
     LuShieldCheck,
 } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -45,19 +58,17 @@ import {
                 class="inline-flex items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/10 backdrop-blur-2xl px-4 py-2 text-sm font-medium text-sky-700 dark:text-sky-300 mb-6 shadow-[0_0_40px_-8px_rgba(56,189,248,0.4)]"
             >
                 <span class="w-2 h-2 bg-sky-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(56,189,248,0.8)]"></span>
-                Storage & Search — Built-in
+                {t("storage.tagline")}
             </div>
 
             <h2
                 class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-sky-500 to-violet-500 bg-clip-text text-transparent drop-shadow-sm"
             >
-                Files, tables, and search — right on the canvas
+                {t("storage.headline")}
             </h2>
 
             <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-                Save files, keep records, and find things fast — all inside your
-                flow. No extra services to wire up. Plug a node in, and your
-                data is ready to use.
+                {t("storage.description")}
             </p>
         </div>
 

@@ -1,6 +1,7 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
 import { BlogHeader } from "../components/blog-header";
+import LanguageDetect from "../components/language-detect.astro";
 
 import AmbientGlow from "../components/ambient-glow.astro";
 import SoftSeam from "../components/soft-seam.astro";
@@ -22,22 +23,25 @@ import Integrations from "../sections/integrations.astro";
 import UseCases from "../sections/use-cases.astro";
 import CtaAutomate from "../sections/cta-automate.astro";
 import TwentyFourHourBanner from "../sections/24-hour-solution-banner.astro";
+import EnterpriseStack from "../sections/enterprise-stack.astro";
+import EnterpriseServices from "../sections/enterprise-services.astro";
+import TargetAudience from "../sections/target-audience.astro";
 import { BlogFooter } from "../components/blog-footer";
 
 // --- SEO constants ---
 const site = "https://flow-like.com";
-const title = "Flow-Like — Typed Workflows that Scale (Fast, Robust, Local-First)";
+const title = "Flow-Like — Enterprise Automation You Can Trust (Auditable, On-Prem, Secure)";
 const description =
-  "Typed, scalable workflows with Rust performance. Build reliable systems that run locally, on edge, or in any cloud — with governance built-in and effortless integration. Skip the Prototype!";
+  "Mission-critical automation you can audit, control and run on-prem. No black boxes. No silent failures. No data leaks. Built for teams that cannot afford uncertainty.";
 const keywords = [
-  "workflow automation","visual programming","typed workflows","Rust",
-  "local-first","ETL","data pipelines","RAG","orchestration","DevOps"
+  "enterprise automation","workflow automation","on-premise automation","auditable workflows",
+  "visual programming","typed workflows","Rust","compliance","governance","secure automation"
 ].join(", ");
 const appName = "Flow-Like";
 const orgName = "TM9657 GmbH";
 const canonicalUrl = site;
 const ogImage = `${site}/og.png`;
-const ogImageAlt = "Flow-Like — Typed Workflows that Scale";
+const ogImageAlt = "Flow-Like — Enterprise Automation You Can Trust";
 const twitterCard = "summary_large_image";
 
 const github = "https://github.com/TM9657/flow-like";
@@ -116,6 +120,18 @@ const ldWebPage = {
 
     <!-- Canonical & alternates -->
     <link rel="canonical" href={canonicalUrl} />
+    <link rel="alternate" hreflang="en" href={site} />
+    <link rel="alternate" hreflang="de" href={`${site}/de`} />
+    <link rel="alternate" hreflang="es" href={`${site}/es`} />
+    <link rel="alternate" hreflang="fr" href={`${site}/fr`} />
+    <link rel="alternate" hreflang="zh" href={`${site}/zh`} />
+    <link rel="alternate" hreflang="ja" href={`${site}/ja`} />
+    <link rel="alternate" hreflang="ko" href={`${site}/ko`} />
+    <link rel="alternate" hreflang="pt" href={`${site}/pt`} />
+    <link rel="alternate" hreflang="it" href={`${site}/it`} />
+    <link rel="alternate" hreflang="nl" href={`${site}/nl`} />
+    <link rel="alternate" hreflang="sv" href={`${site}/sv`} />
+    <link rel="alternate" hreflang="x-default" href={site} />
     <link rel="alternate" type="application/rss+xml" title="Flow-Like Blog" href="/rss.xml" />
 
     <!-- Favicons / PWA -->
@@ -158,6 +174,9 @@ const ldWebPage = {
     <script type="application/ld+json">{JSON.stringify(ldSoftware)}</script>
     <script type="application/ld+json">{JSON.stringify(ldWebSite)}</script>
     <script type="application/ld+json">{JSON.stringify(ldWebPage)}</script>
+
+    <!-- Language detection - runs before page renders -->
+    <LanguageDetect />
 
     <!-- Performance helpers -->
     <style is:global>
@@ -234,22 +253,31 @@ const ldWebPage = {
       <BlogHeader client:load/>
       <Hero client:load/>
 
-      <!-- Clear CTA / value prop right after hero -->
-      <ZeroToProd />
+      <!-- Enterprise Stack - what you get -->
+      <EnterpriseStack />
 
       <!-- CTA -->
       <CtaAutomate />
 
-      <!-- 24 Hour Solution Banner -->
-      <TwentyFourHourBanner />
+      <!-- Problem/Solution - the hidden risk & flow-like difference -->
+      <ProblemSolution />
+
+      <!-- Use Cases -->
+      <UseCases />
 
       <!-- Visual builder showcase -->
       <DesignWorkflowsVisually />
 
-      <!-- White section: Use Cases (overlays into previous dark section) -->
-      <UseCases />
+      <!-- Target Audience -->
+      <TargetAudience />
 
-      <!-- Back to dark: Core features -->
+      <!-- Enterprise Services -->
+      <EnterpriseServices />
+
+      <!-- 24 Hour Solution Banner -->
+      <TwentyFourHourBanner />
+
+      <!-- Core features: Portability -->
       <Portability />
 
       <SoftSeam />
@@ -260,8 +288,8 @@ const ldWebPage = {
 
       <Extensibility />
 
-      <!-- White section: Why it matters (overlays into previous dark section) -->
-      <ProblemSolution />
+      <!-- Zero to Prod -->
+      <ZeroToProd />
 
       <!-- Dark section: Integrations -->
       <Integrations />

@@ -113,6 +113,11 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 					items: [
 						{ label: "Overview", slug: "self-hosting/overview" },
 						{
+							label: "Docker Compose",
+							collapsed: true,
+							autogenerate: { directory: "self-hosting/docker-compose" },
+						},
+						{
 							label: "Kubernetes",
 							collapsed: true,
 							autogenerate: { directory: "self-hosting/kubernetes" },
@@ -134,6 +139,12 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 				{
 					label: "For Enterprises",
 					autogenerate: { directory: "enterprise" },
+				},
+				{
+					label: "Reference",
+					items: [
+						{ label: "Benchmarks", slug: "reference/benchmarks" },
+					],
 				},
 				{
 					label: "Node Catalog",

@@ -1,0 +1,91 @@
+---
+import { LuLayoutGrid, LuShieldCheck, LuActivity, LuCircleCheck } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
+
+const stackItems = [
+  {
+    icon: LuLayoutGrid,
+    title: t("stack.core.title"),
+    features: [
+      t("stack.core.feature1"),
+      t("stack.core.feature2"),
+      t("stack.core.feature3"),
+      t("stack.core.feature4"),
+    ],
+  },
+  {
+    icon: LuShieldCheck,
+    title: t("stack.security.title"),
+    features: [
+      t("stack.security.feature1"),
+      t("stack.security.feature2"),
+      t("stack.security.feature3"),
+      t("stack.security.feature4"),
+    ],
+  },
+  {
+    icon: LuActivity,
+    title: t("stack.reliability.title"),
+    features: [
+      t("stack.reliability.feature1"),
+      t("stack.reliability.feature2"),
+      t("stack.reliability.feature3"),
+      t("stack.reliability.feature4"),
+    ],
+  },
+];
+---
+
+<section class="relative py-24">
+  <!-- Background gradient -->
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_20%,hsl(var(--primary)/.08),transparent)]"></div>
+  </div>
+
+  <div class="mx-auto max-w-6xl px-6 lg:px-8">
+    <!-- Header -->
+    <div class="text-center mb-16">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+        {t("stack.tagline")}
+      </p>
+      <h2 class="text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-foreground leading-[1.15] mb-6">
+        {t("stack.headline")}
+      </h2>
+    </div>
+
+    <!-- Stack Cards -->
+    <div class="grid md:grid-cols-3 gap-6">
+      {stackItems.map((item) => (
+        <div class="relative group">
+          <div class="absolute -inset-px rounded-2xl bg-linear-to-b from-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <div class="relative rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm p-8 h-full">
+            <div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-6">
+              <item.icon className="w-6 h-6 text-primary" />
+            </div>
+            <h3 class="text-xl font-semibold text-foreground mb-6">{item.title}</h3>
+            <ul class="space-y-3">
+              {item.features.map((feature) => (
+                <li class="flex items-start gap-3 text-sm text-muted-foreground">
+                  <LuCircleCheck className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
