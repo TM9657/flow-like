@@ -25,7 +25,7 @@ impl SearchUsersNode {
 
 #[async_trait]
 impl NodeLogic for SearchUsersNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_confluence_search_users",
             "Search Users",
@@ -206,7 +206,7 @@ impl GetCurrentUserNode {
 
 #[async_trait]
 impl NodeLogic for GetCurrentUserNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_confluence_get_current_user",
             "Get Current User",

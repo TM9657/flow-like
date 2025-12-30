@@ -77,7 +77,7 @@ impl ListTaskListsNode {
 
 #[async_trait]
 impl NodeLogic for ListTaskListsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_todo_list_lists",
             "List Task Lists",
@@ -167,7 +167,7 @@ impl CreateTaskListNode {
 
 #[async_trait]
 impl NodeLogic for CreateTaskListNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_todo_create_list",
             "Create Task List",
@@ -269,7 +269,7 @@ impl ListTasksNode {
 
 #[async_trait]
 impl NodeLogic for ListTasksNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_todo_list_tasks",
             "List Tasks",
@@ -369,7 +369,7 @@ impl CreateTaskNode {
 
 #[async_trait]
 impl NodeLogic for CreateTaskNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_todo_create_task",
             "Create Task",
@@ -522,7 +522,7 @@ impl UpdateTaskNode {
 
 #[async_trait]
 impl NodeLogic for UpdateTaskNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_todo_update_task",
             "Update Task",
@@ -678,7 +678,7 @@ impl CompleteTaskNode {
 
 #[async_trait]
 impl NodeLogic for CompleteTaskNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_todo_complete_task",
             "Complete Task",
@@ -785,7 +785,7 @@ impl DeleteTaskNode {
 
 #[async_trait]
 impl NodeLogic for DeleteTaskNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_todo_delete_task",
             "Delete Task",

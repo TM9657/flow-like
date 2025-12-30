@@ -24,7 +24,7 @@ impl ParLoopNode {
 
 #[async_trait]
 impl NodeLogic for ParLoopNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "control_par_for_each",
             "Parallel For Each",

@@ -43,7 +43,7 @@ impl QueryNotionDatabaseNode {
 
 #[async_trait]
 impl NodeLogic for QueryNotionDatabaseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_notion_query_database",
             "Query Notion Database",

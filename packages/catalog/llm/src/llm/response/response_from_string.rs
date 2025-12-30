@@ -22,7 +22,7 @@ impl ResponseFromStringNode {
 
 #[async_trait]
 impl NodeLogic for ResponseFromStringNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_generative_llm_response_from_string",
             "Response From String",

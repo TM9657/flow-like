@@ -22,7 +22,7 @@ impl TryTransformNode {
 
 #[async_trait]
 impl NodeLogic for TryTransformNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "utils_types_try_transform",
             "Try Transform",

@@ -164,7 +164,7 @@ impl AtlassianApiTokenProviderNode {
 
 #[async_trait]
 impl NodeLogic for AtlassianApiTokenProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_provider_api_token",
             "Atlassian (API Token)",
@@ -291,7 +291,7 @@ impl AtlassianOAuthProviderNode {
 
 #[async_trait]
 impl NodeLogic for AtlassianOAuthProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_provider_oauth",
             "Atlassian (OAuth)",

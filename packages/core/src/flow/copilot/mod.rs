@@ -883,6 +883,7 @@ ALWAYS emit commands in this order:
                             event_version: None,
                             event_id: String::new(),
                             payload: vec![],
+                            is_remote: false,
                         };
 
                         match self

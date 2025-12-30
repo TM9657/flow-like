@@ -5,7 +5,7 @@ use flow_like::{
         board::Board,
         execution::{LogLevel, context::ExecutionContext},
         node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
+        pin::{PinOptions, ValueType},
         variable::VariableType,
     },
     state::FlowLikeState,
@@ -80,8 +80,39 @@ enum ExtractionMode {
 struct PreparedSchema {
     tool_parameters: Value,
     output_schema: Value,
-    display: String,
     mode: ExtractionMode,
+    was_inferred: bool,
+}
+
+fn looks_like_schema(value: &Value) -> bool {
+    const SCHEMA_KEYWORDS: &[&str] = &[
+        "type",
+        "properties",
+        "items",
+        "$schema",
+        "$ref",
+        "allOf",
+        "anyOf",
+        "oneOf",
+        "not",
+        "required",
+        "additionalProperties",
+        "patternProperties",
+        "enum",
+        "const",
+        "minimum",
+        "maximum",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "format",
+        "definitions",
+        "$defs",
+    ];
+
+    value
+        .as_object()
+        .is_some_and(|obj| SCHEMA_KEYWORDS.iter().any(|kw| obj.contains_key(*kw)))
 }
 
 fn prepare_schema(raw: &str) -> flow_like_types::Result<PreparedSchema> {
@@ -96,15 +127,14 @@ fn prepare_schema(raw: &str) -> flow_like_types::Result<PreparedSchema> {
         )
     })?;
 
-    let inferred = if jsonschema::meta::is_valid(&user_json) {
-        user_json
+    let is_schema = looks_like_schema(&user_json) && jsonschema::meta::is_valid(&user_json);
+    let (inferred, was_inferred) = if is_schema {
+        (user_json, false)
     } else {
         let schema = schemars::schema_for_value!(&user_json);
         let string = json::to_string_pretty(&schema)?;
-        json::from_str(&string)?
+        (json::from_str(&string)?, true)
     };
-
-    let display = json::to_string_pretty(&inferred).unwrap_or_else(|_| inferred.to_string());
 
     let mode = match inferred.get("type").and_then(|t| t.as_str()) {
         Some("object") => ExtractionMode::Direct,
@@ -125,14 +155,14 @@ fn prepare_schema(raw: &str) -> flow_like_types::Result<PreparedSchema> {
     Ok(PreparedSchema {
         tool_parameters,
         output_schema: inferred,
-        display,
         mode,
+        was_inferred,
     })
 }
 
 #[async_trait]
 impl NodeLogic for LLMExtractHistoryNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "llm_extractor_history",
             "AI Extractor from History",
@@ -184,6 +214,13 @@ impl NodeLogic for LLMExtractHistoryNode {
         .set_schema::<History>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
+        node.add_input_pin(
+            "hint",
+            "Extraction Hint",
+            "Optional hint to guide the extraction (e.g. 'only extract individual line items, not totals')",
+            VariableType::String,
+        ).set_default_value(Some(json::json!("")));
+
         node.add_output_pin(
             "exec_out",
             "Execution Output",
@@ -193,9 +230,9 @@ impl NodeLogic for LLMExtractHistoryNode {
 
         node.add_output_pin(
             "response",
-            "Response",
+            "Json",
             "Structured JSON value that matches the schema",
-            VariableType::Struct,
+            VariableType::Generic,
         );
 
         node.set_long_running(true);
@@ -209,6 +246,7 @@ impl NodeLogic for LLMExtractHistoryNode {
         let model_bit = context.evaluate_pin::<Bit>("model").await?;
         let schema_str: String = context.evaluate_pin("schema").await?;
         let history: History = context.evaluate_pin("history").await?;
+        let hint: String = context.evaluate_pin("hint").await.unwrap_or_default();
 
         let prepared_schema = prepare_schema(&schema_str)?;
 
@@ -217,7 +255,14 @@ impl NodeLogic for LLMExtractHistoryNode {
             LogLevel::Debug,
         );
 
-        let preamble = "You are a knowledge extraction assistant. Extract data by calling the 'submit' tool with structured data matching the provided schema.";
+        let preamble = if hint.trim().is_empty() {
+            "You are a knowledge extraction assistant. Extract data by calling the 'submit' tool with structured data matching the provided schema.".to_string()
+        } else {
+            format!(
+                "You are a knowledge extraction assistant. Extract data by calling the 'submit' tool with structured data matching the provided schema.\n\nExtraction hint: {}",
+                hint
+            )
+        };
 
         let (prompt, chat_history) = history
             .extract_prompt_and_history()
@@ -226,7 +271,7 @@ impl NodeLogic for LLMExtractHistoryNode {
         let agent_builder = model_bit
             .agent(context, &Some(history))
             .await?
-            .preamble(preamble)
+            .preamble(&preamble)
             .tool(DynamicSubmitTool {
                 parameters: prepared_schema.tool_parameters,
                 output_schema: prepared_schema.output_schema.clone(),
@@ -279,6 +324,8 @@ impl NodeLogic for LLMExtractHistoryNode {
     async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
         node.error = None;
 
+        node.harmonize_type(vec!["response"], true);
+
         let schema_value = node
             .get_pin_by_name("schema")
             .and_then(|pin| {
@@ -292,27 +339,40 @@ impl NodeLogic for LLMExtractHistoryNode {
             Some(raw) if raw.trim().is_empty() => {
                 node.error = Some("Schema input cannot be empty".to_string());
             }
-            Some(raw) => {
-                match prepare_schema(&raw) {
-                    Ok(prepared) => {
-                        // Check if the original input was a valid meta schema
-                        let user_json = json::from_str::<Value>(&raw);
-                        if let Ok(user_json) = user_json
-                            && !jsonschema::meta::is_valid(&user_json)
-                        {
-                            // Input was not a valid schema, update with inferred schema
-                            if let Some(pin) = node.get_pin_mut_by_name("schema") {
-                                let schema_str = json::to_string_pretty(&prepared.output_schema)
-                                    .unwrap_or_else(|_| prepared.output_schema.to_string());
-                                let _ = pin.set_default_value(Some(json::json!(schema_str)));
-                            }
+            Some(raw) => match prepare_schema(&raw) {
+                Ok(prepared) => {
+                    if prepared.was_inferred {
+                        if let Some(pin) = node.get_pin_mut_by_name("schema") {
+                            let schema_str = json::to_string_pretty(&prepared.output_schema)
+                                .unwrap_or_else(|_| prepared.output_schema.to_string());
+                            let _ = pin.set_default_value(Some(json::json!(schema_str)));
                         }
                     }
-                    Err(err) => {
-                        node.error = Some(format!("Schema error: {}", err));
+
+                    let schema_type = prepared.output_schema.get("type").and_then(|t| t.as_str());
+
+                    let (pin_schema, value_type) = match schema_type {
+                        Some("array") => {
+                            let items_schema = prepared
+                                .output_schema
+                                .get("items")
+                                .cloned()
+                                .unwrap_or(json::json!({}));
+                            (items_schema, ValueType::Array)
+                        }
+                        _ => (prepared.output_schema.clone(), ValueType::Normal),
+                    };
+
+                    if let Some(response_pin) = node.get_pin_mut_by_name("response") {
+                        response_pin.schema = json::to_string(&pin_schema).ok();
+                        response_pin.value_type = value_type;
+                        response_pin.data_type = VariableType::Struct;
                     }
                 }
-            }
+                Err(err) => {
+                    node.error = Some(format!("Schema error: {}", err));
+                }
+            },
             None => {
                 node.error = Some("Schema input cannot be empty".to_string());
             }

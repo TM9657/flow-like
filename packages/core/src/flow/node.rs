@@ -7,8 +7,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::state::FlowLikeState;
-
 use super::{
     board::Board,
     execution::context::ExecutionContext,
@@ -357,7 +355,7 @@ impl Node {
     }
 
     pub fn harmonize_type(&mut self, pins: Vec<&str>, schema: bool) -> Option<VariableType> {
-        let mut found_schema = None;
+        let mut found_schema: Option<String> = None;
         let variable_type = match self.pins.iter().find(|(_, pin)| {
             pins.contains(&pin.name.as_str()) && pin.data_type != VariableType::Generic
         }) {
@@ -373,8 +371,8 @@ impl Node {
         for pin in self.pins.values_mut() {
             if pins.contains(&pin.name.as_str()) {
                 pin.data_type = variable_type.clone();
-                if let Some(schema) = &found_schema {
-                    pin.schema = Some(schema.clone());
+                if schema {
+                    pin.schema = found_schema.clone();
                 }
             }
         }
@@ -541,7 +539,11 @@ impl Node {
 
 #[async_trait]
 pub trait NodeLogic: Send + Sync {
-    async fn get_node(&self, handler: &FlowLikeState) -> Node;
+    /// Returns the node definition. This is a sync function that constructs
+    /// the node's metadata, pins, and configuration.
+    /// For dynamic updates based on board state, use `on_update()` instead.
+    fn get_node(&self) -> Node;
+
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()>;
     async fn on_drop(&self) {}
 

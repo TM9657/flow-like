@@ -23,7 +23,7 @@ impl SearchJiraIssuesNode {
 
 #[async_trait]
 impl NodeLogic for SearchJiraIssuesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_search_issues",
             "Search Jira Issues",

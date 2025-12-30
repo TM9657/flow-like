@@ -158,7 +158,7 @@ impl GetGoogleFormNode {
 
 #[async_trait]
 impl NodeLogic for GetGoogleFormNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_forms_get",
             "Get Form",
@@ -268,7 +268,7 @@ impl ListGoogleFormResponsesNode {
 
 #[async_trait]
 impl NodeLogic for ListGoogleFormResponsesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_forms_list_responses",
             "List Form Responses",
@@ -403,7 +403,7 @@ impl GetGoogleFormResponseNode {
 
 #[async_trait]
 impl NodeLogic for GetGoogleFormResponseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_forms_get_response",
             "Get Form Response",
@@ -515,7 +515,7 @@ impl CreateGoogleFormNode {
 
 #[async_trait]
 impl NodeLogic for CreateGoogleFormNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_forms_create",
             "Create Form",
@@ -634,7 +634,7 @@ impl UpdateGoogleFormInfoNode {
 
 #[async_trait]
 impl NodeLogic for UpdateGoogleFormInfoNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_forms_update_info",
             "Update Form Info",

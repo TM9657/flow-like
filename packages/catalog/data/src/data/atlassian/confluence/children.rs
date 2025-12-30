@@ -25,7 +25,7 @@ impl GetPageChildrenNode {
 
 #[async_trait]
 impl NodeLogic for GetPageChildrenNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_confluence_get_page_children",
             "Get Page Children",
@@ -208,7 +208,7 @@ impl GetPageAncestorsNode {
 
 #[async_trait]
 impl NodeLogic for GetPageAncestorsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_confluence_get_page_ancestors",
             "Get Page Ancestors",

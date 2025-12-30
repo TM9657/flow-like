@@ -47,7 +47,7 @@ impl MicrosoftGraphTokenProviderNode {
 
 #[async_trait]
 impl NodeLogic for MicrosoftGraphTokenProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_provider_token",
             "Microsoft Graph (Token)",
@@ -134,7 +134,7 @@ impl MicrosoftGraphOAuthProviderNode {
 
 #[async_trait]
 impl NodeLogic for MicrosoftGraphOAuthProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_provider_oauth",
             "Microsoft Graph (OAuth)",

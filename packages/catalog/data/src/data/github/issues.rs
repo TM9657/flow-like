@@ -57,7 +57,7 @@ impl GetGitHubIssueNode {
 
 #[async_trait]
 impl NodeLogic for GetGitHubIssueNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_get_issue",
             "Get Issue",
@@ -224,7 +224,7 @@ impl UpdateGitHubIssueNode {
 
 #[async_trait]
 impl NodeLogic for UpdateGitHubIssueNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_update_issue",
             "Update Issue",
@@ -452,7 +452,7 @@ impl AddGitHubIssueCommentNode {
 
 #[async_trait]
 impl NodeLogic for AddGitHubIssueCommentNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_add_issue_comment",
             "Add Issue Comment",
@@ -635,7 +635,7 @@ impl ListGitHubIssueCommentsNode {
 
 #[async_trait]
 impl NodeLogic for ListGitHubIssueCommentsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_list_issue_comments",
             "List Issue Comments",

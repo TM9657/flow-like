@@ -23,7 +23,7 @@ impl SetToArrayNode {
 
 #[async_trait]
 impl NodeLogic for SetToArrayNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "set_to_array",
             "Set to Array",

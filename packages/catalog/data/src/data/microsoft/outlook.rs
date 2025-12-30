@@ -202,7 +202,7 @@ impl ListOutlookMailFoldersNode {
 
 #[async_trait]
 impl NodeLogic for ListOutlookMailFoldersNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_list_mail_folders",
             "List Mail Folders",
@@ -307,7 +307,7 @@ impl ListOutlookMessagesNode {
 
 #[async_trait]
 impl NodeLogic for ListOutlookMessagesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_list_messages",
             "List Messages",
@@ -457,7 +457,7 @@ impl GetOutlookMessageNode {
 
 #[async_trait]
 impl NodeLogic for GetOutlookMessageNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_get_message",
             "Get Message",
@@ -568,7 +568,7 @@ impl SendOutlookMessageNode {
 
 #[async_trait]
 impl NodeLogic for SendOutlookMessageNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_send_message",
             "Send Message",
@@ -735,7 +735,7 @@ impl ListOutlookCalendarEventsNode {
 
 #[async_trait]
 impl NodeLogic for ListOutlookCalendarEventsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_list_calendar_events",
             "List Calendar Events",
@@ -888,7 +888,7 @@ impl ListOutlookContactsNode {
 
 #[async_trait]
 impl NodeLogic for ListOutlookContactsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_list_contacts",
             "List Contacts",
@@ -1018,7 +1018,7 @@ impl CreateOutlookCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for CreateOutlookCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_create_calendar_event",
             "Create Calendar Event",
@@ -1262,7 +1262,7 @@ impl UpdateOutlookCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for UpdateOutlookCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_update_calendar_event",
             "Update Calendar Event",
@@ -1452,7 +1452,7 @@ impl DeleteOutlookCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for DeleteOutlookCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_delete_calendar_event",
             "Delete Calendar Event",
@@ -1545,7 +1545,7 @@ impl GetOutlookCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for GetOutlookCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_get_calendar_event",
             "Get Calendar Event",
@@ -1649,7 +1649,7 @@ impl RsvpOutlookCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for RsvpOutlookCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_rsvp_calendar_event",
             "RSVP Calendar Event",
@@ -1785,7 +1785,7 @@ impl ForwardOutlookCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for ForwardOutlookCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_outlook_forward_calendar_event",
             "Forward Calendar Event",

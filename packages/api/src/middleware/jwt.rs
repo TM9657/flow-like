@@ -347,12 +347,22 @@ impl AppUser {
     }
 }
 
+use crate::state::CachedAuth;
+
+fn hash_token(token: &str) -> String {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(token.as_bytes());
+    hasher.finalize().to_hex().to_string()
+}
+
 pub async fn jwt_middleware(
     State(state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Result<Response<Body>, AuthorizationError> {
     let mut request = request;
+
+    // Try OpenID/JWT auth
     if let Some(auth_header) = request.headers().get(AUTHORIZATION)
         && let Ok(token) = auth_header.to_str()
         && !token.starts_with("pat_")
@@ -362,11 +372,34 @@ pub async fn jwt_middleware(
         } else {
             token
         };
-
         let token = token.trim();
+        let cache_key = hash_token(token);
+
+        // Check cache first
+        if let Some(cached) = state.auth_cache.get(&cache_key) {
+            if let CachedAuth::OpenID { sub } = cached {
+                let user = AppUser::OpenID(OpenIDUser {
+                    sub,
+                    access_token: token.to_string(),
+                });
+                request.extensions_mut().insert::<AppUser>(user);
+                return Ok(next.run(request).await);
+            }
+        }
+
+        // Cache miss - validate token
         let claims = state.validate_token(token)?;
         let sub = claims.get("sub").ok_or(anyhow!("sub not found"))?;
         let sub = sub.as_str().ok_or(anyhow!("sub not a string"))?;
+
+        // Cache the result
+        state.auth_cache.insert(
+            cache_key,
+            CachedAuth::OpenID {
+                sub: sub.to_string(),
+            },
+        );
+
         let user = AppUser::OpenID(OpenIDUser {
             sub: sub.to_string(),
             access_token: token.to_string(),
@@ -375,11 +408,37 @@ pub async fn jwt_middleware(
         return Ok(next.run(request).await);
     }
 
+    // Try PAT auth
     if let Some(auth_header) = request.headers().get(AUTHORIZATION)
         && let Ok(token) = auth_header.to_str()
         && token.starts_with("pat_")
     {
         let pat_str = token.trim();
+        let cache_key = hash_token(pat_str);
+
+        // Check cache first
+        if let Some(cached) = state.auth_cache.get(&cache_key) {
+            match cached {
+                CachedAuth::PAT { sub } => {
+                    let pat_user = AppUser::PAT(PATUser {
+                        pat: pat_str.to_string(),
+                        sub,
+                    });
+                    request.extensions_mut().insert::<AppUser>(pat_user);
+                    return Ok(next.run(request).await);
+                }
+                CachedAuth::Invalid => {
+                    // Token was previously validated as invalid/expired
+                    request
+                        .extensions_mut()
+                        .insert::<AppUser>(AppUser::Unauthorized);
+                    return Ok(next.run(request).await);
+                }
+                _ => {}
+            }
+        }
+
+        // Cache miss - validate PAT
         if !pat_str.starts_with("pat_") {
             return Err(AuthorizationError::from(anyhow!("Invalid PAT format")));
         }
@@ -403,13 +462,24 @@ pub async fn jwt_middleware(
             )
             .one(&state.db)
             .await?;
+
         if let Some(pat) = db_pat {
             if let Some(valid_until) = pat.valid_until {
                 let now = chrono::Utc::now().naive_utc();
                 if valid_until < now {
+                    state.auth_cache.insert(cache_key, CachedAuth::Invalid);
                     return Err(AuthorizationError::from(anyhow!("PAT is expired")));
                 }
             }
+
+            // Cache valid PAT
+            state.auth_cache.insert(
+                cache_key,
+                CachedAuth::PAT {
+                    sub: pat.user_id.clone(),
+                },
+            );
+
             let pat_user = AppUser::PAT(PATUser {
                 pat: pat_str.to_string(),
                 sub: pat.user_id.clone(),
@@ -419,9 +489,35 @@ pub async fn jwt_middleware(
         }
     }
 
+    // Try API key auth
     if let Some(api_key_header) = request.headers().get("x-api-key")
         && let Ok(api_key_str) = api_key_header.to_str()
     {
+        let cache_key = hash_token(api_key_str);
+
+        // Check cache first
+        if let Some(cached) = state.auth_cache.get(&cache_key) {
+            match cached {
+                CachedAuth::ApiKey { key_id, app_id } => {
+                    let app_user = AppUser::APIKey(ApiKey {
+                        key_id,
+                        api_key: api_key_str.to_string(),
+                        app_id,
+                    });
+                    request.extensions_mut().insert::<AppUser>(app_user);
+                    return Ok(next.run(request).await);
+                }
+                CachedAuth::Invalid => {
+                    request
+                        .extensions_mut()
+                        .insert::<AppUser>(AppUser::Unauthorized);
+                    return Ok(next.run(request).await);
+                }
+                _ => {}
+            }
+        }
+
+        // Cache miss - lookup API key
         let db_app = TechnicalUser::find()
             .filter(technical_user::Column::Key.eq(api_key_str))
             .one(&state.db)
@@ -431,9 +527,19 @@ pub async fn jwt_middleware(
             if let Some(valid_until) = app.valid_until {
                 let now = chrono::Utc::now().naive_utc();
                 if valid_until < now {
+                    state.auth_cache.insert(cache_key, CachedAuth::Invalid);
                     return Err(AuthorizationError::from(anyhow!("API Key is expired")));
                 }
             }
+
+            // Cache valid API key
+            state.auth_cache.insert(
+                cache_key,
+                CachedAuth::ApiKey {
+                    key_id: app.id.clone(),
+                    app_id: app.app_id.clone(),
+                },
+            );
 
             let app_user = AppUser::APIKey(ApiKey {
                 key_id: app.id.clone(),

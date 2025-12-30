@@ -133,7 +133,7 @@ impl ExtractDocumentNode {
 
 #[async_trait]
 impl NodeLogic for ExtractDocumentNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_processing_extract_document",
             "Extract Document",
@@ -243,7 +243,7 @@ impl ExtractDocumentAiNode {
 
 #[async_trait]
 impl NodeLogic for ExtractDocumentAiNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_processing_extract_document_ai",
             "AI Extract Document",
@@ -388,7 +388,7 @@ impl ExtractDocumentsNode {
 
 #[async_trait]
 impl NodeLogic for ExtractDocumentsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_processing_extract_documents",
             "Extract Documents",
@@ -506,7 +506,7 @@ impl ExtractDocumentsAiNode {
 
 #[async_trait]
 impl NodeLogic for ExtractDocumentsAiNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_processing_extract_documents_ai",
             "AI Extract Documents",
@@ -644,7 +644,7 @@ impl PagesToMarkdownNode {
 
 #[async_trait]
 impl NodeLogic for PagesToMarkdownNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_processing_pages_to_markdown",
             "Pages to Markdown",

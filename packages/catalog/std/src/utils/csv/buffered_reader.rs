@@ -27,7 +27,7 @@ impl BufferedCsvReaderNode {
 
 #[async_trait]
 impl NodeLogic for BufferedCsvReaderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "csv_buffered_reader",
             "Buffered CSV Reader",

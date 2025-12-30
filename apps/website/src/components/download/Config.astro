@@ -1,0 +1,63 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+---
+
+<div class="lg:col-span-4">
+  <h3 class="text-xl font-bold tracking-tight mb-6">{t("download.config.title")}</h3>
+  <div class="bg-zinc-50/50 border border-zinc-200 p-6 space-y-6 backdrop-blur-sm">
+     <div class="space-y-4" role="region" aria-label="Download preferences">
+        <label class="block group">
+          <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block group-hover:text-zinc-900 transition-colors">{t("download.config.os")}</span>
+          <div class="relative">
+              <select id="os-select" class="w-full appearance-none bg-white border border-zinc-200 px-4 py-3 text-sm font-medium focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none transition-all rounded-sm">
+                <option value="auto">{t("download.config.os.auto")}</option>
+                <option value="macos">{t("download.config.os.macos")}</option>
+                <option value="windows">{t("download.config.os.windows")}</option>
+                <option value="linux">{t("download.config.os.linux")}</option>
+              </select>
+              <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+          </div>
+        </label>
+
+        <label class="block group">
+          <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block group-hover:text-zinc-900 transition-colors">{t("download.config.arch")}</span>
+          <div class="relative">
+              <select id="arch-select" class="w-full appearance-none bg-white border border-zinc-200 px-4 py-3 text-sm font-medium focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none transition-all rounded-sm">
+                <option value="auto">{t("download.config.arch.auto")}</option>
+                <option value="arm64">{t("download.config.arch.arm64")}</option>
+                <option value="x64">{t("download.config.arch.x64")}</option>
+              </select>
+              <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+          </div>
+        </label>
+
+        <label class="block group">
+          <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block group-hover:text-zinc-900 transition-colors">{t("download.config.pkg")}</span>
+          <div class="relative">
+              <select id="pkg-select" class="w-full appearance-none bg-white border border-zinc-200 px-4 py-3 text-sm font-medium focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none transition-all rounded-sm">
+                <option value="auto">{t("download.config.pkg.auto")}</option>
+                <option value="dmg">{t("download.config.pkg.dmg")}</option>
+                <option value="zip">{t("download.config.pkg.zip")}</option>
+                <option value="msi">{t("download.config.pkg.msi")}</option>
+                <option value="exe">{t("download.config.pkg.exe")}</option>
+                <option value="appimage">{t("download.config.pkg.appimage")}</option>
+                <option value="deb">{t("download.config.pkg.deb")}</option>
+                <option value="rpm">{t("download.config.pkg.rpm")}</option>
+                <option value="tar.gz">{t("download.config.pkg.targz")}</option>
+              </select>
+              <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+          </div>
+        </label>
+     </div>
+  </div>
+</div>

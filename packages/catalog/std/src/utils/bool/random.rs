@@ -25,7 +25,7 @@ impl RandomBoolNode {
 
 #[async_trait]
 impl NodeLogic for RandomBoolNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "random_bool",
             "Random Boolean",

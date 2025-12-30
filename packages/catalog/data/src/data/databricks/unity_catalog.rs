@@ -106,7 +106,7 @@ impl ListDatabricksCatalogsNode {
 
 #[async_trait]
 impl NodeLogic for ListDatabricksCatalogsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_list_catalogs",
             "List Catalogs",
@@ -258,7 +258,7 @@ impl ListDatabricksSchemasNode {
 
 #[async_trait]
 impl NodeLogic for ListDatabricksSchemasNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_list_schemas",
             "List Schemas",
@@ -424,7 +424,7 @@ impl ListDatabricksTablesNode {
 
 #[async_trait]
 impl NodeLogic for ListDatabricksTablesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_list_tables",
             "List Tables",

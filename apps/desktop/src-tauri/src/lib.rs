@@ -18,6 +18,7 @@ use flow_like::{
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
+use flow_like_catalog::get_catalog;
 use flow_like_types::{sync::Mutex, tokio::time::interval};
 use settings::Settings;
 use state::TauriFlowLikeState;
@@ -26,19 +27,6 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 #[cfg(desktop)]
 use tauri_plugin_updater::UpdaterExt;
-
-fn get_full_catalog() -> Vec<Arc<dyn NodeLogic>> {
-    let mut catalog = flow_like_catalog_core::get_catalog();
-    catalog.extend(flow_like_catalog_std::get_catalog());
-    catalog.extend(flow_like_catalog_data::get_catalog());
-    catalog.extend(flow_like_catalog_web::get_catalog());
-    catalog.extend(flow_like_catalog_media::get_catalog());
-    catalog.extend(flow_like_catalog_ml::get_catalog());
-    catalog.extend(flow_like_catalog_onnx::get_catalog());
-    catalog.extend(flow_like_catalog_llm::get_catalog());
-    catalog.extend(flow_like_catalog_processing::get_catalog());
-    catalog
-}
 
 #[cfg(not(debug_assertions))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -188,13 +176,11 @@ pub fn run() {
         flow_like_types::tokio::time::sleep(Duration::from_millis(800)).await;
 
         let weak_ref = Arc::downgrade(&initialized_state);
-        let catalog = get_full_catalog();
+        let catalog = get_catalog();
         let registry_guard = initialized_state.node_registry.clone();
         let mut registry = registry_guard.write().await;
         registry.initialize(weak_ref);
-        if let Err(e) = registry.push_nodes(catalog).await {
-            eprintln!("Failed to push catalog nodes: {:?}", e);
-        }
+        registry.push_nodes(catalog);
         println!("Catalog Initialized");
     });
 

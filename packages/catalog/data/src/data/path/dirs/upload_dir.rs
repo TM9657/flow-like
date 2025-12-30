@@ -21,7 +21,7 @@ impl PathFromUploadDirNode {
 
 #[async_trait]
 impl NodeLogic for PathFromUploadDirNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "path_from_upload_dir",
             "Upload Dir",

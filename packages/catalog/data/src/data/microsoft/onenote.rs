@@ -102,7 +102,7 @@ impl ListNotebooksNode {
 
 #[async_trait]
 impl NodeLogic for ListNotebooksNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onenote_list_notebooks",
             "List Notebooks",
@@ -192,7 +192,7 @@ impl CreateNotebookNode {
 
 #[async_trait]
 impl NodeLogic for CreateNotebookNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onenote_create_notebook",
             "Create Notebook",
@@ -294,7 +294,7 @@ impl ListSectionsNode {
 
 #[async_trait]
 impl NodeLogic for ListSectionsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onenote_list_sections",
             "List Sections",
@@ -394,7 +394,7 @@ impl CreateSectionNode {
 
 #[async_trait]
 impl NodeLogic for CreateSectionNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onenote_create_section",
             "Create Section",
@@ -506,7 +506,7 @@ impl ListPagesNode {
 
 #[async_trait]
 impl NodeLogic for ListPagesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onenote_list_pages",
             "List Pages",
@@ -606,7 +606,7 @@ impl CreatePageNode {
 
 #[async_trait]
 impl NodeLogic for CreatePageNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onenote_create_page",
             "Create Page",
@@ -730,7 +730,7 @@ impl GetPageContentNode {
 
 #[async_trait]
 impl NodeLogic for GetPageContentNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onenote_get_page_content",
             "Get Page Content",
@@ -821,7 +821,7 @@ impl DeletePageNode {
 
 #[async_trait]
 impl NodeLogic for DeletePageNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onenote_delete_page",
             "Delete Page",

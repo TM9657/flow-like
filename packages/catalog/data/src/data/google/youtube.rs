@@ -125,7 +125,7 @@ impl SearchYouTubeVideosNode {
 
 #[async_trait]
 impl NodeLogic for SearchYouTubeVideosNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_youtube_search",
             "Search Videos",
@@ -287,7 +287,7 @@ impl GetYouTubeVideoNode {
 
 #[async_trait]
 impl NodeLogic for GetYouTubeVideoNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_youtube_get_video",
             "Get Video",
@@ -399,7 +399,7 @@ impl ListMyYouTubeVideosNode {
 
 #[async_trait]
 impl NodeLogic for ListMyYouTubeVideosNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_youtube_list_my_videos",
             "List My Videos",
@@ -532,7 +532,7 @@ impl GetYouTubeChannelNode {
 
 #[async_trait]
 impl NodeLogic for GetYouTubeChannelNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_youtube_get_channel",
             "Get Channel",
@@ -663,7 +663,7 @@ impl ListYouTubePlaylistsNode {
 
 #[async_trait]
 impl NodeLogic for ListYouTubePlaylistsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_youtube_list_playlists",
             "List Playlists",
@@ -832,7 +832,7 @@ impl GetYouTubePlaylistItemsNode {
 
 #[async_trait]
 impl NodeLogic for GetYouTubePlaylistItemsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_youtube_get_playlist_items",
             "Get Playlist Items",
@@ -1001,7 +1001,7 @@ impl AddToYouTubePlaylistNode {
 
 #[async_trait]
 impl NodeLogic for AddToYouTubePlaylistNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_youtube_add_to_playlist",
             "Add to Playlist",
@@ -1132,7 +1132,7 @@ impl RemoveFromYouTubePlaylistNode {
 
 #[async_trait]
 impl NodeLogic for RemoveFromYouTubePlaylistNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_youtube_remove_from_playlist",
             "Remove from Playlist",

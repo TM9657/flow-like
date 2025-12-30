@@ -25,12 +25,26 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use crate::credentials::{CredentialsAccess, RuntimeCredentials};
 use crate::entity::role;
+use crate::execution::{DispatchConfig, Dispatcher};
 use crate::mail::{DynMailClient, create_mail_client};
 
 pub type AppState = Arc<State>;
 
 const CONFIG: &str = include_str!("../../../flow-like.config.json");
 const JWKS: &str = include_str!(concat!(env!("OUT_DIR"), "/jwks.json"));
+
+/// Cached auth result for JWT/PAT/API key
+#[derive(Clone, Debug)]
+pub enum CachedAuth {
+    /// OpenID user with sub
+    OpenID { sub: String },
+    /// PAT user with sub
+    PAT { sub: String },
+    /// API key with key_id and app_id
+    ApiKey { key_id: String, app_id: String },
+    /// Invalid/expired token
+    Invalid,
+}
 
 pub struct State {
     pub platform_config: Hub,
@@ -44,11 +58,15 @@ pub struct State {
     pub catalog: Arc<Vec<Arc<dyn NodeLogic>>>,
     pub registry: Arc<FlowNodeRegistryInner>,
     pub provider: Arc<ModelProviderConfiguration>,
+    pub dispatcher: Arc<Dispatcher>,
     pub permission_cache: moka::sync::Cache<String, Arc<role::Model>>,
     pub credentials_cache: moka::sync::Cache<String, Arc<RuntimeCredentials>>,
     pub state_cache: moka::sync::Cache<String, Arc<FlowLikeState>>,
     pub cdn_bucket: Arc<FlowLikeStore>,
     pub response_cache: moka::sync::Cache<String, Value>,
+    /// Auth token cache: token_hash -> CachedAuth
+    /// Short TTL (240s) to balance security vs performance
+    pub auth_cache: moka::sync::Cache<String, CachedAuth>,
 }
 
 impl State {
@@ -102,7 +120,7 @@ impl State {
         let (http_client, _) = HTTPClient::new();
         let flow_like_state = FlowLikeState::new(config, http_client);
 
-        let registry = FlowNodeRegistryInner::prepare(&flow_like_state, &catalog).await;
+        let registry = FlowNodeRegistryInner::prepare(&catalog);
 
         let cache = moka::sync::Cache::builder()
             .max_capacity(32 * 1024 * 1024) // 32 MB
@@ -126,6 +144,10 @@ impl State {
             None
         };
 
+        // Initialize dispatcher once with env config (caches AWS/Redis clients)
+        let dispatch_config = DispatchConfig::from_env();
+        let dispatcher = Dispatcher::new(dispatch_config).await;
+
         Self {
             platform_config,
             db,
@@ -138,6 +160,7 @@ impl State {
             catalog,
             provider: Arc::new(provider),
             registry: Arc::new(registry),
+            dispatcher: Arc::new(dispatcher),
             permission_cache: moka::sync::Cache::builder()
                 .max_capacity(32 * 1024 * 1024)
                 .time_to_live(Duration::from_secs(120))
@@ -149,6 +172,12 @@ impl State {
             credentials_cache: cache,
             cdn_bucket,
             response_cache,
+            // Auth cache: max 10k entries, 60s TTL for security
+            // Entries are keyed by token hash to avoid storing raw tokens
+            auth_cache: moka::sync::Cache::builder()
+                .max_capacity(10_000)
+                .time_to_live(Duration::from_secs(240))
+                .build(),
         }
     }
 

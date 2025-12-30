@@ -23,7 +23,7 @@ impl PdfPageToImageNode {
 
 #[async_trait]
 impl NodeLogic for PdfPageToImageNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "pdf_page_to_image",
             "PDF Page To Image",

@@ -140,7 +140,7 @@ impl ListCalendarsNode {
 
 #[async_trait]
 impl NodeLogic for ListCalendarsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_calendar_list_calendars",
             "List Calendars",
@@ -230,7 +230,7 @@ impl CreateCalendarNode {
 
 #[async_trait]
 impl NodeLogic for CreateCalendarNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_calendar_create_calendar",
             "Create Calendar",
@@ -350,7 +350,7 @@ impl ListEventsNode {
 
 #[async_trait]
 impl NodeLogic for ListEventsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_calendar_list_events",
             "List Events",
@@ -477,7 +477,7 @@ impl CreateEventNode {
 
 #[async_trait]
 impl NodeLogic for CreateEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_calendar_create_event",
             "Create Event",
@@ -672,7 +672,7 @@ impl DeleteEventNode {
 
 #[async_trait]
 impl NodeLogic for DeleteEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_calendar_delete_event",
             "Delete Event",
@@ -760,7 +760,7 @@ impl FindMeetingTimesNode {
 
 #[async_trait]
 impl NodeLogic for FindMeetingTimesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_calendar_find_meeting_times",
             "Find Meeting Times",
@@ -922,7 +922,7 @@ impl GetScheduleNode {
 
 #[async_trait]
 impl NodeLogic for GetScheduleNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_calendar_get_schedule",
             "Get Schedule",
@@ -1064,7 +1064,7 @@ impl UpdateEventNode {
 
 #[async_trait]
 impl NodeLogic for UpdateEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_calendar_update_event",
             "Update Event",

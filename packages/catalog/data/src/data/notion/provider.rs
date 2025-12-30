@@ -37,7 +37,7 @@ impl NotionApiKeyProviderNode {
 
 #[async_trait]
 impl NodeLogic for NotionApiKeyProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_notion_provider_api_key",
             "Notion (API Key)",
@@ -115,7 +115,7 @@ impl NotionOAuthProviderNode {
 
 #[async_trait]
 impl NodeLogic for NotionOAuthProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_notion_provider_oauth",
             "Notion (OAuth)",

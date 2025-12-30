@@ -22,7 +22,7 @@ impl SorensenDiceCoefficientNode {
 
 #[async_trait]
 impl NodeLogic for SorensenDiceCoefficientNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "sorensen_dice_coefficient",
             "Sørensen-Dice Coefficient",

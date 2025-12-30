@@ -2,10 +2,40 @@
 //!
 //! This crate re-exports all catalog sub-crates for convenience.
 //! You can also depend on individual catalog crates directly.
+//!
+//! # Usage
+//!
+//! ```rust,ignore
+//! use flow_like_catalog::{CatalogBuilder, CatalogPackage, get_catalog};
+//!
+//! // Get the full catalog
+//! let catalog = get_catalog();
+//!
+//! // Or use the builder for customization
+//! let catalog = CatalogBuilder::new()
+//!     .exclude_packages(&[CatalogPackage::Onnx, CatalogPackage::Ml])
+//!     .with_custom_nodes(my_custom_nodes())  // Custom nodes override existing ones by name
+//!     .build();
+//!
+//! // Include only specific packages
+//! let catalog = CatalogBuilder::new()
+//!     .only_packages(&[CatalogPackage::Core, CatalogPackage::Std])
+//!     .build();
+//!
+//! // Include/exclude specific nodes by name
+//! let catalog = CatalogBuilder::new()
+//!     .only_nodes(&["control_branch", "bool_or"])  // Only include these nodes
+//!     .build();
+//!
+//! let catalog = CatalogBuilder::new()
+//!     .exclude_nodes(&["control_branch"])  // Exclude specific nodes
+//!     .build();
+//! ```
 
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, LazyLock};
 
-use flow_like_catalog_core::NodeConstructor;
+pub use flow_like_catalog_core::NodeLogic;
 
 // Re-export core types and utilities
 pub use flow_like_catalog_core::{
@@ -37,16 +67,219 @@ pub use flow_like_catalog_llm::generative;
 // Re-export processing modules
 pub use flow_like_catalog_processing::processing;
 
-/// Get the full catalog from all sub-crates
-pub fn get_catalog() -> Vec<Arc<dyn flow_like_catalog_core::NodeLogic>> {
-    let mut catalog = flow_like_catalog_core::get_catalog();
-    catalog.extend(flow_like_catalog_std::get_catalog());
-    catalog.extend(flow_like_catalog_data::get_catalog());
-    catalog.extend(flow_like_catalog_web::get_catalog());
-    catalog.extend(flow_like_catalog_media::get_catalog());
-    catalog.extend(flow_like_catalog_ml::get_catalog());
-    catalog.extend(flow_like_catalog_onnx::get_catalog());
-    catalog.extend(flow_like_catalog_llm::get_catalog());
-    catalog.extend(flow_like_catalog_processing::get_catalog());
-    catalog
+/// Available catalog packages that can be included/excluded
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CatalogPackage {
+    Core,
+    Std,
+    Data,
+    Web,
+    Media,
+    Ml,
+    Onnx,
+    Llm,
+    Processing,
+}
+
+impl CatalogPackage {
+    pub fn all() -> &'static [CatalogPackage] {
+        &[
+            CatalogPackage::Core,
+            CatalogPackage::Std,
+            CatalogPackage::Data,
+            CatalogPackage::Web,
+            CatalogPackage::Media,
+            CatalogPackage::Ml,
+            CatalogPackage::Onnx,
+            CatalogPackage::Llm,
+            CatalogPackage::Processing,
+        ]
+    }
+
+    fn get_nodes(&self) -> Vec<Arc<dyn NodeLogic>> {
+        match self {
+            CatalogPackage::Core => flow_like_catalog_core::get_catalog(),
+            CatalogPackage::Std => flow_like_catalog_std::get_catalog(),
+            CatalogPackage::Data => flow_like_catalog_data::get_catalog(),
+            CatalogPackage::Web => flow_like_catalog_web::get_catalog(),
+            CatalogPackage::Media => flow_like_catalog_media::get_catalog(),
+            CatalogPackage::Ml => flow_like_catalog_ml::get_catalog(),
+            CatalogPackage::Onnx => flow_like_catalog_onnx::get_catalog(),
+            CatalogPackage::Llm => flow_like_catalog_llm::get_catalog(),
+            CatalogPackage::Processing => flow_like_catalog_processing::get_catalog(),
+        }
+    }
+}
+
+impl std::str::FromStr for CatalogPackage {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "core" => Ok(CatalogPackage::Core),
+            "std" | "standard" => Ok(CatalogPackage::Std),
+            "data" => Ok(CatalogPackage::Data),
+            "web" => Ok(CatalogPackage::Web),
+            "media" => Ok(CatalogPackage::Media),
+            "ml" | "machine_learning" => Ok(CatalogPackage::Ml),
+            "onnx" => Ok(CatalogPackage::Onnx),
+            "llm" | "genai" | "generative" => Ok(CatalogPackage::Llm),
+            "processing" => Ok(CatalogPackage::Processing),
+            _ => Err(format!("Unknown catalog package: {}", s)),
+        }
+    }
+}
+
+/// Builder for constructing a customized catalog
+#[derive(Default)]
+pub struct CatalogBuilder {
+    excluded_packages: HashSet<CatalogPackage>,
+    included_packages: Option<HashSet<CatalogPackage>>,
+    excluded_nodes: HashSet<String>,
+    included_nodes: Option<HashSet<String>>,
+    custom_nodes: Vec<Arc<dyn NodeLogic>>,
+    node_filter: Option<Box<dyn Fn(&dyn NodeLogic) -> bool + Send + Sync>>,
+}
+
+impl CatalogBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Include only specific packages (whitelist mode)
+    pub fn only_packages(mut self, packages: &[CatalogPackage]) -> Self {
+        self.included_packages = Some(packages.iter().copied().collect());
+        self
+    }
+
+    /// Include only specific packages by name (whitelist mode)
+    pub fn only_packages_by_name(mut self, names: &[&str]) -> Self {
+        let packages: HashSet<_> = names
+            .iter()
+            .filter_map(|n| n.parse::<CatalogPackage>().ok())
+            .collect();
+        self.included_packages = Some(packages);
+        self
+    }
+
+    /// Exclude specific packages
+    pub fn exclude_packages(mut self, packages: &[CatalogPackage]) -> Self {
+        self.excluded_packages.extend(packages.iter().copied());
+        self
+    }
+
+    /// Exclude packages by name
+    pub fn exclude_packages_by_name(mut self, names: &[&str]) -> Self {
+        for name in names {
+            if let Ok(pkg) = name.parse::<CatalogPackage>() {
+                self.excluded_packages.insert(pkg);
+            }
+        }
+        self
+    }
+
+    /// Include only specific nodes by name (whitelist mode)
+    pub fn only_nodes(mut self, names: &[&str]) -> Self {
+        self.included_nodes = Some(names.iter().map(|s| s.to_string()).collect());
+        self
+    }
+
+    /// Exclude specific nodes by name
+    pub fn exclude_nodes(mut self, names: &[&str]) -> Self {
+        self.excluded_nodes
+            .extend(names.iter().map(|s| s.to_string()));
+        self
+    }
+
+    /// Add custom nodes to the catalog.
+    /// Custom nodes will override any existing nodes with the same name.
+    pub fn with_custom_nodes(mut self, nodes: Vec<Arc<dyn NodeLogic>>) -> Self {
+        self.custom_nodes.extend(nodes);
+        self
+    }
+
+    /// Add a single custom node.
+    /// If a node with the same name already exists, it will be replaced.
+    pub fn with_node(mut self, node: Arc<dyn NodeLogic>) -> Self {
+        self.custom_nodes.push(node);
+        self
+    }
+
+    /// Set a custom filter function for nodes.
+    /// The filter receives a reference to the NodeLogic trait object.
+    pub fn with_filter<F>(mut self, filter: F) -> Self
+    where
+        F: Fn(&dyn NodeLogic) -> bool + Send + Sync + 'static,
+    {
+        self.node_filter = Some(Box::new(filter));
+        self
+    }
+
+    /// Build the catalog with all configurations applied.
+    /// Custom nodes override existing nodes with the same name.
+    pub fn build(self) -> Vec<Arc<dyn NodeLogic>> {
+        let mut node_map: HashMap<String, Arc<dyn NodeLogic>> = HashMap::new();
+
+        let packages_to_include: Vec<CatalogPackage> =
+            if let Some(ref included) = self.included_packages {
+                included.iter().copied().collect()
+            } else {
+                CatalogPackage::all()
+                    .iter()
+                    .filter(|p| !self.excluded_packages.contains(p))
+                    .copied()
+                    .collect()
+            };
+
+        for package in packages_to_include {
+            if self.excluded_packages.contains(&package) {
+                continue;
+            }
+            for node in package.get_nodes() {
+                let node_def = node.get_node();
+                let name = node_def.name.clone();
+                if self.excluded_nodes.contains(&name) {
+                    continue;
+                }
+                if let Some(ref included) = self.included_nodes {
+                    if !included.contains(&name) {
+                        continue;
+                    }
+                }
+                node_map.insert(name, node);
+            }
+        }
+
+        // Custom nodes override existing ones
+        for node in self.custom_nodes {
+            let node_def = node.get_node();
+            node_map.insert(node_def.name.clone(), node);
+        }
+
+        let mut catalog: Vec<Arc<dyn NodeLogic>> = node_map.into_values().collect();
+
+        if let Some(ref filter) = self.node_filter {
+            catalog.retain(|node| filter(node.as_ref()));
+        }
+
+        catalog
+    }
+}
+
+/// Static cached catalog - initialized once on first access
+static CATALOG: LazyLock<Vec<Arc<dyn NodeLogic>>> = LazyLock::new(|| CatalogBuilder::new().build());
+
+/// Get the full catalog from all sub-crates (cached, initialized once)
+pub fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {
+    CATALOG.clone()
+}
+
+/// Get catalog from specific packages only (not cached - use sparingly)
+pub fn get_catalog_from(packages: &[CatalogPackage]) -> Vec<Arc<dyn NodeLogic>> {
+    CatalogBuilder::new().only_packages(packages).build()
+}
+
+/// Get catalog excluding specific packages (not cached - use sparingly)
+pub fn get_catalog_without(packages: &[CatalogPackage]) -> Vec<Arc<dyn NodeLogic>> {
+    CatalogBuilder::new().exclude_packages(packages).build()
 }

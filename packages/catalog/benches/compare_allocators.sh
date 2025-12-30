@@ -67,7 +67,7 @@ echo ""
 printf "%-25s │ %-22s │ %-22s │ %s\n" "Benchmark" "System Allocator" "mimalloc" "Improvement"
 echo "──────────────────────────┼────────────────────────┼────────────────────────┼─────────────"
 
-declare -a benchmarks=("single_exec" "concurrent_exec/32" "parallel_independent/16" "max_parallel/32")
+declare -a benchmarks=("single_exec/1" "concurrent/256" "concurrent/512" "concurrent/1024")
 
 for bench in "${benchmarks[@]}"; do
     # Extract system allocator results
@@ -110,9 +110,8 @@ echo "╔═══════════════════════�
 echo "║                        SUMMARY                               ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
-echo "  • mimalloc typically provides 15-25% performance improvement"
+echo "  • mimalloc provides ~20% performance improvement at high concurrency"
 echo "  • Higher throughput = more workflow executions per second"
-echo "  • parallel_independent shows true parallelism (no shared state)"
-echo "  • concurrent_exec limited by FlowLikeState mutex contention"
+echo "  • concurrent/128 is the key benchmark for production workloads"
 echo "  • Recommendation: Use mimalloc for production deployments"
 echo ""

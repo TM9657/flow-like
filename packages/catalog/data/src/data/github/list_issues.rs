@@ -131,7 +131,7 @@ impl ListGitHubIssuesNode {
 
 #[async_trait]
 impl NodeLogic for ListGitHubIssuesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_list_issues",
             "List Issues",

@@ -27,10 +27,10 @@ This deployment is configured via environment variables (local dev) and Kubernet
 - `S3_REGION`
 - `S3_ACCESS_KEY_ID`
 - `S3_SECRET_ACCESS_KEY`
-- `META_BUCKET` / `META_BUCKET_NAME` (see note below)
-- `CONTENT_BUCKET` / `CONTENT_BUCKET_NAME` (see note below)
+- `META_BUCKET`
+- `CONTENT_BUCKET`
 
-Note: `k8s-api` currently reads `META_BUCKET_NAME` and `CONTENT_BUCKET_NAME` in `apps/backend/kubernetes/api/src/config.rs`. The local `.env.example` uses `META_BUCKET`/`CONTENT_BUCKET`. If you use the scripts, set both (or adjust `api/src/config.rs` to accept both names).
+Note: The API accepts both `META_BUCKET`/`CONTENT_BUCKET` and `META_BUCKET_NAME`/`CONTENT_BUCKET_NAME` for backwards compatibility, but `META_BUCKET`/`CONTENT_BUCKET` is the preferred naming convention.
 
 ### Redis
 
@@ -56,7 +56,7 @@ The helper script `apps/backend/kubernetes/scripts/setup-config.sh` creates:
   - `DATABASE_URL`
 - Secret `flow-like-s3`
   - `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
-  - `META_BUCKET_NAME`, `CONTENT_BUCKET_NAME` (and also `META_BUCKET`/`CONTENT_BUCKET` for compatibility)
+  - `META_BUCKET`, `CONTENT_BUCKET`
 - Secret `flow-like-redis-secret`
   - `REDIS_URL`
 - ConfigMap `flow-like-api-config`

@@ -38,7 +38,7 @@ impl CreateGoogleDocNode {
 
 #[async_trait]
 impl NodeLogic for CreateGoogleDocNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_docs_create",
             "Create Document",
@@ -137,7 +137,7 @@ impl GetGoogleDocNode {
 
 #[async_trait]
 impl NodeLogic for GetGoogleDocNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_docs_get",
             "Get Document",
@@ -259,7 +259,7 @@ fn extract_text_from_doc(body: &Value) -> String {
 
 #[async_trait]
 impl NodeLogic for GetGoogleDocTextNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_docs_get_text",
             "Get Document Text",
@@ -349,7 +349,7 @@ impl InsertGoogleDocTextNode {
 
 #[async_trait]
 impl NodeLogic for InsertGoogleDocTextNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_docs_insert_text",
             "Insert Text",
@@ -456,7 +456,7 @@ impl DeleteGoogleDocTextNode {
 
 #[async_trait]
 impl NodeLogic for DeleteGoogleDocTextNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_docs_delete_text",
             "Delete Text",
@@ -569,7 +569,7 @@ impl ReplaceGoogleDocTextNode {
 
 #[async_trait]
 impl NodeLogic for ReplaceGoogleDocTextNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_docs_replace_text",
             "Replace All Text",
@@ -704,7 +704,7 @@ impl ExportGoogleDocNode {
 
 #[async_trait]
 impl NodeLogic for ExportGoogleDocNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_docs_export",
             "Export Document",

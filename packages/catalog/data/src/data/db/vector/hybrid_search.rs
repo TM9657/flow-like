@@ -24,7 +24,7 @@ impl HybridSearchLocalDatabaseNode {
 
 #[async_trait]
 impl NodeLogic for HybridSearchLocalDatabaseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "hybrid_search_local_db",
             "Hybrid Search",

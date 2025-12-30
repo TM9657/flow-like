@@ -24,7 +24,7 @@ impl ImapMoveMailNode {
 
 #[async_trait]
 impl NodeLogic for ImapMoveMailNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "email_imap_move_message",
             "Move Mail to Mailbox",

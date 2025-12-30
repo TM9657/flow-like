@@ -21,7 +21,7 @@ impl PathFromUserDirNode {
 
 #[async_trait]
 impl NodeLogic for PathFromUserDirNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "path_from_user_dir",
             "User Dir",

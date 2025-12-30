@@ -20,7 +20,7 @@ impl StringStartsWithNode {
 
 #[async_trait]
 impl NodeLogic for StringStartsWithNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "string_starts_with",
             "Starts With",

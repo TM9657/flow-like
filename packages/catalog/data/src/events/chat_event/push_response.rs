@@ -24,7 +24,7 @@ impl PushResponseNode {
 
 #[async_trait]
 impl NodeLogic for PushResponseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "events_chat_push_response",
             "Push Response",

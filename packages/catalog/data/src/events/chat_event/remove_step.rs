@@ -22,7 +22,7 @@ impl RemoveStepNode {
 
 #[async_trait]
 impl NodeLogic for RemoveStepNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "events_chat_remove_step",
             "Remove Step",

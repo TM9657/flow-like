@@ -182,7 +182,7 @@ impl ParseWithSchema {
 
 #[async_trait]
 impl NodeLogic for ParseWithSchema {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "parse_with_schema",
             "Parse JSON with Schema",

@@ -101,7 +101,7 @@ impl ListGitHubReleasesNode {
 
 #[async_trait]
 impl NodeLogic for ListGitHubReleasesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_list_releases",
             "List Releases",
@@ -273,7 +273,7 @@ impl GetLatestGitHubReleaseNode {
 
 #[async_trait]
 impl NodeLogic for GetLatestGitHubReleaseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_get_latest_release",
             "Get Latest Release",
@@ -425,7 +425,7 @@ impl GetGitHubReleaseByTagNode {
 
 #[async_trait]
 impl NodeLogic for GetGitHubReleaseByTagNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_get_release_by_tag",
             "Get Release by Tag",
@@ -585,7 +585,7 @@ impl CreateGitHubReleaseNode {
 
 #[async_trait]
 impl NodeLogic for CreateGitHubReleaseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_create_release",
             "Create Release",

@@ -22,7 +22,7 @@ impl ChunkTextChar {
 
 #[async_trait]
 impl NodeLogic for ChunkTextChar {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "chunk_text_char",
             "Character Chunk Text",

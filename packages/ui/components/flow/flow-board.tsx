@@ -116,6 +116,8 @@ import {
 	parseBoard,
 } from "../../lib/flow-board-utils";
 import { toastError } from "../../lib/messages";
+import { isTauri } from "../../lib/platform";
+import { IAppExecutionMode } from "../../lib/schema/app/app";
 import {
 	type IBoard,
 	type IComment,
@@ -196,6 +198,7 @@ export function FlowBoard({
 		backend.userState,
 		[],
 	);
+	const app = useInvoke(backend.appState.getApp, backend.appState, [appId]);
 	const { addRun, removeRun, pushUpdate } = useRunExecutionStore();
 	const { screenToFlowPosition, getViewport, setViewport, fitView } =
 		useReactFlow();
@@ -578,7 +581,7 @@ export function FlowBoard({
 				}
 			}
 			removeRun(runId);
-			if (!meta) {
+			if (!meta && !runId) {
 				toastError(
 					"Failed to execute board",
 					<PlayCircleIcon className="w-4 h-4" />,
@@ -586,7 +589,90 @@ export function FlowBoard({
 				return;
 			}
 			await refetchLogs(backend);
-			if (meta) setCurrentMetadata(meta);
+			// Find the full metadata from currentLogs by run_id
+			// The meta from runBoard may be incomplete for remote executions
+			const targetRunId = meta?.run_id || runId;
+			const fullMeta = useLogAggregation
+				.getState()
+				.currentLogs.find((log) => log.run_id === targetRunId);
+			if (fullMeta) setCurrentMetadata(fullMeta);
+		},
+		[
+			appId,
+			boardId,
+			backend,
+			refetchLogs,
+			pushUpdate,
+			addRun,
+			removeRun,
+			setCurrentMetadata,
+		],
+	);
+
+	const executeBoardRemote = useCallback(
+		async (node: INode, payload?: object) => {
+			if (!backend.boardState.executeBoardRemote) {
+				toastError(
+					"Remote execution not available",
+					<PlayCircleIcon className="w-4 h-4" />,
+				);
+				return;
+			}
+
+			let added = false;
+			let runId = "";
+			let meta: ILogMetadata | undefined = undefined;
+			try {
+				meta = await backend.boardState.executeBoardRemote(
+					appId,
+					boardId,
+					{
+						id: node.id,
+						payload: payload,
+					},
+					true,
+					async (id: string) => {
+						if (added) return;
+						console.log("Remote run started", id);
+						runId = id;
+						added = true;
+						addRun(id, boardId, [node.id]);
+					},
+					(update) => {
+						console.dir(update);
+						const runUpdates = update
+							.filter((item) => item.event_type.startsWith("run:"))
+							.map((item) => item.payload);
+						if (runUpdates.length === 0) return;
+						const firstItem = runUpdates[0];
+						if (!added) {
+							runId = firstItem.run_id;
+							addRun(firstItem.run_id, boardId, [node.id]);
+							added = true;
+						}
+
+						pushUpdate(firstItem.run_id, runUpdates);
+					},
+				);
+			} catch (error) {
+				console.warn("Failed to execute board remotely", error);
+			}
+			removeRun(runId);
+			if (!meta && !runId) {
+				toastError(
+					"Failed to execute board on server",
+					<PlayCircleIcon className="w-4 h-4" />,
+				);
+				return;
+			}
+			await refetchLogs(backend);
+			// Find the full metadata from currentLogs by run_id
+			// The meta from remote execution is incomplete (only has run_id, status, duration_ms)
+			const targetRunId = meta?.run_id || runId;
+			const fullMeta = useLogAggregation
+				.getState()
+				.currentLogs.find((log) => log.run_id === targetRunId);
+			if (fullMeta) setCurrentMetadata(fullMeta);
 		},
 		[
 			appId,
@@ -849,6 +935,10 @@ export function FlowBoard({
 	useEffect(() => {
 		if (!board.data) return;
 		boardRef.current = board.data;
+
+		// Determine if app is offline (Local execution mode only)
+		const isOffline = app.data?.execution_mode === IAppExecutionMode.Local;
+
 		const parsed = parseBoard(
 			board.data,
 			appId,
@@ -865,6 +955,12 @@ export function FlowBoard({
 			version,
 			openNodeInfo,
 			handleExplainNodes,
+			isTauri() && backend.boardState.executeBoardRemote
+				? {
+						isOffline,
+						onRemoteExecute: executeBoardRemote,
+					}
+				: undefined,
 		);
 
 		setNodes(parsed.nodes);
@@ -877,6 +973,9 @@ export function FlowBoard({
 		version,
 		openNodeInfo,
 		handleExplainNodes,
+		app.data,
+		executeBoardRemote,
+		backend.boardState.executeBoardRemote,
 	]);
 
 	const nodeTypes = useMemo(

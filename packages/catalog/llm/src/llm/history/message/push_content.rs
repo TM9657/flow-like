@@ -46,7 +46,7 @@ impl PushContentNode {
 
 #[async_trait]
 impl NodeLogic for PushContentNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_generative_push_content",
             "Push Content",

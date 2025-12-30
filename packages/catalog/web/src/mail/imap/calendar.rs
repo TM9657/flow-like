@@ -42,7 +42,7 @@ impl ImapListCalendarEventsNode {
 
 #[async_trait]
 impl NodeLogic for ImapListCalendarEventsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "mail_imap_calendar_list_events",
             "List Calendar Events",
@@ -187,7 +187,7 @@ impl ImapListCalendarsNode {
 
 #[async_trait]
 impl NodeLogic for ImapListCalendarsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "mail_imap_calendar_list",
             "IMAP List Calendars",
@@ -298,7 +298,7 @@ impl ImapSubscribeCalendarNode {
 
 #[async_trait]
 impl NodeLogic for ImapSubscribeCalendarNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "mail_imap_calendar_subscribe",
             "Subscribe to Calendar URL",
@@ -484,7 +484,7 @@ impl ImapGetCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for ImapGetCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "mail_imap_calendar_get_event",
             "Get Calendar Event",
@@ -633,7 +633,7 @@ impl ImapCreateCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for ImapCreateCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "mail_imap_calendar_create_event",
             "Create Calendar Event",
@@ -806,7 +806,7 @@ impl ImapDeleteCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for ImapDeleteCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "mail_imap_calendar_delete_event",
             "Delete Calendar Event",

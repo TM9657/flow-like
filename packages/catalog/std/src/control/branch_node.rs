@@ -20,7 +20,7 @@ impl BranchNode {
 
 #[async_trait]
 impl NodeLogic for BranchNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "control_branch",
             "Branch",

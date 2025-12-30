@@ -23,7 +23,7 @@ impl ToJsonNode {
 
 #[async_trait]
 impl NodeLogic for ToJsonNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "http_response_to_json",
             "To Struct",

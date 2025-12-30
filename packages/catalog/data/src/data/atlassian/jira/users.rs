@@ -26,7 +26,7 @@ impl GetCurrentUserNode {
 
 #[async_trait]
 impl NodeLogic for GetCurrentUserNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_current_user",
             "Get Current User",
@@ -194,7 +194,7 @@ impl GetChangelogNode {
 
 #[async_trait]
 impl NodeLogic for GetChangelogNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_changelog",
             "Get Changelog",
@@ -332,7 +332,7 @@ impl BatchGetChangelogsNode {
 
 #[async_trait]
 impl NodeLogic for BatchGetChangelogsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_batch_get_changelogs",
             "Batch Get Changelogs",

@@ -23,7 +23,7 @@ impl EmbedImageNode {
 
 #[async_trait]
 impl NodeLogic for EmbedImageNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "embed_image",
             "Embed Image",

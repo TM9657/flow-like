@@ -73,7 +73,7 @@ impl ListDatabricksSqlWarehousesNode {
 
 #[async_trait]
 impl NodeLogic for ListDatabricksSqlWarehousesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_list_sql_warehouses",
             "List SQL Warehouses",
@@ -233,7 +233,7 @@ impl StartDatabricksSqlWarehouseNode {
 
 #[async_trait]
 impl NodeLogic for StartDatabricksSqlWarehouseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_start_sql_warehouse",
             "Start SQL Warehouse",
@@ -371,7 +371,7 @@ impl StopDatabricksSqlWarehouseNode {
 
 #[async_trait]
 impl NodeLogic for StopDatabricksSqlWarehouseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_stop_sql_warehouse",
             "Stop SQL Warehouse",

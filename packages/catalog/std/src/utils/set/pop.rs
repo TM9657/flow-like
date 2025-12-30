@@ -24,7 +24,7 @@ impl PopSetNode {
 
 #[async_trait]
 impl NodeLogic for PopSetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "set_pop",
             "Pop",

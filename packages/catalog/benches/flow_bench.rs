@@ -43,7 +43,7 @@ async fn default_state() -> Arc<FlowLikeState> {
         let registry_guard = state_ref.node_registry.clone();
         let mut registry = registry_guard.write().await;
         registry.initialize(weak_ref);
-        registry.push_nodes(catalog).await.unwrap();
+        registry.push_nodes(catalog);
     }
     state_ref
 }

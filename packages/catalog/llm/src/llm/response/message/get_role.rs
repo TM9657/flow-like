@@ -22,7 +22,7 @@ impl GetRoleNode {
 
 #[async_trait]
 impl NodeLogic for GetRoleNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_generative_llm_response_message_get_role",
             "Get Role",

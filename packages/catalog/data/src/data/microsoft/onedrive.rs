@@ -69,7 +69,7 @@ impl ListOneDriveItemsNode {
 
 #[async_trait]
 impl NodeLogic for ListOneDriveItemsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onedrive_list_items",
             "List OneDrive Items",
@@ -184,7 +184,7 @@ impl GetOneDriveItemNode {
 
 #[async_trait]
 impl NodeLogic for GetOneDriveItemNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onedrive_get_item",
             "Get OneDrive Item",
@@ -288,7 +288,7 @@ impl DownloadOneDriveFileNode {
 
 #[async_trait]
 impl NodeLogic for DownloadOneDriveFileNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onedrive_download",
             "Download File",
@@ -386,7 +386,7 @@ impl UploadOneDriveFileNode {
 
 #[async_trait]
 impl NodeLogic for UploadOneDriveFileNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onedrive_upload",
             "Upload File",
@@ -528,7 +528,7 @@ impl CreateOneDriveFolderNode {
 
 #[async_trait]
 impl NodeLogic for CreateOneDriveFolderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onedrive_create_folder",
             "Create Folder",
@@ -657,7 +657,7 @@ impl DeleteOneDriveItemNode {
 
 #[async_trait]
 impl NodeLogic for DeleteOneDriveItemNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onedrive_delete",
             "Delete Item",
@@ -745,7 +745,7 @@ impl MoveOneDriveItemNode {
 
 #[async_trait]
 impl NodeLogic for MoveOneDriveItemNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onedrive_move",
             "Move Item",
@@ -901,7 +901,7 @@ impl CopyOneDriveItemNode {
 
 #[async_trait]
 impl NodeLogic for CopyOneDriveItemNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onedrive_copy",
             "Copy Item",
@@ -1058,7 +1058,7 @@ impl SearchOneDriveNode {
 
 #[async_trait]
 impl NodeLogic for SearchOneDriveNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_onedrive_search",
             "Search OneDrive",

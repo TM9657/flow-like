@@ -25,7 +25,7 @@ impl CreateJiraIssueNode {
 
 #[async_trait]
 impl NodeLogic for CreateJiraIssueNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_create_issue",
             "Create Jira Issue",
@@ -383,7 +383,7 @@ impl BatchCreateIssuesNode {
 
 #[async_trait]
 impl NodeLogic for BatchCreateIssuesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_batch_create_issues",
             "Batch Create Issues",

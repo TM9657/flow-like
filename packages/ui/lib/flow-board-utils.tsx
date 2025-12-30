@@ -324,6 +324,10 @@ export function parseBoard(
 	version?: [number, number, number],
 	onOpenInfo?: (node: INode) => void,
 	onExplain?: (nodeIds: string[]) => void,
+	remoteBoardExecution?: {
+		isOffline: boolean;
+		onRemoteExecute?: (node: INode, payload?: object) => Promise<void>;
+	},
 ) {
 	const nodes: any[] = [];
 	const edges: any[] = [];
@@ -382,6 +386,12 @@ export function parseBoard(
 					onExecute: async (node: INode, payload?: object) => {
 						await executeBoard(node, payload);
 					},
+					onRemoteExecute: remoteBoardExecution?.onRemoteExecute
+						? async (node: INode, payload?: object) => {
+								await remoteBoardExecution.onRemoteExecute?.(node, payload);
+							}
+						: undefined,
+					isOffline: remoteBoardExecution?.isOffline ?? true,
 					onCopy: async () => {
 						handleCopy();
 					},

@@ -20,7 +20,7 @@ impl BoolAnd {
 
 #[async_trait]
 impl NodeLogic for BoolAnd {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("bool_and", "And", "Boolean And operation", "Utils/Bool");
 
         node.add_icon("/flow/icons/bool.svg");

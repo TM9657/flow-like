@@ -21,7 +21,7 @@ impl StringSplitNode {
 
 #[async_trait]
 impl NodeLogic for StringSplitNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "string_split",
             "Split String",

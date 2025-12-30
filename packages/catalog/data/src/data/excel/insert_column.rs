@@ -48,7 +48,7 @@ impl InsertColumnNode {
 
 #[async_trait]
 impl NodeLogic for InsertColumnNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "files_spreadsheet_insert_column",
             "Insert Column(s)",

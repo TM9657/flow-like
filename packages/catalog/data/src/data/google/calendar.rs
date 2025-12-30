@@ -118,7 +118,7 @@ impl ListGoogleCalendarsNode {
 
 #[async_trait]
 impl NodeLogic for ListGoogleCalendarsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_calendar_list",
             "List Calendars",
@@ -241,7 +241,7 @@ impl ListGoogleCalendarEventsNode {
 
 #[async_trait]
 impl NodeLogic for ListGoogleCalendarEventsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_calendar_list_events",
             "List Events",
@@ -409,7 +409,7 @@ impl GetGoogleCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for GetGoogleCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_calendar_get_event",
             "Get Event",
@@ -520,7 +520,7 @@ impl CreateGoogleCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for CreateGoogleCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_calendar_create_event",
             "Create Event",
@@ -744,7 +744,7 @@ impl UpdateGoogleCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for UpdateGoogleCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_calendar_update_event",
             "Update Event",
@@ -923,7 +923,7 @@ impl DeleteGoogleCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for DeleteGoogleCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_calendar_delete_event",
             "Delete Event",
@@ -1041,7 +1041,7 @@ impl QuickAddGoogleCalendarEventNode {
 
 #[async_trait]
 impl NodeLogic for QuickAddGoogleCalendarEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_calendar_quick_add",
             "Quick Add Event",
@@ -1154,7 +1154,7 @@ impl QueryFreeBusyNode {
 
 #[async_trait]
 impl NodeLogic for QueryFreeBusyNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_calendar_free_busy",
             "Query Free/Busy",

@@ -34,6 +34,7 @@ pub struct GcpRuntimeCredentials {
     pub access_token: Option<String>,
     pub meta_bucket: String,
     pub content_bucket: String,
+    pub logs_bucket: String,
     /// Allowed path prefixes (enforced by GCP via Credential Access Boundary)
     pub allowed_prefixes: Vec<String>,
     /// Whether write operations are allowed
@@ -43,12 +44,13 @@ pub struct GcpRuntimeCredentials {
 
 #[cfg(feature = "gcp")]
 impl GcpRuntimeCredentials {
-    pub fn new(meta_bucket: &str, content_bucket: &str) -> Self {
+    pub fn new(meta_bucket: &str, content_bucket: &str, logs_bucket: &str) -> Self {
         GcpRuntimeCredentials {
             service_account_key: None,
             access_token: None,
             meta_bucket: meta_bucket.to_string(),
             content_bucket: content_bucket.to_string(),
+            logs_bucket: logs_bucket.to_string(),
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
@@ -57,12 +59,19 @@ impl GcpRuntimeCredentials {
 
     pub fn from_env() -> Self {
         let service_account_key = std::env::var("GOOGLE_APPLICATION_CREDENTIALS_JSON").ok();
+        let logs_bucket = std::env::var("GCP_LOG_BUCKET").unwrap_or_default();
+        if logs_bucket.is_empty() {
+            tracing::warn!(
+                "GCP_LOG_BUCKET environment variable is not set - logs will not be persisted"
+            );
+        }
 
         GcpRuntimeCredentials {
             service_account_key,
             access_token: None,
             meta_bucket: std::env::var("GCP_META_BUCKET").unwrap_or_default(),
             content_bucket: std::env::var("GCP_CONTENT_BUCKET").unwrap_or_default(),
+            logs_bucket,
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
@@ -77,6 +86,7 @@ impl GcpRuntimeCredentials {
             access_token: None,
             meta_bucket: self.meta_bucket.clone(),
             content_bucket: self.content_bucket.clone(),
+            logs_bucket: self.logs_bucket.clone(),
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
@@ -155,6 +165,7 @@ impl GcpRuntimeCredentials {
             access_token: Some(access_token),
             meta_bucket: self.meta_bucket.clone(),
             content_bucket: self.content_bucket.clone(),
+            logs_bucket: self.logs_bucket.clone(),
             allowed_prefixes,
             write_access,
             expiration: Some(chrono_expiration),
@@ -470,6 +481,7 @@ impl RuntimeCredentialsTrait for GcpRuntimeCredentials {
             access_token: self.access_token.clone(),
             meta_bucket: self.meta_bucket.clone(),
             content_bucket: self.content_bucket.clone(),
+            logs_bucket: self.logs_bucket.clone(),
             allowed_prefixes: self.allowed_prefixes.clone(),
             write_access: self.write_access,
             expiration: self.expiration,

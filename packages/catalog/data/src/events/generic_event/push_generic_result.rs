@@ -22,7 +22,7 @@ impl ReturnGenericResultNode {
 
 #[async_trait]
 impl NodeLogic for ReturnGenericResultNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "events_generic_return_result",
             "Return Generic Result",
@@ -40,8 +40,6 @@ impl NodeLogic for ReturnGenericResultNode {
         );
 
         node.add_input_pin("response", "Result", "Chat Response", VariableType::Generic);
-
-        println!("{:?}", node);
 
         return node;
     }

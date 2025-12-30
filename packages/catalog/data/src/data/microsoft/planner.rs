@@ -94,7 +94,7 @@ impl ListMyPlansNode {
 
 #[async_trait]
 impl NodeLogic for ListMyPlansNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_planner_list_my_plans",
             "List My Plans",
@@ -184,7 +184,7 @@ impl GetPlanNode {
 
 #[async_trait]
 impl NodeLogic for GetPlanNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_planner_get_plan",
             "Get Plan",
@@ -278,7 +278,7 @@ impl ListPlanTasksNode {
 
 #[async_trait]
 impl NodeLogic for ListPlanTasksNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_planner_list_tasks",
             "List Plan Tasks",
@@ -373,7 +373,7 @@ impl ListPlanBucketsNode {
 
 #[async_trait]
 impl NodeLogic for ListPlanBucketsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_planner_list_buckets",
             "List Plan Buckets",
@@ -468,7 +468,7 @@ impl CreatePlannerTaskNode {
 
 #[async_trait]
 impl NodeLogic for CreatePlannerTaskNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_planner_create_task",
             "Create Planner Task",
@@ -600,7 +600,7 @@ impl UpdatePlannerTaskNode {
 
 #[async_trait]
 impl NodeLogic for UpdatePlannerTaskNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_planner_update_task",
             "Update Planner Task",
@@ -729,7 +729,7 @@ impl CreateBucketNode {
 
 #[async_trait]
 impl NodeLogic for CreateBucketNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_planner_create_bucket",
             "Create Bucket",
@@ -830,7 +830,7 @@ impl ListMyTasksNode {
 
 #[async_trait]
 impl NodeLogic for ListMyTasksNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_planner_list_my_tasks",
             "List My Tasks",

@@ -23,7 +23,7 @@ impl CropImageNode {
 
 #[async_trait]
 impl NodeLogic for CropImageNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("crop_image", "Crop Image", "Crop Image", "Image/Transform");
         node.add_icon("/flow/icons/image.svg");
 

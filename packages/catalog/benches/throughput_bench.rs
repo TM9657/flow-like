@@ -110,10 +110,7 @@ async fn default_state() -> Arc<FlowLikeState> {
         let registry_guard = state_ref.node_registry.clone();
         let mut registry = registry_guard.write().await;
         registry.initialize(weak_ref);
-        registry
-            .push_nodes(catalog)
-            .await
-            .expect("register catalog");
+        registry.push_nodes(catalog);
     }
     state_ref
 }
@@ -124,9 +121,12 @@ fn construct_profile() -> Profile {
 
 async fn open_board(id: &str, state: Arc<FlowLikeState>) -> Board {
     let path = Path::from("flow").child(&*app_id());
-    Board::load(path, id, state, None)
+    let mut board = Board::load(path, id, state, None)
         .await
-        .expect("load board")
+        .expect("load board");
+    // Suppress ALL internal logging during benchmarks for maximum performance
+    board.log_level = flow_like::flow::execution::LogLevel::Fatal;
+    board
 }
 
 async fn run_once(board: Arc<Board>, state: Arc<FlowLikeState>, profile: &Profile, start: &str) {

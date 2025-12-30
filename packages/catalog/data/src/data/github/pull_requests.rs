@@ -81,7 +81,7 @@ impl GetGitHubPullRequestNode {
 
 #[async_trait]
 impl NodeLogic for GetGitHubPullRequestNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_get_pull_request",
             "Get Pull Request",
@@ -258,7 +258,7 @@ impl CreateGitHubPullRequestNode {
 
 #[async_trait]
 impl NodeLogic for CreateGitHubPullRequestNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_create_pull_request",
             "Create Pull Request",
@@ -486,7 +486,7 @@ impl MergeGitHubPullRequestNode {
 
 #[async_trait]
 impl NodeLogic for MergeGitHubPullRequestNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_merge_pull_request",
             "Merge Pull Request",
@@ -704,7 +704,7 @@ impl ListGitHubPullRequestFilesNode {
 
 #[async_trait]
 impl NodeLogic for ListGitHubPullRequestFilesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_list_pr_files",
             "List PR Files",
@@ -900,7 +900,7 @@ impl ListGitHubPullRequestReviewsNode {
 
 #[async_trait]
 impl NodeLogic for ListGitHubPullRequestReviewsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_list_pr_reviews",
             "List PR Reviews",
@@ -1058,7 +1058,7 @@ impl CreateGitHubPullRequestReviewNode {
 
 #[async_trait]
 impl NodeLogic for CreateGitHubPullRequestReviewNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_create_pr_review",
             "Create PR Review",

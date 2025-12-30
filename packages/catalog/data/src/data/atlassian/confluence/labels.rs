@@ -54,7 +54,7 @@ impl GetLabelsNode {
 
 #[async_trait]
 impl NodeLogic for GetLabelsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_confluence_get_labels",
             "Get Labels",
@@ -202,7 +202,7 @@ impl AddLabelNode {
 
 #[async_trait]
 impl NodeLogic for AddLabelNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_confluence_add_label",
             "Add Label",
@@ -359,7 +359,7 @@ impl RemoveLabelNode {
 
 #[async_trait]
 impl NodeLogic for RemoveLabelNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_confluence_remove_label",
             "Remove Label",

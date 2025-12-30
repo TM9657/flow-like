@@ -70,7 +70,7 @@ impl CreateGoogleSlidesNode {
 
 #[async_trait]
 impl NodeLogic for CreateGoogleSlidesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_slides_create",
             "Create Presentation",
@@ -178,7 +178,7 @@ impl GetGoogleSlidesNode {
 
 #[async_trait]
 impl NodeLogic for GetGoogleSlidesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_slides_get",
             "Get Presentation",
@@ -292,7 +292,7 @@ impl AddGoogleSlideNode {
 
 #[async_trait]
 impl NodeLogic for AddGoogleSlideNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_slides_add_slide",
             "Add Slide",
@@ -450,7 +450,7 @@ impl DeleteGoogleSlideNode {
 
 #[async_trait]
 impl NodeLogic for DeleteGoogleSlideNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_slides_delete_slide",
             "Delete Slide",
@@ -558,7 +558,7 @@ impl AddTextToSlideNode {
 
 #[async_trait]
 impl NodeLogic for AddTextToSlideNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_slides_add_text",
             "Add Text to Slide",
@@ -718,7 +718,7 @@ impl ExportGoogleSlidesNode {
 
 #[async_trait]
 impl NodeLogic for ExportGoogleSlidesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_slides_export",
             "Export Presentation",

@@ -24,7 +24,7 @@ impl UpsertLocalDatabaseNode {
 
 #[async_trait]
 impl NodeLogic for UpsertLocalDatabaseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "upsert_local_db",
             "Upsert",
@@ -85,7 +85,7 @@ impl BatchUpsertLocalDatabaseNode {
 
 #[async_trait]
 impl NodeLogic for BatchUpsertLocalDatabaseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "batch_upsert_local_db",
             "Batch Upsert",

@@ -36,7 +36,7 @@ impl TeachableMachineNode {
 
 #[async_trait]
 impl NodeLogic for TeachableMachineNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_ml_teachable_machine",
             "Teachable Machine",
@@ -273,7 +273,7 @@ impl PredictionClassOrLabelNode {
 
 #[async_trait]
 impl NodeLogic for PredictionClassOrLabelNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_ml_pred_class_or_label",
             "Prediction Class/Label",
@@ -332,7 +332,7 @@ impl PredictionScoreNode {
 
 #[async_trait]
 impl NodeLogic for PredictionScoreNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_ml_pred_score",
             "Prediction Score",

@@ -27,7 +27,7 @@ impl SplitDatasetNode {
 
 #[async_trait]
 impl NodeLogic for SplitDatasetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_ml_dataset_split",
             "Split Dataset",

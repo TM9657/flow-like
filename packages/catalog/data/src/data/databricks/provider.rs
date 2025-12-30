@@ -56,7 +56,7 @@ impl DatabricksPatProviderNode {
 
 #[async_trait]
 impl NodeLogic for DatabricksPatProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_provider_pat",
             "Databricks (PAT)",
@@ -147,7 +147,7 @@ impl DatabricksTokenProviderNode {
 
 #[async_trait]
 impl NodeLogic for DatabricksTokenProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_provider_token",
             "Databricks (Token)",
@@ -234,7 +234,7 @@ impl DatabricksServicePrincipalProviderNode {
 
 #[async_trait]
 impl NodeLogic for DatabricksServicePrincipalProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_provider_service_principal",
             "Databricks (Service Principal)",
@@ -438,7 +438,7 @@ impl DatabricksOAuthProviderNode {
 
 #[async_trait]
 impl NodeLogic for DatabricksOAuthProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_provider_oauth",
             "Databricks (OAuth)",

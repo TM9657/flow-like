@@ -42,7 +42,7 @@ impl ListGitHubBranchesNode {
 
 #[async_trait]
 impl NodeLogic for ListGitHubBranchesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_list_branches",
             "List Branches",
@@ -233,7 +233,7 @@ impl GetGitHubBranchNode {
 
 #[async_trait]
 impl NodeLogic for GetGitHubBranchNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_get_branch",
             "Get Branch",
@@ -394,7 +394,7 @@ impl CreateGitHubBranchNode {
 
 #[async_trait]
 impl NodeLogic for CreateGitHubBranchNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_create_branch",
             "Create Branch",
@@ -557,7 +557,7 @@ impl DeleteGitHubBranchNode {
 
 #[async_trait]
 impl NodeLogic for DeleteGitHubBranchNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_delete_branch",
             "Delete Branch",

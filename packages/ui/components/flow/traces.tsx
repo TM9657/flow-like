@@ -170,9 +170,11 @@ export function Traces({
 			}
 
 			const log = messages[index];
+			if (!log) return null;
+
 			return (
 				<LogMessage
-					key={`${log.run_id}-${log.start.nanos_since_epoch}-${index}`}
+					key={`${log.operation_id ?? index}-${log.start?.nanos_since_epoch ?? 0}-${index}`}
 					log={log}
 					index={index}
 					style={style}
@@ -346,23 +348,25 @@ const LogMessage = memo(function LogMessage({
 
 	// Use useMemo instead of useState + useEffect to avoid re-renders
 	const node = useMemo(() => {
-		if (log.node_id && board.current) {
+		if (log?.node_id && board.current) {
 			return board.current.nodes[log.node_id];
 		}
 		return undefined;
-	}, [log.node_id, board.current?.nodes]);
+	}, [log?.node_id, board.current?.nodes]);
 
 	// Format the message - memoized to avoid re-computing on every render
 	const formattedMessage = useMemo(
-		() => formatLogMessage(log.message),
-		[log.message],
+		() => formatLogMessage(log?.message ?? ""),
+		[log?.message],
 	);
 
 	useEffect(() => {
 		if (rowRef.current) {
 			onSetHeight(index, rowRef.current.clientHeight);
 		}
-	}, [rowRef, index, onSetHeight, log.message]);
+	}, [rowRef, index, onSetHeight, log?.message]);
+
+	const logLevel = log?.log_level ?? ILogLevel.Debug;
 
 	return (
 		<button
@@ -372,19 +376,19 @@ const LogMessage = memo(function LogMessage({
 		>
 			<div
 				ref={rowRef}
-				className={`flex flex-col items-center border rounded-md ${logLevelToColor(log.log_level)}`}
+				className={`flex flex-col items-center border rounded-md ${logLevelToColor(logLevel)}`}
 			>
 				<div className="flex p-1 px-2  flex-row items-center gap-2 w-full">
-					<LogIndicator logLevel={log.log_level} />
+					<LogIndicator logLevel={logLevel} />
 					<div className="text-start text-wrap break-all flex-1 min-w-0">
 						<LogMessageContent message={formattedMessage} />
 					</div>
 				</div>
 				<div className="flex flex-row items-center gap-1 w-full px-2 py-1 border-t justify-between">
-					{log.start.nanos_since_epoch !== log.end.nanos_since_epoch ? (
+					{log.start?.nanos_since_epoch !== log.end?.nanos_since_epoch ? (
 						<div className="flex flex-row items-center">
 							<small className="text-xs">
-								{parseTimespan(log.start, log.end)}
+								{log.start && log.end ? parseTimespan(log.start, log.end) : "—"}
 							</small>
 							{log?.stats?.token_out && (
 								<small className="text-xs">
@@ -406,7 +410,7 @@ const LogMessage = memo(function LogMessage({
 								<span className={`flex flex-row items-center gap-2`}>
 									<DynamicImage
 										url={node.icon ?? ""}
-										className={`w-4 h-4 size-4 ${logLevelToColor(log.log_level, true)}`}
+										className={`w-4 h-4 size-4 ${logLevelToColor(logLevel, true)}`}
 									/>
 									{node.friendly_name || node.name}
 								</span>
@@ -422,13 +426,13 @@ const LogMessage = memo(function LogMessage({
 							size={"icon"}
 							className="p-1! h-6 w-6"
 							onClick={() => {
-								navigator.clipboard.writeText(log.message);
+								navigator.clipboard.writeText(log?.message ?? "");
 								toast.success("Log message copied to clipboard");
 							}}
 						>
 							<CopyIcon className="w-4 h-4" />
 						</Button>
-						{log.node_id && (
+						{log?.node_id && (
 							<Button
 								variant={"outline"}
 								size={"icon"}

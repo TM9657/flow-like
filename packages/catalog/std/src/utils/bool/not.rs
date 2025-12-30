@@ -20,7 +20,7 @@ impl BoolNot {
 
 #[async_trait]
 impl NodeLogic for BoolNot {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("bool_not", "!", "Boolean NOT", "Utils/Bool");
         node.add_icon("/flow/icons/bool.svg");
 

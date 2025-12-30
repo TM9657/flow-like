@@ -20,7 +20,7 @@ impl LevenshteinDistanceNode {
 
 #[async_trait]
 impl NodeLogic for LevenshteinDistanceNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "levenshtein_distance",
             "Levenshtein Distance",

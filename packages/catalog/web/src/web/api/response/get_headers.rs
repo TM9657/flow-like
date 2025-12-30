@@ -22,7 +22,7 @@ impl GetHeadersNode {
 
 #[async_trait]
 impl NodeLogic for GetHeadersNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "http_response_get_headers",
             "Get Headers",

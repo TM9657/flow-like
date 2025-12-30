@@ -24,7 +24,7 @@ impl YakeExtractionNode {
 
 #[async_trait]
 impl NodeLogic for YakeExtractionNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_processing_yake_extraction",
             "YAKE Keywords",

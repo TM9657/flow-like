@@ -22,7 +22,7 @@ impl SetHistoryMaxTokensNode {
 
 #[async_trait]
 impl NodeLogic for SetHistoryMaxTokensNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_generative_set_history_max_tokens",
             "Set Max Tokens",

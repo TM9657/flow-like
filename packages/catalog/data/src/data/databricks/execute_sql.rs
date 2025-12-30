@@ -49,7 +49,7 @@ impl ExecuteDatabricksSqlNode {
 
 #[async_trait]
 impl NodeLogic for ExecuteDatabricksSqlNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_execute_sql",
             "Execute SQL",

@@ -35,7 +35,7 @@ impl ListExcelWorksheetsNode {
 
 #[async_trait]
 impl NodeLogic for ListExcelWorksheetsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_excel_list_worksheets",
             "List Excel Worksheets",
@@ -143,7 +143,7 @@ impl ReadExcelRangeNode {
 
 #[async_trait]
 impl NodeLogic for ReadExcelRangeNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_excel_read_range",
             "Read Excel Range",
@@ -248,7 +248,7 @@ impl WriteExcelRangeNode {
 
 #[async_trait]
 impl NodeLogic for WriteExcelRangeNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_excel_write_range",
             "Write Excel Range",
@@ -352,7 +352,7 @@ impl GetExcelUsedRangeNode {
 
 #[async_trait]
 impl NodeLogic for GetExcelUsedRangeNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_excel_used_range",
             "Get Excel Used Range",
@@ -463,7 +463,7 @@ impl GetExcelTableNode {
 
 #[async_trait]
 impl NodeLogic for GetExcelTableNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_excel_get_table",
             "Get Excel Table",
@@ -609,7 +609,7 @@ impl AddExcelTableRowNode {
 
 #[async_trait]
 impl NodeLogic for AddExcelTableRowNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_excel_add_table_row",
             "Add Excel Table Row",

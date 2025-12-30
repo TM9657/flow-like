@@ -23,7 +23,7 @@ impl DeleteJiraIssueNode {
 
 #[async_trait]
 impl NodeLogic for DeleteJiraIssueNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_delete_issue",
             "Delete Issue",

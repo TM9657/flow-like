@@ -85,7 +85,6 @@ Then configure nginx or similar:
 ```nginx
 upstream flowlike-api {
     server localhost:8080;
-    server localhost:8081;
 }
 
 server {

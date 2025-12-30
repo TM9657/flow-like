@@ -59,7 +59,7 @@ Generate these using:
 | `STORAGE_PROVIDER` | `aws` | Provider: `aws`, `azure`, `gcp` |
 | `META_BUCKET` | `flow-like-meta` | Metadata bucket name |
 | `CONTENT_BUCKET` | `flow-like-content` | Content bucket name |
-| `LOGS_BUCKET` | `flow-like-logs` | Logs bucket name |
+| `LOG_BUCKET` | `flow-like-logs` | Logs bucket name |
 
 See [Storage Providers](/self-hosting/docker-compose/storage/) for provider-specific configuration.
 
@@ -91,12 +91,12 @@ POSTGRES_PASSWORD=your-secure-password
 
 # Storage (AWS S3 example)
 STORAGE_PROVIDER=aws
-S3_REGION=us-east-1
-S3_ACCESS_KEY_ID=AKIA...
-S3_SECRET_ACCESS_KEY=...
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
 META_BUCKET=my-flow-like-meta
 CONTENT_BUCKET=my-flow-like-content
-LOGS_BUCKET=my-flow-like-logs
+LOG_BUCKET=my-flow-like-logs
 
 # JWT Keys (generated with gen-execution-keys.sh)
 EXECUTION_KEY=...

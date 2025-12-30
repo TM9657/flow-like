@@ -21,7 +21,7 @@ impl PathFromCacheDirNode {
 
 #[async_trait]
 impl NodeLogic for PathFromCacheDirNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "path_from_cache_dir",
             "Cache Dir",

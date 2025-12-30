@@ -27,7 +27,7 @@ impl InsertLocalDatabaseNode {
 
 #[async_trait]
 impl NodeLogic for InsertLocalDatabaseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "insert_local_db",
             "Insert",
@@ -85,7 +85,7 @@ impl BatchInsertLocalDatabaseNode {
 
 #[async_trait]
 impl NodeLogic for BatchInsertLocalDatabaseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "batch_insert_local_db",
             "Batch Insert",
@@ -143,7 +143,7 @@ impl BatchInsertCSVLocalDatabaseNode {
 
 #[async_trait]
 impl NodeLogic for BatchInsertCSVLocalDatabaseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "csv_insert_local_db",
             "Batch Insert (CSV)",

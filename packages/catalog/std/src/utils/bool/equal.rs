@@ -20,7 +20,7 @@ impl BoolEqual {
 
 #[async_trait]
 impl NodeLogic for BoolEqual {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("bool_equal", "==", "Boolean Equal", "Utils/Bool");
         node.add_icon("/flow/icons/bool.svg");
 

@@ -64,8 +64,8 @@ cargo test -p flow-like-api --features "minio" -- --ignored minio_tests
 export AWS_ACCESS_KEY_ID="AKIAIOSFODNN7EXAMPLE"
 export AWS_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 export AWS_REGION="us-west-2"
-export META_BUCKET_NAME="your-meta-bucket--usw2-az1--x-s3"
-export CONTENT_BUCKET_NAME="your-content-bucket"
+export META_BUCKET="your-meta-bucket--usw2-az1--x-s3"
+export CONTENT_BUCKET="your-content-bucket"
 export RUNTIME_ROLE_ARN="arn:aws:iam::123456789012:role/FlowLikeRuntimeRole"
 ```
 
@@ -392,8 +392,8 @@ For automated testing, configure these secrets:
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key |
 | `AWS_REGION` | AWS region |
 | `RUNTIME_ROLE_ARN` | IAM role ARN |
-| `META_BUCKET_NAME` | S3 meta bucket |
-| `CONTENT_BUCKET_NAME` | S3 content bucket |
+| `META_BUCKET` | S3 meta bucket |
+| `CONTENT_BUCKET` | S3 content bucket |
 | `AZURE_STORAGE_ACCOUNT_NAME` | Azure storage account |
 | `AZURE_STORAGE_ACCOUNT_KEY` | Azure storage key |
 | `AZURE_META_CONTAINER` | Azure meta container |

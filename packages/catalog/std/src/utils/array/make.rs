@@ -23,7 +23,7 @@ impl MakeArrayNode {
 
 #[async_trait]
 impl NodeLogic for MakeArrayNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "make_array",
             "Make Array",

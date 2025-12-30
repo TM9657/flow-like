@@ -22,7 +22,7 @@ impl PushTextToStepNode {
 
 #[async_trait]
 impl NodeLogic for PushTextToStepNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "events_chat_push_text_to_step",
             "Push Text to Step",

@@ -20,7 +20,7 @@ impl PowerFloatNode {
 
 #[async_trait]
 impl NodeLogic for PowerFloatNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "float_power",
             "Power",

@@ -67,7 +67,7 @@ impl CreateGoogleDriveFolderNode {
 
 #[async_trait]
 impl NodeLogic for CreateGoogleDriveFolderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_drive_create_folder",
             "Create Folder",
@@ -197,7 +197,7 @@ impl DeleteGoogleDriveFileNode {
 
 #[async_trait]
 impl NodeLogic for DeleteGoogleDriveFileNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_drive_delete_file",
             "Delete File",
@@ -288,7 +288,7 @@ impl CopyGoogleDriveFileNode {
 
 #[async_trait]
 impl NodeLogic for CopyGoogleDriveFileNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_drive_copy_file",
             "Copy File",
@@ -428,7 +428,7 @@ impl MoveGoogleDriveFileNode {
 
 #[async_trait]
 impl NodeLogic for MoveGoogleDriveFileNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_drive_move_file",
             "Move File",
@@ -572,7 +572,7 @@ impl SearchGoogleDriveNode {
 
 #[async_trait]
 impl NodeLogic for SearchGoogleDriveNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_drive_search",
             "Search Drive",
@@ -688,7 +688,7 @@ impl GetGoogleDriveFileMetadataNode {
 
 #[async_trait]
 impl NodeLogic for GetGoogleDriveFileMetadataNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_drive_get_metadata",
             "Get File Metadata",
@@ -789,7 +789,7 @@ impl DownloadGoogleDriveFileNode {
 
 #[async_trait]
 impl NodeLogic for DownloadGoogleDriveFileNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_drive_download",
             "Download File",

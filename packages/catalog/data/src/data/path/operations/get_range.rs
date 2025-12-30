@@ -23,7 +23,7 @@ impl GetRangeNode {
 
 #[async_trait]
 impl NodeLogic for GetRangeNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "path_get_range",
             "Get Range",

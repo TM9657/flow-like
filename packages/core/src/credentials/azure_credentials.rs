@@ -1,4 +1,4 @@
-use crate::credentials::SharedCredentialsTrait;
+use crate::credentials::{LogsDbBuilder, SharedCredentialsTrait, StoreType};
 use flow_like_storage::lancedb::connection::ConnectBuilder;
 use flow_like_storage::object_store::azure::MicrosoftAzureBuilder;
 use flow_like_storage::{Path, object_store};
@@ -9,9 +9,18 @@ use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AzureSharedCredentials {
-    pub sas_token: String,
+    /// SAS token for meta container
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meta_sas_token: Option<String>,
+    /// SAS token for content container
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_sas_token: Option<String>,
+    /// SAS token for logs container
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logs_sas_token: Option<String>,
     pub meta_container: String,
     pub content_container: String,
+    pub logs_container: String,
     pub account_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_key: Option<String>,
@@ -44,18 +53,28 @@ impl AzureSharedCredentials {
 impl SharedCredentialsTrait for AzureSharedCredentials {
     #[tracing::instrument(name = "AzureSharedCredentials::to_store", skip(self, meta), fields(meta = meta), level="debug")]
     async fn to_store(&self, meta: bool) -> Result<FlowLikeStore> {
+        self.to_store_type(if meta {
+            StoreType::Meta
+        } else {
+            StoreType::Content
+        })
+        .await
+    }
+
+    #[tracing::instrument(name = "AzureSharedCredentials::to_store_type", skip(self), fields(store_type = ?store_type), level="debug")]
+    async fn to_store_type(&self, store_type: StoreType) -> Result<FlowLikeStore> {
         use flow_like_types::tokio;
 
-        let container = if meta {
-            &self.meta_container
-        } else {
-            &self.content_container
+        let (container, sas_token) = match store_type {
+            StoreType::Meta => (&self.meta_container, &self.meta_sas_token),
+            StoreType::Content => (&self.content_container, &self.content_sas_token),
+            StoreType::Logs => (&self.logs_container, &self.logs_sas_token),
         };
 
         let account = self.account_name.clone();
         let container = container.clone();
         let account_key = self.account_key.clone();
-        let sas_token = self.sas_token.clone();
+        let sas_token = sas_token.clone();
 
         let store = tokio::task::spawn_blocking(move || {
             let builder = MicrosoftAzureBuilder::new()
@@ -65,9 +84,14 @@ impl SharedCredentialsTrait for AzureSharedCredentials {
             // Use account key for master credentials, SAS for scoped credentials
             if let Some(key) = account_key {
                 builder.with_access_key(key).build()
-            } else {
-                let sas_pairs = Self::parse_sas_token(&sas_token);
+            } else if let Some(sas) = sas_token {
+                let sas_pairs = Self::parse_sas_token(&sas);
                 builder.with_sas_authorization(sas_pairs).build()
+            } else {
+                Err(object_store::Error::Generic {
+                    store: "MicrosoftAzure",
+                    source: "No account key or SAS token provided".into(),
+                })
             }
         })
         .await
@@ -82,13 +106,29 @@ impl SharedCredentialsTrait for AzureSharedCredentials {
             .child(app_id)
             .child("storage")
             .child("db");
+        let sas_token = self.content_sas_token.clone().unwrap_or_default();
         let connection = make_azure_builder(
             self.account_name.clone(),
             self.content_container.clone(),
-            self.sas_token.clone(),
+            sas_token,
         );
         let connection = connection(path.clone());
         Ok(connection)
+    }
+
+    fn to_logs_db_builder(&self) -> Result<LogsDbBuilder> {
+        if self.logs_container.is_empty() {
+            return Err(anyhow!(
+                "logs_container is empty - cannot create logs database builder"
+            ));
+        }
+        let sas_token = self.logs_sas_token.clone().unwrap_or_default();
+        let builder = make_azure_builder(
+            self.account_name.clone(),
+            self.logs_container.clone(),
+            sas_token,
+        );
+        Ok(Arc::new(builder))
     }
 }
 
@@ -96,7 +136,7 @@ fn make_azure_builder(
     account_name: String,
     container: String,
     sas_token: String,
-) -> impl Fn(object_store::path::Path) -> ConnectBuilder {
+) -> impl Fn(object_store::path::Path) -> ConnectBuilder + Send + Sync + 'static {
     move |path| {
         let url = format!("az://{}/{}", container, path);
         lancedb::connect(&url)
@@ -115,9 +155,12 @@ mod tests {
 
     fn sample_credentials() -> AzureSharedCredentials {
         AzureSharedCredentials {
-            sas_token: "?sv=2022-11-02&ss=b&srt=sco&sp=rwdlacyx&se=2025-01-15T20:00:00Z&st=2025-01-15T12:00:00Z&spr=https&sig=abcdefghijklmnop".to_string(),
+            meta_sas_token: Some("?sv=2022-11-02&ss=b&srt=sco&sp=rl&se=2025-01-15T20:00:00Z&st=2025-01-15T12:00:00Z&spr=https&sig=meta123".to_string()),
+            content_sas_token: Some("?sv=2022-11-02&ss=b&srt=sco&sp=rwdlacyx&se=2025-01-15T20:00:00Z&st=2025-01-15T12:00:00Z&spr=https&sig=content456".to_string()),
+            logs_sas_token: Some("?sv=2022-11-02&ss=b&srt=sco&sp=rl&se=2025-01-15T20:00:00Z&st=2025-01-15T12:00:00Z&spr=https&sig=logs789".to_string()),
             meta_container: "meta-container".to_string(),
             content_container: "content-container".to_string(),
+            logs_container: "logs-container".to_string(),
             account_name: "mystorageaccount".to_string(),
             account_key: None,
             expiration: None,
@@ -141,6 +184,7 @@ mod tests {
             "sas_token": "?sv=2022-11-02&ss=b&srt=sco&sp=r&se=2025-01-15T20:00:00Z&sig=test",
             "meta_container": "test-meta",
             "content_container": "test-content",
+            "logs_container": "test-logs",
             "account_name": "teststorage",
             "expiration": null
         }"#;
@@ -150,7 +194,6 @@ mod tests {
         assert_eq!(creds.account_name, "teststorage");
         assert_eq!(creds.meta_container, "test-meta");
         assert_eq!(creds.content_container, "test-content");
-        assert!(creds.sas_token.contains("sv=2022-11-02"));
         assert!(creds.expiration.is_none());
     }
 
@@ -160,7 +203,6 @@ mod tests {
         let json = to_string(&original).expect("Failed to serialize");
         let deserialized: AzureSharedCredentials = from_str(&json).expect("Failed to deserialize");
 
-        assert_eq!(original.sas_token, deserialized.sas_token);
         assert_eq!(original.meta_container, deserialized.meta_container);
         assert_eq!(original.content_container, deserialized.content_container);
         assert_eq!(original.account_name, deserialized.account_name);
@@ -172,6 +214,7 @@ mod tests {
             "sas_token": "?sv=2022-11-02&ss=b&sig=test",
             "meta_container": "meta",
             "content_container": "content",
+            "logs_container": "logs",
             "account_name": "storage",
             "expiration": "2025-01-15T12:00:00Z"
         }"#;

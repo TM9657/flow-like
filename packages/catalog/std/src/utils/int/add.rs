@@ -20,7 +20,7 @@ impl AddIntegerNode {
 
 #[async_trait]
 impl NodeLogic for AddIntegerNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("int_add", "+", "Adds two Integers", "Math/Int");
         node.add_icon("/flow/icons/sigma.svg");
 

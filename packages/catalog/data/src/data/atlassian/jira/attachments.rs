@@ -64,7 +64,7 @@ impl GetAttachmentsNode {
 
 #[async_trait]
 impl NodeLogic for GetAttachmentsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_attachments",
             "Get Attachments",
@@ -193,7 +193,7 @@ impl DownloadAttachmentNode {
 
 #[async_trait]
 impl NodeLogic for DownloadAttachmentNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_download_attachment",
             "Download Attachment",
@@ -312,7 +312,7 @@ impl DeleteAttachmentNode {
 
 #[async_trait]
 impl NodeLogic for DeleteAttachmentNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_delete_attachment",
             "Delete Attachment",

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { BsDiscord, BsGithub, BsTwitterX } from "react-icons/bs";
 import { LuBookHeart, LuBookMarked, LuDownload, LuZap } from "react-icons/lu";
+import { translationsCommon } from "../i18n/locales/pages/common";
 
 const languages = {
 	en: "English",
@@ -46,10 +47,36 @@ function saveLangPreference(lang: Lang) {
 	}
 }
 
+function detectCurrentLang(): Lang {
+	if (typeof window === "undefined") return "en";
+	const path = window.location.pathname;
+	for (const lang of Object.keys(languages) as Lang[]) {
+		if (path.startsWith(`/${lang}/`) || path === `/${lang}`) {
+			return lang;
+		}
+	}
+	return "en";
+}
+
+function useTranslation() {
+	const [lang, setLang] = useState<Lang>("en");
+
+	useEffect(() => {
+		setLang(detectCurrentLang());
+	}, []);
+
+	const t = (key: string): string => {
+		return translationsCommon[lang]?.[key] ?? translationsCommon.en[key] ?? key;
+	};
+
+	return { lang, t };
+}
+
 function LanguageSwitcher() {
 	const [open, setOpen] = useState(false);
 	const [currentLang, setCurrentLang] = useState<Lang>("en");
 	const [isMobile, setIsMobile] = useState(false);
+	const { t } = useTranslation();
 
 	useEffect(() => {
 		const path = window.location.pathname;
@@ -111,7 +138,11 @@ function LanguageSwitcher() {
 					stroke="currentColor"
 					strokeWidth="2"
 				>
-					<path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+					<path
+						strokeLinecap="round"
+						strokeLinejoin="round"
+						d="M19 9l-7 7-7-7"
+					/>
 				</svg>
 			</button>
 
@@ -125,77 +156,90 @@ function LanguageSwitcher() {
 					/>
 					<div className="absolute right-0 top-full z-50 mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
 						<div className="grid grid-cols-2 gap-1 p-2 rounded-xl border border-border/50 bg-background/95 shadow-xl shadow-black/10 backdrop-blur-lg min-w-[240px]">
-							{(Object.entries(languages) as [Lang, string][]).map(([code, name]) => (
-								<a
-									key={code}
-									href={getLocalizedPath(code)}
-									className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
-										code === currentLang
-											? "bg-primary/10 text-primary font-medium ring-1 ring-primary/20"
-											: "text-foreground/70 hover:bg-muted hover:text-foreground"
-									}`}
-									onClick={() => {
-										saveLangPreference(code);
-										setOpen(false);
-									}}
-								>
-									<span className="text-lg">{langFlags[code]}</span>
-									<span>{name}</span>
-								</a>
-							))}
-						</div>
-					</div>
-				</>
-			)}
-
-			{open && isMobile && createPortal(
-				<>
-					<div
-						className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in duration-300"
-						onClick={() => setOpen(false)}
-					/>
-					<div className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-300">
-						<div className="bg-background rounded-t-2xl border-t border-border/50 shadow-2xl" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}>
-							<div className="flex justify-center pt-3 pb-2">
-								<div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
-							</div>
-							<div className="px-4 pb-2">
-								<h3 className="text-lg font-semibold text-foreground">Select Language</h3>
-							</div>
-							<div className="grid grid-cols-2 gap-2 p-4 pt-2 max-h-[60vh] overflow-y-auto">
-								{(Object.entries(languages) as [Lang, string][]).map(([code, name]) => (
+							{(Object.entries(languages) as [Lang, string][]).map(
+								([code, name]) => (
 									<a
 										key={code}
 										href={getLocalizedPath(code)}
-										className={`flex items-center gap-3 px-4 py-3 rounded-xl text-base transition-all active:scale-95 ${
+										className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
 											code === currentLang
-												? "bg-primary/10 text-primary font-medium ring-2 ring-primary/30"
-												: "bg-muted/50 text-foreground/80 hover:bg-muted"
+												? "bg-primary/10 text-primary font-medium ring-1 ring-primary/20"
+												: "text-foreground/70 hover:bg-muted hover:text-foreground"
 										}`}
 										onClick={() => {
 											saveLangPreference(code);
 											setOpen(false);
 										}}
 									>
-										<span className="text-2xl">{langFlags[code]}</span>
+										<span className="text-lg">{langFlags[code]}</span>
 										<span>{name}</span>
 									</a>
-								))}
-							</div>
-							<div className="p-4 pt-0">
-								<button
-									type="button"
-									onClick={() => setOpen(false)}
-									className="w-full py-3 rounded-xl bg-muted text-foreground/70 font-medium transition-colors hover:bg-muted/80 active:scale-[0.98]"
-								>
-									Cancel
-								</button>
-							</div>
+								),
+							)}
 						</div>
 					</div>
-				</>,
-				document.body
+				</>
 			)}
+
+			{open &&
+				isMobile &&
+				createPortal(
+					<>
+						<div
+							className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in duration-300"
+							onClick={() => setOpen(false)}
+						/>
+						<div className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-300">
+							<div
+								className="bg-background rounded-t-2xl border-t border-border/50 shadow-2xl"
+								style={{
+									paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+								}}
+							>
+								<div className="flex justify-center pt-3 pb-2">
+									<div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+								</div>
+								<div className="px-4 pb-2">
+									<h3 className="text-lg font-semibold text-foreground">
+										{t("header.selectLanguage")}
+									</h3>
+								</div>
+								<div className="grid grid-cols-2 gap-2 p-4 pt-2 max-h-[60vh] overflow-y-auto">
+									{(Object.entries(languages) as [Lang, string][]).map(
+										([code, name]) => (
+											<a
+												key={code}
+												href={getLocalizedPath(code)}
+												className={`flex items-center gap-3 px-4 py-3 rounded-xl text-base transition-all active:scale-95 ${
+													code === currentLang
+														? "bg-primary/10 text-primary font-medium ring-2 ring-primary/30"
+														: "bg-muted/50 text-foreground/80 hover:bg-muted"
+												}`}
+												onClick={() => {
+													saveLangPreference(code);
+													setOpen(false);
+												}}
+											>
+												<span className="text-2xl">{langFlags[code]}</span>
+												<span>{name}</span>
+											</a>
+										),
+									)}
+								</div>
+								<div className="p-4 pt-0">
+									<button
+										type="button"
+										onClick={() => setOpen(false)}
+										className="w-full py-3 rounded-xl bg-muted text-foreground/70 font-medium transition-colors hover:bg-muted/80 active:scale-[0.98]"
+									>
+										{t("header.cancel")}
+									</button>
+								</div>
+							</div>
+						</div>
+					</>,
+					document.body,
+				)}
 		</div>
 	);
 }
@@ -203,6 +247,7 @@ function LanguageSwitcher() {
 export function BlogHeader() {
 	const [open, setOpen] = useState(false);
 	const [mounted, setMounted] = useState(false);
+	const { t } = useTranslation();
 
 	useEffect(() => setMounted(true), []);
 
@@ -310,7 +355,7 @@ export function BlogHeader() {
 								style={{ transitionDelay: open ? "30ms" : "0ms" }}
 							>
 								<LuZap className="w-5 h-5" />
-								<span>24h Solution</span>
+								<span>{t("header.24h")}</span>
 							</a>
 
 							<a
@@ -324,7 +369,7 @@ export function BlogHeader() {
 								style={{ transitionDelay: open ? "60ms" : "0ms" }}
 							>
 								<LuBookHeart className="w-5 h-5" />
-								<span>Blog</span>
+								<span>{t("header.blog")}</span>
 							</a>
 
 							<a
@@ -340,7 +385,7 @@ export function BlogHeader() {
 								style={{ transitionDelay: open ? "110ms" : "0ms" }}
 							>
 								<LuBookMarked className="w-5 h-5" />
-								<span>Docs</span>
+								<span>{t("header.docs")}</span>
 							</a>
 
 							<a
@@ -402,7 +447,7 @@ export function BlogHeader() {
 								style={{ transitionDelay: open ? "310ms" : "0ms" }}
 							>
 								<LuDownload className="w-5 h-5" />
-								<span>Download</span>
+								<span>{t("header.download")}</span>
 							</a>
 
 							{/* Language selection in mobile menu */}
@@ -416,49 +461,61 @@ export function BlogHeader() {
 							>
 								<div className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground">
 									<Globe className="w-4 h-4" />
-									<span>Language</span>
+									<span>{t("header.language")}</span>
 								</div>
 								<div className="grid grid-cols-3 gap-2 px-4">
-									{(Object.entries(languages) as [Lang, string][]).map(([code, name]) => {
-										const isCurrentLang = (() => {
-											const path = typeof window !== "undefined" ? window.location.pathname : "";
-											for (const l of Object.keys(languages)) {
-												if (path.startsWith(`/${l}/`) || path === `/${l}`) {
-													return code === l;
-												}
-											}
-											return code === "en";
-										})();
-										return (
-											<a
-												key={code}
-												href={(() => {
-													const path = typeof window !== "undefined" ? window.location.pathname : "/";
-													let cleanPath = path;
-													for (const l of Object.keys(languages)) {
-														if (cleanPath.startsWith(`/${l}/`) || cleanPath === `/${l}`) {
-															cleanPath = cleanPath.slice(l.length + 1) || "/";
-															break;
-														}
+									{(Object.entries(languages) as [Lang, string][]).map(
+										([code, name]) => {
+											const isCurrentLang = (() => {
+												const path =
+													typeof window !== "undefined"
+														? window.location.pathname
+														: "";
+												for (const l of Object.keys(languages)) {
+													if (path.startsWith(`/${l}/`) || path === `/${l}`) {
+														return code === l;
 													}
-													if (code === "en") return cleanPath || "/";
-													return `/${code}${cleanPath === "/" ? "" : cleanPath}`;
-												})()}
-												onClick={() => {
-													saveLangPreference(code);
-													handleNavLinkClick();
-												}}
-												className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-sm transition-all ${
-													isCurrentLang
-														? "bg-primary/10 text-primary font-medium ring-1 ring-primary/20"
-														: "bg-muted/50 text-foreground/80 hover:bg-muted"
-												}`}
-											>
-												<span className="text-base">{langFlags[code]}</span>
-												<span className="uppercase text-xs">{code}</span>
-											</a>
-										);
-									})}
+												}
+												return code === "en";
+											})();
+											return (
+												<a
+													key={code}
+													href={(() => {
+														const path =
+															typeof window !== "undefined"
+																? window.location.pathname
+																: "/";
+														let cleanPath = path;
+														for (const l of Object.keys(languages)) {
+															if (
+																cleanPath.startsWith(`/${l}/`) ||
+																cleanPath === `/${l}`
+															) {
+																cleanPath =
+																	cleanPath.slice(l.length + 1) || "/";
+																break;
+															}
+														}
+														if (code === "en") return cleanPath || "/";
+														return `/${code}${cleanPath === "/" ? "" : cleanPath}`;
+													})()}
+													onClick={() => {
+														saveLangPreference(code);
+														handleNavLinkClick();
+													}}
+													className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-sm transition-all ${
+														isCurrentLang
+															? "bg-primary/10 text-primary font-medium ring-1 ring-primary/20"
+															: "bg-muted/50 text-foreground/80 hover:bg-muted"
+													}`}
+												>
+													<span className="text-base">{langFlags[code]}</span>
+													<span className="uppercase text-xs">{code}</span>
+												</a>
+											);
+										},
+									)}
 								</div>
 							</div>
 						</nav>
@@ -484,19 +541,19 @@ export function BlogHeader() {
 							className="border-primary/50 text-primary hover:bg-primary/10"
 						>
 							<LuZap className="w-5 h-5" />
-							24h Solution
+							{t("header.24h")}
 						</Button>
 					</a>
 					<a href="/blog/">
 						<Button variant={"outline"}>
 							<LuBookHeart className="w-5 h-5" />
-							Blog
+							{t("header.blog")}
 						</Button>
 					</a>
 					<a href="https://docs.flow-like.com" target="_blank" rel="noreferrer">
 						<Button variant={"outline"}>
 							<LuBookMarked className="w-5 h-5" />
-							Docs
+							{t("header.docs")}
 						</Button>
 					</a>
 					<a
@@ -525,7 +582,7 @@ export function BlogHeader() {
 					<a href="/download">
 						<Button>
 							<LuDownload className="w-5 h-5" />
-							Download
+							{t("header.download")}
 						</Button>
 					</a>
 					<LanguageSwitcher />

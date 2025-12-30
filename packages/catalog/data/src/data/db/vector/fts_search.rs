@@ -24,7 +24,7 @@ impl FTSLocalDatabaseNode {
 
 #[async_trait]
 impl NodeLogic for FTSLocalDatabaseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "fts_search_local_db",
             "Full-Text Search",

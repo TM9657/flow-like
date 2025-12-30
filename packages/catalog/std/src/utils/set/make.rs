@@ -24,7 +24,7 @@ impl MakeSetNode {
 
 #[async_trait]
 impl NodeLogic for MakeSetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("make_set", "Make Set", "Creates an empty set", "Utils/Set");
 
         node.add_icon("/flow/icons/ellipsis-vertical.svg");

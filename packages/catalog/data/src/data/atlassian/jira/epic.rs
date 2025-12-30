@@ -25,7 +25,7 @@ impl LinkToEpicNode {
 
 #[async_trait]
 impl NodeLogic for LinkToEpicNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_link_to_epic",
             "Link to Epic",
@@ -184,7 +184,7 @@ impl UnlinkFromEpicNode {
 
 #[async_trait]
 impl NodeLogic for UnlinkFromEpicNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_unlink_from_epic",
             "Unlink from Epic",
@@ -325,7 +325,7 @@ impl GetEpicIssuesNode {
 
 #[async_trait]
 impl NodeLogic for GetEpicIssuesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_epic_issues",
             "Get Epic Issues",

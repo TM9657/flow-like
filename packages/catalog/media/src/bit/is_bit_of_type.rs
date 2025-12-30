@@ -25,7 +25,7 @@ impl IsBitOfTypeNode {
 
 #[async_trait]
 impl NodeLogic for IsBitOfTypeNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "is_bit_of_type",
             "Is Bit of Type",

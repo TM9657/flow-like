@@ -28,7 +28,7 @@ impl FetchMailNode {
 
 #[async_trait]
 impl NodeLogic for FetchMailNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "email_imap_inbox_fetch_mail",
             "Fetch Mail",
@@ -87,7 +87,7 @@ impl EmailHeadersNode {
 
 #[async_trait]
 impl NodeLogic for EmailHeadersNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "email_get_headers",
             "Email → Headers",
@@ -157,7 +157,7 @@ impl EmailContentNode {
 
 #[async_trait]
 impl NodeLogic for EmailContentNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "email_get_content",
             "Email → Content",
@@ -204,7 +204,7 @@ impl EmailAttachmentsNode {
 
 #[async_trait]
 impl NodeLogic for EmailAttachmentsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "email_get_attachments",
             "Email → Attachments",
@@ -250,7 +250,7 @@ impl MailAddressFieldsNode {
 
 #[async_trait]
 impl NodeLogic for MailAddressFieldsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "mail_address_fields",
             "MailAddress → Fields",
@@ -299,7 +299,7 @@ impl AttachmentFieldsNode {
 
 #[async_trait]
 impl NodeLogic for AttachmentFieldsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "attachment_fields",
             "Attachment → Fields",
@@ -359,7 +359,7 @@ impl ToMailReferenceNode {
 
 #[async_trait]
 impl NodeLogic for ToMailReferenceNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "mail_imap_inbox_mail_to_reference",
             "Mail → Reference",

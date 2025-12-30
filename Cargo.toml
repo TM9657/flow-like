@@ -3,14 +3,17 @@ resolver = "2"
 members = [
     "apps/desktop/src-tauri",
     "apps/backend/local/api",
+    "apps/backend/local/runtime",
     "apps/schema-gen",
-    "apps/backend/aws/runtime",
-    "apps/backend/aws/runtime-async",
     "apps/backend/aws/api",
+    "apps/backend/aws/executor",
+    "apps/backend/aws/executor-async",
     "apps/backend/aws/media-transformer",
     "apps/backend/aws/file-tracker",
     "apps/backend/kubernetes/api",
     "apps/backend/kubernetes/executor",
+    "apps/backend/docker-compose/api",
+    "apps/backend/docker-compose/runtime",
     "packages/core",
     "packages/model-provider",
     "packages/bits",
@@ -28,13 +31,14 @@ members = [
     "packages/catalog-macros",
     "packages/storage",
     "packages/api",
+    "packages/executor",
     "apps/utils/board-decoder",
 ]
 
 [workspace.dependencies]
 flow-like = { path = "packages/core" }
 flow-like-types = { path = "packages/types" }
-flow-like-api = { path = "packages/api" }
+flow-like-api = { path = "packages/api", default-features = false }
 flow-like-model-provider = { path = "packages/model-provider" }
 flow-like-bits = { path = "packages/bits" }
 flow-like-catalog = { path = "packages/catalog" }
@@ -49,8 +53,10 @@ flow-like-catalog-llm = { path = "packages/catalog/llm" }
 flow-like-catalog-processing = { path = "packages/catalog/processing" }
 flow-like-catalog-macros = { path = "packages/catalog-macros" }
 flow-like-storage = { path = "packages/storage" }
+flow-like-executor = { path = "packages/executor" }
 lambda_http = "0.15.1"
 futures = "0.3.31"
+bytes = "1.10.1"
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_json = "1.0.134"
 schemars = {version="1.1.0", features = ["preserve_order"]}
@@ -80,14 +86,16 @@ blake3 = "1.8.2"
 lambda_runtime = "0.14.2"
 aws-config = "1.8.8"
 aws-sdk-dynamodb = "1.80.0"
+aws-sdk-lambda = "1.88.0"
 aws-sdk-s3 = "1.93.0"
 aws-sdk-sesv2 = "1.85.0"
+aws-sdk-sqs = "1.63.0"
+aws-sdk-sts = "1.88.0"
 tokio = {version="1.47.1"}
 urlencoding = "2.1.3"
 image = "0.25.6"
 imageproc = "0.25.0"
 webp = "0.3.1"
-aws-sdk-sts = "1.88.0"
 ahash = "0.8.12"
 base64 = "0.22.1"
 ndarray = "0.16.1"

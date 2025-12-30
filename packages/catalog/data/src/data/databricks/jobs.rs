@@ -119,7 +119,7 @@ impl ListDatabricksJobsNode {
 
 #[async_trait]
 impl NodeLogic for ListDatabricksJobsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_list_jobs",
             "List Jobs",
@@ -311,7 +311,7 @@ impl RunDatabricksJobNode {
 
 #[async_trait]
 impl NodeLogic for RunDatabricksJobNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_run_job",
             "Run Job",
@@ -484,7 +484,7 @@ impl GetDatabricksJobRunNode {
 
 #[async_trait]
 impl NodeLogic for GetDatabricksJobRunNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_get_job_run",
             "Get Job Run",
@@ -665,7 +665,7 @@ impl CancelDatabricksJobRunNode {
 
 #[async_trait]
 impl NodeLogic for CancelDatabricksJobRunNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_cancel_job_run",
             "Cancel Job Run",

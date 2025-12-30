@@ -38,7 +38,7 @@ impl FitLinearRegressionNode {
 
 #[async_trait]
 impl NodeLogic for FitLinearRegressionNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "fit_linear_regression",
             "Train Regression (Linear)",

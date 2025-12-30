@@ -1,20 +1,36 @@
 use aws_credentials::AwsSharedCredentials;
 use azure_credentials::AzureSharedCredentials;
+use flow_like_storage::Path;
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::lancedb::connection::ConnectBuilder;
 use flow_like_types::Result;
 use flow_like_types::async_trait;
 use gcp_credentials::GcpSharedCredentials;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 pub mod aws_credentials;
 pub mod azure_credentials;
 pub mod gcp_credentials;
 
+pub use aws_credentials::BucketConfig;
+
+/// Type alias for the logs database builder callback
+pub type LogsDbBuilder = Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoreType {
+    Meta,
+    Content,
+    Logs,
+}
+
 #[async_trait]
 pub trait SharedCredentialsTrait {
     async fn to_store(&self, meta: bool) -> Result<FlowLikeStore>;
+    async fn to_store_type(&self, store_type: StoreType) -> Result<FlowLikeStore>;
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder>;
+    fn to_logs_db_builder(&self) -> Result<LogsDbBuilder>;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -33,11 +49,27 @@ impl SharedCredentials {
         }
     }
 
+    pub async fn to_store_type(&self, store_type: StoreType) -> Result<FlowLikeStore> {
+        match self {
+            SharedCredentials::Aws(aws) => aws.to_store_type(store_type).await,
+            SharedCredentials::Azure(azure) => azure.to_store_type(store_type).await,
+            SharedCredentials::Gcp(gcp) => gcp.to_store_type(store_type).await,
+        }
+    }
+
     pub async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
         match self {
             SharedCredentials::Aws(aws) => aws.to_db(app_id).await,
             SharedCredentials::Azure(azure) => azure.to_db(app_id).await,
             SharedCredentials::Gcp(gcp) => gcp.to_db(app_id).await,
+        }
+    }
+
+    pub fn to_logs_db_builder(&self) -> Result<LogsDbBuilder> {
+        match self {
+            SharedCredentials::Aws(aws) => aws.to_logs_db_builder(),
+            SharedCredentials::Azure(azure) => azure.to_logs_db_builder(),
+            SharedCredentials::Gcp(gcp) => gcp.to_logs_db_builder(),
         }
     }
 }
@@ -54,6 +86,10 @@ mod tests {
             session_token: Some("token".to_string()),
             meta_bucket: "aws-meta".to_string(),
             content_bucket: "aws-content".to_string(),
+            logs_bucket: "aws-logs".to_string(),
+            meta_config: None,
+            content_config: None,
+            logs_config: None,
             region: "us-west-2".to_string(),
             expiration: None,
         }
@@ -61,9 +97,12 @@ mod tests {
 
     fn sample_azure() -> AzureSharedCredentials {
         AzureSharedCredentials {
-            sas_token: "?sv=2022-11-02&ss=b&sig=test".to_string(),
+            meta_sas_token: Some("?sv=2022-11-02&ss=b&sig=meta".to_string()),
+            content_sas_token: Some("?sv=2022-11-02&ss=b&sig=content".to_string()),
+            logs_sas_token: Some("?sv=2022-11-02&ss=b&sig=logs".to_string()),
             meta_container: "azure-meta".to_string(),
             content_container: "azure-content".to_string(),
+            logs_container: "azure-logs".to_string(),
             account_name: "mystorageaccount".to_string(),
             account_key: None,
             expiration: None,
@@ -76,6 +115,7 @@ mod tests {
             access_token: None,
             meta_bucket: "gcp-meta".to_string(),
             content_bucket: "gcp-content".to_string(),
+            logs_bucket: "gcp-logs".to_string(),
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
@@ -113,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_shared_credentials_aws_deserialization() {
-        let json = r#"{"Aws":{"access_key_id":"AKIA123","secret_access_key":"secret","session_token":"token","meta_bucket":"meta","content_bucket":"content","region":"us-east-1","expiration":null}}"#;
+        let json = r#"{"Aws":{"access_key_id":"AKIA123","secret_access_key":"secret","session_token":"token","meta_bucket":"meta","content_bucket":"content","logs_bucket":"logs","region":"us-east-1","expiration":null}}"#;
         let creds: SharedCredentials = from_str(json).expect("Failed to deserialize");
 
         match creds {
@@ -127,7 +167,7 @@ mod tests {
 
     #[test]
     fn test_shared_credentials_azure_deserialization() {
-        let json = r#"{"Azure":{"sas_token":"?sv=test","meta_container":"meta","content_container":"content","account_name":"storage","expiration":null}}"#;
+        let json = r#"{"Azure":{"sas_token":"?sv=test","meta_container":"meta","content_container":"content","logs_container":"logs","account_name":"storage","expiration":null}}"#;
         let creds: SharedCredentials = from_str(json).expect("Failed to deserialize");
 
         match creds {
@@ -141,7 +181,7 @@ mod tests {
 
     #[test]
     fn test_shared_credentials_gcp_deserialization() {
-        let json = r#"{"Gcp":{"service_account_key":"{\"type\":\"service_account\"}","meta_bucket":"meta","content_bucket":"content","expiration":null}}"#;
+        let json = r#"{"Gcp":{"service_account_key":"{\"type\":\"service_account\"}","meta_bucket":"meta","content_bucket":"content","logs_bucket":"logs","allowed_prefixes":[],"write_access":true,"expiration":null}}"#;
         let creds: SharedCredentials = from_str(json).expect("Failed to deserialize");
 
         match creds {
@@ -197,7 +237,6 @@ mod tests {
         match (original, cloned) {
             (SharedCredentials::Azure(a), SharedCredentials::Azure(b)) => {
                 assert_eq!(a.account_name, b.account_name);
-                assert_eq!(a.sas_token, b.sas_token);
             }
             _ => panic!("Clone should preserve variant"),
         }

@@ -25,7 +25,7 @@ impl LoadModelNode {
 
 #[async_trait]
 impl NodeLogic for LoadModelNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "load_model",
             "Load Embedding Model",

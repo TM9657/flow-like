@@ -31,7 +31,7 @@ impl StreamInvokeAgentNode {
 
 #[async_trait]
 impl NodeLogic for StreamInvokeAgentNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "agent_stream_invoke",
             "Stream Invoke Agent",

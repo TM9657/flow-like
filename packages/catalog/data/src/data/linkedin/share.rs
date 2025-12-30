@@ -63,7 +63,7 @@ impl ShareTextPostNode {
 
 #[async_trait]
 impl NodeLogic for ShareTextPostNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_linkedin_share_text",
             "Share Text Post",
@@ -245,7 +245,7 @@ impl ShareArticleNode {
 
 #[async_trait]
 impl NodeLogic for ShareArticleNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_linkedin_share_article",
             "Share Article",

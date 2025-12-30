@@ -22,7 +22,7 @@ impl ReadToBytesNode {
 
 #[async_trait]
 impl NodeLogic for ReadToBytesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "read_to_bytes",
             "Read to Bytes",

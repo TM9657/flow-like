@@ -22,7 +22,7 @@ impl FloatVectorDotProductNode {
 
 #[async_trait]
 impl NodeLogic for FloatVectorDotProductNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "float_vector_dot_product",
             "Dot Product",

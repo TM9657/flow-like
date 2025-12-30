@@ -20,7 +20,7 @@ impl GetEnvVariableNode {
 
 #[async_trait]
 impl NodeLogic for GetEnvVariableNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "get_env",
             "Get Environment Variable",

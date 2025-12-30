@@ -43,7 +43,7 @@ impl ListNotionDatabasesNode {
 
 #[async_trait]
 impl NodeLogic for ListNotionDatabasesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_notion_list_databases",
             "List Notion Databases",

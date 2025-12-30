@@ -27,7 +27,7 @@ impl ReadImagePathNode {
 
 #[async_trait]
 impl NodeLogic for ReadImagePathNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "read_image",
             "Read Image",

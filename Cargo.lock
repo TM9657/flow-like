@@ -216,6 +216,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "aes-gcm"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "831010a0f742e1209b3bcea8fab6a8e149051ba6099432c8cb2cc117dec3ead1"
+dependencies = [
+ "aead",
+ "aes",
+ "cipher",
+ "ctr",
+ "ghash",
+ "subtle",
+]
+
+[[package]]
 name = "ahash"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1157,15 +1171,7 @@ dependencies = [
  "axum 0.8.6",
  "flow-like",
  "flow-like-api",
- "flow-like-catalog-core",
- "flow-like-catalog-data",
- "flow-like-catalog-llm",
- "flow-like-catalog-media",
- "flow-like-catalog-ml",
- "flow-like-catalog-onnx",
- "flow-like-catalog-processing",
- "flow-like-catalog-std",
- "flow-like-catalog-web",
+ "flow-like-catalog",
  "flow-like-storage",
  "flow-like-types",
  "lambda_http",
@@ -1186,7 +1192,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37cf2b6af2a95a20e266782b4f76f1a5e12bf412a9db2de9c1e9123b9d8c0ad8"
 dependencies = [
  "aws-credential-types",
- "aws-runtime 1.5.12",
+ "aws-runtime",
  "aws-sdk-sso",
  "aws-sdk-ssooidc",
  "aws-sdk-sts",
@@ -1222,6 +1228,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-executor"
+version = "0.1.0"
+dependencies = [
+ "axum 0.8.6",
+ "flow-like-executor",
+ "flow-like-types",
+ "lambda_http",
+ "mimalloc",
+ "sentry 0.45.0",
+ "sentry-tracing 0.45.0",
+ "serde",
+ "serde_json",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "aws-executor-async"
+version = "0.1.0"
+dependencies = [
+ "aws_lambda_events",
+ "flow-like",
+ "flow-like-executor",
+ "flow-like-types",
+ "lambda_runtime",
+ "mimalloc",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "aws-lc-rs"
 version = "1.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1242,23 +1280,6 @@ dependencies = [
  "cmake",
  "dunce",
  "fs_extra",
-]
-
-[[package]]
-name = "aws-runtime"
-version = "0.1.0"
-dependencies = [
- "axum 0.8.6",
- "flow-like",
- "flow-like-types",
- "lambda_http",
- "mimalloc",
- "sentry 0.45.0",
- "sentry-tower",
- "sentry-tracing 0.45.0",
- "serde",
- "serde_json",
- "tracing",
 ]
 
 [[package]]
@@ -1287,25 +1308,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "aws-runtime-async"
-version = "0.1.0"
-dependencies = [
- "aws_lambda_events",
- "flow-like",
- "flow-like-types",
- "lambda_runtime",
- "mimalloc",
- "tracing",
-]
-
-[[package]]
 name = "aws-sdk-bedrockruntime"
 version = "1.109.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbfdfd941dcb253c17bf70baddbf1e5b22f19e29d313d2e049bad4b1dadb2011"
 dependencies = [
  "aws-credential-types",
- "aws-runtime 1.5.12",
+ "aws-runtime",
  "aws-sigv4",
  "aws-smithy-async",
  "aws-smithy-eventstream",
@@ -1330,7 +1339,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "891660184fbdb81dd3c86edca2e6365060329784c7072d25ddef4f785aa5a750"
 dependencies = [
  "aws-credential-types",
- "aws-runtime 1.5.12",
+ "aws-runtime",
  "aws-smithy-async",
  "aws-smithy-http",
  "aws-smithy-json",
@@ -1352,8 +1361,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2e1f3871da847c7ff682ddd2c2b802fa10a562db34eaf16dd863fc2d3f72ad6"
 dependencies = [
  "aws-credential-types",
- "aws-runtime 1.5.12",
+ "aws-runtime",
  "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand 2.3.0",
+ "http 0.2.12",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
+name = "aws-sdk-lambda"
+version = "1.102.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4398718b52eabed67354762e5c0256ffcd72b32b0eac89c01cce32f84f146828"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-eventstream",
  "aws-smithy-http",
  "aws-smithy-json",
  "aws-smithy-runtime",
@@ -1374,7 +1406,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "200be4aed61e3c0669f7268bacb768f283f1c32a7014ce57225e1160be2f6ccb"
 dependencies = [
  "aws-credential-types",
- "aws-runtime 1.5.12",
+ "aws-runtime",
  "aws-sigv4",
  "aws-smithy-async",
  "aws-smithy-checksums",
@@ -1408,7 +1440,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc52565fa340713fc5b30045912a6cdbf0d5504c957bfbbd6d10fe5cfa73649"
 dependencies = [
  "aws-credential-types",
- "aws-runtime 1.5.12",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand 2.3.0",
+ "http 0.2.12",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
+name = "aws-sdk-sqs"
+version = "1.87.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88e1038d1f0d82ff48b5f592e075294dcb3896237c25083c08eb520772480ce8"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
  "aws-smithy-async",
  "aws-smithy-http",
  "aws-smithy-json",
@@ -1430,7 +1484,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a0abbfab841446cce6e87af853a3ba2cc1bc9afcd3f3550dd556c43d434c86d"
 dependencies = [
  "aws-credential-types",
- "aws-runtime 1.5.12",
+ "aws-runtime",
  "aws-smithy-async",
  "aws-smithy-http",
  "aws-smithy-json",
@@ -1452,7 +1506,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a68d675582afea0e94d38b6ca9c5aaae4ca14f1d36faa6edb19b42e687e70d7"
 dependencies = [
  "aws-credential-types",
- "aws-runtime 1.5.12",
+ "aws-runtime",
  "aws-smithy-async",
  "aws-smithy-http",
  "aws-smithy-json",
@@ -1474,7 +1528,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d30990923f4f675523c51eb1c0dec9b752fb267b36a61e83cbc219c9d86da715"
 dependencies = [
  "aws-credential-types",
- "aws-runtime 1.5.12",
+ "aws-runtime",
  "aws-smithy-async",
  "aws-smithy-http",
  "aws-smithy-json",
@@ -3412,6 +3466,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctr"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0369ee1ad671834580515889b80f2ea915f23b8be8d0daa4bbaf2ac5c7590835"
+dependencies = [
+ "cipher",
+]
+
+[[package]]
 name = "cuid-util"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4465,6 +4528,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
+name = "docker-compose-api"
+version = "0.1.0"
+dependencies = [
+ "axum 0.8.6",
+ "chrono",
+ "flow-like",
+ "flow-like-api",
+ "flow-like-catalog",
+ "flow-like-storage",
+ "flow-like-types",
+ "hyper 1.7.0",
+ "hyper-util",
+ "mimalloc",
+ "reqwest 0.12.24",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-http 0.6.6",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
+name = "docker-compose-runtime"
+version = "0.1.0"
+dependencies = [
+ "axum 0.8.6",
+ "flow-like",
+ "flow-like-api",
+ "flow-like-executor",
+ "flow-like-storage",
+ "mimalloc",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "document-features"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5345,22 +5449,32 @@ dependencies = [
 name = "flow-like-api"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
+ "async-stream",
  "async-stripe",
  "async-trait",
  "aws-config",
  "aws-sdk-cognitoidentityprovider",
+ "aws-sdk-dynamodb",
+ "aws-sdk-lambda",
+ "aws-sdk-s3",
  "aws-sdk-sesv2",
+ "aws-sdk-sqs",
  "aws-sdk-sts",
  "axum 0.8.6",
  "base64 0.22.1",
  "bitflags 2.10.0",
  "blake3",
+ "bytes",
  "chrono",
  "dotenv",
+ "eventsource-stream",
  "flow-like",
  "flow-like-storage",
  "flow-like-types",
+ "futures",
  "futures-util",
+ "getrandom 0.3.4",
  "hmac",
  "hyper 1.7.0",
  "hyper-util",
@@ -5372,12 +5486,14 @@ dependencies = [
  "oasgen",
  "p256 0.13.2",
  "pin-project-lite",
+ "redis",
  "reqwest 0.12.24",
  "rsa",
  "sea-orm",
  "serde",
  "serde_json",
  "sha2",
+ "thiserror 2.0.17",
  "tokio",
  "tower 0.5.2",
  "tower-http 0.6.6",
@@ -5687,15 +5803,7 @@ dependencies = [
  "cron",
  "dirs-next",
  "flow-like",
- "flow-like-catalog-core",
- "flow-like-catalog-data",
- "flow-like-catalog-llm",
- "flow-like-catalog-media",
- "flow-like-catalog-ml",
- "flow-like-catalog-onnx",
- "flow-like-catalog-processing",
- "flow-like-catalog-std",
- "flow-like-catalog-web",
+ "flow-like-catalog",
  "flow-like-types",
  "futures",
  "image",
@@ -5731,6 +5839,27 @@ dependencies = [
  "urlencoding",
  "webp",
  "window-vibrancy",
+]
+
+[[package]]
+name = "flow-like-executor"
+version = "0.1.0"
+dependencies = [
+ "axum 0.8.6",
+ "base64 0.22.1",
+ "chrono",
+ "flow-like",
+ "flow-like-catalog",
+ "flow-like-storage",
+ "flow-like-types",
+ "futures-util",
+ "jsonwebtoken",
+ "p256 0.13.2",
+ "reqwest 0.12.24",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -6299,6 +6428,16 @@ dependencies = [
  "r-efi",
  "wasip2",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "ghash"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
+dependencies = [
+ "opaque-debug",
+ "polyval",
 ]
 
 [[package]]
@@ -8020,15 +8159,7 @@ dependencies = [
  "chrono",
  "flow-like",
  "flow-like-api",
- "flow-like-catalog-core",
- "flow-like-catalog-data",
- "flow-like-catalog-llm",
- "flow-like-catalog-media",
- "flow-like-catalog-ml",
- "flow-like-catalog-onnx",
- "flow-like-catalog-processing",
- "flow-like-catalog-std",
- "flow-like-catalog-web",
+ "flow-like-catalog",
  "flow-like-storage",
  "flow-like-types",
  "hyper 1.7.0",
@@ -8036,7 +8167,6 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "mimalloc",
- "redis",
  "reqwest 0.12.24",
  "serde",
  "serde_json",
@@ -8054,15 +8184,7 @@ dependencies = [
  "axum 0.7.9",
  "base64 0.22.1",
  "flow-like",
- "flow-like-catalog-core",
- "flow-like-catalog-data",
- "flow-like-catalog-llm",
- "flow-like-catalog-media",
- "flow-like-catalog-ml",
- "flow-like-catalog-onnx",
- "flow-like-catalog-processing",
- "flow-like-catalog-std",
- "flow-like-catalog-web",
+ "flow-like-catalog",
  "flow-like-storage",
  "flow-like-types",
  "mimalloc",
@@ -9279,15 +9401,7 @@ dependencies = [
  "dotenv",
  "flow-like",
  "flow-like-api",
- "flow-like-catalog-core",
- "flow-like-catalog-data",
- "flow-like-catalog-llm",
- "flow-like-catalog-media",
- "flow-like-catalog-ml",
- "flow-like-catalog-onnx",
- "flow-like-catalog-processing",
- "flow-like-catalog-std",
- "flow-like-catalog-web",
+ "flow-like-catalog",
  "flow-like-storage",
  "flow-like-types",
  "mimalloc",
@@ -9320,6 +9434,24 @@ dependencies = [
  "neli",
  "thiserror 1.0.69",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "local-runtime"
+version = "0.1.0"
+dependencies = [
+ "axum 0.8.6",
+ "dotenv",
+ "flow-like",
+ "flow-like-api",
+ "flow-like-executor",
+ "flow-like-storage",
+ "mimalloc",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -12294,6 +12426,18 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8159bd90725d2df49889a078b54f4f79e87f1f8a8444194cdca81d38f5393abf"
 dependencies = [
+ "cpufeatures",
+ "opaque-debug",
+ "universal-hash",
+]
+
+[[package]]
+name = "polyval"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d1fe60d06143b2430aa532c94cfe9e29783047f06c0d7fd359a9a51b729fa25"
+dependencies = [
+ "cfg-if",
  "cpufeatures",
  "opaque-debug",
  "universal-hash",

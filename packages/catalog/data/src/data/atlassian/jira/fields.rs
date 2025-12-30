@@ -80,7 +80,7 @@ impl GetFieldsNode {
 
 #[async_trait]
 impl NodeLogic for GetFieldsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_fields",
             "Get Fields",
@@ -216,7 +216,7 @@ impl SearchFieldsNode {
 
 #[async_trait]
 impl NodeLogic for SearchFieldsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_search_fields",
             "Search Fields",

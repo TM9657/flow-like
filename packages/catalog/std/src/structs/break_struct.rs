@@ -184,7 +184,7 @@ fn capitalize_first(s: &str) -> String {
 
 #[async_trait]
 impl NodeLogic for BreakStructNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "struct_break",
             "Break Struct",

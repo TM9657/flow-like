@@ -67,7 +67,7 @@ impl GetSprintsNode {
 
 #[async_trait]
 impl NodeLogic for GetSprintsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_sprints",
             "Get Sprints",
@@ -204,7 +204,7 @@ impl GetSprintIssuesNode {
 
 #[async_trait]
 impl NodeLogic for GetSprintIssuesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_sprint_issues",
             "Get Sprint Issues",
@@ -354,7 +354,7 @@ impl CreateSprintNode {
 
 #[async_trait]
 impl NodeLogic for CreateSprintNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_create_sprint",
             "Create Sprint",
@@ -509,7 +509,7 @@ impl UpdateSprintNode {
 
 #[async_trait]
 impl NodeLogic for UpdateSprintNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_update_sprint",
             "Update Sprint",
@@ -676,7 +676,7 @@ impl MoveToSprintNode {
 
 #[async_trait]
 impl NodeLogic for MoveToSprintNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_move_to_sprint",
             "Move to Sprint",

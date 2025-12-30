@@ -45,7 +45,7 @@ impl InsertRowNode {
 
 #[async_trait]
 impl NodeLogic for InsertRowNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "files_spreadsheet_insert_row",
             "Insert Row(s)",

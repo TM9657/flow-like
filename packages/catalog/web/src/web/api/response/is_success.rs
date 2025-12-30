@@ -23,7 +23,7 @@ impl IsSuccessNode {
 
 #[async_trait]
 impl NodeLogic for IsSuccessNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "http_response_is_success",
             "Is Success",

@@ -21,7 +21,7 @@ impl ParseUtf8LossyNode {
 
 #[async_trait]
 impl NodeLogic for ParseUtf8LossyNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "utf8_lossy",
             "From UTF-8 Lossy",

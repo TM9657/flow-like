@@ -101,6 +101,7 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 						{ label: "Creating Apps", slug: "apps/create" },
 						{ label: "Boards & Flows", slug: "apps/boards" },
 						{ label: "Chat UI", slug: "apps/chat-ui" },
+						{ label: "Custom UI", slug: "apps/a2ui" },
 						{ label: "Templates", slug: "apps/templates" },
 						{ label: "Events", slug: "apps/events" },
 						{ label: "Storage", slug: "apps/storage" },
@@ -112,6 +113,11 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 					label: "Self Hosting",
 					items: [
 						{ label: "Overview", slug: "self-hosting/overview" },
+						{
+							label: "Execution Backends",
+							slug: "self-hosting/execution-backends",
+						},
+						{ label: "Desktop Client", slug: "self-hosting/desktop-client" },
 						{
 							label: "Docker Compose",
 							collapsed: true,
@@ -134,6 +140,16 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 						{ label: "Rust SDK", slug: "dev/rust" },
 						{ label: "Storage Providers", slug: "dev/storage-providers" },
 						{ label: "Customization", slug: "dev/customizing" },
+						{
+							label: "WASM Nodes",
+							collapsed: true,
+							autogenerate: { directory: "dev/wasm-nodes" },
+						},
+						{
+							label: "A2UI",
+							collapsed: true,
+							autogenerate: { directory: "dev/a2ui" },
+						},
 					],
 				},
 				{
@@ -142,9 +158,7 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 				},
 				{
 					label: "Reference",
-					items: [
-						{ label: "Benchmarks", slug: "reference/benchmarks" },
-					],
+					items: [{ label: "Benchmarks", slug: "reference/benchmarks" }],
 				},
 				{
 					label: "Node Catalog",

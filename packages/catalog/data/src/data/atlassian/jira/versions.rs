@@ -67,7 +67,7 @@ impl GetVersionsNode {
 
 #[async_trait]
 impl NodeLogic for GetVersionsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_versions",
             "Get Versions",
@@ -194,7 +194,7 @@ impl CreateVersionNode {
 
 #[async_trait]
 impl NodeLogic for CreateVersionNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_create_version",
             "Create Version",
@@ -394,7 +394,7 @@ impl BatchCreateVersionsNode {
 
 #[async_trait]
 impl NodeLogic for BatchCreateVersionsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_batch_create_versions",
             "Batch Create Versions",
@@ -594,7 +594,7 @@ impl UpdateVersionNode {
 
 #[async_trait]
 impl NodeLogic for UpdateVersionNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_update_version",
             "Update Version",

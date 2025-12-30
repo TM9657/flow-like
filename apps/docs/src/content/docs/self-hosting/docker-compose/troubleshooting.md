@@ -36,7 +36,7 @@ docker compose up db-init
 lsof -i :8080
 
 # Or change the port in .env
-API_PORT=8081
+API_PORT=8080
 ```
 
 ## API issues
@@ -94,10 +94,10 @@ docker compose exec postgres psql -U flowlike -d flowlike
 
 ```bash
 # Test connectivity from API container
-docker compose exec api curl -I "$S3_ENDPOINT"
+docker compose exec api curl -I "$AWS_ENDPOINT"
 
 # Check credentials are set
-docker compose exec api env | grep S3
+docker compose exec api env | grep AWS
 ```
 
 ### Permission denied
@@ -106,7 +106,7 @@ Verify your bucket policy allows the credentials to read/write:
 
 ```bash
 # AWS CLI test (if installed)
-aws s3 ls s3://your-bucket --endpoint-url $S3_ENDPOINT
+aws s3 ls s3://your-bucket --endpoint-url $AWS_ENDPOINT
 ```
 
 ### Path-style URL issues
@@ -114,7 +114,7 @@ aws s3 ls s3://your-bucket --endpoint-url $S3_ENDPOINT
 Some providers require path-style URLs:
 
 ```env
-S3_USE_PATH_STYLE=true
+AWS_USE_PATH_STYLE=true
 ```
 
 ## Runtime issues

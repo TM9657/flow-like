@@ -32,7 +32,7 @@ impl UpdateNotionPageNode {
 
 #[async_trait]
 impl NodeLogic for UpdateNotionPageNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_notion_update_page",
             "Update Notion Page",

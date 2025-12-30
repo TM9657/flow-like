@@ -76,7 +76,7 @@ impl CreateGoogleSpreadsheetNode {
 
 #[async_trait]
 impl NodeLogic for CreateGoogleSpreadsheetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_sheets_create",
             "Create Spreadsheet",
@@ -183,7 +183,7 @@ impl GetGoogleSpreadsheetNode {
 
 #[async_trait]
 impl NodeLogic for GetGoogleSpreadsheetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_sheets_get",
             "Get Spreadsheet",
@@ -292,7 +292,7 @@ impl ReadGoogleSheetsRangeNode {
 
 #[async_trait]
 impl NodeLogic for ReadGoogleSheetsRangeNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_sheets_read_range",
             "Read Range",
@@ -420,7 +420,7 @@ impl WriteGoogleSheetsRangeNode {
 
 #[async_trait]
 impl NodeLogic for WriteGoogleSheetsRangeNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_sheets_write_range",
             "Write Range",
@@ -551,7 +551,7 @@ impl AppendGoogleSheetsRowsNode {
 
 #[async_trait]
 impl NodeLogic for AppendGoogleSheetsRowsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_sheets_append_rows",
             "Append Rows",
@@ -687,7 +687,7 @@ impl ClearGoogleSheetsRangeNode {
 
 #[async_trait]
 impl NodeLogic for ClearGoogleSheetsRangeNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_sheets_clear_range",
             "Clear Range",
@@ -789,7 +789,7 @@ impl AddGoogleSheetNode {
 
 #[async_trait]
 impl NodeLogic for AddGoogleSheetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_sheets_add_sheet",
             "Add Sheet",
@@ -900,7 +900,7 @@ impl DeleteGoogleSheetNode {
 
 #[async_trait]
 impl NodeLogic for DeleteGoogleSheetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_sheets_delete_sheet",
             "Delete Sheet",

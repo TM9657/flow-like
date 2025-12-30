@@ -22,7 +22,7 @@ impl EmbedDocumentNode {
 
 #[async_trait]
 impl NodeLogic for EmbedDocumentNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "embed_document",
             "Embed Document",

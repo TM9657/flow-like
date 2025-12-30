@@ -22,7 +22,7 @@ impl HashFileNode {
 
 #[async_trait]
 impl NodeLogic for HashFileNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "path_hash_file",
             "Hash File",

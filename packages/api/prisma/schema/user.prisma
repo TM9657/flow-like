@@ -37,6 +37,7 @@ model User {
     comments                    Comment[]
     llmUsage                    LLMUsageTracking[]
     executionUsage              ExecutionUsageTracking[]
+    executionRuns               ExecutionRun[]
     feedback                    Feedback[]
     assignedPublicationRequests PublicationRequest[]
     publicationLogs             PublicationLog[]
@@ -160,4 +161,112 @@ model ExecutionUsageTracking {
 
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
+}
+
+enum RunStatus {
+    PENDING
+    RUNNING
+    COMPLETED
+    FAILED
+    CANCELLED
+    TIMEOUT
+}
+
+enum RunMode {
+    LOCAL
+    HTTP                  /// Direct HTTP executor (K8s pool, Docker Compose, Azure Functions, GCP)
+    LAMBDA                /// AWS Lambda
+    KUBERNETES_ISOLATED   /// Isolated K8s job
+    KUBERNETES_POOL       /// Warm K8s executor pool (legacy)
+    FUNCTION              /// Generic function (legacy)
+    QUEUE                 /// Queue-based dispatch (Redis, SQS, Kafka)
+}
+
+/// Streaming events from execution environments
+/// These are batch-pushed by executors and fetched via long polling
+model ExecutionEvent {
+    id String @id
+
+    /// The run this event belongs to
+    run   ExecutionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+    runId String
+
+    /// Event sequence number (for ordering)
+    sequence Int
+    /// Event type (log, progress, output, error, etc.)
+    eventType String
+    /// Event payload (JSON)
+    payload Json
+
+    /// Whether this event has been delivered to the client
+    delivered Boolean @default(false)
+
+    /// Auto-cleanup after TTL
+    expiresAt DateTime
+
+    createdAt DateTime @default(now())
+
+    @@index([runId, delivered, sequence])
+    @@index([expiresAt])
+}
+
+/// Tracks individual execution runs of boards/events
+model ExecutionRun {
+    id String @id
+
+    /// The board being executed
+    boardId String
+    /// Version of the board (optional)
+    version String?
+    /// Event ID if triggered by an event
+    eventId String?
+    /// Node ID that was executed (start node)
+    nodeId String?
+
+    /// Execution status
+    status RunStatus @default(PENDING)
+    /// Execution mode (local, k8s isolated, k8s pool, function)
+    mode RunMode @default(LOCAL)
+    /// Highest log level encountered during execution (0=Debug, 1=Info, 2=Warn, 3=Error, 4=Fatal)
+    logLevel Int @default(0)
+
+    /// Length of input payload in bytes (for tracking only)
+    inputPayloadLen BigInt @default(0)
+    /// Encryption key for input payload stored in object storage (base64 encoded)
+    inputPayloadKey String?
+    /// Length of output payload in bytes (for tracking only)
+    outputPayloadLen BigInt @default(0)
+    /// Error message if failed
+    errorMessage String?
+
+    /// Progress percentage (0-100)
+    progress Int @default(0)
+    /// Current step/stage description
+    currentStep String?
+
+    /// When execution started
+    startedAt DateTime?
+    /// When execution completed
+    completedAt DateTime?
+    /// TTL - auto-cleanup streaming events after this time
+    expiresAt DateTime?
+
+    /// User who initiated the run
+    user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+    userId String?
+
+    /// App the board belongs to
+    app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+    appId String
+
+    /// Streaming events for this run
+    events ExecutionEvent[]
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([appId, status])
+    @@index([userId, status])
+    @@index([boardId])
+    @@index([expiresAt])
 }

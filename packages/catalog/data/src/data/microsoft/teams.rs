@@ -91,7 +91,7 @@ impl ListJoinedTeamsNode {
 
 #[async_trait]
 impl NodeLogic for ListJoinedTeamsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_teams_list_joined",
             "List Joined Teams",
@@ -181,7 +181,7 @@ impl ListTeamChannelsNode {
 
 #[async_trait]
 impl NodeLogic for ListTeamChannelsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_teams_list_channels",
             "List Team Channels",
@@ -276,7 +276,7 @@ impl SendChannelMessageNode {
 
 #[async_trait]
 impl NodeLogic for SendChannelMessageNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_teams_send_message",
             "Send Channel Message",
@@ -404,7 +404,7 @@ impl GetChannelMessagesNode {
 
 #[async_trait]
 impl NodeLogic for GetChannelMessagesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_teams_get_messages",
             "Get Channel Messages",
@@ -515,7 +515,7 @@ impl CreateTeamNode {
 
 #[async_trait]
 impl NodeLogic for CreateTeamNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_teams_create_team",
             "Create Team",
@@ -646,7 +646,7 @@ impl CreateChannelNode {
 
 #[async_trait]
 impl NodeLogic for CreateChannelNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_teams_create_channel",
             "Create Channel",

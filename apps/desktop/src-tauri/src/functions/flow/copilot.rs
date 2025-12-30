@@ -1,4 +1,3 @@
-use crate::get_full_catalog;
 use crate::state::{TauriFlowLikeState, TauriSettingsState};
 use async_trait::async_trait;
 use flow_like::flow::board::Board;
@@ -7,6 +6,7 @@ use flow_like::flow::copilot::{
 };
 use flow_like::flow::pin::{Pin, PinType};
 use flow_like::flow::variable::VariableType;
+use flow_like_catalog::get_catalog;
 use std::sync::Arc;
 use tauri::{AppHandle, State, ipc::Channel};
 
@@ -39,15 +39,14 @@ fn pin_to_metadata(p: &Pin) -> PinMetadata {
 #[async_trait]
 impl CatalogProvider for DesktopCatalogProvider {
     async fn search(&self, query: &str) -> Vec<NodeMetadata> {
-        let catalog = get_full_catalog();
+        let catalog = get_catalog();
         let query_lower = query.to_lowercase();
         let query_tokens: Vec<&str> = query_lower.split_whitespace().collect();
 
         let mut scored_matches: Vec<(i32, NodeMetadata)> = Vec::new();
-        let state_guard = &self.state.0;
 
         for logic in catalog {
-            let node = logic.get_node(state_guard).await;
+            let node = logic.get_node();
             let name_lower = node.name.to_lowercase();
             let friendly_lower = node.friendly_name.to_lowercase();
             let desc_lower = node.description.to_lowercase();
@@ -131,13 +130,12 @@ impl CatalogProvider for DesktopCatalogProvider {
     }
 
     async fn search_by_pin_type(&self, pin_type: &str, is_input: bool) -> Vec<NodeMetadata> {
-        let catalog = get_full_catalog();
+        let catalog = get_catalog();
         let pin_type = pin_type.to_lowercase();
         let mut matches = Vec::new();
-        let state_guard = &self.state.0;
 
         for logic in catalog {
-            let node = logic.get_node(state_guard).await;
+            let node = logic.get_node();
             let name_lower = node.name.to_lowercase();
             let category = name_lower.split("::").nth(1).unwrap_or("");
 
@@ -181,13 +179,12 @@ impl CatalogProvider for DesktopCatalogProvider {
     }
 
     async fn filter_by_category(&self, category_prefix: &str) -> Vec<NodeMetadata> {
-        let catalog = get_full_catalog();
+        let catalog = get_catalog();
         let category_prefix = category_prefix.to_lowercase();
         let mut matches = Vec::new();
-        let state_guard = &self.state.0;
 
         for logic in catalog {
-            let node = logic.get_node(state_guard).await;
+            let node = logic.get_node();
             let name_lower = node.name.to_lowercase();
             // Extract category from name (e.g., "flow_like_catalog::string::concat" -> "string")
             let category = name_lower.split("::").nth(1).unwrap_or("");
@@ -221,11 +218,10 @@ impl CatalogProvider for DesktopCatalogProvider {
     }
 
     async fn get_all_nodes(&self) -> Vec<String> {
-        let catalog = get_full_catalog();
-        let state_guard = &self.state.0;
+        let catalog = get_catalog();
         let mut names = Vec::new();
         for logic in catalog {
-            let node = logic.get_node(state_guard).await;
+            let node = logic.get_node();
             names.push(node.name);
         }
         names

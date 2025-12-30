@@ -54,7 +54,7 @@ impl GetGitHubFileContentsNode {
 
 #[async_trait]
 impl NodeLogic for GetGitHubFileContentsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_get_file_contents",
             "Get File Contents",
@@ -259,7 +259,7 @@ impl CreateOrUpdateGitHubFileNode {
 
 #[async_trait]
 impl NodeLogic for CreateOrUpdateGitHubFileNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_create_or_update_file",
             "Create/Update File",
@@ -505,7 +505,7 @@ impl DeleteGitHubFileNode {
 
 #[async_trait]
 impl NodeLogic for DeleteGitHubFileNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_delete_file",
             "Delete File",
@@ -702,7 +702,7 @@ impl DownloadGitHubFileNode {
 
 #[async_trait]
 impl NodeLogic for DownloadGitHubFileNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_download_file",
             "Download File",

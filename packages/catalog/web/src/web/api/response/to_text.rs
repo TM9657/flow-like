@@ -23,7 +23,7 @@ impl ToTextNode {
 
 #[async_trait]
 impl NodeLogic for ToTextNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "http_response_to_text",
             "To Text",

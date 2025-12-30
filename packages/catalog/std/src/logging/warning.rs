@@ -23,7 +23,7 @@ impl WarningNode {
 
 #[async_trait]
 impl NodeLogic for WarningNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("log_warning", "Log Warning", "Logs a Warning", "Logging");
         node.add_icon("/flow/icons/log-warning.svg");
 

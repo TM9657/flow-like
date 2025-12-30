@@ -20,7 +20,7 @@ impl StringToUpperNode {
 
 #[async_trait]
 impl NodeLogic for StringToUpperNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "string_to_upper",
             "To Upper Case",

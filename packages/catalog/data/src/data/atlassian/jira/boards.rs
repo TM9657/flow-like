@@ -60,7 +60,7 @@ impl GetBoardsNode {
 
 #[async_trait]
 impl NodeLogic for GetBoardsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_boards",
             "Get Boards",
@@ -218,7 +218,7 @@ impl GetBoardIssuesNode {
 
 #[async_trait]
 impl NodeLogic for GetBoardIssuesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_board_issues",
             "Get Board Issues",
@@ -382,7 +382,7 @@ impl GetBacklogNode {
 
 #[async_trait]
 impl NodeLogic for GetBacklogNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_backlog",
             "Get Backlog",

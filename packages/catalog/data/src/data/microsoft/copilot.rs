@@ -153,7 +153,7 @@ impl GetCopilotInteractionsNode {
 
 #[async_trait]
 impl NodeLogic for GetCopilotInteractionsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_copilot_get_interactions",
             "Get Copilot Interactions",
@@ -293,7 +293,7 @@ impl ListMeetingInsightsNode {
 
 #[async_trait]
 impl NodeLogic for ListMeetingInsightsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_copilot_list_meeting_insights",
             "List Meeting Insights",
@@ -396,7 +396,7 @@ impl GetMeetingInsightNode {
 
 #[async_trait]
 impl NodeLogic for GetMeetingInsightNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_copilot_get_meeting_insight",
             "Get Meeting Insight",
@@ -742,7 +742,7 @@ impl GraphSearchNode {
 
 #[async_trait]
 impl NodeLogic for GraphSearchNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_graph_search",
             "Microsoft Search",
@@ -1627,7 +1627,7 @@ impl CopilotChatNode {
 
 #[async_trait]
 impl NodeLogic for CopilotChatNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_copilot_chat",
             "Copilot Chat",
@@ -2211,7 +2211,7 @@ impl CopilotSemanticSearchNode {
 
 #[async_trait]
 impl NodeLogic for CopilotSemanticSearchNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_copilot_semantic_search",
             "Copilot Search",
@@ -2393,7 +2393,7 @@ impl SubscribeCopilotNotificationsNode {
 
 #[async_trait]
 impl NodeLogic for SubscribeCopilotNotificationsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_copilot_subscribe_notifications",
             "Subscribe Copilot Notifications",
@@ -2541,7 +2541,7 @@ impl GetUserCopilotSettingsNode {
 
 #[async_trait]
 impl NodeLogic for GetUserCopilotSettingsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_copilot_get_user_settings",
             "Get User Copilot Settings",
@@ -2627,7 +2627,7 @@ impl FilterCopilotInteractionsByTypeNode {
 
 #[async_trait]
 impl NodeLogic for FilterCopilotInteractionsByTypeNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_copilot_filter_interactions",
             "Filter Copilot Interactions",

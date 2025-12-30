@@ -20,7 +20,7 @@ impl MinFloatNode {
 
 #[async_trait]
 impl NodeLogic for MinFloatNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "float_min",
             "Min",

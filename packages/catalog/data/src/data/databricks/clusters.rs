@@ -72,7 +72,7 @@ impl ListDatabricksClustersNode {
 
 #[async_trait]
 impl NodeLogic for ListDatabricksClustersNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_list_clusters",
             "List Clusters",
@@ -230,7 +230,7 @@ impl GetDatabricksClusterNode {
 
 #[async_trait]
 impl NodeLogic for GetDatabricksClusterNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_get_cluster",
             "Get Cluster",
@@ -390,7 +390,7 @@ impl StartDatabricksClusterNode {
 
 #[async_trait]
 impl NodeLogic for StartDatabricksClusterNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_start_cluster",
             "Start Cluster",
@@ -529,7 +529,7 @@ impl StopDatabricksClusterNode {
 
 #[async_trait]
 impl NodeLogic for StopDatabricksClusterNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_stop_cluster",
             "Stop Cluster",

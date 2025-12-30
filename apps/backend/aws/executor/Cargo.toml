@@ -1,0 +1,26 @@
+[package]
+name = "aws-executor"
+version = "0.1.0"
+edition = "2024"
+description = "Flow-Like AWS Lambda Executor with Streaming Support"
+
+[dependencies]
+flow-like-executor.workspace = true
+flow-like-types.workspace = true
+lambda_http.workspace = true
+mimalloc.workspace = true
+axum.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+sentry.workspace = true
+sentry-tracing.workspace = true
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false

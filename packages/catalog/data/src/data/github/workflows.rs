@@ -82,7 +82,7 @@ impl ListWorkflowsNode {
 
 #[async_trait]
 impl NodeLogic for ListWorkflowsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "github_list_workflows",
             "List Workflows",
@@ -205,7 +205,7 @@ impl TriggerWorkflowNode {
 
 #[async_trait]
 impl NodeLogic for TriggerWorkflowNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "github_trigger_workflow",
             "Trigger Workflow",
@@ -331,7 +331,7 @@ impl ListWorkflowRunsNode {
 
 #[async_trait]
 impl NodeLogic for ListWorkflowRunsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "github_list_workflow_runs",
             "List Workflow Runs",
@@ -515,7 +515,7 @@ impl GetWorkflowRunNode {
 
 #[async_trait]
 impl NodeLogic for GetWorkflowRunNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "github_get_workflow_run",
             "Get Workflow Run",
@@ -625,7 +625,7 @@ impl CancelWorkflowRunNode {
 
 #[async_trait]
 impl NodeLogic for CancelWorkflowRunNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "github_cancel_workflow_run",
             "Cancel Workflow Run",
@@ -729,7 +729,7 @@ impl RerunWorkflowNode {
 
 #[async_trait]
 impl NodeLogic for RerunWorkflowNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "github_rerun_workflow",
             "Rerun Workflow",
@@ -847,7 +847,7 @@ impl GetLatestWorkflowRunNode {
 
 #[async_trait]
 impl NodeLogic for GetLatestWorkflowRunNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "github_get_latest_workflow_run",
             "Get Latest Workflow Run",

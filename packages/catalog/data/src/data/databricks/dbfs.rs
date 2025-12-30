@@ -44,7 +44,7 @@ impl ListDatabricksDbfsNode {
 
 #[async_trait]
 impl NodeLogic for ListDatabricksDbfsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_list_dbfs",
             "List DBFS Files",
@@ -204,7 +204,7 @@ impl ReadDatabricksDbfsNode {
 
 #[async_trait]
 impl NodeLogic for ReadDatabricksDbfsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_read_dbfs",
             "Read DBFS File",
@@ -390,7 +390,7 @@ impl GetDatabricksDbfsStatusNode {
 
 #[async_trait]
 impl NodeLogic for GetDatabricksDbfsStatusNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_databricks_get_dbfs_status",
             "Get DBFS Status",

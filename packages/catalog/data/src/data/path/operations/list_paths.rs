@@ -23,7 +23,7 @@ impl ListPathsNode {
 
 #[async_trait]
 impl NodeLogic for ListPathsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "path_list_paths",
             "List Paths",

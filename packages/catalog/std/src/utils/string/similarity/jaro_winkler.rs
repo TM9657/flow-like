@@ -22,7 +22,7 @@ impl JaroWinklerDistanceNode {
 
 #[async_trait]
 impl NodeLogic for JaroWinklerDistanceNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "jaro_winkler_distance",
             "Jaro-Winkler Distance",

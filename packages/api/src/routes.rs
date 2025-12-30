@@ -5,6 +5,7 @@ pub mod app;
 pub mod auth;
 pub mod bit;
 pub mod chat;
+pub mod execution;
 pub mod health;
 pub mod info;
 pub mod oauth;

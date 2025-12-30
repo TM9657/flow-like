@@ -23,7 +23,7 @@ impl ListWithOffsetNode {
 
 #[async_trait]
 impl NodeLogic for ListWithOffsetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "path_list_with_offset",
             "List With Offset",

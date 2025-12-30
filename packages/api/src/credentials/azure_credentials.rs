@@ -17,9 +17,15 @@ use std::sync::Arc;
 #[cfg(feature = "azure")]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AzureRuntimeCredentials {
-    pub sas_token: Option<String>,
+    /// SAS token for meta container
+    pub meta_sas_token: Option<String>,
+    /// SAS token for content container
+    pub content_sas_token: Option<String>,
+    /// SAS token for logs container
+    pub logs_sas_token: Option<String>,
     pub meta_container: String,
     pub content_container: String,
+    pub logs_container: String,
     pub account_name: String,
     pub account_key: Option<String>,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
@@ -27,11 +33,19 @@ pub struct AzureRuntimeCredentials {
 
 #[cfg(feature = "azure")]
 impl AzureRuntimeCredentials {
-    pub fn new(meta_container: &str, content_container: &str, account_name: &str) -> Self {
+    pub fn new(
+        meta_container: &str,
+        content_container: &str,
+        logs_container: &str,
+        account_name: &str,
+    ) -> Self {
         AzureRuntimeCredentials {
-            sas_token: None,
+            meta_sas_token: None,
+            content_sas_token: None,
+            logs_sas_token: None,
             meta_container: meta_container.to_string(),
             content_container: content_container.to_string(),
+            logs_container: logs_container.to_string(),
             account_name: account_name.to_string(),
             account_key: None,
             expiration: None,
@@ -39,10 +53,19 @@ impl AzureRuntimeCredentials {
     }
 
     pub fn from_env() -> Self {
+        let logs_container = std::env::var("AZURE_LOG_CONTAINER").unwrap_or_default();
+        if logs_container.is_empty() {
+            tracing::warn!(
+                "AZURE_LOG_CONTAINER environment variable is not set - logs will not be persisted"
+            );
+        }
         AzureRuntimeCredentials {
-            sas_token: std::env::var("AZURE_SAS_TOKEN").ok(),
+            meta_sas_token: None,
+            content_sas_token: None,
+            logs_sas_token: None,
             meta_container: std::env::var("AZURE_META_CONTAINER").unwrap_or_default(),
             content_container: std::env::var("AZURE_CONTENT_CONTAINER").unwrap_or_default(),
+            logs_container,
             account_name: std::env::var("AZURE_STORAGE_ACCOUNT_NAME").unwrap_or_default(),
             account_key: std::env::var("AZURE_STORAGE_ACCOUNT_KEY").ok(),
             expiration: None,
@@ -51,9 +74,12 @@ impl AzureRuntimeCredentials {
 
     pub async fn master_credentials(&self) -> Self {
         AzureRuntimeCredentials {
-            sas_token: std::env::var("AZURE_SAS_TOKEN").ok(),
+            meta_sas_token: None,
+            content_sas_token: None,
+            logs_sas_token: None,
             meta_container: self.meta_container.clone(),
             content_container: self.content_container.clone(),
+            logs_container: self.logs_container.clone(),
             account_name: self.account_name.clone(),
             account_key: std::env::var("AZURE_STORAGE_ACCOUNT_KEY").ok(),
             expiration: None,
@@ -84,60 +110,164 @@ impl AzureRuntimeCredentials {
                 flow_like_types::anyhow!("AZURE_STORAGE_ACCOUNT_KEY environment variable not set")
             })?;
 
-        let apps_prefix = format!("apps/{}", app_id);
-        let user_prefix = format!("users/{}/apps/{}", sub, app_id);
-        let log_prefix = format!("logs/runs/{}", app_id);
-        let temporary_user_prefix = format!("tmp/user/{}/apps/{}", sub, app_id);
-        let temporary_global_prefix = format!("tmp/global/apps/{}", app_id);
-
-        let paths = match mode {
-            CredentialsAccess::EditApp => vec![apps_prefix],
-            CredentialsAccess::ReadApp => vec![apps_prefix],
-            CredentialsAccess::InvokeNone => vec![user_prefix, temporary_user_prefix, log_prefix],
-            CredentialsAccess::InvokeRead => vec![
-                apps_prefix,
-                user_prefix,
-                temporary_user_prefix,
-                temporary_global_prefix,
-                log_prefix,
-            ],
-            CredentialsAccess::InvokeWrite => vec![
-                apps_prefix,
-                user_prefix,
-                temporary_user_prefix,
-                temporary_global_prefix,
-                log_prefix,
-            ],
-            CredentialsAccess::ReadLogs => vec![log_prefix],
-        };
-
-        let permissions = match mode {
-            CredentialsAccess::EditApp => "rwdl",
-            CredentialsAccess::ReadApp => "rl",
-            CredentialsAccess::InvokeNone => "rwdl",
-            CredentialsAccess::InvokeRead => "rl",
-            CredentialsAccess::InvokeWrite => "rwdl",
-            CredentialsAccess::ReadLogs => "rl",
-        };
-
         let expiry = chrono::Utc::now() + chrono::Duration::hours(1);
         let expiry_str = expiry.format("%Y-%m-%dT%H:%M:%SZ").to_string();
         let start = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
-        let sas_token = generate_directory_sas(
-            &self.account_name,
-            &self.content_container,
-            &paths.join(","),
-            permissions,
-            &start,
-            &expiry_str,
-            &account_key,
-        )?;
+        // Determine which containers and paths need SAS tokens based on access mode
+        let (meta_sas, content_sas, logs_sas) = match mode {
+            CredentialsAccess::EditApp => {
+                // EditApp: need write access to meta container for app manifests
+                // Also need content access for app data (stored at apps/{app_id})
+                let meta_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.meta_container,
+                    &format!("apps/{}", app_id),
+                    "rwdl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                let content_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.content_container,
+                    &format!("apps/{}", app_id),
+                    "rwdl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                (Some(meta_sas), Some(content_sas), None)
+            }
+            CredentialsAccess::ReadApp => {
+                // ReadApp: need read access to meta container
+                // Also need content access for app data (stored at apps/{app_id})
+                let meta_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.meta_container,
+                    &format!("apps/{}", app_id),
+                    "rl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                let content_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.content_container,
+                    &format!("apps/{}", app_id),
+                    "rl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                (Some(meta_sas), Some(content_sas), None)
+            }
+            CredentialsAccess::InvokeNone => {
+                // InvokeNone: write access to user content, write to logs
+                let content_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.content_container,
+                    &format!("users/{}/apps/{}", sub, app_id),
+                    "rwdl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                let logs_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.logs_container,
+                    &format!("runs/{}", app_id),
+                    "rwdl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                (None, Some(content_sas), Some(logs_sas))
+            }
+            CredentialsAccess::InvokeRead => {
+                // InvokeRead: read app from meta, read user content, read logs
+                let meta_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.meta_container,
+                    &format!("apps/{}", app_id),
+                    "rl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                let content_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.content_container,
+                    &format!("users/{}/apps/{}", sub, app_id),
+                    "rl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                let logs_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.logs_container,
+                    &format!("runs/{}", app_id),
+                    "rl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                (Some(meta_sas), Some(content_sas), Some(logs_sas))
+            }
+            CredentialsAccess::InvokeWrite => {
+                // InvokeWrite: read app from meta, write user content, write logs
+                let meta_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.meta_container,
+                    &format!("apps/{}", app_id),
+                    "rl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                let content_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.content_container,
+                    &format!("users/{}/apps/{}", sub, app_id),
+                    "rwdl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                let logs_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.logs_container,
+                    &format!("runs/{}", app_id),
+                    "rwdl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                (Some(meta_sas), Some(content_sas), Some(logs_sas))
+            }
+            CredentialsAccess::ReadLogs => {
+                // ReadLogs: read access to logs container only
+                let logs_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.logs_container,
+                    &format!("runs/{}", app_id),
+                    "rl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                (None, None, Some(logs_sas))
+            }
+        };
 
         Ok(Self {
-            sas_token: Some(sas_token),
+            meta_sas_token: meta_sas,
+            content_sas_token: content_sas,
+            logs_sas_token: logs_sas,
             meta_container: self.meta_container.clone(),
             content_container: self.content_container.clone(),
+            logs_container: self.logs_container.clone(),
             account_name: self.account_name.clone(),
             account_key: None,
             expiration: Some(expiry),
@@ -208,9 +338,12 @@ impl AzureRuntimeCredentials {
         )?;
 
         Ok(Self {
-            sas_token: Some(sas_token),
+            meta_sas_token: Some(sas_token.clone()),
+            content_sas_token: Some(sas_token.clone()),
+            logs_sas_token: Some(sas_token),
             meta_container: self.meta_container.clone(),
             content_container: self.content_container.clone(),
+            logs_container: self.logs_container.clone(),
             account_name: self.account_name.clone(),
             account_key: None,
             expiration: Some(expiry),
@@ -415,9 +548,12 @@ fn generate_directory_sas(
 impl RuntimeCredentialsTrait for AzureRuntimeCredentials {
     fn into_shared_credentials(&self) -> SharedCredentials {
         SharedCredentials::Azure(AzureSharedCredentials {
-            sas_token: self.sas_token.clone().unwrap_or_default(),
+            meta_sas_token: self.meta_sas_token.clone(),
+            content_sas_token: self.content_sas_token.clone(),
+            logs_sas_token: self.logs_sas_token.clone(),
             meta_container: self.meta_container.clone(),
             content_container: self.content_container.clone(),
+            logs_container: self.logs_container.clone(),
             account_name: self.account_name.clone(),
             account_key: self.account_key.clone(),
             expiration: self.expiration,
@@ -456,9 +592,7 @@ impl RuntimeCredentialsTrait for AzureRuntimeCredentials {
         let (account, container, sas) = (
             self.account_name.clone(),
             self.content_container.clone(),
-            self.sas_token
-                .clone()
-                .ok_or(anyhow!("AZURE_SAS_TOKEN is not set"))?,
+            self.content_sas_token.clone().unwrap_or_default(),
         );
 
         config.register_build_logs_database(Arc::new(make_azure_builder(
@@ -767,8 +901,11 @@ mod integration_tests {
     #[test]
     fn test_azure_runtime_credentials_serialization() {
         let creds = AzureRuntimeCredentials {
-            sas_token: Some("?sv=2022-11-02&sig=test".to_string()),
+            content_sas_token: None,
+            logs_sas_token: None,
+            meta_sas_token: None,
             meta_container: "meta".to_string(),
+            logs_container: "logs".to_string(),
             content_container: "content".to_string(),
             account_name: "teststorage".to_string(),
             account_key: None,
@@ -778,7 +915,6 @@ mod integration_tests {
         let json = to_string(&creds).expect("Failed to serialize");
         let deserialized: AzureRuntimeCredentials = from_str(&json).expect("Failed to deserialize");
 
-        assert_eq!(creds.sas_token, deserialized.sas_token);
         assert_eq!(creds.account_name, deserialized.account_name);
     }
 }

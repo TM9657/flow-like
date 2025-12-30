@@ -219,24 +219,40 @@ impl Board {
     }
 
     async fn node_updates(&mut self, state: Arc<FlowLikeState>) {
-        let reference = Arc::new(self.clone());
         let registry = state.node_registry().clone();
         let registry = registry.read().await;
-        for node in self.nodes.values_mut() {
-            let node_logic = match self.logic_nodes.get(&node.name) {
-                Some(logic) => Arc::clone(logic),
-                None => match registry.instantiate(node) {
-                    Ok(new_logic) => {
-                        self.logic_nodes
-                            .insert(node.name.clone(), Arc::clone(&new_logic));
-                        Arc::clone(&new_logic)
-                    }
-                    Err(_) => continue,
-                },
-            };
-            node_logic.on_update(node, reference.clone()).await;
 
-            node.hash();
+        const MAX_PASSES: usize = 10;
+        for _ in 0..MAX_PASSES {
+            let reference = Arc::new(self.clone());
+            let mut changed = false;
+
+            for node in self.nodes.values_mut() {
+                let old_hash = node.hash;
+
+                let node_logic = match self.logic_nodes.get(&node.name) {
+                    Some(logic) => Arc::clone(logic),
+                    None => match registry.instantiate(node) {
+                        Ok(new_logic) => {
+                            self.logic_nodes
+                                .insert(node.name.clone(), Arc::clone(&new_logic));
+                            Arc::clone(&new_logic)
+                        }
+                        Err(_) => continue,
+                    },
+                };
+                node_logic.on_update(node, reference.clone()).await;
+
+                node.hash();
+
+                if node.hash != old_hash {
+                    changed = true;
+                }
+            }
+
+            if !changed {
+                break;
+            }
         }
 
         for layer in self.layers.values_mut() {

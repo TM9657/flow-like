@@ -105,7 +105,7 @@ fn tls() -> async_native_tls::TlsConnector {
 
 #[async_trait]
 impl NodeLogic for SmtpConnectNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "email_smtp_connect",
             "SMTP Connect",

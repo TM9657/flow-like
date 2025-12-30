@@ -40,7 +40,7 @@ impl CreateGoogleMeetNode {
 
 #[async_trait]
 impl NodeLogic for CreateGoogleMeetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_meet_create",
             "Create Meeting",
@@ -300,7 +300,7 @@ impl CreateInstantMeetNode {
 
 #[async_trait]
 impl NodeLogic for CreateInstantMeetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_meet_instant",
             "Create Instant Meeting",
@@ -450,7 +450,7 @@ impl GetGoogleMeetDetailsNode {
 
 #[async_trait]
 impl NodeLogic for GetGoogleMeetDetailsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_meet_get",
             "Get Meeting Details",
@@ -623,7 +623,7 @@ impl AddMeetToEventNode {
 
 #[async_trait]
 impl NodeLogic for AddMeetToEventNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_meet_add_to_event",
             "Add Meet to Event",

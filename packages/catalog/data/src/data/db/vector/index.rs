@@ -24,7 +24,7 @@ impl IndexLocalDatabaseNode {
 
 #[async_trait]
 impl NodeLogic for IndexLocalDatabaseNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "index_local_db",
             "Build Index",

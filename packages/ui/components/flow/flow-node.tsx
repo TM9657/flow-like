@@ -13,6 +13,7 @@ import {
 	CircleStopIcon,
 	CircleXIcon,
 	ClockIcon,
+	CloudCog,
 	PlayCircleIcon,
 	ScrollTextIcon,
 	SquareCheckIcon,
@@ -36,33 +37,33 @@ import {
 	ILogLevel,
 	IPinType,
 	IValueType,
+	isTauri,
 	moveNodeCommand,
 	removeNodeCommand,
 	updateNodeCommand,
 	upsertLayerCommand,
 	upsertPinCommand,
 } from "../../lib";
+import type { INode } from "../../lib";
 import { logLevelFromNumber } from "../../lib/log-level";
 import type { IBoard, IComment, ILayer } from "../../lib/schema/flow/board";
 import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
-import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IVariableType } from "../../lib/schema/flow/pin";
 import { convertJsonToUint8Array } from "../../lib/uint8";
 import { useBackendStore } from "../../state/backend-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 import {
-	Button,
 	Dialog,
 	DialogContent,
 	DialogDescription,
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-	Textarea,
 } from "../ui";
-import { DynamicImage } from "../ui/dynamic-image";
+import { DynamicImage } from "../ui";
 import { AutoResizeText } from "./auto-resize-text";
 import { useUndoRedo } from "./flow-history";
+import { EventPayloadForm } from "./flow-node/event-payload-form";
 import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
 import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
@@ -95,6 +96,8 @@ export type FlowNode = Node<
 		fnRefsHash?: string;
 		version?: [number, number, number];
 		onExecute: (node: INode, payload?: object) => Promise<void>;
+		onRemoteExecute?: (node: INode, payload?: object) => Promise<void>;
+		isOffline?: boolean;
 		onCopy: () => Promise<void>;
 		remoteSelections?: RemoteSelectionParticipant[];
 		onOpenInfo?: (node: INode) => void;
@@ -620,6 +623,12 @@ const FlowNodeInner = memo(
 		]);
 		const playNode = useMemo(() => {
 			if (!props.data.node.start) return null;
+
+			const canRemoteExecute =
+				isTauri() &&
+				!props.data.isOffline &&
+				props.data.onRemoteExecute !== undefined;
+
 			if (executionState === "done" || executing)
 				return (
 					<button
@@ -633,19 +642,41 @@ const FlowNodeInner = memo(
 						<CircleStopIcon className="w-3 h-3 group-hover/play:scale-110 text-primary" />
 					</button>
 				);
+
+			const handleLocalExecute = async (payloadObj?: object) => {
+				if (executing) return;
+				setExecuting(true);
+				await props.data.onExecute(props.data.node, payloadObj);
+				setExecuting(false);
+			};
+
+			const handleRemoteExecute = async (payloadObj?: object) => {
+				if (executing || !props.data.onRemoteExecute) return;
+				setExecuting(true);
+				await props.data.onRemoteExecute(props.data.node, payloadObj);
+				setExecuting(false);
+			};
+
 			if (Object.keys(props.data.node.pins).length <= 1)
 				return (
-					<button
-						className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 top-0 translate-x-[calc(-120%)]"
-						onClick={async (e) => {
-							if (executing) return;
-							setExecuting(true);
-							await props.data.onExecute(props.data.node);
-							setExecuting(false);
-						}}
-					>
-						<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
-					</button>
+					<div className="absolute left-0 top-0 translate-x-[calc(-120%)] flex flex-col gap-1">
+						<button
+							className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1"
+							onClick={() => handleLocalExecute()}
+							title="Execute locally"
+						>
+							<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+						</button>
+						{canRemoteExecute && (
+							<button
+								className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 relative"
+								onClick={() => handleRemoteExecute()}
+								title="Execute on server"
+							>
+								<CloudCog className="w-3 h-3 group-hover/play:scale-110" />
+							</button>
+						)}
+					</div>
 				);
 
 			return (
@@ -653,44 +684,33 @@ const FlowNodeInner = memo(
 					open={payload.open}
 					onOpenChange={(open) => setPayload((old) => ({ ...old, open }))}
 				>
-					<DialogTrigger>
-						<button className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 top-0 translate-x-[calc(-120%)]">
-							<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
-						</button>
+					<DialogTrigger asChild>
+						<div className="absolute left-0 top-0 translate-x-[calc(-120%)] flex flex-col gap-1">
+							<button
+								className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1"
+								title="Execute locally"
+							>
+								<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+							</button>
+						</div>
 					</DialogTrigger>
-					<DialogContent>
+					<DialogContent className="max-w-lg">
 						<DialogHeader>
-							<DialogTitle>Execution Payload</DialogTitle>
+							<DialogTitle>Execute {props.data.node.friendly_name}</DialogTitle>
 							<DialogDescription>
-								JSON Payload for the Event. Please have a look at the
-								documentation for example Payloads.
+								Provide input values for the event payload.
 							</DialogDescription>
 						</DialogHeader>
-						<Textarea
-							rows={10}
-							placeholder="JSON payload"
-							value={payload.payload}
-							onChange={(e) =>
-								setPayload((old) => ({
-									...old,
-									payload: e.target.value,
-								}))
+						<EventPayloadForm
+							node={props.data.node}
+							boardRef={props.data.boardRef}
+							onLocalExecute={handleLocalExecute}
+							onRemoteExecute={
+								canRemoteExecute ? handleRemoteExecute : undefined
 							}
+							canRemoteExecute={canRemoteExecute}
+							onClose={() => setPayload((old) => ({ ...old, open: false }))}
 						/>
-						<Button
-							onClick={async () => {
-								if (executing) return;
-								setExecuting(true);
-								await props.data.onExecute(
-									props.data.node,
-									JSON.parse(payload.payload),
-								);
-								setExecuting(false);
-								setPayload((old) => ({ ...old, open: false }));
-							}}
-						>
-							Send
-						</Button>
 					</DialogContent>
 				</Dialog>
 			);
@@ -701,6 +721,8 @@ const FlowNodeInner = memo(
 			executing,
 			executionState,
 			props.data.onExecute,
+			props.data.onRemoteExecute,
+			props.data.isOffline,
 			props.data.node,
 		]);
 

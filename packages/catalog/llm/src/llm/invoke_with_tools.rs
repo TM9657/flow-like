@@ -189,7 +189,7 @@ impl InvokeLLMWithToolsNode {
 
 #[async_trait]
 impl NodeLogic for InvokeLLMWithToolsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "invoke_llm_with_tools",
             "Invoke with Tools",

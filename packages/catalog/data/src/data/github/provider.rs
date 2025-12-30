@@ -47,7 +47,7 @@ impl GitHubPatProviderNode {
 
 #[async_trait]
 impl NodeLogic for GitHubPatProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_provider_pat",
             "GitHub (PAT)",
@@ -136,7 +136,7 @@ impl GitHubOAuthProviderNode {
 
 #[async_trait]
 impl NodeLogic for GitHubOAuthProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_provider_oauth",
             "GitHub (OAuth)",
@@ -223,7 +223,7 @@ impl GitHubAppProviderNode {
 
 #[async_trait]
 impl NodeLogic for GitHubAppProviderNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_provider_app",
             "GitHub (App Token)",

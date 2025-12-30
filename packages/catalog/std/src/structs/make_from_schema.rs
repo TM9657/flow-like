@@ -197,7 +197,7 @@ fn get_default_value_for_type(var_type: &VariableType, value_type: &ValueType) -
 
 #[async_trait]
 impl NodeLogic for MakeStructFromSchemaNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "struct_make_from_schema",
             "Make Struct (Schema)",

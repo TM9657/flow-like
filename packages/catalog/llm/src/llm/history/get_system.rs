@@ -22,7 +22,7 @@ impl GetSystemPromptNode {
 
 #[async_trait]
 impl NodeLogic for GetSystemPromptNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_generative_get_system_prompt",
             "Get System Prompt",

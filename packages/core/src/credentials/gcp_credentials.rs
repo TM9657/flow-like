@@ -1,4 +1,4 @@
-use crate::credentials::SharedCredentialsTrait;
+use crate::credentials::{LogsDbBuilder, SharedCredentialsTrait, StoreType};
 use flow_like_storage::lancedb::connection::ConnectBuilder;
 use flow_like_storage::object_store::StaticCredentialProvider;
 use flow_like_storage::object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
@@ -22,6 +22,7 @@ pub struct GcpSharedCredentials {
     pub access_token: Option<String>,
     pub meta_bucket: String,
     pub content_bucket: String,
+    pub logs_bucket: String,
     /// Allowed path prefixes for this credential (informational, enforcement is server-side)
     #[serde(default)]
     pub allowed_prefixes: Vec<String>,
@@ -39,12 +40,22 @@ fn default_write_access() -> bool {
 impl SharedCredentialsTrait for GcpSharedCredentials {
     #[tracing::instrument(name = "GcpSharedCredentials::to_store", skip(self, meta), fields(meta = meta), level="debug")]
     async fn to_store(&self, meta: bool) -> Result<FlowLikeStore> {
+        self.to_store_type(if meta {
+            StoreType::Meta
+        } else {
+            StoreType::Content
+        })
+        .await
+    }
+
+    #[tracing::instrument(name = "GcpSharedCredentials::to_store_type", skip(self), fields(store_type = ?store_type), level="debug")]
+    async fn to_store_type(&self, store_type: StoreType) -> Result<FlowLikeStore> {
         use flow_like_types::tokio;
 
-        let bucket = if meta {
-            self.meta_bucket.clone()
-        } else {
-            self.content_bucket.clone()
+        let bucket = match store_type {
+            StoreType::Meta => self.meta_bucket.clone(),
+            StoreType::Content => self.content_bucket.clone(),
+            StoreType::Logs => self.logs_bucket.clone(),
         };
 
         // Prefer access token for scoped credentials, fall back to service account key
@@ -114,12 +125,40 @@ impl SharedCredentialsTrait for GcpSharedCredentials {
 
         Err(anyhow!("No GCP credentials available"))
     }
+
+    fn to_logs_db_builder(&self) -> Result<LogsDbBuilder> {
+        if self.logs_bucket.is_empty() {
+            return Err(anyhow!(
+                "logs_bucket is empty - cannot create logs database builder"
+            ));
+        }
+
+        // Prefer access token for scoped credentials
+        if let Some(ref access_token) = self.access_token {
+            if !access_token.is_empty() {
+                let builder =
+                    make_gcs_builder_with_token(self.logs_bucket.clone(), access_token.clone());
+                return Ok(Arc::new(builder));
+            }
+        }
+
+        // Fall back to service account key
+        if !self.service_account_key.is_empty() {
+            let builder = make_gcs_builder_with_key(
+                self.logs_bucket.clone(),
+                self.service_account_key.clone(),
+            );
+            return Ok(Arc::new(builder));
+        }
+
+        Err(anyhow!("No GCP credentials available"))
+    }
 }
 
 fn make_gcs_builder_with_key(
     bucket: String,
     service_account_key: String,
-) -> impl Fn(object_store::path::Path) -> ConnectBuilder {
+) -> impl Fn(object_store::path::Path) -> ConnectBuilder + Send + Sync + 'static {
     move |path| {
         let url = format!("gs://{}/{}", bucket, path);
         lancedb::connect(&url).storage_option(
@@ -132,7 +171,7 @@ fn make_gcs_builder_with_key(
 fn make_gcs_builder_with_token(
     bucket: String,
     access_token: String,
-) -> impl Fn(object_store::path::Path) -> ConnectBuilder {
+) -> impl Fn(object_store::path::Path) -> ConnectBuilder + Send + Sync + 'static {
     move |path| {
         let url = format!("gs://{}/{}", bucket, path);
         lancedb::connect(&url)
@@ -155,6 +194,7 @@ mod tests {
             access_token: None,
             meta_bucket: "my-meta-bucket".to_string(),
             content_bucket: "my-content-bucket".to_string(),
+            logs_bucket: "my-logs-bucket".to_string(),
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
@@ -167,6 +207,7 @@ mod tests {
             access_token: Some("ya29.test-access-token".to_string()),
             meta_bucket: "my-meta-bucket".to_string(),
             content_bucket: "my-content-bucket".to_string(),
+            logs_bucket: "my-logs-bucket".to_string(),
             allowed_prefixes: vec!["apps/test-app".to_string()],
             write_access: false,
             expiration: Some(chrono::Utc::now() + chrono::Duration::hours(1)),
@@ -201,6 +242,7 @@ mod tests {
             "service_account_key": "{}",
             "meta_bucket": "test-meta",
             "content_bucket": "test-content",
+            "logs_bucket": "test-logs",
             "expiration": null
         }}"#,
             sa_key
@@ -237,6 +279,7 @@ mod tests {
             "service_account_key": "{}",
             "meta_bucket": "meta",
             "content_bucket": "content",
+            "logs_bucket": "logs",
             "expiration": "2025-01-15T12:00:00Z"
         }}"#,
             sa_key
@@ -264,6 +307,7 @@ mod tests {
             "access_token": "ya29.scoped-token",
             "meta_bucket": "meta",
             "content_bucket": "content",
+            "logs_bucket": "logs",
             "allowed_prefixes": ["apps/my-app", "users/user1/apps/my-app"],
             "write_access": true,
             "expiration": "2025-12-16T12:00:00Z"
@@ -279,7 +323,8 @@ mod tests {
     fn test_gcp_credentials_defaults() {
         let json = r#"{
             "meta_bucket": "meta",
-            "content_bucket": "content"
+            "content_bucket": "content",
+            "logs_bucket": "logs"
         }"#;
 
         let creds: GcpSharedCredentials = from_str(json).expect("Failed to deserialize");

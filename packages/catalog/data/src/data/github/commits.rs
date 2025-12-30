@@ -101,7 +101,7 @@ impl ListGitHubCommitsNode {
 
 #[async_trait]
 impl NodeLogic for ListGitHubCommitsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_list_commits",
             "List Commits",
@@ -337,7 +337,7 @@ impl GetGitHubCommitNode {
 
 #[async_trait]
 impl NodeLogic for GetGitHubCommitNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_get_commit",
             "Get Commit",
@@ -528,7 +528,7 @@ impl CompareGitHubCommitsNode {
 
 #[async_trait]
 impl NodeLogic for CompareGitHubCommitsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_github_compare_commits",
             "Compare Commits",

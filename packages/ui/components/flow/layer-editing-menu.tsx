@@ -301,7 +301,7 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 				options: null,
 				schema: null,
 				pin_type,
-				index: group.length,
+				index: group.length + 1,
 				value_type: IValueType.Normal,
 			};
 			return { ...prev, [id]: next };

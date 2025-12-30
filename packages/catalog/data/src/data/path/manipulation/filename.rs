@@ -22,7 +22,7 @@ impl FilenameNode {
 
 #[async_trait]
 impl NodeLogic for FilenameNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "filename",
             "Filename",
@@ -81,7 +81,7 @@ impl SetFilenameNode {
 
 #[async_trait]
 impl NodeLogic for SetFilenameNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "set_filename",
             "Set Filename",

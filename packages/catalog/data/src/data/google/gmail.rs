@@ -45,7 +45,7 @@ impl SendGmailNode {
 
 #[async_trait]
 impl NodeLogic for SendGmailNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_gmail_send",
             "Send Email",
@@ -195,7 +195,7 @@ impl CreateGmailDraftNode {
 
 #[async_trait]
 impl NodeLogic for CreateGmailDraftNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_gmail_create_draft",
             "Create Draft",
@@ -345,7 +345,7 @@ impl ListGmailLabelsNode {
 
 #[async_trait]
 impl NodeLogic for ListGmailLabelsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_gmail_list_labels",
             "List Labels",

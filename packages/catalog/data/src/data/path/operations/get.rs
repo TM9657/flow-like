@@ -22,7 +22,7 @@ impl GetNode {
 
 #[async_trait]
 impl NodeLogic for GetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "path_get",
             "Get",

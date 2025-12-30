@@ -28,7 +28,7 @@ impl SetAgentSystemPromptNode {
 
 #[async_trait]
 impl NodeLogic for SetAgentSystemPromptNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "agent_set_system_prompt",
             "Set Agent System Prompt",

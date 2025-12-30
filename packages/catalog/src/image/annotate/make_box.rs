@@ -26,7 +26,7 @@ impl MakeBoxNode {
 
 #[async_trait]
 impl NodeLogic for MakeBoxNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "make_boxe",
             "Make Box",

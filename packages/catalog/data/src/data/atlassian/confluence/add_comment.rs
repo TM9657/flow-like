@@ -35,7 +35,7 @@ impl AddConfluenceCommentNode {
 
 #[async_trait]
 impl NodeLogic for AddConfluenceCommentNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_confluence_add_comment",
             "Add Comment",

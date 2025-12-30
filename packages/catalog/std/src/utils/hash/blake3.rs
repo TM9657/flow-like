@@ -24,7 +24,7 @@ impl Blake3Node {
 
 #[async_trait]
 impl NodeLogic for Blake3Node {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "utils_hash_blake3",
             "Blake3 Hash",

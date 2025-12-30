@@ -62,7 +62,7 @@ impl ListGoogleDriveFilesNode {
 
 #[async_trait]
 impl NodeLogic for ListGoogleDriveFilesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_google_drive_list_files",
             "List Google Drive Files",

@@ -24,7 +24,7 @@ impl RerouteNode {
 
 #[async_trait]
 impl NodeLogic for RerouteNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("reroute", "Reroute", "Control Flow Node", "Control");
         node.add_input_pin("route_in", "In", "", VariableType::Generic);
         node.add_output_pin("route_out", "Out", "", VariableType::Generic);

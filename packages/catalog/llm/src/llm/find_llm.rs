@@ -22,7 +22,7 @@ impl FindLLMNode {
 
 #[async_trait]
 impl NodeLogic for FindLLMNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_generative_find_model",
             "Find Model",

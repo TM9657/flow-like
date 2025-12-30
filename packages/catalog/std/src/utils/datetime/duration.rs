@@ -28,7 +28,7 @@ struct SystemTime {
 
 #[async_trait]
 impl NodeLogic for DateTimeDurationNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "utils_datetime_duration",
             "Add Duration",

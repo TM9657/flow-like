@@ -74,7 +74,7 @@ impl GetLinkTypesNode {
 
 #[async_trait]
 impl NodeLogic for GetLinkTypesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_link_types",
             "Get Link Types",
@@ -181,7 +181,7 @@ impl GetIssueLinksNode {
 
 #[async_trait]
 impl NodeLogic for GetIssueLinksNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_get_issue_links",
             "Get Issue Links",
@@ -298,7 +298,7 @@ impl CreateIssueLinkNode {
 
 #[async_trait]
 impl NodeLogic for CreateIssueLinkNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_create_issue_link",
             "Create Issue Link",
@@ -474,7 +474,7 @@ impl RemoveIssueLinkNode {
 
 #[async_trait]
 impl NodeLogic for RemoveIssueLinkNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_atlassian_jira_remove_issue_link",
             "Remove Issue Link",

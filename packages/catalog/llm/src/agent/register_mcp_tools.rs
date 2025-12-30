@@ -30,7 +30,7 @@ pub struct RegisterMcpToolsNode {}
 
 #[async_trait]
 impl NodeLogic for RegisterMcpToolsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         build_register_mcp_tools_node()
     }
 

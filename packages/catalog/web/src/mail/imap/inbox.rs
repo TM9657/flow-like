@@ -41,7 +41,7 @@ impl ImapInboxNode {
 
 #[async_trait]
 impl NodeLogic for ImapInboxNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "mail_imap_inbox",
             "IMAP Inbox",
@@ -113,7 +113,7 @@ impl ImapListInboxesNode {
 
 #[async_trait]
 impl NodeLogic for ImapListInboxesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "mail_imap_list_inboxes",
             "IMAP List Inboxes",
@@ -203,7 +203,7 @@ impl ImapCreateMailboxNode {
 
 #[async_trait]
 impl NodeLogic for ImapCreateMailboxNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "mail_imap_create_mailbox",
             "IMAP Create Mailbox (If Missing)",

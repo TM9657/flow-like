@@ -24,7 +24,7 @@ impl ImapMarkSeenNode {
 
 #[async_trait]
 impl NodeLogic for ImapMarkSeenNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "email_imap_mark_seen",
             "Mark Mail as Seen",

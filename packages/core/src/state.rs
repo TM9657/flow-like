@@ -134,13 +134,13 @@ impl FlowNodeRegistryInner {
         self.registry.values().map(|node| node.0.clone()).collect()
     }
 
-    pub async fn prepare(state: &FlowLikeState, nodes: &Arc<Vec<Arc<dyn NodeLogic>>>) -> Self {
+    pub fn prepare(nodes: &Arc<Vec<Arc<dyn NodeLogic>>>) -> Self {
         let mut registry = FlowNodeRegistryInner {
             registry: HashMap::with_capacity(nodes.len()),
         };
 
         for logic in nodes.iter() {
-            let node = logic.get_node(state).await;
+            let node = logic.get_node();
             registry.insert(node, logic.clone());
         }
 
@@ -196,41 +196,25 @@ impl FlowNodeRegistry {
         Ok(nodes)
     }
 
-    pub async fn push_node(&mut self, logic: Arc<dyn NodeLogic>) -> flow_like_types::Result<()> {
-        let state = self
-            .parent
-            .as_ref()
-            .and_then(|weak| weak.upgrade())
-            .ok_or(flow_like_types::anyhow!("Parent not found"))?;
+    pub fn push_node(&mut self, logic: Arc<dyn NodeLogic>) {
         let mut registry = FlowNodeRegistryInner {
             registry: self.node_registry.registry.clone(),
         };
-        let node = logic.get_node(&state).await;
+        let node = logic.get_node();
         registry.insert(node, logic);
         self.node_registry = Arc::new(registry);
-        Ok(())
     }
 
-    pub async fn push_nodes(
-        &mut self,
-        nodes: Vec<Arc<dyn NodeLogic>>,
-    ) -> flow_like_types::Result<()> {
-        let state = self
-            .parent
-            .as_ref()
-            .and_then(|weak| weak.upgrade())
-            .ok_or(flow_like_types::anyhow!("Parent not found"))?;
-
+    pub fn push_nodes(&mut self, nodes: Vec<Arc<dyn NodeLogic>>) {
         let mut registry = FlowNodeRegistryInner {
             registry: self.node_registry.registry.clone(),
         };
 
         for logic in nodes {
-            let node = logic.get_node(&state).await;
+            let node = logic.get_node();
             registry.insert(node, logic);
         }
         self.node_registry = Arc::new(registry);
-        Ok(())
     }
 
     pub fn get_node(&self, node_id: &str) -> flow_like_types::Result<Node> {

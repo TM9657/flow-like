@@ -32,7 +32,7 @@ impl NewWorksheetNode {
 
 #[async_trait]
 impl NodeLogic for NewWorksheetNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "files_spreadsheet_new_worksheet",
             "New Worksheet",

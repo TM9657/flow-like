@@ -1,0 +1,327 @@
+//! Invoke event execution endpoint
+//!
+//! This endpoint triggers synchronous execution of an event workflow.
+//! The execution runs in an isolated container (executor service, Lambda, etc.)
+//! and streams results back to the user via SSE.
+//!
+//! Flow:
+//! 1. Check user access permissions
+//! 2. Look up the event to get the associated board
+//! 3. Create a run record in the database
+//! 4. Create scoped credentials based on user permissions
+//! 5. Call executor service via HTTP streaming
+//! 6. Proxy SSE events back to the user
+//!
+//! Query Parameters:
+//! - `local=true`: Track run in DB only, no remote execution (returns JSON)
+//! - `isolated=true`: Use isolated K8s job instead of pool (Kubernetes only)
+
+use crate::{
+    ensure_permission,
+    entity::{execution_run, prelude::*},
+    error::ApiError,
+    execution::{
+        DispatchRequest, ExecutionBackend, ExecutionJwtParams, TokenType, is_jwt_configured,
+        payload_storage, proxy_sse_response, sign_execution_jwt,
+    },
+    middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions,
+    state::AppState,
+};
+use axum::{
+    Extension, Json,
+    extract::{Path, Query, State},
+    response::{IntoResponse, Response},
+};
+use flow_like_types::{anyhow, create_id, tokio};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set};
+use serde::{Deserialize, Serialize};
+
+/// Query parameters for event invocation
+#[derive(Clone, Debug, Deserialize, Default)]
+pub struct InvokeEventQuery {
+    /// Track run locally only - no remote execution
+    #[serde(default)]
+    pub local: bool,
+    /// Use isolated execution (K8s job instead of pool)
+    #[serde(default)]
+    pub isolated: bool,
+}
+
+/// Request body for event invocation
+#[derive(Clone, Debug, Deserialize)]
+pub struct InvokeEventRequest {
+    /// Optional board version to execute (defaults to latest)
+    pub version: Option<String>,
+    /// Input payload for the execution
+    pub payload: Option<serde_json::Value>,
+    /// User's auth token to pass to the flow
+    pub token: Option<String>,
+    /// OAuth tokens keyed by provider name
+    pub oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+/// Response from event invocation
+#[derive(Clone, Debug, Serialize)]
+pub struct InvokeEventResponse {
+    /// Unique run ID
+    pub run_id: String,
+    /// Current status
+    pub status: String,
+    /// Message
+    pub message: Option<String>,
+    /// User JWT for polling (only for async/local mode)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub poll_token: Option<String>,
+}
+
+/// Get credentials access for invoke - always InvokeWrite since
+/// server-side execution is scoped through workflow logic
+fn get_credentials_access() -> crate::credentials::CredentialsAccess {
+    crate::credentials::CredentialsAccess::InvokeWrite
+}
+
+/// POST /apps/{app_id}/events/{event_id}/invoke
+///
+/// Invoke event execution. Use `?local=true` to track locally without dispatch.
+/// Use `?isolated=true` for isolated K8s job execution (Kubernetes only).
+///
+/// Returns SSE stream for remote execution or JSON for local mode.
+#[tracing::instrument(
+    name = "POST /apps/{app_id}/events/{event_id}/invoke",
+    skip(state, user, params)
+)]
+pub async fn invoke_event(
+    State(state): State<AppState>,
+    Extension(user): Extension<AppUser>,
+    Path((app_id, event_id)): Path<(String, String)>,
+    Query(query): Query<InvokeEventQuery>,
+    Json(params): Json<InvokeEventRequest>,
+) -> Result<Response, ApiError> {
+    let permission = ensure_permission!(user, &app_id, &state, RolePermissions::ExecuteEvents);
+    let sub = permission.sub()?;
+
+    // Verify event exists and get board_id + serialize event for executor
+    let app = state.master_app(&sub, &app_id, &state).await?;
+    let event = app.get_event(&event_id, None).await?;
+    let board_id = event.board_id.clone();
+    let event_json =
+        serde_json::to_string(&event).map_err(|e| anyhow!("Failed to serialize event: {}", e))?;
+
+    let run_id = create_id();
+    let expires_at = chrono::Utc::now().naive_utc() + chrono::Duration::hours(24);
+
+    let input_payload_len = params
+        .payload
+        .as_ref()
+        .map(|p| {
+            serde_json::to_string(p)
+                .map(|s| s.len() as i64)
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
+
+    // Determine run mode
+    let run_mode = if query.local {
+        execution_run::RunMode::Local
+    } else if query.isolated {
+        execution_run::RunMode::KubernetesIsolated
+    } else {
+        execution_run::RunMode::Http
+    };
+
+    // Store payload in object storage if present (for remote runs only - enables re-run)
+    let input_payload_key = if !query.local {
+        if let Some(ref payload) = params.payload {
+            let payload_bytes = serde_json::to_vec(payload).map_err(|e| {
+                ApiError::InternalError(anyhow!("Failed to serialize payload: {}", e).into())
+            })?;
+            let master_creds = state.master_credentials().await.map_err(|e| {
+                ApiError::InternalError(anyhow!("Failed to get master credentials: {}", e).into())
+            })?;
+            let store = master_creds.to_store(false).await.map_err(|e| {
+                ApiError::InternalError(anyhow!("Failed to get object store: {}", e).into())
+            })?;
+            let stored = payload_storage::store_payload(
+                store.as_generic(),
+                &app_id,
+                &run_id,
+                &payload_bytes,
+            )
+            .await
+            .map_err(|e| {
+                ApiError::InternalError(anyhow!("Failed to store payload: {}", e).into())
+            })?;
+            Some(stored.key)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Build run record (insert happens later - sync for local/isolated, parallel for HTTP)
+    let run = execution_run::ActiveModel {
+        id: Set(run_id.clone()),
+        board_id: Set(board_id.clone()),
+        version: Set(params.version.clone()),
+        event_id: Set(Some(event_id.clone())),
+        node_id: Set(Some(event.id.clone())),
+        status: Set(execution_run::RunStatus::Pending),
+        mode: Set(run_mode.clone()),
+        log_level: Set(0),
+        input_payload_len: Set(input_payload_len),
+        input_payload_key: Set(input_payload_key),
+        output_payload_len: Set(0),
+        error_message: Set(None),
+        progress: Set(0),
+        current_step: Set(None),
+        started_at: Set(None),
+        completed_at: Set(None),
+        expires_at: Set(Some(expires_at)),
+        user_id: Set(Some(sub.clone())),
+        app_id: Set(app_id.clone()),
+        created_at: Set(chrono::Utc::now().naive_utc()),
+        updated_at: Set(chrono::Utc::now().naive_utc()),
+    };
+
+    // For local mode, insert synchronously and return JSON - no dispatch needed
+    if query.local {
+        run.insert(&state.db).await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to create run record");
+            ApiError::InternalError(anyhow!("Failed to create run record: {}", e).into())
+        })?;
+
+        let poll_token = sign_execution_jwt(ExecutionJwtParams {
+            user_id: sub.clone(),
+            run_id: run_id.clone(),
+            app_id: app_id.clone(),
+            board_id: board_id.clone(),
+            event_id: Some(event_id),
+            callback_url: String::new(),
+            token_type: TokenType::User,
+            ttl_seconds: Some(60 * 60),
+        })
+        .ok();
+
+        return Ok(Json(InvokeEventResponse {
+            run_id,
+            status: "pending".to_string(),
+            message: Some("Run tracked locally - no remote execution".to_string()),
+            poll_token,
+        })
+        .into_response());
+    }
+
+    // Check JWT signing is configured for remote execution
+    if !is_jwt_configured() {
+        return Err(ApiError::InternalError(
+            anyhow!("Execution JWT signing not configured (missing EXECUTION_KEY/EXECUTION_PUB env vars)").into()
+        ));
+    }
+
+    // Get scoped credentials based on user permissions
+    let access = get_credentials_access();
+    let credentials = state.scoped_credentials(&sub, &app_id, access).await?;
+
+    // Convert to SharedCredentials for runtime compatibility
+    let shared_credentials = credentials.into_shared_credentials();
+    let credentials_json = serde_json::to_string(&shared_credentials)
+        .map_err(|e| anyhow!("Failed to serialize credentials: {}", e))?;
+
+    let callback_url =
+        std::env::var("API_BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+
+    let executor_jwt = sign_execution_jwt(ExecutionJwtParams {
+        user_id: sub.clone(),
+        run_id: run_id.clone(),
+        app_id: app_id.clone(),
+        board_id: board_id.clone(),
+        event_id: Some(event_id.clone()),
+        callback_url: callback_url.clone(),
+        token_type: TokenType::Executor,
+        ttl_seconds: Some(24 * 60 * 60),
+    })
+    .map_err(|e| {
+        tracing::error!(error = %e, "Failed to sign executor JWT");
+        ApiError::InternalError(anyhow!("Failed to sign executor JWT: {}", e).into())
+    })?;
+
+    let request = DispatchRequest {
+        run_id: run_id.clone(),
+        app_id: app_id.clone(),
+        board_id,
+        board_version: event.board_version,
+        node_id: event.node_id.clone(),
+        event_json: Some(event_json),
+        payload: params.payload,
+        user_id: sub,
+        credentials_json,
+        jwt: executor_jwt,
+        callback_url,
+        token: params.token,
+        oauth_tokens: params.oauth_tokens,
+        stream_state: false,
+    };
+
+    // For isolated K8s jobs, insert run record and dispatch async
+    if query.isolated {
+        run.insert(&state.db).await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to create run record");
+            ApiError::InternalError(anyhow!("Failed to create run record: {}", e).into())
+        })?;
+
+        let response = state
+            .dispatcher
+            .dispatch_with_backend(ExecutionBackend::KubernetesJob, request)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to dispatch job");
+                ApiError::InternalError(anyhow!("Failed to dispatch job: {}", e).into())
+            })?;
+
+        return Ok(Json(InvokeEventResponse {
+            run_id,
+            status: response.status,
+            message: Some(format!("Job dispatched via {} backend", response.backend)),
+            poll_token: None,
+        })
+        .into_response());
+    }
+
+    tracing::info!(run_id = %run_id, "Dispatching HTTP SSE for event execution");
+
+    // Create run record in DB (can happen in parallel with dispatch)
+    let db_clone = state.db.clone();
+    let run_id_clone = run_id.clone();
+    let db_insert_handle = tokio::spawn(async move {
+        run.insert(&db_clone).await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to create run record");
+            e
+        })
+    });
+
+    // Dispatch and get SSE stream from executor (in parallel with DB insert)
+    let (_dispatch_response, executor_response) = state
+        .dispatcher
+        .dispatch_http_sse(request)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to dispatch SSE job");
+            ApiError::InternalError(anyhow!("Failed to dispatch job: {}", e).into())
+        })?;
+
+    // Wait for DB insert to complete (it's likely already done by now)
+    if let Err(e) = db_insert_handle.await {
+        tracing::error!(run_id = %run_id_clone, error = ?e, "DB insert task failed");
+    }
+
+    tracing::info!(run_id = %run_id, "Got executor response, starting stream proxy");
+
+    Ok(proxy_sse_response(
+        executor_response,
+        run_id,
+        Some(std::sync::Arc::new(state.db.clone())),
+    )
+    .into_response())
+}

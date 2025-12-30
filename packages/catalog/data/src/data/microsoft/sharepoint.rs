@@ -155,7 +155,7 @@ impl SearchSharePointSitesNode {
 
 #[async_trait]
 impl NodeLogic for SearchSharePointSitesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_sharepoint_search_sites",
             "Search SharePoint Sites",
@@ -279,7 +279,7 @@ impl GetSharePointSiteNode {
 
 #[async_trait]
 impl NodeLogic for GetSharePointSiteNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_sharepoint_get_site",
             "Get SharePoint Site",
@@ -421,7 +421,7 @@ impl ListSharePointDrivesNode {
 
 #[async_trait]
 impl NodeLogic for ListSharePointDrivesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_sharepoint_list_drives",
             "List SharePoint Drives",
@@ -534,7 +534,7 @@ impl ListSharePointDriveItemsNode {
 
 #[async_trait]
 impl NodeLogic for ListSharePointDriveItemsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_sharepoint_list_drive_items",
             "List Drive Items",
@@ -678,7 +678,7 @@ impl DownloadSharePointFileNode {
 
 #[async_trait]
 impl NodeLogic for DownloadSharePointFileNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_sharepoint_download_file",
             "Download SharePoint File",
@@ -831,7 +831,7 @@ impl ListSharePointListsNode {
 
 #[async_trait]
 impl NodeLogic for ListSharePointListsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_sharepoint_list_lists",
             "List SharePoint Lists",
@@ -944,7 +944,7 @@ impl GetSharePointListItemsNode {
 
 #[async_trait]
 impl NodeLogic for GetSharePointListItemsNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "data_microsoft_sharepoint_get_list_items",
             "Get List Items",

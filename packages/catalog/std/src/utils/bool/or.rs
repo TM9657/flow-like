@@ -20,7 +20,7 @@ impl BoolOr {
 
 #[async_trait]
 impl NodeLogic for BoolOr {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("bool_or", "Or", "Boolean Or operation", "Utils/Bool");
         node.add_icon("/flow/icons/bool.svg");
 
