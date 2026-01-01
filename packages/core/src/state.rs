@@ -327,6 +327,32 @@ impl FlowLikeState {
         }
     }
 
+    #[cfg(feature = "model")]
+    pub fn new_with_model_config(
+        config: FlowLikeConfig,
+        client: HTTPClient,
+        model_provider_config: ModelProviderConfiguration,
+    ) -> Self {
+        FlowLikeState {
+            config: Arc::new(RwLock::new(config)),
+            http_client: Arc::new(client),
+
+            #[cfg(feature = "bit")]
+            download_manager: Arc::new(Mutex::new(DownloadManager::new())),
+
+            model_provider_config: Arc::new(model_provider_config),
+            model_factory: Arc::new(Mutex::new(ModelFactory::new())),
+            embedding_factory: Arc::new(Mutex::new(EmbeddingFactory::new())),
+
+            #[cfg(feature = "flow-runtime")]
+            node_registry: Arc::new(RwLock::new(FlowNodeRegistry::new())),
+            #[cfg(feature = "flow-runtime")]
+            board_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            board_run_registry: Arc::new(DashMap::new()),
+        }
+    }
+
     #[cfg(feature = "bit")]
     pub fn download_manager(&self) -> Arc<Mutex<DownloadManager>> {
         self.download_manager.clone()

@@ -9,7 +9,11 @@ Flow-Like requires S3-compatible object storage for workflow data, execution sta
 
 ## Storage Buckets
 
-Flow-Like uses three buckets with different access patterns:
+Flow-Like requires S3-compatible object storage for workflow data, execution state, and logs. This page covers storage configuration specific to Kubernetes deployments.
+
+:::caution[Required Buckets]
+All three buckets (meta, content, logs) must be configured. Missing the logs bucket will cause executions to fail when trying to store execution logs.
+:::
 
 | Bucket | Purpose | Recommended Storage Class |
 |--------|---------|---------------------------|

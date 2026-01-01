@@ -13,7 +13,7 @@ This deployment lives in `apps/backend/docker-compose/` and provides a simple wa
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                          Docker Compose Network                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
+│  Core Services:                                                             │
 │  ┌─────────────┐     ┌─────────────────────────────────────────────────┐   │
 │  │   API       │────▶│           Execution Runtime                      │   │
 │  │  Container  │     │   (Server Mode - handles multiple jobs)          │   │
@@ -25,13 +25,19 @@ This deployment lives in `apps/backend/docker-compose/` and provides a simple wa
 │  │ PostgreSQL  │                                                            │
 │  │    :5432    │                                                            │
 │  └─────────────┘                                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Monitoring (optional):                                                     │
+│  ┌─────────────┐  ┌─────────────┐                                          │
+│  │ Prometheus  │  │   Grafana   │                                          │
+│  │   :9091     │  │    :3002    │                                          │
+│  └─────────────┘  └─────────────┘                                          │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
                         ┌─────────────────────┐
                         │  External Storage   │
-                        │  (S3/Azure/GCP)     │
+                        │  (S3/Azure/GCP/R2)  │
                         └─────────────────────┘
 ```
 
@@ -43,8 +49,10 @@ This deployment lives in `apps/backend/docker-compose/` and provides a simple wa
 | `runtime` | Shared execution environment | 9000 |
 | `postgres` | PostgreSQL database | 5432 |
 | `db-init` | One-time migration job | — |
+| `prometheus` | Metrics collection (optional) | 9091 |
+| `grafana` | Dashboards (optional) | 3002 |
 
-## Quickstart
+## Quick Start
 
 ```bash
 cd apps/backend/docker-compose
@@ -54,8 +62,24 @@ cp .env.example .env
 # Generate JWT keypair for execution trust
 ../../tools/gen-execution-keys.sh
 
+# Start core services
 docker compose up -d
+
+# Or include monitoring
+docker compose --profile monitoring up -d
 ```
+
+## Monitoring
+
+Enable optional Prometheus + Grafana monitoring:
+
+```bash
+docker compose --profile monitoring up -d
+```
+
+Access Grafana at http://localhost:3002 (default: admin/admin).
+
+→ [Monitoring Guide](/self-hosting/docker-compose/monitoring/)
 
 ## Execution Model
 
@@ -75,5 +99,6 @@ For stronger isolation (one container per execution), consider:
 - [Installation](/self-hosting/docker-compose/installation/)
 - [Configuration](/self-hosting/docker-compose/configuration/)
 - [Storage Providers](/self-hosting/docker-compose/storage/)
+- [Monitoring](/self-hosting/docker-compose/monitoring/)
 - [Scaling](/self-hosting/docker-compose/scaling/)
 - [Troubleshooting](/self-hosting/docker-compose/troubleshooting/)

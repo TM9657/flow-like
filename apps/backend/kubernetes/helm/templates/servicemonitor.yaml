@@ -1,0 +1,17 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "flow-like.fullname" . }}
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "flow-like.api.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.monitoring.serviceMonitor.scrapeTimeout }}
+{{- end }}

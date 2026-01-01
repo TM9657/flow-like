@@ -151,6 +151,13 @@ services:
 
       # Stripe (required when premium features enabled in config)
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+
+      # Tracing (OTLP) - set OTEL_EXPORTER_OTLP_ENDPOINT when using monitoring profile
+      OTEL_SERVICE_NAME: flow-like-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://tempo:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.1}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
       interval: 10s
@@ -193,6 +200,13 @@ services:
       # Execution limits
       MAX_CONCURRENT_EXECUTIONS: ${MAX_CONCURRENT_EXECUTIONS:-10}
       EXECUTION_TIMEOUT_SECONDS: ${EXECUTION_TIMEOUT_SECONDS:-3600}
+
+      # Tracing (OTLP) - set OTEL_EXPORTER_OTLP_ENDPOINT when using monitoring profile
+      OTEL_SERVICE_NAME: flow-like-runtime
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://tempo:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.1}
     deploy:
       resources:
         limits:
@@ -209,9 +223,119 @@ services:
     networks:
       - flowlike
 
+  # =============================================================================
+  # Monitoring Stack (Optional - set MONITORING_ENABLED=true)
+  # =============================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    profiles:
+      - monitoring
+    ports:
+      - "${PROMETHEUS_PORT:-9091}:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowlike
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    profiles:
+      - monitoring
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    ports:
+      - "${GRAFANA_PORT:-3002}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3002}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowlike
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.55.0
+    profiles:
+      - monitoring
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "${REDIS_EXPORTER_PORT:-9121}:9121"
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    networks:
+      - flowlike
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    profiles:
+      - monitoring
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${POSTGRES_EXPORTER_PORT:-9187}:9187"
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER:-flowlike}:${POSTGRES_PASSWORD:-flowlike_dev}@postgres:5432/${POSTGRES_DB:-flowlike}?sslmode=disable
+    networks:
+      - flowlike
+
+  # =============================================================================
+  # Tempo (Distributed Tracing)
+  # =============================================================================
+  tempo:
+    image: grafana/tempo:2.3.1
+    profiles:
+      - monitoring
+    ports:
+      - "${TEMPO_HTTP_PORT:-3200}:3200"
+      - "${TEMPO_OTLP_GRPC_PORT:-4317}:4317"
+      - "${TEMPO_OTLP_HTTP_PORT:-4318}:4318"
+    volumes:
+      - ./monitoring/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    command:
+      - -config.file=/etc/tempo/tempo.yaml
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3200/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowlike
+
 volumes:
   postgres_data:
   redis_data:
+  prometheus_data:
+  grafana_data:
+  tempo_data:
+
 
 networks:
   flowlike:

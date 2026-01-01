@@ -1,0 +1,131 @@
+{{- if .Values.redis.enabled }}
+{{- $fullname := include "flow-like.fullname" . -}}
+{{- $secretName := printf "%s-redis" $fullname -}}
+{{- $existing := (lookup "v1" "Secret" .Release.Namespace $secretName) -}}
+{{- $password := "" -}}
+{{- if .Values.redis.auth.enabled -}}
+  {{- if $existing -}}
+    {{- $password = (index $existing.data "REDIS_PASSWORD" | b64dec) -}}
+  {{- else -}}
+    {{- $p := (default "" .Values.redis.auth.password) -}}
+    {{- if ne $p "" -}}
+      {{- $password = $p -}}
+    {{- else -}}
+      {{- $password = (randAlphaNum 32) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $host := printf "%s-redis-master" $fullname -}}
+{{- $url := "" -}}
+{{- if .Values.redis.auth.enabled -}}
+  {{- $url = printf "redis://:%s@%s:6379" $password $host -}}
+{{- else -}}
+  {{- $url = printf "redis://%s:6379" $host -}}
+{{- end -}}
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+type: Opaque
+stringData:
+  REDIS_URL: {{ $url | quote }}
+  REDIS_PASSWORD: {{ $password | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $host }}
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+  selector:
+    app.kubernetes.io/name: {{ include "flow-like.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-redis
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "flow-like.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "flow-like.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: REDIS_PASSWORD
+          command: ["/bin/sh", "-lc"]
+          args:
+            - |
+              set -eu
+              if [ "{{ ternary "1" "0" .Values.redis.auth.enabled }}" = "1" ] && [ -n "${REDIS_PASSWORD}" ]; then
+                exec redis-server --appendonly yes --requirepass "${REDIS_PASSWORD}"
+              else
+                exec redis-server --appendonly yes
+              fi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- with .Values.redis.master.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.redis.master.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-redis
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+{{- if .Values.redis.master.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-redis
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.redis.master.persistence.size | default "8Gi" }}
+  {{- if .Values.redis.master.persistence.storageClass }}
+  storageClassName: {{ .Values.redis.master.persistence.storageClass | quote }}
+  {{- end }}
+{{- end }}
+
+  {{- end }}

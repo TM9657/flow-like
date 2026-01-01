@@ -1,6 +1,6 @@
 ---
 title: Helm chart
-description: Helm chart structure and install/upgrade commands.
+description: Helm chart structure and configuration.
 sidebar:
   order: 50
 ---
@@ -9,56 +9,89 @@ Chart location:
 
 - `apps/backend/kubernetes/helm/`
 
-## What it deploys
+## What It Deploys
 
-- API Deployment/Service (the `k8s-api` binary)
-- Executor settings for Kubernetes Jobs (the `k8s-executor` image)
-- Optional internal dependencies (depending on values): Postgres, Redis
+| Component | Description |
+|-----------|-------------|
+| **CockroachDB** | 3-node distributed SQL database (internal, default) |
+| **Redis** | Job queue and execution state |
+| **API Service** | Flow-Like API with autoscaling |
+| **Executor Pool** | Reusable execution workers with autoscaling |
+| **DB Migration Job** | Prisma migrations on install/upgrade |
 
-## Values
+## Key Values
 
-Main file:
+```yaml
+# API configuration
+api:
+  enabled: true
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
 
-- `apps/backend/kubernetes/helm/values.yaml`
+# Executor pool (reusable workers)
+executorPool:
+  enabled: true
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
 
-Highlights:
+# Database (internal CockroachDB by default)
+database:
+  type: internal  # or "external"
+  internal:
+    replicas: 3
+    persistence:
+      size: 10Gi
 
-- `api.*`: replicas, image, resources, autoscaling
-- `executor.*`: image, runtimeClass, resources, retry/timeout/ttl
-- `storage.external.*`: S3-compatible storage configuration (required)
-- `database.*`: internal Postgres vs external connection string
-- `redis.*`: Redis chart config
-
-The chart always creates runtime configuration secrets:
-
-- `{{release}}-db` (key: `DATABASE_URL`)
-- `{{release}}-s3` (keys: `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, bucket names)
-
-## Secrets strategy
-
-Recommended patterns:
-
-- Production: create secrets out-of-band (ExternalSecrets, SealedSecrets, Vault, etc.) and reference via chart values.
-- Dev: use `apps/backend/kubernetes/scripts/setup-config.sh` to create secrets/configmaps from `.env`.
-
-## DB migration hook
-
-- `apps/backend/kubernetes/helm/templates/db-migration-job.yaml`
-
-This job is disabled by default. If you enable it, ensure:
-
-- `DATABASE_URL` is available to the job (the chart provides `{{release}}-db`)
-- The job has access to Prisma schema + Prisma tooling (recommended: run migrations in CI before deploying the API)
+# S3-compatible storage (required)
+storage:
+  external:
+    endpoint: ""
+    region: "us-east-1"
+    accessKeyId: ""
+    secretAccessKey: ""
+    metaBucket: "flow-like-meta"
+    contentBucket: "flow-like-content"
+```
 
 ## Install
 
 ```bash
 cd apps/backend/kubernetes
-helm install flow-like ./helm -n flow-like --create-namespace
+helm install flow-like ./helm -n flow-like --create-namespace \
+  --set storage.external.endpoint='https://s3.example.com' \
+  --set storage.external.accessKeyId='YOUR_KEY' \
+  --set storage.external.secretAccessKey='YOUR_SECRET'
 ```
 
 ## Upgrade
 
 ```bash
 helm upgrade flow-like ./helm -n flow-like
+```
+
+## With External Database
+
+```bash
+helm install flow-like ./helm -n flow-like --create-namespace \
+  --set database.type=external \
+  --set database.external.connectionString='postgresql://user:pass@host:5432/flowlike' \
+  --set storage.external.endpoint='https://s3.example.com' \
+  --set storage.external.accessKeyId='YOUR_KEY' \
+  --set storage.external.secretAccessKey='YOUR_SECRET'
+```
+
+## Using Existing Secrets
+
+For production, use externally-managed secrets:
+
+```bash
+helm install flow-like ./helm -n flow-like --create-namespace \
+  --set database.external.existingSecret='my-db-secret' \
+  --set storage.external.existingSecret='my-s3-secret'
 ```

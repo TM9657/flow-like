@@ -1,73 +1,87 @@
 ---
 title: Database
-description: Schema and database setup for the Kubernetes backend.
+description: Database configuration for the Kubernetes backend.
 sidebar:
   order: 30
 ---
 
-The Flow-Like API uses a relational database for platform data. In this repo, the schema is expressed as Prisma schema files under:
+The Flow-Like API uses a relational database for platform data. The Prisma schema is in:
 
 - `packages/api/prisma/schema/`
 
-## CockroachDB vs PostgreSQL
+## CockroachDB (Default)
 
-The Prisma schemas declare:
+The Helm chart deploys a 3-node CockroachDB cluster by default. This provides:
 
-- `provider = "cockroachdb"`
+- **Native schema compatibility** — Flow-Like's Prisma schema is CockroachDB-first
+- **High availability** — Automatic failover with 3 nodes
+- **Distributed SQL** — Horizontal scaling built-in
+- **PostgreSQL compatible** — Standard drivers work out of the box
 
-For PostgreSQL environments (local dev, many Kubernetes clusters), the repo includes a helper script:
+### Internal CockroachDB (default)
 
-- `packages/api/scripts/make-postgres-prisma-mirror.sh`
-
-It copies the schema tree to `packages/api/prisma-postgres-mirror/schema` and rewrites `provider` to `postgresql`.
-
-## Applying the schema
-
-### Local development (recommended)
-
-The Kubernetes backend ships a `docker-compose.yml` that starts Postgres/Redis and applies the schema.
-
-```bash
-cd apps/backend/kubernetes
-cp .env.example .env
-# edit .env
-
-docker compose up -d
+```yaml
+database:
+  type: internal
+  internal:
+    replicas: 3
+    persistence:
+      size: 10Gi
 ```
 
-The `db-migrate` service uses the tooling in `packages/api` to run:
+For local development, a single-node cluster is sufficient:
 
-- mirror schema to PostgreSQL
-- `prisma db push` against `DATABASE_URL`
+```yaml
+database:
+  type: internal
+  internal:
+    replicas: 1
+    persistence:
+      size: 1Gi
+```
 
-### Manual migration (host tools)
+### External Database
+
+Use an external PostgreSQL or CockroachDB instance:
+
+```yaml
+database:
+  type: external
+  external:
+    connectionString: "postgresql://user:pass@host:5432/flowlike"
+    # Or use an existing secret:
+    existingSecret: "my-db-secret"
+```
+
+## Schema Migrations
+
+### Helm Chart Migration Job
+
+The chart includes a migration job that runs on install/upgrade:
+
+```yaml
+database:
+  migration:
+    enabled: true
+```
+
+### Manual Migration
 
 ```bash
 cd apps/backend/kubernetes
 ./scripts/migrate-db.sh
 ```
 
-### Manual migration (Docker)
+Or via Docker:
 
 ```bash
-cd apps/backend/kubernetes
 ./scripts/migrate-db.sh --docker
 ```
 
-### Kubernetes / Helm
+## Runtime Configuration
 
-The Helm chart contains a migration Job template:
+The API requires:
 
-- `apps/backend/kubernetes/helm/templates/db-migration-job.yaml`
-
-Important:
-- Today it is a *hook job* intended to run pre-install / pre-upgrade.
-- You still need to ensure the job image has access to the Prisma schema and tooling. If you don’t ship a purpose-built migration image, you can run migrations out-of-band (CI/CD step or an admin job).
-
-## Runtime configuration
-
-The API runtime expects:
-
-- `DATABASE_URL` (required)
+- `DATABASE_URL` — CockroachDB/PostgreSQL connection string
 
 This is read by `flow_like_api::state::State`.

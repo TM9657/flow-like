@@ -3,7 +3,7 @@
 //! Provides streaming execution that yields events as they occur,
 //! suitable for Lambda streaming responses or SSE endpoints.
 
-use crate::config::ExecutorConfig;
+use crate::config::{model_provider_config_from_env, ExecutorConfig};
 use crate::error::ExecutorError;
 use crate::jwt::verify_jwt_async;
 use crate::types::{ExecutionRequest, ExecutionStatus};
@@ -163,8 +163,11 @@ async fn execute_inner(
         }
     }
 
+    // Load model provider configuration from environment
+    let model_provider_config = model_provider_config_from_env();
+
     let (http_client, _) = HTTPClient::new();
-    let state = FlowLikeState::new(flow_config, http_client);
+    let state = FlowLikeState::new_with_model_config(flow_config, http_client, model_provider_config);
 
     let catalog_arc = Arc::new(catalog);
     let registry = FlowNodeRegistryInner::prepare(&catalog_arc);

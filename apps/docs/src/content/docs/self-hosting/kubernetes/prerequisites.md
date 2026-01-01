@@ -5,72 +5,70 @@ sidebar:
   order: 11
 ---
 
-This section is written for readers who are new to Kubernetes.
+## What You're Installing
 
-## What you are installing
+| Component | Description |
+|-----------|-------------|
+| **API Service** | Long-running Kubernetes Deployment |
+| **Executor Pool** | Autoscaling workers for workflow execution |
+| **CockroachDB** | Internal distributed database (optional, can use external) |
+| **Redis** | Job queue and cache |
 
-The Flow-Like Kubernetes backend consists of:
+## Required External Service
 
-- **API service**: a long-running Kubernetes `Deployment`.
-- **Executor**: short-lived Kubernetes `Job`s created by the API to run workflow executions.
-- **Optional dependencies** ("auto mode"): internal PostgreSQL if you don't provide external credentials.
-- **Required external service**: S3-compatible storage (AWS S3, Cloudflare R2, Google Cloud Storage, etc.)
+- **S3-compatible storage** — AWS S3, Cloudflare R2, Google Cloud Storage, MinIO, etc.
 
-## Kubernetes basics (quick glossary)
+## Required Tools
 
-- **Cluster**: the Kubernetes environment you deploy into.
-- **Namespace**: a logical partition inside a cluster. We recommend a dedicated namespace like `flow-like`.
-- **Pod**: the unit that runs containers.
-- **Deployment**: keeps a set of pods running (used for the API).
-- **Job**: runs pods until completion (used for workflow executions).
-- **Service**: stable network endpoint inside the cluster.
-- **Secret**: stores sensitive values like database credentials.
+### For Local Development (k3d)
 
-## Required tools (on your machine)
+```bash
+# macOS
+brew install k3d kubectl helm docker
 
-- `kubectl` (to talk to your cluster)
-- `helm` (to install the chart)
+# Linux
+curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+# Install kubectl and helm separately
+```
 
-## Required cluster capabilities
+### For Production
 
-- A working Kubernetes cluster (managed Kubernetes, k3s, MicroK8s, etc.)
-- A default `StorageClass` (recommended)
-  - Needed if you want persistent volumes for internal Postgres/Redis.
-- Outbound network access from the API/executor pods to:
-  - your database (if external)
-  - your S3 endpoint (if external)
+- `kubectl` — Kubernetes CLI
+- `helm` — Package manager for Kubernetes
 
-## Optional (but common) add-ons
+## Cluster Requirements
 
-- **Ingress controller** (NGINX, Traefik, etc.)
-  - Needed if you want to expose the API outside the cluster.
-- **DNS + TLS** (cert-manager)
-  - Needed if you want HTTPS with a real domain.
+### Local Development
 
-## Optional security/runtime features
+k3d creates everything you need automatically:
 
-### Kata containers
+```bash
+cd apps/backend/kubernetes
+./scripts/k3d-setup.sh
+```
 
-The executor jobs can use a `RuntimeClass` (for example Kata) for stronger isolation.
+### Production Cluster
 
-- If your cluster does not support Kata, you can still run the executor jobs without it.
-- If you do use Kata, your cluster must already have the runtime installed and configured.
+- Any Kubernetes distribution (EKS, GKE, AKS, k3s, etc.)
+- Default `StorageClass` (for persistent volumes)
+- Network access to your S3 endpoint
 
-## Credentials you may need
+## Optional: Kata Containers
 
-You can run everything “internally” (auto mode), or you can bring your own external services.
+For stronger isolation, the executor can use Kata containers via `RuntimeClass`. Your cluster must have Kata installed and configured.
 
-### External PostgreSQL
+## Credentials You Need
 
-If you use an external database, you’ll typically provide:
+### S3 Storage (required)
 
-- a PostgreSQL connection string (`DATABASE_URL`) via a Kubernetes secret
+- Endpoint URL
+- Region
+- Access key ID
+- Secret access key
+- Bucket names (meta + content)
 
-### S3-compatible storage (required)
+### External Database (optional)
 
-Flow-Like requires external S3-compatible storage. You'll need to provide:
+If not using internal CockroachDB:
 
-- endpoint
-- region
-- access key id / secret access key
-- bucket names (metadata + content)
+- PostgreSQL/CockroachDB connection string

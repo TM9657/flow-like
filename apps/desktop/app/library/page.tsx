@@ -29,6 +29,7 @@ import {
 	useMobileHeader,
 	useNetworkStatus,
 	useQueryClient,
+	useSpotlightStore,
 } from "@tm9657/flow-like-ui";
 import {
 	ArrowUpDown,
@@ -284,12 +285,6 @@ export default function YoursPage() {
 			>
 				<Link2 className="h-4 w-4" />
 			</Button>,
-			<Button key={"create"} variant="default" asChild>
-				<Link href="/library/new">
-					<Sparkles className="mr-2 h-4 w-4" />
-					Create App
-				</Link>
-			</Button>,
 		],
 		[pickImportFile, setJoinDialogOpen],
 	);
@@ -434,17 +429,6 @@ export default function YoursPage() {
 							<Link2 className="mr-2 h-4 w-4" />
 							Join Project
 						</Button>
-						<Button
-							size="lg"
-							variant="outline"
-							className="w-full sm:w-auto h-9 px-3 text-sm sm:h-11 sm:px-5 sm:text-base shadow-lg hover:shadow-xl transition-all duration-200 hidden md:flex"
-							asChild
-						>
-							<Link href="/library/new">
-								<Sparkles className="mr-2 h-4 w-4" />
-								Create App
-							</Link>
-						</Button>
 					</div>
 				</div>
 
@@ -566,7 +550,8 @@ export default function YoursPage() {
 							{
 								label: "Create Your First App",
 								onClick: () => {
-									router.push("/library/new");
+									useSpotlightStore.getState().open();
+									useSpotlightStore.getState().setMode("quick-create");
 								},
 							},
 							{

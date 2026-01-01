@@ -1,22 +1,54 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use axum::Router;
+use axum::{
+    body::Body,
+    extract::MatchedPath,
+    http::Request,
+    middleware::{self, Next},
+    response::IntoResponse,
+    Router,
+};
 use flow_like_api::{construct_router, state::State};
 use flow_like_catalog::get_catalog;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 use tower_http::cors::CorsLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
+mod metrics;
 mod storage;
+
+async fn metrics_middleware(request: Request<Body>, next: Next) -> impl IntoResponse {
+    let path = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|p| p.as_str().to_string())
+        .unwrap_or_else(|| request.uri().path().to_string());
+    let method = request.method().to_string();
+
+    let start = Instant::now();
+    let response = next.run(request).await;
+    let duration = start.elapsed().as_secs_f64();
+
+    let status = response.status().as_u16().to_string();
+
+    metrics::counter!(
+        "http_requests_total",
+        "method" => method.clone(),
+        "path" => path.clone(),
+        "status" => status.clone()
+    )
+    .increment(1);
+
+    metrics::histogram!("http_request_duration_seconds", "method" => method, "path" => path)
+        .record(duration);
+
+    response
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
-        .with(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+    metrics::init_telemetry();
 
     tracing::info!("Starting Flow-Like Docker Compose API Service");
 
@@ -39,13 +71,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = Router::new()
         .merge(construct_router(state.clone()))
+        .layer(middleware::from_fn(metrics_middleware))
         .layer(CorsLayer::permissive());
 
+    let metrics_port = std::env::var("METRICS_PORT").unwrap_or_else(|_| "9090".to_string());
+    let metrics_app = Router::new().route("/metrics", axum::routing::get(metrics::handler));
+
     let addr = format!("0.0.0.0:{}", config.port);
-    tracing::info!("Listening on {}", addr);
+    let metrics_addr = format!("0.0.0.0:{}", metrics_port);
+
+    tracing::info!("API listening on {}", addr);
+    tracing::info!("Metrics listening on {}", metrics_addr);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app).await?;
+    let metrics_listener = tokio::net::TcpListener::bind(&metrics_addr).await?;
+
+    tokio::select! {
+        res = axum::serve(listener, app) => res?,
+        res = axum::serve(metrics_listener, metrics_app) => res?,
+    }
 
     Ok(())
 }

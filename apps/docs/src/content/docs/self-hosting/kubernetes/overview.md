@@ -5,38 +5,105 @@ sidebar:
   order: 10
 ---
 
-This deployment lives in `apps/backend/kubernetes/` and ships:
+Production-ready Kubernetes deployment using Helm with built-in observability.
 
-- `k8s-api`: Kubernetes-hosted API service
-- `k8s-executor`: Kubernetes Job that runs workflow executions (optionally with Kata via `RuntimeClass`)
-- Helm chart to deploy the above plus optional internal dependencies (Postgres, Redis)
+## Architecture
 
-## Quickstart
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Kubernetes Cluster                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Core Services (deployed by Helm):                                           │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐                  │
+│  │ CockroachDB │  │    Redis    │  │    API Service      │                  │
+│  │  (3 nodes)  │  │ (job queue) │  │   (autoscaling)     │                  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘                  │
+│                                     ┌─────────────────────┐                  │
+│                                     │   Executor Pool     │                  │
+│                                     │   (autoscaling)     │                  │
+│                                     └─────────────────────┘                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Observability Stack (optional):                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐                  │
+│  │ Prometheus  │  │   Grafana   │  │       Tempo         │                  │
+│  │  (metrics)  │  │ (dashboards)│  │    (tracing)        │                  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  External (user provides):                                                   │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    S3-compatible Storage                             │    │
+│  │           (AWS S3, Cloudflare R2, GCS, MinIO, etc.)                 │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+### Local Development (k3d)
 
 ```bash
 cd apps/backend/kubernetes
-helm install flow-like ./helm -n flow-like --create-namespace \
-  --set storage.external.endpoint='https://your-s3-endpoint' \
-  --set storage.external.accessKeyId='YOUR_ACCESS_KEY' \
-  --set storage.external.secretAccessKey='YOUR_SECRET_KEY'
+./scripts/k3d-setup.sh
 ```
 
-The chart can run in "auto mode" for the database:
+Creates a complete local environment with monitoring in ~5 minutes.
 
-- If you don't provide an external database connection, it deploys internal Postgres and generates credentials.
-- If you do provide external credentials, it skips the internal database.
+→ [Local Development Guide](/self-hosting/kubernetes/local-development/)
 
-**Note:** S3-compatible storage is always required (AWS S3, Cloudflare R2, Google Cloud Storage, etc.).
+### Production
 
-## Docs
+```bash
+helm install flow-like ./helm -n flow-like --create-namespace \
+  --set storage.external.endpoint='https://s3.example.com' \
+  --set storage.external.accessKeyId='YOUR_KEY' \
+  --set storage.external.secretAccessKey='YOUR_SECRET'
+```
+
+→ [Production Installation Guide](/self-hosting/kubernetes/installation/)
+
+## What's Included
+
+### Core Services
+
+| Component | Description |
+|-----------|-------------|
+| **CockroachDB** | 3-node distributed SQL database |
+| **Redis** | Job queue and execution state |
+| **API Service** | Flow-Like API with autoscaling |
+| **Executor Pool** | Reusable execution workers with autoscaling |
+| **DB Migration Job** | Prisma migrations on install/upgrade |
+
+### Observability Stack
+
+| Component | Description |
+|-----------|-------------|
+| **Prometheus** | Metrics collection from all services |
+| **Grafana** | Pre-configured dashboards |
+| **Tempo** | Distributed tracing with OpenTelemetry |
+
+Enable with `--set monitoring.enabled=true` (enabled by default).
+
+## Grafana Dashboards
+
+Six pre-built dashboards for full visibility:
+
+- **System Overview** — Cluster-wide resource usage
+- **API Service** — Request rates, latencies, errors
+- **Executor Pool** — Job queue depth, execution metrics
+- **CockroachDB** — Query performance, replication
+- **Redis** — Commands/sec, memory usage
+- **Tracing** — Request traces via Tempo
+
+## Documentation
 
 - [Prerequisites](/self-hosting/kubernetes/prerequisites/)
 - [Installation](/self-hosting/kubernetes/installation/)
 - [Configuration](/self-hosting/kubernetes/configuration/)
 - [Database](/self-hosting/kubernetes/database/)
-- [Local development](/self-hosting/kubernetes/local-development/)
-- [Helm chart](/self-hosting/kubernetes/helm/)
-- [API service](/self-hosting/kubernetes/api/)
+- [Local Development](/self-hosting/kubernetes/local-development/)
+- [Helm Chart](/self-hosting/kubernetes/helm/)
+- [API Service](/self-hosting/kubernetes/api/)
 - [Executor](/self-hosting/kubernetes/executor/)
+- [Storage](/self-hosting/kubernetes/storage/)
 - [Scripts](/self-hosting/kubernetes/scripts/)
-- [Security notes](/self-hosting/kubernetes/security/)
+- [Security](/self-hosting/kubernetes/security/)
