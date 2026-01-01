@@ -1,12 +1,9 @@
 use crate::data::path::FlowPath;
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
 
@@ -51,7 +48,7 @@ impl NodeLogic for HashFileNode {
 
         node.add_output_pin("hash", "Hash", "Output Hash", VariableType::String);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

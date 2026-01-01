@@ -1,11 +1,8 @@
 use ahash::AHashSet;
-use flow_like::{
-    flow::{
-        execution::{context::ExecutionContext, internal_node::InternalNode},
-        node::{Node, NodeLogic},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::{context::ExecutionContext, internal_node::InternalNode},
+    node::{Node, NodeLogic},
+    variable::VariableType,
 };
 use flow_like_types::async_trait;
 use std::collections::HashSet;
@@ -37,7 +34,7 @@ impl NodeLogic for SequenceNode {
 
         node.add_output_pin("exec_out", "Output", "Output Pin", VariableType::Execution);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

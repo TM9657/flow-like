@@ -1,11 +1,8 @@
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
@@ -44,7 +41,7 @@ impl NodeLogic for ToStringNode {
 
         node.add_output_pin("string", "String", "Output String", VariableType::String);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

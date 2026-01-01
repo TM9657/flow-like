@@ -2,15 +2,12 @@
 /// Create a new Message object with either image or image Message Content
 /// Set the message type via Role input.
 /// In case of a Tool Message, the associated Tool Call Id has to be provided as well
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_model_provider::history::{
     Content, ContentType, HistoryMessage, ImageUrl, MessageContent, Role,

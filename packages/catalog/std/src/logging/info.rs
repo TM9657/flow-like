@@ -6,7 +6,7 @@ use flow_like::{
         node::{Node, NodeLogic},
         variable::VariableType,
     },
-    state::{FlowLikeState, ToastLevel},
+    state::ToastLevel,
 };
 use flow_like_types::{Value, async_trait};
 use std::sync::Arc;
@@ -57,7 +57,7 @@ impl NodeLogic for InfoNode {
             VariableType::Execution,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

@@ -5,7 +5,6 @@ use flow_like::{
         node::{Node, NodeLogic, NodeScores},
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_types::{async_trait, json::json};
 
@@ -56,7 +55,7 @@ impl NodeLogic for MakePreferencesNode {
         )
         .set_schema::<BitModelPreference>();
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

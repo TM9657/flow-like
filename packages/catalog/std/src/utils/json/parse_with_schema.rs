@@ -4,13 +4,10 @@
 /// Schema definitions can either be JSON schemas or OpenAI function definitions.
 /// Produces detailed error messages in case of violation.
 /// Additionally, this module bundles JSON- and schema-related utility functions.
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    variable::VariableType,
 };
 use flow_like_model_provider::history::{Tool, ToolCall, ToolCallFunction};
 use flow_like_types::{Error, Value, anyhow, async_trait, json, jsonschema};
@@ -227,7 +224,7 @@ impl NodeLogic for ParseWithSchema {
             VariableType::Struct,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

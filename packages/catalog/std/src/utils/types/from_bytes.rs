@@ -1,12 +1,9 @@
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::ValueType,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::ValueType,
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait};
 use std::sync::Arc;
@@ -39,7 +36,7 @@ impl NodeLogic for FromBytesNode {
 
         node.add_output_pin("value", "Value", "Parsed Value", VariableType::Generic);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

@@ -1,12 +1,9 @@
 use crate::data::atlassian::provider::{ATLASSIAN_PROVIDER_ID, AtlassianProvider};
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_types::{JsonSchema, Value, async_trait, json::json, reqwest};
 use serde::{Deserialize, Serialize};

@@ -1,12 +1,9 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::{PinOptions, ValueType},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::{PinOptions, ValueType},
+    variable::VariableType,
 };
 use flow_like_types::{anyhow, async_trait, json::json, reqwest};
 use futures::TryStreamExt;
@@ -133,36 +130,33 @@ impl NodeLogic for ImapListCalendarEventsNode {
                 .try_collect::<Vec<_>>()
                 .await?;
 
-            if let Some(msg) = fetch.first() {
-                if let Some(body) = msg.body() {
-                    if let Ok(body_str) = std::str::from_utf8(body) {
-                        if let Ok(calendar) = body_str.parse::<Calendar>() {
-                            for component in calendar.components {
-                                if let icalendar::CalendarComponent::Event(event) = component {
-                                    let event_data = parse_calendar_event(&event);
+            if let Some(msg) = fetch.first()
+                && let Some(body) = msg.body()
+                && let Ok(body_str) = std::str::from_utf8(body)
+                && let Ok(calendar) = body_str.parse::<Calendar>()
+            {
+                for component in calendar.components {
+                    if let icalendar::CalendarComponent::Event(event) = component {
+                        let event_data = parse_calendar_event(&event);
 
-                                    let should_include =
-                                        if let (Some(start), Some(end)) = (start_date, end_date) {
-                                            if let Some(event_start_str) = &event_data.start {
-                                                if let Some(event_start) =
-                                                    parse_event_datetime(event_start_str)
-                                                {
-                                                    event_start >= start && event_start <= end
-                                                } else {
-                                                    false
-                                                }
-                                            } else {
-                                                false
-                                            }
-                                        } else {
-                                            true
-                                        };
-
-                                    if should_include {
-                                        events.push(event_data);
-                                    }
+                        let should_include = if let (Some(start), Some(end)) =
+                            (start_date, end_date)
+                        {
+                            if let Some(event_start_str) = &event_data.start {
+                                if let Some(event_start) = parse_event_datetime(event_start_str) {
+                                    event_start >= start && event_start <= end
+                                } else {
+                                    false
                                 }
+                            } else {
+                                false
                             }
+                        } else {
+                            true
+                        };
+
+                        if should_include {
+                            events.push(event_data);
                         }
                     }
                 }
@@ -262,11 +256,11 @@ impl NodeLogic for ImapListCalendarsNode {
         // Heuristic: consider mailboxes that contain "calendar" or "cal" in the name
         let calendar_names: Vec<String> = names
             .iter()
-            .cloned()
-            .filter(|n| {
+            .filter(|&n| {
                 let s = n.to_lowercase();
                 s.contains("calendar") || s.contains("cal") || s.contains("events")
             })
+            .cloned()
             .collect();
 
         let calendars: Vec<ImapInbox> = calendar_names
@@ -594,20 +588,18 @@ impl NodeLogic for ImapGetCalendarEventNode {
             .try_collect::<Vec<_>>()
             .await?;
 
-        if let Some(msg) = fetch.first() {
-            if let Some(body) = msg.body() {
-                if let Ok(body_str) = std::str::from_utf8(body) {
-                    if let Ok(calendar) = body_str.parse::<Calendar>() {
-                        for component in calendar.components {
-                            if let icalendar::CalendarComponent::Event(event) = component {
-                                let event_data = parse_calendar_event(&event);
-                                if event_data.uid == event_uid {
-                                    context.set_pin_value("event", json!(event_data)).await?;
-                                    context.activate_exec_pin("exec_out").await?;
-                                    return Ok(());
-                                }
-                            }
-                        }
+        if let Some(msg) = fetch.first()
+            && let Some(body) = msg.body()
+            && let Ok(body_str) = std::str::from_utf8(body)
+            && let Ok(calendar) = body_str.parse::<Calendar>()
+        {
+            for component in calendar.components {
+                if let icalendar::CalendarComponent::Event(event) = component {
+                    let event_data = parse_calendar_event(&event);
+                    if event_data.uid == event_uid {
+                        context.set_pin_value("event", json!(event_data)).await?;
+                        context.activate_exec_pin("exec_out").await?;
+                        return Ok(());
                     }
                 }
             }
@@ -732,8 +724,8 @@ impl NodeLogic for ImapCreateCalendarEventNode {
         let mut event = Event::new();
         event.uid(&event_uid);
         event.summary(&summary);
-        event.add_property("DTSTART", &start.to_rfc3339());
-        event.add_property("DTEND", &end.to_rfc3339());
+        event.add_property("DTSTART", start.to_rfc3339());
+        event.add_property("DTEND", end.to_rfc3339());
 
         if !description.is_empty() {
             event.description(&description);
@@ -746,7 +738,7 @@ impl NodeLogic for ImapCreateCalendarEventNode {
             for email in attendees_str.split(',') {
                 let email = email.trim();
                 if !email.is_empty() {
-                    event.add_property("ATTENDEE", &format!("mailto:{}", email));
+                    event.add_property("ATTENDEE", format!("mailto:{}", email));
                 }
             }
         }
@@ -954,10 +946,10 @@ fn parse_event_datetime(datetime_str: &str) -> Option<DateTime<Utc>> {
     }
 
     // Try parsing date-only format
-    if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(datetime_str, "%Y-%m-%d") {
-        if let Some(naive_dt) = naive_date.and_hms_opt(0, 0, 0) {
-            return Some(DateTime::<Utc>::from_utc(naive_dt, Utc));
-        }
+    if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(datetime_str, "%Y-%m-%d")
+        && let Some(naive_dt) = naive_date.and_hms_opt(0, 0, 0)
+    {
+        return Some(DateTime::<Utc>::from_utc(naive_dt, Utc));
     }
 
     None

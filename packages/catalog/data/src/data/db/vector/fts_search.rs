@@ -1,11 +1,8 @@
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::{PinOptions, ValueType},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::{PinOptions, ValueType},
+    variable::VariableType,
 };
 use flow_like_storage::databases::vector::VectorStore;
 use flow_like_types::{async_trait, json::json};
@@ -74,7 +71,7 @@ impl NodeLogic for FTSLocalDatabaseNode {
         node.add_output_pin("values", "Values", "Found Items", VariableType::Struct)
             .set_value_type(ValueType::Array);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

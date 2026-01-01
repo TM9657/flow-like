@@ -4,14 +4,11 @@
 //! Wraps the MLModel in a cached NodeMLModel.
 
 use crate::ml::{MLModel, NodeMLModel};
-use flow_like::{
-    flow::{
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
 use flow_like_types::{Result, async_trait, json};
@@ -80,7 +77,7 @@ impl NodeLogic for LoadMLModelNode {
         .set_schema::<NodeMLModel>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {

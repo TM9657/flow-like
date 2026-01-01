@@ -16,7 +16,6 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use flow_like_executor::{ExecutorState, executor_router};
 use flow_like_types::tokio;
 use lambda_http::{Error, run_with_streaming_response, tracing};
-use std::env::set_var;
 use tracing_subscriber::prelude::*;
 
 #[flow_like_types::tokio::main]

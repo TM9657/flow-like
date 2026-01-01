@@ -41,7 +41,7 @@ async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
     // Record execution metrics for execute endpoints
     if is_execute {
         metrics::decrement_active_jobs();
-        let exec_status = if status >= 200 && status < 300 {
+        let exec_status = if (200..300).contains(&status) {
             "success"
         } else {
             "error"

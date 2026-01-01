@@ -1,13 +1,10 @@
 use ahash::HashSet;
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::ValueType,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::ValueType,
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, bail, json::json};
 use std::sync::Arc;
@@ -43,7 +40,7 @@ impl NodeLogic for PopSetNode {
         node.add_output_pin("set_out", "Set", "Adjusted Set", VariableType::Generic)
             .set_value_type(ValueType::HashSet);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

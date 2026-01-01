@@ -1,20 +1,17 @@
 use super::provider::{MICROSOFT_PROVIDER_ID, MicrosoftGraphProvider};
 use crate::events::chat_event::{Attachment, ComplexAttachment};
 use ahash::AHashSet;
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::{
-            LogLevel,
-            context::ExecutionContext,
-            internal_node::InternalNode,
-            log::{LogMessage, LogStat},
-        },
-        node::{Node, NodeLogic},
-        pin::{PinOptions, ValueType},
-        variable::VariableType,
+use flow_like::flow::{
+    board::Board,
+    execution::{
+        LogLevel,
+        context::ExecutionContext,
+        internal_node::InternalNode,
+        log::{LogMessage, LogStat},
     },
-    state::FlowLikeState,
+    node::{Node, NodeLogic},
+    pin::{PinOptions, ValueType},
+    variable::VariableType,
 };
 use flow_like_model_provider::{response::Response, response_chunk::ResponseChunk};
 use flow_like_types::{

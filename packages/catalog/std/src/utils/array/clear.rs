@@ -1,12 +1,9 @@
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::ValueType,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::ValueType,
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
@@ -43,7 +40,7 @@ impl NodeLogic for ClearArrayNode {
         node.add_output_pin("array_out", "Array", "Empty Array", VariableType::Generic)
             .set_value_type(ValueType::Array);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

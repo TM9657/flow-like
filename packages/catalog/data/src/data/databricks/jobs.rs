@@ -1,12 +1,9 @@
 use super::provider::{DATABRICKS_PROVIDER_ID, DatabricksProvider};
-use flow_like::{
-    flow::{
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic, NodeScores},
-        pin::{PinOptions, ValueType},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic, NodeScores},
+    pin::{PinOptions, ValueType},
+    variable::VariableType,
 };
 use flow_like_types::{JsonSchema, Value, async_trait, json::json, reqwest};
 use serde::{Deserialize, Serialize};

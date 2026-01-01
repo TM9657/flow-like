@@ -1,13 +1,10 @@
 use std::sync::Arc;
 
-use flow_like::{
-    flow::{
-        execution::{context::ExecutionContext, internal_pin::InternalPin},
-        node::{Node, NodeLogic},
-        pin::PinType,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::{context::ExecutionContext, internal_pin::InternalPin},
+    node::{Node, NodeLogic},
+    pin::PinType,
+    variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
 pub mod push_generic_result;
@@ -151,7 +148,7 @@ impl NodeLogic for GenericEventNode {
             VariableType::Struct,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

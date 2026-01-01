@@ -241,10 +241,10 @@ impl CatalogBuilder {
                 if self.excluded_nodes.contains(&name) {
                     continue;
                 }
-                if let Some(ref included) = self.included_nodes {
-                    if !included.contains(&name) {
-                        continue;
-                    }
+                if let Some(ref included) = self.included_nodes
+                    && !included.contains(&name)
+                {
+                    continue;
                 }
                 node_map.insert(name, node);
             }

@@ -1,13 +1,10 @@
 use std::sync::Arc;
 
 use crate::data::path::FlowPath;
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    variable::VariableType,
 };
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_types::{Cacheable, async_trait, json::json};
@@ -49,7 +46,7 @@ impl NodeLogic for VirtualDirNode {
         )
         .set_schema::<FlowPath>();
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

@@ -5,7 +5,6 @@ use flow_like::flow::{
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
-use flow_like::state::FlowLikeState;
 use flow_like_types::{
     anyhow, async_trait,
     json::{from_slice, json},
@@ -298,7 +297,7 @@ impl NodeLogic for ListMailsNode {
             .and_then(|v| from_slice::<String>(&v).ok())
             .unwrap_or_else(|| "NEW".to_string());
 
-        let dynamic_map = vec![
+        let dynamic_map = [
             (
                 "SINCE",
                 "since_date",

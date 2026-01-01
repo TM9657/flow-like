@@ -8,7 +8,6 @@ use flow_like::{
         pin::PinOptions,
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_storage::blake3;
 use flow_like_types::{
@@ -96,7 +95,7 @@ impl NodeLogic for BuildAnthropicNode {
 
         node.set_long_running(true);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

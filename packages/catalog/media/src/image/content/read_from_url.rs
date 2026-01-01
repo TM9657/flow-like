@@ -1,11 +1,8 @@
 use crate::image::NodeImage;
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    variable::VariableType,
 };
 use flow_like_types::{
     Ok, async_trait,

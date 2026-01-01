@@ -3,15 +3,12 @@ use std::{
     sync::Arc,
 };
 
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
-        node::{Node, NodeLogic},
-        pin::PinType,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
+    node::{Node, NodeLogic},
+    pin::PinType,
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::from_slice};
 
@@ -51,7 +48,7 @@ impl NodeLogic for CallReferenceNode {
             VariableType::Execution,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

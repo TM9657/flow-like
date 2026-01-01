@@ -1,12 +1,9 @@
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
-        pin::ValueType,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic},
+    pin::ValueType,
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, bail, json::json};
 use std::sync::Arc;
@@ -49,7 +46,7 @@ impl NodeLogic for RemoveArrayIndexNode {
         )
         .set_value_type(ValueType::Array);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

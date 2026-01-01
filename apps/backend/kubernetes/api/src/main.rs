@@ -6,7 +6,6 @@ use flow_like_api::{construct_router, state::State};
 use flow_like_catalog::get_catalog;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
 mod health;

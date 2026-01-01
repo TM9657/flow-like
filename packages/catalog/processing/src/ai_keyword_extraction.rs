@@ -6,7 +6,6 @@ use flow_like::{
         pin::{PinOptions, ValueType},
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_types::{Value, anyhow, async_trait, json::json};
 use rig::completion::{Completion, ToolDefinition};
@@ -224,11 +223,10 @@ impl NodeLogic for AiKeywordExtractionNode {
                 },
                 ..
             }) = content
+                && name == "submit_keywords"
             {
-                if name == "submit_keywords" {
-                    keywords_value = Some(arguments);
-                    break;
-                }
+                keywords_value = Some(arguments);
+                break;
             }
         }
 

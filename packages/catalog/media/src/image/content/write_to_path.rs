@@ -1,14 +1,11 @@
 use std::sync::Arc;
 
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic, remove_pin},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic, remove_pin},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_catalog_core::{FlowPath, NodeImage};
 use flow_like_types::{
@@ -113,7 +110,7 @@ impl NodeLogic for WriteImageNode {
             VariableType::Execution,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
@@ -183,7 +180,7 @@ impl NodeLogic for WriteImageNode {
             "Gif" => {
                 let speed: i32 = context.evaluate_pin("speed").await?;
 
-                let encoder = GifEncoder::new_with_speed(&mut encoded, speed);
+                let _encoder = GifEncoder::new_with_speed(&mut encoded, speed);
                 // encoder.encode_frame(img.as_ref())?;
             }
             "AVIF" => {
@@ -228,7 +225,7 @@ impl NodeLogic for WriteImageNode {
                 rgb_img.write_with_encoder(encoder)?;
             }
             "OpenExr" => {
-                let encoder = OpenExrEncoder::new(&mut encoded);
+                let _encoder = OpenExrEncoder::new(&mut encoded);
             }
             _ => return Err(anyhow!("Unsupported image type")),
         };

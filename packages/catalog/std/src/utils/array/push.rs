@@ -1,12 +1,9 @@
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::{PinOptions, ValueType},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::{PinOptions, ValueType},
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
@@ -59,7 +56,7 @@ impl NodeLogic for PushArrayNode {
                 .build(),
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

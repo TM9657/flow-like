@@ -4,7 +4,6 @@ use flow_like::{
         node::{Node, NodeLogic},
         variable::VariableType,
     },
-    state::FlowLikeState,
     utils::json::parse_malformed_json,
 };
 use flow_like_types::async_trait;
@@ -59,7 +58,7 @@ impl NodeLogic for RepairParseNode {
             VariableType::Struct,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

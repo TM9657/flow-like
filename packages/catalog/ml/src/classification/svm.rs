@@ -7,15 +7,12 @@ use crate::ml::{
     MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array1_usize,
     values_to_array2_f64,
 };
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_catalog_core::NodeDBConnection;
 use flow_like_storage::databases::vector::VectorStore;
@@ -96,7 +93,7 @@ impl NodeLogic for FitSVMMultiClassNode {
         .set_schema::<NodeMLModel>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

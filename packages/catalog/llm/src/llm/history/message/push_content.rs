@@ -1,12 +1,9 @@
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_model_provider::history::{
     Content, ContentType, HistoryMessage, ImageUrl, MessageContent,
@@ -97,7 +94,7 @@ impl NodeLogic for PushContentNode {
         )
         .set_schema::<HistoryMessage>();
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

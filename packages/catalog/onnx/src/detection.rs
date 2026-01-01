@@ -1,13 +1,10 @@
 /// # ONNX Object Detection Nodes
 use crate::onnx::{NodeOnnxSession, Provider};
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_catalog_core::{BoundingBox, NodeImage};
 #[cfg(feature = "local-ml")]

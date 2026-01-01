@@ -1,13 +1,10 @@
 use super::provider::{GITHUB_PROVIDER_ID, GitHubProvider};
 use crate::data::path::FlowPath;
-use flow_like::{
-    flow::{
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
 use std::process::Command;

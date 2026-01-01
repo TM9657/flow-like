@@ -1,13 +1,10 @@
 use std::sync::Arc;
 
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
 use flow_like_catalog_data::events::chat_event::Attachment;
@@ -111,7 +108,7 @@ impl NodeLogic for ExtractAttachments {
         .set_value_type(flow_like::flow::pin::ValueType::Array)
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

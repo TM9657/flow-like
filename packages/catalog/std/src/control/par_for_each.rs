@@ -1,12 +1,9 @@
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
-        node::{Node, NodeLogic},
-        pin::{PinOptions, ValueType},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
+    node::{Node, NodeLogic},
+    pin::{PinOptions, ValueType},
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::json};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -76,7 +73,7 @@ impl NodeLogic for ParLoopNode {
             VariableType::Execution,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

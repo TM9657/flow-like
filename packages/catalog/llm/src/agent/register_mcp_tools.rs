@@ -4,15 +4,12 @@
 /// - Automatic: Uses all available tools from the MCP server
 /// - Manual: Lets the user enable individual tools via dynamic boolean pins
 use crate::generative::agent::Agent;
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic, NodeScores},
-        pin::{PinOptions, PinType},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic, NodeScores},
+    pin::{PinOptions, PinType},
+    variable::VariableType,
 };
 use flow_like_types::{async_trait, json, json::from_slice};
 use rmcp::{

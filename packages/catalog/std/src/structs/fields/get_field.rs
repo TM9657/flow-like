@@ -1,12 +1,9 @@
 use super::path_utils::get_value_by_path;
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic},
+    variable::VariableType,
 };
 use flow_like_types::async_trait;
 use std::sync::Arc;
@@ -54,7 +51,7 @@ impl NodeLogic for GetStructFieldNode {
             VariableType::String,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

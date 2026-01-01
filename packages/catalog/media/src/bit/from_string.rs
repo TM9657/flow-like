@@ -5,7 +5,6 @@ use flow_like::{
         node::{Node, NodeLogic},
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_types::{async_trait, bail, json::json};
 
@@ -49,7 +48,7 @@ impl NodeLogic for BitFromStringNode {
         node.add_output_pin("output_bit", "Bit", "Output Bit", VariableType::Struct)
             .set_schema::<Bit>();
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

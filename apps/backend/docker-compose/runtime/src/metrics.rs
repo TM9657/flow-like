@@ -65,10 +65,16 @@ fn init_metrics() {
         .expect("metrics already initialized");
 
     metrics::describe_counter!("flow_executions_total", "Total number of flow executions");
-    metrics::describe_histogram!("flow_execution_duration_seconds", "Flow execution duration in seconds");
+    metrics::describe_histogram!(
+        "flow_execution_duration_seconds",
+        "Flow execution duration in seconds"
+    );
     metrics::describe_gauge!("executor_active_jobs", "Number of currently executing jobs");
     metrics::describe_counter!("http_requests_total", "Total HTTP requests");
-    metrics::describe_histogram!("http_request_duration_seconds", "HTTP request duration in seconds");
+    metrics::describe_histogram!(
+        "http_request_duration_seconds",
+        "HTTP request duration in seconds"
+    );
 
     tracing::info!("Prometheus metrics initialized");
 }
@@ -80,7 +86,8 @@ pub async fn handler() -> impl IntoResponse {
 
 pub fn record_execution(status: &str, duration_secs: f64) {
     metrics::counter!("flow_executions_total", "status" => status.to_string()).increment(1);
-    metrics::histogram!("flow_execution_duration_seconds", "status" => status.to_string()).record(duration_secs);
+    metrics::histogram!("flow_execution_duration_seconds", "status" => status.to_string())
+        .record(duration_secs);
 }
 
 pub fn increment_active_jobs() {
@@ -96,9 +103,11 @@ pub fn record_http_request(method: &str, path: &str, status: u16, duration_secs:
         "method" => method.to_string(),
         "path" => path.to_string(),
         "status" => status.to_string()
-    ).increment(1);
+    )
+    .increment(1);
     metrics::histogram!("http_request_duration_seconds",
         "method" => method.to_string(),
         "path" => path.to_string()
-    ).record(duration_secs);
+    )
+    .record(duration_secs);
 }

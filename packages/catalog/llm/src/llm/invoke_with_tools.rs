@@ -7,7 +7,6 @@ use flow_like::{
         pin::{PinOptions, PinType},
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_model_provider::{
     history::{History, Tool, ToolChoice},
@@ -284,7 +283,7 @@ impl NodeLogic for InvokeLLMWithToolsNode {
 
         node.set_long_running(true);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

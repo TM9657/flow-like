@@ -44,7 +44,9 @@ fn build_aws_store(cfg: &crate::config::AwsStorageConfig) -> Result<FlowLikeStor
     Ok(FlowLikeStore::AWS(Arc::new(store)))
 }
 
-fn build_azure_store(cfg: &crate::config::AzureStorageConfig) -> Result<FlowLikeStore, StorageError> {
+fn build_azure_store(
+    cfg: &crate::config::AzureStorageConfig,
+) -> Result<FlowLikeStore, StorageError> {
     let mut builder = MicrosoftAzureBuilder::new()
         .with_account(&cfg.account_name)
         .with_container_name(&cfg.content_container);

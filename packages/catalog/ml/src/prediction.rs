@@ -7,15 +7,12 @@
 
 use crate::ml::{MAX_ML_PREDICTION_RECORDS, MLPrediction, NodeMLModel, make_new_field};
 use flow_like::flow::pin::ValueType;
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic, NodeScores, remove_pin_by_name},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic, NodeScores, remove_pin_by_name},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_catalog_core::NodeDBConnection;
 use flow_like_storage::arrow_schema::Schema;
@@ -93,7 +90,7 @@ impl NodeLogic for MLPredictNode {
             VariableType::Execution,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {

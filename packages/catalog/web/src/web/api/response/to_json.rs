@@ -1,11 +1,8 @@
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_types::async_trait;
 
@@ -57,7 +54,7 @@ impl NodeLogic for ToJsonNode {
             VariableType::Struct,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

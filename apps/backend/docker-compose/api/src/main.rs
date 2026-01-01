@@ -2,12 +2,12 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use axum::{
+    Router,
     body::Body,
     extract::MatchedPath,
     http::Request,
     middleware::{self, Next},
     response::IntoResponse,
-    Router,
 };
 use flow_like_api::{construct_router, state::State};
 use flow_like_catalog::get_catalog;

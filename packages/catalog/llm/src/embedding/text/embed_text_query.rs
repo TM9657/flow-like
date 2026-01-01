@@ -1,12 +1,9 @@
 use crate::generative::embedding::{CachedEmbeddingModel, CachedEmbeddingModelObject};
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::{PinOptions, ValueType},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::{PinOptions, ValueType},
+    variable::VariableType,
 };
 use flow_like_types::{anyhow, async_trait, bail, json::json};
 
@@ -71,7 +68,7 @@ impl NodeLogic for EmbedQueryNode {
         )
         .set_value_type(ValueType::Array);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

@@ -6,7 +6,6 @@ use flow_like::{
         pin::PinOptions,
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_types::{async_trait, bail, json::json};
 use std::sync::Arc;
@@ -62,7 +61,7 @@ impl NodeLogic for LoadModelNode {
         node.add_output_pin("model", "Model", "Model Out", VariableType::Struct)
             .set_schema::<CachedEmbeddingModel>();
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

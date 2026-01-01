@@ -11,7 +11,6 @@ use flow_like::{
         pin::PinOptions,
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_model_provider::history::{History, HistoryMessage, Role};
 use flow_like_types::{anyhow, async_trait, json};
@@ -153,7 +152,7 @@ impl NodeLogic for LLMBranchNode {
 
         node.set_long_running(true);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

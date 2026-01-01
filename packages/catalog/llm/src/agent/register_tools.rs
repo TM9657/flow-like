@@ -2,14 +2,11 @@ use crate::generative::agent::Agent;
 /// # Register Function Tools Node
 /// Adds referenced Flow-Like functions as tool references to an Agent object.
 /// Function references are stored and converted to tools at execution time to keep data slim.
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_types::{async_trait, json};
 

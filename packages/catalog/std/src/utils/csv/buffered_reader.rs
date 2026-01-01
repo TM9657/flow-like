@@ -1,11 +1,8 @@
-use flow_like::{
-    flow::{
-        execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
-        node::{Node, NodeLogic},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
+    node::{Node, NodeLogic},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
 use flow_like_storage::object_store::buffered::BufReader;
@@ -76,7 +73,7 @@ impl NodeLogic for BufferedCsvReaderNode {
 
         node.add_output_pin("exec_done", "Done", "Done", VariableType::Execution);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

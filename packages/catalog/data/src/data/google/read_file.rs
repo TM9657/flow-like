@@ -1,12 +1,9 @@
 use super::provider::{GOOGLE_PROVIDER_ID, GoogleProvider};
-use flow_like::{
-    flow::{
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::json, reqwest};
 
@@ -159,7 +156,7 @@ impl NodeLogic for ReadGoogleDriveFileNode {
             .send()
             .await;
 
-        let (file_name, mime_type, size) = match metadata_response {
+        let (file_name, mime_type, _size) = match metadata_response {
             Ok(resp) => {
                 if !resp.status().is_success() {
                     let status = resp.status();

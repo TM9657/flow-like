@@ -248,7 +248,7 @@ pub async fn list_runs(
     status: Option<LogLevel>,
     limit: Option<usize>,
     offset: Option<usize>,
-    last_meta: Option<LogMeta>,
+    _last_meta: Option<LogMeta>,
 ) -> Result<Vec<LogMeta>, TauriFunctionError> {
     let limit = limit.unwrap_or(100);
     let offset = offset.unwrap_or(0);

@@ -1,12 +1,9 @@
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::ValueType,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::ValueType,
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::json};
 use std::{collections::HashSet, sync::Arc};
@@ -50,7 +47,7 @@ impl NodeLogic for IsMutualSetNode {
 
         node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

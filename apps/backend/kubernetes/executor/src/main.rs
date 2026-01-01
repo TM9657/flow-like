@@ -16,7 +16,7 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use axum::routing::get;
-use flow_like_executor::{executor_router, ExecutorState};
+use flow_like_executor::{ExecutorState, executor_router};
 
 mod metrics;
 
@@ -74,6 +74,8 @@ async fn run_job_once() -> Result<(), Box<dyn std::error::Error>> {
     // For now, the executor pool (server mode) handles all executions.
     // Job-once mode can be implemented when needed for batch/scheduled workloads.
 
-    tracing::error!("Job-once mode is not yet implemented. Use EXECUTOR_SERVER_MODE=true for the executor pool.");
+    tracing::error!(
+        "Job-once mode is not yet implemented. Use EXECUTOR_SERVER_MODE=true for the executor pool."
+    );
     std::process::exit(1);
 }

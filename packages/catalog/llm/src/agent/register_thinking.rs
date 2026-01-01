@@ -2,14 +2,11 @@ use crate::generative::agent::Agent;
 /// # Register Thinking Tool Node
 /// Enables Rig's built-in Thinking tool on an Agent object.
 /// The thinking tool allows the agent to reason about complex problems before responding.
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_types::{async_trait, json};
 #[crate::register_node]

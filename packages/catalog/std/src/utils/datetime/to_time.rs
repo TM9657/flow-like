@@ -1,14 +1,10 @@
 use chrono::{DateTime, Timelike, Utc};
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    variable::VariableType,
 };
-use flow_like_types::{Value, async_trait, json::json};
-use serde::{Deserialize, Serialize};
+use flow_like_types::{async_trait, json::json};
 
 #[crate::register_node]
 #[derive(Default)]

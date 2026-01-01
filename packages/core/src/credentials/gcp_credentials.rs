@@ -59,23 +59,23 @@ impl SharedCredentialsTrait for GcpSharedCredentials {
         };
 
         // Prefer access token for scoped credentials, fall back to service account key
-        if let Some(ref access_token) = self.access_token {
-            if !access_token.is_empty() {
-                let token = access_token.clone();
-                let bucket = bucket.clone();
-                let store = tokio::task::spawn_blocking(move || {
-                    let credential = GcpCredential { bearer: token };
-                    let provider = StaticCredentialProvider::new(credential);
-                    GoogleCloudStorageBuilder::new()
-                        .with_bucket_name(bucket)
-                        .with_credentials(Arc::new(provider))
-                        .build()
-                })
-                .await
-                .map_err(|e| anyhow!("Failed to spawn blocking task: {}", e))??;
+        if let Some(ref access_token) = self.access_token
+            && !access_token.is_empty()
+        {
+            let token = access_token.clone();
+            let bucket = bucket.clone();
+            let store = tokio::task::spawn_blocking(move || {
+                let credential = GcpCredential { bearer: token };
+                let provider = StaticCredentialProvider::new(credential);
+                GoogleCloudStorageBuilder::new()
+                    .with_bucket_name(bucket)
+                    .with_credentials(Arc::new(provider))
+                    .build()
+            })
+            .await
+            .map_err(|e| anyhow!("Failed to spawn blocking task: {}", e))??;
 
-                return Ok(FlowLikeStore::Google(Arc::new(store)));
-            }
+            return Ok(FlowLikeStore::Google(Arc::new(store)));
         }
 
         // Fall back to service account key (master credentials)
@@ -106,12 +106,12 @@ impl SharedCredentialsTrait for GcpSharedCredentials {
             .child("db");
 
         // Prefer access token for scoped credentials
-        if let Some(ref access_token) = self.access_token {
-            if !access_token.is_empty() {
-                let connection =
-                    make_gcs_builder_with_token(self.content_bucket.clone(), access_token.clone());
-                return Ok(connection(path.clone()));
-            }
+        if let Some(ref access_token) = self.access_token
+            && !access_token.is_empty()
+        {
+            let connection =
+                make_gcs_builder_with_token(self.content_bucket.clone(), access_token.clone());
+            return Ok(connection(path.clone()));
         }
 
         // Fall back to service account key
@@ -134,12 +134,12 @@ impl SharedCredentialsTrait for GcpSharedCredentials {
         }
 
         // Prefer access token for scoped credentials
-        if let Some(ref access_token) = self.access_token {
-            if !access_token.is_empty() {
-                let builder =
-                    make_gcs_builder_with_token(self.logs_bucket.clone(), access_token.clone());
-                return Ok(Arc::new(builder));
-            }
+        if let Some(ref access_token) = self.access_token
+            && !access_token.is_empty()
+        {
+            let builder =
+                make_gcs_builder_with_token(self.logs_bucket.clone(), access_token.clone());
+            return Ok(Arc::new(builder));
         }
 
         // Fall back to service account key

@@ -1,12 +1,9 @@
 use crate::data::path::FlowPath;
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
 
@@ -45,7 +42,7 @@ impl NodeLogic for FilenameNode {
 
         node.add_output_pin("filename", "Filename", "Filename", VariableType::String);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
@@ -100,7 +97,7 @@ impl NodeLogic for SetFilenameNode {
         node.add_output_pin("out_path", "Path", "FlowPath", VariableType::Struct)
             .set_schema::<FlowPath>();
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

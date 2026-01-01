@@ -8,7 +8,6 @@ use flow_like::{
         pin::{PinOptions, ValueType},
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_model_provider::history::History;
 use flow_like_types::json::{self, Deserialize, Serialize};
@@ -341,12 +340,12 @@ impl NodeLogic for LLMExtractHistoryNode {
             }
             Some(raw) => match prepare_schema(&raw) {
                 Ok(prepared) => {
-                    if prepared.was_inferred {
-                        if let Some(pin) = node.get_pin_mut_by_name("schema") {
-                            let schema_str = json::to_string_pretty(&prepared.output_schema)
-                                .unwrap_or_else(|_| prepared.output_schema.to_string());
-                            let _ = pin.set_default_value(Some(json::json!(schema_str)));
-                        }
+                    if prepared.was_inferred
+                        && let Some(pin) = node.get_pin_mut_by_name("schema")
+                    {
+                        let schema_str = json::to_string_pretty(&prepared.output_schema)
+                            .unwrap_or_else(|_| prepared.output_schema.to_string());
+                        let _ = pin.set_default_value(Some(json::json!(schema_str)));
                     }
 
                     let schema_type = prepared.output_schema.get("type").and_then(|t| t.as_str());

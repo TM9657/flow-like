@@ -56,7 +56,9 @@ fn init_metrics() {
     let handle = PrometheusBuilder::new()
         .set_buckets_for_metric(
             Matcher::Full("http_request_duration_seconds".to_string()),
-            &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+            &[
+                0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ],
         )
         .unwrap()
         .install_recorder()
@@ -67,7 +69,10 @@ fn init_metrics() {
         .expect("metrics already initialized");
 
     metrics::describe_counter!("http_requests_total", "Total number of HTTP requests");
-    metrics::describe_histogram!("http_request_duration_seconds", "HTTP request duration in seconds");
+    metrics::describe_histogram!(
+        "http_request_duration_seconds",
+        "HTTP request duration in seconds"
+    );
     metrics::describe_gauge!("api_active_connections", "Number of active connections");
 
     tracing::info!("Prometheus metrics initialized");

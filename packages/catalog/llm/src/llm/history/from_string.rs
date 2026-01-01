@@ -1,13 +1,10 @@
 /// # History From String Node
 /// Create a new History struct with string content as User Message
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_model_provider::history::{
     Content, ContentType, History, HistoryMessage, MessageContent, Role,
@@ -66,7 +63,7 @@ impl NodeLogic for HistoryFromStringNode {
             .set_schema::<History>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

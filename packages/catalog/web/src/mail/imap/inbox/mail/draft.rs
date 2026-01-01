@@ -1,13 +1,10 @@
 use crate::mail::imap::ImapConnection;
 use crate::mail::smtp::send_mail::{build_rfc5322_message_send, generate_message_id};
-use flow_like::{
-    flow::{
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
 use flow_like_types::{async_trait, json::json};

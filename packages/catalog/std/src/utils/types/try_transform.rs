@@ -1,11 +1,8 @@
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
@@ -51,7 +48,7 @@ impl NodeLogic for TryTransformNode {
             VariableType::Boolean,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
@@ -388,16 +385,16 @@ fn value_to_date(input: &Value, target: &mut Value) -> bool {
     // Handle old SystemTime format for backward compatibility
     if input.is_object() {
         let obj = input.as_object().unwrap();
-        if obj.contains_key("secs_since_epoch") && obj.contains_key("nanos_since_epoch") {
-            if let (Some(secs), Some(nanos)) = (
+        if obj.contains_key("secs_since_epoch")
+            && obj.contains_key("nanos_since_epoch")
+            && let (Some(secs), Some(nanos)) = (
                 obj.get("secs_since_epoch").and_then(|v| v.as_i64()),
                 obj.get("nanos_since_epoch").and_then(|v| v.as_u64()),
-            ) {
-                if let Some(dt) = DateTime::<Utc>::from_timestamp(secs, nanos as u32) {
-                    *target = json!(dt);
-                    return true;
-                }
-            }
+            )
+            && let Some(dt) = DateTime::<Utc>::from_timestamp(secs, nanos as u32)
+        {
+            *target = json!(dt);
+            return true;
         }
     }
 

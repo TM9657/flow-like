@@ -12,7 +12,6 @@ use flow_like::{
         pin::PinOptions,
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_model_provider::{
     history::History, response::Response, response_chunk::ResponseChunk,

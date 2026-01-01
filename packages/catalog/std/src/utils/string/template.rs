@@ -1,12 +1,9 @@
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
-        pin::PinType,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic},
+    pin::PinType,
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::json, minijinja};
 use std::{
@@ -52,7 +49,7 @@ impl NodeLogic for TemplateStringNode {
             VariableType::String,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

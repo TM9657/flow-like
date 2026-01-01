@@ -1,11 +1,8 @@
-use flow_like::{
-    flow::{
-        board::Board,
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
-        variable::{Variable, VariableType},
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    board::Board,
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic},
+    variable::{Variable, VariableType},
 };
 use flow_like_types::{Value, async_trait};
 use std::{collections::HashMap, sync::Arc};
@@ -52,7 +49,7 @@ impl NodeLogic for GetVariable {
             VariableType::Generic,
         );
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

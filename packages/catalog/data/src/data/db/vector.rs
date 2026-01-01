@@ -1,10 +1,7 @@
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    variable::VariableType,
 };
 use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
 use flow_like_types::{
@@ -109,7 +106,7 @@ impl NodeLogic for CreateLocalDatabaseNode {
         )
         .set_schema::<NodeDBConnection>();
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

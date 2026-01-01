@@ -2,14 +2,11 @@ use crate::generative::agent::Agent;
 /// # Stream Invoke Agent Node
 /// Executes an Agent with streaming support, emitting chunks as they are generated.
 /// Similar to simple agent's streaming behavior but using the built Agent object.
-use flow_like::{
-    flow::{
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic, NodeScores},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic, NodeScores},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_model_provider::{
     history::History, response::Response, response_chunk::ResponseChunk,

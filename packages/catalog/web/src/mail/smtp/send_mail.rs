@@ -1,13 +1,10 @@
 use async_smtp::{Envelope, SendableEmail};
 use chrono::Offset;
-use flow_like::{
-    flow::{
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
 use flow_like_types::{anyhow, async_trait, json::json};
@@ -185,7 +182,7 @@ impl NodeLogic for SmtpSendMailNode {
             .map_err(|e| anyhow!("Failed to create envelope: {}", e))?;
         let sendable_mail = SendableEmail::new(envelope, message.as_bytes().to_vec());
 
-        let accepted = transport
+        let _accepted = transport
             .send(sendable_mail)
             .await
             .map_err(|e| anyhow!("SMTP send failed: {}", e))?;

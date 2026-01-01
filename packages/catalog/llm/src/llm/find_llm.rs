@@ -6,7 +6,6 @@ use flow_like::{
         pin::PinOptions,
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_types::{async_trait, json::json};
 
@@ -68,7 +67,7 @@ impl NodeLogic for FindLLMNode {
 
         node.set_long_running(true);
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {

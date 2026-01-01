@@ -65,7 +65,10 @@ fn init_metrics() {
         .expect("metrics already initialized");
 
     metrics::describe_counter!("flow_executions_total", "Total number of flow executions");
-    metrics::describe_histogram!("flow_execution_duration_seconds", "Flow execution duration in seconds");
+    metrics::describe_histogram!(
+        "flow_execution_duration_seconds",
+        "Flow execution duration in seconds"
+    );
     metrics::describe_gauge!("executor_active_jobs", "Number of currently executing jobs");
 
     tracing::info!("Prometheus metrics initialized");
@@ -74,9 +77,4 @@ fn init_metrics() {
 pub async fn handler() -> impl IntoResponse {
     let handle = PROMETHEUS_HANDLE.get().expect("metrics not initialized");
     handle.render()
-}
-
-pub fn record_execution(status: &str, duration_secs: f64) {
-    metrics::counter!("flow_executions_total", "status" => status.to_string()).increment(1);
-    metrics::histogram!("flow_execution_duration_seconds").record(duration_secs);
 }

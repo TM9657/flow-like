@@ -1,13 +1,10 @@
 use std::sync::Arc;
 
-use flow_like::{
-    flow::{
-        execution::{EventTrigger, context::ExecutionContext},
-        node::{Node, NodeLogic},
-        pin::PinOptions,
-        variable::VariableType,
-    },
-    state::FlowLikeState,
+use flow_like::flow::{
+    execution::{EventTrigger, context::ExecutionContext},
+    node::{Node, NodeLogic},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_model_provider::{
     history::{Content, History, HistoryMessage, ImageUrl, MessageContent},
@@ -368,7 +365,7 @@ impl NodeLogic for ChatEventNode {
             .set_schema::<User>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        return node;
+        node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
