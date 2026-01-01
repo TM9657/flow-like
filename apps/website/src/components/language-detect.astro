@@ -1,0 +1,54 @@
+---
+// Auto-detect browser language and redirect with smooth transition
+---
+
+<script is:inline>
+  (function() {
+    var SUPPORTED_LANGS = ["en", "de", "es", "fr", "zh", "ja", "ko", "pt", "it", "nl", "sv"];
+    var DEFAULT_LANG = "en";
+    var STORAGE_KEY = "flow-like-lang-preference";
+
+    try {
+      var path = window.location.pathname;
+
+      // Only run detection on root path
+      if (path !== "/" && path !== "") return;
+
+      // Check if user already has a saved preference
+      var savedLang = localStorage.getItem(STORAGE_KEY);
+      if (savedLang && SUPPORTED_LANGS.indexOf(savedLang) !== -1) {
+        // User has preference - redirect to that language if not default
+        if (savedLang !== DEFAULT_LANG) {
+          window.location.replace("/" + savedLang + "/");
+        }
+        return;
+      }
+
+      // Get browser language from navigator
+      var browserLangs = navigator.languages ? navigator.languages : [navigator.language || ""];
+      var detectedLang = null;
+
+      for (var i = 0; i < browserLangs.length; i++) {
+        var lang = browserLangs[i];
+        if (lang) {
+          var shortLang = lang.slice(0, 2).toLowerCase();
+          if (SUPPORTED_LANGS.indexOf(shortLang) !== -1) {
+            detectedLang = shortLang;
+            break;
+          }
+        }
+      }
+
+      // Save preference and redirect if needed
+      if (!detectedLang || detectedLang === DEFAULT_LANG) {
+        localStorage.setItem(STORAGE_KEY, DEFAULT_LANG);
+        return;
+      }
+
+      localStorage.setItem(STORAGE_KEY, detectedLang);
+      window.location.replace("/" + detectedLang + "/");
+    } catch (e) {
+      // Silent fail - localStorage might not be available
+    }
+  })();
+</script>

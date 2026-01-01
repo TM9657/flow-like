@@ -4,6 +4,7 @@ export interface IProfile {
 	created: string;
 	description?: null | string;
 	hub?: string;
+	secure?: boolean;
 	hubs?: string[];
 	icon?: null | string;
 	id?: string;

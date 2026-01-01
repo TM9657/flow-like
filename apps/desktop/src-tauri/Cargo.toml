@@ -18,6 +18,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.4.1", features = [] }
+serde_json = "1"
 
 [dependencies]
 flow-like = { workspace = true, features = ["tauri", "local-ml"] }

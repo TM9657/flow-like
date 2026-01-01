@@ -49,12 +49,12 @@ pub mod trace;
 
 const USE_DEPENDENCY_GRAPH: bool = false;
 static STORED_META_FIELDS: Lazy<Vec<FieldRef>> = Lazy::new(|| {
-    Vec::<FieldRef>::from_type::<LogMeta>(
+    Vec::<FieldRef>::from_type::<StoredLogMeta>(
         TracingOptions::default()
             .allow_null_fields(true)
             .strings_as_large_utf8(false),
     )
-    .expect("derive FieldRef for StoredLogMessage")
+    .expect("derive FieldRef for StoredLogMeta")
 });
 
 #[derive(
@@ -112,8 +112,9 @@ impl LogLevel {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
-pub struct LogMeta {
+/// Storage struct for LanceDB - excludes runtime-only fields like is_remote
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct StoredLogMeta {
     pub app_id: String,
     pub run_id: String,
     pub board_id: String,
@@ -129,10 +130,72 @@ pub struct LogMeta {
     pub payload: Vec<u8>,
 }
 
+impl From<&LogMeta> for StoredLogMeta {
+    fn from(meta: &LogMeta) -> Self {
+        StoredLogMeta {
+            app_id: meta.app_id.clone(),
+            run_id: meta.run_id.clone(),
+            board_id: meta.board_id.clone(),
+            start: meta.start,
+            end: meta.end,
+            log_level: meta.log_level,
+            version: meta.version.clone(),
+            nodes: meta.nodes.clone(),
+            logs: meta.logs,
+            node_id: meta.node_id.clone(),
+            event_version: meta.event_version.clone(),
+            event_id: meta.event_id.clone(),
+            payload: meta.payload.clone(),
+        }
+    }
+}
+
+impl From<StoredLogMeta> for LogMeta {
+    fn from(stored: StoredLogMeta) -> Self {
+        LogMeta {
+            app_id: stored.app_id,
+            run_id: stored.run_id,
+            board_id: stored.board_id,
+            start: stored.start,
+            end: stored.end,
+            log_level: stored.log_level,
+            version: stored.version,
+            nodes: stored.nodes,
+            logs: stored.logs,
+            node_id: stored.node_id,
+            event_version: stored.event_version,
+            event_id: stored.event_id,
+            payload: stored.payload,
+            is_remote: false,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct LogMeta {
+    pub app_id: String,
+    pub run_id: String,
+    pub board_id: String,
+    pub start: u64,
+    pub end: u64,
+    pub log_level: u8,
+    pub version: String,
+    pub nodes: Option<Vec<(String, u8)>>,
+    pub logs: Option<u64>,
+    pub node_id: String,
+    pub event_version: Option<String>,
+    pub event_id: String,
+    pub payload: Vec<u8>,
+    /// Runtime-only field - not stored, set based on fetch source
+    #[serde(default)]
+    pub is_remote: bool,
+}
+
 impl LogMeta {
     fn into_arrow(&self) -> flow_like_types::Result<RecordBatch> {
         let fields = &*STORED_META_FIELDS;
-        let batch = serde_arrow::to_record_batch(fields, &vec![self])?;
+        let stored: StoredLogMeta = self.into();
+        let batch = serde_arrow::to_record_batch(fields, &vec![stored])?;
         Ok(batch)
     }
 
@@ -235,13 +298,19 @@ pub struct Run {
 
 impl Run {
     pub async fn flush_logs(&mut self, finalize: bool) -> flow_like_types::Result<Option<LogMeta>> {
-        let db_fn = self
-            .log_db
-            .as_ref()
-            .ok_or_else(|| anyhow!("No log database configured"))?;
+        let db_fn = match self.log_db.as_ref() {
+            Some(db) => db,
+            None => {
+                tracing::debug!(
+                    "No log database configured - logs will not be persisted to LanceDB"
+                );
+                return Ok(None); // No log database configured - skip silently
+            }
+        };
         let base_path = Path::from("runs")
             .child(self.app_id.clone())
             .child(self.board.id.clone());
+        tracing::debug!(path = %base_path, finalize, traces = self.traces.len(), "Flushing logs to database");
         let db = db_fn(base_path.clone()).execute().await?;
 
         // 1) pre‑count total logs, reserve once, and find highest level in one pass
@@ -328,6 +397,7 @@ impl Run {
             event_id: self.event_id.clone().unwrap_or("".to_string()),
             event_version: self.event_version.clone(),
             payload,
+            is_remote: false,
         };
 
         Ok(Some(content))
@@ -433,16 +503,52 @@ impl InternalRun {
         token: Option<String>,
         oauth_tokens: std::collections::HashMap<String, OAuthToken>,
     ) -> flow_like_types::Result<Self> {
+        Self::new_with_run_id(
+            app_id,
+            board,
+            event,
+            handler,
+            profile,
+            payload,
+            stream_state,
+            callback,
+            credentials,
+            token,
+            oauth_tokens,
+            None,
+        )
+        .await
+    }
+
+    pub async fn new_with_run_id(
+        app_id: &str,
+        board: Arc<Board>,
+        event: Option<Event>,
+        handler: &Arc<FlowLikeState>,
+        profile: &Profile,
+        payload: &RunPayload,
+        stream_state: bool,
+        callback: InterComCallback,
+        credentials: Option<SharedCredentials>,
+        token: Option<String>,
+        oauth_tokens: std::collections::HashMap<String, OAuthToken>,
+        run_id: Option<String>,
+    ) -> flow_like_types::Result<Self> {
         // Convert to AHashMap for internal use
         let oauth_tokens: AHashMap<String, OAuthToken> = oauth_tokens.into_iter().collect();
 
         let before = Instant::now();
-        let run_id = create_id();
+        let run_id = run_id.unwrap_or_else(create_id);
 
         let (log_store, db) = {
             let guard = handler.config.read().await;
             let log_store = guard.stores.log_store.clone();
             let db = guard.callbacks.build_logs_database.clone();
+            tracing::debug!(
+                has_log_store = log_store.is_some(),
+                has_log_db = db.is_some(),
+                "InternalRun: Reading log configuration from state"
+            );
             (log_store, db)
         };
 

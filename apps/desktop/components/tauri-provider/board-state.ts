@@ -25,7 +25,7 @@ import {
 import type { IJwks, IRealtimeAccess } from "@tm9657/flow-like-ui";
 import { isObject } from "lodash-es";
 import { toast } from "sonner";
-import { fetcher } from "../../lib/api";
+import { fetcher, streamFetcher } from "../../lib/api";
 import { oauthConsentStore, oauthTokenStore } from "../../lib/oauth-db";
 import { oauthService } from "../../lib/oauth-service";
 import type { TauriBackend } from "../tauri-provider";
@@ -640,6 +640,62 @@ export class BoardState implements IBoardState {
 		return metadata;
 	}
 
+	async executeBoardRemote(
+		appId: string,
+		boardId: string,
+		payload: IRunPayload,
+		streamState?: boolean,
+		eventId?: (id: string) => void,
+		cb?: (event: IIntercomEvent[]) => void,
+	): Promise<ILogMetadata | undefined> {
+		if (!this.backend.profile || !this.backend.auth) {
+			throw new Error("Profile and auth required for remote execution");
+		}
+
+		let closed = false;
+		let foundRunId = false;
+
+		await streamFetcher<IIntercomEvent>(
+			this.backend.profile,
+			`apps/${appId}/board/${boardId}/invoke`,
+			{
+				method: "POST",
+				body: JSON.stringify({
+					node_id: payload.id,
+					payload: payload.payload,
+					token: this.backend.auth.user?.access_token,
+					stream_state: streamState ?? true,
+				}),
+			},
+			this.backend.auth,
+			(event: IIntercomEvent) => {
+				if (closed) {
+					console.warn("Stream closed, ignoring event");
+					return;
+				}
+
+				// Handle run_initiated event to get run ID
+				if (!foundRunId && eventId && event.event_type === "run_initiated") {
+					const runId = event.payload?.run_id;
+					if (runId) {
+						eventId(runId);
+						foundRunId = true;
+					}
+				}
+
+				// Forward event to callback as array (consistent with local execution)
+				if (cb) cb([event]);
+				else {
+					console.log("UNDELIVERED Received event:", event);
+				}
+			},
+		);
+
+		closed = true;
+		// Full metadata will be fetched separately by the caller
+		return undefined;
+	}
+
 	async listRuns(
 		appId: string,
 		boardId: string,
@@ -651,7 +707,8 @@ export class BoardState implements IBoardState {
 		offset?: number,
 		limit?: number,
 	): Promise<ILogMetadata[]> {
-		const runs: ILogMetadata[] = await invoke("list_runs", {
+		// Fetch local runs
+		const localRuns: ILogMetadata[] = await invoke("list_runs", {
 			appId: appId,
 			boardId: boardId,
 			nodeId: nodeId,
@@ -662,7 +719,59 @@ export class BoardState implements IBoardState {
 			offset: offset,
 			lastMeta: lastMeta,
 		});
-		return runs;
+
+		// Mark local runs
+		for (const run of localRuns) {
+			run.is_remote = false;
+		}
+
+		// Try to fetch remote runs if online
+		let remoteRuns: ILogMetadata[] = [];
+		if (this.backend.profile && this.backend.auth) {
+			try {
+				const params = new URLSearchParams();
+				if (nodeId) params.set("node_id", nodeId);
+				if (from) params.set("from", from.toString());
+				if (to) params.set("to", to.toString());
+				if (status !== undefined) params.set("status", status.toString());
+				if (limit) params.set("limit", limit.toString());
+				if (offset) params.set("offset", offset.toString());
+
+				const queryString = params.toString();
+				const path = `apps/${appId}/board/${boardId}/runs${queryString ? `?${queryString}` : ""}`;
+
+				const response = await fetcher<ILogMetadata[]>(
+					this.backend.profile,
+					path,
+					{ method: "GET" },
+					this.backend.auth,
+				);
+
+				remoteRuns = response ?? [];
+
+				for (const run of remoteRuns) {
+					run.is_remote = true;
+				}
+			} catch (e) {
+				console.warn("Failed to fetch remote runs:", e);
+			}
+		}
+
+		// Merge and deduplicate by run_id, preferring local runs
+		const runMap = new Map<string, ILogMetadata>();
+		for (const run of remoteRuns) {
+			runMap.set(run.run_id, run);
+		}
+		for (const run of localRuns) {
+			runMap.set(run.run_id, run);
+		}
+
+		// Sort by start time descending (newest first)
+		const merged = Array.from(runMap.values()).sort(
+			(a, b) => b.start - a.start,
+		);
+
+		return merged;
 	}
 
 	async queryRun(
@@ -671,6 +780,30 @@ export class BoardState implements IBoardState {
 		offset?: number,
 		limit?: number,
 	): Promise<ILog[]> {
+		// Check if this is a remote run - fetch from API
+		if (logMeta.is_remote && this.backend.profile && this.backend.auth) {
+			try {
+				const params = new URLSearchParams();
+				params.set("run_id", logMeta.run_id);
+				if (query) params.set("query", query);
+				if (limit !== undefined) params.set("limit", limit.toString());
+				if (offset !== undefined) params.set("offset", offset.toString());
+
+				const path = `apps/${logMeta.app_id}/board/${logMeta.board_id}/logs?${params.toString()}`;
+				const logs = await fetcher<ILog[]>(
+					this.backend.profile,
+					path,
+					{ method: "GET" },
+					this.backend.auth,
+				);
+				return logs ?? [];
+			} catch (e) {
+				console.error("Failed to fetch remote logs:", e);
+				return [];
+			}
+		}
+
+		// Local run - use Tauri invoke
 		const runs: ILog[] = await invoke("query_run", {
 			logMeta: logMeta,
 			query: query,

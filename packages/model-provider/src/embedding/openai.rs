@@ -33,7 +33,7 @@ impl OpenAIEmbeddingModel {
     ) -> flow_like_types::Result<Self> {
         let openai_config = random_provider(&config.openai_config)?;
         let api_key = openai_config.api_key.clone().unwrap_or_default();
-        let model_id = provider.provider.model_id.clone();
+        let _model_id = provider.provider.model_id.clone();
 
         let client = if provider.provider.provider_name == "azure" {
             let endpoint = openai_config.endpoint.clone().unwrap_or_default();

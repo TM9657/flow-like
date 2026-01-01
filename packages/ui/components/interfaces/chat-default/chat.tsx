@@ -16,6 +16,13 @@ import type { IMessage } from "./chat-db";
 import { ChatBox, type ChatBoxRef, type ISendMessageFunction } from "./chatbox";
 import { MessageComponent } from "./message";
 
+function getMessageTextContent(message: IMessage): string {
+	const content = message.inner.content;
+	if (typeof content === "string") return content;
+	const textContent = content.find((c) => c.type === "text");
+	return textContent?.text ?? "";
+}
+
 export interface IChatProps {
 	messages: IMessage[];
 	onSendMessage: ISendMessageFunction;
@@ -59,6 +66,15 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 		useEffect(() => {
 			setLocalMessages(messages);
 
+			// Clear optimistic sending state when the user message appears in DB
+			if (isSending) {
+				const lastMessage = messages[messages.length - 1];
+				if (lastMessage?.inner.role === "user") {
+					setIsSending(false);
+					setSendingContent("");
+				}
+			}
+
 			const lastUserMessage = messages
 				.slice()
 				.reverse()
@@ -76,7 +92,7 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 			}
 
 			setDefaultActiveTools(config?.default_tools ?? []);
-		}, [messages, config?.tools]);
+		}, [messages, config?.tools, isSending]);
 
 		// Initial scroll to bottom when messages first load
 		useEffect(() => {
@@ -267,37 +283,43 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 								/>
 							</div>
 						))}
-						{isSending && (
-							<div className="w-full max-w-screen-lg px-4 flex flex-col items-end space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
-								<div className="bg-muted dark:bg-muted/30 text-foreground px-4 py-2 rounded-xl rounded-tr-sm max-w-3xl shadow-sm">
-									<p className="whitespace-pre-wrap text-sm">
-										{sendingContent}
-									</p>
+						{isSending &&
+							!localMessages.some(
+								(m) =>
+									m.inner.role === "user" &&
+									getMessageTextContent(m) === sendingContent,
+							) && (
+								<div className="w-full max-w-screen-lg px-4 flex flex-col items-end space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+									<div className="bg-muted dark:bg-muted/30 text-foreground px-4 py-2 rounded-xl rounded-tr-sm max-w-3xl shadow-sm">
+										<p className="whitespace-pre-wrap text-sm">
+											{sendingContent}
+										</p>
+									</div>
+									<div className="flex items-center gap-2 pr-1">
+										<PuffLoader
+											size={16}
+											color={resolvedTheme === "dark" ? "white" : "black"}
+										/>
+										<span className="text-xs text-muted-foreground">
+											Processing...
+										</span>
+									</div>
 								</div>
-								<div className="flex items-center gap-2 pr-1">
+							)}
+						{currentMessage &&
+							!localMessages.some((m) => m.id === currentMessage.id) && (
+								<div
+									className="w-full max-w-screen-lg px-4 relative"
+									key={currentMessage.id}
+								>
 									<PuffLoader
-										size={16}
 										color={resolvedTheme === "dark" ? "white" : "black"}
+										className="mt-2 absolute left-0 top-0 translate-y-[2.5rem] translate-x-[-100%]"
+										size={30}
 									/>
-									<span className="text-xs text-muted-foreground">
-										Processing...
-									</span>
+									<MessageComponent loading message={currentMessage} />
 								</div>
-							</div>
-						)}
-						{currentMessage && (
-							<div
-								className="w-full max-w-screen-lg px-4 relative"
-								key={currentMessage.id}
-							>
-								<PuffLoader
-									color={resolvedTheme === "dark" ? "white" : "black"}
-									className="mt-2 absolute left-0 top-0 translate-y-[2.5rem] translate-x-[-100%]"
-									size={30}
-								/>
-								<MessageComponent loading message={currentMessage} />
-							</div>
-						)}
+							)}
 						<div ref={messagesEndRef} />
 					</div>
 

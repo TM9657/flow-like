@@ -1,27 +1,53 @@
 ---
-import { LuEye, LuShield, LuZap } from "react-icons/lu";
+import { LuEye, LuShield, LuZap, LuLock, LuTriangleAlert, LuCircleCheck } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
+
+const problems = [
+  t("problem.risk1.title") + " — " + t("problem.risk1.description"),
+  t("problem.risk2.title") + " — " + t("problem.risk2.description"),
+  t("problem.risk3.title") + " — " + t("problem.risk3.description"),
+  t("problem.risk4.title") + " — " + t("problem.risk4.description"),
+  t("problem.risk5.title") + " — " + t("problem.risk5.description"),
+];
 
 const features = [
   {
     icon: LuEye,
-    title: "Full Visibility",
-    description: "Every step captures inputs, changes, and outputs.",
+    title: t("solution.item1").split("—")[0].trim(),
+    description: t("solution.item1").includes("—") ? t("solution.item1").split("—")[1].trim() : t("solution.item1"),
   },
   {
     icon: LuShield,
-    title: "Explainable Results",
-    description: "Easier reviews, faster debugging, fewer surprises.",
+    title: t("solution.item2").split("—")[0].trim(),
+    description: t("solution.item2").includes("—") ? t("solution.item2").split("—")[1].trim() : t("solution.item2"),
   },
   {
     icon: LuZap,
-    title: "Any Scale",
-    description: "Solo to production — same visibility throughout.",
+    title: t("solution.item3").split("—")[0].trim(),
+    description: t("solution.item3").includes("—") ? t("solution.item3").split("—")[1].trim() : t("solution.item3"),
+  },
+  {
+    icon: LuLock,
+    title: t("solution.item4").split("—")[0].trim(),
+    description: t("solution.item4").includes("—") ? t("solution.item4").split("—")[1].trim() : t("solution.item4"),
   },
 ];
 ---
 
-<!-- Sharp tilted white section with bottom edge going back to dark -->
-<section class="relative pb-32 pt-16 -mb-16">
+<!-- Problem section: Light background -->
+<section class="relative pb-20 pt-16">
   <!-- White background with sharp tilted bottom edge -->
   <div
     class="absolute inset-0 bg-[#fafafa]"
@@ -36,40 +62,89 @@ const features = [
 
   <!-- Content -->
   <div class="relative z-10 mx-auto max-w-6xl px-6 lg:px-8">
+    <!-- Problem Section -->
     <div class="grid lg:grid-cols-2 gap-16 lg:gap-24 items-start">
-      <!-- Left: Copy -->
+      <!-- Left: Problem statement -->
       <div class="lg:sticky lg:top-32">
-        <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-neutral-400 mb-4">
-          Why this matters
+        <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-red-500 mb-4 flex items-center gap-2">
+          <LuTriangleAlert className="w-3.5 h-3.5" />
+          {t("problem.tagline")}
         </p>
         <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight text-neutral-900 leading-[1.2] mb-6">
-          The hard part isn't making something run —
-          <span class="text-primary"> it's knowing what happened.</span>
+          {t("problem.headline")}
         </h2>
         <p class="text-neutral-500 leading-relaxed">
-          Most tools show a green checkmark and move on. You're left guessing
-          where the data came from and why the result looks the way it does.
+          {t("problem.description")}
         </p>
       </div>
 
-      <!-- Right: Minimal feature list -->
+      <!-- Right: Problem list -->
       <div class="space-y-0 divide-y divide-neutral-200">
-        {features.map((feature) => (
-          <div class="py-8 first:pt-0 last:pb-0">
+        {problems.map((problem) => (
+          <div class="py-5 first:pt-0 last:pb-0">
             <div class="flex items-start gap-4">
-              <feature.icon className="w-5 h-5 text-neutral-400 mt-0.5 shrink-0" />
-              <div>
-                <h3 class="text-base font-medium text-neutral-900 mb-1">
-                  {feature.title}
-                </h3>
-                <p class="text-sm text-neutral-500">
-                  {feature.description}
-                </p>
-              </div>
+              <span class="w-1.5 h-1.5 rounded-full bg-red-400 mt-2 shrink-0" />
+              <p class="text-base text-neutral-700">{problem}</p>
             </div>
           </div>
         ))}
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- Solution section: Dark background for contrast -->
+<section class="relative py-24 -mt-16">
+  <!-- Dark background with tilted top edge -->
+  <div
+    class="absolute inset-0 bg-background"
+    style="clip-path: polygon(0 60px, 100% 0, 100% 100%, 0 100%);"
+  ></div>
+
+  <!-- Subtle gradient overlay -->
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+    <div class="absolute inset-0 bg-[radial-gradient(60%_40%_at_50%_0%,hsl(var(--primary)/.08),transparent)]"></div>
+  </div>
+
+  <!-- Horizontal accent line -->
+  <div
+    aria-hidden="true"
+    class="pointer-events-none absolute right-[8%] top-1/3 w-24 h-px bg-border/50"
+  ></div>
+
+  <div class="relative z-10 mx-auto max-w-6xl px-6 lg:px-8 pt-12">
+    <div class="mb-14">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-emerald-500 mb-4 flex items-center gap-2">
+        <LuCircleCheck className="w-3.5 h-3.5" />
+        {t("solution.tagline")}
+      </p>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground leading-[1.2] mb-4">
+        {t("solution.headline")}
+      </h2>
+      <p class="text-muted-foreground leading-relaxed max-w-2xl">
+        {t("solution.description")}
+      </p>
+    </div>
+
+    <!-- Feature grid -->
+    <div class="grid sm:grid-cols-2 gap-6">
+      {features.map((feature) => (
+        <div class="p-6 rounded-2xl border border-border/50 bg-card/30 backdrop-blur-sm">
+          <div class="flex items-start gap-4">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+              <feature.icon className="w-5 h-5 text-emerald-500" />
+            </div>
+            <div>
+              <h3 class="text-base font-medium text-foreground mb-2">
+                {feature.title}
+              </h3>
+              <p class="text-sm text-muted-foreground leading-relaxed">
+                {feature.description}
+              </p>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   </div>
 </section>

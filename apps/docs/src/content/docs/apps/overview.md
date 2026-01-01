@@ -11,7 +11,8 @@ While **Flow-Like** refers to the overall platform—the "operating system" you 
 
 Each **Flow-Like App** enables you to:
 - Create [Boards for Flows](/apps/boards/) using our [Studio](/studio/overview/) builder environment,
-- Build custom [user interfaces](/apps/chat-ui/) and connect them to your **Flows**,
+- Build custom [chat interfaces](/apps/chat-ui/) and connect them to your **Flows**,
+- Create rich [custom UIs](/apps/a2ui/) with drag-and-drop or AI generation,
 - Link **Flows** to the outside world through [Events](/apps/events/),
 - [Upload files and folders](/apps/storage/),
 - Manage and inspect [databases](/apps/storage/),

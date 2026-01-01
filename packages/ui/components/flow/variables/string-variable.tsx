@@ -109,7 +109,7 @@ export function StringVariable({
 				/>
 
 				{/* Character count */}
-				{value.length > 0 && (
+				{(value?.length ?? 0) > 0 && (
 					<div className="absolute bottom-1 right-2 text-[10px] text-muted-foreground/60 font-mono select-none pointer-events-none">
 						{value.length} chars
 						{value.includes("\n") && ` · ${value.split("\n").length} lines`}

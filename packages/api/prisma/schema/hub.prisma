@@ -91,6 +91,7 @@ model TemplateProfile {
   thumbnail String?
   icon String?
   description String?
+  secure Boolean @default(true)
   interests String[]
   tags String[]
 

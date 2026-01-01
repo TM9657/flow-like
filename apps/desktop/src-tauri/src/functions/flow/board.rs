@@ -158,7 +158,7 @@ pub async fn get_open_boards(
 #[tauri::command(async)]
 pub async fn undo_board(
     handler: AppHandle,
-    app_id: String,
+    _app_id: String,
     board_id: String,
     commands: Vec<GenericCommand>,
 ) -> Result<Board, TauriFunctionError> {
@@ -174,7 +174,7 @@ pub async fn undo_board(
 #[tauri::command(async)]
 pub async fn redo_board(
     handler: AppHandle,
-    app_id: String,
+    _app_id: String,
     board_id: String,
     commands: Vec<GenericCommand>,
 ) -> Result<Board, TauriFunctionError> {
@@ -190,7 +190,7 @@ pub async fn redo_board(
 #[tauri::command(async)]
 pub async fn execute_command(
     handler: AppHandle,
-    app_id: String,
+    _app_id: String,
     board_id: String,
     command: GenericCommand,
 ) -> Result<GenericCommand, TauriFunctionError> {
@@ -209,7 +209,7 @@ pub async fn execute_command(
 #[tauri::command(async)]
 pub async fn execute_commands(
     handler: AppHandle,
-    app_id: String,
+    _app_id: String,
     board_id: String,
     commands: Vec<GenericCommand>,
 ) -> Result<Vec<GenericCommand>, TauriFunctionError> {

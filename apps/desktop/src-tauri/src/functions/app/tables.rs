@@ -236,3 +236,90 @@ pub async fn build_index(
     db.index(&column, Some(&index_type)).await?;
     Ok(())
 }
+
+#[tauri::command(async)]
+pub async fn db_optimize(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    keep_versions: Option<bool>,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    db.optimize(keep_versions.unwrap_or(false)).await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn db_update(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    filter: String,
+    updates: std::collections::HashMap<String, flow_like_types::Value>,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    db.update(&filter, updates).await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn db_drop_columns(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    columns: Vec<String>,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    let column_refs: Vec<&str> = columns.iter().map(|s| s.as_str()).collect();
+    db.drop_columns(&column_refs).await?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct AddColumnPayload {
+    pub name: String,
+    pub sql_expression: String,
+}
+
+#[tauri::command(async)]
+pub async fn db_add_column(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    column: AddColumnPayload,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    db.add_column(&column.name, &column.sql_expression).await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn db_alter_column(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    column: String,
+    nullable: bool,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    db.make_column_nullable(&column, nullable).await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn db_drop_index(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    index_name: String,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    db.drop_index(&index_name).await?;
+    Ok(())
+}

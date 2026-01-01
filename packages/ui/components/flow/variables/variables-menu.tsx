@@ -2,10 +2,10 @@ import {
 	useDraggable,
 	/* DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors, closestCenter, */ useDroppable,
 } from "@dnd-kit/core";
-import { createId } from "@paralleldrive/cuid2";
 import {
 	ChevronDown,
 	ChevronRight,
+	CircleDotIcon,
 	CirclePlusIcon,
 	EllipsisVerticalIcon,
 	EyeIcon,
@@ -54,6 +54,7 @@ import { IVariableType } from "../../../lib/schema/flow/node";
 import { IValueType } from "../../../lib/schema/flow/pin";
 import { convertJsonToUint8Array } from "../../../lib/uint8";
 import { typeToColor } from "../utils";
+import { NewVariableDialog } from "./new-variable-dialog";
 import { VariablesMenuEdit } from "./variables-menu-edit";
 
 export function VariablesMenu({
@@ -63,6 +64,8 @@ export function VariablesMenu({
 	board: IBoard;
 	executeCommand: (command: IGenericCommand, append: boolean) => Promise<any>;
 }>) {
+	const [showNewVariableDialog, setShowNewVariableDialog] = useState(false);
+
 	const upsertVariable = useCallback(
 		async (variable: IVariable) => {
 			const oldVariable = board.variables[variable.id];
@@ -120,25 +123,18 @@ export function VariablesMenu({
 				<h2>Variables</h2>
 				<Button
 					className="gap-2"
-					onClick={async () => {
-						await upsertVariable({
-							id: createId(),
-							name: "New Variable",
-							data_type: IVariableType.String,
-							exposed: false,
-							value_type: IValueType.Normal,
-							secret: false,
-							editable: true,
-							category: "New",
-							default_value: convertJsonToUint8Array(""),
-							description: "",
-						});
-					}}
+					onClick={() => setShowNewVariableDialog(true)}
 				>
 					<CirclePlusIcon />
 					New
 				</Button>
 			</div>
+
+			<NewVariableDialog
+				open={showNewVariableDialog}
+				onOpenChange={setShowNewVariableDialog}
+				onCreateVariable={upsertVariable}
+			/>
 
 			<CategoryTree
 				root={tree}
@@ -354,6 +350,53 @@ export function Variable({
 		);
 	}, []);
 
+	const valueTypePreviewElement = useCallback(
+		(valueType: IValueType) => {
+			const color = typeToColor(localVariable.data_type);
+			const iconClass = "w-3.5 h-3.5";
+
+			const getIcon = () => {
+				switch (valueType) {
+					case IValueType.Normal:
+						return <CircleDotIcon className={iconClass} style={{ color }} />;
+					case IValueType.Array:
+						return <GripIcon className={iconClass} style={{ color }} />;
+					case IValueType.HashSet:
+						return (
+							<EllipsisVerticalIcon className={iconClass} style={{ color }} />
+						);
+					case IValueType.HashMap:
+						return <ListIcon className={iconClass} style={{ color }} />;
+					default:
+						return null;
+				}
+			};
+
+			const getLabel = () => {
+				switch (valueType) {
+					case IValueType.Normal:
+						return "Single";
+					case IValueType.Array:
+						return "Array";
+					case IValueType.HashSet:
+						return "Set";
+					case IValueType.HashMap:
+						return "Map";
+					default:
+						return valueType;
+				}
+			};
+
+			return (
+				<div className="flex items-center gap-2">
+					{getIcon()}
+					<span>{getLabel()}</span>
+				</div>
+			);
+		},
+		[localVariable.data_type],
+	);
+
 	return (
 		<Sheet
 			open={openEdit}
@@ -369,7 +412,7 @@ export function Variable({
 			<SheetContent className="flex flex-col gap-6 max-h-screen overflow-hidden px-3 pt-2 pb-4">
 				<SheetHeader>
 					<SheetTitle className="flex flex-row items-center gap-2">
-						Edit Variable {isArrayDropdown}
+						Edit Variable
 					</SheetTitle>
 					<SheetDescription className="flex flex-col gap-6 text-foreground">
 						<p className="text-muted-foreground">
@@ -411,58 +454,93 @@ export function Variable({
 				</div>
 
 				<div className="grid w-full max-w-sm items-center gap-1.5">
-					<div className="flex flex-row items-center gap-2">
-						{isArrayDropdown}
-						<Label htmlFor="var_type">Variable Type</Label>
+					<Label htmlFor="var_type">Variable Type</Label>
+					<div className="flex flex-row gap-2">
+						<Select
+							value={localVariable.data_type}
+							onValueChange={(value) =>
+								setLocalVariable((old) => ({
+									...old,
+									data_type: value as IVariableType,
+									default_value: convertJsonToUint8Array(
+										defaultValueFromType(
+											old.value_type,
+											value as IVariableType,
+										),
+									),
+								}))
+							}
+						>
+							<SelectTrigger id="var_type" className="flex-1">
+								<SelectValue placeholder="Data Type" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectGroup>
+									<SelectLabel>Data Type</SelectLabel>
+									<SelectItem value="Boolean">
+										{selectPreviewElement(IVariableType.Boolean)}
+									</SelectItem>
+									<SelectItem value="Date">
+										{selectPreviewElement(IVariableType.Date)}
+									</SelectItem>
+									<SelectItem value="Float">
+										{selectPreviewElement(IVariableType.Float)}
+									</SelectItem>
+									<SelectItem value="Integer">
+										{selectPreviewElement(IVariableType.Integer)}
+									</SelectItem>
+									<SelectItem value="Generic">
+										{selectPreviewElement(IVariableType.Generic)}
+									</SelectItem>
+									<SelectItem value="PathBuf">
+										{selectPreviewElement(IVariableType.PathBuf)}
+									</SelectItem>
+									<SelectItem value="String">
+										{selectPreviewElement(IVariableType.String)}
+									</SelectItem>
+									<SelectItem value="Struct">
+										{selectPreviewElement(IVariableType.Struct)}
+									</SelectItem>
+									<SelectItem value="Byte">
+										{selectPreviewElement(IVariableType.Byte)}
+									</SelectItem>
+								</SelectGroup>
+							</SelectContent>
+						</Select>
+						<Select
+							value={localVariable.value_type}
+							onValueChange={(value) =>
+								setLocalVariable((old) => ({
+									...old,
+									value_type: value as IValueType,
+									default_value: convertJsonToUint8Array(
+										defaultValueFromType(value as IValueType, old.data_type),
+									),
+								}))
+							}
+						>
+							<SelectTrigger className="w-28">
+								<SelectValue placeholder="Value Type" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectGroup>
+									<SelectLabel>Value Type</SelectLabel>
+									<SelectItem value="Normal">
+										{valueTypePreviewElement(IValueType.Normal)}
+									</SelectItem>
+									<SelectItem value="Array">
+										{valueTypePreviewElement(IValueType.Array)}
+									</SelectItem>
+									<SelectItem value="HashSet">
+										{valueTypePreviewElement(IValueType.HashSet)}
+									</SelectItem>
+									<SelectItem value="HashMap">
+										{valueTypePreviewElement(IValueType.HashMap)}
+									</SelectItem>
+								</SelectGroup>
+							</SelectContent>
+						</Select>
 					</div>
-					<Select
-						value={localVariable.data_type}
-						onValueChange={(value) =>
-							setLocalVariable((old) => ({
-								...old,
-								data_type: value as IVariableType,
-								default_value: convertJsonToUint8Array(
-									defaultValueFromType(old.value_type, value as IVariableType),
-								),
-							}))
-						}
-					>
-						<SelectTrigger id="var_type" className="w-full">
-							<SelectValue placeholder="Variable Type" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectGroup>
-								<SelectLabel>Variable Type</SelectLabel>
-								<SelectItem value="Boolean">
-									{selectPreviewElement(IVariableType.Boolean)}
-								</SelectItem>
-								<SelectItem value="Date">
-									{selectPreviewElement(IVariableType.Date)}
-								</SelectItem>
-								<SelectItem value="Float">
-									{selectPreviewElement(IVariableType.Float)}
-								</SelectItem>
-								<SelectItem value="Integer">
-									{selectPreviewElement(IVariableType.Integer)}
-								</SelectItem>
-								<SelectItem value="Generic">
-									{selectPreviewElement(IVariableType.Generic)}
-								</SelectItem>
-								<SelectItem value="PathBuf">
-									{selectPreviewElement(IVariableType.PathBuf)}
-								</SelectItem>
-								<SelectItem value="String">
-									{selectPreviewElement(IVariableType.String)}
-								</SelectItem>
-								<SelectItem value="Struct">
-									{selectPreviewElement(IVariableType.Struct)}
-								</SelectItem>
-								<SelectItem value="Byte">
-									{selectPreviewElement(IVariableType.Byte)}
-								</SelectItem>
-							</SelectGroup>
-						</SelectContent>
-					</Select>
 				</div>
 
 				<div className="flex flex-col gap-1">

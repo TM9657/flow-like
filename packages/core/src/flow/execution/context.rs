@@ -476,6 +476,11 @@ impl ExecutionContext {
         };
 
         if !self.stream_state {
+            tracing::info!(
+                node_id = %self.id,
+                stream_state = self.stream_state,
+                "Skipping run event - stream_state is false"
+            );
             return;
         }
 
@@ -486,6 +491,13 @@ impl ExecutionContext {
         };
 
         let event = InterComEvent::with_type(format!("run:{}", self.run_id), update_event);
+
+        tracing::info!(
+            node_id = %self.id,
+            run_id = %self.run_id,
+            has_callback = self.callback.is_some(),
+            "Sending run update event"
+        );
 
         if let Err(err) = event.call(&self.callback).await {
             self.log_message(

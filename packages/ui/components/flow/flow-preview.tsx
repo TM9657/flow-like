@@ -1,14 +1,14 @@
 import {
 	Background,
 	BackgroundVariant,
-	Controls,
+	type NodeProps,
 	ReactFlow,
-	useEdgesState,
-	useNodesState,
+	type ReactFlowInstance,
+	ReactFlowProvider,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import {
 	type IBoard,
 	IExecutionStage,
@@ -16,43 +16,78 @@ import {
 	type INode,
 	parseBoard,
 } from "../../lib";
-import { CommentNode } from "./comment-node";
-import { FlowNode } from "./flow-node";
-import { LayerNode } from "./layer-node";
+import {
+	CommentNode,
+	type CommentNode as CommentNodeType,
+} from "./comment-node";
+import { FlowNode, type FlowNode as FlowNodeType } from "./flow-node";
+import { LayerNode, type LayerNode as LayerNodeType } from "./layer-node";
 
-export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
-	const [boardNodes, setNodes] = useNodesState<any>([]);
+// Preview versions of nodes that don't show toolbars
+const PreviewFlowNode = memo((props: NodeProps<FlowNodeType>) => (
+	<div className="pointer-events-none">
+		<FlowNode {...props} />
+	</div>
+));
+PreviewFlowNode.displayName = "PreviewFlowNode";
+
+const PreviewLayerNode = memo((props: NodeProps<LayerNodeType>) => (
+	<div className="pointer-events-none">
+		<LayerNode {...props} />
+	</div>
+));
+PreviewLayerNode.displayName = "PreviewLayerNode";
+
+const PreviewCommentNode = memo((props: NodeProps<CommentNodeType>) => (
+	<div className="pointer-events-none">
+		<CommentNode {...props} />
+	</div>
+));
+PreviewCommentNode.displayName = "PreviewCommentNode";
+
+function FlowPreviewInner({ nodes }: Readonly<{ nodes: INode[] }>) {
 	const { resolvedTheme } = useTheme();
+	const instanceRef = useRef<ReactFlowInstance | null>(null);
 	const colorMode = useMemo(
 		() => (resolvedTheme === "dark" ? "dark" : "light"),
 		[resolvedTheme],
 	);
-	const [edges, setEdges] = useEdgesState<any>([]);
+
+	const handleInit = useCallback((instance: ReactFlowInstance) => {
+		instanceRef.current = instance;
+		// Initial fit
+		instance.fitView({ padding: 0.3 });
+	}, []);
+
+	// Re-fit view after mount and when nodes change (handles container resize)
+	useEffect(() => {
+		const timers = [
+			setTimeout(() => instanceRef.current?.fitView({ padding: 0.3 }), 50),
+			setTimeout(() => instanceRef.current?.fitView({ padding: 0.3 }), 150),
+			setTimeout(() => instanceRef.current?.fitView({ padding: 0.3 }), 300),
+		];
+		return () => timers.forEach(clearTimeout);
+	}, [nodes]);
+
 	const nodeTypes = useMemo(
 		() => ({
-			flowNode: FlowNode,
-			commentNode: CommentNode,
-			layerNode: LayerNode,
-			node: FlowNode,
+			flowNode: PreviewFlowNode,
+			commentNode: PreviewCommentNode,
+			layerNode: PreviewLayerNode,
+			node: PreviewFlowNode,
 		}),
 		[],
 	);
 
-	useEffect(() => {
-		const parsed: {
-			[key: string]: INode;
-		} = {};
-
+	const { boardNodes, edges } = useMemo(() => {
+		const parsed: { [key: string]: INode } = {};
 		nodes.forEach((node) => {
 			parsed[node.id] = node;
 		});
 
 		const board: IBoard = {
 			comments: {},
-			created_at: {
-				nanos_since_epoch: 0,
-				secs_since_epoch: 0,
-			},
+			created_at: { nanos_since_epoch: 0, secs_since_epoch: 0 },
 			description: "",
 			id: "",
 			log_level: ILogLevel.Info,
@@ -60,10 +95,7 @@ export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
 			nodes: parsed,
 			refs: {},
 			stage: IExecutionStage.Dev,
-			updated_at: {
-				nanos_since_epoch: 0,
-				secs_since_epoch: 0,
-			},
+			updated_at: { nanos_since_epoch: 0, secs_since_epoch: 0 },
 			layers: {},
 			version: [0, 0, 0],
 			variables: {},
@@ -80,31 +112,48 @@ export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
 			new Set(),
 		);
 
-		console.dir(parsedBoard);
-
-		setNodes(parsedBoard.nodes);
-		setEdges(parsedBoard.edges);
+		return { boardNodes: parsedBoard.nodes, edges: parsedBoard.edges };
 	}, [nodes]);
 
 	return (
+		<ReactFlow
+			suppressHydrationWarning
+			className="w-full h-full min-h-56 rounded-lg"
+			colorMode={colorMode}
+			elementsSelectable={false}
+			nodesDraggable={false}
+			nodesConnectable={false}
+			panOnDrag={true}
+			zoomOnScroll={true}
+			zoomOnPinch={true}
+			zoomOnDoubleClick={false}
+			nodes={boardNodes}
+			nodeTypes={nodeTypes}
+			onInit={handleInit}
+			fitView
+			fitViewOptions={{ padding: 0.3 }}
+			edges={edges}
+			proOptions={{ hideAttribution: true }}
+		>
+			<Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+		</ReactFlow>
+	);
+}
+
+export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
+	if (!nodes || nodes.length === 0) {
+		return (
+			<div className="w-full h-full min-h-56 rounded-md flow-preview not-content flex items-center justify-center bg-muted/20">
+				<p className="text-sm text-muted-foreground">No nodes to preview</p>
+			</div>
+		);
+	}
+
+	return (
 		<main className="w-full h-full min-h-56 rounded-md flow-preview not-content">
-			<ReactFlow
-				suppressHydrationWarning
-				className="w-0 h-0 min-h-0 dark:w-full dark:h-full dark:min-h-56 rounded-lg"
-				colorMode={colorMode}
-				elementsSelectable={false}
-				nodes={boardNodes}
-				nodeTypes={nodeTypes}
-				fitView
-				fitViewOptions={{
-					padding: 0.2,
-				}}
-				edges={edges}
-				proOptions={{ hideAttribution: true }}
-			>
-				<Controls />
-				<Background variant={BackgroundVariant.Dots} gap={12} size={1} />
-			</ReactFlow>
+			<ReactFlowProvider>
+				<FlowPreviewInner nodes={nodes} />
+			</ReactFlowProvider>
 		</main>
 	);
 }

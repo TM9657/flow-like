@@ -1,6 +1,6 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReactFlowInstance } from "@xyflow/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RemoteSelectionParticipant } from "../components/flow/flow-node";
 import { createRealtimeSession } from "../lib";
 import { normalizeSelectionNodes } from "../lib/flow-board-utils";
@@ -59,20 +59,18 @@ export function useRealtimeCollaboration({
 
 	const hasBoardData = !!board.data;
 
+	// Stabilize signaling servers reference to prevent unnecessary effect re-runs
+	const signalingServers = useMemo(
+		() => hub.hub?.signaling ?? [],
+		[JSON.stringify(hub.hub?.signaling)],
+	);
+
 	// Setup realtime session
 	useEffect(() => {
 		let disposed = false;
 		const setup = async () => {
 			try {
 				const offline = await backend.isOffline(appId);
-				console.log(
-					"[FlowBoard] Offline status:",
-					offline,
-					"Version:",
-					version,
-					"Board data:",
-					hasBoardData,
-				);
 
 				if (!hasBoardData || typeof version !== "undefined") return;
 				if (offline) return;
@@ -96,10 +94,14 @@ export function useRealtimeCollaboration({
 					jwks,
 					name,
 					userId,
-					signalingServers: hub.hub?.signaling ?? [],
+					signalingServers,
 					onStatusChange: (status) => {
-						console.log(`[FlowBoard] Connection status changed: ${status}`);
-						setConnectionStatus(status);
+						setConnectionStatus((prev) => {
+							if (prev !== status) {
+								console.log(`[FlowBoard] Connection status changed: ${status}`);
+							}
+							return status;
+						});
 					},
 				});
 
@@ -142,7 +144,7 @@ export function useRealtimeCollaboration({
 		version,
 		currentProfile.data?.id,
 		currentProfile.data?.name,
-		hub.hub,
+		signalingServers,
 		commandAwarenessRef,
 	]);
 

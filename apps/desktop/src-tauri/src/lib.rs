@@ -8,6 +8,7 @@ mod state;
 pub mod utils;
 
 use flow_like::{
+    flow::node::NodeLogic,
     flow_like_storage::{
         Path,
         files::store::{FlowLikeStore, local_store::LocalObjectStore},
@@ -17,8 +18,8 @@ use flow_like::{
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
+use flow_like_catalog::get_catalog;
 use flow_like_types::{sync::Mutex, tokio::time::interval};
-// use serde_json::json; // unused
 use settings::Settings;
 use state::TauriFlowLikeState;
 use std::{sync::Arc, time::Duration};
@@ -175,13 +176,11 @@ pub fn run() {
         flow_like_types::tokio::time::sleep(Duration::from_millis(800)).await;
 
         let weak_ref = Arc::downgrade(&initialized_state);
-        let catalog = flow_like_catalog::get_catalog();
+        let catalog = get_catalog();
         let registry_guard = initialized_state.node_registry.clone();
         let mut registry = registry_guard.write().await;
         registry.initialize(weak_ref);
-        if let Err(e) = registry.push_nodes(catalog).await {
-            eprintln!("Failed to push catalog nodes: {:?}", e);
-        }
+        registry.push_nodes(catalog);
         println!("Catalog Initialized");
     });
 
@@ -543,6 +542,12 @@ pub fn run() {
             functions::app::tables::db_delete,
             functions::app::tables::db_indices,
             functions::app::tables::db_query,
+            functions::app::tables::db_optimize,
+            functions::app::tables::db_update,
+            functions::app::tables::db_drop_columns,
+            functions::app::tables::db_add_column,
+            functions::app::tables::db_alter_column,
+            functions::app::tables::db_drop_index,
             functions::tmp::post_process_local_file,
             functions::bit::get_bit,
             functions::bit::is_bit_installed,

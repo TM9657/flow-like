@@ -10,6 +10,13 @@ import sitemap from "@astrojs/sitemap";
 // https://astro.build/config
 export default defineConfig({
 	site: "https://flow-like.com",
+	i18n: {
+		defaultLocale: "en",
+		locales: ["en", "de", "es", "fr"],
+		routing: {
+			prefixDefaultLocale: false,
+		},
+	},
 	integrations: [
 		// markdoc(),
 		// robotsTxt(),

@@ -25,7 +25,14 @@ pub mod error;
 pub mod mail;
 pub mod permission;
 pub mod state;
+pub mod storage_config;
 pub mod user_management;
+
+pub mod backend_jwt;
+pub mod execution;
+
+#[cfg(feature = "kubernetes")]
+pub mod kubernetes;
 
 pub use axum;
 pub mod auth {
@@ -51,6 +58,7 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/admin", routes::admin::routes())
         .nest("/tmp", routes::tmp::routes())
         .nest("/solution", routes::solution::routes())
+        .nest("/execution", routes::execution::routes())
         .route("/webhook/stripe", post(routes::webhook::stripe_webhook))
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }))

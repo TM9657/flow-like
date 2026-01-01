@@ -55,6 +55,10 @@ pub struct UserTier {
 
 pub type UserTiers = HashMap<String, UserTier>;
 
+fn default_secure() -> bool {
+    true
+}
+
 #[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
 pub struct Hub {
     pub name: String,
@@ -63,9 +67,11 @@ pub struct Hub {
     pub icon: Option<String>,
     pub authentication: Option<Authentication>,
     pub features: Features,
-    pub hubs: Vec<String>, // Assuming hubs might contain strings, adjust if needed
+    pub hubs: Vec<String>,
     pub provider: Option<String>,
     pub domain: String,
+    #[serde(default = "default_secure")]
+    pub secure: bool,
     pub region: Option<String>,
     pub terms_of_service: String,
     pub signaling: Option<Vec<String>>,

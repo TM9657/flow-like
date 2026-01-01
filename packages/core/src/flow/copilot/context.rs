@@ -70,6 +70,22 @@ pub struct LayerContext {
     pub outputs: Vec<PinContext>,
 }
 
+/// Compact variable representation for context
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VariableContext {
+    pub id: String,
+    #[serde(rename = "n")] // "name" abbreviated
+    pub name: String,
+    #[serde(rename = "t")] // "type" abbreviated
+    pub data_type: String,
+    #[serde(rename = "vt")] // "value_type" abbreviated
+    pub value_type: String,
+    #[serde(rename = "c", skip_serializing_if = "Option::is_none")] // "category" abbreviated
+    pub category: Option<String>,
+    #[serde(rename = "v", skip_serializing_if = "Option::is_none")] // "value" abbreviated
+    pub default_value: Option<String>,
+}
+
 /// Complete graph context for the LLM
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphContext {
@@ -78,6 +94,9 @@ pub struct GraphContext {
     /// All layers in the board with their hierarchy
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub layers: Vec<LayerContext>,
+    /// All variables defined in the board
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub variables: Vec<VariableContext>,
     pub selected_nodes: Vec<String>,
 }
 
@@ -234,10 +253,32 @@ pub fn prepare_context(board: &Board, selected_node_ids: &[String]) -> Result<Gr
         })
         .collect();
 
+    // Build variable contexts
+    let variable_contexts: Vec<VariableContext> = board
+        .variables
+        .values()
+        .map(|var| {
+            let default_val = var
+                .default_value
+                .as_ref()
+                .map(|v| String::from_utf8_lossy(v).to_string())
+                .filter(|s| !s.is_empty() && s != "null");
+            VariableContext {
+                id: var.id.clone(),
+                name: var.name.clone(),
+                data_type: format!("{:?}", var.data_type),
+                value_type: format!("{:?}", var.value_type),
+                category: var.category.clone(),
+                default_value: default_val,
+            }
+        })
+        .collect();
+
     Ok(GraphContext {
         nodes: node_contexts,
         edges: edge_contexts,
         layers: layer_contexts,
+        variables: variable_contexts,
         selected_nodes: selected_node_ids.to_vec(),
     })
 }

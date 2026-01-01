@@ -1,55 +1,26 @@
 ---
 import { LuChevronDown } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 
 const faqs = [
-  {
-    q: "Where can I run Flow-Like?",
-    a: "Locally on macOS, Windows, and Linux; in containers; on the edge; or in any cloud. Start offline on your laptop, move to production later without changing the graph.",
-  },
-  {
-    q: "Can I run fully offline / air-gapped?",
-    a: "Yes. Flow-Like is local-first. You can run completely offline or in air-gapped environments. Sync to cloud later if you choose.",
-  },
-  {
-    q: "How do I integrate with my stack?",
-    a: "Wrap systems as typed nodes with explicit input/output types. Embed or white-label the editor, or run the engine headless inside your app.",
-  },
-  {
-    q: "What languages can I use for nodes?",
-    a: "Nodes are authored in Rust today. A WASM node SDK is planned to broaden language support.",
-  },
-  {
-    q: "Is there governance?",
-    a: "Yes — approvals, policy guardrails, roles, and versioned flows with audit trails are first-class to meet operational and compliance needs.",
-  },
-  {
-    q: "How is data stored and searched?",
-    a: "Object-store-centric by design (e.g., S3/local). For vector search we use LanceDB behind the scenes; graphs interact via nodes — no raw SQL required.",
-  },
-  {
-    q: "Does it support versioning & reviews?",
-    a: "Flows are versioned. You can stage changes, request approvals, and roll back safely. Git-based workflows integrate smoothly.",
-  },
-  {
-    q: "How fast is it?",
-    a: "The runtime is written in Rust for high throughput and low latency. Many workloads run dramatically faster than typical scripting-based stacks.",
-  },
-  {
-    q: "Is my data private?",
-    a: "You control where data lives. Local-first by default, no forced telemetry, and encryption in transit. Keep everything on-prem if needed.",
-  },
-  {
-    q: "What license does Flow-Like use?",
-    a: "Business Source License (BSL) 1.1 with an Additional Use Grant, and a Change Date after which each version becomes MPL 2.0.",
-  },
-  {
-    q: "Do I need to code to use it?",
-    a: "No. Build visually with typed nodes. Coding is optional for custom nodes or advanced logic.",
-  },
-  {
-    q: "How is Flow-Like different from typical workflow tools?",
-    a: "Types on nodes & edges, local-first design, Rust performance, and governance built-in. Safer changes, faster execution, portable deployments.",
-  },
+  { q: t("faq.q1"), a: t("faq.a1") },
+  { q: t("faq.q2"), a: t("faq.a2") },
+  { q: t("faq.q3"), a: t("faq.a3") },
+  { q: t("faq.q4"), a: t("faq.a4") },
+  { q: t("faq.q5"), a: t("faq.a5") },
+  { q: t("faq.q6"), a: t("faq.a6") },
 ];
 ---
 
@@ -64,10 +35,10 @@ const faqs = [
     <!-- Minimal header -->
     <div class="mb-16">
       <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
-        FAQ
+        {t("faq.tagline")}
       </p>
       <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground leading-[1.2]">
-        Frequently Asked Questions
+        {t("faq.headline")}
       </h2>
     </div>
 

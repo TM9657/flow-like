@@ -25,6 +25,11 @@ export interface IIndexConfig {
 	columns: string[];
 }
 
+export interface IAddColumnPayload {
+	name: string;
+	sql_expression: string;
+}
+
 export interface IDatabaseState {
 	buildIndex(
 		appId: string,
@@ -51,5 +56,33 @@ export interface IDatabaseState {
 	countItems(appId: string, tableName: string): Promise<number>;
 	getSchema(appId: string, tableName: string): Promise<any>;
 	getIndices(appId: string, tableName: string): Promise<IIndexConfig[]>;
+	dropIndex(appId: string, tableName: string, indexName: string): Promise<void>;
 	listTables(appId: string): Promise<string[]>;
+	optimize(
+		appId: string,
+		tableName: string,
+		keepVersions?: boolean,
+	): Promise<void>;
+	updateItem(
+		appId: string,
+		tableName: string,
+		filter: string,
+		updates: Record<string, any>,
+	): Promise<void>;
+	dropColumns(
+		appId: string,
+		tableName: string,
+		columns: string[],
+	): Promise<void>;
+	addColumn(
+		appId: string,
+		tableName: string,
+		column: IAddColumnPayload,
+	): Promise<void>;
+	alterColumn(
+		appId: string,
+		tableName: string,
+		column: string,
+		nullable: boolean,
+	): Promise<void>;
 }

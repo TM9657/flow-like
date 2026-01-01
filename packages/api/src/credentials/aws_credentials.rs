@@ -3,7 +3,9 @@ use super::RuntimeCredentialsTrait;
 use crate::credentials::CredentialsAccess;
 use crate::state::{AppState, State};
 #[cfg(feature = "aws")]
-use flow_like::credentials::{SharedCredentials, aws_credentials::AwsSharedCredentials};
+use flow_like::credentials::{
+    BucketConfig, SharedCredentials, aws_credentials::AwsSharedCredentials,
+};
 use flow_like::{
     flow_like_storage::lancedb::{connect, connection::ConnectBuilder},
     state::{FlowLikeConfig, FlowLikeState},
@@ -23,6 +25,7 @@ pub struct AwsRuntimeCredentials {
     pub session_token: Option<String>,
     pub meta_bucket: String,
     pub content_bucket: String,
+    pub logs_bucket: String,
     pub region: String,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -36,6 +39,7 @@ impl From<aws_sdk_sts::types::Credentials> for AwsRuntimeCredentials {
             session_token: Some(credentials.session_token),
             meta_bucket: std::env::var("META_BUCKET_NAME").unwrap_or_default(),
             content_bucket: std::env::var("CONTENT_BUCKET_NAME").unwrap_or_default(),
+            logs_bucket: std::env::var("LOG_BUCKET").unwrap_or_default(),
             region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             expiration: None,
         }
@@ -44,25 +48,33 @@ impl From<aws_sdk_sts::types::Credentials> for AwsRuntimeCredentials {
 
 #[cfg(feature = "aws")]
 impl AwsRuntimeCredentials {
-    pub fn new(meta_bucket: &str, content_bucket: &str, region: &str) -> Self {
+    pub fn new(meta_bucket: &str, content_bucket: &str, logs_bucket: &str, region: &str) -> Self {
         AwsRuntimeCredentials {
             access_key_id: None,
             secret_access_key: None,
             session_token: None,
             meta_bucket: meta_bucket.to_string(),
             content_bucket: content_bucket.to_string(),
+            logs_bucket: logs_bucket.to_string(),
             region: region.to_string(),
             expiration: None,
         }
     }
 
     pub fn from_env() -> Self {
+        let logs_bucket = std::env::var("LOG_BUCKET").unwrap_or_default();
+        if logs_bucket.is_empty() {
+            tracing::warn!(
+                "LOG_BUCKET environment variable is not set - logs will not be persisted"
+            );
+        }
         AwsRuntimeCredentials {
             access_key_id: std::env::var("AWS_ACCESS_KEY_ID").ok(),
             secret_access_key: std::env::var("AWS_SECRET_ACCESS_KEY").ok(),
             session_token: std::env::var("AWS_SESSION_TOKEN").ok(),
             meta_bucket: std::env::var("META_BUCKET_NAME").unwrap_or_default(),
             content_bucket: std::env::var("CONTENT_BUCKET_NAME").unwrap_or_default(),
+            logs_bucket,
             region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             expiration: None,
         }
@@ -75,6 +87,7 @@ impl AwsRuntimeCredentials {
             session_token: std::env::var("AWS_SESSION_TOKEN").ok(),
             meta_bucket: self.meta_bucket.clone(),
             content_bucket: self.content_bucket.clone(),
+            logs_bucket: self.logs_bucket.clone(),
             region: self.region.clone(),
             expiration: None,
         }
@@ -163,6 +176,7 @@ impl AwsRuntimeCredentials {
                 .map(|c| c.session_token().to_string()),
             meta_bucket: self.meta_bucket.clone(),
             content_bucket: self.content_bucket.clone(),
+            logs_bucket: self.logs_bucket.clone(),
             region: self.region.clone(),
             expiration: Some(chrono_expiration),
         })
@@ -173,12 +187,56 @@ impl AwsRuntimeCredentials {
 #[async_trait]
 impl RuntimeCredentialsTrait for AwsRuntimeCredentials {
     fn into_shared_credentials(&self) -> SharedCredentials {
+        let meta_express = std::env::var("META_BUCKET_EXPRESS_ZONE")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false);
+        let content_express = std::env::var("CONTENT_BUCKET_EXPRESS_ZONE")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false);
+        let logs_express = std::env::var("LOGS_BUCKET_EXPRESS_ZONE")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false);
+
+        let meta_endpoint = std::env::var("META_BUCKET_ENDPOINT").ok();
+        let content_endpoint = std::env::var("CONTENT_BUCKET_ENDPOINT").ok();
+        let logs_endpoint = std::env::var("LOGS_BUCKET_ENDPOINT").ok();
+
+        // Build optional configs only if there's something to configure
+        let meta_config = if meta_endpoint.is_some() || meta_express {
+            Some(BucketConfig {
+                endpoint: meta_endpoint,
+                express: meta_express,
+            })
+        } else {
+            None
+        };
+        let content_config = if content_endpoint.is_some() || content_express {
+            Some(BucketConfig {
+                endpoint: content_endpoint,
+                express: content_express,
+            })
+        } else {
+            None
+        };
+        let logs_config = if logs_endpoint.is_some() || logs_express {
+            Some(BucketConfig {
+                endpoint: logs_endpoint,
+                express: logs_express,
+            })
+        } else {
+            None
+        };
+
         SharedCredentials::Aws(AwsSharedCredentials {
             access_key_id: self.access_key_id.clone(),
             secret_access_key: self.secret_access_key.clone(),
             session_token: self.session_token.clone(),
             meta_bucket: self.meta_bucket.clone(),
             content_bucket: self.content_bucket.clone(),
+            logs_bucket: self.logs_bucket.clone(),
+            meta_config,
+            content_config,
+            logs_config,
             region: self.region.clone(),
             expiration: self.expiration,
         })
@@ -627,4 +685,133 @@ fn read_logs_policy(
     });
 
     policy
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(all(test, feature = "aws"))]
+mod tests {
+    use super::*;
+    use crate::credentials::RuntimeCredentialsTrait;
+    use flow_like::credentials::SharedCredentialsTrait;
+    use flow_like_storage::Path;
+    use flow_like_storage::object_store::ObjectStore;
+    use flow_like_types::json::{from_str, to_string};
+    use flow_like_types::tokio;
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_aws_master_credentials_setup() {
+        let creds = AwsRuntimeCredentials::from_env();
+        assert!(
+            creds.access_key_id.is_some(),
+            "AWS_ACCESS_KEY_ID must be set"
+        );
+        assert!(
+            creds.secret_access_key.is_some(),
+            "AWS_SECRET_ACCESS_KEY must be set"
+        );
+        assert!(
+            !creds.meta_bucket.is_empty(),
+            "META_BUCKET_NAME must be set"
+        );
+        assert!(
+            !creds.content_bucket.is_empty(),
+            "CONTENT_BUCKET_NAME must be set"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_aws_master_credentials_can_write() {
+        let creds = AwsRuntimeCredentials::from_env();
+        let shared = creds.into_shared_credentials();
+        let store = shared
+            .to_store(false)
+            .await
+            .expect("Failed to create store from master credentials");
+
+        let test_path = format!(
+            "test/master-write-test-{}.txt",
+            flow_like_types::create_id()
+        );
+        let path = Path::from(test_path.as_str());
+
+        match &store {
+            flow_like::flow_like_storage::files::store::FlowLikeStore::AWS(s) => {
+                s.put(&path, b"test content".to_vec().into())
+                    .await
+                    .expect("Master credentials should be able to write");
+                s.delete(&path).await.ok();
+            }
+            _ => panic!("Expected AWS store"),
+        }
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_aws_master_credentials_can_read() {
+        let creds = AwsRuntimeCredentials::from_env();
+        let shared = creds.into_shared_credentials();
+        let store = shared
+            .to_store(false)
+            .await
+            .expect("Failed to create store from master credentials");
+
+        let test_path = format!("test/master-read-test-{}.txt", flow_like_types::create_id());
+        let path = Path::from(test_path.as_str());
+        let content = b"read test content";
+
+        match &store {
+            flow_like::flow_like_storage::files::store::FlowLikeStore::AWS(s) => {
+                s.put(&path, content.to_vec().into())
+                    .await
+                    .expect("Setup: write should succeed");
+
+                let result = s.get(&path).await.expect("Read should succeed");
+                let bytes = result.bytes().await.expect("Should get bytes");
+                assert_eq!(bytes.as_ref(), content);
+
+                s.delete(&path).await.ok();
+            }
+            _ => panic!("Expected AWS store"),
+        }
+    }
+
+    #[test]
+    fn test_aws_runtime_credentials_serialization() {
+        let creds = AwsRuntimeCredentials {
+            access_key_id: Some("AKIATEST".to_string()),
+            secret_access_key: Some("secret".to_string()),
+            session_token: Some("token".to_string()),
+            meta_bucket: "meta".to_string(),
+            content_bucket: "content".to_string(),
+            logs_bucket: "logs".to_string(),
+            region: "us-east-1".to_string(),
+            expiration: None,
+        };
+
+        let json = to_string(&creds).expect("Failed to serialize");
+        let deserialized: AwsRuntimeCredentials = from_str(&json).expect("Failed to deserialize");
+
+        assert_eq!(creds.access_key_id, deserialized.access_key_id);
+        assert_eq!(creds.region, deserialized.region);
+    }
+
+    #[test]
+    fn test_credentials_access_display() {
+        use crate::credentials::CredentialsAccess;
+
+        assert_eq!(format!("{}", CredentialsAccess::EditApp), "edit_app");
+        assert_eq!(format!("{}", CredentialsAccess::ReadApp), "read_app");
+        assert_eq!(format!("{}", CredentialsAccess::InvokeNone), "invoke_none");
+        assert_eq!(format!("{}", CredentialsAccess::InvokeRead), "invoke_read");
+        assert_eq!(
+            format!("{}", CredentialsAccess::InvokeWrite),
+            "invoke_write"
+        );
+        assert_eq!(format!("{}", CredentialsAccess::ReadLogs), "read_logs");
+    }
 }

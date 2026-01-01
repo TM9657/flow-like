@@ -784,6 +784,7 @@ impl Tool for QueryLogsTool {
             event_version: None,
             event_id: String::new(),
             payload: vec![],
+            is_remote: false,
         };
 
         #[cfg(feature = "flow-runtime")]

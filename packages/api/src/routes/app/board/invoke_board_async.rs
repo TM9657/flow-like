@@ -1,0 +1,232 @@
+//! Async board execution endpoint
+//!
+//! This endpoint triggers async execution of a board workflow via queue.
+//! The job is dispatched to the configured queue backend (Redis, SQS, Kafka)
+//! and returns immediately with a run_id for tracking.
+//!
+//! Flow:
+//! 1. Check user access permissions
+//! 2. Create a run record in the database
+//! 3. Create scoped credentials based on user permissions
+//! 4. Dispatch to queue (Redis/SQS/Kafka based on EXECUTION_BACKEND env)
+//! 5. Return run_id and poll_token for tracking progress
+
+use crate::{
+    ensure_permission,
+    entity::{execution_run, prelude::*},
+    error::ApiError,
+    execution::{
+        DispatchRequest, ExecutionJwtParams, TokenType, is_jwt_configured, payload_storage,
+        sign_execution_jwt,
+    },
+    middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions,
+    state::AppState,
+};
+use axum::{
+    Extension, Json,
+    extract::{Path, State},
+};
+use flow_like_types::{anyhow, create_id};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set};
+use serde::{Deserialize, Serialize};
+
+/// Request body for async board invocation
+#[derive(Clone, Debug, Deserialize)]
+pub struct InvokeBoardAsyncRequest {
+    /// Node ID to start execution from (required)
+    pub node_id: String,
+    /// Optional board version as tuple (major, minor, patch) - defaults to latest
+    pub version: Option<(u32, u32, u32)>,
+    /// Input payload for the execution
+    pub payload: Option<serde_json::Value>,
+    /// User's auth token to pass to the flow
+    pub token: Option<String>,
+    /// OAuth tokens keyed by provider name
+    pub oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+/// Response from async board invocation
+#[derive(Clone, Debug, Serialize)]
+pub struct InvokeBoardAsyncResponse {
+    /// Unique run ID (use this to track progress)
+    pub run_id: String,
+    /// Current status
+    pub status: String,
+    /// User JWT for long polling (use in Authorization header)
+    pub poll_token: String,
+    /// Backend used for dispatch
+    pub backend: String,
+}
+
+/// Get credentials access for invoke - always InvokeWrite since
+/// server-side execution is scoped through workflow logic
+fn get_credentials_access() -> crate::credentials::CredentialsAccess {
+    crate::credentials::CredentialsAccess::InvokeWrite
+}
+
+/// POST /apps/{app_id}/board/{board_id}/invoke/async
+///
+/// Invoke async execution of a board workflow via queue.
+/// Uses EXECUTION_BACKEND env var to determine queue (redis, sqs, kafka).
+#[tracing::instrument(
+    name = "POST /apps/{app_id}/board/{board_id}/invoke/async",
+    skip(state, user, params)
+)]
+pub async fn invoke_board_async(
+    State(state): State<AppState>,
+    Extension(user): Extension<AppUser>,
+    Path((app_id, board_id)): Path<(String, String)>,
+    Json(params): Json<InvokeBoardAsyncRequest>,
+) -> Result<Json<InvokeBoardAsyncResponse>, ApiError> {
+    let permission = ensure_permission!(user, &app_id, &state, RolePermissions::ExecuteEvents);
+    let sub = permission.sub()?;
+
+    if !is_jwt_configured() {
+        return Err(ApiError::InternalError(
+            anyhow!("Execution JWT signing not configured (missing EXECUTION_KEY/EXECUTION_PUB env vars)").into()
+        ));
+    }
+
+    let run_id = create_id();
+    let expires_at = chrono::Utc::now().naive_utc() + chrono::Duration::hours(24);
+
+    let input_payload_len = params
+        .payload
+        .as_ref()
+        .map(|p| {
+            serde_json::to_string(p)
+                .map(|s| s.len() as i64)
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
+
+    // Store payload in object storage if present (enables re-run)
+    let input_payload_key = if let Some(ref payload) = params.payload {
+        let payload_bytes = serde_json::to_vec(payload).map_err(|e| {
+            ApiError::InternalError(anyhow!("Failed to serialize payload: {}", e).into())
+        })?;
+        let master_creds = state.master_credentials().await.map_err(|e| {
+            ApiError::InternalError(anyhow!("Failed to get master credentials: {}", e).into())
+        })?;
+        let store = master_creds.to_store(false).await.map_err(|e| {
+            ApiError::InternalError(anyhow!("Failed to get object store: {}", e).into())
+        })?;
+        let stored =
+            payload_storage::store_payload(store.as_generic(), &app_id, &run_id, &payload_bytes)
+                .await
+                .map_err(|e| {
+                    ApiError::InternalError(anyhow!("Failed to store payload: {}", e).into())
+                })?;
+        Some(stored.key)
+    } else {
+        None
+    };
+
+    // Async always uses queue mode
+    let run = execution_run::ActiveModel {
+        id: Set(run_id.clone()),
+        board_id: Set(board_id.clone()),
+        version: Set(params
+            .version
+            .map(|(maj, min, pat)| format!("{}.{}.{}", maj, min, pat))),
+        event_id: Set(None),
+        node_id: Set(Some(params.node_id.clone())),
+        status: Set(execution_run::RunStatus::Pending),
+        mode: Set(execution_run::RunMode::Queue),
+        log_level: Set(0),
+        input_payload_len: Set(input_payload_len),
+        input_payload_key: Set(input_payload_key),
+        output_payload_len: Set(0),
+        error_message: Set(None),
+        progress: Set(0),
+        current_step: Set(None),
+        started_at: Set(None),
+        completed_at: Set(None),
+        expires_at: Set(Some(expires_at)),
+        user_id: Set(Some(sub.clone())),
+        app_id: Set(app_id.clone()),
+        created_at: Set(chrono::Utc::now().naive_utc()),
+        updated_at: Set(chrono::Utc::now().naive_utc()),
+    };
+
+    run.insert(&state.db).await.map_err(|e| {
+        tracing::error!(error = %e, "Failed to create run record");
+        ApiError::InternalError(anyhow!("Failed to create run record: {}", e).into())
+    })?;
+
+    let poll_token = sign_execution_jwt(ExecutionJwtParams {
+        user_id: sub.clone(),
+        run_id: run_id.clone(),
+        app_id: app_id.clone(),
+        board_id: board_id.clone(),
+        event_id: None,
+        callback_url: String::new(),
+        token_type: TokenType::User,
+        ttl_seconds: Some(60 * 60),
+    })
+    .map_err(|e| {
+        tracing::error!(error = %e, "Failed to sign user JWT");
+        ApiError::InternalError(anyhow!("Failed to sign user JWT: {}", e).into())
+    })?;
+
+    // Get scoped credentials based on user permissions
+    let access = get_credentials_access();
+    let credentials = state.scoped_credentials(&sub, &app_id, access).await?;
+
+    // Convert to SharedCredentials for runtime compatibility
+    let shared_credentials = credentials.into_shared_credentials();
+    let credentials_json = serde_json::to_string(&shared_credentials)
+        .map_err(|e| anyhow!("Failed to serialize credentials: {}", e))?;
+
+    let callback_url =
+        std::env::var("API_BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+
+    let executor_jwt = sign_execution_jwt(ExecutionJwtParams {
+        user_id: sub.clone(),
+        run_id: run_id.clone(),
+        app_id: app_id.clone(),
+        board_id: board_id.clone(),
+        event_id: None,
+        callback_url: callback_url.clone(),
+        token_type: TokenType::Executor,
+        ttl_seconds: Some(24 * 60 * 60),
+    })
+    .map_err(|e| {
+        tracing::error!(error = %e, "Failed to sign executor JWT");
+        ApiError::InternalError(anyhow!("Failed to sign executor JWT: {}", e).into())
+    })?;
+
+    let request = DispatchRequest {
+        run_id: run_id.clone(),
+        app_id: app_id.clone(),
+        board_id,
+        board_version: params.version,
+        node_id: params.node_id.clone(),
+        event_json: None,
+        payload: params.payload,
+        user_id: sub,
+        credentials_json,
+        jwt: executor_jwt,
+        callback_url,
+        token: params.token,
+        oauth_tokens: params.oauth_tokens,
+        stream_state: true,
+    };
+
+    let response = state
+        .dispatcher
+        .dispatch_async(request)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to dispatch job to queue");
+            ApiError::InternalError(anyhow!("Failed to dispatch job: {}", e).into())
+        })?;
+
+    Ok(Json(InvokeBoardAsyncResponse {
+        run_id,
+        status: response.status,
+        poll_token,
+        backend: response.backend,
+    }))
+}

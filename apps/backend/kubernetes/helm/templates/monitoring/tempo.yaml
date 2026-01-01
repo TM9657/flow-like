@@ -1,0 +1,178 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+---
+# Tempo ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "flow-like.fullname" . }}-tempo-config
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+data:
+  tempo.yaml: |
+    server:
+      http_listen_port: 3200
+      grpc_listen_port: 9095
+
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: "0.0.0.0:4317"
+            http:
+              endpoint: "0.0.0.0:4318"
+
+    ingester:
+      max_block_duration: 5m
+
+    compactor:
+      compaction:
+        block_retention: {{ .Values.monitoring.tracing.retention | default "72h" }}
+
+    storage:
+      trace:
+        backend: local
+        local:
+          path: /var/tempo/traces
+        wal:
+          path: /var/tempo/wal
+
+    querier:
+      search:
+        prefer_self: 10
+
+    metrics_generator:
+      registry:
+        external_labels:
+          source: tempo
+          cluster: {{ include "flow-like.fullname" . }}
+      storage:
+        path: /var/tempo/generator/wal
+
+---
+# Tempo Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flow-like.fullname" . }}-tempo
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "flow-like.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: tempo
+  template:
+    metadata:
+      labels:
+        {{- include "flow-like.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: tempo
+      annotations:
+        checksum/config: {{ .Values.monitoring.tempo | toJson | sha256sum }}
+    spec:
+      containers:
+        - name: tempo
+          image: "{{ .Values.monitoring.tempo.image.repository | default "grafana/tempo" }}:{{ .Values.monitoring.tempo.image.tag | default "2.3.1" }}"
+          imagePullPolicy: {{ .Values.monitoring.tempo.image.pullPolicy | default "IfNotPresent" }}
+          args:
+            - -config.file=/etc/tempo/tempo.yaml
+          ports:
+            - name: http
+              containerPort: 3200
+              protocol: TCP
+            - name: grpc
+              containerPort: 9095
+              protocol: TCP
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tempo
+            - name: data
+              mountPath: /var/tempo
+          resources:
+            {{- toYaml (.Values.monitoring.tempo.resources | default (dict "requests" (dict "memory" "256Mi" "cpu" "100m") "limits" (dict "memory" "1Gi" "cpu" "500m"))) | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "flow-like.fullname" . }}-tempo-config
+        - name: data
+          {{- if .Values.monitoring.tempo.persistence.enabled | default false }}
+          persistentVolumeClaim:
+            claimName: {{ include "flow-like.fullname" . }}-tempo
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+
+---
+# Tempo Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "flow-like.fullname" . }}-tempo
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3200
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: 9095
+      targetPort: grpc
+      protocol: TCP
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+      protocol: TCP
+  selector:
+    {{- include "flow-like.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+
+{{- if .Values.monitoring.tempo.persistence.enabled | default false }}
+---
+# Tempo PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "flow-like.fullname" . }}-tempo
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.monitoring.tempo.persistence.storageClass }}
+  storageClassName: {{ .Values.monitoring.tempo.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.monitoring.tempo.persistence.size | default "10Gi" }}
+{{- end }}
+{{- end }}

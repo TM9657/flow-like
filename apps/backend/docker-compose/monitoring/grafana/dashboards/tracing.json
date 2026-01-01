@@ -1,0 +1,277 @@
+{
+	"annotations": { "list": [] },
+	"editable": false,
+	"fiscalYearStartMonth": 0,
+	"graphTooltip": 1,
+	"links": [
+		{
+			"asDropdown": false,
+			"icon": "external link",
+			"includeVars": true,
+			"keepTime": true,
+			"tags": ["flow-like"],
+			"targetBlank": false,
+			"title": "Flow-Like Dashboards",
+			"type": "dashboards"
+		}
+	],
+	"liveNow": false,
+	"panels": [
+		{
+			"gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+			"id": 1,
+			"options": {
+				"content": "# Distributed Tracing Dashboard\nView traces from Flow-Like services via Tempo",
+				"mode": "markdown"
+			},
+			"title": "",
+			"type": "text"
+		},
+		{
+			"datasource": { "type": "tempo", "uid": "${tempo}" },
+			"gridPos": { "h": 8, "w": 12, "x": 0, "y": 3 },
+			"id": 2,
+			"options": {},
+			"targets": [
+				{
+					"datasource": { "type": "tempo", "uid": "${tempo}" },
+					"queryType": "serviceMap"
+				}
+			],
+			"title": "Service Map",
+			"type": "nodeGraph"
+		},
+		{
+			"datasource": { "type": "tempo", "uid": "${tempo}" },
+			"gridPos": { "h": 8, "w": 12, "x": 12, "y": 3 },
+			"id": 3,
+			"options": {},
+			"targets": [
+				{
+					"datasource": { "type": "tempo", "uid": "${tempo}" },
+					"limit": 20,
+					"queryType": "traceqlSearch",
+					"tableType": "traces"
+				}
+			],
+			"title": "Recent Traces",
+			"type": "table"
+		},
+		{
+			"datasource": { "type": "prometheus", "uid": "${datasource}" },
+			"fieldConfig": {
+				"defaults": {
+					"color": { "mode": "palette-classic" },
+					"custom": {
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"drawStyle": "line",
+						"fillOpacity": 10,
+						"gradientMode": "none",
+						"hideFrom": { "legend": false, "tooltip": false, "viz": false },
+						"lineInterpolation": "smooth",
+						"lineWidth": 2,
+						"pointSize": 5,
+						"scaleDistribution": { "type": "linear" },
+						"showPoints": "never",
+						"spanNulls": false,
+						"stacking": { "group": "A", "mode": "none" },
+						"thresholdsStyle": { "mode": "off" }
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [{ "color": "green", "value": null }]
+					},
+					"unit": "s"
+				}
+			},
+			"gridPos": { "h": 8, "w": 12, "x": 0, "y": 11 },
+			"id": 4,
+			"options": {
+				"legend": {
+					"calcs": ["mean", "max"],
+					"displayMode": "table",
+					"placement": "right",
+					"showLegend": true
+				},
+				"tooltip": { "mode": "multi", "sort": "desc" }
+			},
+			"targets": [
+				{
+					"expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"flow-like-api\"}[5m])) by (le))",
+					"legendFormat": "P50"
+				},
+				{
+					"expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"flow-like-api\"}[5m])) by (le))",
+					"legendFormat": "P95"
+				},
+				{
+					"expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"flow-like-api\"}[5m])) by (le))",
+					"legendFormat": "P99"
+				}
+			],
+			"title": "API Latency Percentiles",
+			"type": "timeseries"
+		},
+		{
+			"datasource": { "type": "prometheus", "uid": "${datasource}" },
+			"fieldConfig": {
+				"defaults": {
+					"color": { "mode": "palette-classic" },
+					"custom": {
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"drawStyle": "line",
+						"fillOpacity": 10,
+						"gradientMode": "none",
+						"hideFrom": { "legend": false, "tooltip": false, "viz": false },
+						"lineInterpolation": "smooth",
+						"lineWidth": 2,
+						"pointSize": 5,
+						"scaleDistribution": { "type": "linear" },
+						"showPoints": "never",
+						"spanNulls": false,
+						"stacking": { "group": "A", "mode": "none" },
+						"thresholdsStyle": { "mode": "off" }
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [{ "color": "green", "value": null }]
+					},
+					"unit": "s"
+				}
+			},
+			"gridPos": { "h": 8, "w": 12, "x": 12, "y": 11 },
+			"id": 5,
+			"options": {
+				"legend": {
+					"calcs": ["mean", "max"],
+					"displayMode": "table",
+					"placement": "right",
+					"showLegend": true
+				},
+				"tooltip": { "mode": "multi", "sort": "desc" }
+			},
+			"targets": [
+				{
+					"expr": "histogram_quantile(0.50, sum(rate(flow_execution_duration_seconds_bucket{job=\"flow-like-runtime\"}[5m])) by (le))",
+					"legendFormat": "P50"
+				},
+				{
+					"expr": "histogram_quantile(0.95, sum(rate(flow_execution_duration_seconds_bucket{job=\"flow-like-runtime\"}[5m])) by (le))",
+					"legendFormat": "P95"
+				},
+				{
+					"expr": "histogram_quantile(0.99, sum(rate(flow_execution_duration_seconds_bucket{job=\"flow-like-runtime\"}[5m])) by (le))",
+					"legendFormat": "P99"
+				}
+			],
+			"title": "Execution Duration Percentiles",
+			"type": "timeseries"
+		},
+		{
+			"datasource": { "type": "prometheus", "uid": "${datasource}" },
+			"fieldConfig": {
+				"defaults": {
+					"color": { "mode": "palette-classic" },
+					"custom": {
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"drawStyle": "bars",
+						"fillOpacity": 50,
+						"gradientMode": "none",
+						"hideFrom": { "legend": false, "tooltip": false, "viz": false },
+						"lineInterpolation": "smooth",
+						"lineWidth": 1,
+						"pointSize": 5,
+						"scaleDistribution": { "type": "linear" },
+						"showPoints": "never",
+						"spanNulls": false,
+						"stacking": { "group": "A", "mode": "normal" },
+						"thresholdsStyle": { "mode": "off" }
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [{ "color": "green", "value": null }]
+					},
+					"unit": "reqps"
+				}
+			},
+			"gridPos": { "h": 8, "w": 24, "x": 0, "y": 19 },
+			"id": 6,
+			"options": {
+				"legend": {
+					"calcs": ["sum"],
+					"displayMode": "table",
+					"placement": "right",
+					"showLegend": true
+				},
+				"tooltip": { "mode": "multi", "sort": "desc" }
+			},
+			"targets": [
+				{
+					"expr": "sum(rate(http_requests_total{job=\"flow-like-api\"}[5m])) by (status_code)",
+					"legendFormat": "{{status_code}}"
+				}
+			],
+			"title": "Request Rate by Status Code",
+			"type": "timeseries"
+		}
+	],
+	"schemaVersion": 38,
+	"tags": ["flow-like", "tracing"],
+	"templating": {
+		"list": [
+			{
+				"current": {
+					"selected": false,
+					"text": "Prometheus",
+					"value": "Prometheus"
+				},
+				"hide": 0,
+				"includeAll": false,
+				"label": "Prometheus",
+				"multi": false,
+				"name": "datasource",
+				"options": [],
+				"query": "prometheus",
+				"refresh": 1,
+				"regex": "",
+				"skipUrlSync": false,
+				"type": "datasource"
+			},
+			{
+				"current": { "selected": false, "text": "Tempo", "value": "Tempo" },
+				"hide": 0,
+				"includeAll": false,
+				"label": "Tempo",
+				"multi": false,
+				"name": "tempo",
+				"options": [],
+				"query": "tempo",
+				"refresh": 1,
+				"regex": "",
+				"skipUrlSync": false,
+				"type": "datasource"
+			}
+		]
+	},
+	"time": { "from": "now-1h", "to": "now" },
+	"timepicker": {},
+	"timezone": "browser",
+	"title": "Distributed Tracing",
+	"uid": "flow-like-tracing",
+	"version": 1
+}

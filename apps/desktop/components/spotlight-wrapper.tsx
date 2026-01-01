@@ -11,6 +11,7 @@ import {
 	useBackend,
 	useInvalidateInvoke,
 	useInvoke,
+	useSpotlightStore,
 } from "@tm9657/flow-like-ui";
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -121,8 +122,9 @@ export function SpotlightWrapper({ children }: SpotlightWrapperProps) {
 	);
 
 	const handleCreateProject = useCallback(() => {
-		router.push("/library/new");
-	}, [router]);
+		useSpotlightStore.getState().open();
+		useSpotlightStore.getState().setMode("quick-create");
+	}, []);
 
 	const handleToggleTheme = useCallback(
 		(theme: "light" | "dark" | "system") => {

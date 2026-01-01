@@ -133,10 +133,6 @@ const data = {
 				// 	title: "Favorites",
 				// 	url: "/library/favorites",
 				// },
-				{
-					title: "Create App",
-					url: "/library/new",
-				},
 			],
 		},
 		// {

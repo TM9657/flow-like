@@ -44,7 +44,6 @@ use flow_like::{
         node::{Node, NodeLogic},
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_types::{async_trait, json::json};
 
@@ -59,7 +58,7 @@ impl BoolOr {
 
 #[async_trait]
 impl NodeLogic for BoolOr {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("bool_or", "Or", "Boolean Or operation", "Utils/Bool");
         node.add_icon("/flow/icons/bool.svg");
 
@@ -125,7 +124,6 @@ use flow_like::{
         node::{Node, NodeLogic},
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_types::async_trait;
 
@@ -140,7 +138,7 @@ impl BranchNode {
 
 #[async_trait]
 impl NodeLogic for BranchNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "control_branch",
             "Branch",
@@ -207,7 +205,6 @@ use flow_like::{
         pin::PinOptions,
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_storage::Path;
 use flow_like_types::{
@@ -274,7 +271,7 @@ impl DoclingNode {
 
 #[async_trait]
 impl NodeLogic for DoclingNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "ai_generative_processing_docling",
             "Docling Parse",
@@ -546,7 +543,6 @@ use flow_like::{
         pin::PinType,
         variable::VariableType,
     },
-    state::FlowLikeState,
 };
 use flow_like_types::{Value, async_trait, json::from_slice};
 
@@ -561,7 +557,7 @@ impl CallReferenceNode {
 
 #[async_trait]
 impl NodeLogic for CallReferenceNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "control_call_reference",
             "Call Reference",

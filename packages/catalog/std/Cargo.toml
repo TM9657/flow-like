@@ -1,0 +1,36 @@
+[package]
+name = "flow-like-catalog-std"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+local-ml = ["flow-like-catalog-core/local-ml"]
+
+[dependencies]
+flow-like-catalog-core.workspace = true
+flow-like.workspace = true
+flow-like-types.workspace = true
+flow-like-model-provider.workspace = true
+flow-like-storage.workspace = true
+flow-like-catalog-macros.workspace = true
+inventory = "0.3"
+ahash.workspace = true
+tracing.workspace = true
+schemars.workspace = true
+futures.workspace = true
+serde = { workspace = true, features = ["derive", "rc"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+uuid.workspace = true
+async-trait.workspace = true
+fasteval = "0.2.4"
+strsim = "0.11.1"
+regex.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+iana-time-zone.workspace = true
+once_cell = "1.21.3"
+nalgebra = "0.34.0"
+htmd = "0.3.0"
+csv-async = { version = "1.3.0", features = ["tokio"] }
+csv = "1.3"

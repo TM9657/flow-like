@@ -1,6 +1,19 @@
 ---
 import { Image } from "astro:assets";
 import tracing from "../images/index/tracing.png";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -76,40 +89,55 @@ import tracing from "../images/index/tracing.png";
             <h2
               class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-orange-500 to-red-500 bg-clip-text text-transparent leading-tight"
             >
-              One of the fastest runtimes — with a clear paper trail
+              {t("perf.headline")}
             </h2>
 
             <p class="mt-4 sm:mt-5 text-base sm:text-lg text-muted-foreground">
-              Flow-Like runs your flows at top speed and makes every run
-              explainable. See what went in, what changed, and what came out —
-              with timestamps and spans you can drill into when you need the
-              details.
+              {t("perf.description")}
             </p>
+
+            <!-- Benchmark stats -->
+            <div class="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="rounded-xl border border-orange-500/20 bg-orange-500/5 p-3 text-center">
+                <div class="text-2xl sm:text-3xl font-bold text-orange-500">~0.6ms</div>
+                <div class="text-xs text-muted-foreground mt-1">{t("perf.metric.workflow")}</div>
+              </div>
+              <div class="rounded-xl border border-green-500/20 bg-green-500/5 p-3 text-center">
+                <div class="text-2xl sm:text-3xl font-bold text-green-500">244K</div>
+                <div class="text-xs text-muted-foreground mt-1">{t("perf.metric.executions")}</div>
+              </div>
+              <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-center">
+                <div class="text-2xl sm:text-3xl font-bold text-blue-500">1109×</div>
+                <div class="text-xs text-muted-foreground mt-1">{t("perf.comparison")}</div>
+              </div>
+              <div class="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 text-center">
+                <div class="text-2xl sm:text-3xl font-bold text-purple-500">100%</div>
+                <div class="text-xs text-muted-foreground mt-1">{t("perf.metric.traceable")}</div>
+              </div>
+            </div>
 
             <!-- succinct value tags -->
             <div class="mt-5 flex flex-wrap gap-2">
               <span
                 class="rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-xs font-medium"
               >
-                ⚡ High-performance engine
+                {t("perf.tag.rust")}
               </span>
               <span
                 class="rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1 text-xs font-medium"
               >
-                🔎 Traceable by design
+                {t("perf.tag.traceable")}
               </span>
               <span
                 class="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-xs font-medium"
               >
-                📜 In-depth logs & timings
+                {t("perf.tag.logs")}
               </span>
             </div>
 
-            <!-- quiet proof (optional) -->
+            <!-- proof link -->
             <div class="mt-4 text-xs sm:text-sm text-muted-foreground">
-              Built on a Rust runtime for predictable performance. Benchmarks <span
-                class="opacity-80">(coming soon)</span
-              >.
+              {t("perf.benchmark_note")} <a href="https://docs.flow-like.com/reference/benchmarks/" class="text-orange-500 hover:underline">{t("perf.benchmark_link")}</a>
             </div>
           </div>
         </div>

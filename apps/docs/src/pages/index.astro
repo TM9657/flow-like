@@ -1,110 +1,402 @@
 ---
 import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
-import Hero from "../components/docs/Hero.astro";
-import FeatureRows from "../components/docs/FeatureRows.astro";
-import Steps from "../components/docs/Steps.astro";
-import Marquee from "../components/docs/Marquee.astro";
-import CTA from "../components/docs/CTA.astro";
+
+const quickLinks = [
+    { href: "/start/what-is-flow-like/", label: "What is Flow-Like?", icon: "📖" },
+    { href: "/start/getting-started/", label: "Getting Started", icon: "🚀" },
+    { href: "https://flow-like.com/download", label: "Download", icon: "⬇️", external: true },
+];
+
+const sections = [
+    {
+        title: "Learn the basics",
+        links: [
+            { href: "/start/what-is-flow-like/", label: "Introduction" },
+            { href: "/start/getting-started/", label: "Installation" },
+            { href: "/start/what-is-flow-like/", label: "Core concepts" },
+        ],
+    },
+    {
+        title: "Build workflows",
+        links: [
+            { href: "/start/what-is-flow-like/", label: "Creating nodes" },
+            { href: "/start/what-is-flow-like/", label: "Composing flows" },
+            { href: "/start/what-is-flow-like/", label: "Data types" },
+        ],
+    },
+    {
+        title: "Go to production",
+        links: [
+            { href: "/start/what-is-flow-like/", label: "Deployment" },
+            { href: "/start/what-is-flow-like/", label: "Performance" },
+            { href: "/start/what-is-flow-like/", label: "Best practices" },
+        ],
+    },
+];
+
+const features = [
+    { icon: "🎛️", title: "Visual design", desc: "Build workflows with drag-and-drop" },
+    { icon: "🧩", title: "Composable", desc: "Small parts that combine reliably" },
+    { icon: "⚡", title: "Fast", desc: "Rust-powered performance" },
+    { icon: "🌍", title: "Portable", desc: "Run anywhere without lock-in" },
+];
 ---
 
 <StarlightPage
     frontmatter={{
-        title: "",
+        title: "Flow-Like Documentation",
         template: "splash",
-        description:
-            "Documentation for Flow-Like, the typed workflow automation platform.",
-        hero: {
-            title: "Flow‑Like Documentation",
-        },
+        description: "Documentation for Flow-Like, the typed workflow automation platform.",
     }}
 >
-    <Marquee
-        items={[
-            "Design workflows visually",
-            "Composable processes",
-            "Performance",
-            "Portability",
-            "Extensibility",
-            "Theming",
-            "Storage & IO",
-            "Reading & Debugging",
-            "Zero‑to‑Prod",
-        ]}
-    />
+    <div class="docs-home not-content">
+        <!-- Hero -->
+        <header class="docs-hero">
+            <p class="hero-tagline">Model · Automate · Scale</p>
+            <h2 class="text-3xl sm:text-5xl mb-10 -mt-4">Flow-Like Docs</h2>
+            <p class="hero-desc">
+                Learn how to build typed, visual workflows that scale from prototype to production.
+            </p>
+            <div class="quick-links">
+                {quickLinks.map((link) => (
+                    <a
+                        href={link.href}
+                        class="quick-link"
+                        target={link.external ? "_blank" : undefined}
+                        rel={link.external ? "noopener" : undefined}
+                    >
+                        <span class="quick-link-icon">{link.icon}</span>
+                        <span>{link.label}</span>
+                        {link.external && <span class="external">↗</span>}
+                    </a>
+                ))}
+            </div>
+        </header>
 
-    <section id="why" style={{ marginTop: "4rem" }}>
-        <FeatureRows
-            items={[
-                {
-                    icon: "🎛️",
-                    title: "Design workflows visually",
-                    text: "Shape ideas fast with a visual model that stays in sync with code.",
-                },
-                {
-                    icon: "🧩",
-                    title: "Composable processes",
-                    text: "Small, focused parts that combine into reliable pipelines.",
-                },
-                {
-                    icon: "⚡",
-                    title: "Performance that scales",
-                    text: "Keep hot paths fast and predictable as graphs grow.",
-                },
-                {
-                    icon: "🌍",
-                    title: "Portable by design",
-                    text: "Run across environments without lock‑in.",
-                },
-                {
-                    icon: "🧱",
-                    title: "Extensible",
-                    text: "Bring your own integrations and custom nodes.",
-                },
-                {
-                    icon: "🎨",
-                    title: "Theming & UX",
-                    text: "Match your brand while keeping accessibility first.",
-                },
-            ]}
-        />
-    </section>
+        <!-- Feature highlights -->
+        <section class="features">
+            {features.map((f) => (
+                <div class="feature">
+                    <span class="feature-icon">{f.icon}</span>
+                    <div class="feature-content">
+                        <strong>{f.title}</strong>
+                        <span class="feature-desc">{f.desc}</span>
+                    </div>
+                </div>
+            ))}
+        </section>
 
-    <section id="start" style={{ marginTop: "4rem" }}>
-        <Steps
-            steps={[
-                {
-                    label: "Install",
-                    detail: "Install the CLI and scaffold your first project.",
-                    cta: {
-                        href: "/start/what-is-flow-like/",
-                        label: "Getting started",
-                    },
-                },
-                {
-                    label: "Compose",
-                    detail: "Combine nodes into readable, testable processes.",
-                    cta: {
-                        href: "/start/what-is-flow-like/",
-                        label: "Best practices",
-                    },
-                },
-                {
-                    label: "Ship",
-                    detail: "Tune performance, stay portable, deploy with confidence.",
-                    cta: {
-                        href: "/start/what-is-flow-like/",
-                        label: "Zero‑to‑Prod",
-                    },
-                },
-            ]}
-        />
-    </section>
+        <!-- Documentation sections -->
+        <section class="sections">
+            {sections.map((section) => (
+                <div class="section-card">
+                    <h2 class="section-title">{section.title}</h2>
+                    <ul class="section-links">
+                        {section.links.map((link) => (
+                            <li>
+                                <a href={link.href}>{link.label}</a>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ))}
+        </section>
 
-    <CTA
-        kicker="Move fast, stay readable"
-        title="Build flows you can reason about."
-        subtitle="Explore guides, patterns, and examples to take a flow from idea to production."
-        primary={{ href: "/start/getting-started/", label: "Start building" }}
-        secondary={{ href: "https://flow-like.com#faq", label: "Read the FAQ" }}
-    />
+        <!-- Footer links -->
+        <footer class="footer">
+            <a href="https://flow-like.com" target="_blank" rel="noopener">Website</a>
+            <span class="sep">·</span>
+            <a href="https://github.com/TM9657/flow-like" target="_blank" rel="noopener">GitHub</a>
+            <span class="sep">·</span>
+            <a href="https://flow-like.com/download" target="_blank" rel="noopener">Download</a>
+        </footer>
+    </div>
 </StarlightPage>
+
+<style>
+    /* Hide Starlight's default title/hero */
+    :global(.content-panel h1),
+    :global(.sl-markdown-content > h1:not(.hero-title)) {
+        display: none !important;
+    }
+
+    .docs-home {
+        max-width: 1024px;
+        margin: 0 auto;
+        padding: 0 1rem;
+    }
+
+    /* Hero */
+    .docs-hero {
+        text-align: center;
+        padding: 8rem 0 6rem;
+        border-bottom: 1px solid var(--sl-color-gray-6);
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Grid Background */
+    .docs-hero::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+            linear-gradient(var(--sl-color-gray-6) 1px, transparent 1px),
+            linear-gradient(90deg, var(--sl-color-gray-6) 1px, transparent 1px);
+        background-size: 3rem 3rem;
+        background-position: center top;
+        mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+        opacity: 0.5;
+        z-index: -1;
+        pointer-events: none;
+    }
+
+    /* Glow Effect */
+    .docs-hero::after {
+        content: "";
+        position: absolute;
+        top: 40%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 120%;
+        height: 100%;
+        background: radial-gradient(circle at center, var(--sl-color-accent-low) 0%, transparent 50%);
+        opacity: 0.15;
+        z-index: -1;
+        filter: blur(60px);
+        pointer-events: none;
+    }
+
+    .hero-tagline {
+        font-family: var(--sl-font-mono);
+        font-size: 0.75rem;
+        letter-spacing: 0.25em;
+        text-transform: uppercase;
+        color: var(--sl-color-accent);
+        margin: 0 0 1.5rem;
+        opacity: 0.9;
+    }
+
+    .hero-title {
+        font-size: 4rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        line-height: 1.1;
+        margin: 0 0 1.5rem;
+        color: var(--sl-color-white);
+        /* Subtle gradient text */
+        background: linear-gradient(to bottom right, var(--sl-color-white) 30%, var(--sl-color-gray-3));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .hero-desc {
+        font-size: 1.25rem;
+        line-height: 1.6;
+        color: var(--sl-color-gray-2);
+        margin: 0 auto 3rem;
+        max-width: 640px;
+        font-weight: 300;
+    }
+
+    .quick-links {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1rem;
+    }
+
+    .quick-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        border-radius: 2px;
+        background: var(--sl-color-black);
+        border: 1px solid var(--sl-color-gray-5);
+        color: var(--sl-color-gray-2);
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        font-family: var(--sl-font-mono);
+        letter-spacing: -0.01em;
+    }
+
+    .quick-link:hover {
+        border-color: var(--sl-color-accent);
+        color: var(--sl-color-white);
+        box-shadow: 0 0 15px -5px var(--sl-color-accent-low);
+        transform: translateY(-2px);
+    }
+
+    /* Features Grid */
+    .features {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        padding: 4rem 0;
+        border-bottom: 1px solid var(--sl-color-gray-6);
+    }
+
+    @media (max-width: 640px) {
+        .features {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .feature {
+        display: flex;
+        align-items: flex-start;
+        gap: 1.5rem;
+        padding: 2rem;
+        border: 1px solid var(--sl-color-gray-6);
+        background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%);
+        height: 100%;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Tech corner accent */
+    .feature::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 0;
+        height: 1px;
+        background: var(--sl-color-accent);
+        transition: width 0.3s ease;
+    }
+
+    .feature:hover {
+        border-color: var(--sl-color-gray-4);
+        background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, transparent 100%);
+        transform: translateY(-2px);
+    }
+
+    .feature:hover::before {
+        width: 100%;
+    }
+
+    .feature-icon {
+        font-size: 1.75rem;
+        line-height: 1;
+        padding-top: 0.25rem;
+        filter: grayscale(100%);
+        transition: filter 0.3s ease;
+    }
+
+    .feature:hover .feature-icon {
+        filter: grayscale(0%);
+    }
+
+    .feature-content {
+        flex: 1;
+    }
+
+    .feature strong {
+        display: block;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--sl-color-white);
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.01em;
+    }
+
+    .feature-desc {
+        font-size: 0.95rem;
+        line-height: 1.6;
+        color: var(--sl-color-gray-3);
+    }
+
+    /* Sections Grid */
+    .sections {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2rem;
+        padding: 4rem 0;
+    }
+
+    @media (max-width: 768px) {
+        .sections {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .section-card {
+        display: flex;
+        flex-direction: column;
+        padding: 0;
+        border-top: 1px solid var(--sl-color-gray-5);
+        background: transparent;
+        height: 100%;
+        transition: border-color 0.3s ease;
+    }
+
+    .section-card:hover {
+        border-color: var(--sl-color-accent);
+    }
+
+    .section-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin: 1.5rem 0 1.5rem;
+        color: var(--sl-color-gray-2);
+        font-family: var(--sl-font-mono);
+    }
+
+    .section-links {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .section-links a {
+        display: block;
+        font-size: 0.95rem;
+        color: var(--sl-color-gray-3);
+        text-decoration: none;
+        transition: all 0.2s;
+        padding-left: 0;
+        border-left: 1px solid transparent;
+    }
+
+    .section-links a:hover {
+        color: var(--sl-color-white);
+        padding-left: 1rem;
+        border-left-color: var(--sl-color-accent);
+    }
+
+    /* Footer */
+    .footer {
+        text-align: center;
+        padding: 2rem 0 6rem;
+        font-size: 0.875rem;
+        color: var(--sl-color-gray-4);
+        font-family: var(--sl-font-mono);
+        opacity: 0.6;
+    }
+
+    .footer a {
+        color: var(--sl-color-gray-3);
+        text-decoration: none;
+        transition: color 0.2s;
+    }
+
+    .footer a:hover {
+        color: var(--sl-color-accent);
+    }
+
+    .sep {
+        color: var(--sl-color-gray-5);
+        margin: 0 1rem;
+    }
+</style>

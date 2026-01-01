@@ -54,6 +54,15 @@ export interface IBoardState {
 		skipConsentCheck?: boolean,
 	): Promise<ILogMetadata | undefined>;
 
+	executeBoardRemote?(
+		appId: string,
+		boardId: string,
+		payload: IRunPayload,
+		streamState?: boolean,
+		eventId?: (id: string) => void,
+		cb?: (event: IIntercomEvent[]) => void,
+	): Promise<ILogMetadata | undefined>;
+
 	listRuns(
 		appId: string,
 		boardId: string,

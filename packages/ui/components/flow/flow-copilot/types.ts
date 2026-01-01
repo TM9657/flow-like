@@ -42,6 +42,8 @@ export interface FlowCopilotProps {
 	embedded?: boolean;
 	runContext?: ILogMetadata;
 	onFocusNode?: (nodeId: string) => void;
+	onSelectNodes?: (nodeIds: string[]) => void;
+	initialPrompt?: string;
 }
 
 export const LOADING_PHASES: Record<LoadingPhase, LoadingPhaseInfo> = {
