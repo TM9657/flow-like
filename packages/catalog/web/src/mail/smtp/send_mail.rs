@@ -241,9 +241,9 @@ pub fn build_rfc5322_message_send(
 
     if attachments.is_empty() {
         if body_html.trim().is_empty() {
-            message.push_str("Content-Type: text/plain; charset=utf-8");
-            message.push_str(crlf);
-            message.push_str("Content-Transfer-Encoding: 8bit");
+            headers.push("Content-Type: text/plain; charset=utf-8".to_string());
+            headers.push("Content-Transfer-Encoding: 8bit".to_string());
+            message.push_str(&headers.join(crlf));
             message.push_str(crlf);
             message.push_str(crlf);
             message.push_str(body_text);
@@ -253,10 +253,12 @@ pub fn build_rfc5322_message_send(
             message.push_str(crlf);
         } else {
             let alt_boundary = "----=_FlowLikeBoundary_mpart_alternative_001";
-            message.push_str(&format!(
+            headers.push(format!(
                 "Content-Type: multipart/alternative; boundary=\"{}\"",
                 alt_boundary
             ));
+
+            message.push_str(&headers.join(crlf));
             message.push_str(crlf);
             message.push_str(crlf);
 
