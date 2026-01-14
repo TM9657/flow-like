@@ -27,7 +27,6 @@ import {
 	Search,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "react-oidc-context";
 import { useApi } from "../../../../lib/useApi";
 
 const ITEMS_PER_PAGE_OPTIONS = [12, 24, 48, 96];
@@ -56,7 +55,6 @@ const ALL_BIT_TYPES = [
 let counter = 0;
 
 export default function EditPage() {
-	const auth = useAuth();
 	const [searchTerm, setSearchTerm] = useState("");
 	const debouncedSearch = useDebounce(searchTerm, 300);
 	const [selectedBitTypes, setSelectedBitTypes] = useState<IBitTypes[]>([
@@ -81,12 +79,7 @@ export default function EditPage() {
 		[debouncedSearch, selectedBitTypes, currentPage, itemsPerPage],
 	);
 
-	const bits = useApi<IBit[]>(
-		"POST",
-		"bit",
-		queryParams,
-		auth?.isAuthenticated ?? false,
-	);
+	const bits = useApi<IBit[]>("POST", "bit", queryParams, true);
 
 	useEffect(() => {
 		console.dir(bits.data, "Bits data fetched in EditPage");

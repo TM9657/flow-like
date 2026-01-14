@@ -52,6 +52,9 @@ model App {
   meta Meta[]
 
   templates Template[]
+  widgets Widget[]
+  pages Page[]
+  routes AppRoute[]
   queue JoinQueue[]
   members Membership[]
   comments Comment[]
@@ -60,6 +63,7 @@ model App {
   courses CourseConnection[]
   inviteLinks InviteLink[]
   invitations Invitation[]
+  notifications Notification[]
 
   feedback Feedback[]
   publicationRequests PublicationRequest[]
@@ -198,6 +202,78 @@ model Template {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Widget {
+  id String @id
+
+  meta Meta[]
+
+  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  version String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([appId])
+}
+
+model Page {
+  id String @id
+
+  name String
+  description String?
+
+  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  boardId String?
+
+  version String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([appId])
+  @@index([boardId])
+}
+
+enum RouteTargetType {
+  PAGE
+  EVENT
+}
+
+model AppRoute {
+  id String @id
+
+  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  path String
+  targetType RouteTargetType
+
+  // For PAGE target
+  pageId String?
+  boardId String?
+  pageVersion String?
+
+  // For EVENT target
+  eventId String?
+
+  isDefault Boolean @default(false)
+  priority Int @default(0)
+
+  label String?
+  icon String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([appId, path])
+  @@index([appId])
+  @@index([appId, isDefault])
 }
 
 model BoardSync {

@@ -136,7 +136,7 @@ pub async fn assign_role(
                     app_id
                 );
                 return Err(ApiError::InternalError(
-                    anyhow!("Failed to update roles for user and new owner".to_string()).into(),
+                    anyhow!("Failed to update roles for user and new owner".to_string()),
                 ));
             }
 

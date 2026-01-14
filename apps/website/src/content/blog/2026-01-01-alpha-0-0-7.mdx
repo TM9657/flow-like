@@ -1,0 +1,245 @@
+---
+title: "Flow-Like Alpha v0.0.7 — Self-Hosting, Storage Freedom & Major UX Upgrades"
+description: "The self-hosting release. Kubernetes & Docker-Compose setups with observability, multi-cloud blob storage, backend-agnostic desktop apps, and substantial UX, DX, and core improvements."
+date: 2026-01-01
+tags: ["release", "alpha", "alpha-0-0-7", "self-hosting", "kubernetes", "docker", "storage", "ux"]
+cover: "/images/0-0-7.jpg"
+draft: false
+---
+
+Alpha **v0.0.7** is a foundational release for Flow-Like.
+While v0.0.6 focused on *capabilities* (agents, collaboration, integrations), **v0.0.7 focuses on deployability, operational control, and extensibility**.
+
+This is the **self-hosting release**.
+
+Flow-Like can now be run on infrastructure you control — from a single-machine homelab setup to a production Kubernetes cluster — with officially supported deployment configurations, observability built in, and a desktop app that can connect to a custom backend with minimal configuration.
+
+In addition, this release includes major UX improvements, developer-facing build optimizations, and a broad expansion of node functionality.
+
+---
+
+## Highlights
+
+- **Self-Hosting Support** — Kubernetes Helm charts and Docker-Compose setups
+- **Built-in Observability** — Tracing, metrics, and ready-to-use Grafana dashboards
+- **Storage Freedom** — AWS S3, Cloudflare R2, GCP Storage, Azure Blob, and self-hosted S3 (MinIO)
+- **Backend-Agnostic Desktop App** — One env var to connect to your own backend
+- **UX Improvements** — Faster navigation, pinned tabs, cleaner project creation
+- **Developer Experience Improvements** — Faster catalog compile times, smaller binaries
+- **New Nodes & Capabilities** — Calendars, keyword extraction, dates, better tables
+- **FlowPilot Enhancements** — One-click node explanations with full context
+
+---
+
+## Self-Hosting: From Laptop to Kubernetes
+
+Flow-Like now provides **official, supported self-hosting setups**.
+
+### Kubernetes Support
+We ship **Kubernetes Helm charts** covering:
+- API services
+- Execution/runtime services
+- Authentication and user management
+- Storage backends
+- Database wiring
+- Ingress and TLS-ready setups
+
+All Kubernetes deployments include:
+- **Distributed tracing**
+- **Metrics endpoints**
+- **Preconfigured Grafana dashboards** for system health, execution behavior, and performance
+
+The charts are designed to work on:
+- Managed Kubernetes (AWS, GCP, Azure)
+- Bare-metal clusters
+- Lightweight distributions (k3s, microk8s)
+
+### Docker-Compose (Homelab & Dev)
+For smaller installations, we provide **Docker-Compose setups**:
+- Suitable for homelabs, local development, and small teams
+- Minimal operational overhead
+- Transparent service topology
+
+Docker-Compose deployments also include:
+- Metrics collection
+- Tracing support
+- Ready-to-import Grafana dashboards
+
+---
+
+## Documentation Updates
+
+Self-hosting documentation has been expanded substantially:
+- Deployment walkthroughs (Docker & Kubernetes)
+- Storage backend configuration
+- Observability setup and dashboard usage
+- Environment variable reference
+- Architecture and execution model explanations
+
+Self-hosting is **supported**, but remains **optional** — hosted deployments and local-first usage continue to be first-class.
+
+---
+
+## Desktop App: Bring Your Own Backend
+
+The Flow-Like desktop app is now **backend-agnostic**.
+
+By setting **a single environment variable**, the desktop application can:
+- Connect to a self-hosted backend
+- Authenticate against custom infrastructure
+- Execute workflows using user-controlled storage and compute
+
+This enables:
+- Air-gapped deployments
+- Enterprise-controlled environments
+- Hybrid local-first + server execution setups
+
+No forks or custom builds required.
+
+---
+
+## Storage Backends: Beyond AWS
+
+Storage is now fully **pluggable and cloud-agnostic**.
+
+Supported backends:
+- **AWS S3**
+- **Cloudflare R2**
+- **Google Cloud Storage**
+- **Azure Blob Storage**
+- **Self-Hosted S3-Compatible Storage** (e.g. MinIO)
+
+All backends share the same abstraction layer:
+- Identical runtime behavior
+- Portable workflows
+- No provider-specific logic in graphs
+
+Workflows remain file-based, movable, and executable across environments without modification.
+
+---
+
+## UX Improvements
+
+This release includes multiple UX changes focused on navigation speed and clarity.
+
+### Project Creation
+- Project creation has been moved into a **sidebar modal**
+- Reduced context switching during setup
+
+### Global Spotlight
+- A **global spotlight** enables fast navigation
+- Jump directly to projects, nodes, and actions
+
+### Pinned Tabs
+- Tabs can now be **pinned to the sidebar**
+- Designed for frequently accessed flows and files
+
+### Node Context Handling
+- Node context actions are no longer hidden behind right-click
+- All actions are now accessible via a **toolbar above each node**
+
+---
+
+## Developer Experience & Core Changes
+
+### Faster Node Catalog Compilation
+The node catalog has been split into **multiple crates**:
+- Faster incremental builds
+- Better isolation during node development
+- Cleaner dependency boundaries
+
+This significantly improves iteration speed for contributors and core developers.
+
+### Office Parsing: Custom, Faster, Smaller
+We replaced Docling with a **custom Rust-native implementation**:
+- Repository: https://github.com/TM9657/markitdown-rs
+- Supports a wide range of Office formats
+- Faster parsing performance
+- Optional vision-model-based parsing
+- Reduced application binary size by **several hundred MB**
+
+---
+
+## Node Execution & Auto-Generated Forms
+
+Nodes with structured inputs now generate **automatic UI forms**:
+- No raw JSON required by default
+- Safer input handling
+- Improved usability for non-technical users
+
+JSON inputs remain available where appropriate.
+
+---
+
+## New Nodes & Capabilities
+
+### Calendar & IMAP
+- **IMAP Calendar Nodes**
+- Subscribe to web calendars
+- Read and process calendar data
+
+### Keyword Extraction
+New keyword extraction nodes:
+- **YAKE**
+- **RAKE**
+- **AI-Based Keywords**
+
+Designed for document pipelines, search, and semantic enrichment.
+
+### Date & Time Nodes
+- `Now`
+- `Parse Date`
+- Additional date utilities for temporal workflows
+
+### Improved Table Management
+Tables can now be managed visually:
+- Add and modify columns
+- Create and manage indexes
+- Control optional vs required columns
+
+---
+
+## FlowPilot Improvements
+
+FlowPilot now supports **one-click node explanations**:
+- Explain any node instantly
+- Responses include **full node context**
+- Useful for onboarding, debugging, and large graphs
+
+---
+
+## Execution Throughput (Synthetic Benchmark)
+
+To establish a baseline for the execution engine itself, we ran a **synthetic throughput benchmark** focused on the Flow-Like runtime core.
+
+- **Flow-Like:** ~**255,000 executions / second**
+  Measured as repeated execution of a minimal in-memory node chain, without external I/O, network calls, persistence, scheduling delays, or UI involvement.
+
+- **n8n:** ~**200–220 workflow executions / second per instance**
+  Based on n8n’s own published performance guidance and documentation.
+
+Important context:
+- These numbers **do not represent end-to-end automation throughput** and should not be interpreted as such.
+- The benchmarks are **not directly comparable** due to different architectures, execution models, and definitions of “execution.”
+- Real-world throughput is typically dominated by external systems (APIs, databases, storage latency), not engine dispatch speed.
+
+The Flow-Like result is intended to demonstrate **execution headroom** of the core runtime, not typical production performance.
+
+We plan to publish the benchmark harness, configuration, and workload definition to allow independent reproduction and comparison.
+---
+
+## What’s Next
+
+With self-hosting and observability in place, upcoming work focuses on:
+
+- **Web App** — A fully hosted, browser-based Flow-Like experience
+- **Visual UI Builder** — Build custom frontends visually
+- **AI-Assisted UI Generation** — Use FlowPilot to design and scaffold UIs
+
+These will allow workflows to evolve into complete, user-facing applications with minimal glue code.
+
+---
+
+**Alpha v0.0.7** expands Flow-Like from a powerful editor into a deployable system.
+
+Upgrade to **v0.0.7** and run Flow-Like where and how it fits your environment.

@@ -87,3 +87,10 @@ export type {
 export * from "./profile/profile";
 export * from "./app/app";
 export * from "./solution/solution";
+
+// A2UI Copilot types
+export * from "./a2ui/copilot";
+// Unified Copilot types
+export * from "./copilot";
+// WASM Package types
+export * from "./wasm";

@@ -135,13 +135,13 @@ pub async fn invoke_board(
     let input_payload_key = if !query.local {
         if let Some(ref payload) = params.payload {
             let payload_bytes = serde_json::to_vec(payload).map_err(|e| {
-                ApiError::InternalError(anyhow!("Failed to serialize payload: {}", e).into())
+                ApiError::InternalError(anyhow!("Failed to serialize payload: {}", e))
             })?;
             let master_creds = state.master_credentials().await.map_err(|e| {
-                ApiError::InternalError(anyhow!("Failed to get master credentials: {}", e).into())
+                ApiError::InternalError(anyhow!("Failed to get master credentials: {}", e))
             })?;
             let store = master_creds.to_store(false).await.map_err(|e| {
-                ApiError::InternalError(anyhow!("Failed to get object store: {}", e).into())
+                ApiError::InternalError(anyhow!("Failed to get object store: {}", e))
             })?;
             let stored = payload_storage::store_payload(
                 store.as_generic(),
@@ -151,7 +151,7 @@ pub async fn invoke_board(
             )
             .await
             .map_err(|e| {
-                ApiError::InternalError(anyhow!("Failed to store payload: {}", e).into())
+                ApiError::InternalError(anyhow!("Failed to store payload: {}", e))
             })?;
             Some(stored.key)
         } else {
@@ -192,7 +192,7 @@ pub async fn invoke_board(
     if query.local {
         run.insert(&state.db).await.map_err(|e| {
             tracing::error!(error = %e, "Failed to create run record");
-            ApiError::InternalError(anyhow!("Failed to create run record: {}", e).into())
+            ApiError::InternalError(anyhow!("Failed to create run record: {}", e))
         })?;
 
         println!("Tracking local run ID: {}", run_id);
@@ -221,7 +221,7 @@ pub async fn invoke_board(
     if !is_jwt_configured() {
         println!("Execution JWT signing not configured");
         return Err(ApiError::InternalError(
-            anyhow!("Execution JWT signing not configured (missing EXECUTION_KEY/EXECUTION_PUB env vars)").into()
+            anyhow!("Execution JWT signing not configured (missing EXECUTION_KEY/EXECUTION_PUB env vars)")
         ));
     }
 
@@ -249,7 +249,7 @@ pub async fn invoke_board(
     })
     .map_err(|e| {
         tracing::error!(error = %e, "Failed to sign executor JWT");
-        ApiError::InternalError(anyhow!("Failed to sign executor JWT: {}", e).into())
+        ApiError::InternalError(anyhow!("Failed to sign executor JWT: {}", e))
     })?;
 
     let request = DispatchRequest {
@@ -274,7 +274,7 @@ pub async fn invoke_board(
         // Insert synchronously for K8s jobs (returns immediately anyway)
         run.insert(&state.db).await.map_err(|e| {
             tracing::error!(error = %e, "Failed to create run record");
-            ApiError::InternalError(anyhow!("Failed to create run record: {}", e).into())
+            ApiError::InternalError(anyhow!("Failed to create run record: {}", e))
         })?;
 
         let response = state
@@ -283,7 +283,7 @@ pub async fn invoke_board(
             .await
             .map_err(|e| {
                 tracing::error!(error = %e, "Failed to dispatch job");
-                ApiError::InternalError(anyhow!("Failed to dispatch job: {}", e).into())
+                ApiError::InternalError(anyhow!("Failed to dispatch job: {}", e))
             })?;
 
         return Ok(Json(InvokeBoardResponse {
@@ -314,7 +314,7 @@ pub async fn invoke_board(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to dispatch SSE job");
-            ApiError::InternalError(anyhow!("Failed to dispatch job: {}", e).into())
+            ApiError::InternalError(anyhow!("Failed to dispatch job: {}", e))
         })?;
 
     // Wait for DB insert to complete (it's likely already done by now)

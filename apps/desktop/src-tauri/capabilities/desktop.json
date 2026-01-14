@@ -111,6 +111,10 @@
     "fs:read-all",
     "opener:default",
     "updater:default",
+    "notification:default",
+    "notification:allow-notify",
+    "notification:allow-request-permission",
+    "notification:allow-is-permission-granted",
     {
       "identifier": "fs:scope",
       "allow": [{ "path": "*" }, { "path": "**/*"} ]

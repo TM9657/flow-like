@@ -111,7 +111,32 @@ impl NodeLogic for SetVariable {
             }
         };
 
-        node.friendly_name = format!("Set {}", &var_ref_variable.name);
+        let expected_name = format!("Set {}", &var_ref_variable.name);
+
+        // Check if value_in pin needs updating
+        let value_in = read_only_node.get_pin_by_name("value_in");
+        let value_ref = read_only_node.get_pin_by_name("value_ref");
+
+        let value_in_changed = value_in.is_some_and(|pin| {
+            pin.data_type != var_ref_variable.data_type
+                || pin.value_type != var_ref_variable.value_type
+                || pin.schema != var_ref_variable.schema
+        });
+
+        let value_ref_changed = value_ref.is_some_and(|pin| {
+            pin.data_type != var_ref_variable.data_type
+                || pin.value_type != var_ref_variable.value_type
+                || pin.schema != var_ref_variable.schema
+        });
+
+        let name_changed = node.friendly_name != expected_name;
+
+        if !value_in_changed && !value_ref_changed && !name_changed {
+            return;
+        }
+
+        node.friendly_name = expected_name;
+
         let mut_value = match node.get_pin_mut_by_name("value_in") {
             Some(val) => val,
             None => {
@@ -121,11 +146,19 @@ impl NodeLogic for SetVariable {
         };
         mut_value.data_type = var_ref_variable.data_type.clone();
         mut_value.value_type = var_ref_variable.value_type.clone();
+        mut_value.schema = var_ref_variable.schema.clone();
         if !mut_value.depends_on.is_empty() {
             let mut dependencies = mut_value.depends_on.clone();
             dependencies.retain(|deps| {
                 board.get_pin_by_id(deps).is_some_and(|pin| {
-                    pin.data_type == mut_value.data_type && pin.value_type == mut_value.value_type
+                    if pin.data_type != mut_value.data_type || pin.value_type != mut_value.value_type {
+                        return false;
+                    }
+                    // If both have schemas, they must match
+                    if mut_value.schema.is_some() && pin.schema.is_some() {
+                        return mut_value.schema == pin.schema;
+                    }
+                    true
                 })
             });
 
@@ -142,14 +175,21 @@ impl NodeLogic for SetVariable {
 
         mut_new_value.data_type = var_ref_variable.data_type.clone();
         mut_new_value.value_type = var_ref_variable.value_type.clone();
+        mut_new_value.schema = var_ref_variable.schema.clone();
 
-        if !var_ref.connected_to.is_empty() {
-            let mut connected = var_ref.connected_to.clone();
+        if !mut_new_value.connected_to.is_empty() {
+            let mut connected = mut_new_value.connected_to.clone();
 
             connected.retain(|conn| {
                 board.get_pin_by_id(conn).is_some_and(|pin| {
-                    pin.data_type == mut_new_value.data_type
-                        && pin.value_type == mut_new_value.value_type
+                    if pin.data_type != mut_new_value.data_type || pin.value_type != mut_new_value.value_type {
+                        return false;
+                    }
+                    // If both have schemas, they must match
+                    if mut_new_value.schema.is_some() && pin.schema.is_some() {
+                        return mut_new_value.schema == pin.schema;
+                    }
+                    true
                 })
             });
 

@@ -1,0 +1,44 @@
+---
+title: "Flow-Like Alpha v0.0.8 — The UI Building and BI Release"
+description: "The self-hosting release. Kubernetes & Docker-Compose setups with observability, multi-cloud blob storage, backend-agnostic desktop apps, and substantial UX, DX, and core improvements."
+date: 2026-01-01
+tags: ["release", "alpha", "alpha-0-0-8", "self-hosting", "kubernetes", "docker", "storage", "ux"]
+cover: "/images/0-0-8.jpg"
+draft: false
+---
+
+## UI Builder
+- Dashboard Elements
+- Custom Layouts
+- Interactive Components
+- FlowPilot for UI Generation
+- Update, Delete & Create new UI Elements from your workflow - versioned together
+
+Sharable Widgets for reuse and the nodes to control the frontend
+
+## Business Intelligence (BI) Features
+- Data Viz through dashboard building
+- Integration of a robust DataFusion integration on node level
+    - Let's you query your lancedb tables (database default implementation)
+    - Ingest new data
+    - Use Parquet ingest (time based aggregations, filters, etc)
+    - Connection of Postgres, MySQL, and other databases through DataFusion connectors
+    - Athena Integration
+    - S3 based data lake querying (Iceberg, Delta Lake, etc)
+    - And more...
+- Agent compatible, just hook one or multiple Sources into a DataFusion session and add the session to the agent
+
+## WASM Nodes
+- Rust and AssemblyScript templates for building custom WASM nodes
+- Expanded node catalog with new functionalities without adjusting the source code
+
+## Node Updates
+- Open Database now supports user scoped databases (secure by design)
+
+## Some UI and UX Improvements
+- Improved project creation, removed the old way of doing that.
+- Faster navigation through quick search / spotlight
+
+## Documentation updates & code base changes
+- New docs for our new features
+- Frontend for the desktop app was moved into ui components as preparation for the Web App.

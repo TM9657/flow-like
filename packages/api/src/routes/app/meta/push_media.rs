@@ -98,7 +98,7 @@ pub async fn push_media(
                 e
             );
             ApiError::InternalError(
-                anyhow!("Failed to create signed URL, reference ID: {}", id).into(),
+                anyhow!("Failed to create signed URL, reference ID: {}", id),
             )
         })?;
 

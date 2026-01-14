@@ -211,6 +211,18 @@ export const nl = {
 	"reading.viewall": "Alle artikelen",
 	"reading.viewall.mobile": "Bekijk alle",
 
+	// Newsletter
+	"newsletter.tagline": "Blijf op de hoogte",
+	"newsletter.headline": "Ontvang automatisering-inzichten",
+	"newsletter.description": "Meld je aan voor onze nieuwsbrief om de laatste updates over Flow-Like, best practices voor automatisering en industrie-inzichten te ontvangen. Geen spam — alleen waardevolle content.",
+	"newsletter.email.label": "E-mailadres",
+	"newsletter.email.placeholder": "Voer je e-mail in",
+	"newsletter.button": "Aanmelden",
+	"newsletter.optin": "Ik ga akkoord met het ontvangen van e-mailupdates en accepteer het Privacybeleid",
+	"newsletter.privacy": "We gebruiken Brevo als marketingplatform. Door dit formulier in te dienen, ga je akkoord dat je gegevens worden verwerkt volgens het Privacybeleid van Brevo.",
+	"newsletter.success": "Bedankt voor je aanmelding! Check je inbox om te bevestigen.",
+	"newsletter.error": "Er is iets misgegaan. Probeer het later opnieuw.",
+
 	// Footer & Navigation
 	"nav.download": "Downloaden",
 	"nav.docs": "Documentatie",

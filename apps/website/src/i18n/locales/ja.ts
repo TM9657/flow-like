@@ -284,6 +284,18 @@ export const ja = {
 	"reading.viewall": "すべての記事",
 	"reading.viewall.mobile": "すべて見る",
 
+	// Newsletter
+	"newsletter.tagline": "最新情報を受け取る",
+	"newsletter.headline": "オートメーションのインサイトをお届け",
+	"newsletter.description": "ニュースレターに登録して、Flow-Likeの最新アップデート、オートメーションのベストプラクティス、業界のインサイトを受け取りましょう。スパムなし — 価値あるコンテンツのみ。",
+	"newsletter.email.label": "メールアドレス",
+	"newsletter.email.placeholder": "メールを入力",
+	"newsletter.button": "購読する",
+	"newsletter.optin": "メール更新を受け取り、プライバシーポリシーに同意します",
+	"newsletter.privacy": "Brevoをマーケティングプラットフォームとして使用しています。このフォームを送信することで、Brevoのプライバシーポリシーに従ってデータが処理されることに同意します。",
+	"newsletter.success": "登録ありがとうございます！確認のため受信ボックスをご確認ください。",
+	"newsletter.error": "問題が発生しました。後ほど再度お試しください。",
+
 	// Footer & Navigation
 	"nav.download": "ダウンロード",
 	"nav.docs": "ドキュメント",

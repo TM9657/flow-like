@@ -7,6 +7,7 @@ import {
 	IBitTypes,
 	IConnectionMode,
 	type IProfile,
+	useBackend,
 } from "@tm9657/flow-like-ui";
 import { Button } from "@tm9657/flow-like-ui";
 import { Input } from "@tm9657/flow-like-ui";
@@ -31,8 +32,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@tm9657/flow-like-ui";
 import { Separator } from "@tm9657/flow-like-ui";
 import { Image, Monitor, Plus, Save, Upload, User, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import { useAuth } from "react-oidc-context";
-import { fetcher, get } from "../../../../lib/api";
 import { useApi } from "../../../../lib/useApi";
 
 const DEFAULT_PROFILE: IProfile = {
@@ -62,7 +61,7 @@ export default function AddProfilePage() {
 	const [newBitId, setNewBitId] = useState("");
 	const iconInputRef = useRef<HTMLInputElement>(null);
 	const thumbnailInputRef = useRef<HTMLInputElement>(null);
-	const auth = useAuth();
+	const backend = useBackend();
 
 	const bits = useApi<IBit[]>(
 		"POST",
@@ -75,7 +74,7 @@ export default function AddProfilePage() {
 				IBitTypes.Vlm,
 			],
 		},
-		auth?.isAuthenticated ?? false,
+		true,
 	);
 
 	const updateProfile = (field: keyof IProfile, value: any) => {
@@ -161,18 +160,14 @@ export default function AddProfilePage() {
 	};
 
 	const handleSave = useCallback(async () => {
-		const putRequest = await fetcher(
+		await backend.apiState.put(
 			profile,
 			`admin/profiles/${profile.id}`,
-			{
-				method: "PUT",
-				body: JSON.stringify(profile),
-			},
-			auth,
+			profile,
 		);
 
 		setProfile(DEFAULT_PROFILE);
-	}, [profile, auth]);
+	}, [profile, backend.apiState]);
 
 	const handleImageUpload = useCallback(
 		async (
@@ -181,11 +176,10 @@ export default function AddProfilePage() {
 		) => {
 			const file = event.target.files?.[0];
 			if (file && file.type === "image/webp") {
-				const signedUrl = await get<{ url: string; final_url?: string }>(
-					profile,
-					"admin/profiles/media",
-					auth,
-				);
+				const signedUrl = await backend.apiState.get<{
+					url: string;
+					final_url?: string;
+				}>(profile, "admin/profiles/media");
 				if (signedUrl?.url) {
 					const response = await fetch(signedUrl.url, {
 						method: "PUT",
@@ -212,7 +206,7 @@ export default function AddProfilePage() {
 				}
 			}
 		},
-		[auth],
+		[backend.apiState, profile],
 	);
 
 	return (

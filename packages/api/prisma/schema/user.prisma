@@ -43,6 +43,9 @@ model User {
     publicationLogs             PublicationLog[]
     invitations                 Invitation[]
     transactions                Transaction[]
+    notifications               Notification[]
+    authoredWasmPackages        WasmPackageAuthor[]
+    wasmPackageReviews          WasmPackageReview[]
 
     status UserStatus @default(ACTIVE)
     tier   UserTier   @default(FREE)

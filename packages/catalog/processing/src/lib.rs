@@ -2,7 +2,6 @@
 //!
 //! This crate contains document processing utilities:
 //! - Markitdown conversion
-//! - Docling processing
 //! - Keyword extraction (RAKE, YAKE, AI-based)
 
 use std::sync::Arc;

@@ -41,4 +41,6 @@ message Event {
   bool active = 15;
   string event_type = 16;
   uint32 priority = 17;
+  // A2UI: default page to render for this event
+  optional string default_page_id = 18;
 }

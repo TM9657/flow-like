@@ -4,16 +4,13 @@ import {
 	useInvoke,
 	useQuery,
 } from "@tm9657/flow-like-ui";
-import { useAuth } from "react-oidc-context";
-import { fetcher } from "./api";
 
 export function useApi<T>(
 	method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
 	path: string,
-	data?: any,
+	data?: unknown,
 	enabled?: boolean,
 ): UseQueryResult<T, Error> {
-	const auth = useAuth();
 	const backend = useBackend();
 	const profile = useInvoke(
 		backend.userState.getProfile,
@@ -21,19 +18,13 @@ export function useApi<T>(
 		[],
 	);
 	const query = useQuery<T, Error>({
-		queryKey: [method, path, data, auth?.user?.profile?.sub ?? "anon"],
+		queryKey: [method, path, data],
 		queryFn: async () => {
-			const response = await fetcher<T>(
-				profile.data!,
-				path,
-				{
-					method,
-					body: data ? JSON.stringify(data) : undefined,
-				},
-				auth,
-			);
-
-			return response;
+			if (!profile.data) throw new Error("Profile not loaded");
+			return backend.apiState.fetch<T>(profile.data, path, {
+				method,
+				body: data ? JSON.stringify(data) : undefined,
+			});
 		},
 		enabled: enabled && !!profile.data,
 	});

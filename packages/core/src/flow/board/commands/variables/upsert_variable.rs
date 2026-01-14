@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::{
     flow::{
         board::{Board, commands::Command},
-        variable::Variable,
+        variable::{Variable, VariableType, infer_schema_from_json},
     },
     state::FlowLikeState,
 };
@@ -33,6 +33,19 @@ impl Command for UpsertVariableCommand {
         board: &mut Board,
         _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
+        // If the variable is a Struct type and has a schema that looks like example JSON,
+        // infer the proper JSON Schema from it
+        if self.variable.data_type == VariableType::Struct
+            && let Some(ref schema_str) = self.variable.schema
+            && !schema_str.trim().is_empty()
+        {
+            if let Ok(inferred) = infer_schema_from_json(schema_str) {
+                self.variable.schema = Some(inferred);
+            }
+        } else {
+            self.variable.schema = None;
+        }
+
         if let Some(old_variable) = board
             .variables
             .insert(self.variable.id.clone(), self.variable.clone())

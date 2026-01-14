@@ -71,4 +71,32 @@ export interface IUserLookup {
 
 export interface INotificationsOverview {
 	invites_count: number;
+	notifications_count: number;
+	unread_count: number;
+}
+
+export type NotificationType = "WORKFLOW" | "SYSTEM";
+
+export interface INotification {
+	id: string;
+	user_id: string;
+	app_id?: string;
+	title: string;
+	description?: string;
+	icon?: string;
+	link?: string;
+	notification_type: NotificationType;
+	read: boolean;
+	source_run_id?: string;
+	source_node_id?: string;
+	created_at: string;
+	read_at?: string;
+}
+
+export interface INotificationEvent {
+	title: string;
+	description?: string;
+	icon?: string;
+	link?: string;
+	show_desktop: boolean;
 }

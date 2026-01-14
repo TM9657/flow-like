@@ -601,7 +601,9 @@ impl RuntimeCredentialsTrait for AzureRuntimeCredentials {
             sas.clone(),
         )));
         config
-            .register_build_project_database(Arc::new(make_azure_builder(account, container, sas)));
+            .register_build_project_database(Arc::new(make_azure_builder(account.clone(), container.clone(), sas.clone())));
+        config
+            .register_build_user_database(Arc::new(make_azure_builder(account, container, sas)));
 
         let mut flow_like_state = FlowLikeState::new(config, http_client);
 

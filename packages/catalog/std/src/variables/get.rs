@@ -97,7 +97,23 @@ impl NodeLogic for GetVariable {
             }
         };
 
-        node.friendly_name = format!("Get {}", &var_ref_variable.name);
+        let expected_name = format!("Get {}", &var_ref_variable.name);
+
+        // Check if anything changed using read_only_node to avoid borrow issues
+        let value_pin = read_only_node.get_pin_by_name("value_ref");
+        let type_changed = value_pin.is_some_and(|pin| {
+            pin.data_type != var_ref_variable.data_type
+                || pin.value_type != var_ref_variable.value_type
+                || pin.schema != var_ref_variable.schema
+        });
+        let name_changed = read_only_node.friendly_name != expected_name;
+
+        if !type_changed && !name_changed {
+            return;
+        }
+
+        node.friendly_name = expected_name;
+
         let mut_value = match node.get_pin_mut_by_name("value_ref") {
             Some(val) => val,
             None => {
@@ -109,6 +125,7 @@ impl NodeLogic for GetVariable {
 
         mut_value.data_type = var_ref_variable.data_type.clone();
         mut_value.value_type = var_ref_variable.value_type.clone();
+        mut_value.schema = var_ref_variable.schema.clone();
 
         if immutable_value.connected_to.is_empty() {
             return;
@@ -118,7 +135,15 @@ impl NodeLogic for GetVariable {
 
         connected.retain(|conn| {
             board.get_pin_by_id(conn).is_some_and(|pin| {
-                pin.data_type == mut_value.data_type && pin.value_type == mut_value.value_type
+                // Check type and value_type match
+                if pin.data_type != mut_value.data_type || pin.value_type != mut_value.value_type {
+                    return false;
+                }
+                // If both have schemas, they must match
+                if mut_value.schema.is_some() && pin.schema.is_some() {
+                    return mut_value.schema == pin.schema;
+                }
+                true
             })
         });
 

@@ -2,17 +2,13 @@
 title: Rust WASM Nodes
 description: Create custom WASM nodes using Rust
 sidebar:
-  order: 1
+  order: 3
   badge:
-    text: Coming Soon
-    variant: caution
+    text: Recommended
+    variant: tip
 ---
 
-:::caution[Coming Soon]
-Custom WASM nodes are currently in development. This template previews the planned API.
-:::
-
-Rust is the **recommended language** for WASM nodes — it produces the smallest binaries and has the best WASM tooling.
+Rust is the **recommended language** for WASM nodes — it produces the smallest binaries and has the best WASM tooling. The Flow-Like SDK provides macros for zero-boilerplate node development.
 
 ## Prerequisites
 
@@ -24,20 +20,20 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustup target add wasm32-wasip1
 ```
 
-## Project Setup
+## Quick Start with SDK
 
-Create a new Rust library project:
+### Project Setup
 
 ```bash
-cargo new --lib my-custom-node
-cd my-custom-node
+cargo new --lib my-wasm-nodes
+cd my-wasm-nodes
 ```
 
 Update `Cargo.toml`:
 
 ```toml title="Cargo.toml"
 [package]
-name = "my-custom-node"
+name = "my-wasm-nodes"
 version = "0.1.0"
 edition = "2024"
 
@@ -45,181 +41,221 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
+flow-like-wasm-sdk = { git = "https://github.com/TM9657/flow-like", branch = "dev" }
 serde_json = "1"
 
 [profile.release]
-opt-level = "s"      # Optimize for size
-lto = true           # Link-time optimization
-strip = true         # Strip symbols
+opt-level = "s"
+lto = true
+strip = true
 ```
 
-## Template Code
+### Single Node Example
 
 ```rust title="src/lib.rs"
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use flow_like_wasm_sdk::*;
 
-// Node definition structures
-#[derive(Serialize)]
-struct NodeDefinition {
-    name: &'static str,
-    friendly_name: &'static str,
-    description: &'static str,
-    category: &'static str,
-    icon: Option<&'static str>,
-    pins: Vec<PinDefinition>,
-    scores: Option<NodeScores>,
+// Define the node using the macro
+node! {
+    name: "uppercase",
+    friendly_name: "Uppercase",
+    description: "Converts text to uppercase",
+    category: "Custom/Text",
+
+    inputs: {
+        exec: Exec,
+        text: String = "",
+    },
+
+    outputs: {
+        exec_out: Exec,
+        result: String,
+    },
 }
 
-#[derive(Serialize)]
-struct PinDefinition {
-    name: &'static str,
-    friendly_name: &'static str,
-    description: &'static str,
-    pin_type: &'static str,  // "Input" or "Output"
-    data_type: &'static str, // "Execution", "String", "Integer", etc.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    default_value: Option<serde_json::Value>,
-}
+// Implement the run logic
+run_node!(handle_run);
 
-#[derive(Serialize)]
-struct NodeScores {
-    privacy: u8,
-    security: u8,
-    performance: u8,
-    governance: u8,
-    reliability: u8,
-    cost: u8,
-}
-
-// Execution context (passed from Flow-Like runtime)
-#[derive(Deserialize)]
-struct ExecutionContext {
-    inputs: serde_json::Map<String, serde_json::Value>,
-}
-
-#[derive(Serialize)]
-struct ExecutionResult {
-    outputs: serde_json::Map<String, serde_json::Value>,
-    error: Option<String>,
-}
-
-// ============================================================
-// REQUIRED: Export get_node() - returns node definition as JSON
-// ============================================================
-#[no_mangle]
-pub extern "C" fn get_node() -> *const u8 {
-    let node = NodeDefinition {
-        name: "wasm_example_uppercase",
-        friendly_name: "Uppercase",
-        description: "Converts a string to uppercase",
-        category: "Custom/Text",
-        icon: Some("/flow/icons/text.svg"),
-        pins: vec![
-            PinDefinition {
-                name: "exec_in",
-                friendly_name: "▶",
-                description: "Trigger execution",
-                pin_type: "Input",
-                data_type: "Execution",
-                default_value: None,
-            },
-            PinDefinition {
-                name: "exec_out",
-                friendly_name: "▶",
-                description: "Continue execution",
-                pin_type: "Output",
-                data_type: "Execution",
-                default_value: None,
-            },
-            PinDefinition {
-                name: "input",
-                friendly_name: "Input",
-                description: "The string to convert",
-                pin_type: "Input",
-                data_type: "String",
-                default_value: Some(json!("")),
-            },
-            PinDefinition {
-                name: "output",
-                friendly_name: "Output",
-                description: "The uppercase string",
-                pin_type: "Output",
-                data_type: "String",
-                default_value: None,
-            },
-        ],
-        scores: Some(NodeScores {
-            privacy: 0,
-            security: 0,
-            performance: 1,
-            governance: 0,
-            reliability: 0,
-            cost: 0,
-        }),
-    };
-
-    let json = serde_json::to_string(&node).unwrap();
-    let bytes = json.into_bytes();
-    let ptr = bytes.as_ptr();
-    std::mem::forget(bytes); // Prevent deallocation
-    ptr
-}
-
-// ============================================================
-// REQUIRED: Export run() - executes node logic
-// ============================================================
-#[no_mangle]
-pub extern "C" fn run(context_ptr: *const u8, context_len: u32) -> *const u8 {
-    // Parse input context
-    let context_slice = unsafe {
-        std::slice::from_raw_parts(context_ptr, context_len as usize)
-    };
-    let context: ExecutionContext = match serde_json::from_slice(context_slice) {
-        Ok(ctx) => ctx,
-        Err(e) => {
-            return error_result(&format!("Failed to parse context: {}", e));
-        }
-    };
-
-    // Get input value
-    let input = context.inputs
-        .get("input")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-
-    // Execute logic
-    let output = input.to_uppercase();
-
-    // Return result
-    let mut outputs = serde_json::Map::new();
-    outputs.insert("output".to_string(), json!(output));
-
-    let result = ExecutionResult {
-        outputs,
-        error: None,
-    };
-
-    let json = serde_json::to_string(&result).unwrap();
-    let bytes = json.into_bytes();
-    let ptr = bytes.as_ptr();
-    std::mem::forget(bytes);
-    ptr
-}
-
-fn error_result(message: &str) -> *const u8 {
-    let result = ExecutionResult {
-        outputs: serde_json::Map::new(),
-        error: Some(message.to_string()),
-    };
-    let json = serde_json::to_string(&result).unwrap();
-    let bytes = json.into_bytes();
-    let ptr = bytes.as_ptr();
-    std::mem::forget(bytes);
-    ptr
+fn handle_run(mut ctx: Context) -> ExecutionResult {
+    let text = ctx.get_string("text").unwrap_or_default();
+    ctx.set_output("result", text.to_uppercase());
+    ctx.success()
 }
 ```
+
+### Multi-Node Package
+
+For packages with multiple related nodes:
+
+```rust title="src/lib.rs"
+use flow_like_wasm_sdk::*;
+
+package! {
+    nodes: [
+        {
+            name: "add",
+            friendly_name: "Add",
+            description: "Adds two numbers",
+            category: "Custom/Math",
+            inputs: { exec: Exec, a: I64 = 0, b: I64 = 0 },
+            outputs: { exec_out: Exec, result: I64 },
+        },
+        {
+            name: "subtract",
+            friendly_name: "Subtract",
+            description: "Subtracts two numbers",
+            category: "Custom/Math",
+            inputs: { exec: Exec, a: I64 = 0, b: I64 = 0 },
+            outputs: { exec_out: Exec, result: I64 },
+        },
+        {
+            name: "multiply",
+            friendly_name: "Multiply",
+            description: "Multiplies two numbers",
+            category: "Custom/Math",
+            inputs: { exec: Exec, a: I64 = 0, b: I64 = 0 },
+            outputs: { exec_out: Exec, result: I64 },
+        }
+    ]
+}
+
+// Each node needs a run function named run_{node_name}
+#[no_mangle]
+pub extern "C" fn run_add(ptr: i32, len: i32) -> i64 {
+    run_with_handler(ptr, len, |mut ctx| {
+        let a = ctx.get_i64("a").unwrap_or(0);
+        let b = ctx.get_i64("b").unwrap_or(0);
+        ctx.set_output("result", a + b);
+        ctx.success()
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn run_subtract(ptr: i32, len: i32) -> i64 {
+    run_with_handler(ptr, len, |mut ctx| {
+        let a = ctx.get_i64("a").unwrap_or(0);
+        let b = ctx.get_i64("b").unwrap_or(0);
+        ctx.set_output("result", a - b);
+        ctx.success()
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn run_multiply(ptr: i32, len: i32) -> i64 {
+    run_with_handler(ptr, len, |mut ctx| {
+        let a = ctx.get_i64("a").unwrap_or(0);
+        let b = ctx.get_i64("b").unwrap_or(0);
+        ctx.set_output("result", a * b);
+        ctx.success()
+    })
+}
+```
+
+## Package Manifest
+
+Create `manifest.toml` alongside your code:
+
+```toml title="manifest.toml"
+manifest_version = 1
+id = "com.example.math-utils"
+name = "Math Utilities"
+version = "1.0.0"
+description = "Common math operations"
+
+[[authors]]
+name = "Your Name"
+
+[permissions]
+memory = "minimal"
+timeout = "quick"
+
+[[nodes]]
+id = "add"
+name = "Add"
+description = "Adds two numbers"
+category = "Custom/Math"
+
+[[nodes]]
+id = "subtract"
+name = "Subtract"
+description = "Subtracts two numbers"
+category = "Custom/Math"
+
+[[nodes]]
+id = "multiply"
+name = "Multiply"
+description = "Multiplies two numbers"
+category = "Custom/Math"
+```
+
+## SDK API Reference
+
+### Context Methods
+
+```rust
+// Get input values
+ctx.get_string("pin_name") -> Option<String>
+ctx.get_i64("pin_name") -> Option<i64>
+ctx.get_f64("pin_name") -> Option<f64>
+ctx.get_bool("pin_name") -> Option<bool>
+ctx.get_json("pin_name") -> Option<serde_json::Value>
+ctx.get_bytes("pin_name") -> Option<Vec<u8>>
+
+// Set output values
+ctx.set_output("pin_name", value)
+
+// Execution control
+ctx.success() -> ExecutionResult
+ctx.error(message) -> ExecutionResult
+```
+
+### Logging
+
+```rust
+use flow_like_wasm_sdk::log;
+
+log::debug("Debug message");
+log::info("Info message");
+log::warn("Warning message");
+log::error("Error message");
+```
+
+### Variables
+
+```rust
+use flow_like_wasm_sdk::var;
+
+// Get/set execution variables
+let value = var::get_variable("my_var");
+var::set_variable("my_var", json!({"key": "value"}));
+```
+
+### Streaming Output
+
+```rust
+use flow_like_wasm_sdk::stream;
+
+// Stream progress updates
+stream::stream_progress(50, "Processing...");
+
+// Stream text
+stream::stream_text("Partial output...");
+
+// Stream JSON
+stream::stream_json(json!({"status": "working"}));
+```
+
+## Pin Types
+
+| Type | Rust Type | Default |
+|------|-----------|---------|
+| `Exec` | `()` | - |
+| `String` | `String` | `""` |
+| `I64` | `i64` | `0` |
+| `F64` | `f64` | `0.0` |
+| `Bool` | `bool` | `false` |
+| `Json` | `serde_json::Value` | `null` |
+| `Bytes` | `Vec<u8>` | `[]` |
 
 ## Build
 
@@ -227,7 +263,7 @@ fn error_result(message: &str) -> *const u8 {
 cargo build --release --target wasm32-wasip1
 ```
 
-Output: `target/wasm32-wasip1/release/my_custom_node.wasm`
+Output: `target/wasm32-wasip1/release/my_wasm_nodes.wasm`
 
 ## Optimize (Optional)
 
@@ -237,53 +273,80 @@ Install `wasm-opt` for smaller binaries:
 # macOS
 brew install binaryen
 
-# Optimize
-wasm-opt -Os -o optimized.wasm target/wasm32-wasip1/release/my_custom_node.wasm
+# Linux
+apt install binaryen
+
+# Optimize (can reduce size by 20-40%)
+wasm-opt -Os -o optimized.wasm target/wasm32-wasip1/release/my_wasm_nodes.wasm
 ```
 
-## Install
+## Install & Test
 
-Copy the `.wasm` file to your Flow-Like nodes directory:
+### Local Testing
 
 ```bash
-cp target/wasm32-wasip1/release/my_custom_node.wasm ~/.flow-like/nodes/
+# Copy to Flow-Like nodes directory
+cp target/wasm32-wasip1/release/my_wasm_nodes.wasm ~/.flow-like/nodes/
+cp manifest.toml ~/.flow-like/nodes/my_wasm_nodes.toml
 ```
 
-## Advanced: Multiple Nodes per Module
+### Publishing
 
-You can export multiple nodes from a single WASM module:
+```bash
+# Publish to registry (requires API key)
+flow-like publish ./target/wasm32-wasip1/release/my_wasm_nodes.wasm
+```
+
+## Advanced: HTTP Requests
+
+For nodes that need network access, declare it in the manifest:
+
+```toml
+[permissions.network]
+http_enabled = true
+allowed_hosts = ["api.example.com"]
+```
+
+Then use the host functions:
 
 ```rust
-#[no_mangle]
-pub extern "C" fn get_nodes() -> *const u8 {
-    let nodes = vec![
-        get_uppercase_node(),
-        get_lowercase_node(),
-        get_trim_node(),
-    ];
+use flow_like_wasm_sdk::http;
 
-    let json = serde_json::to_string(&nodes).unwrap();
-    // ... return pointer
+fn handle_run(mut ctx: Context) -> ExecutionResult {
+    let response = http::get("https://api.example.com/data")?;
+    ctx.set_output("result", response);
+    ctx.success()
 }
 ```
 
-## Advanced: Async Operations
+## Advanced: OAuth Access
 
-For long-running operations, return a "pending" status and poll:
+For nodes requiring OAuth:
+
+```toml
+[[permissions.oauth_scopes]]
+provider = "google"
+scopes = ["https://www.googleapis.com/auth/drive.readonly"]
+reason = "Access Google Drive files"
+required = true
+
+[[nodes]]
+id = "list_files"
+oauth_providers = ["google"]
+```
 
 ```rust
-#[derive(Serialize)]
-struct ExecutionResult {
-    outputs: serde_json::Map<String, serde_json::Value>,
-    error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pending: Option<bool>,
+use flow_like_wasm_sdk::auth;
+
+fn handle_run(mut ctx: Context) -> ExecutionResult {
+    let token = auth::get_oauth_access_token("google")?;
+    // Use token for API calls...
+    ctx.success()
 }
 ```
 
 ## Related
 
+→ [Package Manifest](/dev/wasm-nodes/manifest/) — Full manifest reference
 → [WASM Nodes Overview](/dev/wasm-nodes/overview/)
 → [Writing Native Rust Nodes](/dev/writing-nodes/)
-→ [Go Template](/dev/wasm-nodes/go/)
-→ [TypeScript Template](/dev/wasm-nodes/typescript/)

@@ -96,6 +96,10 @@ pub enum Relation {
     TechnicalUser,
     #[sea_orm(has_many = "super::template::Entity")]
     Template,
+    #[sea_orm(has_many = "super::widget::Entity")]
+    Widget,
+    #[sea_orm(has_many = "super::page::Entity")]
+    Page,
 }
 
 impl Related<super::board_sync::Entity> for Entity {
@@ -179,6 +183,18 @@ impl Related<super::technical_user::Entity> for Entity {
 impl Related<super::template::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Template.def()
+    }
+}
+
+impl Related<super::widget::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Widget.def()
+    }
+}
+
+impl Related<super::page::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Page.def()
     }
 }
 

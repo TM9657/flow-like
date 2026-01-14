@@ -1,0 +1,32 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+---
+
+<section class="relative py-28">
+  <div class="mx-auto max-w-4xl px-6 lg:px-8 text-center">
+    <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+      {t("bi.cta.tagline")}
+    </p>
+    <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-6">
+      {t("bi.cta.headline")}
+    </h2>
+    <p class="text-lg text-muted-foreground mb-10 max-w-xl mx-auto">
+      {t("bi.cta.description")}
+    </p>
+
+    <a href="/download" class="inline-flex items-center gap-3 px-8 py-4 bg-primary text-primary-foreground rounded-full font-medium text-lg hover:bg-primary/90 transition-colors">
+      {t("bi.cta.button")}
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+    </a>
+
+    <p class="text-sm text-muted-foreground mt-6">
+      {t("bi.cta.note")}
+    </p>
+  </div>
+</section>

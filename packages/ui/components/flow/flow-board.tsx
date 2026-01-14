@@ -31,6 +31,7 @@ import "@xyflow/react/dist/style.css";
 import { useMediaQuery } from "@uidotdev/usehooks";
 import {
 	ArrowBigLeftDashIcon,
+	FileTextIcon,
 	HistoryIcon,
 	LayoutTemplateIcon,
 	NotebookPenIcon,
@@ -72,6 +73,7 @@ import {
 	FlowNodeInfoOverlay,
 	type FlowNodeInfoOverlayHandle,
 } from "../../components/flow/flow-node/flow-node-info-overlay";
+import { FlowPages } from "../../components/flow/flow-pages";
 import { Traces } from "../../components/flow/traces";
 import {
 	Variable,
@@ -100,6 +102,7 @@ import {
 	moveNodeCommand,
 	updateNodeCommand,
 	upsertCommentCommand,
+	upsertVariableCommand,
 } from "../../lib";
 import {
 	handleConnection,
@@ -483,6 +486,7 @@ export function FlowBoard({
 	const [varsOpen, setVarsOpen] = useState(false);
 	const [runsOpen, setRunsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
+	const [pagesOpen, setPagesOpen] = useState(false);
 	const [copilotOpen, setCopilotOpen] = useState(false);
 	const [copilotInitialPrompt, setCopilotInitialPrompt] = useState<
 		string | undefined
@@ -497,6 +501,16 @@ export function FlowBoard({
 		setRunsOpen,
 		setLogsOpen,
 	});
+
+	const togglePages = useCallback(() => {
+		if (isMobile) {
+			setPagesOpen((v) => !v);
+		} else {
+			// For desktop, we use the runs panel area to show pages
+			// Toggle the runs panel if needed, or just open the sheet
+			setPagesOpen((v) => !v);
+		}
+	}, [isMobile]);
 
 	// Clear selections when version changes
 	useEffect(() => {
@@ -912,6 +926,18 @@ export function FlowBoard({
 			document.removeEventListener("paste", handlePasteCB);
 		};
 	}, [nodes]);
+
+	// Keyboard shortcut: Cmd/Ctrl+Shift+P to toggle pages panel
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "p") {
+				e.preventDefault();
+				setPagesOpen((v) => !v);
+			}
+		};
+		document.addEventListener("keydown", handleKeyDown);
+		return () => document.removeEventListener("keydown", handleKeyDown);
+	}, []);
 
 	useEffect(() => {
 		document.addEventListener("flow-drop", handleDrop);
@@ -1584,6 +1610,12 @@ export function FlowBoard({
 						closeMeta={() => setEditBoard(false)}
 						version={version}
 						selectVersion={(version) => setVersion(version)}
+						onPageClick={(pageId) => {
+							setEditBoard(false);
+							router.push(
+								`/page-builder?id=${pageId}&app=${appId}&board=${boardId}`,
+							);
+						}}
 					/>
 				)}
 				<FlowDock
@@ -1621,6 +1653,13 @@ export function FlowBoard({
 							title: "Manage Board",
 							onClick: async () => {
 								setEditBoard(true);
+							},
+						},
+						{
+							icon: <FileTextIcon />,
+							title: "Pages",
+							onClick: async () => {
+								togglePages();
 							},
 						},
 						{
@@ -1716,6 +1755,11 @@ export function FlowBoard({
 								}}
 								onNodePlace={async (node) => {
 									await placeNode(node);
+								}}
+								onCreateVariable={async (variable) => {
+									const command = upsertVariableCommand({ variable });
+									await executeCommand(command, false);
+									setDroppedPin(undefined);
 								}}
 							>
 								<div
@@ -2008,6 +2052,21 @@ export function FlowBoard({
 								No run selected yet. Start a run to view logs here.
 							</div>
 						)}
+					</SheetContent>
+				</Sheet>
+				{/* Pages Sheet */}
+				<Sheet open={pagesOpen} onOpenChange={setPagesOpen}>
+					<SheetContent side="right" className="w-[400px] sm:w-[540px] p-0">
+						<FlowPages
+							appId={appId}
+							boardId={boardId}
+							onOpenPage={(pageId, bId) => {
+								setPagesOpen(false);
+								router.push(
+									`/page-builder?id=${pageId}&app=${appId}&board=${bId}`,
+								);
+							}}
+						/>
 					</SheetContent>
 				</Sheet>
 				{/* Mobile FlowPilot Sheet */}

@@ -45,6 +45,7 @@ impl ToProto<flow_like_types::proto::Event> for Event {
             created_at: Some(Timestamp::from(self.created_at)),
             updated_at: Some(Timestamp::from(self.updated_at)),
             event_type: self.event_type.clone(),
+            default_page_id: self.default_page_id.clone(),
         }
     }
 }
@@ -107,6 +108,7 @@ impl FromProto<flow_like_types::proto::Event> for Event {
                 .map(|t| SystemTime::try_from(t).unwrap_or(SystemTime::UNIX_EPOCH))
                 .unwrap_or(SystemTime::UNIX_EPOCH),
             event_type: proto.event_type,
+            default_page_id: proto.default_page_id,
         }
     }
 }

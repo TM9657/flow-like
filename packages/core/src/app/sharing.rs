@@ -1030,6 +1030,8 @@ mod tests {
             frontend: None,
             price: None,
             app_state: Some(state),
+            widget_ids: vec![],
+            page_ids: vec![],
         }
     }
 

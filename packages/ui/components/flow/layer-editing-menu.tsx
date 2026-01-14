@@ -88,6 +88,7 @@ type PinEdit = {
 	pin_type: IPinType;
 	index: number;
 	value_type: IValueType;
+	default_value?: number[] | null;
 };
 
 function selectPreviewElement(type: IVariableType) {
@@ -182,6 +183,7 @@ const buildInitialEdits = (
 			pin_type: pin.pin_type,
 			index: pin.index ?? 1,
 			value_type: normalizeValueType(p?.value_type ?? p?.valueType),
+			default_value: p?.default_value ?? null,
 		};
 	}
 	return out;
@@ -303,6 +305,7 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 				pin_type,
 				index: group.length + 1,
 				value_type: IValueType.Normal,
+				default_value: null,
 			};
 			return { ...prev, [id]: next };
 		});
@@ -361,7 +364,7 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 				index: zeroIndexed ? (edit.index ?? 0) + 1 : (edit.index ?? 1),
 				connected_to: prev?.connected_to ?? [],
 				depends_on: prev?.depends_on ?? [],
-				default_value: prev?.default_value ?? null,
+				default_value: edit.default_value ?? null,
 				data_type: edit.data_type,
 				description: edit.description ?? "",
 				friendly_name: edit.friendly_name ?? edit.name,
@@ -889,7 +892,7 @@ const SortablePinRow: React.FC<{
 				</Button>
 			</div>
 			{expanded && (
-				<div className="p-2">
+				<div className="p-2 space-y-3">
 					<div className="space-y-1.5">
 						<Label className="text-xs">Description</Label>
 						<Input

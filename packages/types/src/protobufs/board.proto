@@ -7,6 +7,7 @@ import "node.proto";
 import "pin.proto";
 import "variable.proto";
 import "comment.proto";
+import "a2ui.proto";
 
 enum ExecutionStage {
   DEV = 0;
@@ -74,4 +75,5 @@ message Board {
   google.protobuf.Timestamp created_at = 16;
   google.protobuf.Timestamp updated_at = 17;
   map<string, Layer> layers = 18;
+  repeated string page_ids = 19;
 }

@@ -51,6 +51,9 @@ pub struct Event {
     pub event_version: (u32, u32, u32),
     pub created_at: std::time::SystemTime,
     pub updated_at: std::time::SystemTime,
+
+    // A2UI: default page to render for this event
+    pub default_page_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]

@@ -13,8 +13,10 @@ pub use context::{
 };
 pub use provider::CatalogProvider;
 pub use tools::{
-    CatalogTool, EmitCommandsTool, FilterCategoryTool, GetNodeDetailsTool, QueryLogsTool,
-    SearchByPinTool, SearchTemplatesTool, get_tool_description,
+    CatalogTool, EmitCommandsArgs, EmitCommandsTool, FilterCategoryArgs, FilterCategoryTool,
+    GetNodeDetailsArgs, GetNodeDetailsTool, QueryLogsArgs, QueryLogsTool, SearchArgs,
+    SearchByPinArgs, SearchByPinTool, SearchTemplatesArgs, SearchTemplatesTool, ThinkingArgs,
+    get_tool_description,
 };
 pub use types::{
     AgentType, BoardCommand, ChatImage, ChatMessage, ChatRole, Connection, CopilotResponse, Edge,
@@ -46,10 +48,7 @@ use crate::profile::Profile;
 use crate::state::FlowLikeState;
 use flow_like_model_provider::provider::ModelProvider;
 
-use tools::{
-    EmitCommandsArgs, FilterCategoryArgs, GetNodeDetailsArgs, QueryLogsArgs, SearchArgs,
-    SearchByPinArgs, SearchTemplatesArgs, ThinkingArgs,
-};
+// Note: Tool args types are re-exported publicly from `pub use tools::{ ... }` above
 
 /// The main Copilot struct that provides AI-powered graph editing
 pub struct Copilot {
@@ -288,6 +287,25 @@ impl Copilot {
         let mut plan_step_counter = 0u32;
 
         for iteration in 0..max_iterations {
+            // Send iteration start event
+            if let Some(ref callback) = on_token {
+                plan_step_counter += 1;
+                let step_event = StreamEvent::PlanStep(PlanStep {
+                    id: format!("iteration_{}", iteration),
+                    description: if iteration == 0 {
+                        "Analyzing request...".to_string()
+                    } else {
+                        "Processing tool results...".to_string()
+                    },
+                    status: PlanStepStatus::InProgress,
+                    tool_name: Some("analyze".to_string()),
+                });
+                callback(format!(
+                    "<plan_step>{}</plan_step>",
+                    serde_json::to_string(&step_event).unwrap_or_default()
+                ));
+            }
+
             // Build completion request - tools are already attached via agent builder
             let request = agent
                 .completion(prompt.clone(), current_history.clone())
@@ -376,6 +394,24 @@ impl Copilot {
                     description: current_reasoning.trim().to_string(),
                     status: PlanStepStatus::Completed,
                     tool_name: Some("think".to_string()),
+                });
+                callback(format!(
+                    "<plan_step>{}</plan_step>",
+                    serde_json::to_string(&step_event).unwrap_or_default()
+                ));
+            }
+
+            // Mark iteration analysis as complete
+            if let Some(ref callback) = on_token {
+                let step_event = StreamEvent::PlanStep(PlanStep {
+                    id: format!("iteration_{}", iteration),
+                    description: if iteration == 0 {
+                        "Analysis complete".to_string()
+                    } else {
+                        "Tool results processed".to_string()
+                    },
+                    status: PlanStepStatus::Completed,
+                    tool_name: Some("analyze".to_string()),
                 });
                 callback(format!(
                     "<plan_step>{}</plan_step>",

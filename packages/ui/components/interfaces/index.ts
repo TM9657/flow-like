@@ -1,3 +1,4 @@
+export * from "./a2ui-interface";
 export * from "./chat-default";
 export * from "./configs/api";
 export * from "./configs/simple_chat";
@@ -18,3 +19,4 @@ export type {
 	IUseInterfaceProps,
 } from "./interfaces";
 export * from "./no-default";
+export * from "./page-interface";

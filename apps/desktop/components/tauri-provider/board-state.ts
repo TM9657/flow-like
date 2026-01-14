@@ -1,7 +1,6 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import {
-	type ChatMessage,
-	type CopilotResponse,
+	type CopilotScope,
 	type IBoard,
 	type IBoardState,
 	IConnectionMode,
@@ -18,11 +17,15 @@ import {
 	type IRunPayload,
 	type ISettingsProfile,
 	type IVersionType,
+	type UIActionContext,
+	type UnifiedChatMessage,
+	type UnifiedCopilotResponse,
 	checkOAuthTokens,
 	injectDataFunction,
 	isEqual,
 } from "@tm9657/flow-like-ui";
 import type { IJwks, IRealtimeAccess } from "@tm9657/flow-like-ui";
+import type { SurfaceComponent } from "@tm9657/flow-like-ui/components/a2ui/types";
 import { isObject } from "lodash-es";
 import { toast } from "sonner";
 import { fetcher, streamFetcher } from "../../lib/api";
@@ -707,18 +710,21 @@ export class BoardState implements IBoardState {
 		offset?: number,
 		limit?: number,
 	): Promise<ILogMetadata[]> {
+		let localRuns: ILogMetadata[] = [];
 		// Fetch local runs
-		const localRuns: ILogMetadata[] = await invoke("list_runs", {
-			appId: appId,
-			boardId: boardId,
-			nodeId: nodeId,
-			from: from,
-			to: to,
-			status: status,
-			limit: limit,
-			offset: offset,
-			lastMeta: lastMeta,
-		});
+		try {
+			localRuns = await invoke("list_runs", {
+				appId: appId,
+				boardId: boardId,
+				nodeId: nodeId,
+				from: from,
+				to: to,
+				status: status,
+				limit: limit,
+				offset: offset,
+				lastMeta: lastMeta,
+			});
+		} catch (e) {}
 
 		// Mark local runs
 		for (const run of localRuns) {
@@ -1035,17 +1041,62 @@ export class BoardState implements IBoardState {
 		return returnValue;
 	}
 
-	async flowpilot_chat(
-		board: IBoard,
+	async getExecutionElements(
+		appId: string,
+		boardId: string,
+		pageId: string,
+		wildcard = false,
+	): Promise<Record<string, unknown>> {
+		// Try local execution first
+		const localElements = await invoke<Record<string, unknown>>("get_execution_elements", {
+			boardId,
+			pageId,
+			wildcard,
+		});
+
+		// For offline apps or if we have local elements, return them
+		const isOffline = await this.backend.isOffline(appId);
+		if (isOffline || Object.keys(localElements).length > 0) {
+			return localElements;
+		}
+
+		// Try remote API if online and no local elements
+		if (this.backend.profile && this.backend.auth) {
+			try {
+				const params = new URLSearchParams();
+				params.set("page_id", pageId);
+				if (wildcard) params.set("wildcard", "true");
+
+				const response = await fetcher<{ elements: Record<string, unknown> }>(
+					this.backend.profile,
+					`apps/${appId}/board/${boardId}/elements?${params.toString()}`,
+					{ method: "GET" },
+					this.backend.auth,
+				);
+				return response.elements;
+			} catch (error) {
+				console.warn("Failed to fetch execution elements from API:", error);
+			}
+		}
+
+		return localElements;
+	}
+
+	async copilot_chat(
+		scope: CopilotScope,
+		board: IBoard | null,
 		selectedNodeIds: string[],
+		currentSurface: SurfaceComponent[] | null,
+		selectedComponentIds: string[],
 		userPrompt: string,
-		history: ChatMessage[],
+		history: UnifiedChatMessage[],
 		onToken?: (token: string) => void,
 		modelId?: string,
 		token?: string,
 		runContext?: IRunContext,
-	): Promise<CopilotResponse> {
-		console.log("[flowpilot_chat] Calling with runContext:", runContext);
+		actionContext?: UIActionContext,
+	): Promise<UnifiedCopilotResponse> {
+		console.log("[copilot_chat] Calling with scope:", scope, "runContext:", runContext);
 
 		const channel = new Channel<string>();
 		if (onToken) {
@@ -1054,15 +1105,19 @@ export class BoardState implements IBoardState {
 
 		const actualToken = token ?? this.backend.auth?.user?.access_token;
 
-		return await invoke("flowpilot_chat", {
+		return await invoke("copilot_chat", {
+			scope,
 			board,
 			selectedNodeIds,
+			currentSurface,
+			selectedComponentIds,
 			userPrompt,
 			history,
 			modelId,
 			channel,
 			token: actualToken,
 			runContext,
+			actionContext,
 		});
 	}
 }

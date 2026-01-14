@@ -9,10 +9,12 @@ export function VariableConfigCard({
 	disabled,
 	variable,
 	onUpdate,
+	refs,
 }: Readonly<{
 	disabled?: boolean;
 	variable: IVariable;
 	onUpdate: (variable: IVariable) => Promise<void>;
+	refs?: Record<string, string>;
 }>) {
 	return (
 		<div className="border rounded-lg p-5 bg-card hover:bg-accent/5 transition-all duration-200 group">
@@ -43,6 +45,7 @@ export function VariableConfigCard({
 					<VariablesMenuEdit
 						disabled={disabled}
 						variable={variable}
+						refs={refs}
 						updateVariable={async (updatedVariable) => {
 							console.log(parseUint8ArrayToJson(updatedVariable.default_value));
 							await onUpdate(updatedVariable);

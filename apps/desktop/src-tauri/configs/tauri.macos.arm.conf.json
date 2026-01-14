@@ -9,8 +9,7 @@
             "binaries/mac/arm/libggml-rpc.dylib",
             "binaries/mac/arm/libggml.dylib",
             "binaries/mac/arm/libllama.dylib",
-            "binaries/mac/arm/llama-server",
-            "bin/flow-docling"
+            "binaries/mac/arm/llama-server"
         ],
         "resources": {
             "icons/Assets.car": "Assets.car",

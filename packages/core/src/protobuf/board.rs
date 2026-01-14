@@ -100,6 +100,7 @@ impl ToProto<flow_like_types::proto::Board> for Board {
                 .iter()
                 .map(|(layer_id, layer)| (layer_id.clone(), layer.to_proto()))
                 .collect(),
+            page_ids: self.page_ids.clone(),
             viewport_x: self.viewport.0,
             viewport_y: self.viewport.1,
             viewport_zoom: self.viewport.2,
@@ -147,6 +148,7 @@ impl FromProto<flow_like_types::proto::Board> for Board {
                 .into_iter()
                 .map(|(layer_id, layer)| (layer_id, Layer::from_proto(layer)))
                 .collect(),
+            page_ids: proto.page_ids,
             stage: ExecutionStage::from_proto(proto.stage),
             log_level: LogLevel::from_proto(proto.log_level),
             refs: proto.refs,
@@ -159,7 +161,7 @@ impl FromProto<flow_like_types::proto::Board> for Board {
                 .map(|t| SystemTime::try_from(t).unwrap_or(SystemTime::UNIX_EPOCH))
                 .unwrap_or(SystemTime::UNIX_EPOCH),
             parent: None,
-            board_dir: Path::from("/default"), // Placeholder, set as needed
+            board_dir: Path::from("/default"),
             logic_nodes: HashMap::new(),
             app_state: None,
         }

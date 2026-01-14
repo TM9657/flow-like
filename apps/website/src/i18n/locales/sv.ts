@@ -212,6 +212,18 @@ export const sv = {
 	"reading.viewall": "Alla artiklar",
 	"reading.viewall.mobile": "Se alla",
 
+	// Newsletter
+	"newsletter.tagline": "Håll dig uppdaterad",
+	"newsletter.headline": "Få automatiseringsinsikter",
+	"newsletter.description": "Prenumerera på vårt nyhetsbrev för att få de senaste uppdateringarna om Flow-Like, best practices för automatisering och branschinsikter. Ingen spam — bara värdefullt innehåll.",
+	"newsletter.email.label": "E-postadress",
+	"newsletter.email.placeholder": "Ange din e-post",
+	"newsletter.button": "Prenumerera",
+	"newsletter.optin": "Jag godkänner att ta emot e-postuppdateringar och accepterar integritetspolicyn",
+	"newsletter.privacy": "Vi använder Brevo som marknadsföringsplattform. Genom att skicka detta formulär godkänner du att dina uppgifter behandlas enligt Brevos integritetspolicy.",
+	"newsletter.success": "Tack för din prenumeration! Kolla din inkorg för att bekräfta.",
+	"newsletter.error": "Något gick fel. Försök igen senare.",
+
 	// Footer & Navigation
 	"nav.download": "Ladda ner",
 	"nav.docs": "Dokumentation",

@@ -31,6 +31,8 @@ pub mod user_management;
 pub mod backend_jwt;
 pub mod execution;
 
+pub use routes::registry::ServerRegistry;
+
 #[cfg(feature = "kubernetes")]
 pub mod kubernetes;
 
@@ -55,10 +57,12 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/auth", routes::auth::routes())
         .nest("/oauth", routes::oauth::routes())
         .nest("/chat", routes::chat::routes())
+        .nest("/ai", routes::ai::routes())
         .nest("/admin", routes::admin::routes())
         .nest("/tmp", routes::tmp::routes())
         .nest("/solution", routes::solution::routes())
         .nest("/execution", routes::execution::routes())
+        .nest("/registry", routes::registry::routes())
         .route("/webhook/stripe", post(routes::webhook::stripe_webhook))
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }))

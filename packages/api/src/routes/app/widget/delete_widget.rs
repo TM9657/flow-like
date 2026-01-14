@@ -1,0 +1,48 @@
+use crate::{
+    ensure_permission, entity::widget, error::ApiError, middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions, state::AppState,
+};
+use axum::{
+    Extension, Json,
+    extract::{Path, State},
+};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+#[tracing::instrument(
+    name = "DELETE /apps/{app_id}/widgets/{widget_id}",
+    skip(state, user)
+)]
+pub async fn delete_widget(
+    State(state): State<AppState>,
+    Extension(user): Extension<AppUser>,
+    Path((app_id, widget_id)): Path<(String, String)>,
+) -> Result<Json<()>, ApiError> {
+    ensure_permission!(user, &app_id, &state, RolePermissions::WriteWidgets);
+
+    let mut app = state
+        .scoped_app(
+            &user.sub()?,
+            &app_id,
+            &state,
+            crate::credentials::CredentialsAccess::EditApp,
+        )
+        .await?;
+
+    // Delete from bucket storage
+    app.delete_widget(&widget_id).await?;
+
+    app.widget_ids.retain(|id| id != &widget_id);
+    app.save().await?;
+
+    // Delete from DB (cascades to meta)
+    widget::Entity::delete_many()
+        .filter(
+            widget::Column::AppId
+                .eq(app_id.clone())
+                .and(widget::Column::Id.eq(widget_id.clone())),
+        )
+        .exec(&state.db)
+        .await?;
+
+    Ok(Json(()))
+}

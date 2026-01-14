@@ -64,6 +64,10 @@ impl Cacheable for LanceDBVectorStore {
     }
 }
 impl LanceDBVectorStore {
+    pub fn table_name(&self) -> &str {
+        &self.table_name
+    }
+
     pub async fn new(path: PathBuf, table_name: String) -> Result<Self> {
         let connection = connect(path.to_str().unwrap()).execute().await.ok();
         let connection: Connection = connection.ok_or(anyhow!("Error connecting to LanceDB"))?;

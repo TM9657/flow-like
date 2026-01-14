@@ -6,6 +6,11 @@ edition = "2024"
 [features]
 default = []
 local-ml = ["flow-like-catalog-core/local-ml"]
+# Data lake formats
+delta = ["flow-like-storage/delta"]
+# Feature bundles
+all-lakes = ["delta"]
+full = ["all-lakes"]
 
 [dependencies]
 flow-like-catalog-core.workspace = true

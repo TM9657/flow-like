@@ -1,7 +1,7 @@
 import { Button } from "@tm9657/flow-like-ui";
 import { useEffect, useState } from "react";
 import { BsDiscord, BsGithub, BsTwitterX } from "react-icons/bs";
-import { LuBookHeart, LuBookMarked, LuDownload, LuZap } from "react-icons/lu";
+import { LuBookHeart, LuBookMarked, LuDownload, LuZap, LuScale } from "react-icons/lu";
 import { translationsCommon } from "../i18n/locales/pages/common";
 
 type Lang =
@@ -68,6 +68,12 @@ export function Header() {
 					>
 						<LuZap className="w-5 h-5" />
 						<span className="hidden md:inline">{t("header.24h")}</span>
+					</Button>
+				</a>
+				<a href="/compare">
+					<Button variant={"outline"}>
+						<LuScale className="w-5 h-5" />
+						<span className="hidden lg:inline">{t("header.compare")}</span>
 					</Button>
 				</a>
 				<a href="/blog/">

@@ -13,6 +13,7 @@ export interface IBoard {
 	variables: { [key: string]: IVariable };
 	version: number[];
 	viewport: number[];
+	page_ids: string[];
 	[property: string]: any;
 }
 
@@ -175,6 +176,7 @@ export interface IVariable {
 	hash?: number | null;
 	id: string;
 	name: string;
+	schema?: null | string;
 	secret: boolean;
 	value_type: IValueType;
 	[property: string]: any;

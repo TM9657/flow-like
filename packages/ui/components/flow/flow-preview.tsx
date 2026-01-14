@@ -100,6 +100,7 @@ function FlowPreviewInner({ nodes }: Readonly<{ nodes: INode[] }>) {
 			version: [0, 0, 0],
 			variables: {},
 			viewport: [0, 0, 0, 0],
+			page_ids: [],
 		};
 
 		const parsedBoard = parseBoard(

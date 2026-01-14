@@ -137,7 +137,7 @@ export default function Page() {
 					{allItems.map((meta) => (
 						<div key={`left${meta.id}`} className="group">
 							<AppCard
-								apps={allItems as any}
+								isOwned
 								app={meta.app}
 								metadata={meta as IMetadata}
 								variant="small"

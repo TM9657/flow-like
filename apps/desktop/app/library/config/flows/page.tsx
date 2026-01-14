@@ -34,6 +34,7 @@ import {
 import {
 	Calendar,
 	ExternalLink,
+	FileText,
 	PlusCircleIcon,
 	SquareMousePointerIcon,
 	Trash2,
@@ -338,6 +339,10 @@ function BoardCard({
 }>) {
 	const backend = useBackend();
 	const router = useRouter();
+	const pages = useInvoke(backend.pageState.getPages, backend.pageState, [
+		app.id,
+		board.id,
+	]);
 	const handleBoardClick = async () => {
 		await invoke("get_app_board", {
 			appId: app.id,
@@ -422,6 +427,10 @@ function BoardCard({
 							<div className="flex items-center space-x-1">
 								<VariableIcon className="h-3 w-3" />
 								<span>{Object.keys(board.variables).length}</span>
+							</div>
+							<div className="flex items-center space-x-1">
+								<FileText className="h-3 w-3" />
+								<span>{pages.data?.length ?? 0}</span>
 							</div>
 						</div>
 						<div className="flex items-center space-x-1 text-xs text-muted-foreground">

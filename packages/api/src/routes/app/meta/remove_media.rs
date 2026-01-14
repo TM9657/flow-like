@@ -67,7 +67,7 @@ pub async fn remove_media(
     if let Err(e) = master_store.as_generic().delete(&path).await {
         tracing::error!("Failed to delete media file at {}: {:?}", path, e);
         return Err(ApiError::InternalError(
-            anyhow!("Failed to delete media file, reference ID: {}", create_id()).into(),
+            anyhow!("Failed to delete media file, reference ID: {}", create_id()),
         ));
     }
     txn.commit().await?;

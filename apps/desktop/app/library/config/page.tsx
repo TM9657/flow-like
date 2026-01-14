@@ -1,5 +1,6 @@
 "use client";
 import {
+	AppGeneralSettings,
 	Badge,
 	Button,
 	Card,
@@ -22,13 +23,13 @@ import {
 	SelectTrigger,
 	SelectValue,
 	Textarea,
+	TextEditor,
 	VerificationDialog,
 	toastError,
 	useBackend,
 	useInvalidateInvoke,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
-import { TextEditor } from "@tm9657/flow-like-ui";
 import { isEqual } from "lodash-es";
 import {
 	BombIcon,

@@ -1,0 +1,125 @@
+"use client";
+
+import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
+import type { IIntercomEvent, INotificationEvent } from "@tm9657/flow-like-ui";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { useAuth } from "react-oidc-context";
+import { toast } from "sonner";
+import { addLocalNotification } from "../lib/notifications-db";
+
+type NotificationPermission = "granted" | "denied" | "default";
+type NotificationApi = {
+	isPermissionGranted: () => Promise<boolean>;
+	requestPermission: () => Promise<NotificationPermission>;
+	sendNotification: (options: { title: string; body?: string }) => void;
+};
+
+async function loadNotificationPlugin(): Promise<NotificationApi | null> {
+	try {
+		const mod = await import("@tauri-apps/plugin-notification");
+		return {
+			isPermissionGranted: mod.isPermissionGranted,
+			requestPermission: mod.requestPermission,
+			sendNotification: mod.sendNotification,
+		};
+	} catch {
+		return null;
+	}
+}
+
+interface NotificationProviderProps {
+	appId?: string;
+}
+
+export default function NotificationProvider({ appId }: NotificationProviderProps = {}) {
+	const auth = useAuth();
+	const queryClient = useQueryClient();
+	// Use a constant for offline/unauthenticated users
+	const userId = auth.user?.profile?.sub ?? "offline-user";
+	const notificationApi = useRef<NotificationApi | null>(null);
+	const permissionGranted = useRef<boolean>(false);
+
+	useEffect(() => {
+		const initNotifications = async () => {
+			try {
+				const api = await loadNotificationPlugin();
+				if (api) {
+					notificationApi.current = api;
+					let granted = await api.isPermissionGranted();
+					if (!granted) {
+						const permission = await api.requestPermission();
+						granted = permission === "granted";
+					}
+					permissionGranted.current = granted;
+				}
+			} catch (e) {
+				// Notification plugin not available (e.g., in dev mode or unsupported platform)
+				console.log("[NotificationProvider] Desktop notifications not available:", e);
+			}
+		};
+
+		initNotifications();
+	}, []);
+
+	useEffect(() => {
+		const subscriptions: (Promise<UnlistenFn> | undefined)[] = [];
+
+		const unlistenFn = listen(
+			"flow_notification",
+			async (events: Event<IIntercomEvent[]>) => {
+				for (const event of events.payload) {
+					const notification = event.payload as INotificationEvent;
+
+					// Store in local database for persistence
+					try {
+						await addLocalNotification({
+							userId,
+							appId,
+							title: notification.title,
+							description: notification.description,
+							icon: notification.icon,
+							link: notification.link,
+							notificationType: "WORKFLOW",
+						});
+
+						// Refetch notification queries so UI updates immediately
+						// Using refetchQueries instead of invalidateQueries to force immediate refetch
+						await queryClient.refetchQueries({
+							predicate: (query) => {
+								const key = query.queryKey[0];
+								return key === "getNotifications" || key === "listNotifications";
+							}
+						});
+					} catch (e) {
+						console.error("[NotificationProvider] Failed to store local notification:", e);
+					}
+
+					// Show desktop notification if enabled
+					if (notificationApi.current && permissionGranted.current && notification.show_desktop) {
+						notificationApi.current.sendNotification({
+							title: notification.title,
+							body: notification.description ?? undefined,
+						});
+					} else {
+						toast.info(notification.title, {
+							description: notification.description,
+						});
+					}
+				}
+			},
+		);
+
+		subscriptions.push(unlistenFn);
+
+		return () => {
+			(async () => {
+				for await (const subscription of subscriptions) {
+					if (subscription) subscription();
+				}
+			})();
+		};
+	}, [userId, appId, queryClient]);
+
+	return null;
+}

@@ -224,6 +224,14 @@ pub enum UserTier {
     Enterprise,
 }
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "RouteTargetType")]
+pub enum RouteTargetType {
+    #[sea_orm(string_value = "PAGE")]
+    Page,
+    #[sea_orm(string_value = "EVENT")]
+    Event,
+}
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "Visibility")]
 pub enum Visibility {
     #[sea_orm(string_value = "PUBLIC")]
@@ -236,4 +244,54 @@ pub enum Visibility {
     Prototype,
     #[sea_orm(string_value = "OFFLINE")]
     Offline,
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, Default,
+)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "WasmPackageStatus")]
+pub enum WasmPackageStatus {
+    #[sea_orm(string_value = "PENDING_REVIEW")]
+    PendingReview,
+    #[default]
+    #[sea_orm(string_value = "ACTIVE")]
+    Active,
+    #[sea_orm(string_value = "REJECTED")]
+    Rejected,
+    #[sea_orm(string_value = "DEPRECATED")]
+    Deprecated,
+    #[sea_orm(string_value = "DISABLED")]
+    Disabled,
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, Default,
+)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "WasmReviewAction")]
+pub enum WasmReviewAction {
+    #[default]
+    #[sea_orm(string_value = "SUBMITTED")]
+    Submitted,
+    #[sea_orm(string_value = "APPROVED")]
+    Approved,
+    #[sea_orm(string_value = "REJECTED")]
+    Rejected,
+    #[sea_orm(string_value = "REQUESTED_CHANGES")]
+    RequestedChanges,
+    #[sea_orm(string_value = "COMMENTED")]
+    Commented,
+    #[sea_orm(string_value = "FLAGGED")]
+    Flagged,
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, Default,
+)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "NotificationType")]
+pub enum NotificationType {
+    #[default]
+    #[sea_orm(string_value = "WORKFLOW")]
+    Workflow,
+    #[sea_orm(string_value = "SYSTEM")]
+    System,
 }

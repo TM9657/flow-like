@@ -46,7 +46,7 @@ pub async fn delete_app(
         .delete_stream(locations)
         .try_collect::<Vec<flow_like_storage::Path>>()
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to delete metadata: {}", e).into()))?;
+        .map_err(|e| ApiError::InternalError(anyhow!("Failed to delete metadata: {}", e)))?;
 
     let locations = project_bucket
         .list(Some(&path))
@@ -56,7 +56,7 @@ pub async fn delete_app(
         .delete_stream(locations)
         .try_collect::<Vec<flow_like_storage::Path>>()
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to delete metadata: {}", e).into()))?;
+        .map_err(|e| ApiError::InternalError(anyhow!("Failed to delete metadata: {}", e)))?;
 
     txn.commit().await?;
     Ok(Json(()))

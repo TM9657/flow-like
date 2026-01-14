@@ -4,3 +4,7 @@ export * from "./events/events-page";
 export * from "./templates/template-preview";
 export * from "./solutions/solutions-page";
 export * from "./subscription/subscription-page";
+export * from "./model-catalog";
+export * from "./app-general";
+export * from "./visibility-status";
+export * from "./profile";

@@ -232,6 +232,8 @@ pub struct Features {
     pub unauthorized_read: bool,
     pub admin_interface: bool,
     pub premium: bool,
+    #[serde(default)]
+    pub wasm_registry: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]

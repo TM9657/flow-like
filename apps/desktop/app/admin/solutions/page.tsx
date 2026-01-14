@@ -14,12 +14,9 @@ import {
 } from "@tm9657/flow-like-ui";
 import { useDebounce } from "@uidotdev/usehooks";
 import { useCallback, useMemo, useState } from "react";
-import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
-import { fetcher, patch } from "../../../lib/api";
 
 export default function AdminSolutionsPage() {
-	const auth = useAuth();
 	const backend = useBackend();
 	const queryClient = useQueryClient();
 
@@ -48,20 +45,18 @@ export default function AdminSolutionsPage() {
 	}, [page, limit, statusFilter, debouncedSearch]);
 
 	const solutions = useQuery<ISolutionListResponse, Error>({
-		queryKey: ["admin", "solutions", queryParams, auth?.user?.profile?.sub],
+		queryKey: ["admin", "solutions", queryParams],
 		queryFn: async () => {
 			if (!profile.data) throw new Error("Profile not loaded");
 			const queryString = new URLSearchParams(
 				Object.entries(queryParams).map(([k, v]) => [k, String(v)]),
 			).toString();
-			return fetcher<ISolutionListResponse>(
+			return backend.apiState.get<ISolutionListResponse>(
 				profile.data,
 				`admin/solutions?${queryString}`,
-				{ method: "GET" },
-				auth,
 			);
 		},
-		enabled: !!profile.data && auth?.isAuthenticated,
+		enabled: !!profile.data,
 	});
 
 	const handleRefresh = useCallback(() => {
@@ -97,7 +92,11 @@ export default function AdminSolutionsPage() {
 			if (!profile.data) throw new Error("Profile not loaded");
 
 			try {
-				await patch(profile.data, `admin/solutions/${id}`, update, auth);
+				await backend.apiState.patch(
+					profile.data,
+					`admin/solutions/${id}`,
+					update,
+				);
 				toast.success("Solution updated successfully");
 			} catch (error) {
 				toast.error(
@@ -106,20 +105,18 @@ export default function AdminSolutionsPage() {
 				throw error;
 			}
 		},
-		[profile.data, auth],
+		[profile.data, backend.apiState],
 	);
 
 	const handleFetchSolution = useCallback(
 		async (id: string): Promise<ISolutionRequest | null> => {
 			if (!profile.data) throw new Error("Profile not loaded");
-			return fetcher<ISolutionRequest>(
+			return backend.apiState.get<ISolutionRequest>(
 				profile.data,
 				`admin/solutions/${id}`,
-				{ method: "GET" },
-				auth,
 			);
 		},
-		[profile.data, auth],
+		[profile.data, backend.apiState],
 	);
 
 	const handleAddLog = useCallback(
@@ -127,11 +124,10 @@ export default function AdminSolutionsPage() {
 			if (!profile.data) throw new Error("Profile not loaded");
 
 			try {
-				await fetcher(
+				await backend.apiState.post(
 					profile.data,
 					`admin/solutions/${id}/logs`,
-					{ method: "POST", body: JSON.stringify(log) },
-					auth,
+					log,
 				);
 				toast.success("Log added successfully");
 			} catch (error) {
@@ -141,7 +137,7 @@ export default function AdminSolutionsPage() {
 				throw error;
 			}
 		},
-		[profile.data, auth],
+		[profile.data, backend.apiState],
 	);
 
 	return (

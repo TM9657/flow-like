@@ -2,8 +2,7 @@
 	"identifier": "com.flow-like.app",
 	"bundle": {
 		"externalBin": [
-            "binaries/win/x64/llama-server",
-            "bin/flow-docling"
+            "binaries/win/x64/llama-server"
         ],
         "resources": {
             "binaries/win/x64/ggml-base.dll": "ggml-base.dll",

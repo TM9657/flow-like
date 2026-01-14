@@ -1,0 +1,620 @@
+---
+title: A2UI Component Reference
+description: Complete reference for all A2UI components available in Flow-Like
+---
+
+import { Tabs, TabItem, Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+# A2UI Component Reference
+
+A2UI (Agent-to-UI) is Flow-Like's protocol for agent-driven interfaces. It enables AI agents to generate rich, interactive UIs that render natively across platforms.
+
+## Overview
+
+A2UI components are organized into categories:
+
+- **Layout** - Structure and arrangement of content
+- **Display** - Visual content presentation
+- **Interactive** - User input and actions
+- **Container** - Grouping and organization
+- **Game/Visual** - Advanced graphics and game elements
+
+---
+
+## Layout Components
+
+### Row
+
+Arranges children horizontally in a flex row.
+
+```json
+{
+  "type": "Row",
+  "props": {
+    "gap": "4",
+    "justify": "between",
+    "align": "center",
+    "wrap": true
+  },
+  "children": [...]
+}
+```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `gap` | string | `"0"` | Space between children (Tailwind spacing) |
+| `justify` | string | `"start"` | Justify content: `start`, `end`, `center`, `between`, `around`, `evenly` |
+| `align` | string | `"stretch"` | Align items: `start`, `end`, `center`, `stretch`, `baseline` |
+| `wrap` | boolean | `false` | Whether children should wrap to next line |
+
+### Column
+
+Arranges children vertically in a flex column.
+
+```json
+{
+  "type": "Column",
+  "props": {
+    "gap": "4",
+    "align": "center"
+  },
+  "children": [...]
+}
+```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `gap` | string | `"0"` | Space between children |
+| `justify` | string | `"start"` | Justify content |
+| `align` | string | `"stretch"` | Align items |
+
+### Grid
+
+CSS Grid layout with configurable columns.
+
+```json
+{
+  "type": "Grid",
+  "props": {
+    "cols": 3,
+    "gap": "4",
+    "responsive": {
+      "sm": { "cols": 1 },
+      "md": { "cols": 2 },
+      "lg": { "cols": 3 }
+    }
+  },
+  "children": [...]
+}
+```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `cols` | number | `1` | Number of columns |
+| `rows` | number | - | Number of rows (auto if not set) |
+| `gap` | string | `"0"` | Gap between grid items |
+| `responsive` | object | - | Breakpoint-specific overrides |
+
+### Stack
+
+Overlays children on top of each other (z-axis stacking).
+
+```json
+{
+  "type": "Stack",
+  "props": {
+    "align": "center"
+  },
+  "children": [...]
+}
+```
+
+### List
+
+Renders a dynamic list from a data template.
+
+```json
+{
+  "type": "List",
+  "props": {
+    "data": { "path": "/items" },
+    "keyField": "id",
+    "direction": "vertical"
+  },
+  "template": {
+    "type": "Card",
+    "props": {
+      "title": { "path": "/items/$index/name" }
+    }
+  }
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `data` | BoundValue | Path to array data |
+| `keyField` | string | Unique key field for each item |
+| `template` | Component | Template to render for each item |
+| `direction` | string | `vertical` or `horizontal` |
+
+---
+
+## Display Components
+
+### Text
+
+Displays text content with typography options.
+
+```json
+{
+  "type": "Text",
+  "props": {
+    "content": "Hello, World!",
+    "variant": "h1",
+    "color": "primary"
+  }
+}
+```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `content` | BoundValue | - | Text content (required) |
+| `variant` | string | `"body"` | Typography variant: `h1`-`h6`, `body`, `caption`, `label` |
+| `color` | string | - | Text color |
+| `align` | string | `"left"` | Text alignment |
+| `truncate` | boolean | `false` | Truncate with ellipsis |
+| `maxLines` | number | - | Maximum lines before truncation |
+
+### Image
+
+Displays an image with optional loading states.
+
+```json
+{
+  "type": "Image",
+  "props": {
+    "src": { "path": "/user/avatar" },
+    "alt": "User avatar",
+    "fit": "cover",
+    "aspectRatio": "1/1"
+  }
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `src` | BoundValue | Image URL |
+| `alt` | string | Alt text for accessibility |
+| `fit` | string | Object fit: `cover`, `contain`, `fill`, `none` |
+| `aspectRatio` | string | Aspect ratio (e.g., `"16/9"`, `"1/1"`) |
+| `fallback` | string | Fallback image URL |
+
+### Icon
+
+Displays an icon from the icon library.
+
+```json
+{
+  "type": "Icon",
+  "props": {
+    "name": "check",
+    "size": "24",
+    "color": "green"
+  }
+}
+```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `name` | string | - | Icon name (required) |
+| `size` | string | `"16"` | Icon size in pixels |
+| `color` | string | - | Icon color |
+
+### Markdown
+
+Renders Markdown content.
+
+```json
+{
+  "type": "Markdown",
+  "props": {
+    "content": "# Hello\n\nThis is **bold** text."
+  }
+}
+```
+
+### Divider
+
+A visual separator line.
+
+```json
+{
+  "type": "Divider",
+  "props": {
+    "orientation": "horizontal",
+    "variant": "solid"
+  }
+}
+```
+
+---
+
+## Interactive Components
+
+### Button
+
+Clickable button with various styles.
+
+```json
+{
+  "type": "Button",
+  "props": {
+    "label": "Click me",
+    "variant": "primary",
+    "size": "md",
+    "disabled": false
+  },
+  "actions": {
+    "onClick": {
+      "type": "submit",
+      "payload": { "action": "save" }
+    }
+  }
+}
+```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `label` | BoundValue | - | Button text |
+| `variant` | string | `"default"` | Style variant: `default`, `primary`, `secondary`, `outline`, `ghost`, `destructive` |
+| `size` | string | `"md"` | Size: `sm`, `md`, `lg` |
+| `disabled` | BoundValue | `false` | Disabled state |
+| `loading` | BoundValue | `false` | Loading state |
+| `icon` | string | - | Icon name |
+| `iconPosition` | string | `"left"` | Icon position: `left`, `right` |
+
+### TextField
+
+Text input field with validation.
+
+```json
+{
+  "type": "TextField",
+  "props": {
+    "value": { "path": "/form/email" },
+    "placeholder": "Enter email",
+    "type": "email",
+    "required": true
+  },
+  "actions": {
+    "onChange": {
+      "type": "updateData",
+      "path": "/form/email"
+    }
+  }
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `value` | BoundValue | Current value |
+| `placeholder` | string | Placeholder text |
+| `type` | string | Input type: `text`, `email`, `password`, `number`, `tel`, `url` |
+| `required` | boolean | Required validation |
+| `minLength` | number | Minimum character length |
+| `maxLength` | number | Maximum character length |
+| `pattern` | string | Regex pattern for validation |
+| `disabled` | BoundValue | Disabled state |
+
+### Checkbox
+
+Checkbox input with label.
+
+```json
+{
+  "type": "Checkbox",
+  "props": {
+    "checked": { "path": "/form/agree" },
+    "label": "I agree to the terms"
+  }
+}
+```
+
+### Switch
+
+Toggle switch control.
+
+```json
+{
+  "type": "Switch",
+  "props": {
+    "checked": { "path": "/settings/notifications" },
+    "label": "Enable notifications"
+  }
+}
+```
+
+### Slider
+
+Range slider input.
+
+```json
+{
+  "type": "Slider",
+  "props": {
+    "value": { "path": "/settings/volume" },
+    "min": 0,
+    "max": 100,
+    "step": 1
+  }
+}
+```
+
+### Select
+
+Dropdown selection.
+
+```json
+{
+  "type": "Select",
+  "props": {
+    "value": { "path": "/form/country" },
+    "options": [
+      { "value": "us", "label": "United States" },
+      { "value": "uk", "label": "United Kingdom" }
+    ],
+    "placeholder": "Select a country"
+  }
+}
+```
+
+### RadioGroup
+
+Radio button group.
+
+```json
+{
+  "type": "RadioGroup",
+  "props": {
+    "value": { "path": "/form/plan" },
+    "options": [
+      { "value": "free", "label": "Free", "description": "Basic features" },
+      { "value": "pro", "label": "Pro", "description": "All features" }
+    ]
+  }
+}
+```
+
+### DateTimeInput
+
+Date and time picker.
+
+```json
+{
+  "type": "DateTimeInput",
+  "props": {
+    "value": { "path": "/form/date" },
+    "mode": "datetime",
+    "minDate": "2024-01-01",
+    "maxDate": "2025-12-31"
+  }
+}
+```
+
+---
+
+## Container Components
+
+### Card
+
+A bordered container with optional header and footer.
+
+```json
+{
+  "type": "Card",
+  "props": {
+    "title": "Card Title",
+    "description": "Card description",
+    "variant": "elevated"
+  },
+  "children": [...]
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `title` | BoundValue | Card title |
+| `description` | BoundValue | Card description |
+| `variant` | string | Style: `default`, `elevated`, `outlined` |
+| `clickable` | boolean | Whether card is clickable |
+
+### Modal
+
+Dialog overlay.
+
+```json
+{
+  "type": "Modal",
+  "props": {
+    "open": { "path": "/ui/modalOpen" },
+    "title": "Confirm Action",
+    "size": "md"
+  },
+  "children": [...]
+}
+```
+
+### Tabs
+
+Tabbed content container.
+
+```json
+{
+  "type": "Tabs",
+  "props": {
+    "activeTab": { "path": "/ui/activeTab" },
+    "tabs": [
+      { "id": "overview", "label": "Overview" },
+      { "id": "settings", "label": "Settings" }
+    ]
+  },
+  "children": {
+    "overview": [...],
+    "settings": [...]
+  }
+}
+```
+
+### Accordion
+
+Collapsible content sections.
+
+```json
+{
+  "type": "Accordion",
+  "props": {
+    "type": "single",
+    "collapsible": true
+  },
+  "items": [
+    {
+      "id": "faq1",
+      "title": "What is A2UI?",
+      "content": { "type": "Text", "props": { "content": "..." } }
+    }
+  ]
+}
+```
+
+### ScrollArea
+
+Scrollable container with custom scrollbars.
+
+```json
+{
+  "type": "ScrollArea",
+  "props": {
+    "maxHeight": "400px",
+    "orientation": "vertical"
+  },
+  "children": [...]
+}
+```
+
+---
+
+## Styling
+
+All components accept a `style` property for customization:
+
+```json
+{
+  "type": "Card",
+  "style": {
+    "className": "p-6 bg-blue-50 dark:bg-blue-950 rounded-xl shadow-lg hover:shadow-xl transition-shadow"
+  }
+}
+```
+
+<Aside type="tip">
+Use Tailwind CSS classes in `className` for most styling needs. The style system supports dark mode (`dark:`) and responsive breakpoints (`sm:`, `md:`, `lg:`, `xl:`).
+</Aside>
+
+### Responsive Overrides
+
+For complex responsive layouts:
+
+```json
+{
+  "style": {
+    "className": "p-4 md:p-6 lg:p-8",
+    "responsive": {
+      "sm": { "hidden": true },
+      "md": { "display": "flex", "flexDirection": "row" }
+    }
+  }
+}
+```
+
+---
+
+## Data Binding
+
+A2UI uses `BoundValue` for dynamic data:
+
+### Literal Values
+
+```json
+{ "content": "Static text" }
+{ "count": 42 }
+{ "enabled": true }
+```
+
+### Data Path Binding
+
+```json
+{ "content": { "path": "/user/name" } }
+{ "items": { "path": "/data/products" } }
+```
+
+### Template Variables
+
+In List templates, use `$index` and `$item`:
+
+```json
+{
+  "type": "List",
+  "props": { "data": { "path": "/items" } },
+  "template": {
+    "type": "Text",
+    "props": {
+      "content": { "path": "/items/$index/name" }
+    }
+  }
+}
+```
+
+---
+
+## Actions
+
+Components can trigger actions:
+
+```json
+{
+  "actions": {
+    "onClick": {
+      "type": "navigate",
+      "payload": { "route": "/dashboard" }
+    },
+    "onChange": {
+      "type": "updateData",
+      "path": "/form/value"
+    },
+    "onSubmit": {
+      "type": "invoke",
+      "flowId": "process-form",
+      "payload": { "data": { "path": "/form" } }
+    }
+  }
+}
+```
+
+### Action Types
+
+| Type | Description |
+|------|-------------|
+| `updateData` | Update data model at path |
+| `navigate` | Navigate to a route |
+| `invoke` | Invoke a Flow |
+| `submit` | Submit form data |
+| `openModal` | Open a modal |
+| `closeModal` | Close a modal |
+| `custom` | Custom action handler |
+
+---
+
+## Next Steps
+
+- [Widget Builder Guide](/reference/widget-builder) - Learn to build widgets visually
+- [FlowPilot UI Generation](/reference/flowpilot-ui) - Generate UIs with AI

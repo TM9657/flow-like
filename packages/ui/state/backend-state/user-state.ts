@@ -1,6 +1,6 @@
 import type { IProfile, IProfileApp } from "../../lib";
 import type { ISettingsProfile } from "../../types";
-import type { INotificationsOverview, IUserLookup } from "./types";
+import type { INotification, INotificationsOverview, IUserLookup } from "./types";
 
 export interface IUserUpdate {
 	name?: string;
@@ -73,10 +73,52 @@ export interface IBillingSession {
 	url: string;
 }
 
+/** Widget info returned from the user widgets endpoint */
+export interface IUserWidgetInfo {
+	/** The app ID where the widget is defined */
+	appId: string;
+	/** The widget ID */
+	widgetId: string;
+	/** Widget metadata */
+	metadata: {
+		name: string;
+		description: string;
+		thumbnail?: string | null;
+		tags: string[];
+		icon?: string | null;
+		preview_media?: string[];
+	};
+}
+
+/** Template info returned from the user templates endpoint */
+export interface IUserTemplateInfo {
+	/** The app ID where the template is defined */
+	appId: string;
+	/** The template ID */
+	templateId: string;
+	/** Template metadata */
+	metadata: {
+		name: string;
+		description: string;
+		thumbnail?: string | null;
+		tags: string[];
+		icon?: string | null;
+		preview_media?: string[];
+	};
+}
+
 export interface IUserState {
 	lookupUser(userId: string): Promise<IUserLookup>;
 	searchUsers(query: string): Promise<IUserLookup[]>;
 	getNotifications(): Promise<INotificationsOverview>;
+	listNotifications(
+		unreadOnly?: boolean,
+		offset?: number,
+		limit?: number,
+	): Promise<INotification[]>;
+	markNotificationRead(notificationId: string): Promise<void>;
+	deleteNotification(notificationId: string): Promise<void>;
+	markAllNotificationsRead(): Promise<number>;
 	getProfile(): Promise<IProfile>;
 	getSettingsProfile(): Promise<ISettingsProfile>;
 	updateUser(data: IUserUpdate, avatar?: File): Promise<void>;
@@ -104,4 +146,8 @@ export interface IUserState {
 	getPricing(): Promise<IPricingResponse>;
 	createSubscription(request: ISubscribeRequest): Promise<ISubscribeResponse>;
 	getBillingSession(): Promise<IBillingSession>;
+	/** Get all widgets accessible to the user across all apps with ReadWidgets permission */
+	getUserWidgets(language?: string): Promise<IUserWidgetInfo[]>;
+	/** Get all templates accessible to the user across all apps with ReadTemplates permission */
+	getUserTemplates(language?: string): Promise<IUserTemplateInfo[]>;
 }

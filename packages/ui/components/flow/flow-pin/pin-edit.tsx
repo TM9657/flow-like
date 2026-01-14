@@ -13,6 +13,7 @@ import useFlowControlState from "../../../state/flow-control-state";
 import { BitVariable } from "./variable-types/bit-select";
 import { BooleanVariable } from "./variable-types/boolean-variable";
 import { VariableDescription } from "./variable-types/default-text";
+import { ElementSelect } from "./variable-types/element-select";
 import { EnumVariable } from "./variable-types/enum-variable";
 import { FnVariable } from "./variable-types/fn-select";
 import { VarVariable } from "./variable-types/var-select";
@@ -116,6 +117,24 @@ export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 		return (
 			<VarVariable
 				boardId={boardId}
+				pin={pin}
+				value={cachedDefaultValue}
+				appId={appId}
+				setValue={async (value) => {
+					setCachedDefaultValue(value);
+					await saveDefaultValue(value);
+				}}
+			/>
+		);
+	}
+
+	if (
+		pin.name.startsWith("element_ref") &&
+		pin.data_type === IVariableType.String &&
+		pin.value_type === IValueType.Normal
+	) {
+		return (
+			<ElementSelect
 				pin={pin}
 				value={cachedDefaultValue}
 				appId={appId}

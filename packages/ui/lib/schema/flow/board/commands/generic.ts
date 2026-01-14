@@ -159,6 +159,7 @@ export interface IVariable {
 	exposed: boolean;
 	id: string;
 	name: string;
+	schema?: null | string;
 	secret: boolean;
 	value_type: IValueType;
 	[property: string]: any;

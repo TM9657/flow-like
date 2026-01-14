@@ -57,7 +57,7 @@ pub async fn invite_user(
             app_id
         );
         return Err(ApiError::InternalError(
-            anyhow!("App does not have a default role set").into(),
+            anyhow!("App does not have a default role set"),
         ));
     }
 

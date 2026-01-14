@@ -10,6 +10,7 @@ use crate::flow::{
     },
     node::Node,
     pin::Pin,
+    variable::Variable,
 };
 
 pub mod bridge_layers;
@@ -69,6 +70,8 @@ pub trait BoardCleanupLogic {
 
     fn initial_layer_iteration(&mut self, _layer: &Layer) {}
     fn main_layer_iteration(&mut self, _layer: &mut Layer, _pin_lookup: &PinLookup) {}
+
+    fn main_variable_iteration(&mut self, _variable: &mut Variable, _pin_lookup: &PinLookup) {}
 
     fn post_process(&mut self, _board: &mut Board, _pin_lookup: &PinLookup) {}
 }
@@ -148,6 +151,12 @@ impl Board {
                 for step in steps.iter_mut() {
                     (*step).main_pin_iteration(pin, &pins);
                 }
+            }
+        }
+
+        for variable in self.variables.values_mut() {
+            for step in steps.iter_mut() {
+                (*step).main_variable_iteration(variable, &pins);
             }
         }
 

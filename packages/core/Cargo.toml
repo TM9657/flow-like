@@ -35,6 +35,7 @@ url = {version = "2.5.4", features = ["serde"]}
 json5 = "0.4.1"
 ahash.workspace = true
 schemars.workspace = true
+jsonschema.workspace = true
 chrono.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }

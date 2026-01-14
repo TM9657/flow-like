@@ -1,0 +1,77 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+---
+
+<section class="relative min-h-[85vh] flex items-center">
+  <div class="mx-auto max-w-6xl px-6 lg:px-8 py-24 w-full">
+    <div class="text-center mb-16 lg:mb-20">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-6">
+        {t("bi.hero.tagline")}
+      </p>
+
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight mb-6">
+        {t("bi.hero.headline")} <span class="text-primary">{t("bi.hero.headline.highlight")}</span> {t("bi.hero.headline.end")}
+      </h1>
+
+      <p class="text-lg sm:text-xl text-muted-foreground leading-relaxed max-w-2xl mx-auto mb-10">
+        {t("bi.hero.description")}
+      </p>
+
+      <div class="flex flex-wrap items-center justify-center gap-6">
+        <a href="/download" class="inline-flex items-center gap-3 px-6 py-3 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-colors">
+          {t("bi.hero.cta.primary")}
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
+        </a>
+        <a href="#solution" class="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+          {t("bi.hero.cta.secondary")}
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7" />
+          </svg>
+        </a>
+      </div>
+    </div>
+
+    <!-- Visual Element: Abstract Dashboard Preview -->
+    <div class="relative max-w-4xl mx-auto">
+      <div class="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent z-10 pointer-events-none" />
+      <div class="grid grid-cols-12 gap-3 p-6 rounded-2xl border border-border/50 bg-card/30 backdrop-blur">
+        <!-- Chart placeholder 1 -->
+        <div class="col-span-8 h-40 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-border/30 flex items-end p-4">
+          <div class="flex items-end gap-1 w-full">
+            {[40, 65, 45, 80, 55, 70, 90, 60, 75, 85, 50, 95].map((h) => (
+              <div class="flex-1 bg-primary/40 rounded-t" style={`height: ${h}%`} />
+            ))}
+          </div>
+        </div>
+        <!-- KPI Cards -->
+        <div class="col-span-4 space-y-3">
+          <div class="h-[4.5rem] rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-border/30 p-3 flex flex-col justify-between">
+            <span class="text-[10px] text-muted-foreground">Revenue</span>
+            <span class="text-lg font-semibold text-emerald-600">+24.5%</span>
+          </div>
+          <div class="h-[4.5rem] rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-border/30 p-3 flex flex-col justify-between">
+            <span class="text-[10px] text-muted-foreground">Users</span>
+            <span class="text-lg font-semibold text-blue-600">12.4k</span>
+          </div>
+        </div>
+        <!-- Chart placeholder 2 -->
+        <div class="col-span-4 h-32 rounded-xl bg-gradient-to-br from-violet-500/10 to-violet-500/5 border border-border/30 p-4">
+          <div class="w-24 h-24 mx-auto rounded-full border-8 border-violet-500/30 border-t-violet-500 animate-spin" style="animation-duration: 3s;" />
+        </div>
+        <!-- Chart placeholder 3 -->
+        <div class="col-span-8 h-32 rounded-xl bg-gradient-to-br from-amber-500/10 to-amber-500/5 border border-border/30 p-4 flex items-center">
+          <svg class="w-full h-16" viewBox="0 0 200 40">
+            <path d="M0 35 Q25 30 50 20 T100 25 T150 10 T200 15" fill="none" stroke="currentColor" stroke-width="2" class="text-amber-500/50" />
+            <path d="M0 35 Q25 30 50 20 T100 25 T150 10 T200 15" fill="none" stroke="currentColor" stroke-width="2" class="text-amber-500" stroke-dasharray="4 4" />
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

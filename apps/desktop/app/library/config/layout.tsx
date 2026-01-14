@@ -46,7 +46,6 @@ import {
 } from "@tm9657/flow-like-ui";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
-	CableIcon,
 	ChartAreaIcon,
 	CogIcon,
 	CopyIcon,
@@ -97,16 +96,22 @@ const navigationItems = [
 		description: "Business logic and workflow definitions",
 	},
 	{
+		href: "/library/config/widgets",
+		label: "Widgets",
+		icon: LayoutGridIcon,
+		description: "Reusable UI components and widgets",
+	},
+	{
+		href: "/library/config/pages",
+		label: "Events & UI",
+		icon: SparklesIcon,
+		description: "Pages, routes, and event handling",
+	},
+	{
 		href: "/library/config/templates",
 		label: "Templates",
 		icon: CopyIcon,
 		description: "Reusable Flow templates",
-	},
-	{
-		href: "/library/config/events",
-		label: "Events",
-		icon: CableIcon,
-		description: "Event handling and triggers",
 	},
 	{
 		href: "/library/config/storage",
@@ -237,6 +242,14 @@ export default function Id({
 		(id ?? "") !== "",
 	);
 
+	// Fetch configured routes for this app
+	const routes = useInvoke(
+		backend.routeState.getRoutes,
+		backend.routeState,
+		[id ?? ""],
+		(id ?? "") !== "",
+	);
+
 	const { update } = useMobileHeader(
 		{
 			title:
@@ -262,7 +275,26 @@ export default function Id({
 		[events.data],
 	);
 
+	const usableEvents = useMemo(() => {
+		const set = new Set<string>();
+		Object.values(EVENT_CONFIG).forEach((config) => {
+			const usable = Object.keys(config.useInterfaces);
+			for (const eventType of usable) {
+				if (config.eventTypes.includes(eventType)) set.add(eventType);
+			}
+		});
+		return set;
+	}, []);
+
 	useEffect(() => {
+		const hasRoutes = !!routes.data?.length;
+		const hasUsableEvent = !!events.data?.find((e) =>
+			usableEvents.has(e.event_type),
+		);
+		const useHref = hasRoutes
+			? `/use?id=${id}`
+			: `/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`;
+
 		update({
 			title:
 				metadata.data?.name ??
@@ -282,19 +314,26 @@ export default function Id({
 				>
 					<MenuIcon className="w-4 h-4" />
 				</Button>,
-				<Link
-					key={"use-app"}
-					href={`/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`}
-					className="md:hidden"
-				>
-					<Button variant="default" size="sm" aria-label="Use App">
-						<SparklesIcon className="w-4 h-4" />
-						Use App
-					</Button>
-				</Link>,
+				...(hasRoutes || hasUsableEvent
+					? [
+							<Link key={"use-app"} href={useHref} className="md:hidden">
+								<Button variant="default" size="sm" aria-label="Use App">
+									<SparklesIcon className="w-4 h-4" />
+									Use App
+								</Button>
+							</Link>,
+						]
+					: []),
 			],
 		});
-	}, [events.data]);
+	}, [
+		events.data,
+		routes.data,
+		id,
+		metadata.data?.name,
+		metadata.isFetching,
+		usableEvents,
+	]);
 
 	const strength = useMemo(() => {
 		if (!encrypt) return 0;
@@ -331,17 +370,6 @@ export default function Id({
 			toast.dismiss(loader);
 		}
 	}, [id, encrypt, password]);
-
-	const usableEvents = useMemo(() => {
-		const set = new Set<string>();
-		Object.values(EVENT_CONFIG).forEach((config) => {
-			const usable = Object.keys(config.useInterfaces);
-			for (const eventType of usable) {
-				if (config.eventTypes.includes(eventType)) set.add(eventType);
-			}
-		});
-		return set;
-	}, []);
 
 	async function executeEvent(event: IEvent) {
 		if (!id) return;
@@ -396,10 +424,15 @@ export default function Id({
 								</BreadcrumbList>
 							</Breadcrumb>
 							<div className="flex items-center gap-2">
-								{events.data?.find((e) => usableEvents.has(e.event_type)) && (
+								{(routes.data?.length ||
+									events.data?.find((e) => usableEvents.has(e.event_type))) && (
 									<div className="hidden md:block">
 										<Link
-											href={`/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`}
+											href={
+												routes.data?.length
+													? `/use?id=${id}`
+													: `/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`
+											}
 											className="w-full"
 										>
 											<Button
@@ -414,9 +447,14 @@ export default function Id({
 								)}
 
 								{/* Mobile "Use App" quick action */}
-								{events.data?.find((e) => usableEvents.has(e.event_type)) && (
+								{(routes.data?.length ||
+									events.data?.find((e) => usableEvents.has(e.event_type))) && (
 									<Link
-										href={`/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`}
+										href={
+											routes.data?.length
+												? `/use?id=${id}`
+												: `/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`
+										}
 										className="md:hidden"
 									>
 										<Button variant="default" size="sm" aria-label="Use App">

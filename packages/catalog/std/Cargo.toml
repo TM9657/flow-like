@@ -34,3 +34,4 @@ nalgebra = "0.34.0"
 htmd = "0.3.0"
 csv-async = { version = "1.3.0", features = ["tokio"] }
 csv = "1.3"
+urlencoding.workspace = true

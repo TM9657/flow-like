@@ -49,6 +49,7 @@ import { SpotlightWrapper } from "../components/spotlight-wrapper";
 import { TauriProvider } from "../components/tauri-provider";
 import { ThemeLoader } from "../components/theme-loader";
 import ToastProvider from "../components/toast-provider";
+import NotificationProvider from "../components/notification-provider";
 import { UpdateProvider } from "../components/update-provider";
 import PostHogPageView from "./PostHogPageView";
 import { PHProvider } from "./provider";
@@ -178,6 +179,7 @@ export default function RootLayout({
 											<OAuthCallbackHandler>
 												<OAuthExecutionProvider>
 													<DesktopAuthProvider>
+														<NotificationProvider />
 														<ExecutionEngineProviderComponent>
 															<SpotlightWrapper>
 																<PostHogPageView />

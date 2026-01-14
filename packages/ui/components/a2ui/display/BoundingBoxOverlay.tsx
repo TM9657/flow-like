@@ -1,0 +1,239 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { cn } from "../../../lib/utils";
+import type { ComponentProps } from "../ComponentRegistry";
+import { useData } from "../DataContext";
+import { resolveInlineStyle, resolveStyle } from "../StyleResolver";
+import type {
+	BoundValue,
+	BoundingBox,
+	BoundingBoxOverlayComponent,
+} from "../types";
+
+function useResolved<T>(boundValue: BoundValue | undefined): T | undefined {
+	const { resolve } = useData();
+	if (!boundValue) return undefined;
+	return resolve(boundValue) as T;
+}
+
+const DEFAULT_COLORS = [
+	"#ef4444", // red
+	"#f97316", // orange
+	"#eab308", // yellow
+	"#22c55e", // green
+	"#06b6d4", // cyan
+	"#3b82f6", // blue
+	"#8b5cf6", // violet
+	"#ec4899", // pink
+];
+
+export function A2UIBoundingBoxOverlay({
+	component,
+	style,
+	onAction,
+	surfaceId,
+	componentId,
+}: ComponentProps<BoundingBoxOverlayComponent>) {
+	const containerRef = useRef<HTMLDivElement>(null);
+	const imageRef = useRef<HTMLImageElement>(null);
+
+	const src = useResolved<string>(component.src);
+	const alt = useResolved<string>(component.alt) ?? "Image with bounding boxes";
+	const rawBoxes = useResolved<BoundingBox[]>(component.boxes) ?? [];
+	const showLabels = useResolved<boolean>(component.showLabels) ?? true;
+	const showConfidence = useResolved<boolean>(component.showConfidence) ?? true;
+	const strokeWidth = useResolved<number>(component.strokeWidth) ?? 2;
+	const fontSize = useResolved<number>(component.fontSize) ?? 12;
+	const fit = useResolved<string>(component.fit) ?? "contain";
+	const normalized = useResolved<boolean>(component.normalized) ?? false;
+	const interactive = useResolved<boolean>(component.interactive) ?? false;
+
+	const [imageLoaded, setImageLoaded] = useState(false);
+	const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+	const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+	const [hoveredBoxId, setHoveredBoxId] = useState<string | null>(null);
+
+	// Parse boxes from various formats
+	const boxes = useMemo((): BoundingBox[] => {
+		if (!rawBoxes) return [];
+		if (typeof rawBoxes === "string") {
+			try {
+				return JSON.parse(rawBoxes);
+			} catch {
+				return [];
+			}
+		}
+		return Array.isArray(rawBoxes) ? rawBoxes : [];
+	}, [rawBoxes]);
+
+	// Create color map for labels
+	const labelColorMap = useMemo(() => {
+		const uniqueLabels = [...new Set(boxes.map((b) => b.label).filter(Boolean))];
+		const map: Record<string, string> = {};
+		uniqueLabels.forEach((label, i) => {
+			if (label) map[label] = DEFAULT_COLORS[i % DEFAULT_COLORS.length];
+		});
+		return map;
+	}, [boxes]);
+
+	const handleImageLoad = useCallback(() => {
+		if (imageRef.current) {
+			setImageSize({
+				width: imageRef.current.naturalWidth,
+				height: imageRef.current.naturalHeight,
+			});
+			setImageLoaded(true);
+		}
+	}, []);
+
+	// Track container size for proper scaling
+	useEffect(() => {
+		if (!containerRef.current) return;
+		const observer = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				setContainerSize({
+					width: entry.contentRect.width,
+					height: entry.contentRect.height,
+				});
+			}
+		});
+		observer.observe(containerRef.current);
+		return () => observer.disconnect();
+	}, []);
+
+	// Calculate scaling factor for box positions
+	const scale = useMemo(() => {
+		if (!imageLoaded || !imageSize.width || !imageSize.height) {
+			return { x: 1, y: 1, offsetX: 0, offsetY: 0 };
+		}
+
+		const imgAspect = imageSize.width / imageSize.height;
+		const containerAspect =
+			containerSize.width / (containerSize.height || containerSize.width);
+
+		let displayWidth: number;
+		let displayHeight: number;
+		let offsetX = 0;
+		let offsetY = 0;
+
+		if (fit === "contain") {
+			if (imgAspect > containerAspect) {
+				displayWidth = containerSize.width;
+				displayHeight = containerSize.width / imgAspect;
+				offsetY = (containerSize.height - displayHeight) / 2;
+			} else {
+				displayHeight = containerSize.height || containerSize.width / imgAspect;
+				displayWidth = displayHeight * imgAspect;
+				offsetX = (containerSize.width - displayWidth) / 2;
+			}
+		} else {
+			displayWidth = containerSize.width;
+			displayHeight = containerSize.height || containerSize.width / imgAspect;
+		}
+
+		return {
+			x: displayWidth / (normalized ? 1 : imageSize.width),
+			y: displayHeight / (normalized ? 1 : imageSize.height),
+			offsetX,
+			offsetY,
+		};
+	}, [imageLoaded, imageSize, containerSize, fit, normalized]);
+
+	const handleBoxClick = useCallback(
+		(box: BoundingBox) => {
+			if (!interactive || !onAction || !component.actions?.length) return;
+			const clickAction = component.actions.find(
+				(a) => a.name === "onBoxClick" || a.name === "onClick",
+			);
+			if (clickAction) {
+				onAction({
+					type: "userAction",
+					name: clickAction.name,
+					surfaceId,
+					sourceComponentId: componentId,
+					timestamp: Date.now(),
+					context: { box, ...clickAction.context },
+				});
+			}
+		},
+		[interactive, onAction, component.actions, surfaceId, componentId],
+	);
+
+	const fitClass =
+		{
+			contain: "object-contain",
+			cover: "object-cover",
+			fill: "object-fill",
+		}[fit] ?? "object-contain";
+
+	return (
+		<div
+			ref={containerRef}
+			className={cn("relative", resolveStyle(style))}
+			style={resolveInlineStyle(style)}
+		>
+			<img
+				ref={imageRef}
+				src={src}
+				alt={alt}
+				onLoad={handleImageLoad}
+				className={cn("w-full h-full", fitClass)}
+			/>
+
+			{/* Bounding box overlays */}
+			{imageLoaded &&
+				boxes.map((box, index) => {
+					const color = box.color ?? labelColorMap[box.label ?? ""] ?? DEFAULT_COLORS[index % DEFAULT_COLORS.length];
+					const isHovered = hoveredBoxId === (box.id ?? `box_${index}`);
+					const boxId = box.id ?? `box_${index}`;
+
+					const left = box.x * scale.x + scale.offsetX;
+					const top = box.y * scale.y + scale.offsetY;
+					const width = box.width * scale.x;
+					const height = box.height * scale.y;
+
+					return (
+						<div
+							key={boxId}
+							className={cn(
+								"absolute border transition-opacity",
+								interactive && "cursor-pointer hover:opacity-80",
+							)}
+							style={{
+								left: `${left}px`,
+								top: `${top}px`,
+								width: `${width}px`,
+								height: `${height}px`,
+								borderColor: color,
+								borderWidth: `${isHovered ? strokeWidth + 1 : strokeWidth}px`,
+								backgroundColor: `${color}${isHovered ? "30" : "15"}`,
+							}}
+							onClick={() => handleBoxClick(box)}
+							onMouseEnter={() => setHoveredBoxId(boxId)}
+							onMouseLeave={() => setHoveredBoxId(null)}
+						>
+							{/* Label */}
+							{showLabels && box.label && (
+								<div
+									className="absolute -top-6 left-0 px-1.5 py-0.5 text-white whitespace-nowrap"
+									style={{
+										backgroundColor: color,
+										fontSize: `${fontSize}px`,
+										lineHeight: 1.2,
+									}}
+								>
+									{box.label}
+									{showConfidence && box.confidence !== undefined && (
+										<span className="ml-1 opacity-80">
+											{(box.confidence * 100).toFixed(0)}%
+										</span>
+									)}
+								</div>
+							)}
+						</div>
+					);
+				})}
+		</div>
+	);
+}

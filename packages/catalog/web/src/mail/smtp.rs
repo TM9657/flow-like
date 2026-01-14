@@ -106,7 +106,7 @@ impl NodeLogic for SmtpConnectNode {
         let mut node = Node::new(
             "email_smtp_connect",
             "SMTP Connect",
-            "Connects to an SMTP server and caches the session",
+            "Connects to an SMTP server and caches the session. For Gmail: use host 'smtp.gmail.com', port 587, encryption 'StartTls', your Gmail address as username, and an App Password (not your regular password). Generate an App Password at: https://support.google.com/mail/answer/185833",
             "Email/SMTP",
         );
         node.add_icon("/flow/icons/mail.svg");

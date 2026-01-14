@@ -1,0 +1,129 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+
+const rows = [
+  {
+    feature: t("bi.comparison.row1.feature"),
+    flowlike: t("bi.comparison.row1.flowlike"),
+    traditional: t("bi.comparison.row1.traditional"),
+    spreadsheets: t("bi.comparison.row1.spreadsheets"),
+  },
+  {
+    feature: t("bi.comparison.row2.feature"),
+    flowlike: t("bi.comparison.row2.flowlike"),
+    traditional: t("bi.comparison.row2.traditional"),
+    spreadsheets: t("bi.comparison.row2.spreadsheets"),
+  },
+  {
+    feature: t("bi.comparison.row3.feature"),
+    flowlike: t("bi.comparison.row3.flowlike"),
+    traditional: t("bi.comparison.row3.traditional"),
+    spreadsheets: t("bi.comparison.row3.spreadsheets"),
+  },
+  {
+    feature: t("bi.comparison.row4.feature"),
+    flowlike: t("bi.comparison.row4.flowlike"),
+    traditional: t("bi.comparison.row4.traditional"),
+    spreadsheets: t("bi.comparison.row4.spreadsheets"),
+  },
+  {
+    feature: t("bi.comparison.row5.feature"),
+    flowlike: t("bi.comparison.row5.flowlike"),
+    traditional: t("bi.comparison.row5.traditional"),
+    spreadsheets: t("bi.comparison.row5.spreadsheets"),
+  },
+  {
+    feature: t("bi.comparison.row6.feature"),
+    flowlike: t("bi.comparison.row6.flowlike"),
+    traditional: t("bi.comparison.row6.traditional"),
+    spreadsheets: t("bi.comparison.row6.spreadsheets"),
+  },
+];
+---
+
+<section class="relative py-28">
+  <div class="mx-auto max-w-6xl px-6 lg:px-8">
+    <div class="text-center mb-16">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+        {t("bi.comparison.tagline")}
+      </p>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-6">
+        {t("bi.comparison.headline")}
+      </h2>
+      <p class="text-lg text-muted-foreground max-w-2xl mx-auto">
+        {t("bi.comparison.description")}
+      </p>
+    </div>
+
+    <!-- Desktop Table -->
+    <div class="hidden lg:block overflow-hidden rounded-2xl border border-border/50">
+      <table class="w-full">
+        <thead>
+          <tr class="bg-muted/50">
+            <th class="text-left p-4 font-medium text-muted-foreground">{t("bi.comparison.feature")}</th>
+            <th class="text-left p-4 font-medium text-primary bg-primary/5">{t("bi.comparison.flowlike")}</th>
+            <th class="text-left p-4 font-medium text-muted-foreground">{t("bi.comparison.traditional")}</th>
+            <th class="text-left p-4 font-medium text-muted-foreground">{t("bi.comparison.spreadsheets")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr class={`border-t border-border/50 ${i % 2 === 0 ? 'bg-card/30' : 'bg-card/50'}`}>
+              <td class="p-4 font-medium">{row.feature}</td>
+              <td class="p-4 text-primary bg-primary/5">
+                <div class="flex items-start gap-2">
+                  <svg class="w-5 h-5 text-primary shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span class="text-sm">{row.flowlike}</span>
+                </div>
+              </td>
+              <td class="p-4 text-sm text-muted-foreground">{row.traditional}</td>
+              <td class="p-4 text-sm text-muted-foreground">{row.spreadsheets}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Mobile Cards -->
+    <div class="lg:hidden space-y-4">
+      {rows.map((row) => (
+        <div class="p-4 rounded-xl border border-border/50 bg-card/50">
+          <h3 class="font-semibold mb-3">{row.feature}</h3>
+          <div class="space-y-2">
+            <div class="flex items-start gap-2 p-2 rounded-lg bg-primary/10">
+              <svg class="w-4 h-4 text-primary shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              <div>
+                <span class="text-xs font-medium text-primary block">{t("bi.comparison.flowlike")}</span>
+                <span class="text-sm">{row.flowlike}</span>
+              </div>
+            </div>
+            <div class="flex items-start gap-2 p-2">
+              <div>
+                <span class="text-xs font-medium text-muted-foreground block">{t("bi.comparison.traditional")}</span>
+                <span class="text-sm text-muted-foreground">{row.traditional}</span>
+              </div>
+            </div>
+            <div class="flex items-start gap-2 p-2">
+              <div>
+                <span class="text-xs font-medium text-muted-foreground block">{t("bi.comparison.spreadsheets")}</span>
+                <span class="text-sm text-muted-foreground">{row.spreadsheets}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <p class="text-sm text-muted-foreground text-center mt-8 max-w-2xl mx-auto">
+      {t("bi.comparison.note")}
+    </p>
+  </div>
+</section>

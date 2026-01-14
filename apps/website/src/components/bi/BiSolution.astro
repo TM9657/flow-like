@@ -1,0 +1,66 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+
+const features = [
+  { icon: "brush", title: t("bi.solution.feature1.title"), desc: t("bi.solution.feature1.description") },
+  { icon: "sparkles", title: t("bi.solution.feature2.title"), desc: t("bi.solution.feature2.description") },
+  { icon: "flow", title: t("bi.solution.feature3.title"), desc: t("bi.solution.feature3.description") },
+  { icon: "palette", title: t("bi.solution.feature4.title"), desc: t("bi.solution.feature4.description") },
+];
+---
+
+<section id="solution" class="relative py-28">
+  <div class="mx-auto max-w-6xl px-6 lg:px-8">
+    <div class="text-center mb-16">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+        {t("bi.solution.tagline")}
+      </p>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-6">
+        {t("bi.solution.headline")} <span class="text-primary">{t("bi.solution.headline.highlight")}</span>
+      </h2>
+      <p class="text-lg text-muted-foreground max-w-2xl mx-auto">
+        {t("bi.solution.description")}
+      </p>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-6">
+      {features.map((feature, i) => (
+        <div class="group relative p-8 rounded-2xl border border-border/50 bg-card/50 hover:border-primary/30 hover:bg-primary/5 transition-all duration-300 overflow-hidden">
+          <div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-colors" />
+
+          <div class="relative">
+            <div class="w-14 h-14 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-5 group-hover:bg-primary/20 transition-colors">
+              {feature.icon === "brush" && (
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              )}
+              {feature.icon === "sparkles" && (
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
+              )}
+              {feature.icon === "flow" && (
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              )}
+              {feature.icon === "palette" && (
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                </svg>
+              )}
+            </div>
+
+            <h3 class="text-xl font-semibold mb-3">{feature.title}</h3>
+            <p class="text-muted-foreground leading-relaxed">{feature.desc}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

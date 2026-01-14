@@ -81,7 +81,7 @@ pub async fn get_runs(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to query runs");
-            ApiError::InternalError(anyhow!("Failed to query runs: {}", e).into())
+            ApiError::InternalError(anyhow!("Failed to query runs: {}", e))
         })?;
 
     let log_metas: Vec<LogMeta> = runs

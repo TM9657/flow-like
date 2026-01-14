@@ -6,6 +6,7 @@ import {
 	type IToolBarActions,
 	LoadingScreen,
 	NoDefaultInterface,
+	PageInterface,
 	useBackend,
 	useInvoke,
 	useSetQueryParams,
@@ -15,6 +16,8 @@ import type {
 	IUseInterfaceProps,
 } from "@tm9657/flow-like-ui/components/interfaces/interfaces";
 import { parseUint8ArrayToJson } from "@tm9657/flow-like-ui/lib/uint8";
+import type { IPage } from "@tm9657/flow-like-ui/state/backend-state/page-state";
+import type { IAppRoute } from "@tm9657/flow-like-ui/state/backend-state/route-state";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
 	type JSX,
@@ -23,18 +26,75 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
+	useState,
 } from "react";
 import { EVENT_CONFIG } from "../../lib/event-config";
 import NotFound from "../library/config/not-found";
 
-export default function Page() {
+export default function UsePage() {
 	const backend = useBackend();
 	const searchParams = useSearchParams();
+	const router = useRouter();
+
 	const appId = searchParams.get("id");
+	const routePath = searchParams.get("route") ?? "/";
+
 	const headerRef = useRef<IToolBarActions>(null!);
 	const sidebarRef = useRef<ISidebarActions>(null!);
 	const setQueryParams = useSetQueryParams();
-	const router = useRouter();
+
+	// Route and page state
+	const [routeConfig, setRouteConfig] = useState<IAppRoute | null>(null);
+	const [pageData, setPageData] = useState<IPage | null>(null);
+	const [routeLoading, setRouteLoading] = useState(true);
+
+	// Load route config and page data
+	useEffect(() => {
+		if (!appId) {
+			setRouteConfig(null);
+			setPageData(null);
+			setRouteLoading(false);
+			return;
+		}
+
+		const loadRouteAndPage = async () => {
+			setRouteLoading(true);
+			try {
+				// Get route config by path or default
+				let route: IAppRoute | null = null;
+				if (routePath && routePath !== "/") {
+					route = await backend.routeState.getRouteByPath(appId, routePath);
+				}
+
+				// If no specific route found, try default route
+				if (!route) {
+					route = await backend.routeState.getDefaultRoute(appId);
+				}
+
+				setRouteConfig(route);
+
+				// If route targets a page, load the page
+				if (route?.targetType === "page" && route.pageId) {
+					const page = await backend.pageState.getPage(
+						appId,
+						route.pageId,
+						route.boardId || undefined,
+					);
+					setPageData(page);
+				} else {
+					setPageData(null);
+				}
+			} catch (e) {
+				console.error("Failed to load route:", e);
+				setRouteConfig(null);
+				setPageData(null);
+			} finally {
+				setRouteLoading(false);
+			}
+		};
+
+		loadRouteAndPage();
+	}, [appId, routePath, backend.routeState, backend.pageState]);
 
 	const usableEvents = useMemo(() => {
 		const events = new Map<
@@ -50,7 +110,7 @@ export default function Page() {
 			}
 		});
 		return events;
-	}, [EVENT_CONFIG]);
+	}, []);
 
 	const metadata = useInvoke(
 		backend.appState.getAppMeta,
@@ -85,11 +145,10 @@ export default function Page() {
 			if (eventId === newEventId) return;
 			if (newEventId === "") return;
 
-			// Clear toolbar elements when switching events
 			headerRef.current?.pushToolbarElements([]);
 			setQueryParams("eventId", newEventId);
 		},
-		[appId, router, eventId, setQueryParams],
+		[appId, eventId, setQueryParams],
 	);
 
 	const config = useMemo(() => {
@@ -104,8 +163,10 @@ export default function Page() {
 
 	useEffect(() => {
 		if (!appId) return;
+		if (routeConfig) return;
+		if (routeLoading) return;
+
 		if (sortedEvents.length === 0 && events.data) {
-			console.log("No events found, redirecting to event config");
 			router.replace(`/store?id=${appId}`);
 			return;
 		}
@@ -115,7 +176,6 @@ export default function Page() {
 		let rerouteEvent = sortedEvents.find((e) => usableEvents.has(e.event_type));
 
 		if (!rerouteEvent && usableEvents.size > 0 && events.data) {
-			console.log("No usable events found, redirecting to event config");
 			router.replace(`/store?id=${appId}`);
 			return;
 		}
@@ -149,10 +209,58 @@ export default function Page() {
 		switchEvent,
 		usableEvents,
 		events.data,
+		routeConfig,
+		routeLoading,
+		router,
 	]);
 
 	const inner = useMemo(() => {
 		if (!appId) return <NotFound />;
+		if (routeLoading) return <LoadingScreen />;
+
+		// Route targets a page
+		if (routeConfig?.targetType === "page" && pageData) {
+			return (
+				<div className="flex flex-col grow h-full w-full max-h-full overflow-hidden">
+					<PageInterface
+						appId={appId}
+						event={currentEvent}
+						config={config}
+						page={pageData}
+						toolbarRef={headerRef}
+						sidebarRef={sidebarRef}
+					/>
+				</div>
+			);
+		}
+
+		// Route targets an event
+		if (routeConfig?.targetType === "event" && routeConfig.eventId) {
+			const targetEvent = sortedEvents.find(
+				(e) => e.id === routeConfig.eventId,
+			);
+			if (targetEvent && usableEvents.has(targetEvent.event_type)) {
+				const InterfaceComponent = usableEvents.get(targetEvent.event_type);
+				if (InterfaceComponent) {
+					return (
+						<div
+							key={targetEvent.id}
+							className="flex flex-col grow h-full w-full max-h-full overflow-hidden"
+						>
+							<InterfaceComponent
+								appId={appId}
+								event={targetEvent}
+								config={parseUint8ArrayToJson(targetEvent.config)}
+								toolbarRef={headerRef}
+								sidebarRef={sidebarRef}
+							/>
+						</div>
+					);
+				}
+			}
+		}
+
+		// No route config - fall back to event-based interface
 		if (!currentEvent) return <LoadingScreen />;
 		if (!usableEvents) return <LoadingScreen />;
 
@@ -162,7 +270,7 @@ export default function Page() {
 				return (
 					<div
 						key={currentEvent.id}
-						className="flex flex-col flex-grow h-full w-full max-h-full overflow-hidden"
+						className="flex flex-col grow h-full w-full max-h-full overflow-hidden"
 					>
 						<InterfaceComponent
 							appId={appId}
@@ -178,11 +286,13 @@ export default function Page() {
 		return <NoDefaultInterface appId={appId} eventId={eventId ?? undefined} />;
 	}, [
 		appId,
+		routeConfig,
+		routeLoading,
+		pageData,
+		sortedEvents,
 		currentEvent,
 		config,
 		eventId,
-		headerRef,
-		sidebarRef,
 		usableEvents,
 	]);
 
@@ -193,7 +303,7 @@ export default function Page() {
 	return (
 		<main className="flex flex-col h-full overflow-hidden flex-1 min-h-0">
 			<Container ref={sidebarRef}>
-				<div className="flex flex-col flex-grow h-full w-full max-h-full overflow-hidden">
+				<div className="flex flex-col grow h-full w-full max-h-full overflow-hidden">
 					<Header
 						ref={headerRef}
 						usableEvents={new Set(usableEvents.keys())}

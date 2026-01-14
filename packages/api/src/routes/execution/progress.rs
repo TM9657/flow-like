@@ -106,7 +106,7 @@ pub async fn report_progress(
     let run = store
         .get_run_for_app(&claims.run_id, &claims.app_id)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e).into()))?
+        .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e)))?
         .ok_or_else(|| ApiError::NotFound)?;
 
     // Don't accept updates for terminal states
@@ -163,7 +163,7 @@ pub async fn report_progress(
     let updated = store
         .update_run(&claims.run_id, update)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to update run: {}", e).into()))?;
+        .map_err(|e| ApiError::InternalError(anyhow!("Failed to update run: {}", e)))?;
 
     Ok(Json(ProgressUpdateResponse {
         accepted: true,
@@ -189,7 +189,7 @@ pub async fn push_events(
 
     // Get current max sequence for this run
     let max_seq = store.get_max_sequence(&claims.run_id).await.map_err(|e| {
-        ApiError::InternalError(anyhow!("Failed to get max sequence: {}", e).into())
+        ApiError::InternalError(anyhow!("Failed to get max sequence: {}", e))
     })?;
 
     let expires_at = chrono::Utc::now().timestamp_millis() + 24 * 60 * 60 * 1000; // 24 hours
@@ -215,7 +215,7 @@ pub async fn push_events(
     let accepted = store
         .push_events(events)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to push events: {}", e).into()))?;
+        .map_err(|e| ApiError::InternalError(anyhow!("Failed to push events: {}", e)))?;
 
     Ok(Json(PushEventsResponse {
         accepted,
@@ -284,7 +284,7 @@ pub async fn poll_status(
         let run = store
             .get_run_for_app(&claims.run_id, &claims.app_id)
             .await
-            .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e).into()))?
+            .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e)))?
             .ok_or_else(|| ApiError::NotFound)?;
 
         // Get undelivered events
@@ -296,7 +296,7 @@ pub async fn poll_status(
                 limit: Some(100),
             })
             .await
-            .map_err(|e| ApiError::InternalError(anyhow!("Failed to get events: {}", e).into()))?;
+            .map_err(|e| ApiError::InternalError(anyhow!("Failed to get events: {}", e)))?;
 
         // Return immediately if terminal state or we have events
         let is_terminal = run.status.is_terminal();
@@ -352,7 +352,7 @@ pub async fn get_run_status(
     let run = store
         .get_run(&run_id)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e).into()))?
+        .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e)))?
         .ok_or_else(|| ApiError::NotFound)?;
 
     crate::ensure_permission!(
@@ -435,5 +435,5 @@ async fn get_state_store(state: &AppState) -> Result<Arc<dyn ExecutionStateStore
 
     crate::execution::state::create_state_store(config)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to create state store: {}", e).into()))
+        .map_err(|e| ApiError::InternalError(anyhow!("Failed to create state store: {}", e)))
 }

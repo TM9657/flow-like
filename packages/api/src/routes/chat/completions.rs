@@ -234,11 +234,11 @@ fn build_provider_url(hosted_provider: &HostedProvider) -> Result<(String, Strin
         .ok()
         .filter(|s| !s.is_empty())
         .or_else(|| hosted_provider.default_endpoint().map(String::from))
-        .ok_or_else(|| anyhow!("{} not configured", endpoint_key))?;
+        .ok_or_else(|| ApiError::internal(format!("{} not configured", endpoint_key)))?;
 
     let api_key = std::env::var(api_key_key).unwrap_or_default();
     if api_key.is_empty() {
-        return Err(anyhow!("{} not configured", api_key_key).into());
+        return Err(ApiError::internal(format!("{} not configured", api_key_key)));
     }
 
     let url = format!(
@@ -382,7 +382,7 @@ async fn handle_streaming(
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
         tracing::error!(status=%status, body=%text, "Upstream error");
-        return Err(ApiError::BadRequest("Upstream error".into()));
+        return Err(ApiError::bad_request("Upstream error"));
     }
 
     let mut builder = AxumResponse::builder().status(resp.status());
@@ -462,7 +462,7 @@ pub async fn invoke_llm(
     let model_field = payload
         .get("model")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| ApiError::BadRequest("Missing 'model' field".into()))?;
+        .ok_or_else(|| ApiError::bad_request("Missing 'model' field"))?;
     let (provider, hosted_provider) = fetch_provider(&state, model_field).await?;
     enforce_tier(&user, &state, &provider).await?;
     let upstream_model_id = provider

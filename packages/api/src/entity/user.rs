@@ -82,6 +82,10 @@ pub enum Relation {
     PublicationRequest,
     #[sea_orm(has_many = "super::transaction::Entity")]
     Transaction,
+    #[sea_orm(has_many = "super::wasm_package_author::Entity")]
+    WasmPackageAuthor,
+    #[sea_orm(has_many = "super::wasm_package_review::Entity")]
+    WasmPackageReview,
 }
 
 impl Related<super::comment::Entity> for Entity {
@@ -153,6 +157,18 @@ impl Related<super::publication_request::Entity> for Entity {
 impl Related<super::transaction::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Transaction.def()
+    }
+}
+
+impl Related<super::wasm_package_author::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WasmPackageAuthor.def()
+    }
+}
+
+impl Related<super::wasm_package_review::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WasmPackageReview.def()
     }
 }
 

@@ -94,7 +94,6 @@ export const StoreRecommendations = memo(function StoreRecommendations() {
 									{combinedApps.map(([app, metadata]) => (
 										<AppCard
 											key={app.id}
-											apps={combinedApps.map(([a]) => a)}
 											app={app}
 											variant="extended"
 											metadata={metadata}

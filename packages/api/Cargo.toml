@@ -18,7 +18,9 @@ tower.workspace = true
 flow-like.workspace = true
 flow-like-types.workspace = true
 flow-like-storage.workspace = true
+flow-like-wasm.workspace = true
 serde_json.workspace = true
+base64.workspace = true
 jsonwebtoken.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
@@ -38,6 +40,7 @@ getrandom = "0.3"
 p256 = "0.13.2"
 async-trait.workspace = true
 thiserror.workspace = true
+parking_lot = "0.12"
 
 # ---- AWS dependencies ----
 aws-config = {workspace = true, optional=true}
@@ -50,7 +53,6 @@ aws-sdk-sqs = {workspace = true, optional=true}
 # ----- Azure dependencies ----
 hmac = { version = "0.12", optional = true }
 sha2 = { version = "0.10", optional = true }
-base64 = { workspace = true, optional = true }
 urlencoding = { workspace = true, optional = true }
 # -----
 
@@ -84,8 +86,8 @@ aws-sdk-s3 = { version = "1", optional = true }
 [features]
 default = ["aws", "cognito", "ses", "smtp", "sendgrid"]
 aws = ["aws-config", "aws-sdk-sts"]
-azure = ["hmac", "sha2", "base64", "urlencoding"]
-gcp = ["sha2", "base64", "rsa", "urlencoding"]
+azure = ["hmac", "sha2", "urlencoding"]
+gcp = ["sha2", "rsa", "urlencoding"]
 r2 = []  # Cloudflare R2 with proprietary temp credentials API
 cognito = ["aws-sdk-cognitoidentityprovider", "aws-config"]
 ses = ["aws-sdk-sesv2", "aws-config"]

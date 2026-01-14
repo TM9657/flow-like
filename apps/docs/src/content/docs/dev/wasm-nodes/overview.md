@@ -4,13 +4,9 @@ description: Create custom workflow nodes using WebAssembly
 sidebar:
   order: 25
   badge:
-    text: Coming Soon
-    variant: caution
+    text: Beta
+    variant: tip
 ---
-
-:::caution[Coming Soon]
-Custom WASM nodes are currently in development. This documentation previews the planned architecture and API.
-:::
 
 Flow-Like supports custom nodes written in **any language that compiles to WebAssembly**. This allows you to extend Flow-Like with your own logic without modifying the core Rust codebase.
 
@@ -23,6 +19,7 @@ Flow-Like supports custom nodes written in **any language that compiles to WebAs
 | **Portable** | Same WASM module works on desktop, server, and browser |
 | **Performance** | Near-native execution speed |
 | **Hot Reload** | Load new nodes without restarting Flow-Like |
+| **Package Registry** | Share and discover community nodes |
 
 ## Architecture Overview
 
@@ -44,60 +41,85 @@ Flow-Like supports custom nodes written in **any language that compiles to WebAs
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Node Interface
+## Packages vs Single Nodes
 
-WASM nodes must implement a standard interface that Flow-Like calls:
+WASM nodes are distributed as **packages** that can contain one or more nodes:
 
-### Required Exports
+| Type | Use Case |
+|------|----------|
+| **Single Node** | Simple, focused functionality |
+| **Multi-Node Package** | Related nodes that share code (e.g., math operators) |
 
+## Package Manifest
+
+Every package requires a `manifest.toml` that declares:
+
+- Package metadata (name, version, author)
+- Permission requirements
+- OAuth scope requirements
+- Node definitions
+
+```toml title="manifest.toml"
+manifest_version = 1
+id = "com.example.math-utils"
+name = "Math Utilities"
+version = "1.0.0"
+description = "Common math operations"
+
+[permissions]
+memory = "standard"     # 64 MB
+timeout = "standard"    # 30 seconds
+variables = true
+cache = true
+
+[[nodes]]
+id = "add"
+name = "Add Numbers"
+description = "Adds two numbers"
+category = "Math/Arithmetic"
 ```
-// Return the node definition (JSON)
-fn get_node() -> String
 
-// Execute the node logic
-fn run(context: *const u8, context_len: u32) -> i32
+See [Package Manifest](/dev/wasm-nodes/manifest/) for full documentation.
 ```
 
-### Node Definition Schema
+## Permission System
 
-Your `get_node()` function must return a JSON object matching this schema:
+Packages must declare their required permissions upfront. Users can review these before installing.
 
-```json
-{
-  "name": "my_custom_node",
-  "friendly_name": "My Custom Node",
-  "description": "Does something amazing",
-  "category": "Custom",
-  "icon": "/icons/custom.svg",
-  "pins": [
-    {
-      "name": "exec_in",
-      "friendly_name": "Input",
-      "pin_type": "Input",
-      "data_type": "Execution"
-    },
-    {
-      "name": "exec_out",
-      "friendly_name": "Output",
-      "pin_type": "Output",
-      "data_type": "Execution"
-    },
-    {
-      "name": "value",
-      "friendly_name": "Value",
-      "pin_type": "Input",
-      "data_type": "String"
-    }
-  ],
-  "scores": {
-    "privacy": 0,
-    "security": 0,
-    "performance": 2,
-    "governance": 0,
-    "reliability": 5,
-    "cost": 1
-  }
-}
+### Memory Tiers
+
+| Tier | Memory | Use Case |
+|------|--------|----------|
+| `minimal` | 16 MB | Simple string processing |
+| `light` | 32 MB | Basic data manipulation |
+| `standard` | 64 MB | Most nodes (default) |
+| `heavy` | 128 MB | Data processing |
+| `intensive` | 256 MB | ML inference, large datasets |
+
+### Timeout Tiers
+
+| Tier | Duration | Use Case |
+|------|----------|----------|
+| `quick` | 5 seconds | Fast operations |
+| `standard` | 30 seconds | Most nodes (default) |
+| `extended` | 60 seconds | API calls |
+| `long_running` | 5 minutes | ML inference |
+
+### OAuth Scopes
+
+Packages can request OAuth access per-provider. Each node declares which providers it needs:
+
+```toml
+[[permissions.oauth_scopes]]
+provider = "google"
+scopes = ["https://www.googleapis.com/auth/drive.readonly"]
+reason = "Read files from Google Drive"
+required = true
+
+[[nodes]]
+id = "list_drive_files"
+name = "List Drive Files"
+oauth_providers = ["google"]  # Only this node gets Google access
 ```
 
 ## Data Types
@@ -153,24 +175,58 @@ Choose your preferred language to get started:
 | [Python](/dev/wasm-nodes/python/) | 🔜 Planned | Via Pyodide or similar |
 | [C/C++](/dev/wasm-nodes/cpp/) | ✅ Supported | Emscripten or wasi-sdk |
 
-## Installation
+## Installation & Registry
 
-Once built, WASM nodes can be loaded in multiple ways:
+### Installing Packages
 
-1. **Local directory** — Place `.wasm` files in `~/.flow-like/nodes/`
-2. **App-specific** — Bundle with your Flow-Like app
-3. **Remote URL** — Load from a CDN or storage bucket
+Packages can be installed from multiple sources:
+
+1. **Registry** — Browse and install from the Flow-Like registry
+2. **Local file** — Load `.wasm` files from disk
+3. **URL** — Install from a direct download URL
+
+```bash
+# From registry (coming soon)
+flow-like install com.example.math-utils
+
+# From local file
+flow-like install ./my-package.wasm
+```
+
+### Offline Support
+
+Installed packages are cached locally, enabling:
+
+- Full offline functionality
+- Fast startup without network
+- Automatic background updates when online
+
+### Publishing
+
+Share your packages with the community:
+
+```bash
+# Build your package
+cargo build --release --target wasm32-wasip1
+
+# Publish to registry (requires API key)
+flow-like publish ./target/wasm32-wasip1/release/my_package.wasm
+```
+
+See the [Package Registry](/dev/wasm-nodes/registry/) documentation for details on the publishing process and governance.
 
 ## Security Considerations
 
 WASM nodes run in a sandboxed environment with:
 
-- **No filesystem access** — Must use Flow-Like's storage API
-- **No network access** — Must use Flow-Like's HTTP nodes
-- **Memory limits** — Configurable per-node
+- **Declared permissions only** — Packages can only use permissions they declare
+- **Per-node OAuth** — Nodes only get OAuth tokens they specifically request
+- **Memory limits** — Enforced per the declared memory tier
 - **Execution timeout** — Prevents infinite loops
+- **No arbitrary filesystem** — Must use Flow-Like's storage API
+- **No arbitrary network** — Must use Flow-Like's HTTP capabilities
 
 ## Next Steps
 
-→ Choose a [language template](/dev/wasm-nodes/rust/) to get started
-→ See [Writing Nodes](/dev/writing-nodes/) for native Rust node development
+→ [Package Manifest](/dev/wasm-nodes/manifest/) — Full manifest reference
+→ [Package Registry](/dev/wasm-nodes/registry/) — Publishing and governance

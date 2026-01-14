@@ -59,6 +59,12 @@ const backgroundIcons = [
 	{ Icon: Wand2, color: "text-muted-foreground/15", size: "w-11 h-11" },
 ];
 
+// Seeded random number generator for deterministic values
+function seededRandom(seed: number) {
+	const x = Math.sin(seed) * 10000;
+	return x - Math.floor(x);
+}
+
 export function LoadingScreen({
 	message = loadingMessages[0],
 	progress = 0,
@@ -66,6 +72,7 @@ export function LoadingScreen({
 }: Readonly<LoadingScreenProps>) {
 	const [currentMessage, setCurrentMessage] = useState(message);
 	const [dots, setDots] = useState("");
+	const [isMounted, setIsMounted] = useState(false);
 	const [backgroundElements, setBackgroundElements] = useState<
 		Array<{
 			id: number;
@@ -77,15 +84,26 @@ export function LoadingScreen({
 		}>
 	>([]);
 
+	// Generate deterministic particle positions using seeded random
+	const particles = Array.from({ length: 30 }, (_, i) => ({
+		id: i,
+		x: seededRandom(i * 7 + 1) * 100,
+		y: seededRandom(i * 13 + 2) * 100,
+		delay: seededRandom(i * 17 + 3) * 8,
+		duration: 3 + seededRandom(i * 23 + 4) * 2,
+	}));
+
 	useEffect(() => {
-		// Generate random background elements
+		setIsMounted(true);
+
+		// Generate random background elements (client-side only)
 		const elements = Array.from({ length: 5 }, (_, i) => ({
 			id: i,
-			x: Math.random() * 100,
-			y: Math.random() * 100,
-			icon: backgroundIcons[Math.floor(Math.random() * backgroundIcons.length)],
-			animationDelay: Math.random() * 5,
-			animationDuration: 8 + Math.random() * 4,
+			x: seededRandom(i * 31 + 5) * 100,
+			y: seededRandom(i * 37 + 6) * 100,
+			icon: backgroundIcons[Math.floor(seededRandom(i * 41 + 7) * backgroundIcons.length)],
+			animationDelay: seededRandom(i * 43 + 8) * 5,
+			animationDuration: 8 + seededRandom(i * 47 + 9) * 4,
 		}));
 		setBackgroundElements(elements);
 
@@ -132,7 +150,7 @@ export function LoadingScreen({
 			</div>
 
 			{/* Background icon constellation */}
-			{backgroundElements.map((element) => (
+			{isMounted && backgroundElements.map((element) => (
 				<div
 					key={element.id}
 					className="absolute animate-float-background"
@@ -177,15 +195,15 @@ export function LoadingScreen({
 
 			{/* Particle trail effect */}
 			<div className="absolute inset-0">
-				{Array.from({ length: 30 }).map((_, i) => (
+				{particles.map((particle) => (
 					<div
-						key={i}
+						key={particle.id}
 						className="absolute w-1 h-1 bg-muted-foreground/30 rounded-full animate-particle-trail"
 						style={{
-							left: `${Math.random() * 100}%`,
-							top: `${Math.random() * 100}%`,
-							animationDelay: `${Math.random() * 8}s`,
-							animationDuration: `${3 + Math.random() * 2}s`,
+							left: `${particle.x}%`,
+							top: `${particle.y}%`,
+							animationDelay: `${particle.delay}s`,
+							animationDuration: `${particle.duration}s`,
 						}}
 					/>
 				))}

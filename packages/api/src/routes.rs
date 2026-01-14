@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod admin;
+pub mod ai;
 pub mod app;
 pub mod auth;
 pub mod bit;
@@ -10,6 +11,7 @@ pub mod health;
 pub mod info;
 pub mod oauth;
 pub mod profile;
+pub mod registry;
 pub mod solution;
 pub mod store;
 pub mod tmp;

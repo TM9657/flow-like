@@ -114,7 +114,7 @@ pub async fn upsert_app(
             app_id
         );
         return Err(ApiError::InternalError(
-            anyhow!("Meta is required for new apps").into(),
+            anyhow!("Meta is required for new apps"),
         ));
     };
 
@@ -264,7 +264,11 @@ pub async fn upsert_app(
                 Ok(app)
             })
         })
-        .await?;
+        .await
+        .map_err(|e| match e {
+            sea_orm::TransactionError::Connection(db_err) => ApiError::from(db_err),
+            sea_orm::TransactionError::Transaction(db_err) => ApiError::from(db_err),
+        })?;
 
     Ok(Json(drive_app))
 }

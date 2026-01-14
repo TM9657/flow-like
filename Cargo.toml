@@ -32,6 +32,7 @@ members = [
     "packages/storage",
     "packages/api",
     "packages/executor",
+    "packages/wasm",
     "apps/utils/board-decoder",
 ]
 
@@ -54,6 +55,7 @@ flow-like-catalog-processing = { path = "packages/catalog/processing" }
 flow-like-catalog-macros = { path = "packages/catalog-macros" }
 flow-like-storage = { path = "packages/storage" }
 flow-like-executor = { path = "packages/executor" }
+flow-like-wasm = { path = "packages/wasm" }
 lambda_http = "0.15.1"
 futures = "0.3.31"
 bytes = "1.10.1"

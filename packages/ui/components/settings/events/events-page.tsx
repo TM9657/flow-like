@@ -100,6 +100,8 @@ export interface EventsPageProps {
 		provider: IOAuthProvider,
 		token: IStoredOAuthToken,
 	) => Promise<IStoredOAuthToken>;
+	/** Base path for routing (defaults to /library/config/events) */
+	basePath?: string;
 }
 
 export default function EventsPage({
@@ -109,6 +111,7 @@ export default function EventsPage({
 	hub,
 	onStartOAuth,
 	onRefreshToken,
+	basePath = "/library/config/events",
 }: Readonly<EventsPageProps>) {
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
@@ -279,9 +282,9 @@ export default function EventsPage({
 				additionalParams = `&eventId=${event.id}`;
 			}
 
-			router.push(`/library/config/events?id=${id}${additionalParams}`);
+			router.push(`${basePath}?id=${id}${additionalParams}`);
 		},
-		[id, router],
+		[id, router, basePath],
 	);
 
 	const handleNavigateToNode = useCallback(

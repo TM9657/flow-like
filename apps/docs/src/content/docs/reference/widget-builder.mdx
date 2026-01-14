@@ -1,0 +1,364 @@
+---
+title: Widget Builder Guide
+description: Learn how to create and customize widgets using the visual Widget Builder
+---
+
+import { Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+# Widget Builder Guide
+
+The Widget Builder is a visual tool for creating reusable UI components (widgets) that can be embedded in your apps, pages, and flows.
+
+## Overview
+
+Widgets are self-contained UI components that:
+
+- Can be customized through **customization options**
+- Support **versioning** for safe updates
+- Can be shared across your organization
+- Render natively on all platforms
+
+---
+
+## Getting Started
+
+<Steps>
+
+1. **Open the Widget Builder**
+
+   Navigate to **Studio > Widgets** and click **New Widget**.
+
+2. **Choose a Template**
+
+   Start from a blank widget or choose a template:
+   - **Card Widget** - Basic card layout
+   - **Form Widget** - Input form with validation
+   - **List Widget** - Dynamic list display
+   - **Dashboard Widget** - Stats and metrics display
+
+3. **Design Your Widget**
+
+   Use the visual canvas to drag and drop components.
+
+4. **Add Customization Options**
+
+   Define which properties users can customize.
+
+5. **Publish Your Widget**
+
+   Version and publish for use across your apps.
+
+</Steps>
+
+---
+
+## The Builder Interface
+
+### Canvas
+
+The main design area where you arrange components visually.
+
+- **Drag & Drop** - Add components from the left panel
+- **Select** - Click to select and edit components
+- **Multi-select** - Shift+click for multiple components
+- **Resize** - Drag handles to resize
+- **Reorder** - Drag in the layer tree
+
+### Component Panel
+
+Browse available components organized by category:
+
+- **Layout** - Row, Column, Grid, Stack
+- **Display** - Text, Image, Icon, Divider
+- **Interactive** - Button, TextField, Select
+- **Container** - Card, Modal, Tabs
+
+### Properties Panel
+
+Edit the selected component's properties:
+
+- **Content** - Text, images, data bindings
+- **Style** - Tailwind classes, custom styles
+- **Actions** - Click handlers, form submissions
+- **Responsive** - Breakpoint-specific overrides
+
+### Data Panel
+
+Manage the widget's data model:
+
+- **Add Data** - Define data entries
+- **Bind Data** - Connect components to data paths
+- **Mock Data** - Preview with sample data
+
+---
+
+## Building Your First Widget
+
+### Example: User Profile Card
+
+Let's build a user profile card widget:
+
+<Steps>
+
+1. **Add a Card Container**
+
+   Drag a **Card** component onto the canvas.
+
+2. **Add Layout**
+
+   Inside the card, add a **Row** for horizontal layout.
+
+3. **Add Avatar**
+
+   Add an **Image** component for the avatar:
+   ```
+   Binding: /user/avatar
+   Fallback: /default-avatar.png
+   Style: w-16 h-16 rounded-full
+   ```
+
+4. **Add User Info**
+
+   Add a **Column** next to the image:
+   - **Text** for name: `{ path: "/user/name" }`
+   - **Text** for role: `{ path: "/user/role" }`
+
+5. **Add Customization**
+
+   Go to **Customization** tab and add:
+   - `showRole` (boolean) - Toggle role visibility
+   - `avatarSize` (select) - sm, md, lg
+
+</Steps>
+
+---
+
+## Customization Options
+
+Customization options let users configure your widget without editing its structure.
+
+### Option Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `string` | Text input | Title, label |
+| `number` | Numeric input | Count, size |
+| `boolean` | Toggle switch | Show/hide features |
+| `select` | Dropdown | Size options, variants |
+| `color` | Color picker | Theme colors |
+| `image` | Image upload | Custom images |
+| `data` | Data path | Dynamic content source |
+
+### Defining Options
+
+```json
+{
+  "customization": [
+    {
+      "id": "title",
+      "label": "Widget Title",
+      "type": "string",
+      "defaultValue": "My Widget"
+    },
+    {
+      "id": "variant",
+      "label": "Style Variant",
+      "type": "select",
+      "options": [
+        { "value": "default", "label": "Default" },
+        { "value": "compact", "label": "Compact" }
+      ],
+      "defaultValue": "default"
+    },
+    {
+      "id": "showFooter",
+      "label": "Show Footer",
+      "type": "boolean",
+      "defaultValue": true
+    }
+  ]
+}
+```
+
+### Using Options in Components
+
+Reference customization options using the `$options` prefix:
+
+```json
+{
+  "type": "Text",
+  "props": {
+    "content": { "path": "$options/title" }
+  }
+}
+```
+
+Conditional rendering based on options:
+
+```json
+{
+  "type": "Column",
+  "condition": { "path": "$options/showFooter" },
+  "children": [...]
+}
+```
+
+---
+
+## Data Binding
+
+### Widget Data Model
+
+Each widget has its own data model scoped to the widget instance:
+
+```
+/title          - Widget title
+/items          - List of items
+/items/0/name   - First item's name
+/user/avatar    - User avatar URL
+```
+
+### Binding to Data
+
+Use `BoundValue` objects to bind component props to data:
+
+```json
+{
+  "type": "Text",
+  "props": {
+    "content": { "path": "/title" }
+  }
+}
+```
+
+### External Data
+
+Widgets can receive data from parent contexts:
+
+```json
+{
+  "type": "WidgetInstance",
+  "props": {
+    "widgetId": "user-card",
+    "data": {
+      "user": { "path": "/currentUser" }
+    }
+  }
+}
+```
+
+---
+
+## Styling Widgets
+
+### Tailwind CSS
+
+Use Tailwind classes for styling:
+
+```json
+{
+  "style": {
+    "className": "p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all"
+  }
+}
+```
+
+### Responsive Design
+
+Add responsive breakpoints:
+
+```json
+{
+  "style": {
+    "className": "p-4 md:p-6 lg:p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+  }
+}
+```
+
+### Dark Mode
+
+Support dark mode with `dark:` prefix:
+
+```json
+{
+  "style": {
+    "className": "bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+  }
+}
+```
+
+---
+
+## Versioning
+
+Widgets support semantic versioning (major.minor.patch):
+
+### Version Numbers
+
+- **Major** (1.0.0 → 2.0.0): Breaking changes
+- **Minor** (1.0.0 → 1.1.0): New features, backward compatible
+- **Patch** (1.0.0 → 1.0.1): Bug fixes
+
+### Publishing Versions
+
+<Steps>
+
+1. Make your changes in the builder
+2. Click **Publish** in the toolbar
+3. Select version increment type
+4. Add release notes
+5. Confirm publish
+
+</Steps>
+
+<Aside type="caution">
+Major version changes may break existing widget instances. Users will be notified to update.
+</Aside>
+
+---
+
+## Best Practices
+
+### Design Guidelines
+
+- **Keep widgets focused** - One purpose per widget
+- **Use semantic structure** - Proper heading hierarchy
+- **Support dark mode** - Test both themes
+- **Plan for responsiveness** - Test all breakpoints
+
+### Performance
+
+- **Minimize nesting** - Flatten component hierarchy
+- **Use lazy loading** - For images and heavy content
+- **Optimize data** - Only bind necessary data
+
+### Accessibility
+
+- **Use semantic components** - Buttons, headings, labels
+- **Add alt text** - For all images
+- **Support keyboard** - All interactive elements
+- **Test with screen readers** - Verify announcements
+
+---
+
+## FlowPilot Integration
+
+Use FlowPilot to generate or modify widgets with AI:
+
+1. Select a widget or component
+2. Click **Edit with FlowPilot** in the toolbar
+3. Describe your changes:
+   - "Add a loading state to this button"
+   - "Make this card responsive with 2 columns on mobile"
+   - "Add hover animations to all cards"
+
+<Aside type="tip">
+FlowPilot understands context - it knows your current widget structure and can make targeted improvements.
+</Aside>
+
+---
+
+## Next Steps
+
+- [A2UI Component Reference](/reference/a2ui-components) - Full component documentation
+- [FlowPilot UI Generation](/reference/flowpilot-ui) - AI-powered UI generation

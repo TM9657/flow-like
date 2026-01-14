@@ -2,8 +2,7 @@
 	"identifier": "com.flow-like.app",
 	"bundle": {
 		"externalBin": [
-            "binaries/linux/x64/llama-server",
-            "bin/flow-docling"
+            "binaries/linux/x64/llama-server"
         ],
         "resources": {
             "binaries/linux/x64/libmtmd.so": "libmtmd.so",

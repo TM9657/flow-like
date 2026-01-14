@@ -1,0 +1,382 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+
+type Support = "native" | "partial" | "none" | string;
+
+interface Competitor {
+  name: string;
+  capabilities: Record<string, Support>;
+}
+
+interface Category {
+  name: string;
+  desc: string;
+  competitors: Competitor[];
+}
+
+const capabilities = [
+  "visual_workflow",
+  "replayable",
+  "high_volume",
+  "compiled",
+  "ai_agents",
+  "ui_builder",
+  "full_apps",
+  "customer_facing",
+  "desktop",
+  "mobile",
+  "offline",
+  "local_first",
+  "file_native",
+  "data_science",
+  "governance",
+  "self_hosted",
+  "lock_in",
+];
+
+const flowLikeCapabilities: Record<string, Support> = {
+  visual_workflow: "native",
+  replayable: "native",
+  high_volume: "native",
+  compiled: "native",
+  ai_agents: "native",
+  ui_builder: "native",
+  full_apps: "native",
+  customer_facing: "native",
+  desktop: "native",
+  mobile: "native",
+  offline: "native",
+  local_first: "native",
+  file_native: "native",
+  data_science: "native",
+  governance: "native",
+  self_hosted: "native",
+  lock_in: "none-lock-in",
+};
+
+const categories: Category[] = [
+  {
+    name: t("compare.category.execution"),
+    desc: t("compare.category.execution.desc"),
+    competitors: [
+      {
+        name: "Zapier",
+        capabilities: {
+          visual_workflow: "native",
+          replayable: "none",
+          high_volume: "none",
+          compiled: "none",
+          ai_agents: "none",
+          ui_builder: "none",
+          full_apps: "none",
+          customer_facing: "none",
+          desktop: "none",
+          mobile: "none",
+          offline: "none",
+          local_first: "none",
+          file_native: "none",
+          data_science: "none",
+          governance: "saas",
+          self_hosted: "none",
+          lock_in: "high",
+        },
+      },
+      {
+        name: "n8n",
+        capabilities: {
+          visual_workflow: "native",
+          replayable: "none",
+          high_volume: "none",
+          compiled: "js",
+          ai_agents: "partial",
+          ui_builder: "none",
+          full_apps: "none",
+          customer_facing: "none",
+          desktop: "none",
+          mobile: "none",
+          offline: "none",
+          local_first: "none",
+          file_native: "none",
+          data_science: "partial",
+          governance: "basic",
+          self_hosted: "native",
+          lock_in: "low",
+        },
+      },
+      {
+        name: "Node-RED",
+        capabilities: {
+          visual_workflow: "native",
+          replayable: "none",
+          high_volume: "none",
+          compiled: "js",
+          ai_agents: "partial",
+          ui_builder: "none",
+          full_apps: "none",
+          customer_facing: "none",
+          desktop: "none",
+          mobile: "none",
+          offline: "none",
+          local_first: "none",
+          file_native: "none",
+          data_science: "partial",
+          governance: "none",
+          self_hosted: "native",
+          lock_in: "low",
+        },
+      },
+    ],
+  },
+  {
+    name: t("compare.category.lowcode"),
+    desc: t("compare.category.lowcode.desc"),
+    competitors: [
+      {
+        name: "Retool",
+        capabilities: {
+          visual_workflow: "partial",
+          replayable: "none",
+          high_volume: "none",
+          compiled: "none",
+          ai_agents: "partial",
+          ui_builder: "native",
+          full_apps: "native",
+          customer_facing: "native",
+          desktop: "none",
+          mobile: "none",
+          offline: "none",
+          local_first: "none",
+          file_native: "none",
+          data_science: "none",
+          governance: "basic",
+          self_hosted: "partial",
+          lock_in: "high",
+        },
+      },
+      {
+        name: "Power Apps",
+        capabilities: {
+          visual_workflow: "partial",
+          replayable: "none",
+          high_volume: "none",
+          compiled: "none",
+          ai_agents: "partial",
+          ui_builder: "native",
+          full_apps: "native",
+          customer_facing: "native",
+          desktop: "none",
+          mobile: "none",
+          offline: "none",
+          local_first: "none",
+          file_native: "none",
+          data_science: "none",
+          governance: "enterprise",
+          self_hosted: "none",
+          lock_in: "high",
+        },
+      },
+      {
+        name: "Superblocks",
+        capabilities: {
+          visual_workflow: "partial",
+          replayable: "none",
+          high_volume: "none",
+          compiled: "none",
+          ai_agents: "partial",
+          ui_builder: "native",
+          full_apps: "native",
+          customer_facing: "native",
+          desktop: "none",
+          mobile: "none",
+          offline: "none",
+          local_first: "none",
+          file_native: "none",
+          data_science: "none",
+          governance: "basic",
+          self_hosted: "partial",
+          lock_in: "high",
+        },
+      },
+      {
+        name: "Appsmith",
+        capabilities: {
+          visual_workflow: "partial",
+          replayable: "none",
+          high_volume: "none",
+          compiled: "none",
+          ai_agents: "partial",
+          ui_builder: "native",
+          full_apps: "native",
+          customer_facing: "native",
+          desktop: "none",
+          mobile: "none",
+          offline: "none",
+          local_first: "none",
+          file_native: "none",
+          data_science: "none",
+          governance: "basic",
+          self_hosted: "native",
+          lock_in: "low",
+        },
+      },
+    ],
+  },
+  {
+    name: t("compare.category.orchestration"),
+    desc: t("compare.category.orchestration.desc"),
+    competitors: [
+      {
+        name: "Airflow",
+        capabilities: {
+          visual_workflow: "none",
+          replayable: "native",
+          high_volume: "native",
+          compiled: "native",
+          ai_agents: "none",
+          ui_builder: "none",
+          full_apps: "none",
+          customer_facing: "none",
+          desktop: "none",
+          mobile: "none",
+          offline: "none",
+          local_first: "none",
+          file_native: "none",
+          data_science: "native",
+          governance: "none",
+          self_hosted: "native",
+          lock_in: "low",
+        },
+      },
+      {
+        name: "Temporal",
+        capabilities: {
+          visual_workflow: "none",
+          replayable: "native",
+          high_volume: "native",
+          compiled: "native",
+          ai_agents: "none",
+          ui_builder: "none",
+          full_apps: "none",
+          customer_facing: "none",
+          desktop: "none",
+          mobile: "none",
+          offline: "none",
+          local_first: "none",
+          file_native: "none",
+          data_science: "native",
+          governance: "none",
+          self_hosted: "native",
+          lock_in: "low",
+        },
+      },
+    ],
+  },
+];
+
+const renderSupport = (support: Support, cap: string): { icon: string; color: string; label?: string } => {
+  if (support === "native") return { icon: "✓", color: "emerald" };
+  if (support === "partial") return { icon: "◐", color: "amber" };
+  if (support === "none") return { icon: "✗", color: "red" };
+  if (support === "none-lock-in") return { icon: "✓", color: "emerald" };
+  if (support === "high") return { icon: "⚠", color: "red", label: "High" };
+  if (support === "low") return { icon: "○", color: "emerald", label: "Low" };
+  if (support === "saas") return { icon: "◐", color: "amber", label: "SaaS" };
+  if (support === "basic") return { icon: "◐", color: "amber", label: "Basic" };
+  if (support === "enterprise") return { icon: "◐", color: "amber", label: "Enterprise" };
+  if (support === "js") return { icon: "◐", color: "amber", label: "JS" };
+  return { icon: support, color: "muted", label: support };
+};
+---
+
+<section id="matrix" class="relative py-20 lg:py-28">
+  <div class="mx-auto max-w-7xl px-4 lg:px-8">
+    {categories.map((category, catIndex) => (
+      <div class:list={["mb-16 last:mb-0", catIndex > 0 && "pt-16 border-t border-border/30"]}>
+        <!-- Category Header -->
+        <div class="mb-8">
+          <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">{category.name}</h2>
+          <p class="text-muted-foreground max-w-2xl">{category.desc}</p>
+        </div>
+
+        <!-- Comparison Table -->
+        <div class="overflow-x-auto -mx-4 px-4 pb-4">
+          <div class="min-w-[800px]">
+            <table class="w-full border-collapse">
+              <thead>
+                <tr class="border-b border-border/50">
+                  <th class="text-left py-4 pr-4 font-medium text-muted-foreground text-sm w-48">Capability</th>
+                  <th class="text-center py-4 px-3 font-semibold text-emerald-600 dark:text-emerald-400 text-sm">
+                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                      <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      Flow-Like
+                    </div>
+                  </th>
+                  {category.competitors.map((comp) => (
+                    <th class="text-center py-4 px-3 font-medium text-muted-foreground text-sm">{comp.name}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {capabilities.map((cap) => {
+                  const flowLikeSupport = renderSupport(flowLikeCapabilities[cap], cap);
+                  return (
+                    <tr class="border-b border-border/20 hover:bg-muted/30 transition-colors">
+                      <td class="py-3 pr-4 text-sm">{t(`compare.cap.${cap}`)}</td>
+                      <td class="py-3 px-3 text-center">
+                        <span class:list={[
+                          "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold",
+                          flowLikeSupport.color === "emerald" && "bg-emerald-500/20 text-emerald-500",
+                          flowLikeSupport.color === "amber" && "bg-amber-500/20 text-amber-500",
+                          flowLikeSupport.color === "red" && "bg-red-500/20 text-red-500",
+                        ]}>
+                          {flowLikeSupport.icon}
+                        </span>
+                      </td>
+                      {category.competitors.map((comp) => {
+                        const support = renderSupport(comp.capabilities[cap], cap);
+                        return (
+                          <td class="py-3 px-3 text-center">
+                            <div class="flex items-center justify-center gap-1.5">
+                              <span class:list={[
+                                "flex items-center justify-center w-6 h-6 rounded-full text-xs",
+                                support.color === "emerald" && "bg-emerald-500/20 text-emerald-500",
+                                support.color === "amber" && "bg-amber-500/20 text-amber-500",
+                                support.color === "red" && "bg-red-500/20 text-red-500",
+                                support.color === "muted" && "bg-muted/50 text-muted-foreground",
+                              ]}>
+                                {support.icon}
+                              </span>
+                              {support.label && (
+                                <span class="text-xs text-muted-foreground">{support.label}</span>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+</section>
+
+<style>
+  table {
+    border-spacing: 0;
+  }
+  th, td {
+    vertical-align: middle;
+  }
+</style>

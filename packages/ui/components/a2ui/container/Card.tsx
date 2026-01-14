@@ -1,0 +1,68 @@
+"use client";
+
+import { Fragment } from "react";
+import { cn } from "../../../lib/utils";
+import {
+	CardContent,
+	CardDescription,
+	CardFooter,
+	CardHeader,
+	CardTitle,
+	Card as ShadCard,
+} from "../../ui/card";
+import type { ComponentProps } from "../ComponentRegistry";
+import { useData } from "../DataContext";
+import { resolveInlineStyle, resolveStyle } from "../StyleResolver";
+import type { BoundValue, CardComponent, Children } from "../types";
+
+function useResolved<T>(boundValue: BoundValue | undefined): T | undefined {
+	const { resolve } = useData();
+	if (!boundValue) return undefined;
+	return resolve(boundValue) as T;
+}
+
+function getChildIds(children: Children | undefined): string[] {
+	if (!children) return [];
+	if ("explicitList" in children) return children.explicitList;
+	return [];
+}
+
+export function A2UICard({
+	component,
+	style,
+	renderChild,
+}: ComponentProps<CardComponent>) {
+	const title = useResolved<string>(component.title);
+	const description = useResolved<string>(component.description);
+	const footer = useResolved<string>(component.footer);
+	const hoverable = useResolved<boolean>(component.hoverable);
+	const clickable = useResolved<boolean>(component.clickable);
+
+	const childIds = getChildIds(component.children);
+
+	return (
+		<ShadCard
+			className={cn(
+				resolveStyle(style),
+				hoverable && "hover:shadow-lg transition-shadow",
+				clickable && "cursor-pointer",
+			)}
+			style={resolveInlineStyle(style)}
+		>
+			{(title || description) && (
+				<CardHeader>
+					{title && <CardTitle>{title}</CardTitle>}
+					{description && <CardDescription>{description}</CardDescription>}
+				</CardHeader>
+			)}
+			{childIds.length > 0 && (
+				<CardContent>
+					{childIds.map((id) => (
+						<Fragment key={id}>{renderChild(id)}</Fragment>
+					))}
+				</CardContent>
+			)}
+			{footer && <CardFooter>{footer}</CardFooter>}
+		</ShadCard>
+	);
+}

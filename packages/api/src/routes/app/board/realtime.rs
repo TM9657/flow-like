@@ -76,7 +76,7 @@ pub async fn jwks(
 
     // Get JWKS from unified backend module
     let jwks = get_jwks()
-        .map_err(|e| ApiError::InternalError(anyhow!("Realtime not configured: {}", e).into()))?;
+        .map_err(|e| ApiError::InternalError(anyhow!("Realtime not configured: {}", e)))?;
 
     Ok(Json(jwks))
 }
@@ -121,7 +121,7 @@ pub async fn access(
     };
 
     let jwt = backend_jwt::sign(&claims)
-        .map_err(|e| ApiError::InternalError(anyhow!("Realtime not configured: {}", e).into()))?;
+        .map_err(|e| ApiError::InternalError(anyhow!("Realtime not configured: {}", e)))?;
 
     Ok(Json(RealtimeParams {
         jwt,

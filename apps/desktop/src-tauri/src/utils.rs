@@ -8,7 +8,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 static LAST_EMIT: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum UiEmitTarget {
     Main,
     Label(String),

@@ -1,4 +1,5 @@
-import { MessageCircleDashedIcon, PlayCircleIcon, ZapIcon } from "lucide-react";
+import { createId } from "@paralleldrive/cuid2";
+import { MessageCircleDashedIcon, PlayCircleIcon, VariableIcon, ZapIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMiniSearch } from "react-minisearch";
 import {
@@ -10,6 +11,7 @@ import {
 import { type IBoard, doPinsMatch } from "../../lib";
 import type { INode } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
+import type { IVariable } from "../../lib/schema/flow/variable";
 import { convertJsonToUint8Array } from "../../lib/uint8";
 import {
 	Button,
@@ -35,6 +37,7 @@ export function FlowContextMenu({
 	onPlaceholder,
 	onNodePlace,
 	onCommentPlace,
+	onCreateVariable,
 	onClose,
 }: Readonly<{
 	nodes: INode[];
@@ -45,6 +48,7 @@ export function FlowContextMenu({
 	onPlaceholder: (name: string) => void;
 	onNodePlace: (node: INode) => void;
 	onCommentPlace: () => void;
+	onCreateVariable?: (variable: IVariable) => void;
 	onClose: () => void;
 }>) {
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -406,6 +410,34 @@ export function FlowContextMenu({
 							<ZapIcon className="w-4 h-4" />
 							Placeholder
 						</ContextMenuItem>
+						{/* TODO: create the get node if input, set node if output! */}
+						{droppedPin && onCreateVariable && droppedPin.data_type !== "Execution" && (
+							<ContextMenuItem
+								className="flex flex-row gap-1 items-center"
+								onSelect={(event) => {
+									if (menuBlockedRef.current) {
+										event.preventDefault();
+										return;
+									}
+									const variable: IVariable = {
+										id: createId(),
+										name: droppedPin.friendly_name || droppedPin.name,
+										data_type: droppedPin.data_type,
+										value_type: droppedPin.value_type,
+										exposed: false,
+										secret: false,
+										editable: true,
+										schema: droppedPin.schema ?? null,
+										default_value: droppedPin.default_value ?? null,
+									};
+									onCreateVariable(variable);
+									onClose();
+								}}
+							>
+								<VariableIcon className="w-4 h-4" />
+								Create Variable from Pin
+							</ContextMenuItem>
+						)}
 						<Separator className="my-1" />
 						<Input
 							ref={inputRef}

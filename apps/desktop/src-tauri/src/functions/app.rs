@@ -522,7 +522,7 @@ pub async fn get_app_meta(
 pub async fn get_app_size(
     app_handle: AppHandle,
     app_id: String,
-) -> Result<usize, TauriFunctionError> {
+) -> Result<u64, TauriFunctionError> {
     let content_store = TauriFlowLikeState::get_project_storage_store(&app_handle).await?;
     let path = Path::from("apps").child(app_id);
 

@@ -130,7 +130,7 @@ impl NodeLogic for ImapConnectNode {
         let mut node = Node::new(
             "email_imap_connect",
             "IMAP Connect",
-            "Connects to an IMAP server and caches the session",
+            "Connects to an IMAP server and caches the session. For Gmail: use host 'imap.gmail.com', port 993, encryption 'Tls', your Gmail address as username, and an App Password (not your regular password). Generate an App Password at: https://support.google.com/mail/answer/185833",
             "Email/IMAP",
         );
         node.add_icon("/flow/icons/mail.svg");

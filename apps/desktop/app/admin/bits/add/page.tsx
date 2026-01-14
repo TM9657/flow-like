@@ -28,9 +28,7 @@ import {
 	UploadCloudIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
-import { put, streamFetcher } from "../../../../lib/api";
 import {
 	getContextLength,
 	getModelLicense,
@@ -152,7 +150,6 @@ export default function Page() {
 	const [imageEmbeddingConfig, setImageEmbeddingConfig] = useState<
 		IBit | undefined
 	>(undefined);
-	const auth = useAuth();
 	const [progress, setProgress] = useState<number>(0);
 
 	const [progressDownloaded, setProgressDownloaded] = useState<number | null>(
@@ -182,15 +179,14 @@ export default function Page() {
 
 			let finalBit = { ...bit };
 
-			await streamFetcher(
+			await backend.apiState.stream(
 				profile.data,
 				`admin/bit/${bit.id}`,
 				{
 					method: "PUT",
 					body: JSON.stringify(bit),
 				},
-				auth,
-				(data: any) => {
+				(data: Record<string, unknown>) => {
 					console.log("Received data:", data);
 
 					const pRaw = data?.percent;
@@ -259,7 +255,7 @@ export default function Page() {
 			);
 			return finalBit;
 		},
-		[auth, profile.data],
+		[backend.apiState, profile.data],
 	);
 
 	function setDefaultDependencies(type: IBitTypes) {
@@ -721,11 +717,10 @@ export default function Page() {
 									),
 								});
 
-								const metaUpload = await put(
+								const metaUpload = await backend.apiState.put(
 									profile.data,
 									`admin/bit/${response.id}/en`,
 									bit.meta.en,
-									auth,
 								);
 							}
 
@@ -793,11 +788,10 @@ export default function Page() {
 									),
 								});
 
-								const metaUpload = await put(
+								const metaUpload = await backend.apiState.put(
 									profile.data,
 									`admin/bit/${response.id}/en`,
 									bit.meta.en,
-									auth,
 								);
 							}
 
@@ -822,11 +816,10 @@ export default function Page() {
 										(dep) => `${dep.hub}:${dep.id}`,
 									),
 								});
-								const metaUpload = await put(
+								const metaUpload = await backend.apiState.put(
 									profile.data,
 									`admin/bit/${response.id}/en`,
 									bit.meta.en,
-									auth,
 								);
 							}
 

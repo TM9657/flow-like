@@ -27,6 +27,7 @@ use crate::credentials::{CredentialsAccess, RuntimeCredentials};
 use crate::entity::role;
 use crate::execution::{DispatchConfig, Dispatcher};
 use crate::mail::{DynMailClient, create_mail_client};
+use crate::routes::registry::ServerRegistry;
 
 pub type AppState = Arc<State>;
 
@@ -67,6 +68,8 @@ pub struct State {
     /// Auth token cache: token_hash -> CachedAuth
     /// Short TTL (240s) to balance security vs performance
     pub auth_cache: moka::sync::Cache<String, CachedAuth>,
+    /// WASM package registry (optional)
+    pub wasm_registry: Option<Arc<ServerRegistry>>,
 }
 
 impl State {
@@ -148,6 +151,15 @@ impl State {
         let dispatch_config = DispatchConfig::from_env();
         let dispatcher = Dispatcher::new(dispatch_config).await;
 
+        // Initialize WASM registry if enabled (uses PostgreSQL + CDN)
+        let wasm_registry = if platform_config.features.wasm_registry {
+            let cdn_base_url = platform_config.cdn.clone();
+            let registry = ServerRegistry::new(db.clone(), cdn_bucket.clone(), cdn_base_url);
+            Some(Arc::new(registry))
+        } else {
+            None
+        };
+
         Self {
             platform_config,
             db,
@@ -178,6 +190,7 @@ impl State {
                 .max_capacity(10_000)
                 .time_to_live(Duration::from_secs(240))
                 .build(),
+            wasm_registry,
         }
     }
 

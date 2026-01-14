@@ -293,6 +293,18 @@ export const de = {
 	"reading.viewall": "Alle Posts",
 	"reading.viewall.mobile": "Alle anzeigen",
 
+	// Newsletter
+	"newsletter.tagline": "Bleib informiert",
+	"newsletter.headline": "Automation-Insights direkt ins Postfach",
+	"newsletter.description": "Melde dich für unseren Newsletter an und erhalte die neuesten Updates zu Flow-Like, Best Practices für Automatisierung und Branchen-Insights. Kein Spam — nur wertvolle Inhalte.",
+	"newsletter.email.label": "E-Mail-Adresse",
+	"newsletter.email.placeholder": "Deine E-Mail eingeben",
+	"newsletter.button": "Anmelden",
+	"newsletter.optin": "Ich stimme zu, E-Mail-Updates zu erhalten und akzeptiere die Datenschutzerklärung",
+	"newsletter.privacy": "Wir nutzen Brevo als Marketing-Plattform. Mit dem Absenden stimmst du zu, dass deine Daten gemäß der Brevo-Datenschutzerklärung verarbeitet werden.",
+	"newsletter.success": "Danke für die Anmeldung! Prüfe dein Postfach zur Bestätigung.",
+	"newsletter.error": "Etwas ist schiefgelaufen. Bitte versuche es später erneut.",
+
 	// Footer & Navigation
 	"nav.download": "Download",
 	"nav.docs": "Dokumentation",

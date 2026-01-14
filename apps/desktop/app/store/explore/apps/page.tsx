@@ -563,7 +563,7 @@ function AppGrid({
 				{apps.map(([app, metadata]) => (
 					<motion.div key={app.id} variants={itemVariants}>
 						<AppCard
-							apps={apps.map(([a]) => a)}
+							isOwned={userAppIds.has(app.id)}
 							app={app}
 							metadata={metadata}
 							variant={viewMode === "grid" ? "extended" : "small"}
@@ -659,7 +659,7 @@ function UserAppsSection({
 			{apps.map(([app, metadata]) => (
 				<motion.div key={app.id} variants={itemVariants}>
 					<AppCard
-						apps={apps.map(([a]) => a)}
+						isOwned
 						app={app}
 						metadata={metadata}
 						variant={viewMode === "grid" ? "extended" : "small"}

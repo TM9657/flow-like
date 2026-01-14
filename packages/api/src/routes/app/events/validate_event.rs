@@ -37,7 +37,7 @@ pub async fn validate_event(
             [maj, min, pat] => Some((*maj, *min, *pat)),
             _ => {
                 return Err(ApiError::InternalError(
-                    anyhow!("version must be in MAJOR_MINOR_PATCH format").into(),
+                    anyhow!("version must be in MAJOR_MINOR_PATCH format"),
                 ));
             }
         }

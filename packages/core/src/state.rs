@@ -43,6 +43,7 @@ pub struct FlowLikeStores {
 #[derive(Clone, Default)]
 pub struct FlowLikeCallbacks {
     pub build_project_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
+    pub build_user_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
     pub build_logs_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
 }
 
@@ -103,6 +104,13 @@ impl FlowLikeConfig {
         callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
     ) {
         self.callbacks.build_project_database = Some(callback);
+    }
+
+    pub fn register_build_user_database(
+        &mut self,
+        callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
+    ) {
+        self.callbacks.build_user_database = Some(callback);
     }
 
     pub fn register_build_logs_database(
@@ -299,6 +307,12 @@ pub struct FlowLikeState {
     pub board_registry: Arc<DashMap<String, Arc<Mutex<Board>>>>, // TODO: should board be wrapped in RWLock or Mutex?
     #[cfg(feature = "flow-runtime")]
     pub board_run_registry: Arc<DashMap<String, Arc<RunData>>>,
+
+    // A2UI registries for open widgets/pages
+    #[cfg(feature = "flow-runtime")]
+    pub widget_registry: Arc<DashMap<String, crate::a2ui::widget::Widget>>,
+    #[cfg(feature = "flow-runtime")]
+    pub page_registry: Arc<DashMap<String, crate::a2ui::widget::Page>>,
 }
 
 impl FlowLikeState {
@@ -324,6 +338,11 @@ impl FlowLikeState {
             board_registry: Arc::new(DashMap::new()),
             #[cfg(feature = "flow-runtime")]
             board_run_registry: Arc::new(DashMap::new()),
+
+            #[cfg(feature = "flow-runtime")]
+            widget_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            page_registry: Arc::new(DashMap::new()),
         }
     }
 
@@ -350,6 +369,11 @@ impl FlowLikeState {
             board_registry: Arc::new(DashMap::new()),
             #[cfg(feature = "flow-runtime")]
             board_run_registry: Arc::new(DashMap::new()),
+
+            #[cfg(feature = "flow-runtime")]
+            widget_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            page_registry: Arc::new(DashMap::new()),
         }
     }
 
@@ -639,6 +663,60 @@ impl Default for ToastEvent {
         ToastEvent {
             message: "".to_string(),
             level: ToastLevel::Info,
+        }
+    }
+}
+
+/// Event sent via InterCom to notify the user
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NotificationEvent {
+    pub title: String,
+    pub description: Option<String>,
+    pub icon: Option<String>,
+    pub link: Option<String>,
+    pub show_desktop: bool,
+}
+
+impl NotificationEvent {
+    pub fn new(title: &str) -> Self {
+        NotificationEvent {
+            title: title.to_string(),
+            description: None,
+            icon: None,
+            link: None,
+            show_desktop: true,
+        }
+    }
+
+    pub fn with_description(mut self, description: &str) -> Self {
+        self.description = Some(description.to_string());
+        self
+    }
+
+    pub fn with_icon(mut self, icon: &str) -> Self {
+        self.icon = Some(icon.to_string());
+        self
+    }
+
+    pub fn with_link(mut self, link: &str) -> Self {
+        self.link = Some(link.to_string());
+        self
+    }
+
+    pub fn with_desktop(mut self, show_desktop: bool) -> Self {
+        self.show_desktop = show_desktop;
+        self
+    }
+}
+
+impl Default for NotificationEvent {
+    fn default() -> Self {
+        NotificationEvent {
+            title: String::new(),
+            description: None,
+            icon: None,
+            link: None,
+            show_desktop: true,
         }
     }
 }

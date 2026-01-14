@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 flow-like-types.workspace = true
-object_store = {version="0.11.1", features = ["gcp", "aws", "azure", "serde", "serde_json", "cloud"] }
+object_store = {version="0.12.4", features = ["gcp", "aws", "azure", "serde", "serde_json", "cloud"] }
 lancedb = { git = "https://github.com/TM9657/lancedb.git", rev="5b6f4bb", features = ["polars"]}
 polars = "0.39.2"
 polars-arrow = "0.39.2"
@@ -22,13 +22,23 @@ futures-util = "0.3.31"
 urlencoding.workspace = true
 schemars.workspace = true
 base64.workspace = true
-datafusion = { version = "49.0.2", default-features = false, features = ["recursive_protection", "regex_expressions", "string_expressions", "unicode_expressions", "array_expressions", "nested_expressions", "math_expressions", "datetime_expressions"]}
+datafusion = { version = "49.0.2", default-features = false, features = ["recursive_protection", "regex_expressions", "string_expressions", "unicode_expressions", "array_expressions", "nested_expressions", "math_expressions", "datetime_expressions", "parquet"]}
+num_cpus = "1.16"
 percent-encoding.workspace = true
 infer = "0.19.0"
 rig-core.workspace = true
 rmcp.workspace = true
-# duckdb = { version="1.2.2", features = ["bundled", "extensions-full", "modern-full", "vtab-full"]}
+
+# Data lake formats - Delta Lake support (v0.28 compatible with datafusion 49 + arrow 55)
+deltalake = { version = "0.28", optional = true, default-features = false, features = ["datafusion", "rustls"] }
 
 [features]
 tauri = []
 default = []
+
+# Data lake features
+delta = ["deltalake"]
+all-lakes = ["delta"]
+
+# Full feature set (currently only lakes - database providers pending datafusion version compatibility)
+full = ["all-lakes"]

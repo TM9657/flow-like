@@ -7,14 +7,18 @@
 //! - Structs/data structures
 //! - Logging
 //! - Utilities
+//! - A2UI (Agent-to-UI) operations
+//! - Notifications
 
 use std::sync::Arc;
 
 pub use flow_like_catalog_core::{NodeConstructor, NodeLogic, inventory, register_node};
 
+pub mod a2ui;
 pub mod control;
 pub mod logging;
 pub mod math;
+pub mod notifications;
 pub mod structs;
 pub mod utils;
 pub mod variables;

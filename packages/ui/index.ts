@@ -16,6 +16,7 @@ export * from "./db/index";
 // Dependency exports
 export {
 	QueryClient,
+	useMutation,
 	useQuery,
 	useQueryClient,
 	type QueryObserverResult,
