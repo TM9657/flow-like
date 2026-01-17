@@ -1,5 +1,18 @@
 "use client";
 
+import {
+	AlertTriangleIcon,
+	ArrowRightIcon,
+	ExternalLinkIcon,
+	EyeIcon,
+	InfoIcon,
+	SettingsIcon,
+	ShieldIcon,
+	UsersIcon,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { useCallback } from "react";
+import { toast } from "sonner";
 import type { IApp } from "../../../types";
 import { IAppVisibility } from "../../../types";
 import {
@@ -21,19 +34,6 @@ import {
 	CardHeader,
 	CardTitle,
 } from "../../ui/card";
-import {
-	AlertTriangleIcon,
-	ArrowRightIcon,
-	ExternalLinkIcon,
-	EyeIcon,
-	InfoIcon,
-	SettingsIcon,
-	ShieldIcon,
-	UsersIcon,
-} from "lucide-react";
-import type { ReactNode } from "react";
-import { useCallback } from "react";
-import { toast } from "sonner";
 
 export interface VisibilityStatusSwitcherProps {
 	localApp: IApp;

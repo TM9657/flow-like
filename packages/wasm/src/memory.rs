@@ -10,12 +10,17 @@ pub struct WasmMemory;
 
 impl WasmMemory {
     /// Read bytes from WASM memory
-    pub fn read_bytes(memory: &Memory, store: &impl wasmtime::AsContext, ptr: u32, len: u32) -> WasmResult<Vec<u8>> {
+    pub fn read_bytes(
+        memory: &Memory,
+        store: &impl wasmtime::AsContext,
+        ptr: u32,
+        len: u32,
+    ) -> WasmResult<Vec<u8>> {
         let data = memory.data(store);
         let start = ptr as usize;
-        let end = start.checked_add(len as usize).ok_or_else(|| {
-            WasmError::memory_access("Memory address overflow")
-        })?;
+        let end = start
+            .checked_add(len as usize)
+            .ok_or_else(|| WasmError::memory_access("Memory address overflow"))?;
 
         if end > data.len() {
             return Err(WasmError::memory_access(format!(
@@ -28,20 +33,29 @@ impl WasmMemory {
     }
 
     /// Read a UTF-8 string from WASM memory
-    pub fn read_string(memory: &Memory, store: &impl wasmtime::AsContext, ptr: u32, len: u32) -> WasmResult<String> {
+    pub fn read_string(
+        memory: &Memory,
+        store: &impl wasmtime::AsContext,
+        ptr: u32,
+        len: u32,
+    ) -> WasmResult<String> {
         let bytes = Self::read_bytes(memory, store, ptr, len)?;
-        String::from_utf8(bytes).map_err(|e| {
-            WasmError::memory_access(format!("Invalid UTF-8 string: {}", e))
-        })
+        String::from_utf8(bytes)
+            .map_err(|e| WasmError::memory_access(format!("Invalid UTF-8 string: {}", e)))
     }
 
     /// Write bytes to WASM memory
-    pub fn write_bytes(memory: &Memory, store: &mut impl wasmtime::AsContextMut, ptr: u32, data: &[u8]) -> WasmResult<()> {
+    pub fn write_bytes(
+        memory: &Memory,
+        store: &mut impl wasmtime::AsContextMut,
+        ptr: u32,
+        data: &[u8],
+    ) -> WasmResult<()> {
         let mem_data = memory.data_mut(store);
         let start = ptr as usize;
-        let end = start.checked_add(data.len()).ok_or_else(|| {
-            WasmError::memory_access("Memory address overflow")
-        })?;
+        let end = start
+            .checked_add(data.len())
+            .ok_or_else(|| WasmError::memory_access("Memory address overflow"))?;
 
         if end > mem_data.len() {
             return Err(WasmError::memory_access(format!(
@@ -55,7 +69,12 @@ impl WasmMemory {
     }
 
     /// Write a string to WASM memory
-    pub fn write_string(memory: &Memory, store: &mut impl wasmtime::AsContextMut, ptr: u32, s: &str) -> WasmResult<()> {
+    pub fn write_string(
+        memory: &Memory,
+        store: &mut impl wasmtime::AsContextMut,
+        ptr: u32,
+        s: &str,
+    ) -> WasmResult<()> {
         Self::write_bytes(memory, store, ptr, s.as_bytes())
     }
 
@@ -65,10 +84,14 @@ impl WasmMemory {
     }
 
     /// Grow memory by the specified number of pages (64KB each)
-    pub fn grow(memory: &Memory, store: &mut impl wasmtime::AsContextMut, pages: u64) -> WasmResult<u64> {
-        memory.grow(store, pages).map_err(|e| {
-            WasmError::memory_access(format!("Failed to grow memory: {}", e))
-        })
+    pub fn grow(
+        memory: &Memory,
+        store: &mut impl wasmtime::AsContextMut,
+        pages: u64,
+    ) -> WasmResult<u64> {
+        memory
+            .grow(store, pages)
+            .map_err(|e| WasmError::memory_access(format!("Failed to grow memory: {}", e)))
     }
 }
 
@@ -118,12 +141,12 @@ impl StringMarshaller {
 
     /// Serialize a value to JSON bytes
     pub fn to_json_bytes<T: serde::Serialize>(value: &T) -> WasmResult<Vec<u8>> {
-        serde_json::to_vec(value).map_err(|e| WasmError::Json(e))
+        serde_json::to_vec(value).map_err(WasmError::Json)
     }
 
     /// Deserialize JSON bytes to a value
     pub fn from_json_bytes<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> WasmResult<T> {
-        serde_json::from_slice(bytes).map_err(|e| WasmError::Json(e))
+        serde_json::from_slice(bytes).map_err(WasmError::Json)
     }
 }
 
@@ -153,12 +176,12 @@ impl WasmAllocator {
     pub fn bump_alloc(&mut self, size: u32, align: u32) -> WasmResult<u32> {
         // Align the bump pointer
         let aligned = (self.bump_ptr + align - 1) & !(align - 1);
-        let end = aligned.checked_add(size).ok_or_else(|| {
-            WasmError::OutOfMemory {
+        let end = aligned
+            .checked_add(size)
+            .ok_or_else(|| WasmError::OutOfMemory {
                 requested: size as usize,
                 limit: self.max_memory as usize,
-            }
-        })?;
+            })?;
 
         if end > self.max_memory {
             return Err(WasmError::OutOfMemory {

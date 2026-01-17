@@ -1,12 +1,12 @@
+use super::element_utils::{extract_element_id, find_element};
+use flow_like::a2ui::components::SwitchProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::SwitchProps;
 use flow_like_types::{Value, async_trait, json::json};
-use super::element_utils::{extract_element_id, find_element};
 
 /// Toggles the state of a switch element.
 #[crate::register_node]
@@ -42,7 +42,12 @@ impl NodeLogic for ToggleSwitch {
         .set_options(PinOptions::new().set_enforce_schema(false).build());
 
         node.add_output_pin("exec_out", "▶", "Execution output", VariableType::Execution);
-        node.add_output_pin("new_state", "New State", "The new checked state after toggle", VariableType::Boolean);
+        node.add_output_pin(
+            "new_state",
+            "New State",
+            "The new checked state after toggle",
+            VariableType::Boolean,
+        );
 
         node.set_long_running(true);
 
@@ -68,12 +73,21 @@ impl NodeLogic for ToggleSwitch {
 
         let new_checked = !current_checked;
 
-        context.upsert_element(&element_id, json!({
-            "type": "setChecked",
-            "checked": new_checked
-        })).await?;
+        context
+            .upsert_element(
+                &element_id,
+                json!({
+                    "type": "setChecked",
+                    "checked": new_checked
+                }),
+            )
+            .await?;
 
-        context.get_pin_by_name("new_state").await?.set_value(Value::Bool(new_checked)).await;
+        context
+            .get_pin_by_name("new_state")
+            .await?
+            .set_value(Value::Bool(new_checked))
+            .await;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

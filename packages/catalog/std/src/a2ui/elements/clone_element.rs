@@ -91,10 +91,7 @@ impl NodeLogic for CloneElement {
 
         // Get source element from frontend elements
         let elements = context.get_frontend_elements().await?;
-        let source_element = elements
-            .as_ref()
-            .and_then(|e| e.get(&source_ref))
-            .cloned();
+        let source_element = elements.as_ref().and_then(|e| e.get(&source_ref)).cloned();
 
         let Some(source) = source_element else {
             return Err(flow_like_types::anyhow!(
@@ -138,22 +135,24 @@ impl NodeLogic for CloneElement {
         };
 
         // Create the SurfaceComponent
-        let surface_component = flow_like::a2ui::SurfaceComponent::new(
-            new_element_id.clone(),
-            component_value,
-        );
+        let surface_component =
+            flow_like::a2ui::SurfaceComponent::new(new_element_id.clone(), component_value);
 
-        context.create_element(
-            surface_id,
-            &effective_parent,
-            surface_component,
-            index.map(|i| i as usize),
-        ).await?;
+        context
+            .create_element(
+                surface_id,
+                &effective_parent,
+                surface_component,
+                index.map(|i| i as usize),
+            )
+            .await?;
 
         // Create new element reference
         let new_element_ref = format!("{}/{}", surface_id, new_element_id);
 
-        context.set_pin_value("cloned_element_ref", Value::String(new_element_ref)).await?;
+        context
+            .set_pin_value("cloned_element_ref", Value::String(new_element_ref))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

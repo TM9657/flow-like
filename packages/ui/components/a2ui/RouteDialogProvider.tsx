@@ -1,19 +1,22 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import {
-	Dialog,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-} from "../ui/dialog";
 import { Loader2 } from "lucide-react";
-import { A2UIRenderer } from "./A2UIRenderer";
-import type { Surface, A2UIServerMessage, SurfaceComponent } from "./types";
+import {
+	type ReactNode,
+	createContext,
+	useCallback,
+	useContext,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
+import type { IEvent } from "../../lib/schema/flow/event";
 import { useBackend } from "../../state/backend-state";
 import type { IPage } from "../../state/backend-state/page-state";
 import type { IRouteMapping } from "../../state/backend-state/route-state";
-import type { IEvent } from "../../lib/schema/flow/event";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { A2UIRenderer } from "./A2UIRenderer";
+import type { A2UIServerMessage, Surface, SurfaceComponent } from "./types";
 
 interface DialogState {
 	id: string;
@@ -28,7 +31,7 @@ interface RouteDialogContextValue {
 		route: string,
 		title?: string,
 		queryParams?: Record<string, string>,
-		dialogId?: string
+		dialogId?: string,
 	) => void;
 	closeDialog: (dialogId?: string) => void;
 	dialogs: DialogState[];
@@ -53,7 +56,10 @@ interface RouteDialogProviderProps {
 	appId?: string;
 }
 
-export function RouteDialogProvider({ children, appId }: RouteDialogProviderProps) {
+export function RouteDialogProvider({
+	children,
+	appId,
+}: RouteDialogProviderProps) {
 	const [dialogs, setDialogs] = useState<DialogState[]>([]);
 
 	const openDialog = useCallback(
@@ -61,19 +67,25 @@ export function RouteDialogProvider({ children, appId }: RouteDialogProviderProp
 			route: string,
 			title?: string,
 			queryParams?: Record<string, string>,
-			dialogId?: string
+			dialogId?: string,
 		) => {
-			console.log("[RouteDialogProvider] openDialog called:", { route, title, queryParams, dialogId });
+			console.log("[RouteDialogProvider] openDialog called:", {
+				route,
+				title,
+				queryParams,
+				dialogId,
+			});
 			const id = dialogId || `dialog-${Date.now()}`;
 			setDialogs((prev) => {
-				console.log("[RouteDialogProvider] Adding dialog to stack:", { id, route, prevCount: prev.length });
-				return [
-					...prev,
-					{ id, route, title, queryParams, isOpen: true },
-				];
+				console.log("[RouteDialogProvider] Adding dialog to stack:", {
+					id,
+					route,
+					prevCount: prev.length,
+				});
+				return [...prev, { id, route, title, queryParams, isOpen: true }];
 			});
 		},
-		[]
+		[],
 	);
 
 	const closeDialog = useCallback((dialogId?: string) => {
@@ -87,11 +99,14 @@ export function RouteDialogProvider({ children, appId }: RouteDialogProviderProp
 		});
 	}, []);
 
-	const handleDialogOpenChange = useCallback((dialogId: string, open: boolean) => {
-		if (!open) {
-			setDialogs((prev) => prev.filter((d) => d.id !== dialogId));
-		}
-	}, []);
+	const handleDialogOpenChange = useCallback(
+		(dialogId: string, open: boolean) => {
+			if (!open) {
+				setDialogs((prev) => prev.filter((d) => d.id !== dialogId));
+			}
+		},
+		[],
+	);
 
 	return (
 		<RouteDialogContext.Provider value={{ openDialog, closeDialog, dialogs }}>
@@ -114,11 +129,22 @@ interface RouteDialogRendererProps {
 	dialog: DialogState;
 	appId?: string;
 	onOpenChange: (open: boolean) => void;
-	openDialog: (route: string, title?: string, queryParams?: Record<string, string>, dialogId?: string) => void;
+	openDialog: (
+		route: string,
+		title?: string,
+		queryParams?: Record<string, string>,
+		dialogId?: string,
+	) => void;
 	closeDialog: (dialogId?: string) => void;
 }
 
-function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDialog }: RouteDialogRendererProps) {
+function RouteDialogRenderer({
+	dialog,
+	appId,
+	onOpenChange,
+	openDialog,
+	closeDialog,
+}: RouteDialogRendererProps) {
 	const backend = useBackend();
 	const [isLoading, setIsLoading] = useState(true);
 	const [isLoadEventRunning, setIsLoadEventRunning] = useState(false);
@@ -142,10 +168,8 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 			setError(null);
 			try {
 				// Get route mapping
-				const mapping: IRouteMapping | null = await backend.routeState.getRouteByPath(
-					appId,
-					dialog.route
-				);
+				const mapping: IRouteMapping | null =
+					await backend.routeState.getRouteByPath(appId, dialog.route);
 
 				if (!mapping) {
 					setError(`Route not found: ${dialog.route}`);
@@ -172,13 +196,16 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 					const pageResult = await backend.pageState.getPage(
 						appId,
 						event.default_page_id,
-						undefined
+						undefined,
 					);
 
 					if (pageResult) {
 						setPage(pageResult);
 						// Build surface from page
-						const builtSurface = buildSurfaceFromPage(pageResult, pageResult.id);
+						const builtSurface = buildSurfaceFromPage(
+							pageResult,
+							pageResult.id,
+						);
 						setSurface(builtSurface);
 					} else {
 						setError(`Page not found: ${event.default_page_id}`);
@@ -195,7 +222,13 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 		};
 
 		loadContent();
-	}, [appId, dialog.route, backend.routeState, backend.pageState, backend.eventState]);
+	}, [
+		appId,
+		dialog.route,
+		backend.routeState,
+		backend.pageState,
+		backend.eventState,
+	]);
 
 	const handleServerMessage = useCallback((message: A2UIServerMessage) => {
 		console.log("[RouteDialog] Server message:", message);
@@ -224,23 +257,38 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 
 			if (updateType === "setText") {
 				const text = updateValue.text as string;
-				const componentData = component.component as unknown as Record<string, unknown>;
+				const componentData = component.component as unknown as Record<
+					string,
+					unknown
+				>;
 				updatedComponent = {
 					...component,
-					component: { ...componentData, text } as unknown as SurfaceComponent["component"],
+					component: {
+						...componentData,
+						text,
+					} as unknown as SurfaceComponent["component"],
 				};
 			} else if (updateType === "setProps") {
 				const props = updateValue.props as Record<string, unknown>;
-				const componentData = component.component as unknown as Record<string, unknown>;
+				const componentData = component.component as unknown as Record<
+					string,
+					unknown
+				>;
 				updatedComponent = {
 					...component,
-					component: { ...componentData, ...props } as unknown as SurfaceComponent["component"],
+					component: {
+						...componentData,
+						...props,
+					} as unknown as SurfaceComponent["component"],
 				};
 			}
 
 			return {
 				...prevSurface,
-				components: { ...prevSurface.components, [componentId]: updatedComponent },
+				components: {
+					...prevSurface.components,
+					[componentId]: updatedComponent,
+				},
 			};
 		});
 	}, []);
@@ -257,7 +305,9 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 		const currentSurface = surfaceRef.current;
 		if (!currentSurface) return {};
 		const elements: Record<string, unknown> = {};
-		for (const [componentId, surfaceComponent] of Object.entries(currentSurface.components)) {
+		for (const [componentId, surfaceComponent] of Object.entries(
+			currentSurface.components,
+		)) {
 			const elementId = `${currentSurface.id}/${componentId}`;
 			elements[elementId] = {
 				...surfaceComponent,
@@ -323,7 +373,16 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 		if (!isLoading && page) {
 			executeOnLoadEvent();
 		}
-	}, [appId, page, routeEvent, dialog, isLoading, backend.boardState, handleServerMessage, getElementsFromSurface]);
+	}, [
+		appId,
+		page,
+		routeEvent,
+		dialog,
+		isLoading,
+		backend.boardState,
+		handleServerMessage,
+		getElementsFromSurface,
+	]);
 
 	const showLoading = isLoading || isLoadEventRunning;
 

@@ -145,7 +145,8 @@ export const itBi = {
 	"bi.cta.description":
 		"Scarica Flow-Like e costruisci la tua prima dashboard in minuti. Nessuna carta di credito. Nessun vendor lock-in. Solo BI migliore.",
 	"bi.cta.button": "Scarica Gratis",
-	"bi.cta.note": "Gratis per sempre per individui. Piani Team & Enterprise disponibili.",
+	"bi.cta.note":
+		"Gratis per sempre per individui. Piani Team & Enterprise disponibili.",
 
 	// FAQ
 	"bi.faq.tagline": "Domande",

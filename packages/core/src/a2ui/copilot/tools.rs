@@ -226,7 +226,9 @@ impl Tool for EmitSurfaceTool {
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         if args.components.is_empty() {
-            return Err(EmitSurfaceToolError("emit_surface requires at least one component".to_string()));
+            return Err(EmitSurfaceToolError(
+                "emit_surface requires at least one component".to_string(),
+            ));
         }
         Ok(format!(
             "Surface emitted successfully with {} components",
@@ -260,7 +262,8 @@ Example:
     "gap": "16px",
     "children": { "explicitList": ["header", "content", "footer"] }
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "row" => r#"Row - Horizontal flex container
 Properties:
@@ -281,7 +284,8 @@ Example:
     "justify": "end",
     "children": { "explicitList": ["cancel-btn", "submit-btn"] }
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "grid" => r#"Grid - CSS Grid container
 Properties:
@@ -302,7 +306,8 @@ Example:
     "gap": "16px",
     "children": { "explicitList": ["card-1", "card-2", "card-3"] }
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "text" => r#"Text - Text display component
 Properties:
@@ -323,7 +328,8 @@ Example:
     "content": { "literalString": "Welcome" },
     "variant": "h1"
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "button" => r#"Button - Interactive button
 Properties:
@@ -351,7 +357,8 @@ Example:
   "actions": {
     "onClick": { "type": "emit", "event": "form_submit" }
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "card" => r#"Card - Content container with optional header/footer
 Properties:
@@ -371,7 +378,8 @@ Example:
     "title": { "literalString": "User Profile" },
     "children": { "explicitList": ["avatar", "user-info"] }
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "textfield" | "text_field" => r#"TextField - Text input
 Properties:
@@ -399,7 +407,8 @@ Example:
   "actions": {
     "onChange": { "type": "update", "path": "$.form.email" }
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "select" => r#"Select - Dropdown selection
 Properties:
@@ -423,7 +432,8 @@ Example:
       { "value": "uk", "label": "United Kingdom" }
     ]
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "image" => r#"Image - Image display
 Properties:
@@ -444,7 +454,8 @@ Example:
     "alt": "User avatar",
     "fit": "cover"
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "icon" => r#"Icon - Lucide icon
 Properties:
@@ -462,7 +473,8 @@ Example:
     "name": "settings",
     "size": "md"
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "checkbox" => r#"Checkbox - Boolean toggle with label
 Properties:
@@ -480,7 +492,8 @@ Example:
     "checked": { "path": "$.form.acceptTerms" },
     "label": "I accept the terms and conditions"
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "switch" => r#"Switch - Toggle switch
 Properties:
@@ -497,7 +510,8 @@ Example:
     "checked": { "path": "$.settings.notifications" },
     "label": "Enable notifications"
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "tabs" => r#"Tabs - Tabbed content container
 Properties:
@@ -518,7 +532,8 @@ Example:
     ],
     "children": { "explicitList": ["general-panel", "security-panel"] }
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         "modal" => r#"Modal - Dialog overlay
 Properties:
@@ -538,7 +553,8 @@ Example:
     "title": { "literalString": "Confirm Action" },
     "children": { "explicitList": ["modal-content", "modal-actions"] }
   }
-}"#.to_string(),
+}"#
+        .to_string(),
 
         _ => format!(
             "Unknown component type: {}. Available types: column, row, grid, stack, text, image, icon, button, textField, select, checkbox, switch, slider, card, modal, tabs, accordion, divider, badge, avatar, progress, spinner, skeleton",
@@ -561,7 +577,8 @@ Common patterns:
 - Card: "p-4" or "p-6"
 - Button: "px-4 py-2"
 - Section: "py-8" or "py-12"
-- Container: "px-4 mx-auto max-w-screen-lg""#.to_string(),
+- Container: "px-4 mx-auto max-w-screen-lg""#
+            .to_string(),
 
         "colors" => r#"Color Classes:
 Background:
@@ -585,7 +602,8 @@ Common patterns:
 - Card: "bg-card text-card-foreground"
 - Muted text: "text-muted-foreground"
 - Primary button: "bg-primary text-primary-foreground"
-- Hover: "hover:bg-accent hover:text-accent-foreground""#.to_string(),
+- Hover: "hover:bg-accent hover:text-accent-foreground""#
+            .to_string(),
 
         "effects" => r#"Effect Classes:
 Border radius:
@@ -605,7 +623,8 @@ Common patterns:
 - Card: "rounded-lg shadow-md"
 - Button: "rounded-md shadow-sm hover:shadow-md transition-all"
 - Avatar: "rounded-full"
-- Modal: "rounded-xl shadow-2xl""#.to_string(),
+- Modal: "rounded-xl shadow-2xl""#
+            .to_string(),
 
         "layout" => r#"Layout Classes:
 Display:
@@ -634,7 +653,8 @@ Sizing:
 Common patterns:
 - Center content: "flex items-center justify-center"
 - Space between: "flex justify-between items-center"
-- Responsive grid: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4""#.to_string(),
+- Responsive grid: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4""#
+            .to_string(),
 
         "responsive" => r#"Responsive Prefixes:
 - sm: 640px and up
@@ -648,7 +668,8 @@ Examples:
 - "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" - Responsive grid
 - "hidden md:block" - Hide on mobile, show on tablet+
 - "text-sm md:text-base lg:text-lg" - Responsive text size
-- "flex-col md:flex-row" - Stack on mobile, row on tablet+"#.to_string(),
+- "flex-col md:flex-row" - Stack on mobile, row on tablet+"#
+            .to_string(),
 
         "typography" => r#"Typography Classes:
 Size:
@@ -671,7 +692,8 @@ Common patterns:
 - Subheading: "text-lg font-semibold"
 - Body: "text-base font-normal"
 - Caption: "text-sm text-muted-foreground"
-- Code: "font-mono text-sm""#.to_string(),
+- Code: "font-mono text-sm""#
+            .to_string(),
 
         _ => format!(
             "Unknown style category: {}. Available: spacing, colors, effects, layout, responsive, typography",

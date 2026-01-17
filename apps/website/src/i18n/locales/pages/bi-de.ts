@@ -145,7 +145,8 @@ export const deBi = {
 	"bi.cta.description":
 		"Laden Sie Flow-Like herunter und bauen Sie Ihr erstes Dashboard in Minuten. Keine Kreditkarte. Kein Vendor Lock-in. Einfach bessere BI.",
 	"bi.cta.button": "Kostenlos herunterladen",
-	"bi.cta.note": "Für Einzelpersonen immer kostenlos. Team- & Enterprise-Pläne verfügbar.",
+	"bi.cta.note":
+		"Für Einzelpersonen immer kostenlos. Team- & Enterprise-Pläne verfügbar.",
 
 	// FAQ
 	"bi.faq.tagline": "Fragen",

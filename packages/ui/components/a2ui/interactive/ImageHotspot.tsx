@@ -152,7 +152,11 @@ export function A2UIImageHotspot({
 		[onAction, component.actions, surfaceId, componentId],
 	);
 
-	const getMarkerClasses = (hotspot: Hotspot, isHovered: boolean, isActive: boolean) => {
+	const getMarkerClasses = (
+		hotspot: Hotspot,
+		isHovered: boolean,
+		isActive: boolean,
+	) => {
 		const base =
 			"absolute flex items-center justify-center transition-all duration-200 cursor-pointer";
 		const disabled = hotspot.disabled ? "opacity-50 cursor-not-allowed" : "";
@@ -168,7 +172,13 @@ export function A2UIImageHotspot({
 			none: "opacity-0",
 		};
 
-		return cn(base, disabled, hovered, active, styleClasses[markerStyle] ?? styleClasses.pulse);
+		return cn(
+			base,
+			disabled,
+			hovered,
+			active,
+			styleClasses[markerStyle] ?? styleClasses.pulse,
+		);
 	};
 
 	const fitClass =
@@ -241,26 +251,28 @@ export function A2UIImageHotspot({
 							</button>
 
 							{/* Tooltip */}
-							{showTooltips && isHovered && (hotspot.label || hotspot.description) && (
-								<div
-									className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground rounded-md shadow-lg text-sm whitespace-nowrap z-20"
-									style={{ minWidth: "100px", maxWidth: "200px" }}
-								>
-									{hotspot.label && (
-										<div className="font-medium">{hotspot.label}</div>
-									)}
-									{hotspot.description && (
-										<div className="text-muted-foreground text-xs mt-0.5 whitespace-normal">
-											{hotspot.description}
-										</div>
-									)}
-									{/* Arrow */}
+							{showTooltips &&
+								isHovered &&
+								(hotspot.label || hotspot.description) && (
 									<div
-										className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent"
-										style={{ borderTopColor: "hsl(var(--popover))" }}
-									/>
-								</div>
-							)}
+										className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground rounded-md shadow-lg text-sm whitespace-nowrap z-20"
+										style={{ minWidth: "100px", maxWidth: "200px" }}
+									>
+										{hotspot.label && (
+											<div className="font-medium">{hotspot.label}</div>
+										)}
+										{hotspot.description && (
+											<div className="text-muted-foreground text-xs mt-0.5 whitespace-normal">
+												{hotspot.description}
+											</div>
+										)}
+										{/* Arrow */}
+										<div
+											className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent"
+											style={{ borderTopColor: "hsl(var(--popover))" }}
+										/>
+									</div>
+								)}
 						</div>
 					);
 				})}

@@ -1,6 +1,5 @@
 "use client";
 import {
-	AppGeneralSettings,
 	Badge,
 	Button,
 	Card,
@@ -22,8 +21,8 @@ import {
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-	Textarea,
 	TextEditor,
+	Textarea,
 	VerificationDialog,
 	toastError,
 	useBackend,

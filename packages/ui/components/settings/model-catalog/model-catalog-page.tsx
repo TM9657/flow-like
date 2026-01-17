@@ -24,7 +24,7 @@ import {
 	Type,
 	Wand2,
 	X,
-	Zap
+	Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMiniSearch } from "react-minisearch";
@@ -34,7 +34,19 @@ import type { IBit } from "../../../lib/schema/bit/bit";
 import { IBitTypes } from "../../../lib/schema/bit/bit";
 import type { ILlmParameters } from "../../../lib/schema/bit/bit/llm-parameters";
 import { useBackend } from "../../../state/backend-state";
-import { Button, formatContextLength, Input, ModelCard, ModelDetailSheet, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Slider } from "../../ui";
+import {
+	Button,
+	Input,
+	ModelCard,
+	ModelDetailSheet,
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+	Slider,
+	formatContextLength,
+} from "../../ui";
 import { Badge } from "../../ui/badge";
 import { Checkbox } from "../../ui/checkbox";
 
@@ -99,7 +111,11 @@ const capabilityIcons: Record<string, CapabilityInfo> = {
 
 export function AIModelPage() {
 	const backend = useBackend();
-	const profile = useInvoke(backend.userState.getProfile, backend.userState, []);
+	const profile = useInvoke(
+		backend.userState.getProfile,
+		backend.userState,
+		[],
+	);
 	const [searchTerm, setSearchTerm] = useState("");
 	const [blacklist, setBlacklist] = useState(new Set<string>());
 	const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -129,14 +145,17 @@ export function AIModelPage() {
 		factuality: 0,
 	});
 
-	const checkInstalled = useCallback(async (bit: IBit) => {
-		try {
-			const result = await backend.bitState.isBitInstalled(bit);
-			return result;
-		} catch {
-			return false;
-		}
-	}, [backend.bitState]);
+	const checkInstalled = useCallback(
+		async (bit: IBit) => {
+			try {
+				const result = await backend.bitState.isBitInstalled(bit);
+				return result;
+			} catch {
+				return false;
+			}
+		},
+		[backend.bitState],
+	);
 
 	const foundBits = useInvoke(
 		backend.bitState.searchBits,
@@ -252,9 +271,7 @@ export function AIModelPage() {
 	}, [foundBits.data]);
 
 	const profileBitIds = useMemo(() => {
-		return new Set(
-			profile.data?.bits.map((id) => id.split(":").pop()) ?? [],
-		);
+		return new Set(profile.data?.bits.map((id) => id.split(":").pop()) ?? []);
 	}, [profile.data]);
 
 	const filteredModels = useMemo(() => {

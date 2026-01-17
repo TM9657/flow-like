@@ -2,7 +2,12 @@
 
 import { createId } from "@paralleldrive/cuid2";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowRight, ChevronDownIcon, HistoryIcon, HomeIcon, SquarePenIcon } from "lucide-react";
+import {
+	ChevronDownIcon,
+	HistoryIcon,
+	HomeIcon,
+	SquarePenIcon,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
 	type RefObject,
@@ -289,11 +294,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	);
 
 	const handleNavigateTo = useCallback(
-		(
-			route: string,
-			replace: boolean,
-			queryParams?: Record<string, string>,
-		) => {
+		(route: string, replace: boolean, queryParams?: Record<string, string>) => {
 			const navUrl = buildUseNavigationUrl(route, queryParams);
 			if (replace) {
 				router.replace(navUrl);
@@ -402,153 +403,157 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		[updateSessionId],
 	);
 
-	const toolbarElements = useMemo(
-		() => {
-			const normalizeRoute = (value: string): string => {
-				const trimmed = value.trim();
-				if (!trimmed) return "";
-				return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-			};
+	const toolbarElements = useMemo(() => {
+		const normalizeRoute = (value: string): string => {
+			const trimmed = value.trim();
+			if (!trimmed) return "";
+			return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+		};
 
-			const configuredRoutes = (() => {
-				const rawArray = (config as any)?.navigate_to_routes;
-				const raw: string[] = Array.isArray(rawArray) ? rawArray : [];
-				const normalized = raw
-					.map((r) => normalizeRoute(String(r)))
-					.filter((r) => !!r);
-				return Array.from(new Set(normalized));
-			})();
+		const configuredRoutes = (() => {
+			const rawArray = (config as any)?.navigate_to_routes;
+			const raw: string[] = Array.isArray(rawArray) ? rawArray : [];
+			const normalized = raw
+				.map((r) => normalizeRoute(String(r)))
+				.filter((r) => !!r);
+			return Array.from(new Set(normalized));
+		})();
 
-			const elements = [
-				<HoverCard key="chat-history" openDelay={200} closeDelay={100}>
-					<HoverCardTrigger asChild>
-						<Button
-							variant="ghost"
-							size="icon"
-							className="hover:bg-accent hover:text-accent-foreground transition-colors"
-							onClick={handleSidebarToggle}
-						>
-							<HistoryIcon className="w-4 h-4" />
-						</Button>
-					</HoverCardTrigger>
-					<HoverCardContent
-						side="bottom"
-						align="center"
-						className="w-auto p-2 bg-popover border shadow-lg"
-						onClick={() => {
-							console.log("Open chat history");
-						}}
-					>
-						<div className="flex items-center gap-2 text-sm font-medium">
-							<HistoryIcon className="w-3 h-3" />
-							Chat History
-						</div>
-					</HoverCardContent>
-				</HoverCard>,
-				<HoverCard key="new-chat" openDelay={200} closeDelay={100}>
-					<HoverCardTrigger asChild>
-						<Button
-							onClick={handleNewChat}
-							variant="ghost"
-							size="icon"
-							className="hover:bg-accent hover:text-accent-foreground transition-colors"
-						>
-							<SquarePenIcon className="w-4 h-4" />
-						</Button>
-					</HoverCardTrigger>
-					<HoverCardContent
-						side="bottom"
-						align="center"
-						className="w-auto p-2 bg-popover border shadow-lg"
-						onClick={handleNewChat}
-					>
-						<div className="flex items-center gap-2 text-sm font-medium">
-							<SquarePenIcon className="w-3 h-3" />
-							New Chat
-						</div>
-					</HoverCardContent>
-				</HoverCard>,
-			];
-
-			const getRouteLabel = (path: string): string => {
-				if (path === "/") return "Home";
-				return path.replace(/^\//, "").replace(/-/g, " ").replace(/\//g, " / ");
-			};
-
-			const getRouteIcon = (path: string) => {
-				if (path === "/") return <HomeIcon className="h-4 w-4" />;
-				return null;
-			};
-
-			// Single route: pill button
-			if (configuredRoutes.length === 1) {
-				const route = configuredRoutes[0];
-				const icon = getRouteIcon(route);
-				elements.push(
+		const elements = [
+			<HoverCard key="chat-history" openDelay={200} closeDelay={100}>
+				<HoverCardTrigger asChild>
 					<Button
-						key={`navigate-${route}`}
-						variant="outline"
-						size="sm"
-						onClick={() => handleNavigateTo(route, false)}
-						className="rounded-full px-4 gap-2 font-medium"
+						variant="ghost"
+						size="icon"
+						className="hover:bg-accent hover:text-accent-foreground transition-colors"
+						onClick={handleSidebarToggle}
 					>
-						{icon}
-						{getRouteLabel(route)}
+						<HistoryIcon className="w-4 h-4" />
 					</Button>
-				);
-			} else if (configuredRoutes.length === 2) {
-				// Two routes: segmented control
-				elements.push(
-					<div key="route-nav" className="inline-flex items-center rounded-full bg-muted/50 p-0.5">
+				</HoverCardTrigger>
+				<HoverCardContent
+					side="bottom"
+					align="center"
+					className="w-auto p-2 bg-popover border shadow-lg"
+					onClick={() => {
+						console.log("Open chat history");
+					}}
+				>
+					<div className="flex items-center gap-2 text-sm font-medium">
+						<HistoryIcon className="w-3 h-3" />
+						Chat History
+					</div>
+				</HoverCardContent>
+			</HoverCard>,
+			<HoverCard key="new-chat" openDelay={200} closeDelay={100}>
+				<HoverCardTrigger asChild>
+					<Button
+						onClick={handleNewChat}
+						variant="ghost"
+						size="icon"
+						className="hover:bg-accent hover:text-accent-foreground transition-colors"
+					>
+						<SquarePenIcon className="w-4 h-4" />
+					</Button>
+				</HoverCardTrigger>
+				<HoverCardContent
+					side="bottom"
+					align="center"
+					className="w-auto p-2 bg-popover border shadow-lg"
+					onClick={handleNewChat}
+				>
+					<div className="flex items-center gap-2 text-sm font-medium">
+						<SquarePenIcon className="w-3 h-3" />
+						New Chat
+					</div>
+				</HoverCardContent>
+			</HoverCard>,
+		];
+
+		const getRouteLabel = (path: string): string => {
+			if (path === "/") return "Home";
+			return path.replace(/^\//, "").replace(/-/g, " ").replace(/\//g, " / ");
+		};
+
+		const getRouteIcon = (path: string) => {
+			if (path === "/") return <HomeIcon className="h-4 w-4" />;
+			return null;
+		};
+
+		// Single route: pill button
+		if (configuredRoutes.length === 1) {
+			const route = configuredRoutes[0];
+			const icon = getRouteIcon(route);
+			elements.push(
+				<Button
+					key={`navigate-${route}`}
+					variant="outline"
+					size="sm"
+					onClick={() => handleNavigateTo(route, false)}
+					className="rounded-full px-4 gap-2 font-medium"
+				>
+					{icon}
+					{getRouteLabel(route)}
+				</Button>,
+			);
+		} else if (configuredRoutes.length === 2) {
+			// Two routes: segmented control
+			elements.push(
+				<div
+					key="route-nav"
+					className="inline-flex items-center rounded-full bg-muted/50 p-0.5"
+				>
+					{configuredRoutes.map((route) => {
+						const icon = getRouteIcon(route);
+						return (
+							<button
+								key={route}
+								type="button"
+								onClick={() => handleNavigateTo(route, false)}
+								className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-all text-muted-foreground hover:text-foreground hover:bg-background hover:shadow-sm"
+							>
+								{icon}
+								{getRouteLabel(route)}
+							</button>
+						);
+					})}
+				</div>,
+			);
+		} else if (configuredRoutes.length >= 3) {
+			// 3+ routes: dropdown
+			elements.push(
+				<DropdownMenu key="navigate-menu">
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant="outline"
+							size="sm"
+							className="rounded-full px-4 gap-2 font-medium"
+						>
+							Navigate
+							<ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="start" className="min-w-40">
 						{configuredRoutes.map((route) => {
 							const icon = getRouteIcon(route);
 							return (
-								<button
+								<DropdownMenuItem
 									key={route}
-									type="button"
-									onClick={() => handleNavigateTo(route, false)}
-									className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-all text-muted-foreground hover:text-foreground hover:bg-background hover:shadow-sm"
+									onSelect={() => handleNavigateTo(route, false)}
+									className="gap-2"
 								>
 									{icon}
 									{getRouteLabel(route)}
-								</button>
+								</DropdownMenuItem>
 							);
 						})}
-					</div>
-				);
-			} else if (configuredRoutes.length >= 3) {
-				// 3+ routes: dropdown
-				elements.push(
-					<DropdownMenu key="navigate-menu">
-						<DropdownMenuTrigger asChild>
-							<Button variant="outline" size="sm" className="rounded-full px-4 gap-2 font-medium">
-								Navigate
-								<ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="start" className="min-w-40">
-							{configuredRoutes.map((route) => {
-								const icon = getRouteIcon(route);
-								return (
-									<DropdownMenuItem
-										key={route}
-										onSelect={() => handleNavigateTo(route, false)}
-										className="gap-2"
-									>
-										{icon}
-										{getRouteLabel(route)}
-									</DropdownMenuItem>
-								);
-							})}
-						</DropdownMenuContent>
-					</DropdownMenu>,
-				);
-			}
+					</DropdownMenuContent>
+				</DropdownMenu>,
+			);
+		}
 
-			return elements;
-		},
-		[config, handleSidebarToggle, handleNewChat, handleNavigateTo],
-	);
+		return elements;
+	}, [config, handleSidebarToggle, handleNewChat, handleNavigateTo]);
 
 	const sidebarContent = useMemo(
 		() => (

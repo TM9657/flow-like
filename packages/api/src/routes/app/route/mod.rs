@@ -11,7 +11,10 @@ pub mod update_route;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/", get(get_routes::get_routes).post(create_route::create_route))
+        .route(
+            "/",
+            get(get_routes::get_routes).post(create_route::create_route),
+        )
         .route("/by-path", get(get_route_by_path::get_route_by_path))
         .route("/default", get(get_default_route::get_default_route))
         .route(

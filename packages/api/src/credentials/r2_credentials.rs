@@ -313,7 +313,12 @@ impl RuntimeCredentialsTrait for R2RuntimeCredentials {
             secret.clone(),
             token.clone(),
         )));
-        config.register_build_project_database(Arc::new(make_r2_builder(bkt.clone(), key.clone(), secret.clone(), token.clone())));
+        config.register_build_project_database(Arc::new(make_r2_builder(
+            bkt.clone(),
+            key.clone(),
+            secret.clone(),
+            token.clone(),
+        )));
         config.register_build_user_database(Arc::new(make_r2_builder(bkt, key, secret, token)));
 
         let mut flow_like_state = FlowLikeState::new(config, http_client);

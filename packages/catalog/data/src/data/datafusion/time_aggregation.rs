@@ -1,5 +1,5 @@
-use crate::data::datafusion::session::DataFusionSession;
 use crate::data::datafusion::query::batches_to_rows;
+use crate::data::datafusion::session::DataFusionSession;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic, NodeScores},
@@ -43,7 +43,10 @@ impl TimeInterval {
     pub fn to_trunc_precision(&self) -> &'static str {
         match self {
             TimeInterval::Second => "second",
-            TimeInterval::Minute | TimeInterval::FiveMinutes | TimeInterval::FifteenMinutes | TimeInterval::ThirtyMinutes => "minute",
+            TimeInterval::Minute
+            | TimeInterval::FiveMinutes
+            | TimeInterval::FifteenMinutes
+            | TimeInterval::ThirtyMinutes => "minute",
             TimeInterval::Hour => "hour",
             TimeInterval::Day => "day",
             TimeInterval::Week => "week",
@@ -58,7 +61,9 @@ impl TimeInterval {
             "second" | "1s" | "s" => Some(TimeInterval::Second),
             "minute" | "1m" | "m" => Some(TimeInterval::Minute),
             "5m" | "5min" | "5_minutes" | "five_minutes" => Some(TimeInterval::FiveMinutes),
-            "15m" | "15min" | "15_minutes" | "fifteen_minutes" => Some(TimeInterval::FifteenMinutes),
+            "15m" | "15min" | "15_minutes" | "fifteen_minutes" => {
+                Some(TimeInterval::FifteenMinutes)
+            }
             "30m" | "30min" | "30_minutes" | "thirty_minutes" => Some(TimeInterval::ThirtyMinutes),
             "hour" | "1h" | "h" => Some(TimeInterval::Hour),
             "day" | "1d" | "d" => Some(TimeInterval::Day),
@@ -229,7 +234,10 @@ impl NodeLogic for TimeBinAggregationNode {
         let aggregations: String = context.evaluate_pin("aggregations").await?;
         let group_by: String = context.evaluate_pin("group_by").await.unwrap_or_default();
         let filter: String = context.evaluate_pin("filter").await.unwrap_or_default();
-        let output_table: String = context.evaluate_pin("output_table").await.unwrap_or_default();
+        let output_table: String = context
+            .evaluate_pin("output_table")
+            .await
+            .unwrap_or_default();
 
         let interval = TimeInterval::from_string(&interval_str)
             .ok_or_else(|| flow_like_types::anyhow!("Invalid interval: {}. Use: second, minute, 5m, 15m, 30m, hour, day, week, month, quarter, year", interval_str))?;
@@ -237,11 +245,21 @@ impl NodeLogic for TimeBinAggregationNode {
         let cached_session = session.load(context).await?;
 
         // Parse value columns and aggregations
-        let value_cols: Vec<&str> = value_columns.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
-        let aggs: Vec<&str> = aggregations.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        let value_cols: Vec<&str> = value_columns
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let aggs: Vec<&str> = aggregations
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
 
         if value_cols.is_empty() {
-            return Err(flow_like_types::anyhow!("At least one value column is required"));
+            return Err(flow_like_types::anyhow!(
+                "At least one value column is required"
+            ));
         }
 
         // Build aggregation expressions
@@ -252,7 +270,11 @@ impl NodeLogic for TimeBinAggregationNode {
         )];
 
         // Add group by columns to select
-        let group_cols: Vec<&str> = group_by.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        let group_cols: Vec<&str> = group_by
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
         for col in &group_cols {
             select_parts.push(col.to_string());
         }
@@ -419,12 +441,7 @@ impl NodeLogic for DateTruncAggregationNode {
             VariableType::Generic,
         );
 
-        node.add_output_pin(
-            "sql",
-            "SQL",
-            "Generated SQL",
-            VariableType::String,
-        );
+        node.add_output_pin("sql", "SQL", "Generated SQL", VariableType::String);
 
         node.scores = Some(NodeScores {
             privacy: 8,
@@ -448,7 +465,9 @@ impl NodeLogic for DateTruncAggregationNode {
         let aggregation_sql: String = context.evaluate_pin("aggregation_sql").await?;
         let filter: String = context.evaluate_pin("filter").await.unwrap_or_default();
 
-        let valid_precisions = ["second", "minute", "hour", "day", "week", "month", "quarter", "year"];
+        let valid_precisions = [
+            "second", "minute", "hour", "day", "week", "month", "quarter", "year",
+        ];
         let precision_lower = precision.to_lowercase();
         if !valid_precisions.contains(&precision_lower.as_str()) {
             return Err(flow_like_types::anyhow!(
@@ -468,11 +487,7 @@ impl NodeLogic for DateTruncAggregationNode {
 
         let sql = format!(
             "SELECT date_trunc('{}', {}) as time_period, {} FROM {}{} GROUP BY time_period ORDER BY time_period",
-            precision_lower,
-            timestamp_column,
-            aggregation_sql,
-            source_table,
-            where_clause
+            precision_lower, timestamp_column, aggregation_sql, source_table, where_clause
         );
 
         context.set_pin_value("sql", json!(sql.clone())).await?;
@@ -595,19 +610,9 @@ impl NodeLogic for WindowAggregationNode {
         )
         .set_schema::<DataFusionSession>();
 
-        node.add_output_pin(
-            "results",
-            "Results",
-            "Query results",
-            VariableType::Generic,
-        );
+        node.add_output_pin("results", "Results", "Query results", VariableType::Generic);
 
-        node.add_output_pin(
-            "sql",
-            "SQL",
-            "Generated SQL",
-            VariableType::String,
-        );
+        node.add_output_pin("sql", "SQL", "Generated SQL", VariableType::String);
 
         node.scores = Some(NodeScores {
             privacy: 8,
@@ -630,8 +635,14 @@ impl NodeLogic for WindowAggregationNode {
         let value_column: String = context.evaluate_pin("value_column").await?;
         let window_function: String = context.evaluate_pin("window_function").await?;
         let window_size: i64 = context.evaluate_pin("window_size").await?;
-        let partition_by: String = context.evaluate_pin("partition_by").await.unwrap_or_default();
-        let select_columns: String = context.evaluate_pin("select_columns").await.unwrap_or_else(|_| "*".to_string());
+        let partition_by: String = context
+            .evaluate_pin("partition_by")
+            .await
+            .unwrap_or_default();
+        let select_columns: String = context
+            .evaluate_pin("select_columns")
+            .await
+            .unwrap_or_else(|_| "*".to_string());
 
         let cached_session = session.load(context).await?;
 
@@ -648,24 +659,53 @@ impl NodeLogic for WindowAggregationNode {
         };
 
         let window_expr = match window_function.to_lowercase().as_str() {
-            "avg" => format!("AVG({}) OVER ({}ORDER BY {} {})", value_column, partition_clause, timestamp_column, frame_clause),
-            "sum" => format!("SUM({}) OVER ({}ORDER BY {} {})", value_column, partition_clause, timestamp_column, frame_clause),
-            "min" => format!("MIN({}) OVER ({}ORDER BY {} {})", value_column, partition_clause, timestamp_column, frame_clause),
-            "max" => format!("MAX({}) OVER ({}ORDER BY {} {})", value_column, partition_clause, timestamp_column, frame_clause),
-            "count" => format!("COUNT({}) OVER ({}ORDER BY {} {})", value_column, partition_clause, timestamp_column, frame_clause),
-            "row_number" => format!("ROW_NUMBER() OVER ({}ORDER BY {})", partition_clause, timestamp_column),
-            "rank" => format!("RANK() OVER ({}ORDER BY {})", partition_clause, timestamp_column),
-            "lag" => format!("LAG({}, 1) OVER ({}ORDER BY {})", value_column, partition_clause, timestamp_column),
-            "lead" => format!("LEAD({}, 1) OVER ({}ORDER BY {})", value_column, partition_clause, timestamp_column),
-            _ => return Err(flow_like_types::anyhow!("Unknown window function: {}", window_function)),
+            "avg" => format!(
+                "AVG({}) OVER ({}ORDER BY {} {})",
+                value_column, partition_clause, timestamp_column, frame_clause
+            ),
+            "sum" => format!(
+                "SUM({}) OVER ({}ORDER BY {} {})",
+                value_column, partition_clause, timestamp_column, frame_clause
+            ),
+            "min" => format!(
+                "MIN({}) OVER ({}ORDER BY {} {})",
+                value_column, partition_clause, timestamp_column, frame_clause
+            ),
+            "max" => format!(
+                "MAX({}) OVER ({}ORDER BY {} {})",
+                value_column, partition_clause, timestamp_column, frame_clause
+            ),
+            "count" => format!(
+                "COUNT({}) OVER ({}ORDER BY {} {})",
+                value_column, partition_clause, timestamp_column, frame_clause
+            ),
+            "row_number" => format!(
+                "ROW_NUMBER() OVER ({}ORDER BY {})",
+                partition_clause, timestamp_column
+            ),
+            "rank" => format!(
+                "RANK() OVER ({}ORDER BY {})",
+                partition_clause, timestamp_column
+            ),
+            "lag" => format!(
+                "LAG({}, 1) OVER ({}ORDER BY {})",
+                value_column, partition_clause, timestamp_column
+            ),
+            "lead" => format!(
+                "LEAD({}, 1) OVER ({}ORDER BY {})",
+                value_column, partition_clause, timestamp_column
+            ),
+            _ => {
+                return Err(flow_like_types::anyhow!(
+                    "Unknown window function: {}",
+                    window_function
+                ));
+            }
         };
 
         let sql = format!(
             "SELECT {}, {} as window_result FROM {} ORDER BY {}",
-            select_columns,
-            window_expr,
-            source_table,
-            timestamp_column
+            select_columns, window_expr, source_table, timestamp_column
         );
 
         context.set_pin_value("sql", json!(sql.clone())).await?;
@@ -746,16 +786,24 @@ impl NodeLogic for DateTimeToTimestampNode {
             .or_else(|_| {
                 // Try without timezone
                 chrono::NaiveDateTime::parse_from_str(&datetime_str, "%Y-%m-%dT%H:%M:%S")
-                    .or_else(|_| chrono::NaiveDateTime::parse_from_str(&datetime_str, "%Y-%m-%d %H:%M:%S"))
+                    .or_else(|_| {
+                        chrono::NaiveDateTime::parse_from_str(&datetime_str, "%Y-%m-%d %H:%M:%S")
+                    })
                     .map(|ndt| ndt.and_utc().fixed_offset())
             })
-            .map_err(|e| flow_like_types::anyhow!("Failed to parse datetime '{}': {}", datetime_str, e))?;
+            .map_err(|e| {
+                flow_like_types::anyhow!("Failed to parse datetime '{}': {}", datetime_str, e)
+            })?;
 
         let timestamp_literal = format!("TIMESTAMP '{}'", dt.format("%Y-%m-%d %H:%M:%S%.6f"));
         let epoch_micros = dt.timestamp_micros();
 
-        context.set_pin_value("timestamp_literal", json!(timestamp_literal)).await?;
-        context.set_pin_value("epoch_micros", json!(epoch_micros)).await?;
+        context
+            .set_pin_value("timestamp_literal", json!(timestamp_literal))
+            .await?;
+        context
+            .set_pin_value("epoch_micros", json!(epoch_micros))
+            .await?;
 
         Ok(())
     }
@@ -860,7 +908,9 @@ impl NodeLogic for TimeRangeFilterNode {
                 };
 
                 let (num_str, unit) = rest.split_at(rest.len() - 1);
-                let num: i64 = num_str.parse().map_err(|_| flow_like_types::anyhow!("Invalid relative time: {}", s))?;
+                let num: i64 = num_str
+                    .parse()
+                    .map_err(|_| flow_like_types::anyhow!("Invalid relative time: {}", s))?;
 
                 let duration = match unit {
                     "s" => chrono::Duration::seconds(num * sign),
@@ -868,7 +918,12 @@ impl NodeLogic for TimeRangeFilterNode {
                     "h" => chrono::Duration::hours(num * sign),
                     "d" => chrono::Duration::days(num * sign),
                     "w" => chrono::Duration::weeks(num * sign),
-                    _ => return Err(flow_like_types::anyhow!("Invalid time unit in '{}'. Use s, m, h, d, w", s)),
+                    _ => {
+                        return Err(flow_like_types::anyhow!(
+                            "Invalid time unit in '{}'. Use s, m, h, d, w",
+                            s
+                        ));
+                    }
                 };
 
                 return Ok(now + duration);
@@ -900,9 +955,15 @@ impl NodeLogic for TimeRangeFilterNode {
             timestamp_column, start_literal, timestamp_column, end_literal
         );
 
-        context.set_pin_value("where_clause", json!(where_clause)).await?;
-        context.set_pin_value("start_timestamp", json!(start_literal)).await?;
-        context.set_pin_value("end_timestamp", json!(end_literal)).await?;
+        context
+            .set_pin_value("where_clause", json!(where_clause))
+            .await?;
+        context
+            .set_pin_value("start_timestamp", json!(start_literal))
+            .await?;
+        context
+            .set_pin_value("end_timestamp", json!(end_literal))
+            .await?;
 
         Ok(())
     }
@@ -915,13 +976,25 @@ mod tests {
 
     #[test]
     fn test_time_interval_from_string_standard() {
-        assert_eq!(TimeInterval::from_string("second"), Some(TimeInterval::Second));
-        assert_eq!(TimeInterval::from_string("minute"), Some(TimeInterval::Minute));
+        assert_eq!(
+            TimeInterval::from_string("second"),
+            Some(TimeInterval::Second)
+        );
+        assert_eq!(
+            TimeInterval::from_string("minute"),
+            Some(TimeInterval::Minute)
+        );
         assert_eq!(TimeInterval::from_string("hour"), Some(TimeInterval::Hour));
         assert_eq!(TimeInterval::from_string("day"), Some(TimeInterval::Day));
         assert_eq!(TimeInterval::from_string("week"), Some(TimeInterval::Week));
-        assert_eq!(TimeInterval::from_string("month"), Some(TimeInterval::Month));
-        assert_eq!(TimeInterval::from_string("quarter"), Some(TimeInterval::Quarter));
+        assert_eq!(
+            TimeInterval::from_string("month"),
+            Some(TimeInterval::Month)
+        );
+        assert_eq!(
+            TimeInterval::from_string("quarter"),
+            Some(TimeInterval::Quarter)
+        );
         assert_eq!(TimeInterval::from_string("year"), Some(TimeInterval::Year));
     }
 
@@ -931,9 +1004,18 @@ mod tests {
         assert_eq!(TimeInterval::from_string("s"), Some(TimeInterval::Second));
         assert_eq!(TimeInterval::from_string("1m"), Some(TimeInterval::Minute));
         assert_eq!(TimeInterval::from_string("m"), Some(TimeInterval::Minute));
-        assert_eq!(TimeInterval::from_string("5m"), Some(TimeInterval::FiveMinutes));
-        assert_eq!(TimeInterval::from_string("15m"), Some(TimeInterval::FifteenMinutes));
-        assert_eq!(TimeInterval::from_string("30m"), Some(TimeInterval::ThirtyMinutes));
+        assert_eq!(
+            TimeInterval::from_string("5m"),
+            Some(TimeInterval::FiveMinutes)
+        );
+        assert_eq!(
+            TimeInterval::from_string("15m"),
+            Some(TimeInterval::FifteenMinutes)
+        );
+        assert_eq!(
+            TimeInterval::from_string("30m"),
+            Some(TimeInterval::ThirtyMinutes)
+        );
         assert_eq!(TimeInterval::from_string("1h"), Some(TimeInterval::Hour));
         assert_eq!(TimeInterval::from_string("h"), Some(TimeInterval::Hour));
         assert_eq!(TimeInterval::from_string("1d"), Some(TimeInterval::Day));
@@ -943,15 +1025,24 @@ mod tests {
         assert_eq!(TimeInterval::from_string("1mo"), Some(TimeInterval::Month));
         assert_eq!(TimeInterval::from_string("mo"), Some(TimeInterval::Month));
         assert_eq!(TimeInterval::from_string("q"), Some(TimeInterval::Quarter));
-        assert_eq!(TimeInterval::from_string("3mo"), Some(TimeInterval::Quarter));
+        assert_eq!(
+            TimeInterval::from_string("3mo"),
+            Some(TimeInterval::Quarter)
+        );
         assert_eq!(TimeInterval::from_string("1y"), Some(TimeInterval::Year));
         assert_eq!(TimeInterval::from_string("y"), Some(TimeInterval::Year));
     }
 
     #[test]
     fn test_time_interval_from_string_case_insensitive() {
-        assert_eq!(TimeInterval::from_string("SECOND"), Some(TimeInterval::Second));
-        assert_eq!(TimeInterval::from_string("Minute"), Some(TimeInterval::Minute));
+        assert_eq!(
+            TimeInterval::from_string("SECOND"),
+            Some(TimeInterval::Second)
+        );
+        assert_eq!(
+            TimeInterval::from_string("Minute"),
+            Some(TimeInterval::Minute)
+        );
         assert_eq!(TimeInterval::from_string("HOUR"), Some(TimeInterval::Hour));
     }
 
@@ -968,8 +1059,14 @@ mod tests {
         assert_eq!(TimeInterval::Second.to_interval_string(), "1 second");
         assert_eq!(TimeInterval::Minute.to_interval_string(), "1 minute");
         assert_eq!(TimeInterval::FiveMinutes.to_interval_string(), "5 minutes");
-        assert_eq!(TimeInterval::FifteenMinutes.to_interval_string(), "15 minutes");
-        assert_eq!(TimeInterval::ThirtyMinutes.to_interval_string(), "30 minutes");
+        assert_eq!(
+            TimeInterval::FifteenMinutes.to_interval_string(),
+            "15 minutes"
+        );
+        assert_eq!(
+            TimeInterval::ThirtyMinutes.to_interval_string(),
+            "30 minutes"
+        );
         assert_eq!(TimeInterval::Hour.to_interval_string(), "1 hour");
         assert_eq!(TimeInterval::Day.to_interval_string(), "1 day");
         assert_eq!(TimeInterval::Week.to_interval_string(), "1 week");
@@ -1002,8 +1099,16 @@ mod tests {
         assert_eq!(node.friendly_name, "Time Bin Aggregation");
         assert_eq!(node.category, "Data/DataFusion/Aggregation");
 
-        let input_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Input).collect();
-        let output_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Output).collect();
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
+        let output_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Output)
+            .collect();
 
         assert!(input_pins.iter().any(|p| p.name == "exec_in"));
         assert!(input_pins.iter().any(|p| p.name == "session"));
@@ -1021,7 +1126,11 @@ mod tests {
         assert_eq!(node.name, "df_window_aggregation");
         assert_eq!(node.friendly_name, "Window Aggregation");
 
-        let input_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Input).collect();
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
 
         assert!(input_pins.iter().any(|p| p.name == "window_size"));
         assert!(input_pins.iter().any(|p| p.name == "window_function"));
@@ -1035,8 +1144,16 @@ mod tests {
         assert_eq!(node.name, "df_time_range_filter");
         assert_eq!(node.friendly_name, "Time Range Filter");
 
-        let input_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Input).collect();
-        let output_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Output).collect();
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
+        let output_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Output)
+            .collect();
 
         assert!(input_pins.iter().any(|p| p.name == "start_time"));
         assert!(input_pins.iter().any(|p| p.name == "end_time"));

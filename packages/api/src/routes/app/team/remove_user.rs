@@ -36,11 +36,11 @@ pub async fn remove_user(
         .find_also_related(role::Entity)
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     if let Some(role) = role {
         let role_permissions =
-            RolePermissions::from_bits(role.permissions).ok_or_else(|| ApiError::FORBIDDEN)?;
+            RolePermissions::from_bits(role.permissions).ok_or(ApiError::FORBIDDEN)?;
 
         if role_permissions.contains(RolePermissions::Owner) {
             tracing::warn!(

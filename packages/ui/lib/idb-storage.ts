@@ -9,7 +9,10 @@ import { createStore, del, get, keys, set } from "idb-keyval";
 const routesStore = createStore("flow-like-routes", "routes");
 const pageStateStore = createStore("flow-like-page-state", "page-state");
 const globalStateStore = createStore("flow-like-global-state", "global-state");
-const elementValuesStore = createStore("flow-like-element-values", "element-values");
+const elementValuesStore = createStore(
+	"flow-like-element-values",
+	"element-values",
+);
 
 // Route storage helpers
 export const routeStorage = {
@@ -196,7 +199,10 @@ export interface ElementValue {
 
 export const elementValues = {
 	async get(appId: string, elementId: string): Promise<ElementValue | null> {
-		const data = await get<ElementValue>(`${appId}:${elementId}`, elementValuesStore);
+		const data = await get<ElementValue>(
+			`${appId}:${elementId}`,
+			elementValuesStore,
+		);
 		return data ?? null;
 	},
 
@@ -206,11 +212,15 @@ export const elementValues = {
 	},
 
 	async set(appId: string, elementId: string, value: unknown): Promise<void> {
-		await set(`${appId}:${elementId}`, {
-			elementId,
-			value,
-			updatedAt: new Date().toISOString(),
-		} satisfies ElementValue, elementValuesStore);
+		await set(
+			`${appId}:${elementId}`,
+			{
+				elementId,
+				value,
+				updatedAt: new Date().toISOString(),
+			} satisfies ElementValue,
+			elementValuesStore,
+		);
 	},
 
 	async delete(appId: string, elementId: string): Promise<void> {

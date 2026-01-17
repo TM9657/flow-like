@@ -80,7 +80,9 @@ impl NodeLogic for SetPageState {
             .unwrap_or("default")
             .to_string();
 
-        context.set_page_state(&page_id, &key, value.clone()).await?;
+        context
+            .set_page_state(&page_id, &key, value.clone())
+            .await?;
 
         context.log_message(
             &format!("Set page state '{}' = {:?} (page: {})", key, value, page_id),
@@ -99,13 +101,10 @@ impl NodeLogic for SetPageState {
             None => return,
         };
 
-        let key = key_pin
-            .default_value
-            .as_ref()
-            .and_then(|v| {
-                let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
-                parsed.as_str().map(String::from)
-            });
+        let key = key_pin.default_value.as_ref().and_then(|v| {
+            let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
+            parsed.as_str().map(String::from)
+        });
 
         if let Some(k) = key {
             node.friendly_name = format!("Set Page '{}'", k);

@@ -11,8 +11,10 @@ use std::path::PathBuf;
 /// Registry entry status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum PackageStatus {
     /// Package is active and usable
+    #[default]
     Active,
     /// Package is deprecated (still usable but shows warning)
     Deprecated,
@@ -22,29 +24,19 @@ pub enum PackageStatus {
     PendingReview,
 }
 
-impl Default for PackageStatus {
-    fn default() -> Self {
-        Self::Active
-    }
-}
-
 /// Source type for a package
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PackageSource {
     /// Local development package
-    Local {
-        path: PathBuf,
-    },
+    Local { path: PathBuf },
     /// Remote registry package
     Remote {
         registry_url: String,
         download_url: String,
     },
     /// Embedded package (built-in)
-    Embedded {
-        data: Vec<u8>,
-    },
+    Embedded { data: Vec<u8> },
 }
 
 /// Registry entry for a single package version
@@ -507,10 +499,7 @@ mod tests {
             serde_json::to_string(&SortField::Downloads).unwrap(),
             "\"downloads\""
         );
-        assert_eq!(
-            serde_json::to_string(&SortField::Name).unwrap(),
-            "\"name\""
-        );
+        assert_eq!(serde_json::to_string(&SortField::Name).unwrap(), "\"name\"");
         assert_eq!(
             serde_json::to_string(&SortField::UpdatedAt).unwrap(),
             "\"updated_at\""
@@ -546,12 +535,8 @@ mod tests {
 
     #[test]
     fn test_publish_request_serialization() {
-        let manifest = crate::manifest::PackageManifest::new(
-            "test.package",
-            "Test",
-            "1.0.0",
-            "Description",
-        );
+        let manifest =
+            crate::manifest::PackageManifest::new("test.package", "Test", "1.0.0", "Description");
         let request = PublishRequest {
             manifest,
             wasm_base64: "AGFzbQE=".to_string(),

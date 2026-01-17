@@ -45,8 +45,26 @@ export const NIVO_SAMPLE_DATA: Record<string, unknown> = {
 	],
 	// Line: array of { id, data: [{ x, y }] }
 	line: [
-		{ id: "Series A", data: [{ x: "Jan", y: 20 }, { x: "Feb", y: 45 }, { x: "Mar", y: 30 }, { x: "Apr", y: 80 }, { x: "May", y: 55 }] },
-		{ id: "Series B", data: [{ x: "Jan", y: 50 }, { x: "Feb", y: 35 }, { x: "Mar", y: 60 }, { x: "Apr", y: 40 }, { x: "May", y: 75 }] },
+		{
+			id: "Series A",
+			data: [
+				{ x: "Jan", y: 20 },
+				{ x: "Feb", y: 45 },
+				{ x: "Mar", y: 30 },
+				{ x: "Apr", y: 80 },
+				{ x: "May", y: 55 },
+			],
+		},
+		{
+			id: "Series B",
+			data: [
+				{ x: "Jan", y: 50 },
+				{ x: "Feb", y: 35 },
+				{ x: "Mar", y: 60 },
+				{ x: "Apr", y: 40 },
+				{ x: "May", y: 75 },
+			],
+		},
 	],
 	// Pie: array of { id, value, label? }
 	pie: [
@@ -65,14 +83,56 @@ export const NIVO_SAMPLE_DATA: Record<string, unknown> = {
 	],
 	// Heatmap: array of { id, data: [{ x, y }] }
 	heatmap: [
-		{ id: "Mon", data: [{ x: "9am", y: 45 }, { x: "12pm", y: 78 }, { x: "3pm", y: 62 }, { x: "6pm", y: 38 }] },
-		{ id: "Tue", data: [{ x: "9am", y: 58 }, { x: "12pm", y: 95 }, { x: "3pm", y: 71 }, { x: "6pm", y: 42 }] },
-		{ id: "Wed", data: [{ x: "9am", y: 52 }, { x: "12pm", y: 88 }, { x: "3pm", y: 68 }, { x: "6pm", y: 45 }] },
+		{
+			id: "Mon",
+			data: [
+				{ x: "9am", y: 45 },
+				{ x: "12pm", y: 78 },
+				{ x: "3pm", y: 62 },
+				{ x: "6pm", y: 38 },
+			],
+		},
+		{
+			id: "Tue",
+			data: [
+				{ x: "9am", y: 58 },
+				{ x: "12pm", y: 95 },
+				{ x: "3pm", y: 71 },
+				{ x: "6pm", y: 42 },
+			],
+		},
+		{
+			id: "Wed",
+			data: [
+				{ x: "9am", y: 52 },
+				{ x: "12pm", y: 88 },
+				{ x: "3pm", y: 68 },
+				{ x: "6pm", y: 45 },
+			],
+		},
 	],
 	// Scatter: array of { id, data: [{ x, y }] } with numeric x
 	scatter: [
-		{ id: "Group A", data: [{ x: 10, y: 20 }, { x: 25, y: 45 }, { x: 40, y: 30 }, { x: 55, y: 65 }, { x: 70, y: 50 }] },
-		{ id: "Group B", data: [{ x: 15, y: 35 }, { x: 30, y: 25 }, { x: 45, y: 55 }, { x: 60, y: 40 }, { x: 75, y: 70 }] },
+		{
+			id: "Group A",
+			data: [
+				{ x: 10, y: 20 },
+				{ x: 25, y: 45 },
+				{ x: 40, y: 30 },
+				{ x: 55, y: 65 },
+				{ x: 70, y: 50 },
+			],
+		},
+		{
+			id: "Group B",
+			data: [
+				{ x: 15, y: 35 },
+				{ x: 30, y: 25 },
+				{ x: 45, y: 55 },
+				{ x: 60, y: 40 },
+				{ x: 75, y: 70 },
+			],
+		},
 	],
 	// Funnel: array of { id, value, label }
 	funnel: [
@@ -86,8 +146,22 @@ export const NIVO_SAMPLE_DATA: Record<string, unknown> = {
 	treemap: {
 		id: "root",
 		children: [
-			{ id: "Frontend", children: [{ id: "React", value: 145 }, { id: "Vue", value: 98 }, { id: "Angular", value: 72 }] },
-			{ id: "Backend", children: [{ id: "Node", value: 112 }, { id: "Python", value: 135 }, { id: "Go", value: 78 }] },
+			{
+				id: "Frontend",
+				children: [
+					{ id: "React", value: 145 },
+					{ id: "Vue", value: 98 },
+					{ id: "Angular", value: 72 },
+				],
+			},
+			{
+				id: "Backend",
+				children: [
+					{ id: "Node", value: 112 },
+					{ id: "Python", value: 135 },
+					{ id: "Go", value: 78 },
+				],
+			},
 		],
 	},
 	// Sunburst: hierarchical { id, children: [{ id, value }] }
@@ -95,9 +169,27 @@ export const NIVO_SAMPLE_DATA: Record<string, unknown> = {
 	sunburst: {
 		id: "root",
 		children: [
-			{ id: "Design", children: [{ id: "UI", value: 85 }, { id: "UX", value: 72 }] },
-			{ id: "Development", children: [{ id: "Frontend", value: 125 }, { id: "Backend", value: 142 }] },
-			{ id: "Testing", children: [{ id: "Unit", value: 65 }, { id: "E2E", value: 48 }] },
+			{
+				id: "Design",
+				children: [
+					{ id: "UI", value: 85 },
+					{ id: "UX", value: 72 },
+				],
+			},
+			{
+				id: "Development",
+				children: [
+					{ id: "Frontend", value: 125 },
+					{ id: "Backend", value: 142 },
+				],
+			},
+			{
+				id: "Testing",
+				children: [
+					{ id: "Unit", value: 65 },
+					{ id: "E2E", value: 48 },
+				],
+			},
 		],
 	},
 	// Sankey: { nodes: [{ id }], links: [{ source, target, value }] }
@@ -129,23 +221,83 @@ export const NIVO_SAMPLE_DATA: Record<string, unknown> = {
 	],
 	// Bump: array of { id, data: [{ x, y }] } where y is ranking (1, 2, 3...)
 	bump: [
-		{ id: "Team A", data: [{ x: 2020, y: 1 }, { x: 2021, y: 2 }, { x: 2022, y: 1 }, { x: 2023, y: 3 }] },
-		{ id: "Team B", data: [{ x: 2020, y: 2 }, { x: 2021, y: 1 }, { x: 2022, y: 3 }, { x: 2023, y: 1 }] },
-		{ id: "Team C", data: [{ x: 2020, y: 3 }, { x: 2021, y: 3 }, { x: 2022, y: 2 }, { x: 2023, y: 2 }] },
+		{
+			id: "Team A",
+			data: [
+				{ x: 2020, y: 1 },
+				{ x: 2021, y: 2 },
+				{ x: 2022, y: 1 },
+				{ x: 2023, y: 3 },
+			],
+		},
+		{
+			id: "Team B",
+			data: [
+				{ x: 2020, y: 2 },
+				{ x: 2021, y: 1 },
+				{ x: 2022, y: 3 },
+				{ x: 2023, y: 1 },
+			],
+		},
+		{
+			id: "Team C",
+			data: [
+				{ x: 2020, y: 3 },
+				{ x: 2021, y: 3 },
+				{ x: 2022, y: 2 },
+				{ x: 2023, y: 2 },
+			],
+		},
 	],
 	// AreaBump: array of { id, data: [{ x, y }] } where y is actual value (larger numbers)
 	areaBump: [
-		{ id: "JavaScript", data: [{ x: 2020, y: 185 }, { x: 2021, y: 210 }, { x: 2022, y: 245 }, { x: 2023, y: 278 }] },
-		{ id: "TypeScript", data: [{ x: 2020, y: 95 }, { x: 2021, y: 142 }, { x: 2022, y: 198 }, { x: 2023, y: 265 }] },
-		{ id: "Python", data: [{ x: 2020, y: 165 }, { x: 2021, y: 195 }, { x: 2022, y: 225 }, { x: 2023, y: 252 }] },
+		{
+			id: "JavaScript",
+			data: [
+				{ x: 2020, y: 185 },
+				{ x: 2021, y: 210 },
+				{ x: 2022, y: 245 },
+				{ x: 2023, y: 278 },
+			],
+		},
+		{
+			id: "TypeScript",
+			data: [
+				{ x: 2020, y: 95 },
+				{ x: 2021, y: 142 },
+				{ x: 2022, y: 198 },
+				{ x: 2023, y: 265 },
+			],
+		},
+		{
+			id: "Python",
+			data: [
+				{ x: 2020, y: 165 },
+				{ x: 2021, y: 195 },
+				{ x: 2022, y: 225 },
+				{ x: 2023, y: 252 },
+			],
+		},
 	],
 	// CirclePacking: hierarchical { id, children/value }
 	// IMPORTANT: Use 'id' field, NOT 'name'
 	circlePacking: {
 		id: "root",
 		children: [
-			{ id: "Data", children: [{ id: "Analytics", value: 145 }, { id: "ML", value: 112 }] },
-			{ id: "Infra", children: [{ id: "Cloud", value: 98 }, { id: "DevOps", value: 85 }] },
+			{
+				id: "Data",
+				children: [
+					{ id: "Analytics", value: 145 },
+					{ id: "ML", value: 112 },
+				],
+			},
+			{
+				id: "Infra",
+				children: [
+					{ id: "Cloud", value: 98 },
+					{ id: "DevOps", value: 85 },
+				],
+			},
 		],
 	},
 	// Network: { nodes: [{ id }], links: [{ source, target }] }
@@ -189,9 +341,30 @@ export const NIVO_SAMPLE_DATA: Record<string, unknown> = {
 	],
 	// Marimekko: array of { id/statement, value/participation, dimension values }
 	marimekko: [
-		{ statement: "Quality", participation: 85, stronglyAgree: 45, agree: 28, disagree: 18, stronglyDisagree: 9 },
-		{ statement: "Price", participation: 72, stronglyAgree: 32, agree: 35, disagree: 22, stronglyDisagree: 11 },
-		{ statement: "Service", participation: 68, stronglyAgree: 52, agree: 25, disagree: 15, stronglyDisagree: 8 },
+		{
+			statement: "Quality",
+			participation: 85,
+			stronglyAgree: 45,
+			agree: 28,
+			disagree: 18,
+			stronglyDisagree: 9,
+		},
+		{
+			statement: "Price",
+			participation: 72,
+			stronglyAgree: 32,
+			agree: 35,
+			disagree: 22,
+			stronglyDisagree: 11,
+		},
+		{
+			statement: "Service",
+			participation: 68,
+			stronglyAgree: 52,
+			agree: 25,
+			disagree: 15,
+			stronglyDisagree: 8,
+		},
 	],
 	// ParallelCoordinates: array of objects with variables as properties
 	parallelCoordinates: [
@@ -203,9 +376,30 @@ export const NIVO_SAMPLE_DATA: Record<string, unknown> = {
 	],
 	// RadialBar: array of { id, data: [{ x, y }] }
 	radialBar: [
-		{ id: "Store A", data: [{ x: "Vegetables", y: 72 }, { x: "Fruits", y: 85 }, { x: "Meat", y: 45 }] },
-		{ id: "Store B", data: [{ x: "Vegetables", y: 58 }, { x: "Fruits", y: 65 }, { x: "Meat", y: 78 }] },
-		{ id: "Store C", data: [{ x: "Vegetables", y: 82 }, { x: "Fruits", y: 48 }, { x: "Meat", y: 62 }] },
+		{
+			id: "Store A",
+			data: [
+				{ x: "Vegetables", y: 72 },
+				{ x: "Fruits", y: 85 },
+				{ x: "Meat", y: 45 },
+			],
+		},
+		{
+			id: "Store B",
+			data: [
+				{ x: "Vegetables", y: 58 },
+				{ x: "Fruits", y: 65 },
+				{ x: "Meat", y: 78 },
+			],
+		},
+		{
+			id: "Store C",
+			data: [
+				{ x: "Vegetables", y: 82 },
+				{ x: "Fruits", y: 48 },
+				{ x: "Meat", y: 62 },
+			],
+		},
 	],
 	// Boxplot: array of { group, subgroup?, value }
 	boxplot: [
@@ -253,7 +447,9 @@ export const NIVO_CHART_DEFAULTS: Record<string, NivoChartDefaults> = {
 	stream: { keys: ["React", "Vue", "Angular"] },
 	swarmplot: { groups: ["Category A", "Category B", "Category C"] },
 	chord: { keys: ["John", "Raoul", "Jane", "Marcel", "Ibrahim"] },
-	marimekko: { keys: ["stronglyAgree", "agree", "disagree", "stronglyDisagree"] },
+	marimekko: {
+		keys: ["stronglyAgree", "agree", "disagree", "stronglyDisagree"],
+	},
 	parallelCoordinates: { keys: ["temp", "cost", "volume", "efficiency"] },
 };
 
@@ -265,20 +461,28 @@ export const NIVO_CHART_DEFAULTS: Record<string, NivoChartDefaults> = {
 export const NIVO_DATA_SPECS: Record<string, NivoDataSpec> = {
 	bar: {
 		type: "array",
-		validator: (item) => typeof item === "object" && item !== null && Object.values(item).some(v => typeof v === "number"),
-		description: "Array of { [indexBy]: string, [key1]: number, [key2]: number, ... }",
+		validator: (item) =>
+			typeof item === "object" &&
+			item !== null &&
+			Object.values(item).some((v) => typeof v === "number"),
+		description:
+			"Array of { [indexBy]: string, [key1]: number, [key2]: number, ... }",
 	},
 	line: {
 		type: "array",
 		validator: (item) => {
 			const i = item as Record<string, unknown>;
-			return typeof i?.id === "string" && Array.isArray(i?.data) &&
+			return (
+				typeof i?.id === "string" &&
+				Array.isArray(i?.data) &&
 				i.data.every((d: unknown) => {
 					const point = d as Record<string, unknown>;
 					return point?.x !== undefined && typeof point?.y === "number";
-				});
+				})
+			);
 		},
-		description: "Array of { id: string, data: [{ x: string|number, y: number }] }",
+		description:
+			"Array of { id: string, data: [{ x: string|number, y: number }] }",
 	},
 	pie: {
 		type: "array",
@@ -290,30 +494,41 @@ export const NIVO_DATA_SPECS: Record<string, NivoDataSpec> = {
 	},
 	radar: {
 		type: "array",
-		validator: (item) => typeof item === "object" && item !== null && Object.values(item).some(v => typeof v === "number"),
-		description: "Array of { [indexBy]: string, [key1]: number, [key2]: number, ... }",
+		validator: (item) =>
+			typeof item === "object" &&
+			item !== null &&
+			Object.values(item).some((v) => typeof v === "number"),
+		description:
+			"Array of { [indexBy]: string, [key1]: number, [key2]: number, ... }",
 	},
 	heatmap: {
 		type: "array",
 		validator: (item) => {
 			const i = item as Record<string, unknown>;
-			return typeof i?.id === "string" && Array.isArray(i?.data) &&
+			return (
+				typeof i?.id === "string" &&
+				Array.isArray(i?.data) &&
 				i.data.every((d: unknown) => {
 					const cell = d as Record<string, unknown>;
 					return cell?.x !== undefined && typeof cell?.y === "number";
-				});
+				})
+			);
 		},
-		description: "Array of { id: string, data: [{ x: string|number, y: number }] }",
+		description:
+			"Array of { id: string, data: [{ x: string|number, y: number }] }",
 	},
 	scatter: {
 		type: "array",
 		validator: (item) => {
 			const i = item as Record<string, unknown>;
-			return typeof i?.id === "string" && Array.isArray(i?.data) &&
+			return (
+				typeof i?.id === "string" &&
+				Array.isArray(i?.data) &&
 				i.data.every((d: unknown) => {
 					const point = d as Record<string, unknown>;
 					return typeof point?.x === "number" && typeof point?.y === "number";
-				});
+				})
+			);
 		},
 		description: "Array of { id: string, data: [{ x: number, y: number }] }",
 	},
@@ -321,66 +536,85 @@ export const NIVO_DATA_SPECS: Record<string, NivoDataSpec> = {
 		type: "array",
 		validator: (item) => {
 			const i = item as Record<string, unknown>;
-			return (typeof i?.id === "string" || typeof i?.id === "number") && typeof i?.value === "number";
+			return (
+				(typeof i?.id === "string" || typeof i?.id === "number") &&
+				typeof i?.value === "number"
+			);
 		},
-		description: "Array of { id: string|number, value: number, label?: string }",
+		description:
+			"Array of { id: string|number, value: number, label?: string }",
 	},
 	treemap: {
 		type: "object",
 		validator: (data) => {
 			const d = data as Record<string, unknown>;
-			const hasValidStructure = typeof d?.id === "string" && (Array.isArray(d?.children) || typeof d?.value === "number");
+			const hasValidStructure =
+				typeof d?.id === "string" &&
+				(Array.isArray(d?.children) || typeof d?.value === "number");
 			if (!hasValidStructure) return false;
 			const checkChildren = (node: Record<string, unknown>): boolean => {
 				if (!node.children) return true;
-				return (node.children as Record<string, unknown>[]).every(child =>
-					typeof child.id === "string" && checkChildren(child)
+				return (node.children as Record<string, unknown>[]).every(
+					(child) => typeof child.id === "string" && checkChildren(child),
 				);
 			};
 			return checkChildren(d);
 		},
-		description: "{ id: string, children?: [...], value?: number } - hierarchical with 'id' field",
+		description:
+			"{ id: string, children?: [...], value?: number } - hierarchical with 'id' field",
 	},
 	sunburst: {
 		type: "object",
 		validator: (data) => {
 			const d = data as Record<string, unknown>;
-			const hasValidStructure = typeof d?.id === "string" && (Array.isArray(d?.children) || typeof d?.value === "number");
+			const hasValidStructure =
+				typeof d?.id === "string" &&
+				(Array.isArray(d?.children) || typeof d?.value === "number");
 			if (!hasValidStructure) return false;
 			const checkChildren = (node: Record<string, unknown>): boolean => {
 				if (!node.children) return true;
-				return (node.children as Record<string, unknown>[]).every(child =>
-					typeof child.id === "string" && checkChildren(child)
+				return (node.children as Record<string, unknown>[]).every(
+					(child) => typeof child.id === "string" && checkChildren(child),
 				);
 			};
 			return checkChildren(d);
 		},
-		description: "{ id: string, children?: [...], value?: number } - hierarchical with 'id' field",
+		description:
+			"{ id: string, children?: [...], value?: number } - hierarchical with 'id' field",
 	},
 	circlePacking: {
 		type: "object",
 		validator: (data) => {
 			const d = data as Record<string, unknown>;
-			const hasValidStructure = typeof d?.id === "string" && (Array.isArray(d?.children) || typeof d?.value === "number");
+			const hasValidStructure =
+				typeof d?.id === "string" &&
+				(Array.isArray(d?.children) || typeof d?.value === "number");
 			if (!hasValidStructure) return false;
 			const checkChildren = (node: Record<string, unknown>): boolean => {
 				if (!node.children) return true;
-				return (node.children as Record<string, unknown>[]).every(child =>
-					typeof child.id === "string" && checkChildren(child)
+				return (node.children as Record<string, unknown>[]).every(
+					(child) => typeof child.id === "string" && checkChildren(child),
 				);
 			};
 			return checkChildren(d);
 		},
-		description: "{ id: string, children?: [...], value?: number } - hierarchical with 'id' field",
+		description:
+			"{ id: string, children?: [...], value?: number } - hierarchical with 'id' field",
 	},
 	sankey: {
 		type: "object",
 		validator: (data) => {
-			const d = data as { nodes?: { id: string }[]; links?: { source: string; target: string; value: number }[] };
+			const d = data as {
+				nodes?: { id: string }[];
+				links?: { source: string; target: string; value: number }[];
+			};
 			if (!Array.isArray(d?.nodes) || !Array.isArray(d?.links)) return false;
-			const nodeIds = new Set(d.nodes.map(n => n.id));
-			return d.links.every(link =>
-				nodeIds.has(link.source) && nodeIds.has(link.target) && typeof link.value === "number"
+			const nodeIds = new Set(d.nodes.map((n) => n.id));
+			return d.links.every(
+				(link) =>
+					nodeIds.has(link.source) &&
+					nodeIds.has(link.target) &&
+					typeof link.value === "number",
 			);
 		},
 		description: "{ nodes: [{ id }], links: [{ source, target, value }] }",
@@ -388,10 +622,15 @@ export const NIVO_DATA_SPECS: Record<string, NivoDataSpec> = {
 	network: {
 		type: "object",
 		validator: (data) => {
-			const d = data as { nodes?: { id: string }[]; links?: { source: string; target: string }[] };
+			const d = data as {
+				nodes?: { id: string }[];
+				links?: { source: string; target: string }[];
+			};
 			if (!Array.isArray(d?.nodes) || !Array.isArray(d?.links)) return false;
-			const nodeIds = new Set(d.nodes.map(n => n.id));
-			return d.links.every(link => nodeIds.has(link.source) && nodeIds.has(link.target));
+			const nodeIds = new Set(d.nodes.map((n) => n.id));
+			return d.links.every(
+				(link) => nodeIds.has(link.source) && nodeIds.has(link.target),
+			);
 		},
 		description: "{ nodes: [{ id }], links: [{ source, target }] }",
 	},
@@ -399,7 +638,11 @@ export const NIVO_DATA_SPECS: Record<string, NivoDataSpec> = {
 		type: "array",
 		validator: (item) => {
 			const i = item as Record<string, unknown>;
-			return typeof i?.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(i.day) && typeof i?.value === "number";
+			return (
+				typeof i?.day === "string" &&
+				/^\d{4}-\d{2}-\d{2}$/.test(i.day) &&
+				typeof i?.value === "number"
+			);
 		},
 		description: "Array of { day: 'YYYY-MM-DD', value: number }",
 	},
@@ -415,36 +658,51 @@ export const NIVO_DATA_SPECS: Record<string, NivoDataSpec> = {
 		type: "array",
 		validator: (item) => {
 			const i = item as Record<string, unknown>;
-			return typeof i?.id === "string" && Array.isArray(i?.data) &&
+			return (
+				typeof i?.id === "string" &&
+				Array.isArray(i?.data) &&
 				i.data.every((d: unknown) => {
 					const point = d as Record<string, unknown>;
 					return typeof point?.x === "number" && typeof point?.y === "number";
-				});
+				})
+			);
 		},
-		description: "Array of { id: string, data: [{ x: number, y: number (rank) }] }",
+		description:
+			"Array of { id: string, data: [{ x: number, y: number (rank) }] }",
 	},
 	areaBump: {
 		type: "array",
 		validator: (item) => {
 			const i = item as Record<string, unknown>;
-			return typeof i?.id === "string" && Array.isArray(i?.data) &&
+			return (
+				typeof i?.id === "string" &&
+				Array.isArray(i?.data) &&
 				i.data.every((d: unknown) => {
 					const point = d as Record<string, unknown>;
 					return typeof point?.x === "number" && typeof point?.y === "number";
-				});
+				})
+			);
 		},
-		description: "Array of { id: string, data: [{ x: number, y: number (value) }] }",
+		description:
+			"Array of { id: string, data: [{ x: number, y: number (value) }] }",
 	},
 	stream: {
 		type: "array",
-		validator: (item) => typeof item === "object" && item !== null && Object.values(item).every(v => typeof v === "number"),
+		validator: (item) =>
+			typeof item === "object" &&
+			item !== null &&
+			Object.values(item).every((v) => typeof v === "number"),
 		description: "Array of { [key1]: number, [key2]: number, ... }",
 	},
 	swarmplot: {
 		type: "array",
 		validator: (item) => {
 			const i = item as Record<string, unknown>;
-			return typeof i?.id === "string" && typeof i?.group === "string" && typeof i?.price === "number";
+			return (
+				typeof i?.id === "string" &&
+				typeof i?.group === "string" &&
+				typeof i?.price === "number"
+			);
 		},
 		description: "Array of { id: string, group: string, price: number }",
 	},
@@ -452,7 +710,11 @@ export const NIVO_DATA_SPECS: Record<string, NivoDataSpec> = {
 		type: "array",
 		validator: (item) => {
 			const i = item as Record<string, unknown>;
-			return typeof i?.id === "string" && typeof i?.x === "number" && typeof i?.y === "number";
+			return (
+				typeof i?.id === "string" &&
+				typeof i?.x === "number" &&
+				typeof i?.y === "number"
+			);
 		},
 		description: "Array of { id: string, x: number, y: number }",
 	},
@@ -460,24 +722,33 @@ export const NIVO_DATA_SPECS: Record<string, NivoDataSpec> = {
 		type: "array",
 		validator: (item) => {
 			const i = item as Record<string, unknown>;
-			return typeof i?.statement === "string" && typeof i?.participation === "number";
+			return (
+				typeof i?.statement === "string" && typeof i?.participation === "number"
+			);
 		},
-		description: "Array of { statement: string, participation: number, [dimension]: number, ... }",
+		description:
+			"Array of { statement: string, participation: number, [dimension]: number, ... }",
 	},
 	parallelCoordinates: {
 		type: "array",
-		validator: (item) => typeof item === "object" && item !== null && Object.values(item).every(v => typeof v === "number"),
+		validator: (item) =>
+			typeof item === "object" &&
+			item !== null &&
+			Object.values(item).every((v) => typeof v === "number"),
 		description: "Array of { [var1]: number, [var2]: number, ... }",
 	},
 	radialBar: {
 		type: "array",
 		validator: (item) => {
 			const i = item as Record<string, unknown>;
-			return typeof i?.id === "string" && Array.isArray(i?.data) &&
+			return (
+				typeof i?.id === "string" &&
+				Array.isArray(i?.data) &&
 				i.data.every((d: unknown) => {
 					const point = d as Record<string, unknown>;
 					return typeof point?.x === "string" && typeof point?.y === "number";
-				});
+				})
+			);
 		},
 		description: "Array of { id: string, data: [{ x: string, y: number }] }",
 	},
@@ -495,11 +766,16 @@ export const NIVO_DATA_SPECS: Record<string, NivoDataSpec> = {
 			const i = item as Record<string, unknown>;
 			const ranges = i?.ranges as number[] | undefined;
 			const measures = i?.measures as number[] | undefined;
-			return typeof i?.id === "string" &&
-				Array.isArray(ranges) && ranges.length >= 3 &&
-				Array.isArray(measures) && measures.length > 0;
+			return (
+				typeof i?.id === "string" &&
+				Array.isArray(ranges) &&
+				ranges.length >= 3 &&
+				Array.isArray(measures) &&
+				measures.length > 0
+			);
 		},
-		description: "Array of { id: string, ranges: number[] (3+), measures: number[], markers?: number[] }",
+		description:
+			"Array of { id: string, ranges: number[] (3+), measures: number[], markers?: number[] }",
 	},
 	chord: {
 		type: "object",
@@ -508,8 +784,8 @@ export const NIVO_DATA_SPECS: Record<string, NivoDataSpec> = {
 			const matrix = data as number[][];
 			const size = matrix.length;
 			if (size === 0) return false;
-			return matrix.every((row, i) =>
-				Array.isArray(row) && row.length === size && row[i] === 0
+			return matrix.every(
+				(row, i) => Array.isArray(row) && row.length === size && row[i] === 0,
 			);
 		},
 		description: "2D matrix where matrix[i][i] = 0 (no self-connections)",
@@ -556,19 +832,43 @@ export const NIVO_PROPS_SPECS: Record<string, NivoPropsSpec> = {
 // ============================================================================
 
 export const NIVO_CHART_TYPES = [
-	"bar", "line", "pie", "radar", "heatmap", "scatter", "funnel",
-	"treemap", "sunburst", "calendar", "bump", "areaBump", "circlePacking",
-	"network", "sankey", "stream", "swarmplot", "voronoi", "waffle",
-	"marimekko", "parallelCoordinates", "radialBar", "boxplot", "bullet", "chord"
+	"bar",
+	"line",
+	"pie",
+	"radar",
+	"heatmap",
+	"scatter",
+	"funnel",
+	"treemap",
+	"sunburst",
+	"calendar",
+	"bump",
+	"areaBump",
+	"circlePacking",
+	"network",
+	"sankey",
+	"stream",
+	"swarmplot",
+	"voronoi",
+	"waffle",
+	"marimekko",
+	"parallelCoordinates",
+	"radialBar",
+	"boxplot",
+	"bullet",
+	"chord",
 ] as const;
 
-export type NivoChartType = typeof NIVO_CHART_TYPES[number];
+export type NivoChartType = (typeof NIVO_CHART_TYPES)[number];
 
 // ============================================================================
 // VALIDATION HELPERS
 // ============================================================================
 
-export function validateNivoData(chartType: string, data: unknown): { valid: boolean; error?: string } {
+export function validateNivoData(
+	chartType: string,
+	data: unknown,
+): { valid: boolean; error?: string } {
 	const spec = NIVO_DATA_SPECS[chartType];
 	if (!spec) {
 		return { valid: false, error: `Unknown chart type: ${chartType}` };
@@ -580,12 +880,18 @@ export function validateNivoData(chartType: string, data: unknown): { valid: boo
 		}
 		for (let i = 0; i < data.length; i++) {
 			if (!spec.validator(data[i])) {
-				return { valid: false, error: `Invalid item at index ${i}. Expected: ${spec.description}` };
+				return {
+					valid: false,
+					error: `Invalid item at index ${i}. Expected: ${spec.description}`,
+				};
 			}
 		}
 	} else {
 		if (!spec.validator(data)) {
-			return { valid: false, error: `Invalid data structure. Expected: ${spec.description}` };
+			return {
+				valid: false,
+				error: `Invalid data structure. Expected: ${spec.description}`,
+			};
 		}
 	}
 

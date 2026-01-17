@@ -1,10 +1,10 @@
+use flow_like::a2ui::components::SelectProps;
 use flow_like::flow::{
     execution::{LogLevel, context::ExecutionContext},
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::SelectProps;
 use flow_like_types::{Value, async_trait, json::json};
 
 use super::element_utils::extract_element_id;
@@ -41,7 +41,12 @@ impl NodeLogic for SetSelectValue {
         )
         .set_schema::<SelectProps>()
         .set_options(PinOptions::new().set_enforce_schema(false).build());
-        node.add_input_pin("value", "Value", "The value to select", VariableType::String);
+        node.add_input_pin(
+            "value",
+            "Value",
+            "The value to select",
+            VariableType::String,
+        );
 
         node.add_output_pin("exec_out", "▶", "Execution output", VariableType::Execution);
 
@@ -54,18 +59,28 @@ impl NodeLogic for SetSelectValue {
         context.activate_exec_pin("exec_out").await?;
 
         let element_value: Value = context.evaluate_pin("element_ref").await?;
-        let element_id = extract_element_id(&element_value)
-            .ok_or_else(|| flow_like_types::anyhow!("Invalid element reference - expected string ID or element object"))?;
+        let element_id = extract_element_id(&element_value).ok_or_else(|| {
+            flow_like_types::anyhow!(
+                "Invalid element reference - expected string ID or element object"
+            )
+        })?;
         let value: String = context.evaluate_pin("value").await?;
 
-        context.upsert_element(&element_id, json!({
-            "type": "setValue",
-            "value": value
-        })).await?;
+        context
+            .upsert_element(
+                &element_id,
+                json!({
+                    "type": "setValue",
+                    "value": value
+                }),
+            )
+            .await?;
 
-        context.log_message(&format!("Set select value: {} = {}", element_id, value), LogLevel::Debug);
+        context.log_message(
+            &format!("Set select value: {} = {}", element_id, value),
+            LogLevel::Debug,
+        );
 
         Ok(())
     }
 }
-

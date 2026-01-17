@@ -2,8 +2,8 @@
 
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useBackend } from "../../../state/backend-state";
 import { cn } from "../../../lib/utils";
+import { useBackend } from "../../../state/backend-state";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
@@ -87,14 +87,25 @@ export function A2UIImageInput({
 	}, [component.value, setByPath, multiple]);
 
 	useEffect(() => {
-		const handleClear = (e: CustomEvent<{ surfaceId: string; componentId: string }>) => {
-			if (e.detail.surfaceId === surfaceId && e.detail.componentId === componentId) {
+		const handleClear = (
+			e: CustomEvent<{ surfaceId: string; componentId: string }>,
+		) => {
+			if (
+				e.detail.surfaceId === surfaceId &&
+				e.detail.componentId === componentId
+			) {
 				clearImages();
 			}
 		};
-		window.addEventListener("a2ui:clearFileInput", handleClear as EventListener);
+		window.addEventListener(
+			"a2ui:clearFileInput",
+			handleClear as EventListener,
+		);
 		return () => {
-			window.removeEventListener("a2ui:clearFileInput", handleClear as EventListener);
+			window.removeEventListener(
+				"a2ui:clearFileInput",
+				handleClear as EventListener,
+			);
 		};
 	}, [surfaceId, componentId, clearImages]);
 
@@ -118,45 +129,55 @@ export function A2UIImageInput({
 					dataUrl,
 					uploading: true,
 				};
-			}
+			},
 		);
 
 		const pendingImages = await Promise.all(imageDataPromises);
 		const newPending = multiple
-			? [...displayImages.filter(img => !img.uploading), ...pendingImages].slice(0, maxFiles)
+			? [
+					...displayImages.filter((img) => !img.uploading),
+					...pendingImages,
+				].slice(0, maxFiles)
 			: [pendingImages[0]];
 		setLocalImages(newPending);
 
-		const uploadPromises = validFiles.map(async (file, index): Promise<ImageData> => {
-			const dataUrl = pendingImages[index].dataUrl;
-			try {
-				const backendUrl = await backend.helperState.fileToUrl(file, false);
-				return {
-					name: file.name,
-					size: file.size,
-					type: file.type,
-					dataUrl,
-					backendUrl,
-					uploading: false,
-				};
-			} catch (err) {
-				return {
-					name: file.name,
-					size: file.size,
-					type: file.type,
-					dataUrl,
-					uploading: false,
-					uploadError: err instanceof Error ? err.message : "Upload failed",
-				};
-			}
-		});
+		const uploadPromises = validFiles.map(
+			async (file, index): Promise<ImageData> => {
+				const dataUrl = pendingImages[index].dataUrl;
+				try {
+					const backendUrl = await backend.helperState.fileToUrl(file, false);
+					return {
+						name: file.name,
+						size: file.size,
+						type: file.type,
+						dataUrl,
+						backendUrl,
+						uploading: false,
+					};
+				} catch (err) {
+					return {
+						name: file.name,
+						size: file.size,
+						type: file.type,
+						dataUrl,
+						uploading: false,
+						uploadError: err instanceof Error ? err.message : "Upload failed",
+					};
+				}
+			},
+		);
 
 		const uploadedImages = await Promise.all(uploadPromises);
 		const newValue = multiple
-			? [...displayImages.filter(img => !img.uploading), ...uploadedImages].slice(0, maxFiles)
+			? [
+					...displayImages.filter((img) => !img.uploading),
+					...uploadedImages,
+				].slice(0, maxFiles)
 			: uploadedImages[0];
 
-		setLocalImages(Array.isArray(newValue) ? newValue : newValue ? [newValue] : []);
+		setLocalImages(
+			Array.isArray(newValue) ? newValue : newValue ? [newValue] : [],
+		);
 		setIsUploading(false);
 
 		if (component.value && "path" in component.value) {
@@ -221,7 +242,9 @@ export function A2UIImageInput({
 						</div>
 					) : displayImages[0].uploadError ? (
 						<div className="absolute inset-0 bg-destructive/60 flex flex-col items-center justify-center gap-2">
-							<p className="text-white text-sm">{displayImages[0].uploadError}</p>
+							<p className="text-white text-sm">
+								{displayImages[0].uploadError}
+							</p>
 							<Button
 								variant="secondary"
 								size="sm"
@@ -290,7 +313,9 @@ export function A2UIImageInput({
 								</div>
 							) : image.uploadError ? (
 								<div className="absolute inset-0 bg-destructive/60 flex flex-col items-center justify-center p-2">
-									<p className="text-xs text-white text-center mb-2">{image.uploadError}</p>
+									<p className="text-xs text-white text-center mb-2">
+										{image.uploadError}
+									</p>
 									<Button
 										variant="secondary"
 										size="icon"
@@ -316,7 +341,9 @@ export function A2UIImageInput({
 							<div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
 								<p className="text-xs text-white truncate">{image.name}</p>
 								<p className="text-xs text-white/70">
-									{image.uploading ? "Uploading..." : formatFileSize(image.size)}
+									{image.uploading
+										? "Uploading..."
+										: formatFileSize(image.size)}
 								</p>
 							</div>
 						</div>
@@ -331,7 +358,9 @@ export function A2UIImageInput({
 								: "cursor-pointer hover:border-primary",
 							error ? "border-destructive" : "border-muted-foreground/25",
 						)}
-						onClick={() => !disabled && !isUploading && inputRef.current?.click()}
+						onClick={() =>
+							!disabled && !isUploading && inputRef.current?.click()
+						}
 					>
 						{isUploading ? (
 							<Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
@@ -347,8 +376,9 @@ export function A2UIImageInput({
 
 			{!showPreview && displayImages.length > 0 && (
 				<div className="text-sm text-muted-foreground">
-					{displayImages.length} image{displayImages.length !== 1 ? "s" : ""} selected
-					{displayImages.some(img => img.uploading) && " (uploading...)"}
+					{displayImages.length} image{displayImages.length !== 1 ? "s" : ""}{" "}
+					selected
+					{displayImages.some((img) => img.uploading) && " (uploading...)"}
 				</div>
 			)}
 		</div>

@@ -1,10 +1,10 @@
+use flow_like::a2ui::components::ButtonProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::ButtonProps;
 use flow_like_types::{Value, async_trait, json::json};
 
 use super::element_utils::extract_element_id;
@@ -60,8 +60,11 @@ impl NodeLogic for SetElementLoading {
         context.deactivate_exec_pin("exec_out").await?;
 
         let element_value: Value = context.evaluate_pin("element_ref").await?;
-        let element_id = extract_element_id(&element_value)
-            .ok_or_else(|| flow_like_types::anyhow!("Invalid element reference - expected string ID or element object"))?;
+        let element_id = extract_element_id(&element_value).ok_or_else(|| {
+            flow_like_types::anyhow!(
+                "Invalid element reference - expected string ID or element object"
+            )
+        })?;
         let loading: bool = context.evaluate_pin("loading").await?;
 
         let update_value = json!({

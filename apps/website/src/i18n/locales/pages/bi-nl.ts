@@ -145,7 +145,8 @@ export const nlBi = {
 	"bi.cta.description":
 		"Download Flow-Like en bouw je eerste dashboard in minuten. Geen creditcard. Geen vendor lock-in. Gewoon betere BI.",
 	"bi.cta.button": "Gratis Downloaden",
-	"bi.cta.note": "Voor altijd gratis voor individuen. Team & Enterprise plannen beschikbaar.",
+	"bi.cta.note":
+		"Voor altijd gratis voor individuen. Team & Enterprise plannen beschikbaar.",
 
 	// FAQ
 	"bi.faq.tagline": "Vragen",

@@ -1,1 +1,4 @@
-export { AppGeneralSettings, type AppGeneralSettingsProps } from "./app-general-settings";
+export {
+	AppGeneralSettings,
+	type AppGeneralSettingsProps,
+} from "./app-general-settings";

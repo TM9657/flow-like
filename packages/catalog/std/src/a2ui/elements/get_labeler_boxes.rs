@@ -1,3 +1,5 @@
+use super::element_utils::{extract_element_id_from_pin, find_element};
+use flow_like::a2ui::components::ImageLabelerProps;
 use flow_like::flow::{
     board::Board,
     execution::context::ExecutionContext,
@@ -5,10 +7,8 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::ImageLabelerProps;
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
-use super::element_utils::{find_element, extract_element_id_from_pin};
 
 /// Gets all bounding boxes from an ImageLabeler element.
 ///

@@ -29,9 +29,7 @@ pub async fn get_page_by_route(
 ) -> Result<Json<Option<PageWithBoardId>>, ApiError> {
     ensure_permission!(user, &app_id, &state, RolePermissions::ExecuteEvents);
 
-    let app = state
-        .master_app(&user.sub()?, &app_id, &state)
-        .await?;
+    let app = state.master_app(&user.sub()?, &app_id, &state).await?;
 
     for board_id in app.boards.iter() {
         if let Ok(board) = app.open_board(board_id.to_string(), None, None).await {

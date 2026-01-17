@@ -1,12 +1,25 @@
 "use client";
 
-import { useRouter, usePathname } from "next/navigation";
-import { type ReactNode, createContext, useCallback, useContext, useState, useRef, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+	type ReactNode,
+	createContext,
+	useCallback,
+	useContext,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
+import { appGlobalState, pageLocalState } from "../../lib/idb-storage";
 import type { IIntercomEvent } from "../../lib/schema/events/intercom-event";
 import { useBackend } from "../../state/backend-state";
-import { appGlobalState, pageLocalState } from "../../lib/idb-storage";
-import type { A2UIClientMessage, A2UIServerMessage, Action, SurfaceComponent } from "./types";
 import { useRouteDialogSafe } from "./RouteDialogProvider";
+import type {
+	A2UIClientMessage,
+	A2UIServerMessage,
+	Action,
+	SurfaceComponent,
+} from "./types";
 
 type ActionHandler = (message: A2UIClientMessage) => void;
 type A2UIMessageHandler = (message: A2UIServerMessage) => void;
@@ -24,7 +37,12 @@ interface ActionContextValue {
 	setPageState: (key: string, value: unknown) => void;
 	clearPageState: () => void;
 	isPreviewMode: boolean;
-	openDialog?: (route: string, title?: string, queryParams?: Record<string, string>, dialogId?: string) => void;
+	openDialog?: (
+		route: string,
+		title?: string,
+		queryParams?: Record<string, string>,
+		dialogId?: string,
+	) => void;
 	closeDialog?: (dialogId?: string) => void;
 	getElementValues: () => Record<string, unknown>;
 }
@@ -40,7 +58,12 @@ interface ActionProviderProps {
 	components?: Record<string, SurfaceComponent>;
 	children: ReactNode;
 	isPreviewMode?: boolean;
-	openDialog?: (route: string, title?: string, queryParams?: Record<string, string>, dialogId?: string) => void;
+	openDialog?: (
+		route: string,
+		title?: string,
+		queryParams?: Record<string, string>,
+		dialogId?: string,
+	) => void;
 	closeDialog?: (dialogId?: string) => void;
 }
 
@@ -58,7 +81,9 @@ export function ActionProvider({
 }: ActionProviderProps) {
 	const pathname = usePathname();
 	const routeDialog = useRouteDialogSafe();
-	const [globalState, setGlobalStateMap] = useState<Record<string, unknown>>({});
+	const [globalState, setGlobalStateMap] = useState<Record<string, unknown>>(
+		{},
+	);
 	const pageStateRef = useRef<Record<string, Record<string, unknown>>>({});
 	const [pageState, setPageStateLocal] = useState<Record<string, unknown>>({});
 	const [isStateLoaded, setIsStateLoaded] = useState(false);
@@ -72,26 +97,36 @@ export function ActionProvider({
 
 	// Getter for element values (used by useExecuteAction)
 	const getElementValues = useCallback(() => {
-		console.log("[ActionHandler] getElementValues called, current values:", elementValuesRef.current);
+		console.log(
+			"[ActionHandler] getElementValues called, current values:",
+			elementValuesRef.current,
+		);
 		return elementValuesRef.current;
 	}, []);
 
 	// Wrap onAction to intercept change events and store element values in memory
-	const wrappedOnAction = useCallback((message: A2UIClientMessage) => {
-		// Store element values on change actions
-		if (message.name === "change" && message.sourceComponentId) {
-			const elementId = `${message.surfaceId}/${message.sourceComponentId}`;
-			const value = message.context?.value;
+	const wrappedOnAction = useCallback(
+		(message: A2UIClientMessage) => {
+			// Store element values on change actions
+			if (message.name === "change" && message.sourceComponentId) {
+				const elementId = `${message.surfaceId}/${message.sourceComponentId}`;
+				const value = message.context?.value;
 
-			console.log("[ActionHandler] Storing element value:", { elementId, value, surfaceId: message.surfaceId });
+				console.log("[ActionHandler] Storing element value:", {
+					elementId,
+					value,
+					surfaceId: message.surfaceId,
+				});
 
-			// Store in memory
-			elementValuesRef.current[elementId] = value;
-		}
+				// Store in memory
+				elementValuesRef.current[elementId] = value;
+			}
 
-		// Forward to original handler
-		onAction?.(message);
-	}, [onAction]);
+			// Forward to original handler
+			onAction?.(message);
+		},
+		[onAction],
+	);
 
 	// Load persisted state from IndexedDB on mount
 	useEffect(() => {
@@ -153,34 +188,42 @@ export function ActionProvider({
 		loadPageState();
 	}, [appId, pathname, isStateLoaded]);
 
-	const setGlobalState = useCallback((key: string, value: unknown) => {
-		setGlobalStateMap(prev => {
-			const next = { ...prev, [key]: value };
+	const setGlobalState = useCallback(
+		(key: string, value: unknown) => {
+			setGlobalStateMap((prev) => {
+				const next = { ...prev, [key]: value };
+				// Persist to IndexedDB
+				if (appId) {
+					appGlobalState
+						.set(appId, key, value)
+						.catch((err) =>
+							console.error("Failed to persist global state:", err),
+						);
+				}
+				return next;
+			});
+		},
+		[appId],
+	);
+
+	const setPageState = useCallback(
+		(key: string, value: unknown) => {
+			const pageId = pathname || "default";
+			if (!pageStateRef.current[pageId]) {
+				pageStateRef.current[pageId] = {};
+			}
+			pageStateRef.current[pageId][key] = value;
+			setPageStateLocal({ ...pageStateRef.current[pageId] });
+
 			// Persist to IndexedDB
 			if (appId) {
-				appGlobalState.set(appId, key, value).catch(err =>
-					console.error("Failed to persist global state:", err)
-				);
+				pageLocalState
+					.set(appId, pageId, key, value)
+					.catch((err) => console.error("Failed to persist page state:", err));
 			}
-			return next;
-		});
-	}, [appId]);
-
-	const setPageState = useCallback((key: string, value: unknown) => {
-		const pageId = pathname || "default";
-		if (!pageStateRef.current[pageId]) {
-			pageStateRef.current[pageId] = {};
-		}
-		pageStateRef.current[pageId][key] = value;
-		setPageStateLocal({ ...pageStateRef.current[pageId] });
-
-		// Persist to IndexedDB
-		if (appId) {
-			pageLocalState.set(appId, pageId, key, value).catch(err =>
-				console.error("Failed to persist page state:", err)
-			);
-		}
-	}, [pathname, appId]);
+		},
+		[pathname, appId],
+	);
 
 	const clearPageState = useCallback(() => {
 		const pageId = pathname || "default";
@@ -189,86 +232,107 @@ export function ActionProvider({
 
 		// Clear from IndexedDB
 		if (appId) {
-			pageLocalState.clearPage(appId, pageId).catch(err =>
-				console.error("Failed to clear page state:", err)
-			);
+			pageLocalState
+				.clearPage(appId, pageId)
+				.catch((err) => console.error("Failed to clear page state:", err));
 		}
 	}, [pathname, appId]);
 
 	// Wrap onA2UIMessage to handle state updates
-	const handleA2UIMessage = useCallback((message: A2UIServerMessage) => {
-		switch (message.type) {
-			case "setGlobalState": {
-				const { key, value } = message as { key: string; value: unknown };
-				setGlobalState(key, value);
-				break;
-			}
-			case "setPageState": {
-				const { pageId, key, value } = message as { pageId: string; key: string; value: unknown };
-				const currentPageId = pathname || "default";
-				// Only apply if it's for the current page
-				if (pageId === currentPageId) {
-					setPageState(key, value);
-				} else {
-					// Store for other pages in memory
-					if (!pageStateRef.current[pageId]) {
-						pageStateRef.current[pageId] = {};
+	const handleA2UIMessage = useCallback(
+		(message: A2UIServerMessage) => {
+			switch (message.type) {
+				case "setGlobalState": {
+					const { key, value } = message as { key: string; value: unknown };
+					setGlobalState(key, value);
+					break;
+				}
+				case "setPageState": {
+					const { pageId, key, value } = message as {
+						pageId: string;
+						key: string;
+						value: unknown;
+					};
+					const currentPageId = pathname || "default";
+					// Only apply if it's for the current page
+					if (pageId === currentPageId) {
+						setPageState(key, value);
+					} else {
+						// Store for other pages in memory
+						if (!pageStateRef.current[pageId]) {
+							pageStateRef.current[pageId] = {};
+						}
+						pageStateRef.current[pageId][key] = value;
+						// Also persist to IndexedDB for cross-page state
+						if (appId) {
+							pageLocalState
+								.set(appId, pageId, key, value)
+								.catch((err) =>
+									console.error(
+										"Failed to persist page state for other page:",
+										err,
+									),
+								);
+						}
 					}
-					pageStateRef.current[pageId][key] = value;
-					// Also persist to IndexedDB for cross-page state
+					break;
+				}
+				case "clearPageState": {
+					const { pageId } = message as { pageId: string };
+					pageStateRef.current[pageId] = {};
+					if (pageId === (pathname || "default")) {
+						setPageStateLocal({});
+					}
+					// Also clear from IndexedDB
 					if (appId) {
-						pageLocalState.set(appId, pageId, key, value).catch(err =>
-							console.error("Failed to persist page state for other page:", err)
-						);
+						pageLocalState
+							.clearPage(appId, pageId)
+							.catch((err) =>
+								console.error("Failed to clear page state:", err),
+							);
 					}
+					break;
 				}
-				break;
-			}
-			case "clearPageState": {
-				const { pageId } = message as { pageId: string };
-				pageStateRef.current[pageId] = {};
-				if (pageId === (pathname || "default")) {
-					setPageStateLocal({});
-				}
-				// Also clear from IndexedDB
-				if (appId) {
-					pageLocalState.clearPage(appId, pageId).catch(err =>
-						console.error("Failed to clear page state:", err)
+				case "clearFileInput": {
+					const { surfaceId: targetSurfaceId, componentId } = message as {
+						surfaceId: string;
+						componentId: string;
+					};
+					window.dispatchEvent(
+						new CustomEvent("a2ui:clearFileInput", {
+							detail: { surfaceId: targetSurfaceId, componentId },
+						}),
 					);
+					break;
 				}
-				break;
+				default:
+					// Forward to original handler
+					onA2UIMessage?.(message);
 			}
-			case "clearFileInput": {
-				const { surfaceId: targetSurfaceId, componentId } = message as { surfaceId: string; componentId: string };
-				window.dispatchEvent(new CustomEvent("a2ui:clearFileInput", {
-					detail: { surfaceId: targetSurfaceId, componentId }
-				}));
-				break;
-			}
-			default:
-				// Forward to original handler
-				onA2UIMessage?.(message);
-		}
-	}, [onA2UIMessage, pathname, appId, setGlobalState, setPageState]);
+		},
+		[onA2UIMessage, pathname, appId, setGlobalState, setPageState],
+	);
 
 	return (
-		<ActionContext.Provider value={{
-			onAction: wrappedOnAction,
-			onA2UIMessage: handleA2UIMessage,
-			surfaceId,
-			appId,
-			boardId,
-			components,
-			globalState,
-			pageState,
-			setGlobalState,
-			setPageState,
-			clearPageState,
-			isPreviewMode,
-			openDialog,
-			closeDialog,
-			getElementValues,
-		}}>
+		<ActionContext.Provider
+			value={{
+				onAction: wrappedOnAction,
+				onA2UIMessage: handleA2UIMessage,
+				surfaceId,
+				appId,
+				boardId,
+				components,
+				globalState,
+				pageState,
+				setGlobalState,
+				setPageState,
+				clearPageState,
+				isPreviewMode,
+				openDialog,
+				closeDialog,
+				getElementValues,
+			}}
+		>
 			{children}
 		</ActionContext.Provider>
 	);
@@ -277,7 +341,12 @@ export function ActionProvider({
 export function useActionContext() {
 	const context = useContext(ActionContext);
 	if (!context) {
-		return { appId: undefined, boardId: undefined, surfaceId: "", isPreviewMode: false };
+		return {
+			appId: undefined,
+			boardId: undefined,
+			surfaceId: "",
+			isPreviewMode: false,
+		};
 	}
 	return {
 		appId: context.appId,
@@ -337,144 +406,196 @@ export function useExecuteAction() {
 	const router = useRouter();
 	const pathname = usePathname();
 	const backend = useBackend();
-	const { onAction, onA2UIMessage, surfaceId, appId, boardId, components, globalState, pageState, isPreviewMode, openDialog, closeDialog, getElementValues } = useContext(ActionContext) ?? {};
+	const {
+		onAction,
+		onA2UIMessage,
+		surfaceId,
+		appId,
+		boardId,
+		components,
+		globalState,
+		pageState,
+		isPreviewMode,
+		openDialog,
+		closeDialog,
+		getElementValues,
+	} = useContext(ActionContext) ?? {};
 
 	// Cache for execution elements per board
-	const executionElementsCache = useRef<Map<string, Record<string, unknown>>>(new Map());
+	const executionElementsCache = useRef<Map<string, Record<string, unknown>>>(
+		new Map(),
+	);
 
-	const handleA2UIEvents = useCallback((events: IIntercomEvent[]) => {
-		console.log("[A2UI] Received events from backend:", events);
+	const handleA2UIEvents = useCallback(
+		(events: IIntercomEvent[]) => {
+			console.log("[A2UI] Received events from backend:", events);
 
-		for (const event of events) {
-			console.log("[A2UI] Processing event:", event.event_type, event.payload);
+			for (const event of events) {
+				console.log(
+					"[A2UI] Processing event:",
+					event.event_type,
+					event.payload,
+				);
 
-			if (event.event_type === "a2ui") {
-				const message = event.payload as A2UIServerMessage;
-				console.log("[A2UI] A2UI message:", message);
+				if (event.event_type === "a2ui") {
+					const message = event.payload as A2UIServerMessage;
+					console.log("[A2UI] A2UI message:", message);
 
-				// Handle navigation directly - ActionHandler handles this, don't duplicate in page-interface
-				if (message.type === "navigateTo") {
-					const { route, replace, queryParams } = message as {
-						route: string;
-						replace: boolean;
-						queryParams?: Record<string, string>;
-					};
+					// Handle navigation directly - ActionHandler handles this, don't duplicate in page-interface
+					if (message.type === "navigateTo") {
+						const { route, replace, queryParams } = message as {
+							route: string;
+							replace: boolean;
+							queryParams?: Record<string, string>;
+						};
 
-					// Build the navigation URL using query params format
-					let navUrl = route;
+						// Build the navigation URL using query params format
+						let navUrl = route;
 
-					// If route doesn't start with /use and is an internal route, build query params URL
-					if (appId && !route.startsWith("/use") && !route.startsWith("http")) {
-						// Parse any query params that might be in the route itself
-						const [routePath, routeQueryString] = route.split("?");
-						const params = new URLSearchParams();
-						params.set("id", appId);
-						params.set("route", routePath);
+						// If route doesn't start with /use and is an internal route, build query params URL
+						if (
+							appId &&
+							!route.startsWith("/use") &&
+							!route.startsWith("http")
+						) {
+							// Parse any query params that might be in the route itself
+							const [routePath, routeQueryString] = route.split("?");
+							const params = new URLSearchParams();
+							params.set("id", appId);
+							params.set("route", routePath);
 
-						// Add query params from the route string (e.g., /new?foo=bar)
-						if (routeQueryString) {
-							const routeParams = new URLSearchParams(routeQueryString);
-							routeParams.forEach((value, key) => {
-								params.set(key, value);
-							});
-						}
-
-						// Add additional query params if provided (these override route params)
-						if (queryParams) {
-							for (const [key, value] of Object.entries(queryParams)) {
-								params.set(key, value);
+							// Add query params from the route string (e.g., /new?foo=bar)
+							if (routeQueryString) {
+								const routeParams = new URLSearchParams(routeQueryString);
+								routeParams.forEach((value, key) => {
+									params.set(key, value);
+								});
 							}
+
+							// Add additional query params if provided (these override route params)
+							if (queryParams) {
+								for (const [key, value] of Object.entries(queryParams)) {
+									params.set(key, value);
+								}
+							}
+							navUrl = `/use?${params.toString()}`;
+						} else if (queryParams && Object.keys(queryParams).length > 0) {
+							// External or already-formed URL with additional query params
+							const params = new URLSearchParams(queryParams);
+							const separator = navUrl.includes("?") ? "&" : "?";
+							navUrl = `${navUrl}${separator}${params.toString()}`;
 						}
-						navUrl = `/use?${params.toString()}`;
-					} else if (queryParams && Object.keys(queryParams).length > 0) {
-						// External or already-formed URL with additional query params
-						const params = new URLSearchParams(queryParams);
-						const separator = navUrl.includes("?") ? "&" : "?";
-						navUrl = `${navUrl}${separator}${params.toString()}`;
+
+						console.log(
+							"[A2UI] Navigating to:",
+							navUrl,
+							"replace:",
+							replace,
+							"appId:",
+							appId,
+							"currentPath:",
+							pathname,
+						);
+
+						// Use window.location for navigation in Tauri/desktop environment
+						// This ensures the navigation actually works regardless of React/Next.js state
+						if (replace) {
+							window.location.replace(navUrl);
+						} else {
+							window.location.href = navUrl;
+						}
+						// Continue to next event, navigation is fully handled here
+						continue;
 					}
 
-					console.log("[A2UI] Navigating to:", navUrl, "replace:", replace, "appId:", appId, "currentPath:", pathname);
+					// Handle query param updates
+					if (message.type === "setQueryParam") {
+						const { key, value, replace } = message as {
+							key: string;
+							value?: string;
+							replace: boolean;
+						};
 
-					// Use window.location for navigation in Tauri/desktop environment
-					// This ensures the navigation actually works regardless of React/Next.js state
-					if (replace) {
-						window.location.replace(navUrl);
+						const url = new URL(window.location.href);
+						if (value === undefined || value === "") {
+							url.searchParams.delete(key);
+						} else {
+							url.searchParams.set(key, value);
+						}
+
+						console.log("[A2UI] Setting query param:", key, "=", value);
+
+						if (replace) {
+							router.replace(url.pathname + url.search);
+						} else {
+							router.push(url.pathname + url.search);
+						}
+						continue;
+					}
+
+					// Handle open dialog
+					if (message.type === "openDialog") {
+						const { route, title, queryParams, dialogId } = message as {
+							route: string;
+							title?: string;
+							queryParams?: Record<string, string>;
+							dialogId?: string;
+						};
+
+						console.log("[A2UI] openDialog message received:", {
+							route,
+							title,
+							queryParams,
+							dialogId,
+							openDialogFn: !!openDialog,
+						});
+
+						if (openDialog) {
+							console.log(
+								"[A2UI] Calling openDialog function with route:",
+								route,
+							);
+							openDialog(route, title, queryParams, dialogId);
+						} else {
+							console.warn(
+								"[A2UI] openDialog not available, cannot open dialog. Make sure ActionProvider is inside RouteDialogProvider or openDialog prop is passed.",
+							);
+						}
+						continue;
+					}
+
+					// Handle close dialog
+					if (message.type === "closeDialog") {
+						const { dialogId } = message as { dialogId?: string };
+
+						console.log("[A2UI] closeDialog message received:", { dialogId });
+
+						if (closeDialog) {
+							closeDialog(dialogId);
+						} else {
+							console.warn(
+								"[A2UI] closeDialog not available, cannot close dialog",
+							);
+						}
+						continue;
+					}
+
+					// Forward other A2UI messages to the handler (state updates, element updates, etc.)
+					if (onA2UIMessage) {
+						console.log(
+							"[A2UI] Forwarding message to handler:",
+							message.type,
+							message,
+						);
+						onA2UIMessage(message);
 					} else {
-						window.location.href = navUrl;
+						console.warn("[A2UI] No onA2UIMessage handler available!");
 					}
-					// Continue to next event, navigation is fully handled here
-					continue;
-				}
-
-				// Handle query param updates
-				if (message.type === "setQueryParam") {
-					const { key, value, replace } = message as {
-						key: string;
-						value?: string;
-						replace: boolean;
-					};
-
-					const url = new URL(window.location.href);
-					if (value === undefined || value === "") {
-						url.searchParams.delete(key);
-					} else {
-						url.searchParams.set(key, value);
-					}
-
-					console.log("[A2UI] Setting query param:", key, "=", value);
-
-					if (replace) {
-						router.replace(url.pathname + url.search);
-					} else {
-						router.push(url.pathname + url.search);
-					}
-					continue;
-				}
-
-				// Handle open dialog
-				if (message.type === "openDialog") {
-					const { route, title, queryParams, dialogId } = message as {
-						route: string;
-						title?: string;
-						queryParams?: Record<string, string>;
-						dialogId?: string;
-					};
-
-					console.log("[A2UI] openDialog message received:", { route, title, queryParams, dialogId, openDialogFn: !!openDialog });
-
-					if (openDialog) {
-						console.log("[A2UI] Calling openDialog function with route:", route);
-						openDialog(route, title, queryParams, dialogId);
-					} else {
-						console.warn("[A2UI] openDialog not available, cannot open dialog. Make sure ActionProvider is inside RouteDialogProvider or openDialog prop is passed.");
-					}
-					continue;
-				}
-
-				// Handle close dialog
-				if (message.type === "closeDialog") {
-					const { dialogId } = message as { dialogId?: string };
-
-					console.log("[A2UI] closeDialog message received:", { dialogId });
-
-					if (closeDialog) {
-						closeDialog(dialogId);
-					} else {
-						console.warn("[A2UI] closeDialog not available, cannot close dialog");
-					}
-					continue;
-				}
-
-				// Forward other A2UI messages to the handler (state updates, element updates, etc.)
-				if (onA2UIMessage) {
-					console.log("[A2UI] Forwarding message to handler:", message.type, message);
-					onA2UIMessage(message);
-				} else {
-					console.warn("[A2UI] No onA2UIMessage handler available!");
 				}
 			}
-		}
-	}, [router, onA2UIMessage, appId, openDialog, closeDialog]);
+		},
+		[router, onA2UIMessage, appId, openDialog, closeDialog],
+	);
 
 	const executeAction = useCallback(
 		async (action: Action | undefined) => {
@@ -483,12 +604,20 @@ export function useExecuteAction() {
 
 			const { name, context } = action;
 
-			console.log("[ActionHandler] executeAction:", { name, context, appId, isPreviewMode });
+			console.log("[ActionHandler] executeAction:", {
+				name,
+				context,
+				appId,
+				isPreviewMode,
+			});
 
 			switch (name) {
 				case "navigate_page": {
 					const route = context.route as string | undefined;
-					const queryParamsRaw = context.queryParams as string | Record<string, string> | undefined;
+					const queryParamsRaw = context.queryParams as
+						| string
+						| Record<string, string>
+						| undefined;
 
 					// Parse queryParams if it's a JSON string
 					let extraParams: Record<string, string> = {};
@@ -496,16 +625,27 @@ export function useExecuteAction() {
 						try {
 							extraParams = JSON.parse(queryParamsRaw);
 						} catch {
-							console.warn("[ActionHandler] Invalid queryParams JSON:", queryParamsRaw);
+							console.warn(
+								"[ActionHandler] Invalid queryParams JSON:",
+								queryParamsRaw,
+							);
 						}
 					} else if (typeof queryParamsRaw === "object" && queryParamsRaw) {
 						extraParams = queryParamsRaw;
 					}
 
-					console.log("[ActionHandler] navigate_page:", { route, appId, extraParams });
+					console.log("[ActionHandler] navigate_page:", {
+						route,
+						appId,
+						extraParams,
+					});
 					if (route) {
 						// Build query params URL for internal routes
-						if (appId && !route.startsWith("/use") && !route.startsWith("http")) {
+						if (
+							appId &&
+							!route.startsWith("/use") &&
+							!route.startsWith("http")
+						) {
 							// Parse any query params that might be in the route itself
 							const [routePath, routeQueryString] = route.split("?");
 							const params = new URLSearchParams();
@@ -544,7 +684,9 @@ export function useExecuteAction() {
 				case "workflow_event": {
 					const nodeId = context.nodeId as string | undefined;
 					const actionBoardId = context.boardId as string | undefined;
-					const boardVersion = context.boardVersion as [number, number, number] | undefined;
+					const boardVersion = context.boardVersion as
+						| [number, number, number]
+						| undefined;
 					const contextAppId = context.appId as string | undefined;
 
 					const effectiveAppId = contextAppId || appId;
@@ -579,7 +721,10 @@ export function useExecuteAction() {
 									// Cache for subsequent executions
 									executionElementsCache.current.set(cacheKey, elementsMap);
 								} catch (err) {
-									console.warn("[A2UI] Failed to fetch execution elements, falling back to all components:", err);
+									console.warn(
+										"[A2UI] Failed to fetch execution elements, falling back to all components:",
+										err,
+									);
 									// Fall back to all components
 									elementsMap = {};
 									if (components && surfaceId) {
@@ -601,10 +746,16 @@ export function useExecuteAction() {
 							const mergedElements: Record<string, unknown> = {};
 							for (const [elementId, element] of Object.entries(elementsMap)) {
 								const storedValue = storedValues[elementId];
-								console.log("[A2UI] Checking element:", { elementId, hasStoredValue: storedValue !== undefined, storedValue });
+								console.log("[A2UI] Checking element:", {
+									elementId,
+									hasStoredValue: storedValue !== undefined,
+									storedValue,
+								});
 								if (storedValue !== undefined) {
 									const comp = element as Record<string, unknown>;
-									const componentData = comp.component as Record<string, unknown> | undefined;
+									const componentData = comp.component as
+										| Record<string, unknown>
+										| undefined;
 									if (componentData) {
 										mergedElements[elementId] = {
 											...comp,
@@ -626,7 +777,9 @@ export function useExecuteAction() {
 							// Extract query params from the current URL
 							const queryParams: Record<string, string> = {};
 							if (typeof window !== "undefined") {
-								const searchParams = new URLSearchParams(window.location.search);
+								const searchParams = new URLSearchParams(
+									window.location.search,
+								);
 								searchParams.forEach((value, key) => {
 									queryParams[key] = value;
 								});
@@ -636,7 +789,10 @@ export function useExecuteAction() {
 								id: nodeId,
 								payload: {
 									_elements: mergedElements,
-									_route: typeof window !== "undefined" ? window.location.pathname : "",
+									_route:
+										typeof window !== "undefined"
+											? window.location.pathname
+											: "",
 									_query_params: queryParams,
 									_page_id: currentPageId,
 									_global_state: globalState || {},
@@ -678,7 +834,19 @@ export function useExecuteAction() {
 					}
 			}
 		},
-		[router, pathname, backend, onAction, surfaceId, appId, components, globalState, pageState, handleA2UIEvents, isPreviewMode],
+		[
+			router,
+			pathname,
+			backend,
+			onAction,
+			surfaceId,
+			appId,
+			components,
+			globalState,
+			pageState,
+			handleA2UIEvents,
+			isPreviewMode,
+		],
 	);
 
 	return { executeAction, isPreviewMode: isPreviewMode ?? false };

@@ -1,5 +1,19 @@
 "use client";
 
+import { formatDistanceToNow } from "date-fns";
+import {
+	ArrowLeft,
+	Check,
+	Download,
+	ExternalLink,
+	Github,
+	Globe,
+	Package,
+	RefreshCw,
+	Shield,
+	Tag,
+	User,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -12,21 +26,6 @@ import {
 } from "../ui/card";
 import { Skeleton } from "../ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { formatDistanceToNow } from "date-fns";
-import {
-	ArrowLeft,
-	Check,
-	Download,
-	ExternalLink,
-	FileCode,
-	Github,
-	Globe,
-	Package,
-	RefreshCw,
-	Shield,
-	Tag,
-	User,
-} from "lucide-react";
 
 export interface PackageManifestUI {
 	name: string;

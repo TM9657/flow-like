@@ -7,7 +7,6 @@ import {
 	ChevronDownIcon,
 	ChevronRight,
 	Circle,
-	Clock,
 	Download,
 	FileText,
 	HomeIcon,
@@ -22,13 +21,18 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { IEvent, IEventInput, IIntercomEvent, IRunPayload } from "../../lib";
+import { useInvoke } from "../../hooks/use-invoke";
+import type {
+	IEvent,
+	IEventInput,
+	IIntercomEvent,
+	IRunPayload,
+} from "../../lib";
 import { formatDuration } from "../../lib/date";
 import { useBackend } from "../../state/backend-state";
+import type { IRouteMapping } from "../../state/backend-state/route-state";
 import { useExecutionEngine } from "../../state/execution-engine-context";
-import { useInvoke } from "../../hooks/use-invoke";
 import {
-	Badge,
 	Button,
 	DropdownMenu,
 	DropdownMenuContent,
@@ -37,13 +41,11 @@ import {
 	Input,
 	Label,
 	ScrollArea,
-	Separator,
 	Switch,
-	Textarea,
 	TextEditor,
+	Textarea,
 } from "../ui";
 import type { IUseInterfaceProps } from "./interfaces";
-import type { IRouteMapping } from "../../state/backend-state/route-state";
 
 type ExecutionStepStatus = "planned" | "progress" | "done" | "failed";
 
@@ -157,7 +159,11 @@ function getStepStatusColor(status: ExecutionStepStatus, isActive: boolean) {
 	}
 }
 
-function ExecutionSteps({ steps, currentStepId, isComplete }: { steps: IExecutionStep[]; currentStepId?: string; isComplete?: boolean }) {
+function ExecutionSteps({
+	steps,
+	currentStepId,
+	isComplete,
+}: { steps: IExecutionStep[]; currentStepId?: string; isComplete?: boolean }) {
 	const [isExpanded, setIsExpanded] = useState(true);
 	const [expandedSteps, setExpandedSteps] = useState<Set<string>>(
 		new Set(currentStepId ? [currentStepId] : []),
@@ -225,64 +231,72 @@ function ExecutionSteps({ steps, currentStepId, isComplete }: { steps: IExecutio
 			</button>
 			{isExpanded && (
 				<div className="px-4 pb-4 pt-4 space-y-2">
-				{steps.map((step, index) => {
-					const isStepExpanded = expandedSteps.has(step.id);
-					const isActive = currentStepId === step.id;
-					const hasReasoning = step.reasoning && step.reasoning.trim() !== "";
-					const duration =
-						step.startTime && step.endTime
-							? formatDuration((step.endTime - step.startTime) * 1000)
-							: null;
+					{steps.map((step, index) => {
+						const isStepExpanded = expandedSteps.has(step.id);
+						const isActive = currentStepId === step.id;
+						const hasReasoning = step.reasoning && step.reasoning.trim() !== "";
+						const duration =
+							step.startTime && step.endTime
+								? formatDuration((step.endTime - step.startTime) * 1000)
+								: null;
 
-					return (
-						<div
-							key={step.id}
-							className={`rounded-md border transition-all ${getStepStatusColor(step.status, isActive)}`}
-						>
-							<button
-								type="button"
-								onClick={() => hasReasoning && toggleStep(step.id)}
-								className={`w-full flex items-center gap-3 p-3 text-left ${
-									hasReasoning ? "hover:bg-muted/30 cursor-pointer" : "cursor-default"
-								}`}
+						return (
+							<div
+								key={step.id}
+								className={`rounded-md border transition-all ${getStepStatusColor(step.status, isActive)}`}
 							>
-								<div className="shrink-0">{getStepStatusIcon(step.status)}</div>
-								<div className="flex-1 min-w-0">
-									<div className="flex items-center gap-2">
-										<span className="text-sm font-medium">{step.title}</span>
-										{isActive && (
-											<span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-medium">
-												Active
-											</span>
-										)}
-									</div>
-									{step.description && (
-										<p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
-									)}
-								</div>
-								{duration && (
-									<span className="text-xs text-muted-foreground">{duration}</span>
-								)}
-								{hasReasoning && (
+								<button
+									type="button"
+									onClick={() => hasReasoning && toggleStep(step.id)}
+									className={`w-full flex items-center gap-3 p-3 text-left ${
+										hasReasoning
+											? "hover:bg-muted/30 cursor-pointer"
+											: "cursor-default"
+									}`}
+								>
 									<div className="shrink-0">
-										{isStepExpanded ? (
-											<ChevronDown className="w-4 h-4 text-muted-foreground" />
-										) : (
-											<ChevronRight className="w-4 h-4 text-muted-foreground" />
+										{getStepStatusIcon(step.status)}
+									</div>
+									<div className="flex-1 min-w-0">
+										<div className="flex items-center gap-2">
+											<span className="text-sm font-medium">{step.title}</span>
+											{isActive && (
+												<span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-medium">
+													Active
+												</span>
+											)}
+										</div>
+										{step.description && (
+											<p className="text-xs text-muted-foreground mt-0.5">
+												{step.description}
+											</p>
 										)}
 									</div>
-								)}
-							</button>
-							{isStepExpanded && hasReasoning && (
-								<div className="px-3 pb-3">
-									<div className="rounded bg-muted/50 p-2 text-xs text-muted-foreground whitespace-pre-wrap font-mono">
-										{step.reasoning}
+									{duration && (
+										<span className="text-xs text-muted-foreground">
+											{duration}
+										</span>
+									)}
+									{hasReasoning && (
+										<div className="shrink-0">
+											{isStepExpanded ? (
+												<ChevronDown className="w-4 h-4 text-muted-foreground" />
+											) : (
+												<ChevronRight className="w-4 h-4 text-muted-foreground" />
+											)}
+										</div>
+									)}
+								</button>
+								{isStepExpanded && hasReasoning && (
+									<div className="px-3 pb-3">
+										<div className="rounded bg-muted/50 p-2 text-xs text-muted-foreground whitespace-pre-wrap font-mono">
+											{step.reasoning}
+										</div>
 									</div>
-								</div>
-							)}
-						</div>
-					);
-				})}
+								)}
+							</div>
+						);
+					})}
 				</div>
 			)}
 		</div>
@@ -337,7 +351,9 @@ function StreamingOutput({ content, isStreaming }: StreamingOutputProps) {
 // Attachments Display Component
 // ============================================================================
 
-function getAttachmentType(attachment: IStreamAttachment): "image" | "video" | "audio" | "pdf" | "document" | "other" {
+function getAttachmentType(
+	attachment: IStreamAttachment,
+): "image" | "video" | "audio" | "pdf" | "document" | "other" {
 	const url = typeof attachment === "string" ? attachment : attachment.url;
 	const mimeType = typeof attachment === "object" ? attachment.type : undefined;
 
@@ -346,16 +362,19 @@ function getAttachmentType(attachment: IStreamAttachment): "image" | "video" | "
 		if (mimeType.startsWith("video/")) return "video";
 		if (mimeType.startsWith("audio/")) return "audio";
 		if (mimeType === "application/pdf") return "pdf";
-		if (mimeType.includes("document") || mimeType.includes("text")) return "document";
+		if (mimeType.includes("document") || mimeType.includes("text"))
+			return "document";
 	}
 
 	// Check by URL extension
 	const cleanPath = url.split("?")[0].toLowerCase();
-	if (cleanPath.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff)$/)) return "image";
+	if (cleanPath.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff)$/))
+		return "image";
 	if (cleanPath.match(/\.(mp4|webm|mov|avi|mkv|m4v|3gp|ogv)$/)) return "video";
 	if (cleanPath.match(/\.(mp3|wav|ogg|m4a|flac|aac|wma)$/)) return "audio";
 	if (cleanPath.match(/\.pdf$/)) return "pdf";
-	if (cleanPath.match(/\.(doc|docx|txt|md|rtf|xls|xlsx|ppt|pptx)$/)) return "document";
+	if (cleanPath.match(/\.(doc|docx|txt|md|rtf|xls|xlsx|ppt|pptx)$/))
+		return "document";
 
 	// Check data URLs
 	if (url.startsWith("data:")) {
@@ -384,7 +403,9 @@ function getAttachmentName(attachment: IStreamAttachment): string {
 	}
 }
 
-function AttachmentsDisplay({ attachments }: { attachments: IStreamAttachment[] }) {
+function AttachmentsDisplay({
+	attachments,
+}: { attachments: IStreamAttachment[] }) {
 	if (!attachments || attachments.length === 0) return null;
 
 	const handleAttachmentClick = (attachment: IStreamAttachment) => {
@@ -394,7 +415,9 @@ function AttachmentsDisplay({ attachments }: { attachments: IStreamAttachment[] 
 			if (type === "image") {
 				const newWindow = window.open();
 				if (newWindow) {
-					newWindow.document.write(`<img src="${url}" style="max-width: 100%; height: auto;" />`);
+					newWindow.document.write(
+						`<img src="${url}" style="max-width: 100%; height: auto;" />`,
+					);
 				}
 			} else {
 				const link = document.createElement("a");
@@ -409,25 +432,33 @@ function AttachmentsDisplay({ attachments }: { attachments: IStreamAttachment[] 
 		}
 	};
 
-	const images = attachments.filter(a => getAttachmentType(a) === "image");
-	const videos = attachments.filter(a => getAttachmentType(a) === "video");
-	const audio = attachments.filter(a => getAttachmentType(a) === "audio");
-	const others = attachments.filter(a => !["image", "video", "audio"].includes(getAttachmentType(a)));
+	const images = attachments.filter((a) => getAttachmentType(a) === "image");
+	const videos = attachments.filter((a) => getAttachmentType(a) === "video");
+	const audio = attachments.filter((a) => getAttachmentType(a) === "audio");
+	const others = attachments.filter(
+		(a) => !["image", "video", "audio"].includes(getAttachmentType(a)),
+	);
 
 	return (
 		<div className="rounded-lg border bg-muted/30 p-4 animate-in fade-in duration-200">
 			<div className="flex items-center gap-2 mb-3 text-sm font-medium">
 				<Paperclip className="h-4 w-4 text-primary" />
 				Attachments
-				<span className="text-xs text-muted-foreground">({attachments.length})</span>
+				<span className="text-xs text-muted-foreground">
+					({attachments.length})
+				</span>
 			</div>
 			<div className="space-y-4">
 				{/* Images Grid */}
 				{images.length > 0 && (
 					<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
 						{images.map((attachment, idx) => {
-							const url = typeof attachment === "string" ? attachment : attachment.url;
-							const thumbnailUrl = typeof attachment === "object" ? attachment.thumbnail_url : undefined;
+							const url =
+								typeof attachment === "string" ? attachment : attachment.url;
+							const thumbnailUrl =
+								typeof attachment === "object"
+									? attachment.thumbnail_url
+									: undefined;
 							const name = getAttachmentName(attachment);
 							return (
 								<div
@@ -457,11 +488,23 @@ function AttachmentsDisplay({ attachments }: { attachments: IStreamAttachment[] 
 
 				{/* Videos */}
 				{videos.map((attachment, idx) => {
-					const url = typeof attachment === "string" ? attachment : attachment.url;
-					const thumbnailUrl = typeof attachment === "object" ? attachment.thumbnail_url : undefined;
+					const url =
+						typeof attachment === "string" ? attachment : attachment.url;
+					const thumbnailUrl =
+						typeof attachment === "object"
+							? attachment.thumbnail_url
+							: undefined;
 					return (
-						<div key={`vid-${idx}`} className="rounded-md overflow-hidden border bg-muted/50 max-w-md">
-							<video controls className="w-full" preload="metadata" poster={thumbnailUrl}>
+						<div
+							key={`vid-${idx}`}
+							className="rounded-md overflow-hidden border bg-muted/50 max-w-md"
+						>
+							<video
+								controls
+								className="w-full"
+								preload="metadata"
+								poster={thumbnailUrl}
+							>
 								<source src={url} />
 							</video>
 						</div>
@@ -470,10 +513,14 @@ function AttachmentsDisplay({ attachments }: { attachments: IStreamAttachment[] 
 
 				{/* Audio */}
 				{audio.map((attachment, idx) => {
-					const url = typeof attachment === "string" ? attachment : attachment.url;
+					const url =
+						typeof attachment === "string" ? attachment : attachment.url;
 					const name = getAttachmentName(attachment);
 					return (
-						<div key={`aud-${idx}`} className="rounded-lg border bg-muted/50 p-3">
+						<div
+							key={`aud-${idx}`}
+							className="rounded-lg border bg-muted/50 p-3"
+						>
 							<div className="flex items-center gap-2 mb-2">
 								<Music className="h-4 w-4 text-muted-foreground" />
 								<span className="text-sm truncate">{name}</span>
@@ -489,10 +536,15 @@ function AttachmentsDisplay({ attachments }: { attachments: IStreamAttachment[] 
 				{others.length > 0 && (
 					<div className="space-y-2">
 						{others.map((attachment, idx) => {
-							const url = typeof attachment === "string" ? attachment : attachment.url;
+							const url =
+								typeof attachment === "string" ? attachment : attachment.url;
 							const name = getAttachmentName(attachment);
-							const previewText = typeof attachment === "object" ? attachment.preview_text : undefined;
-							const size = typeof attachment === "object" ? attachment.size : undefined;
+							const previewText =
+								typeof attachment === "object"
+									? attachment.preview_text
+									: undefined;
+							const size =
+								typeof attachment === "object" ? attachment.size : undefined;
 							return (
 								<button
 									key={`file-${idx}`}
@@ -502,9 +554,13 @@ function AttachmentsDisplay({ attachments }: { attachments: IStreamAttachment[] 
 								>
 									<FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
 									<div className="flex-1 min-w-0">
-										<p className="text-sm font-medium truncate">{decodeURIComponent(name)}</p>
+										<p className="text-sm font-medium truncate">
+											{decodeURIComponent(name)}
+										</p>
 										{previewText && (
-											<p className="text-xs text-muted-foreground line-clamp-2 mt-1">{previewText}</p>
+											<p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+												{previewText}
+											</p>
 										)}
 										{size && (
 											<p className="text-xs text-muted-foreground mt-1">
@@ -512,8 +568,7 @@ function AttachmentsDisplay({ attachments }: { attachments: IStreamAttachment[] 
 													? `${(size / (1024 * 1024)).toFixed(1)} MB`
 													: size > 1024
 														? `${(size / 1024).toFixed(1)} KB`
-														: `${size} bytes`
-												}
+														: `${size} bytes`}
 											</p>
 										)}
 									</div>
@@ -595,7 +650,9 @@ export function GenericEventFormInterface({
 	const [executionSteps, setExecutionSteps] = useState<IExecutionStep[]>([]);
 	const [currentStepId, setCurrentStepId] = useState<string | undefined>();
 	const [streamingContent, setStreamingContent] = useState<string>("");
-	const [streamAttachments, setStreamAttachments] = useState<IStreamAttachment[]>([]);
+	const [streamAttachments, setStreamAttachments] = useState<
+		IStreamAttachment[]
+	>([]);
 
 	const lastNavigateToRef = useRef<string | null>(null);
 	const activeSubscriptionRef = useRef<{
@@ -633,7 +690,7 @@ export function GenericEventFormInterface({
 		if (!routesQuery.data || !eventsQuery.data) return mapping;
 
 		for (const route of routesQuery.data) {
-			const evt = eventsQuery.data.find(e => e.id === route.eventId);
+			const evt = eventsQuery.data.find((e) => e.id === route.eventId);
 			if (evt?.name) {
 				mapping[route.path] = evt.name;
 			}
@@ -644,8 +701,8 @@ export function GenericEventFormInterface({
 	// Use inputs from the event directly (populated by backend)
 	// Filter out "payload" field as it's handled separately
 	const inputPins = useMemo(() => {
-		return (event.inputs ?? []).filter(pin =>
-			pin.name.toLowerCase() !== "payload"
+		return (event.inputs ?? []).filter(
+			(pin) => pin.name.toLowerCase() !== "payload",
 		);
 	}, [event.inputs]);
 
@@ -720,12 +777,15 @@ export function GenericEventFormInterface({
 		[appId, router],
 	);
 
-	const getRouteLabel = useCallback((path: string): string => {
-		const eventName = routeEventNames[path];
-		if (eventName) return eventName;
-		if (path === "/") return "Home";
-		return path.replace(/^\//, "").replace(/-/g, " ").replace(/\//g, " / ");
-	}, [routeEventNames]);
+	const getRouteLabel = useCallback(
+		(path: string): string => {
+			const eventName = routeEventNames[path];
+			if (eventName) return eventName;
+			if (path === "/") return "Home";
+			return path.replace(/^\//, "").replace(/-/g, " ").replace(/\//g, " / ");
+		},
+		[routeEventNames],
+	);
 
 	const toolbarElements = useMemo(() => {
 		if (configuredRoutes.length === 0) return [];
@@ -754,7 +814,10 @@ export function GenericEventFormInterface({
 
 		if (configuredRoutes.length === 2) {
 			return [
-				<div key="route-nav" className="inline-flex items-center rounded-full bg-muted/50 p-0.5">
+				<div
+					key="route-nav"
+					className="inline-flex items-center rounded-full bg-muted/50 p-0.5"
+				>
 					{configuredRoutes.map((route) => {
 						const icon = getRouteIcon(route);
 						return (
@@ -776,7 +839,11 @@ export function GenericEventFormInterface({
 		return [
 			<DropdownMenu key="navigate-menu">
 				<DropdownMenuTrigger asChild>
-					<Button variant="outline" size="sm" className="rounded-full px-4 gap-2 font-medium">
+					<Button
+						variant="outline"
+						size="sm"
+						className="rounded-full px-4 gap-2 font-medium"
+					>
 						Navigate
 						<ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
 					</Button>
@@ -809,7 +876,9 @@ export function GenericEventFormInterface({
 		setValues((prev) => ({ ...prev, [name]: value }));
 	}, []);
 
-	const parseJsonField = (raw: unknown): { ok: true; value: unknown } | { ok: false; error: string } => {
+	const parseJsonField = (
+		raw: unknown,
+	): { ok: true; value: unknown } | { ok: false; error: string } => {
 		if (raw == null) return { ok: true, value: undefined };
 		if (typeof raw !== "string") return { ok: true, value: raw };
 		const text = raw.trim();
@@ -842,7 +911,11 @@ export function GenericEventFormInterface({
 
 			const raw = values[key];
 
-			if (isMultiValueInput(pin) || pin.data_type === "Struct" || pin.data_type === "Generic") {
+			if (
+				isMultiValueInput(pin) ||
+				pin.data_type === "Struct" ||
+				pin.data_type === "Generic"
+			) {
 				const parsed = parseJsonField(raw);
 				if (!parsed.ok) {
 					nextFieldErrors[key] = parsed.error;
@@ -908,7 +981,10 @@ export function GenericEventFormInterface({
 		try {
 			const active = activeSubscriptionRef.current;
 			if (active) {
-				executionEngine.unsubscribeFromEventStream(active.streamId, active.subscriberId);
+				executionEngine.unsubscribeFromEventStream(
+					active.streamId,
+					active.subscriberId,
+				);
 				activeSubscriptionRef.current = null;
 			}
 
@@ -934,17 +1010,30 @@ export function GenericEventFormInterface({
 					// Process events for plan steps and streaming content
 					for (const ev of events) {
 						// Handle plan updates (from chat_stream_partial or chat_stream)
-						if (ev.event_type === "chat_stream_partial" || ev.event_type === "chat_stream") {
+						if (
+							ev.event_type === "chat_stream_partial" ||
+							ev.event_type === "chat_stream"
+						) {
 							if (ev.payload?.plan) {
-								const planData = ev.payload.plan as { plan: [number, string][]; current_step: number; current_message: string };
+								const planData = ev.payload.plan as {
+									plan: [number, string][];
+									current_step: number;
+									current_message: string;
+								};
 								const steps: IExecutionStep[] = [];
 								let activeStepId: string | undefined;
 
 								for (const [stepId, stepText] of planData.plan) {
 									const id = `step-${stepId}`;
 									const colonIndex = stepText.indexOf(":");
-									const title = colonIndex > 0 ? stepText.substring(0, colonIndex).trim() : stepText;
-									const description = colonIndex > 0 ? stepText.substring(colonIndex + 1).trim() : undefined;
+									const title =
+										colonIndex > 0
+											? stepText.substring(0, colonIndex).trim()
+											: stepText;
+									const description =
+										colonIndex > 0
+											? stepText.substring(colonIndex + 1).trim()
+											: undefined;
 
 									let status: ExecutionStepStatus;
 									if (stepId < planData.current_step) {
@@ -961,7 +1050,10 @@ export function GenericEventFormInterface({
 										title,
 										description,
 										status,
-										reasoning: stepId === planData.current_step ? planData.current_message : undefined,
+										reasoning:
+											stepId === planData.current_step
+												? planData.current_message
+												: undefined,
 									});
 								}
 
@@ -971,23 +1063,36 @@ export function GenericEventFormInterface({
 
 							// Handle streaming chunk content (chat_stream_partial with chunk.choices[].delta.content)
 							if (ev.payload?.chunk?.choices?.[0]?.delta?.content) {
-								setStreamingContent(prev => prev + ev.payload.chunk.choices[0].delta.content);
+								setStreamingContent(
+									(prev) => prev + ev.payload.chunk.choices[0].delta.content,
+								);
 							}
 
 							// Handle full response content (chat_stream with response.choices[].message.content)
-							if (ev.event_type === "chat_stream" && ev.payload?.response?.choices?.[0]?.message?.content) {
-								const fullContent = ev.payload.response.choices[0].message.content;
+							if (
+								ev.event_type === "chat_stream" &&
+								ev.payload?.response?.choices?.[0]?.message?.content
+							) {
+								const fullContent =
+									ev.payload.response.choices[0].message.content;
 								// Replace entire content since this is the full response
 								setStreamingContent(fullContent);
 							}
 
 							// Handle attachments from streaming response
-							if (ev.payload?.attachments && Array.isArray(ev.payload.attachments) && ev.payload.attachments.length > 0) {
-								setStreamAttachments(prev => {
-									const newAttachments = ev.payload.attachments as IStreamAttachment[];
+							if (
+								ev.payload?.attachments &&
+								Array.isArray(ev.payload.attachments) &&
+								ev.payload.attachments.length > 0
+							) {
+								setStreamAttachments((prev) => {
+									const newAttachments = ev.payload
+										.attachments as IStreamAttachment[];
 									// Dedupe by URL
-									const existingUrls = new Set(prev.map(a => typeof a === "string" ? a : a.url));
-									const unique = newAttachments.filter(a => {
+									const existingUrls = new Set(
+										prev.map((a) => (typeof a === "string" ? a : a.url)),
+									);
+									const unique = newAttachments.filter((a) => {
 										const url = typeof a === "string" ? a : a.url;
 										return !existingUrls.has(url);
 									});
@@ -997,21 +1102,26 @@ export function GenericEventFormInterface({
 						}
 
 						// Handle direct text output events
-						if (ev.event_type === "text_output" || ev.event_type === "stream_text") {
+						if (
+							ev.event_type === "text_output" ||
+							ev.event_type === "stream_text"
+						) {
 							if (typeof ev.payload === "string") {
-								setStreamingContent(prev => prev + ev.payload);
+								setStreamingContent((prev) => prev + ev.payload);
 							} else if (ev.payload?.text) {
-								setStreamingContent(prev => prev + ev.payload.text);
+								setStreamingContent((prev) => prev + ev.payload.text);
 							}
 						}
 
 						// Handle chat completion
 						if (ev.event_type === "chat_out") {
 							// Mark all steps as done
-							setExecutionSteps(prev => prev.map(step => ({
-								...step,
-								status: step.status === "progress" ? "done" : step.status,
-							})));
+							setExecutionSteps((prev) =>
+								prev.map((step) => ({
+									...step,
+									status: step.status === "progress" ? "done" : step.status,
+								})),
+							);
 							setCurrentStepId(undefined);
 						}
 					}
@@ -1020,10 +1130,12 @@ export function GenericEventFormInterface({
 					setIsRunning(false);
 					setIsComplete(true);
 					// Finalize any in-progress steps
-					setExecutionSteps(prev => prev.map(step => ({
-						...step,
-						status: step.status === "progress" ? "done" : step.status,
-					})));
+					setExecutionSteps((prev) =>
+						prev.map((step) => ({
+							...step,
+							status: step.status === "progress" ? "done" : step.status,
+						})),
+					);
 					setCurrentStepId(undefined);
 				},
 			);
@@ -1042,13 +1154,23 @@ export function GenericEventFormInterface({
 			setIsComplete(false);
 			setError(e instanceof Error ? e.message : "Failed to run event");
 		}
-	}, [appId, buildRunPayload, event.id, event.name, executionEngine, handleNavigationEvents, pathname, resetOutput]);
+	}, [
+		appId,
+		buildRunPayload,
+		event.id,
+		event.name,
+		executionEngine,
+		handleNavigationEvents,
+		pathname,
+		resetOutput,
+	]);
 
 	const outputData = useMemo(() => {
-		const returnEvents = runEvents.filter(ev =>
-			ev.event_type === "return" ||
-			ev.event_type === "output" ||
-			(ev.event_type === "intercom" && ev.payload?.type === "return")
+		const returnEvents = runEvents.filter(
+			(ev) =>
+				ev.event_type === "return" ||
+				ev.event_type === "output" ||
+				(ev.event_type === "intercom" && ev.payload?.type === "return"),
 		);
 
 		if (returnEvents.length > 0) {
@@ -1063,7 +1185,11 @@ export function GenericEventFormInterface({
 		return null;
 	}, [runEvents]);
 
-	const hasOutput = runEvents.length > 0 || error || streamingContent || executionSteps.length > 0;
+	const hasOutput =
+		runEvents.length > 0 ||
+		error ||
+		streamingContent ||
+		executionSteps.length > 0;
 
 	return (
 		<div className="flex flex-col h-full grow min-h-0">
@@ -1075,9 +1201,7 @@ export function GenericEventFormInterface({
 							{event.name || "Run Task"}
 						</h1>
 						{event.description && (
-							<p className="text-muted-foreground">
-								{event.description}
-							</p>
+							<p className="text-muted-foreground">{event.description}</p>
 						)}
 					</div>
 
@@ -1087,7 +1211,10 @@ export function GenericEventFormInterface({
 							{inputPins.map((pin, index) => {
 								const key = pin.name;
 								const label = pin.friendly_name || pin.name;
-								const help = pin.description && !/^\d+$/.test(pin.description) ? pin.description : undefined;
+								const help =
+									pin.description && !/^\d+$/.test(pin.description)
+										? pin.description
+										: undefined;
 								const err = fieldErrors[key];
 
 								return (
@@ -1109,21 +1236,34 @@ export function GenericEventFormInterface({
 														{files[key].length} file(s) selected
 													</p>
 												)}
-												{help && <p className="text-xs text-muted-foreground">{help}</p>}
-												{err && <p className="text-xs text-destructive">{err}</p>}
+												{help && (
+													<p className="text-xs text-muted-foreground">
+														{help}
+													</p>
+												)}
+												{err && (
+													<p className="text-xs text-destructive">{err}</p>
+												)}
 											</div>
 										) : pin.data_type === "Boolean" ? (
 											<div className="flex items-center justify-between gap-3 rounded-lg border p-4">
 												<div className="space-y-0.5">
 													<Label className="text-sm font-medium">{label}</Label>
-													{help && <p className="text-xs text-muted-foreground">{help}</p>}
+													{help && (
+														<p className="text-xs text-muted-foreground">
+															{help}
+														</p>
+													)}
 												</div>
 												<Switch
 													checked={Boolean(values[key] ?? false)}
-													onCheckedChange={(checked) => setFieldValue(key, checked)}
+													onCheckedChange={(checked) =>
+														setFieldValue(key, checked)
+													}
 												/>
 											</div>
-										) : pin.data_type === "Integer" || pin.data_type === "Float" ? (
+										) : pin.data_type === "Integer" ||
+											pin.data_type === "Float" ? (
 											<div className="space-y-2">
 												<Label className="text-sm font-medium">{label}</Label>
 												<Input
@@ -1133,8 +1273,14 @@ export function GenericEventFormInterface({
 													value={String(values[key] ?? "")}
 													onChange={(e) => setFieldValue(key, e.target.value)}
 												/>
-												{help && <p className="text-xs text-muted-foreground">{help}</p>}
-												{err && <p className="text-xs text-destructive">{err}</p>}
+												{help && (
+													<p className="text-xs text-muted-foreground">
+														{help}
+													</p>
+												)}
+												{err && (
+													<p className="text-xs text-destructive">{err}</p>
+												)}
 											</div>
 										) : pin.data_type === "Date" ? (
 											<div className="space-y-2">
@@ -1144,9 +1290,15 @@ export function GenericEventFormInterface({
 													value={String(values[key] ?? "")}
 													onChange={(e) => setFieldValue(key, e.target.value)}
 												/>
-												{help && <p className="text-xs text-muted-foreground">{help}</p>}
+												{help && (
+													<p className="text-xs text-muted-foreground">
+														{help}
+													</p>
+												)}
 											</div>
-										) : pin.data_type === "Struct" || pin.data_type === "Generic" || isMultiValueInput(pin) ? (
+										) : pin.data_type === "Struct" ||
+											pin.data_type === "Generic" ||
+											isMultiValueInput(pin) ? (
 											<div className="space-y-2">
 												<Label className="text-sm font-medium">{label}</Label>
 												<Textarea
@@ -1155,8 +1307,14 @@ export function GenericEventFormInterface({
 													placeholder="Enter JSON value"
 													className="font-mono text-sm min-h-24"
 												/>
-												{help && <p className="text-xs text-muted-foreground">{help}</p>}
-												{err && <p className="text-xs text-destructive">{err}</p>}
+												{help && (
+													<p className="text-xs text-muted-foreground">
+														{help}
+													</p>
+												)}
+												{err && (
+													<p className="text-xs text-destructive">{err}</p>
+												)}
 											</div>
 										) : (
 											<div className="space-y-2">
@@ -1167,7 +1325,11 @@ export function GenericEventFormInterface({
 													value={String(values[key] ?? "")}
 													onChange={(e) => setFieldValue(key, e.target.value)}
 												/>
-												{help && <p className="text-xs text-muted-foreground">{help}</p>}
+												{help && (
+													<p className="text-xs text-muted-foreground">
+														{help}
+													</p>
+												)}
 											</div>
 										)}
 									</div>
@@ -1214,7 +1376,9 @@ export function GenericEventFormInterface({
 							<div className="flex items-start gap-3">
 								<XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
 								<div>
-									<p className="text-sm font-medium text-destructive">Something went wrong</p>
+									<p className="text-sm font-medium text-destructive">
+										Something went wrong
+									</p>
 									<p className="text-sm text-destructive/80 mt-1">{error}</p>
 								</div>
 							</div>
@@ -1223,12 +1387,19 @@ export function GenericEventFormInterface({
 
 					{/* Show execution steps when available */}
 					{executionSteps.length > 0 && (
-						<ExecutionSteps steps={executionSteps} currentStepId={currentStepId} isComplete={isComplete} />
+						<ExecutionSteps
+							steps={executionSteps}
+							currentStepId={currentStepId}
+							isComplete={isComplete}
+						/>
 					)}
 
 					{/* Show streaming content when available - always visible when there's content */}
 					{streamingContent && (
-						<StreamingOutput content={streamingContent} isStreaming={isRunning} />
+						<StreamingOutput
+							content={streamingContent}
+							isStreaming={isRunning}
+						/>
 					)}
 
 					{/* Show attachments when available */}
@@ -1252,8 +1423,12 @@ export function GenericEventFormInterface({
 							<div className="flex items-center justify-center h-12 w-12 rounded-full bg-green-500/10 mb-3">
 								<CheckCircle2 className="h-6 w-6 text-green-500" />
 							</div>
-							<p className="font-medium text-green-600 dark:text-green-400">All done!</p>
-							<p className="text-sm text-muted-foreground">Your task completed successfully</p>
+							<p className="font-medium text-green-600 dark:text-green-400">
+								All done!
+							</p>
+							<p className="text-sm text-muted-foreground">
+								Your task completed successfully
+							</p>
 						</div>
 					)}
 
@@ -1263,38 +1438,43 @@ export function GenericEventFormInterface({
 					)}
 
 					{/* Legacy output display (fallback for non-streaming) */}
-					{hasOutput && !isComplete && !streamingContent && runEvents.length > 0 && (
-						<div className="rounded-lg border bg-muted/30 p-4 animate-in fade-in duration-200">
-							<div className="flex items-center justify-between mb-3">
-								<span className="text-sm font-medium">Processing</span>
-								{isRunning && (
-									<div className="flex items-center gap-2 text-sm text-muted-foreground">
-										<Loader2 className="h-3 w-3 animate-spin" />
-										Working...
+					{hasOutput &&
+						!isComplete &&
+						!streamingContent &&
+						runEvents.length > 0 && (
+							<div className="rounded-lg border bg-muted/30 p-4 animate-in fade-in duration-200">
+								<div className="flex items-center justify-between mb-3">
+									<span className="text-sm font-medium">Processing</span>
+									{isRunning && (
+										<div className="flex items-center gap-2 text-sm text-muted-foreground">
+											<Loader2 className="h-3 w-3 animate-spin" />
+											Working...
+										</div>
+									)}
+								</div>
+								{outputData ? (
+									<pre className="text-sm whitespace-pre-wrap break-words font-mono">
+										{typeof outputData === "string"
+											? outputData
+											: JSON.stringify(outputData, null, 2)}
+									</pre>
+								) : (
+									<div className="space-y-2">
+										{runEvents.slice(-3).map((ev, idx) => (
+											<div
+												key={`${ev.event_id}-${idx}`}
+												className="text-xs text-muted-foreground"
+											>
+												{ev.event_type}:{" "}
+												{typeof ev.payload === "string"
+													? ev.payload.slice(0, 100)
+													: "..."}
+											</div>
+										))}
 									</div>
 								)}
 							</div>
-							{outputData ? (
-								<pre className="text-sm whitespace-pre-wrap break-words font-mono">
-									{typeof outputData === "string"
-										? outputData
-										: JSON.stringify(outputData, null, 2)
-									}
-								</pre>
-							) : (
-								<div className="space-y-2">
-									{runEvents.slice(-3).map((ev, idx) => (
-										<div
-											key={`${ev.event_id}-${idx}`}
-											className="text-xs text-muted-foreground"
-										>
-											{ev.event_type}: {typeof ev.payload === "string" ? ev.payload.slice(0, 100) : "..."}
-										</div>
-									))}
-								</div>
-							)}
-						</div>
-					)}
+						)}
 				</div>
 			</ScrollArea>
 		</div>

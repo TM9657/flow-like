@@ -41,10 +41,7 @@ pub struct A2UICopilot {
 
 impl A2UICopilot {
     /// Create a new A2UICopilot
-    pub async fn new(
-        state: Arc<FlowLikeState>,
-        profile: Option<Arc<Profile>>,
-    ) -> Result<Self> {
+    pub async fn new(state: Arc<FlowLikeState>, profile: Option<Arc<Profile>>) -> Result<Self> {
         Ok(Self { state, profile })
     }
 
@@ -97,37 +94,35 @@ impl A2UICopilot {
         // Convert chat history to rig message format
         let mut current_history: Vec<rig::message::Message> = history
             .iter()
-            .filter_map(|msg| {
-                match msg.role {
-                    A2UIChatRole::User => {
-                        let mut contents: Vec<UserContent> =
-                            vec![UserContent::Text(rig::message::Text {
-                                text: msg.content.clone(),
-                            })];
+            .filter_map(|msg| match msg.role {
+                A2UIChatRole::User => {
+                    let mut contents: Vec<UserContent> =
+                        vec![UserContent::Text(rig::message::Text {
+                            text: msg.content.clone(),
+                        })];
 
-                        if let Some(images) = &msg.images {
-                            for img in images {
-                                contents.push(UserContent::Image(Image {
-                                    data: DocumentSourceKind::Base64(img.data.clone()),
-                                    media_type: parse_media_type(&img.media_type),
-                                    detail: Some(ImageDetail::Auto),
-                                    additional_params: None,
-                                }));
-                            }
-                        }
-
-                        match OneOrMany::many(contents) {
-                            Ok(content) => Some(rig::message::Message::User { content }),
-                            Err(_) => None,
+                    if let Some(images) = &msg.images {
+                        for img in images {
+                            contents.push(UserContent::Image(Image {
+                                data: DocumentSourceKind::Base64(img.data.clone()),
+                                media_type: parse_media_type(&img.media_type),
+                                detail: Some(ImageDetail::Auto),
+                                additional_params: None,
+                            }));
                         }
                     }
-                    A2UIChatRole::Assistant => Some(rig::message::Message::Assistant {
-                        id: None,
-                        content: OneOrMany::one(AssistantContent::Text(rig::message::Text {
-                            text: msg.content.clone(),
-                        })),
-                    }),
+
+                    match OneOrMany::many(contents) {
+                        Ok(content) => Some(rig::message::Message::User { content }),
+                        Err(_) => None,
+                    }
                 }
+                A2UIChatRole::Assistant => Some(rig::message::Message::Assistant {
+                    id: None,
+                    content: OneOrMany::one(AssistantContent::Text(rig::message::Text {
+                        text: msg.content.clone(),
+                    })),
+                }),
             })
             .collect();
 
@@ -287,10 +282,11 @@ impl A2UICopilot {
                     text: iteration_text.clone(),
                 }))
             } else {
-                OneOrMany::many(response_contents.clone())
-                    .unwrap_or_else(|_| OneOrMany::one(AssistantContent::Text(rig::message::Text {
+                OneOrMany::many(response_contents.clone()).unwrap_or_else(|_| {
+                    OneOrMany::one(AssistantContent::Text(rig::message::Text {
                         text: iteration_text.clone(),
-                    })))
+                    }))
+                })
             };
 
             current_history.push(rig::message::Message::Assistant {
@@ -308,26 +304,32 @@ impl A2UICopilot {
                 // Describe what each tool does
                 let tool_description = match tool_call.function.name.as_str() {
                     "get_component_schema" => {
-                        let component_type = tool_call.function.arguments
+                        let component_type = tool_call
+                            .function
+                            .arguments
                             .get("component_type")
                             .and_then(|v| v.as_str())
                             .unwrap_or("component");
                         format!("Looking up {} schema...", component_type)
-                    },
+                    }
                     "get_style_examples" => {
-                        let category = tool_call.function.arguments
+                        let category = tool_call
+                            .function
+                            .arguments
                             .get("category")
                             .and_then(|v| v.as_str())
                             .unwrap_or("styles");
                         format!("Fetching {} style examples...", category)
-                    },
+                    }
                     "modify_component" => {
-                        let component_id = tool_call.function.arguments
+                        let component_id = tool_call
+                            .function
+                            .arguments
                             .get("component_id")
                             .and_then(|v| v.as_str())
                             .unwrap_or("component");
                         format!("Modifying {}...", component_id)
-                    },
+                    }
                     "emit_surface" => "Creating components...".to_string(),
                     "think" => "Reasoning...".to_string(),
                     other => format!("Executing {}...", other),
@@ -349,7 +351,13 @@ impl A2UICopilot {
                     ));
                 }
 
-                let result = self.execute_tool(&tool_call.function.name, &tool_call.function.arguments, current_surface).await;
+                let result = self
+                    .execute_tool(
+                        &tool_call.function.name,
+                        &tool_call.function.arguments,
+                        current_surface,
+                    )
+                    .await;
 
                 // Describe completion based on tool type
                 let completion_description = match tool_call.function.name.as_str() {
@@ -357,13 +365,15 @@ impl A2UICopilot {
                     "get_style_examples" => "Style examples ready".to_string(),
                     "modify_component" => "Component modified".to_string(),
                     "emit_surface" => {
-                        if let Ok(args) = serde_json::from_value::<EmitSurfaceArgs>(tool_call.function.arguments.clone()) {
+                        if let Ok(args) = serde_json::from_value::<EmitSurfaceArgs>(
+                            tool_call.function.arguments.clone(),
+                        ) {
                             generated_components = args.components.clone();
                             format!("Created {} components", args.components.len())
                         } else {
                             "Components created".to_string()
                         }
-                    },
+                    }
                     _ => "Done".to_string(),
                 };
 
@@ -397,7 +407,11 @@ impl A2UICopilot {
                     call_id: None,
                     content: OneOrMany::one(result_content),
                 };
-                tool_results.push((tool_call.id.clone(), tool_call.function.name.clone(), tool_result));
+                tool_results.push((
+                    tool_call.id.clone(),
+                    tool_call.function.name.clone(),
+                    tool_result,
+                ));
             }
 
             // Add tool results to history (each as a separate User message)
@@ -517,9 +531,14 @@ impl A2UICopilot {
                 let args: EmitSurfaceArgs = serde_json::from_value(arguments.clone())?;
                 // Validate the components
                 if args.components.is_empty() {
-                    return Err(flow_like_types::anyhow!("emit_surface requires at least one component"));
+                    return Err(flow_like_types::anyhow!(
+                        "emit_surface requires at least one component"
+                    ));
                 }
-                Ok(format!("Surface emitted with {} components", args.components.len()))
+                Ok(format!(
+                    "Surface emitted with {} components",
+                    args.components.len()
+                ))
             }
             _ => Err(flow_like_types::anyhow!("Unknown tool: {}", tool_name)),
         }

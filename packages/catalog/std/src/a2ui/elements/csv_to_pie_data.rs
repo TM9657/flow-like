@@ -1,11 +1,11 @@
+use super::chart_data_utils::{extract_from_csv_table, parse_column_ref, parse_csv_text};
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
-use super::chart_data_utils::{extract_from_csv_table, parse_csv_text, parse_column_ref};
+use flow_like_types::{Value, async_trait, json::json};
 
 /// Converts CSV data or CSVTable (from DataFusion) to Nivo Pie chart format.
 ///
@@ -85,7 +85,12 @@ impl NodeLogic for CsvToPieData {
         )
         .set_default_value(Some(json!(",")));
 
-        node.add_output_pin("data", "Data", "Pie chart data array", VariableType::Generic);
+        node.add_output_pin(
+            "data",
+            "Data",
+            "Pie chart data array",
+            VariableType::Generic,
+        );
 
         node
     }
@@ -96,7 +101,8 @@ impl NodeLogic for CsvToPieData {
         let color_col: String = context.evaluate_pin("color_column").await?;
         let delimiter: String = context.evaluate_pin("delimiter").await?;
 
-        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await {
+        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await
+        {
             if !table_value.is_null() {
                 extract_from_csv_table(&table_value)?
             } else {
@@ -115,29 +121,38 @@ impl NodeLogic for CsvToPieData {
 
         let label_idx = parse_column_ref(&label_col, &headers);
         let value_idx = parse_column_ref(&value_col, &headers);
-        let color_idx = if color_col.is_empty() { None } else { Some(parse_column_ref(&color_col, &headers)) };
+        let color_idx = if color_col.is_empty() {
+            None
+        } else {
+            Some(parse_column_ref(&color_col, &headers))
+        };
 
-        let data: Vec<Value> = rows.iter().map(|row| {
-            let label = row.get(label_idx).cloned().unwrap_or_default();
-            let id = label.to_lowercase().replace(' ', "_");
-            let value: f64 = row.get(value_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+        let data: Vec<Value> = rows
+            .iter()
+            .map(|row| {
+                let label = row.get(label_idx).cloned().unwrap_or_default();
+                let id = label.to_lowercase().replace(' ', "_");
+                let value: f64 = row
+                    .get(value_idx)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0);
 
-            let mut slice = json!({
-                "id": id,
-                "label": label,
-                "value": value
-            });
+                let mut slice = json!({
+                    "id": id,
+                    "label": label,
+                    "value": value
+                });
 
-            if let Some(c_idx) = color_idx {
-                if let Some(color) = row.get(c_idx) {
-                    if !color.is_empty() {
-                        slice["color"] = json!(color);
-                    }
+                if let Some(c_idx) = color_idx
+                    && let Some(color) = row.get(c_idx)
+                    && !color.is_empty()
+                {
+                    slice["color"] = json!(color);
                 }
-            }
 
-            slice
-        }).collect();
+                slice
+            })
+            .collect();
 
         context.set_pin_value("data", json!(data)).await?;
 

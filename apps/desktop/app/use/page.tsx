@@ -85,7 +85,10 @@ export default function UsePage() {
 
 				// Load the event if we have a mapping
 				if (mapping) {
-					const event = await backend.eventState.getEvent(appId, mapping.eventId);
+					const event = await backend.eventState.getEvent(
+						appId,
+						mapping.eventId,
+					);
 					setRouteEvent(event);
 				} else {
 					setRouteEvent(null);

@@ -94,15 +94,21 @@ impl NodeLogic for CreateElement {
 
         let surface_id: String = context.evaluate_pin("surface_id").await?;
         let parent_value: Value = context.evaluate_pin("parent_id").await?;
-        let parent_id = extract_element_id(&parent_value)
-            .ok_or_else(|| flow_like_types::anyhow!("Invalid parent reference - expected string ID or element object"))?;
+        let parent_id = extract_element_id(&parent_value).ok_or_else(|| {
+            flow_like_types::anyhow!(
+                "Invalid parent reference - expected string ID or element object"
+            )
+        })?;
         let element_id: String = context.evaluate_pin("element_id").await?;
         let component_type: String = context.evaluate_pin("component_type").await?;
-        let props: Value = context.evaluate_pin("props").await.unwrap_or(Value::Object(Default::default()));
+        let props: Value = context
+            .evaluate_pin("props")
+            .await
+            .unwrap_or(Value::Object(Default::default()));
         let index: Option<i64> = context.evaluate_pin("index").await.ok();
 
         // Build the component Value
-        let mut component_value = if let Some(obj) = props.as_object() {
+        let component_value = if let Some(obj) = props.as_object() {
             let mut map = obj.clone();
             map.insert("type".to_string(), Value::String(component_type));
             Value::Object(map)
@@ -113,19 +119,21 @@ impl NodeLogic for CreateElement {
         };
 
         // Create the SurfaceComponent
-        let surface_component = flow_like::a2ui::SurfaceComponent::new(
-            element_id.clone(),
-            component_value,
-        );
+        let surface_component =
+            flow_like::a2ui::SurfaceComponent::new(element_id.clone(), component_value);
 
-        context.create_element(
-            &surface_id,
-            &parent_id,
-            surface_component,
-            index.map(|i| i as usize),
-        ).await?;
+        context
+            .create_element(
+                &surface_id,
+                &parent_id,
+                surface_component,
+                index.map(|i| i as usize),
+            )
+            .await?;
 
-        context.set_pin_value("created_id", Value::String(element_id)).await?;
+        context
+            .set_pin_value("created_id", Value::String(element_id))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

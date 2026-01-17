@@ -7,7 +7,7 @@ use flow_like::flow::{
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
-use super::element_utils::{find_element, extract_element_id_from_pin};
+use super::element_utils::{extract_element_id_from_pin, find_element};
 
 /// Toggles the checked state of a checkbox or switch element.
 #[crate::register_node]
@@ -41,7 +41,12 @@ impl NodeLogic for ToggleCheckbox {
         );
 
         node.add_output_pin("exec_out", "▶", "Execution output", VariableType::Execution);
-        node.add_output_pin("new_state", "New State", "The new checked state after toggle", VariableType::Boolean);
+        node.add_output_pin(
+            "new_state",
+            "New State",
+            "The new checked state after toggle",
+            VariableType::Boolean,
+        );
 
         node
     }
@@ -66,14 +71,26 @@ impl NodeLogic for ToggleCheckbox {
 
         let new_checked = !current_checked;
 
-        context.upsert_element(&element_id, json!({
-            "type": "setChecked",
-            "checked": new_checked
-        })).await?;
+        context
+            .upsert_element(
+                &element_id,
+                json!({
+                    "type": "setChecked",
+                    "checked": new_checked
+                }),
+            )
+            .await?;
 
-        context.get_pin_by_name("new_state").await?.set_value(Value::Bool(new_checked)).await;
+        context
+            .get_pin_by_name("new_state")
+            .await?
+            .set_value(Value::Bool(new_checked))
+            .await;
 
-        context.log_message(&format!("Toggled checkbox: {} -> {}", element_id, new_checked), LogLevel::Debug);
+        context.log_message(
+            &format!("Toggled checkbox: {} -> {}", element_id, new_checked),
+            LogLevel::Debug,
+        );
 
         Ok(())
     }

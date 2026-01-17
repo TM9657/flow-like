@@ -1,10 +1,8 @@
-use flow_like::{
-    flow::{
-        execution::context::ExecutionContext,
-        node::{Node, NodeLogic},
-        pin::PinOptions,
-        variable::VariableType,
-    },
+use flow_like::flow::{
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::PinOptions,
+    variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::json};
 
@@ -81,18 +79,24 @@ impl NodeLogic for CreateComponent {
 
         let component_id: String = context.evaluate_pin("component_id").await?;
         let component_type: String = context.evaluate_pin("component_type").await?;
-        let props: Value = context.evaluate_pin::<Value>("props").await.unwrap_or(json!({}));
-        let style: Option<flow_like::a2ui::Style> = context.evaluate_pin::<flow_like::a2ui::Style>("style").await.ok();
+        let props: Value = context
+            .evaluate_pin::<Value>("props")
+            .await
+            .unwrap_or(json!({}));
+        let style: Option<flow_like::a2ui::Style> = context
+            .evaluate_pin::<flow_like::a2ui::Style>("style")
+            .await
+            .ok();
 
         let mut component_data = json!({
             "type": component_type
         });
 
-        if let Value::Object(prop_map) = props {
-            if let Value::Object(ref mut data_map) = component_data {
-                for (key, value) in prop_map {
-                    data_map.insert(key, value);
-                }
+        if let Value::Object(prop_map) = props
+            && let Value::Object(ref mut data_map) = component_data
+        {
+            for (key, value) in prop_map {
+                data_map.insert(key, value);
             }
         }
 

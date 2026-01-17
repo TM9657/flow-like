@@ -43,7 +43,13 @@ function injectMonacoCodeStyles() {
 	document.head.appendChild(style);
 }
 
-export type MonacoLanguage = "css" | "json" | "javascript" | "typescript" | "html" | "plaintext";
+export type MonacoLanguage =
+	| "css"
+	| "json"
+	| "javascript"
+	| "typescript"
+	| "html"
+	| "plaintext";
 
 export interface MonacoCodeEditorProps {
 	value: string;
@@ -93,7 +99,9 @@ export function MonacoCodeEditor({
 	// Update theme when resolvedTheme changes
 	useEffect(() => {
 		if (monacoRef.current) {
-			monacoRef.current.editor.setTheme(resolvedTheme === "dark" ? "vs-dark" : "vs");
+			monacoRef.current.editor.setTheme(
+				resolvedTheme === "dark" ? "vs-dark" : "vs",
+			);
 		}
 	}, [resolvedTheme]);
 
@@ -115,7 +123,7 @@ export function MonacoCodeEditor({
 			className={cn(
 				"monaco-code-editor-wrapper relative rounded-md border bg-muted/30 overflow-hidden",
 				isFullscreen && "monaco-code-editor-fullscreen bg-background",
-				className
+				className,
 			)}
 		>
 			{allowFullscreen && (
@@ -191,7 +199,10 @@ export function MonacoCodeEditor({
 		return (
 			<>
 				{/* Placeholder to maintain layout when fullscreen */}
-				<div className={cn("rounded-md border bg-muted/30", className)} style={{ height }} />
+				<div
+					className={cn("rounded-md border bg-muted/30", className)}
+					style={{ height }}
+				/>
 				{createPortal(editorContent, document.body)}
 			</>
 		);

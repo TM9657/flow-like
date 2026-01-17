@@ -1,3 +1,6 @@
+use super::element_utils::{extract_element_id_from_pin, find_element};
+use super::schema_utils::set_component_schema_by_type;
+use flow_like::a2ui::A2UIElement;
 use flow_like::flow::{
     board::Board,
     execution::{LogLevel, context::ExecutionContext},
@@ -5,11 +8,8 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::A2UIElement;
 use flow_like_types::{Value, async_trait};
 use std::sync::Arc;
-use super::element_utils::{find_element, extract_element_id_from_pin};
-use super::schema_utils::set_component_schema_by_type;
 
 /// Gets an element's data from the workflow payload.
 ///
@@ -50,11 +50,21 @@ impl NodeLogic for GetElement {
             VariableType::String,
         );
 
-        node.add_output_pin("element", "Element", "The element data", VariableType::Struct)
-            .set_schema::<A2UIElement>()
-            .set_options(PinOptions::new().set_enforce_schema(false).build());
+        node.add_output_pin(
+            "element",
+            "Element",
+            "The element data",
+            VariableType::Struct,
+        )
+        .set_schema::<A2UIElement>()
+        .set_options(PinOptions::new().set_enforce_schema(false).build());
 
-        node.add_output_pin("exists", "Exists", "Whether the element exists", VariableType::Boolean);
+        node.add_output_pin(
+            "exists",
+            "Exists",
+            "Whether the element exists",
+            VariableType::Boolean,
+        );
 
         node
     }
@@ -117,13 +127,10 @@ impl NodeLogic for GetElement {
             }
         };
 
-        let element_id = element_ref
-            .default_value
-            .as_ref()
-            .and_then(|v| {
-                let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
-                parsed.as_str().map(String::from)
-            });
+        let element_id = element_ref.default_value.as_ref().and_then(|v| {
+            let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
+            parsed.as_str().map(String::from)
+        });
 
         if let Some(id) = &element_id {
             let component_type = find_component_type_in_board(&board, id).await;
@@ -147,7 +154,10 @@ async fn find_component_type_in_board(board: &Board, element_id: &str) -> Option
     let pages = board.load_all_pages(None).await.ok()?;
     for page in pages {
         for component in &page.components {
-            if component.id == element_id || element_id.ends_with(&format!("/{}", component.id)) || element_id == component.id.split('/').last().unwrap_or("") {
+            if component.id == element_id
+                || element_id.ends_with(&format!("/{}", component.id))
+                || element_id == component.id.split('/').next_back().unwrap_or("")
+            {
                 return component.get_component_type_name().into();
             }
         }

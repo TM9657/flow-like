@@ -63,7 +63,10 @@ impl NodeLogic for GetVariable {
         if variable.secret {
             context.log_message("Accessed secret variable value", LogLevel::Debug);
         } else {
-            context.log_message(&format!("Accessed variable value: {:?}", value_cloned), LogLevel::Debug);
+            context.log_message(
+                &format!("Accessed variable value: {:?}", value_cloned),
+                LogLevel::Debug,
+            );
         }
 
         value_pin.set_value(value_cloned).await;

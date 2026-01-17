@@ -11,8 +11,8 @@ import { Label } from "../ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useBuilder } from "./BuilderContext";
-import { normalizeComponents } from "./componentDefaults";
 import { ROOT_ID } from "./WidgetBuilder";
+import { normalizeComponents } from "./componentDefaults";
 
 export interface FlowPilotActionProps {
 	onGenerate?: (request: string) => Promise<string>;
@@ -47,8 +47,9 @@ export function FlowPilotAction({
 				// Collect all child IDs referenced within the new components
 				const referencedChildIds = new Set<string>();
 				for (const comp of newComponents) {
-					const childrenData = (comp.component as unknown as Record<string, unknown>)
-						?.children as Children | undefined;
+					const childrenData = (
+						comp.component as unknown as Record<string, unknown>
+					)?.children as Children | undefined;
 					if (childrenData && "explicitList" in childrenData) {
 						for (const childId of childrenData.explicitList) {
 							referencedChildIds.add(childId);
@@ -76,8 +77,9 @@ export function FlowPilotAction({
 
 				// Add top-level components to the root's children list
 				if (topLevelIds.length > 0 && rootComponent) {
-					const rootChildrenData = (rootComponent.component as unknown as Record<string, unknown>)
-						?.children as Children | undefined;
+					const rootChildrenData = (
+						rootComponent.component as unknown as Record<string, unknown>
+					)?.children as Children | undefined;
 					const existingChildren =
 						rootChildrenData && "explicitList" in rootChildrenData
 							? [...rootChildrenData.explicitList]

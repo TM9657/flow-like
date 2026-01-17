@@ -21,10 +21,7 @@ export function A2UIBox({
 	const Tag = as as ElementType;
 
 	return (
-		<Tag
-			className={cn(resolveStyle(style))}
-			style={resolveInlineStyle(style)}
-		>
+		<Tag className={cn(resolveStyle(style))} style={resolveInlineStyle(style)}>
 			{children.map((childId) => (
 				<Fragment key={childId}>{renderChild(childId)}</Fragment>
 			))}

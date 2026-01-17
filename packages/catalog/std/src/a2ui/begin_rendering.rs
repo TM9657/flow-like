@@ -7,7 +7,7 @@ use flow_like::{
         variable::VariableType,
     },
 };
-use flow_like_types::{async_trait, json::json};
+use flow_like_types::async_trait;
 
 #[crate::register_node]
 #[derive(Default)]
@@ -72,14 +72,19 @@ impl NodeLogic for BeginRendering {
 
         let surface: Surface = context.evaluate_pin("surface").await?;
         let components: Vec<SurfaceComponent> = context.evaluate_pin("components").await?;
-        let data_model: DataModel = context.evaluate_pin::<DataModel>("data_model").await.unwrap_or_default();
+        let data_model: DataModel = context
+            .evaluate_pin::<DataModel>("data_model")
+            .await
+            .unwrap_or_default();
 
         let mut full_surface = surface;
         for component in components {
             full_surface.add_component(component);
         }
 
-        context.stream_a2ui_begin_rendering(&full_surface, &data_model).await?;
+        context
+            .stream_a2ui_begin_rendering(&full_surface, &data_model)
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

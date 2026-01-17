@@ -982,7 +982,8 @@ impl ExecutionContext {
         query_params: Option<std::collections::HashMap<String, String>>,
         dialog_id: Option<String>,
     ) -> flow_like_types::Result<()> {
-        let message = crate::a2ui::A2UIServerMessage::open_dialog(route, title, query_params, dialog_id);
+        let message =
+            crate::a2ui::A2UIServerMessage::open_dialog(route, title, query_params, dialog_id);
         self.stream_a2ui_update(message).await
     }
 

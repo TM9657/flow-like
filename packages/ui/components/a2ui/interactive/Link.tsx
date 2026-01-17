@@ -37,7 +37,9 @@ export function A2UILink({
 	const label = useResolved<string>(component.label) ?? "";
 	const href = useResolved<string>(component.href) ?? "";
 	const route = useResolved<string>(component.route);
-	const queryParams = useResolved<Record<string, string>>(component.queryParams);
+	const queryParams = useResolved<Record<string, string>>(
+		component.queryParams,
+	);
 	const disabled = useResolved<boolean>(component.disabled);
 	const { executeAction, isPreviewMode } = useExecuteAction();
 	const { appId } = useActionContext();

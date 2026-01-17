@@ -6,7 +6,7 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
+use flow_like_types::{Value, async_trait, json::json};
 
 /// Removes a row from a table element by index.
 #[crate::register_node]

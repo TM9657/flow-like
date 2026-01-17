@@ -63,7 +63,9 @@ impl NodeLogic for SurfaceUpdate {
         let surface_id: String = context.evaluate_pin("surface_id").await?;
         let components: Vec<SurfaceComponent> = context.evaluate_pin("components").await?;
 
-        context.stream_a2ui_surface_update(&surface_id, components).await?;
+        context
+            .stream_a2ui_surface_update(&surface_id, components)
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

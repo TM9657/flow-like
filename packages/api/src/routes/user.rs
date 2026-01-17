@@ -57,8 +57,14 @@ pub fn routes() -> Router<AppState> {
         .route("/templates", get(templates::get_templates))
         .route("/widgets", get(widgets::get_widgets))
         .route("/notifications", get(notifications::get_notifications))
-        .route("/notifications/list", get(notifications::list_notifications))
-        .route("/notifications/read-all", post(notifications::mark_all_read))
+        .route(
+            "/notifications/list",
+            get(notifications::list_notifications),
+        )
+        .route(
+            "/notifications/read-all",
+            post(notifications::mark_all_read),
+        )
         .route(
             "/notifications/{notification_id}",
             post(notifications::mark_notification_read).delete(notifications::delete_notification),

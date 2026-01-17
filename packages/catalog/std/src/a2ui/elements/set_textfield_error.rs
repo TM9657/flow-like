@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id;
+use flow_like::a2ui::components::TextFieldProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::TextFieldProps;
 use flow_like_types::{Value, async_trait, json::json};
-use super::element_utils::extract_element_id;
 
 /// Sets the error state/message of a text field element.
 #[crate::register_node]
@@ -64,10 +64,15 @@ impl NodeLogic for SetTextFieldError {
 
         let error: String = context.evaluate_pin("error").await?;
 
-        context.upsert_element(&element_id, json!({
-            "type": "setError",
-            "error": if error.is_empty() { Value::Null } else { Value::String(error) }
-        })).await?;
+        context
+            .upsert_element(
+                &element_id,
+                json!({
+                    "type": "setError",
+                    "error": if error.is_empty() { Value::Null } else { Value::String(error) }
+                }),
+            )
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

@@ -3,10 +3,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use axum::{
-    Json,
-    http::HeaderValue,
-};
+use axum::{Json, http::HeaderValue};
 
 use serde::Serialize;
 
@@ -162,12 +159,7 @@ impl ApiError {
     pub fn gone(msg: impl Into<String>) -> Self {
         let msg = msg.into();
         tracing::warn!("Gone: {}", msg);
-        Self::new(
-            StatusCode::GONE,
-            "GONE",
-            Some(msg),
-            ReportPolicy::Ignore,
-        )
+        Self::new(StatusCode::GONE, "GONE", Some(msg), ReportPolicy::Ignore)
     }
 
     pub fn unprocessable(msg: impl Into<String>) -> Self {
@@ -407,12 +399,7 @@ impl std::error::Error for ApiError {}
 
 impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}: {}",
-            self.status,
-            self.public_code.as_str()
-        )
+        write!(f, "{}: {}", self.status, self.public_code.as_str())
     }
 }
 

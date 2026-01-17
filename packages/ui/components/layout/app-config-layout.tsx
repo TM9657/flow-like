@@ -1,7 +1,29 @@
 "use client";
 
+import {
+	DownloadIcon,
+	EyeIcon,
+	EyeOffIcon,
+	LayoutGridIcon,
+	LockIcon,
+	Maximize2Icon,
+	MenuIcon,
+	Minimize2Icon,
+	PlayCircleIcon,
+	UnlockIcon,
+	ZapIcon,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
-import { IAppVisibility, type IMetadata, type IApp, type IEvent } from "../../types";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+	type IApp,
+	IAppVisibility,
+	type IEvent,
+	type IMetadata,
+} from "../../types";
+import { VisibilityIcon } from "../ui/app-card";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Badge } from "../ui/badge";
 import {
@@ -13,12 +35,7 @@ import {
 	BreadcrumbSeparator,
 } from "../ui/breadcrumb";
 import { Button } from "../ui/button";
-import {
-	Card,
-	CardContent,
-	CardHeader,
-	CardTitle,
-} from "../ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -44,23 +61,6 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "../ui/tooltip";
-import { VisibilityIcon } from "../ui/app-card";
-import {
-	DownloadIcon,
-	EyeIcon,
-	EyeOffIcon,
-	LayoutGridIcon,
-	LockIcon,
-	Maximize2Icon,
-	MenuIcon,
-	Minimize2Icon,
-	PlayCircleIcon,
-	UnlockIcon,
-	ZapIcon,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import Link from "next/link";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 export interface NavigationItem {
 	href: string;
@@ -174,17 +174,14 @@ export function AppConfigLayout({
 	const filteredNavItems = useMemo(
 		() =>
 			navigationItems.filter(
-				(item) =>
-					!item.visibilities || item.visibilities.includes(visibility),
+				(item) => !item.visibilities || item.visibilities.includes(visibility),
 			),
 		[navigationItems, visibility],
 	);
 
 	const activeQuickActions = useMemo(
 		() =>
-			quickActions.filter(
-				(e) => e.event_type === "quick_action" && e.active,
-			),
+			quickActions.filter((e) => e.event_type === "quick_action" && e.active),
 		[quickActions],
 	);
 
@@ -330,7 +327,9 @@ export function AppConfigLayout({
 										</div>
 									</div>
 									<div className="flex items-center gap-2">
-										<span className="text-xs text-muted-foreground">Encrypt</span>
+										<span className="text-xs text-muted-foreground">
+											Encrypt
+										</span>
 										<Switch checked={encrypt} onCheckedChange={setEncrypt} />
 									</div>
 								</div>
@@ -543,9 +542,7 @@ export function AppConfigLayout({
 															<p className="font-bold">
 																{item.label} (Coming soon!)
 															</p>
-															<p className="text-xs mt-1">
-																{item.description}
-															</p>
+															<p className="text-xs mt-1">{item.description}</p>
 														</TooltipContent>
 													</Tooltip>
 												);

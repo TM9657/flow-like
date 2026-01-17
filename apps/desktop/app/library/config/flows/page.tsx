@@ -2,6 +2,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { invoke } from "@tauri-apps/api/core";
 import {
+	type FlowLibraryBoardCreationState,
 	FlowLibraryBoardsSection,
 	FlowLibraryHeader,
 	IExecutionStage,
@@ -9,7 +10,6 @@ import {
 	useBackend,
 	useFlowBoardParentState,
 	useInvoke,
-	type FlowLibraryBoardCreationState,
 } from "@tm9657/flow-like-ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -44,11 +44,12 @@ export default function Page() {
 	}, [boards.data, id]);
 
 	const router = useRouter();
-	const [boardCreation, setBoardCreation] = useState<FlowLibraryBoardCreationState>({
-		open: false,
-		name: "",
-		description: "",
-	});
+	const [boardCreation, setBoardCreation] =
+		useState<FlowLibraryBoardCreationState>({
+			open: false,
+			name: "",
+			description: "",
+		});
 
 	const handleCreateBoard = async () => {
 		if (!id) return;

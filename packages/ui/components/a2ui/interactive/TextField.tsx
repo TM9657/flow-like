@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "../../../lib/utils";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import { Textarea } from "../../ui/textarea";
+import { useOnAction } from "../ActionHandler";
 import type { ComponentProps } from "../ComponentRegistry";
 import { useData } from "../DataContext";
-import { useOnAction } from "../ActionHandler";
 import { resolveInlineStyle, resolveStyle } from "../StyleResolver";
 import type { BoundValue, TextFieldComponent } from "../types";
 

@@ -285,15 +285,15 @@ fn determine_tier_from_subscription(
 
                 // Check product_id against hub config tiers
                 for (tier_name, tier_config) in &state.platform_config.tiers {
-                    if let Some(config_product_id) = &tier_config.product_id {
-                        if config_product_id == &product_id {
-                            return match tier_name.to_uppercase().as_str() {
-                                "ENTERPRISE" => UserTier::Enterprise,
-                                "PRO" => UserTier::Pro,
-                                "PREMIUM" => UserTier::Premium,
-                                _ => UserTier::Free,
-                            };
-                        }
+                    if let Some(config_product_id) = &tier_config.product_id
+                        && config_product_id == &product_id
+                    {
+                        return match tier_name.to_uppercase().as_str() {
+                            "ENTERPRISE" => UserTier::Enterprise,
+                            "PRO" => UserTier::Pro,
+                            "PREMIUM" => UserTier::Premium,
+                            _ => UserTier::Free,
+                        };
                     }
                 }
 
@@ -309,14 +309,14 @@ fn determine_tier_from_subscription(
             }
 
             // Also check price metadata for tier info
-            if let Some(metadata) = &price.metadata {
-                if let Some(tier) = metadata.get("tier") {
-                    match tier.to_uppercase().as_str() {
-                        "ENTERPRISE" => return UserTier::Enterprise,
-                        "PRO" => return UserTier::Pro,
-                        "PREMIUM" => return UserTier::Premium,
-                        _ => {}
-                    }
+            if let Some(metadata) = &price.metadata
+                && let Some(tier) = metadata.get("tier")
+            {
+                match tier.to_uppercase().as_str() {
+                    "ENTERPRISE" => return UserTier::Enterprise,
+                    "PRO" => return UserTier::Pro,
+                    "PREMIUM" => return UserTier::Premium,
+                    _ => {}
                 }
             }
         }

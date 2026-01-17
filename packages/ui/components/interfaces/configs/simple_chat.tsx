@@ -1,16 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import {
-	Checkbox,
-	Input,
-	Label,
-	ScrollArea,
-	Switch,
-} from "../../ui";
 import { useInvoke } from "../../../hooks/use-invoke";
-import type { IRouteMapping } from "../../../state/backend-state/route-state";
 import { useBackend } from "../../../state/backend-state";
+import type { IRouteMapping } from "../../../state/backend-state/route-state";
+import { Checkbox, Input, Label, ScrollArea, Switch } from "../../ui";
 import type { IConfigInterfaceProps } from "../interfaces";
 
 export function SimpleChatConfig({
@@ -111,9 +105,8 @@ export function SimpleChatConfig({
 												</label>
 											);
 										})
-								)
-							}
-						</div>
+								)}
+							</div>
 						</ScrollArea>
 						<div className="border-t border-input p-2">
 							<button

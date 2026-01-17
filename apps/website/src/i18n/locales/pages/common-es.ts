@@ -10,7 +10,8 @@ export const esCommon = {
 	"header.cancel": "Cancelar",
 	// Footer CTA
 	"footer.cta.title": "¿Listo para automatizar?",
-	"footer.cta.description": "Descarga Flow-Like y crea tu primer flujo en minutos.",
+	"footer.cta.description":
+		"Descarga Flow-Like y crea tu primer flujo en minutos.",
 	"footer.cta.button": "Empezar Gratis",
 
 	// Footer Sections

@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id_from_pin;
+use flow_like::a2ui::components::TooltipProps;
 use flow_like::flow::{
     execution::{LogLevel, context::ExecutionContext},
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::TooltipProps;
 use flow_like_types::{Value, async_trait};
-use super::element_utils::extract_element_id_from_pin;
 
 #[crate::register_node]
 #[derive(Default)]
@@ -63,21 +63,38 @@ impl NodeLogic for GetTooltipContent {
 
         let Some(elements_map) = elements else {
             context.log_message("No elements in payload", LogLevel::Warn);
-            context.get_pin_by_name("content").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("side").await?.set_value(Value::Null).await;
+            context
+                .get_pin_by_name("content")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("side")
+                .await?
+                .set_value(Value::Null)
+                .await;
             return Ok(());
         };
 
         let Some(element) = elements_map.get(&element_id) else {
-            context.log_message(&format!("Element not found: {}", element_id), LogLevel::Warn);
-            context.get_pin_by_name("content").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("side").await?.set_value(Value::Null).await;
+            context.log_message(
+                &format!("Element not found: {}", element_id),
+                LogLevel::Warn,
+            );
+            context
+                .get_pin_by_name("content")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("side")
+                .await?
+                .set_value(Value::Null)
+                .await;
             return Ok(());
         };
 
-        let props = element
-            .get("component")
-            .and_then(|c| c.get("props"));
+        let props = element.get("component").and_then(|c| c.get("props"));
 
         let content = props
             .and_then(|p| p.get("content"))
@@ -89,8 +106,16 @@ impl NodeLogic for GetTooltipContent {
             .and_then(|s| s.as_str())
             .unwrap_or("top");
 
-        context.get_pin_by_name("content").await?.set_value(Value::String(content.to_string())).await;
-        context.get_pin_by_name("side").await?.set_value(Value::String(side.to_string())).await;
+        context
+            .get_pin_by_name("content")
+            .await?
+            .set_value(Value::String(content.to_string()))
+            .await;
+        context
+            .get_pin_by_name("side")
+            .await?
+            .set_value(Value::String(side.to_string()))
+            .await;
         Ok(())
     }
 }

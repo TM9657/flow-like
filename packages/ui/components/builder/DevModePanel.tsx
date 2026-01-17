@@ -63,7 +63,7 @@ export function DevModePanel({ className }: DevModePanelProps) {
 		<div
 			className={cn(
 				"fixed inset-0 z-50 bg-background/80 backdrop-blur-sm",
-				className
+				className,
 			)}
 		>
 			<div className="fixed inset-4 bg-background border rounded-lg shadow-xl flex flex-col">
@@ -74,18 +74,10 @@ export function DevModePanel({ className }: DevModePanelProps) {
 						<h2 className="font-semibold">Dev Mode - Raw JSON Editor</h2>
 					</div>
 					<div className="flex items-center gap-2">
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={handleFormat}
-						>
+						<Button variant="outline" size="sm" onClick={handleFormat}>
 							Format
 						</Button>
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={handleCopy}
-						>
+						<Button variant="outline" size="sm" onClick={handleCopy}>
 							{copied ? (
 								<>
 									<Check className="h-4 w-4 mr-1" />
@@ -98,11 +90,7 @@ export function DevModePanel({ className }: DevModePanelProps) {
 								</>
 							)}
 						</Button>
-						<Button
-							variant="default"
-							size="sm"
-							onClick={handleSave}
-						>
+						<Button variant="default" size="sm" onClick={handleSave}>
 							{saved ? (
 								<>
 									<Check className="h-4 w-4 mr-1" />
@@ -148,8 +136,10 @@ export function DevModePanel({ className }: DevModePanelProps) {
 				<div className="px-4 py-2 border-t text-xs text-muted-foreground">
 					<p>
 						Edit the raw JSON structure of your widget. The structure includes{" "}
-						<code className="bg-muted px-1 rounded">components</code> (array of SurfaceComponent) and{" "}
-						<code className="bg-muted px-1 rounded">widgetRefs</code> (widget definitions).
+						<code className="bg-muted px-1 rounded">components</code> (array of
+						SurfaceComponent) and{" "}
+						<code className="bg-muted px-1 rounded">widgetRefs</code> (widget
+						definitions).
 					</p>
 				</div>
 			</div>

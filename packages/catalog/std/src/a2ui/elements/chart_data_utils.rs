@@ -1,22 +1,32 @@
 //! Shared utilities for converting CSV and CSVTable data to chart formats.
 
-use flow_like_types::{Value, json::Map};
+use flow_like_types::Value;
 
 /// Extract headers and rows from a CSVTable JSON value (from DataFusion queries)
-pub fn extract_from_csv_table(value: &Value) -> flow_like_types::Result<(Vec<String>, Vec<Vec<String>>)> {
-    let headers = value.get("headers")
+pub fn extract_from_csv_table(
+    value: &Value,
+) -> flow_like_types::Result<(Vec<String>, Vec<Vec<String>>)> {
+    let headers = value
+        .get("headers")
         .and_then(|h| h.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
-    let rows = value.get("rows")
+    let rows = value
+        .get("rows")
         .and_then(|r| r.as_array())
         .map(|arr| {
-            arr.iter().map(|row| {
-                row.as_array()
-                    .map(|cells| cells.iter().map(cell_to_string).collect())
-                    .unwrap_or_default()
-            }).collect()
+            arr.iter()
+                .map(|row| {
+                    row.as_array()
+                        .map(|cells| cells.iter().map(cell_to_string).collect())
+                        .unwrap_or_default()
+                })
+                .collect()
         })
         .unwrap_or_default();
 
@@ -32,13 +42,18 @@ pub fn cell_to_string(value: &Value) -> String {
         Value::String(s) => s.clone(),
         Value::Object(obj) => {
             // Handle Cell enum variants like { "Int": 42 } or { "Str": "hello" }
-            if let Some(v) = obj.get("Int").or(obj.get("Float")).or(obj.get("Bool")).or(obj.get("Str")) {
+            if let Some(v) = obj
+                .get("Int")
+                .or(obj.get("Float"))
+                .or(obj.get("Bool"))
+                .or(obj.get("Str"))
+            {
                 return cell_to_string(v);
             }
-            if let Some(date_obj) = obj.get("Date") {
-                if let Some(iso) = date_obj.get("iso").and_then(|v| v.as_str()) {
-                    return iso.to_string();
-                }
+            if let Some(date_obj) = obj.get("Date")
+                && let Some(iso) = date_obj.get("iso").and_then(|v| v.as_str())
+            {
+                return iso.to_string();
             }
             String::new()
         }
@@ -47,13 +62,23 @@ pub fn cell_to_string(value: &Value) -> String {
 }
 
 /// Parse CSV text into headers and rows
-pub fn parse_csv_text(csv_text: &str, delimiter: char) -> flow_like_types::Result<(Vec<String>, Vec<Vec<String>>)> {
-    let lines: Vec<&str> = csv_text.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+pub fn parse_csv_text(
+    csv_text: &str,
+    delimiter: char,
+) -> flow_like_types::Result<(Vec<String>, Vec<Vec<String>>)> {
+    let lines: Vec<&str> = csv_text
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
     if lines.is_empty() {
         return Ok((vec![], vec![]));
     }
     let headers = parse_csv_row(lines[0], delimiter);
-    let rows: Vec<Vec<String>> = lines[1..].iter().map(|line| parse_csv_row(line, delimiter)).collect();
+    let rows: Vec<Vec<String>> = lines[1..]
+        .iter()
+        .map(|line| parse_csv_row(line, delimiter))
+        .collect();
     Ok((headers, rows))
 }
 
@@ -82,12 +107,15 @@ pub fn parse_column_ref(col_ref: &str, headers: &[String]) -> usize {
     if let Ok(idx) = col_ref.parse::<usize>() {
         return idx;
     }
-    headers.iter().position(|h| h.eq_ignore_ascii_case(col_ref)).unwrap_or(0)
+    headers
+        .iter()
+        .position(|h| h.eq_ignore_ascii_case(col_ref))
+        .unwrap_or(0)
 }
 
 /// Clean field name for use in chart data (lowercase, replace spaces/dashes with underscores)
 pub fn clean_field_name(name: &str) -> String {
-    name.to_lowercase().replace(' ', "_").replace('-', "_")
+    name.to_lowercase().replace([' ', '-'], "_")
 }
 
 /// Get data from either CSVTable (table pin) or CSV text (csv pin)
@@ -97,10 +125,10 @@ pub async fn get_chart_data(
     delimiter: char,
 ) -> flow_like_types::Result<(Vec<String>, Vec<Vec<String>>)> {
     // Try to get data from CSVTable first, then fall back to CSV text
-    if let Ok(table_value) = context.evaluate_pin::<Value>("table").await {
-        if !table_value.is_null() {
-            return extract_from_csv_table(&table_value);
-        }
+    if let Ok(table_value) = context.evaluate_pin::<Value>("table").await
+        && !table_value.is_null()
+    {
+        return extract_from_csv_table(&table_value);
     }
 
     let csv_text: String = context.evaluate_pin("csv").await?;

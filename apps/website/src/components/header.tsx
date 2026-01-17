@@ -1,7 +1,13 @@
 import { Button } from "@tm9657/flow-like-ui";
 import { useEffect, useState } from "react";
 import { BsDiscord, BsGithub, BsTwitterX } from "react-icons/bs";
-import { LuBookHeart, LuBookMarked, LuDownload, LuZap, LuScale } from "react-icons/lu";
+import {
+	LuBookHeart,
+	LuBookMarked,
+	LuDownload,
+	LuScale,
+	LuZap,
+} from "react-icons/lu";
 import { translationsCommon } from "../i18n/locales/pages/common";
 
 type Lang =

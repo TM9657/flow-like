@@ -107,9 +107,9 @@ export function AssetPicker({
 
 	const items = useInvoke(
 		backend.storageState.listStorageItems,
-        backend.storageState,
+		backend.storageState,
 		[appId, prefix],
-		open && (typeof appId === "string")
+		open && typeof appId === "string",
 	);
 
 	const handleSelect = useCallback(

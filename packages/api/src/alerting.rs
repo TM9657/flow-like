@@ -1,7 +1,4 @@
-use crate::{
-    mail::EmailMessage,
-    state::State,
-};
+use crate::{mail::EmailMessage, state::State};
 use flow_like_types::{Result, bail};
 
 #[tracing::instrument(name = "Send alert email", skip(state, subject, body_text))]

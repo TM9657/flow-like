@@ -454,9 +454,7 @@ function ActionBindingField({
 
 			<CollapsibleContent className="pt-2 pl-6 space-y-3">
 				{action.description && (
-					<p className="text-xs text-muted-foreground">
-						{action.description}
-					</p>
+					<p className="text-xs text-muted-foreground">{action.description}</p>
 				)}
 
 				{action.contextFields.length > 0 && (
@@ -601,9 +599,7 @@ function InputMappingField({
 	value,
 	onChange,
 }: InputMappingFieldProps) {
-	const valueType = value
-		? Object.keys(value)[0]
-		: "literalString";
+	const valueType = value ? Object.keys(value)[0] : "literalString";
 
 	return (
 		<div className="flex gap-2 items-start">
@@ -658,9 +654,8 @@ function InputMappingField({
 							type="number"
 							className="h-7 text-xs flex-1"
 							value={
-								(value && "literalNumber" in value
-									? value.literalNumber
-									: 0) ?? 0
+								(value && "literalNumber" in value ? value.literalNumber : 0) ??
+								0
 							}
 							onChange={(e) =>
 								onChange({

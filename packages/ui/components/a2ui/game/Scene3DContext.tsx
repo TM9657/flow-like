@@ -11,8 +11,6 @@ export function useIsInsideScene3D(): boolean {
 
 export function Scene3DProvider({ children }: { children: React.ReactNode }) {
 	return (
-		<Scene3DContext.Provider value={true}>
-			{children}
-		</Scene3DContext.Provider>
+		<Scene3DContext.Provider value={true}>{children}</Scene3DContext.Provider>
 	);
 }

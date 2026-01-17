@@ -1,11 +1,11 @@
+use super::chart_data_utils::{extract_from_csv_table, parse_column_ref, parse_csv_text};
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
-use super::chart_data_utils::{extract_from_csv_table, parse_csv_text, parse_column_ref};
+use flow_like_types::{Value, async_trait, json::json};
 
 /// Converts CSV data or CSVTable (from DataFusion) to Nivo Sankey diagram format.
 ///
@@ -85,7 +85,12 @@ impl NodeLogic for CsvToSankeyData {
         )
         .set_default_value(Some(json!(",")));
 
-        node.add_output_pin("data", "Data", "Sankey data object with nodes and links", VariableType::Generic);
+        node.add_output_pin(
+            "data",
+            "Data",
+            "Sankey data object with nodes and links",
+            VariableType::Generic,
+        );
 
         node
     }
@@ -96,7 +101,8 @@ impl NodeLogic for CsvToSankeyData {
         let value_col: String = context.evaluate_pin("value_column").await?;
         let delimiter: String = context.evaluate_pin("delimiter").await?;
 
-        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await {
+        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await
+        {
             if !table_value.is_null() {
                 extract_from_csv_table(&table_value)?
             } else {
@@ -109,7 +115,9 @@ impl NodeLogic for CsvToSankeyData {
         };
 
         if headers.is_empty() || rows.is_empty() {
-            context.set_pin_value("data", json!({ "nodes": [], "links": [] })).await?;
+            context
+                .set_pin_value("data", json!({ "nodes": [], "links": [] }))
+                .await?;
             return Ok(());
         }
 
@@ -123,7 +131,10 @@ impl NodeLogic for CsvToSankeyData {
         for row in &rows {
             let source = row.get(source_idx).cloned().unwrap_or_default();
             let target = row.get(target_idx).cloned().unwrap_or_default();
-            let value: f64 = row.get(value_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            let value: f64 = row
+                .get(value_idx)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.0);
 
             if !source.is_empty() && !target.is_empty() {
                 node_set.insert(source.clone());
@@ -134,7 +145,9 @@ impl NodeLogic for CsvToSankeyData {
 
         let nodes: Vec<Value> = node_set.into_iter().map(|id| json!({ "id": id })).collect();
 
-        context.set_pin_value("data", json!({ "nodes": nodes, "links": links })).await?;
+        context
+            .set_pin_value("data", json!({ "nodes": nodes, "links": links }))
+            .await?;
 
         Ok(())
     }

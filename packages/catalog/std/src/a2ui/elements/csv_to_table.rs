@@ -3,7 +3,7 @@ use flow_like::flow::{
     node::{Node, NodeLogic},
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, json::Map, Value};
+use flow_like_types::{Value, async_trait, json::Map, json::json};
 
 /// Parses CSV text and outputs table-compatible columns and data.
 ///

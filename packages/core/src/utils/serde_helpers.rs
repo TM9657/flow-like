@@ -28,15 +28,15 @@ where
 
     match TimeFormat::deserialize(deserializer)? {
         TimeFormat::IsoString(s) => {
-            let datetime = DateTime::parse_from_rfc3339(&s)
-                .map_err(serde::de::Error::custom)?;
+            let datetime = DateTime::parse_from_rfc3339(&s).map_err(serde::de::Error::custom)?;
             Ok(datetime.with_timezone(&Utc).into())
         }
         TimeFormat::SystemTimeStruct {
             secs_since_epoch,
             nanos_since_epoch,
-        } => Ok(std::time::UNIX_EPOCH
-            + std::time::Duration::new(secs_since_epoch, nanos_since_epoch)),
+        } => {
+            Ok(std::time::UNIX_EPOCH
+                + std::time::Duration::new(secs_since_epoch, nanos_since_epoch))
+        }
     }
 }
-

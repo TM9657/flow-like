@@ -1,5 +1,18 @@
 "use client";
 
+import {
+	Calendar,
+	Camera,
+	Cpu,
+	GitBranch,
+	Save,
+	Settings,
+	Upload,
+	User,
+	X,
+	Zap,
+} from "lucide-react";
+import { useCallback, useState } from "react";
 import type { ISettingsProfile } from "../../../types";
 import { IConnectionMode, IThemes } from "../../../types";
 import { Badge } from "../../ui/badge";
@@ -22,19 +35,6 @@ import {
 } from "../../ui/select";
 import { Switch } from "../../ui/switch";
 import { Textarea } from "../../ui/textarea";
-import {
-	Calendar,
-	Camera,
-	Cpu,
-	GitBranch,
-	Save,
-	Settings,
-	Upload,
-	User,
-	X,
-	Zap,
-} from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
 
 export interface ProfileSettingsPageProps {
 	profile: ISettingsProfile;
@@ -64,9 +64,15 @@ export function ProfileSettingsPage({
 		(
 			input: string,
 			id = "Custom Theme",
-		): { id: string; light: Record<string, string>; dark: Record<string, string> } => {
+		): {
+			id: string;
+			light: Record<string, string>;
+			dark: Record<string, string>;
+		} => {
 			const toCamel = (name: string) =>
-				name.replace(/^-+/, "").replace(/-([a-z0-9])/gi, (_, c) => c.toUpperCase());
+				name
+					.replace(/^-+/, "")
+					.replace(/-([a-z0-9])/gi, (_, c) => c.toUpperCase());
 
 			const extractBlock = (source: string, selector: string) => {
 				const re = new RegExp(`${selector}\\s*\\{([\\s\\S]*?)\\}`, "m");
@@ -115,7 +121,10 @@ export function ProfileSettingsPage({
 
 	const handleImportTheme = useCallback(() => {
 		try {
-			const parsed = parseTweakcnTheme(customCss, customThemeName || "Custom Theme");
+			const parsed = parseTweakcnTheme(
+				customCss,
+				customThemeName || "Custom Theme",
+			);
 			if (!parsed.light?.background && !parsed.dark?.background) {
 				throw new Error("No valid variables found.");
 			}
@@ -128,9 +137,7 @@ export function ProfileSettingsPage({
 			setThemeSelectValue("CUSTOM");
 			setImportError(null);
 		} catch (err: unknown) {
-			setImportError(
-				(err as Error)?.message ?? "Failed to import theme.",
-			);
+			setImportError((err as Error)?.message ?? "Failed to import theme.");
 		}
 	}, [customCss, customThemeName, profile, onProfileUpdate, parseTweakcnTheme]);
 
@@ -187,7 +194,8 @@ export function ProfileSettingsPage({
 											width={224}
 											height={224}
 											src={
-												profile.hub_profile.icon ?? "/placeholder-thumbnail.webp"
+												profile.hub_profile.icon ??
+												"/placeholder-thumbnail.webp"
 											}
 											alt="Profile thumbnail"
 										/>
@@ -383,7 +391,10 @@ export function ProfileSettingsPage({
 						<CardContent>
 							<div className="space-y-3">
 								<Label htmlFor="theme">Theme</Label>
-								<Select value={themeSelectValue} onValueChange={handleThemeChange}>
+								<Select
+									value={themeSelectValue}
+									onValueChange={handleThemeChange}
+								>
 									<SelectTrigger>
 										<SelectValue placeholder="Select theme" />
 									</SelectTrigger>

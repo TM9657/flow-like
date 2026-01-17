@@ -47,7 +47,9 @@ impl NodeLogic for UrlEncode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let input: String = context.evaluate_pin("input").await?;
         let encoded = urlencoding::encode(&input).to_string();
-        context.set_pin_value("encoded", json::json!(encoded)).await?;
+        context
+            .set_pin_value("encoded", json::json!(encoded))
+            .await?;
         Ok(())
     }
 }

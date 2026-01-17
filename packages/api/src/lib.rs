@@ -7,8 +7,8 @@ use axum::{
 };
 use error::InternalError;
 use flow_like_types::Value;
-use middleware::jwt::jwt_middleware;
 use middleware::error_reporting::error_reporting_middleware;
+use middleware::jwt::jwt_middleware;
 use state::{AppState, State};
 use tower::ServiceBuilder;
 use tower_http::{
@@ -21,9 +21,9 @@ pub mod entity;
 mod middleware;
 mod routes;
 
+pub mod alerting;
 pub mod credentials;
 pub mod error;
-pub mod alerting;
 pub mod mail;
 pub mod permission;
 pub mod state;
@@ -68,7 +68,10 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .route("/webhook/stripe", post(routes::webhook::stripe_webhook))
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }))
-        .layer(from_fn_with_state(state.clone(), error_reporting_middleware))
+        .layer(from_fn_with_state(
+            state.clone(),
+            error_reporting_middleware,
+        ))
         .layer(from_fn_with_state(state.clone(), jwt_middleware))
         .layer(CorsLayer::permissive())
         .layer(

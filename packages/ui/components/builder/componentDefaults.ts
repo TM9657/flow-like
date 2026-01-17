@@ -1,5 +1,10 @@
-import type { A2UIComponent, BoundValue, SelectOption, Style } from "../a2ui/types";
-import { COMPONENT_SCHEMAS, isValidComponentType, isValidProperty } from "./componentSchema";
+import type {
+	A2UIComponent,
+	BoundValue,
+	SelectOption,
+	Style,
+} from "../a2ui/types";
+import { isValidComponentType, isValidProperty } from "./componentSchema";
 
 // Helper to create BoundValue literals
 export const str = (value: string): BoundValue => ({ literalString: value });
@@ -43,7 +48,7 @@ export const COMPONENT_DEFAULT_PROPS: Record<
 		align: str("stretch"),
 		width: str("100%"),
 		height: str("300px"),
-		children: { explicitList: [] }
+		children: { explicitList: [] },
 	},
 	grid: {
 		columns: num(2),
@@ -137,9 +142,24 @@ export const COMPONENT_DEFAULT_PROPS: Record<
 	table: {
 		columns: {
 			literalJson: JSON.stringify([
-				{ id: "col-1", header: { literalString: "Name" }, accessor: { literalString: "name" }, sortable: { literalBool: true } },
-				{ id: "col-2", header: { literalString: "Age" }, accessor: { literalString: "age" }, sortable: { literalBool: true } },
-				{ id: "col-3", header: { literalString: "Email" }, accessor: { literalString: "email" }, sortable: { literalBool: true } },
+				{
+					id: "col-1",
+					header: { literalString: "Name" },
+					accessor: { literalString: "name" },
+					sortable: { literalBool: true },
+				},
+				{
+					id: "col-2",
+					header: { literalString: "Age" },
+					accessor: { literalString: "age" },
+					sortable: { literalBool: true },
+				},
+				{
+					id: "col-3",
+					header: { literalString: "Email" },
+					accessor: { literalString: "email" },
+					sortable: { literalBool: true },
+				},
 			]),
 		},
 		data: {
@@ -422,12 +442,14 @@ export const COMPONENT_DEFAULT_PROPS: Record<
 	},
 	nivoChart: {
 		chartType: str("bar"),
-		data: { literalJson: JSON.stringify([
-			{ country: "USA", burgers: 120, fries: 80, sandwiches: 60 },
-			{ country: "UK", burgers: 90, fries: 110, sandwiches: 70 },
-			{ country: "France", burgers: 60, fries: 70, sandwiches: 100 },
-			{ country: "Germany", burgers: 85, fries: 95, sandwiches: 55 },
-		]) },
+		data: {
+			literalJson: JSON.stringify([
+				{ country: "USA", burgers: 120, fries: 80, sandwiches: 60 },
+				{ country: "UK", burgers: 90, fries: 110, sandwiches: 70 },
+				{ country: "France", burgers: 60, fries: 70, sandwiches: 100 },
+				{ country: "Germany", burgers: 85, fries: 95, sandwiches: 55 },
+			]),
+		},
 		width: str("100%"),
 		height: str("400px"),
 		indexBy: str("country"),
@@ -436,7 +458,14 @@ export const COMPONENT_DEFAULT_PROPS: Record<
 		animate: bool(true),
 		showLegend: bool(true),
 		legendPosition: str("bottom"),
-		margin: { literalJson: JSON.stringify({ top: 50, right: 130, bottom: 50, left: 60 }) },
+		margin: {
+			literalJson: JSON.stringify({
+				top: 50,
+				right: 130,
+				bottom: 50,
+				left: 60,
+			}),
+		},
 	},
 	boundingBoxOverlay: {
 		src: str("https://placehold.co/800x600"),
@@ -477,12 +506,17 @@ export function getDefaultStyle(type: string): Partial<Style> | undefined {
  * @param component The component to normalize
  * @param strict If true, unknown props are removed. If false, they're kept.
  */
-export function normalizeComponent(component: A2UIComponent, strict = true): A2UIComponent {
+export function normalizeComponent(
+	component: A2UIComponent,
+	strict = true,
+): A2UIComponent {
 	const { type, ...existingProps } = component;
 
 	// Unknown component type - return as-is (or filter unknown types entirely)
 	if (!isValidComponentType(type)) {
-		console.warn(`[A2UI] Unknown component type "${type}" - skipping normalization`);
+		console.warn(
+			`[A2UI] Unknown component type "${type}" - skipping normalization`,
+		);
 		return component;
 	}
 
@@ -498,7 +532,9 @@ export function normalizeComponent(component: A2UIComponent, strict = true): A2U
 			// In non-strict mode, keep unknown props
 			normalized[key] = value;
 		} else {
-			console.warn(`[A2UI] Removing unknown property "${key}" from component type "${type}"`);
+			console.warn(
+				`[A2UI] Removing unknown property "${key}" from component type "${type}"`,
+			);
 		}
 	}
 
@@ -517,19 +553,23 @@ export function normalizeComponent(component: A2UIComponent, strict = true): A2U
  */
 export function normalizeComponents(
 	components: Array<{ id: string; component?: A2UIComponent; style?: Style }>,
-	strict = true
+	strict = true,
 ): Array<{ id: string; component: A2UIComponent; style?: Style }> {
 	return components
 		.filter((comp) => {
 			const type = comp.component?.type;
 			if (!type || !isValidComponentType(type)) {
-				console.warn(`[A2UI] Filtering out unknown component type "${type ?? "undefined"}" (id: ${comp.id})`);
+				console.warn(
+					`[A2UI] Filtering out unknown component type "${type ?? "undefined"}" (id: ${comp.id})`,
+				);
 				return false;
 			}
 			return true;
 		})
 		.map((comp) => ({
 			...comp,
-			component: comp.component ? normalizeComponent(comp.component, strict) : createDefaultComponent("text"),
+			component: comp.component
+				? normalizeComponent(comp.component, strict)
+				: createDefaultComponent("text"),
 		}));
 }

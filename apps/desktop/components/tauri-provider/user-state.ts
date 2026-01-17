@@ -22,12 +22,12 @@ import type {
 } from "@tm9657/flow-like-ui/state/backend-state/user-state";
 import { fetcher } from "../../lib/api";
 import {
+	type ILocalNotification,
 	deleteLocalNotification,
 	getLocalNotificationCounts,
 	getLocalNotifications,
 	markAllLocalNotificationsRead,
 	markLocalNotificationRead,
-	type ILocalNotification,
 } from "../../lib/notifications-db";
 import type { TauriBackend } from "../tauri-provider";
 
@@ -96,11 +96,14 @@ export class UserState implements IUserState {
 		let localCounts = { total: 0, unread: 0 };
 		try {
 			localCounts = await getLocalNotificationCounts(userId);
-			let offlineCounts = await getLocalNotificationCounts("offline-user")
-			localCounts.total = offlineCounts.total
-			localCounts.unread = offlineCounts.unread
+			const offlineCounts = await getLocalNotificationCounts("offline-user");
+			localCounts.total = offlineCounts.total;
+			localCounts.unread = offlineCounts.unread;
 		} catch (e) {
-			console.error("[UserState.getNotifications] Error getting local counts:", e);
+			console.error(
+				"[UserState.getNotifications] Error getting local counts:",
+				e,
+			);
 		}
 
 		// Try to get remote notifications if online
@@ -115,7 +118,8 @@ export class UserState implements IUserState {
 
 				return {
 					invites_count: remoteResult.invites_count,
-					notifications_count: (remoteResult.notifications_count ?? 0) + localCounts.total,
+					notifications_count:
+						(remoteResult.notifications_count ?? 0) + localCounts.total,
 					unread_count: (remoteResult.unread_count ?? 0) + localCounts.unread,
 				};
 			} catch {
@@ -142,10 +146,18 @@ export class UserState implements IUserState {
 		let localNotifications: INotification[] = [];
 		try {
 			// Fetch more than needed for proper pagination when merged
-			const local = await getLocalNotifications(userId, limit + offset, 0, unreadOnly);
+			const local = await getLocalNotifications(
+				userId,
+				limit + offset,
+				0,
+				unreadOnly,
+			);
 			localNotifications = local.map(localToINotification);
 		} catch (e) {
-			console.error("[UserState.listNotifications] Error getting local notifications:", e);
+			console.error(
+				"[UserState.listNotifications] Error getting local notifications:",
+				e,
+			);
 		}
 
 		// Try to get remote notifications if online
@@ -171,7 +183,8 @@ export class UserState implements IUserState {
 
 		// Merge and sort by createdAt descending
 		const merged = [...remoteResult, ...localNotifications].sort(
-			(a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+			(a, b) =>
+				new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
 		);
 
 		// Apply pagination to merged result
@@ -466,7 +479,9 @@ export class UserState implements IUserState {
 			const localApps = await invoke<[{ id: string }, any][]>("get_apps");
 			for (const [app] of localApps) {
 				try {
-					const widgets = await invoke<{ id: string }[]>("get_widgets", { appId: app.id });
+					const widgets = await invoke<{ id: string }[]>("get_widgets", {
+						appId: app.id,
+					});
 					for (const widget of widgets) {
 						try {
 							const metadata = await invoke<any | null>("get_widget_meta", {
@@ -515,7 +530,9 @@ export class UserState implements IUserState {
 		// If logged in, merge with remote widgets (remote takes precedence for metadata)
 		if (this.backend.profile && this.backend.auth) {
 			try {
-				const queryParams = language ? `?language=${encodeURIComponent(language)}` : "";
+				const queryParams = language
+					? `?language=${encodeURIComponent(language)}`
+					: "";
 				const remoteWidgets = await fetcher<[string, string, any][]>(
 					this.backend.profile,
 					`user/widgets${queryParams}`,
@@ -551,7 +568,9 @@ export class UserState implements IUserState {
 			return [];
 		}
 
-		const queryParams = language ? `?language=${encodeURIComponent(language)}` : "";
+		const queryParams = language
+			? `?language=${encodeURIComponent(language)}`
+			: "";
 		const result = await fetcher<[string, string, any][]>(
 			this.backend.profile,
 			`user/templates${queryParams}`,

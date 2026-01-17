@@ -1,13 +1,13 @@
 "use client";
 
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { useInvoke } from "../../../hooks/use-invoke";
 import type {
 	AdminPackageDetailResponse,
 	ReviewRequest,
 } from "../../../lib/schema/wasm";
 import { useBackend } from "../../../state/backend-state";
-import { useInvoke } from "../../../hooks/use-invoke";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminPackageDetailView } from "../../store/admin-package-detail-view";
 
 export interface AdminPackageDetailProps {
@@ -80,7 +80,8 @@ export function AdminPackageDetail({
 	);
 
 	const handleUpdatePackage = useCallback(
-		(data: { status?: string; verified?: boolean }) => updatePackage.mutate(data),
+		(data: { status?: string; verified?: boolean }) =>
+			updatePackage.mutate(data),
 		[updatePackage],
 	);
 

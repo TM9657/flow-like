@@ -1,12 +1,12 @@
 import type React from "react";
 import type { IBoard } from "../../lib";
-import type { SurfaceComponent } from "../a2ui/types";
+import type { A2UIPlanStep } from "../../lib/schema/a2ui/copilot";
 import type {
 	BoardCommand,
 	PlanStep,
 	Suggestion,
 } from "../../lib/schema/flow/copilot";
-import type { A2UIPlanStep } from "../../lib/schema/a2ui/copilot";
+import type { SurfaceComponent } from "../a2ui/types";
 
 /**
  * Agent mode determines what the copilot operates on:

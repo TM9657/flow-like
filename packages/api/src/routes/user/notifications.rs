@@ -94,7 +94,7 @@ pub async fn mark_notification_read(
         .filter(notification::Column::UserId.eq(sub))
         .one(&state.db)
         .await?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let mut active: notification::ActiveModel = notification.into();
     active.read = Set(true);
@@ -116,7 +116,7 @@ pub async fn delete_notification(
         .filter(notification::Column::UserId.eq(sub))
         .one(&state.db)
         .await?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let active: notification::ActiveModel = notification.into();
     active.delete(&state.db).await?;
@@ -132,7 +132,10 @@ pub async fn mark_all_read(
     let sub = user.sub()?;
 
     let result = notification::Entity::update_many()
-        .col_expr(notification::Column::Read, sea_orm::sea_query::Expr::value(true))
+        .col_expr(
+            notification::Column::Read,
+            sea_orm::sea_query::Expr::value(true),
+        )
         .col_expr(
             notification::Column::ReadAt,
             sea_orm::sea_query::Expr::value(chrono::Utc::now().naive_utc()),
@@ -144,4 +147,3 @@ pub async fn mark_all_read(
 
     Ok(Json(result.rows_affected))
 }
-

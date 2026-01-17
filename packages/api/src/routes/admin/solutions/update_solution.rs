@@ -93,40 +93,39 @@ pub async fn update_solution(
     let updated = active.update(&state.db).await?;
 
     // Send email notification if status changed
-    if let Some(new_status) = new_status_value {
-        if new_status != old_status {
-            if let Some(mail_client) = &state.mail_client {
-                let frontend_url = std::env::var("FRONTEND_URL").unwrap_or_else(|_| {
-                    format!(
-                        "https://{}",
-                        state
-                            .platform_config
-                            .web
-                            .clone()
-                            .unwrap_or_else(|| state.platform_config.domain.clone())
-                    )
-                });
-                let tracking_url = format!("{}/solutions/track/{}", frontend_url, solution_id);
-                let status_str = status_to_string(&new_status);
-                let (html, text) = solution_status_update(
-                    &solution_name,
-                    &solution_id,
-                    &status_str,
-                    &tracking_url,
-                    None,
-                );
+    if let Some(new_status) = new_status_value
+        && new_status != old_status
+        && let Some(mail_client) = &state.mail_client
+    {
+        let frontend_url = std::env::var("FRONTEND_URL").unwrap_or_else(|_| {
+            format!(
+                "https://{}",
+                state
+                    .platform_config
+                    .web
+                    .clone()
+                    .unwrap_or_else(|| state.platform_config.domain.clone())
+            )
+        });
+        let tracking_url = format!("{}/solutions/track/{}", frontend_url, solution_id);
+        let status_str = status_to_string(&new_status);
+        let (html, text) = solution_status_update(
+            &solution_name,
+            &solution_id,
+            &status_str,
+            &tracking_url,
+            None,
+        );
 
-                let email = EmailMessage {
-                    to: solution_email,
-                    subject: format!("Solution Update: {}", status_str.replace('_', " ")),
-                    body_html: Some(html),
-                    body_text: Some(text),
-                };
+        let email = EmailMessage {
+            to: solution_email,
+            subject: format!("Solution Update: {}", status_str.replace('_', " ")),
+            body_html: Some(html),
+            body_text: Some(text),
+        };
 
-                if let Err(e) = mail_client.send(email).await {
-                    tracing::warn!(error = %e, "Failed to send status update email");
-                }
-            }
+        if let Err(e) = mail_client.send(email).await {
+            tracing::warn!(error = %e, "Failed to send status update email");
         }
     }
 

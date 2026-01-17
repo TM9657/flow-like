@@ -167,7 +167,10 @@ pub enum UnifiedStreamEvent {
     /// Agent is thinking/reasoning
     Thinking(String),
     /// Focus on a specific node (board mode)
-    FocusNode { node_id: String, description: String },
+    FocusNode {
+        node_id: String,
+        description: String,
+    },
     /// Preview of generated components (frontend mode)
     ComponentPreview(Vec<SurfaceComponent>),
     /// Agent determined which scope to focus on

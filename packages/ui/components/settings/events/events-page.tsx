@@ -52,11 +52,11 @@ import type {
 	IStoredOAuthToken,
 } from "@tm9657/flow-like-ui/lib/oauth/types";
 import type { IHub } from "@tm9657/flow-like-ui/lib/schema/hub/hub";
-import type { PageListItem } from "@tm9657/flow-like-ui/state/backend-state/page-state";
 import {
 	convertJsonToUint8Array,
 	parseUint8ArrayToJson,
 } from "@tm9657/flow-like-ui/lib/uint8";
+import type { PageListItem } from "@tm9657/flow-like-ui/state/backend-state/page-state";
 import {
 	ActivityIcon,
 	AlertTriangle,
@@ -138,7 +138,10 @@ export default function EventsPage({
 	const [pendingRoutePath, setPendingRoutePath] = useState<string | null>(null);
 	const [isOffline, setIsOffline] = useState<boolean | null>(null);
 	const [routeCleanupDone, setRouteCleanupDone] = useState(false);
-	const uiEventTypeSet = useMemo(() => new Set(uiEventTypes ?? []), [uiEventTypes]);
+	const uiEventTypeSet = useMemo(
+		() => new Set(uiEventTypes ?? []),
+		[uiEventTypes],
+	);
 	const normalizePath = useCallback((path: unknown): string => {
 		const raw = String(path ?? "").trim();
 		if (!raw) return "/";
@@ -182,19 +185,25 @@ export default function EventsPage({
 				const eventIds = new Set(events.data?.map((e) => e.id) ?? []);
 				let deletedAny = false;
 
-				console.log(`[Route Cleanup] Found ${routes.length} routes, checking against ${eventIds.size} events`);
+				console.log(
+					`[Route Cleanup] Found ${routes.length} routes, checking against ${eventIds.size} events`,
+				);
 
 				for (const route of routes) {
 					// Delete routes that point to non-existent events
 					if (!eventIds.has(route.eventId)) {
-						console.log(`[Route Cleanup] Marking for deletion: route ${route.path} (eventId: ${route.eventId})`);
+						console.log(
+							`[Route Cleanup] Marking for deletion: route ${route.path} (eventId: ${route.eventId})`,
+						);
 						await backend.routeState.deleteRouteByPath(id, route.path);
 						deletedAny = true;
 					}
 				}
 
 				if (deletedAny) {
-					console.log("[Route Cleanup] Completed - deleted orphaned routes, invalidating cache");
+					console.log(
+						"[Route Cleanup] Completed - deleted orphaned routes, invalidating cache",
+					);
 					await invalidate(backend.routeState.getRoutes, [id]);
 				} else {
 					console.log("[Route Cleanup] No orphaned routes found");
@@ -305,7 +314,10 @@ export default function EventsPage({
 
 			// If this is a UI event (including page-target events), create a path-based route pointing to it.
 			// Use savedEvent.id since the backend may generate a new ID for new events
-			if (uiEventTypeSet.has(savedEvent.event_type) || !!savedEvent.default_page_id) {
+			if (
+				uiEventTypeSet.has(savedEvent.event_type) ||
+				!!savedEvent.default_page_id
+			) {
 				try {
 					const path = normalizePath((newEvent as any)?.path);
 					await backend.routeState.setRoute(id, path, savedEvent.id);
@@ -357,7 +369,14 @@ export default function EventsPage({
 			console.log(`Deleted event with ID: ${eventId}`);
 			await events.refetch();
 		},
-		[id, editingEvent, events, backend.eventState, backend.routeState, invalidate],
+		[
+			id,
+			editingEvent,
+			events,
+			backend.eventState,
+			backend.routeState,
+			invalidate,
+		],
 	);
 
 	const handleEditingEvent = useCallback(
@@ -392,7 +411,10 @@ export default function EventsPage({
 				);
 
 				// Create route for UI events - use savedEvent.id since backend may generate new ID
-				if (uiEventTypeSet.has(savedEvent.event_type) || !!savedEvent.default_page_id) {
+				if (
+					uiEventTypeSet.has(savedEvent.event_type) ||
+					!!savedEvent.default_page_id
+				) {
 					try {
 						const path = normalizePath(pendingRoutePath);
 						await backend.routeState.setRoute(id, path, savedEvent.id);
@@ -409,7 +431,17 @@ export default function EventsPage({
 				setPendingRoutePath(null);
 			}
 		},
-		[pendingEvent, pendingRoutePath, id, backend.eventState, backend.routeState, events, uiEventTypeSet, normalizePath, invalidate],
+		[
+			pendingEvent,
+			pendingRoutePath,
+			id,
+			backend.eventState,
+			backend.routeState,
+			events,
+			uiEventTypeSet,
+			normalizePath,
+			invalidate,
+		],
 	);
 
 	if (id && editingEvent) {
@@ -602,7 +634,8 @@ function EventConfiguration({
 	>({});
 
 	const isPageTargetEvent = !!formData.default_page_id;
-	const shouldShowRoutePath = uiEventTypeSet.has(formData.event_type) || isPageTargetEvent;
+	const shouldShowRoutePath =
+		uiEventTypeSet.has(formData.event_type) || isPageTargetEvent;
 
 	const boards = useInvoke(
 		backend.boardState.getBoards,
@@ -884,7 +917,13 @@ function EventConfiguration({
 		setIsRefreshingInputs(true);
 		try {
 			// Re-upsert the event to trigger populate_inputs on the backend
-			await backend.eventState.upsertEvent(appId, event, undefined, undefined, undefined);
+			await backend.eventState.upsertEvent(
+				appId,
+				event,
+				undefined,
+				undefined,
+				undefined,
+			);
 			await invalidate(backend.eventState.getEvents, [appId]);
 			onReload?.();
 		} catch (error) {
@@ -906,23 +945,37 @@ function EventConfiguration({
 		const targetPinType = event.default_page_id ? "Input" : "Output";
 
 		const currentPins = Object.values(node.pins ?? {})
-			.filter((pin: any) => pin.pin_type === targetPinType && pin.data_type !== "Execution")
+			.filter(
+				(pin: any) =>
+					pin.pin_type === targetPinType && pin.data_type !== "Execution",
+			)
 			.sort((a: any, b: any) => a.index - b.index);
 
 		const savedInputs = event.inputs ?? [];
 
 		// Check for differences
-		const added: Array<{id: string; name: string; friendly_name: string}> = [];
+		const added: Array<{ id: string; name: string; friendly_name: string }> =
+			[];
 		const removed: IEventInput[] = [];
-		const changed: Array<{id: string; name: string; field: string; oldValue: string; newValue: string}> = [];
+		const changed: Array<{
+			id: string;
+			name: string;
+			field: string;
+			oldValue: string;
+			newValue: string;
+		}> = [];
 
-		const savedInputsMap = new Map(savedInputs.map(i => [i.id, i]));
+		const savedInputsMap = new Map(savedInputs.map((i) => [i.id, i]));
 		const currentPinsMap = new Map(currentPins.map((p: any) => [p.id, p]));
 
 		// Find added pins (in current but not in saved)
 		for (const pin of currentPins as any[]) {
 			if (!savedInputsMap.has(pin.id)) {
-				added.push({ id: pin.id, name: pin.name, friendly_name: pin.friendly_name });
+				added.push({
+					id: pin.id,
+					name: pin.name,
+					friendly_name: pin.friendly_name,
+				});
 			}
 		}
 
@@ -939,21 +992,48 @@ function EventConfiguration({
 			if (!pin) continue;
 
 			if (pin.name !== input.name) {
-				changed.push({ id: input.id, name: input.name, field: "name", oldValue: input.name, newValue: pin.name });
+				changed.push({
+					id: input.id,
+					name: input.name,
+					field: "name",
+					oldValue: input.name,
+					newValue: pin.name,
+				});
 			}
 			if (pin.friendly_name !== input.friendly_name) {
-				changed.push({ id: input.id, name: input.friendly_name, field: "friendly_name", oldValue: input.friendly_name, newValue: pin.friendly_name });
+				changed.push({
+					id: input.id,
+					name: input.friendly_name,
+					field: "friendly_name",
+					oldValue: input.friendly_name,
+					newValue: pin.friendly_name,
+				});
 			}
 			const pinDataType = String(pin.data_type);
 			if (pinDataType !== input.data_type) {
-				changed.push({ id: input.id, name: input.name, field: "data_type", oldValue: input.data_type, newValue: pinDataType });
+				changed.push({
+					id: input.id,
+					name: input.name,
+					field: "data_type",
+					oldValue: input.data_type,
+					newValue: pinDataType,
+				});
 			}
 		}
 
-		const hasDrift = added.length > 0 || removed.length > 0 || changed.length > 0;
+		const hasDrift =
+			added.length > 0 || removed.length > 0 || changed.length > 0;
 		const isEmpty = savedInputs.length === 0;
 
-		return { hasDrift, isEmpty, added, removed, changed, savedInputs, currentPins: currentPins.length };
+		return {
+			hasDrift,
+			isEmpty,
+			added,
+			removed,
+			changed,
+			savedInputs,
+			currentPins: currentPins.length,
+		};
 	}, [board.data, event.node_id, event.inputs, event.default_page_id]);
 
 	return (
@@ -984,7 +1064,10 @@ function EventConfiguration({
 				<div className="flex items-center gap-2">
 					{isEditing ? (
 						<>
-							<Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300">
+							<Badge
+								variant="outline"
+								className="bg-orange-100 text-orange-800 border-orange-300"
+							>
 								Editing
 							</Badge>
 							<Button variant="outline" size="sm" onClick={handleCancel}>
@@ -1010,673 +1093,714 @@ function EventConfiguration({
 
 			{/* Content - scrolls with parent ScrollArea */}
 			<div className="space-y-8 pt-8 pb-8">
-			{/* Floating Save Button for mobile/small screens */}
-			{isEditing && (
-				<div className="fixed bottom-6 right-6 flex items-center gap-2 z-50 md:hidden">
-					<Button
-						variant="outline"
-						onClick={handleCancel}
-						className="shadow-lg"
-					>
-						Cancel
-					</Button>
-					<Button
-						onClick={() => handleSave()}
-						className="gap-2 shadow-lg bg-orange-600 hover:bg-orange-700"
-					>
-						<SaveIcon className="h-4 w-4" />
-						Save Changes
-					</Button>
-				</div>
-			)}
-
-			{/* Status Card */}
-			<Card>
-				<CardHeader>
-					<CardTitle className="flex items-center gap-2">
-						<ActivityIcon className="h-5 w-5" />
-						Event Status
-					</CardTitle>
-				</CardHeader>
-				<CardContent className="flex flex-col space-y-4">
-					<div>
-						{board.data?.nodes?.[formData.node_id] && formData.node_id && (
-							<EventTypeConfiguration
-								eventConfig={eventMapping}
-								disabled={!isEditing}
-								node={board.data?.nodes?.[formData.node_id]}
-								event={formData}
-								onUpdate={(type) => {
-									handleInputChange("event_type", type);
-								}}
-							/>
-						)}
+				{/* Floating Save Button for mobile/small screens */}
+				{isEditing && (
+					<div className="fixed bottom-6 right-6 flex items-center gap-2 z-50 md:hidden">
+						<Button
+							variant="outline"
+							onClick={handleCancel}
+							className="shadow-lg"
+						>
+							Cancel
+						</Button>
+						<Button
+							onClick={() => handleSave()}
+							className="gap-2 shadow-lg bg-orange-600 hover:bg-orange-700"
+						>
+							<SaveIcon className="h-4 w-4" />
+							Save Changes
+						</Button>
 					</div>
-					<div className="flex items-center justify-between">
-						<div className="flex items-center gap-3">
-							<div
-								className={`w-3 h-3 rounded-full ${event.active ? "bg-green-500" : "bg-orange-500"}`}
-							/>
-							<span className="font-medium">
-								{event.active ? "Active" : "Inactive"}
-							</span>
+				)}
+
+				{/* Status Card */}
+				<Card>
+					<CardHeader>
+						<CardTitle className="flex items-center gap-2">
+							<ActivityIcon className="h-5 w-5" />
+							Event Status
+						</CardTitle>
+					</CardHeader>
+					<CardContent className="flex flex-col space-y-4">
+						<div>
+							{board.data?.nodes?.[formData.node_id] && formData.node_id && (
+								<EventTypeConfiguration
+									eventConfig={eventMapping}
+									disabled={!isEditing}
+									node={board.data?.nodes?.[formData.node_id]}
+									event={formData}
+									onUpdate={(type) => {
+										handleInputChange("event_type", type);
+									}}
+								/>
+							)}
 						</div>
-						{isEditing && (
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => handleInputChange("active", !formData.active)}
-								className="gap-2"
-							>
-								{formData.active ? (
-									<>
-										<Pause className="h-4 w-4" />
-										Deactivate
-									</>
-								) : (
-									<>
-										<Play className="h-4 w-4" />
-										Activate
-									</>
-								)}
-							</Button>
-						)}
-					</div>
-				</CardContent>
-			</Card>
-
-			{/* Main Configuration */}
-			<div className="space-y-8">
-				{/* Top Row - Essential Information */}
-				<div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-					{/* Basic Information */}
-					<Card>
-						<CardHeader>
-							<CardTitle className="flex items-center gap-2">
-								<FileTextIcon className="h-5 w-5" />
-								Basic Information
-							</CardTitle>
-						</CardHeader>
-						<CardContent className="space-y-4">
-							<div>
-								<Label>Event Name</Label>
-								{isEditing ? (
-									<Input
-										type="text"
-										value={formData.name}
-										onChange={(e) => handleInputChange("name", e.target.value)}
-									/>
-								) : (
-									<p className="mt-1 text-sm text-muted-foreground">
-										{event.name}
-									</p>
-								)}
+						<div className="flex items-center justify-between">
+							<div className="flex items-center gap-3">
+								<div
+									className={`w-3 h-3 rounded-full ${event.active ? "bg-green-500" : "bg-orange-500"}`}
+								/>
+								<span className="font-medium">
+									{event.active ? "Active" : "Inactive"}
+								</span>
 							</div>
-							<div>
-								<Label>Description</Label>
-								{isEditing ? (
-									<Textarea
-										value={formData.description}
-										onChange={(e) =>
-											handleInputChange("description", e.target.value)
-										}
-										rows={3}
-									/>
-								) : (
-									<p className="mt-1 text-sm text-muted-foreground">
-										{event.description || "No description provided"}
-									</p>
-								)}
-							</div>
-							{uiEventTypeSet.has(formData.event_type) || isPageTargetEvent ? (
-								<div>
-									<Label>Route Path</Label>
-									{isEditing ? (
-										<div className="space-y-1">
-											<Input
-												value={routePathDraft}
-												onChange={(e) => setRoutePathDraft(e.target.value)}
-												placeholder="/"
-											/>
-											{routePathError && (
-												<p className="text-xs text-destructive">
-													{routePathError}
-												</p>
-											)}
-											<p className="text-xs text-muted-foreground">
-												Used for path-based navigation. Must be unique.
-											</p>
-										</div>
+							{isEditing && (
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => handleInputChange("active", !formData.active)}
+									className="gap-2"
+								>
+									{formData.active ? (
+										<>
+											<Pause className="h-4 w-4" />
+											Deactivate
+										</>
 									) : (
-										<p className="mt-1 text-sm text-muted-foreground font-mono">
-											{routeForEvent?.path ?? "No route configured"}
+										<>
+											<Play className="h-4 w-4" />
+											Activate
+										</>
+									)}
+								</Button>
+							)}
+						</div>
+					</CardContent>
+				</Card>
+
+				{/* Main Configuration */}
+				<div className="space-y-8">
+					{/* Top Row - Essential Information */}
+					<div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+						{/* Basic Information */}
+						<Card>
+							<CardHeader>
+								<CardTitle className="flex items-center gap-2">
+									<FileTextIcon className="h-5 w-5" />
+									Basic Information
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-4">
+								<div>
+									<Label>Event Name</Label>
+									{isEditing ? (
+										<Input
+											type="text"
+											value={formData.name}
+											onChange={(e) =>
+												handleInputChange("name", e.target.value)
+											}
+										/>
+									) : (
+										<p className="mt-1 text-sm text-muted-foreground">
+											{event.name}
 										</p>
 									)}
 								</div>
-							) : null}
-							<div>
-								<Label>Event ID</Label>
-								<p className="mt-1 text-sm text-muted-foreground font-mono">
-									{event.id}
-								</p>
-							</div>
-						</CardContent>
-					</Card>
-
-					{/* Flow Configuration */}
-					<Card>
-						<CardHeader>
-							<CardTitle className="flex items-center gap-2">
-								<LayersIcon className="h-5 w-5" />
-								{event.default_page_id ? "Page Configuration" : "Flow Configuration"}
-							</CardTitle>
-						</CardHeader>
-						{!isEditing && event.default_page_id && (
-							<CardContent className="space-y-4">
 								<div>
-									<Label className="group flex items-center hover:underline">
-										<Link
-											title="Open Page Editor"
-											className="flex flex-row items-center"
-											href={`/library/config/page-editor?id=${appId}&pageId=${event.default_page_id}`}
-										>
-											Page
-											<Button
-												size={"icon"}
-												variant={"ghost"}
-												className="p-0! w-4 h-4 ml-1 mb-[0.1rem]"
-											>
-												<ExternalLinkIcon className="w-4 h-4 group-hover:text-primary" />
-											</Button>
-										</Link>
-									</Label>
-									<p className="mt-1 text-sm text-muted-foreground font-mono">
-										{event.default_page_id}
-									</p>
-								</div>
-							</CardContent>
-						)}
-						{!isEditing && !event.default_page_id && (
-							<CardContent className="space-y-4">
-								<div>
-									<Label>Flow</Label>
-									<p className="mt-1 text-sm text-muted-foreground font-mono">
-										{board.data?.name ?? "BOARD NOT FOUND!"}
-									</p>
-								</div>
-								<div>
-									<Label>Flow Version</Label>
-									<p className="mt-1 text-sm text-muted-foreground">
-										{event.board_version
-											? event.board_version.join(".")
-											: "Latest"}
-									</p>
-								</div>
-								<div>
-									<Label className="group flex items-center hover:underline">
-										<Link
-											title="Open Flow and Node"
-											className="flex flex-row items-center"
-											href={`/flow?id=${event.board_id}&app=${appId}&node=${event.node_id}${event.board_version ? `&version=${event.board_version.join("_")}` : ""}`}
-										>
-											Node ID
-											<Button
-												size={"icon"}
-												variant={"ghost"}
-												className="p-0! w-4 h-4 ml-1 mb-[0.1rem]"
-											>
-												<ExternalLinkIcon className="w-4 h-4 group-hover:text-primary" />
-											</Button>
-										</Link>
-									</Label>
-									<p className="mt-1 text-sm text-muted-foreground font-mono">
-										{board.data?.nodes?.[event.node_id]?.friendly_name ??
-											"Node not found"}{" "}
-										({event.node_id})
-									</p>
-								</div>
-							</CardContent>
-						)}
-						{isEditing && isPageTargetEvent && (
-							<CardContent className="space-y-4">
-								{/* Page Selection */}
-								<div className="space-y-2">
-									<Label htmlFor="page">Page</Label>
-									<Select
-										value={formData.default_page_id ?? ""}
-										onValueChange={(value) => {
-											handleInputChange("default_page_id", value);
-											const page = (pages.data ?? []).find((p: PageListItem) => p.pageId === value);
-											if (page?.boardId) {
-												handleInputChange("board_id", page.boardId);
+									<Label>Description</Label>
+									{isEditing ? (
+										<Textarea
+											value={formData.description}
+											onChange={(e) =>
+												handleInputChange("description", e.target.value)
 											}
-										}}
-									>
-										<SelectTrigger>
-											<SelectValue placeholder="Select a page" />
-										</SelectTrigger>
-										<SelectContent>
-											{(pages.data ?? []).map((p: PageListItem) => (
-												<SelectItem key={p.pageId} value={p.pageId}>
-													{p.name}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
+											rows={3}
+										/>
+									) : (
+										<p className="mt-1 text-sm text-muted-foreground">
+											{event.description || "No description provided"}
+										</p>
+									)}
+								</div>
+								{uiEventTypeSet.has(formData.event_type) ||
+								isPageTargetEvent ? (
+									<div>
+										<Label>Route Path</Label>
+										{isEditing ? (
+											<div className="space-y-1">
+												<Input
+													value={routePathDraft}
+													onChange={(e) => setRoutePathDraft(e.target.value)}
+													placeholder="/"
+												/>
+												{routePathError && (
+													<p className="text-xs text-destructive">
+														{routePathError}
+													</p>
+												)}
+												<p className="text-xs text-muted-foreground">
+													Used for path-based navigation. Must be unique.
+												</p>
+											</div>
+										) : (
+											<p className="mt-1 text-sm text-muted-foreground font-mono">
+												{routeForEvent?.path ?? "No route configured"}
+											</p>
+										)}
+									</div>
+								) : null}
+								<div>
+									<Label>Event ID</Label>
+									<p className="mt-1 text-sm text-muted-foreground font-mono">
+										{event.id}
+									</p>
 								</div>
 							</CardContent>
-						)}
-						{isEditing && !isPageTargetEvent && (
-							<CardContent className="space-y-4">
-								{/* Board Selection */}
-								<div className="space-y-4">
-									<div className="space-y-2">
-										<Label htmlFor="board">Flow</Label>
-										<Select
-											value={formData.board_id}
-											onValueChange={(value) => {
-												handleInputChange("board_id", value);
-												handleInputChange("board_version", undefined);
-												handleInputChange("node_id", undefined);
-											}}
-										>
-											<SelectTrigger>
-												<SelectValue placeholder="Select a board" />
-											</SelectTrigger>
-											<SelectContent>
-												{boards.data?.map((board) => (
-													<SelectItem key={board.id} value={board.id}>
-														{board.name}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
-								</div>
-								{/* Board Version Selection */}
-								<div className="space-y-4">
-									<div className="space-y-2">
-										<Label htmlFor="board">Flow Version</Label>
-										<Select
-											value={formData.board_version?.join(".") ?? ""}
-											onValueChange={(value) => {
-												handleInputChange(
-													"board_version",
-													value === "" || value === "none"
-														? undefined
-														: value.split(".").map(Number),
-												);
-												handleInputChange("node_id", undefined);
-											}}
-										>
-											<SelectTrigger>
-												<SelectValue placeholder="Latest" />
-											</SelectTrigger>
-											<SelectContent>
-												{versions.data?.map((board) => (
-													<SelectItem
-														key={board.join(".")}
-														value={board.join(".")}
-													>
-														v{board.join(".")}
-													</SelectItem>
-												))}
-												<SelectItem key={""} value={"none"}>
-													Latest
-												</SelectItem>
-											</SelectContent>
-										</Select>
-									</div>
-								</div>
+						</Card>
 
-								{/* Node and Board Selection */}
-								{board.data && (
+						{/* Flow Configuration */}
+						<Card>
+							<CardHeader>
+								<CardTitle className="flex items-center gap-2">
+									<LayersIcon className="h-5 w-5" />
+									{event.default_page_id
+										? "Page Configuration"
+										: "Flow Configuration"}
+								</CardTitle>
+							</CardHeader>
+							{!isEditing && event.default_page_id && (
+								<CardContent className="space-y-4">
+									<div>
+										<Label className="group flex items-center hover:underline">
+											<Link
+												title="Open Page Editor"
+												className="flex flex-row items-center"
+												href={`/library/config/page-editor?id=${appId}&pageId=${event.default_page_id}`}
+											>
+												Page
+												<Button
+													size={"icon"}
+													variant={"ghost"}
+													className="p-0! w-4 h-4 ml-1 mb-[0.1rem]"
+												>
+													<ExternalLinkIcon className="w-4 h-4 group-hover:text-primary" />
+												</Button>
+											</Link>
+										</Label>
+										<p className="mt-1 text-sm text-muted-foreground font-mono">
+											{event.default_page_id}
+										</p>
+									</div>
+								</CardContent>
+							)}
+							{!isEditing && !event.default_page_id && (
+								<CardContent className="space-y-4">
+									<div>
+										<Label>Flow</Label>
+										<p className="mt-1 text-sm text-muted-foreground font-mono">
+											{board.data?.name ?? "BOARD NOT FOUND!"}
+										</p>
+									</div>
+									<div>
+										<Label>Flow Version</Label>
+										<p className="mt-1 text-sm text-muted-foreground">
+											{event.board_version
+												? event.board_version.join(".")
+												: "Latest"}
+										</p>
+									</div>
+									<div>
+										<Label className="group flex items-center hover:underline">
+											<Link
+												title="Open Flow and Node"
+												className="flex flex-row items-center"
+												href={`/flow?id=${event.board_id}&app=${appId}&node=${event.node_id}${event.board_version ? `&version=${event.board_version.join("_")}` : ""}`}
+											>
+												Node ID
+												<Button
+													size={"icon"}
+													variant={"ghost"}
+													className="p-0! w-4 h-4 ml-1 mb-[0.1rem]"
+												>
+													<ExternalLinkIcon className="w-4 h-4 group-hover:text-primary" />
+												</Button>
+											</Link>
+										</Label>
+										<p className="mt-1 text-sm text-muted-foreground font-mono">
+											{board.data?.nodes?.[event.node_id]?.friendly_name ??
+												"Node not found"}{" "}
+											({event.node_id})
+										</p>
+									</div>
+								</CardContent>
+							)}
+							{isEditing && isPageTargetEvent && (
+								<CardContent className="space-y-4">
+									{/* Page Selection */}
+									<div className="space-y-2">
+										<Label htmlFor="page">Page</Label>
+										<Select
+											value={formData.default_page_id ?? ""}
+											onValueChange={(value) => {
+												handleInputChange("default_page_id", value);
+												const page = (pages.data ?? []).find(
+													(p: PageListItem) => p.pageId === value,
+												);
+												if (page?.boardId) {
+													handleInputChange("board_id", page.boardId);
+												}
+											}}
+										>
+											<SelectTrigger>
+												<SelectValue placeholder="Select a page" />
+											</SelectTrigger>
+											<SelectContent>
+												{(pages.data ?? []).map((p: PageListItem) => (
+													<SelectItem key={p.pageId} value={p.pageId}>
+														{p.name}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+								</CardContent>
+							)}
+							{isEditing && !isPageTargetEvent && (
+								<CardContent className="space-y-4">
+									{/* Board Selection */}
 									<div className="space-y-4">
 										<div className="space-y-2">
-											<Label htmlFor="node">Node</Label>
+											<Label htmlFor="board">Flow</Label>
 											<Select
-												value={formData.node_id}
-												onValueChange={(value) =>
-													handleInputChange("node_id", value)
-												}
+												value={formData.board_id}
+												onValueChange={(value) => {
+													handleInputChange("board_id", value);
+													handleInputChange("board_version", undefined);
+													handleInputChange("node_id", undefined);
+												}}
 											>
 												<SelectTrigger>
-													<SelectValue placeholder="Select a node" />
+													<SelectValue placeholder="Select a board" />
 												</SelectTrigger>
 												<SelectContent>
-													{Object.values(board.data.nodes)
-														.filter((node) => node.start)
-														.map((node) => (
-															<SelectItem key={node.id} value={node.id}>
-																{node?.friendly_name || node?.name}
-															</SelectItem>
-														))}
+													{boards.data?.map((board) => (
+														<SelectItem key={board.id} value={board.id}>
+															{board.name}
+														</SelectItem>
+													))}
 												</SelectContent>
 											</Select>
 										</div>
 									</div>
-								)}
-							</CardContent>
-						)}
-					</Card>
-				</div>
-
-				{/* Version Information - Single row for metadata */}
-				<Card>
-					<CardHeader>
-						<CardTitle className="flex items-center gap-2">
-							<GitBranchIcon className="h-5 w-5" />
-							Version Information
-						</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-							<div>
-								<Label>Event Version</Label>
-								<p className="mt-1 text-sm text-muted-foreground">
-									{event.event_version.join(".")}
-								</p>
-							</div>
-							<div>
-								<Label>Created</Label>
-								<p className="mt-1 text-sm text-muted-foreground">
-									{new Date(
-										event.created_at.secs_since_epoch * 1000,
-									).toLocaleString()}
-								</p>
-							</div>
-							<div>
-								<Label>Last Updated</Label>
-								<p className="mt-1 text-sm text-muted-foreground">
-									{new Date(
-										event.updated_at.secs_since_epoch * 1000,
-									).toLocaleString()}
-								</p>
-							</div>
-						</div>
-					</CardContent>
-				</Card>
-
-				{/* Inputs - Show saved inputs and drift detection */}
-				{event.node_id && (
-					<Card>
-						<CardHeader>
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<FormInputIcon className="h-5 w-5" />
-									<CardTitle>Inputs</CardTitle>
-									{inputsDrift?.hasDrift && (
-										<Badge variant="destructive" className="ml-2">
-											<AlertTriangle className="h-3 w-3 mr-1" />
-											Drift Detected
-										</Badge>
-									)}
-								</div>
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={handleRefreshInputs}
-									disabled={isRefreshingInputs}
-									className="gap-2"
-								>
-									{isRefreshingInputs ? (
-										<Loader2 className="h-4 w-4 animate-spin" />
-									) : (
-										<RefreshCw className="h-4 w-4" />
-									)}
-									Refresh from Node
-								</Button>
-							</div>
-							<CardDescription>
-								Input pins captured at publish time. Changes to the node since then are shown below.
-							</CardDescription>
-						</CardHeader>
-						<CardContent className="space-y-4">
-							{inputsDrift?.isEmpty && !inputsDrift?.hasDrift && (
-								<p className="text-sm text-muted-foreground">
-									No input pins were captured for this event. Click "Refresh from Node" to sync.
-								</p>
-							)}
-
-							{inputsDrift?.hasDrift && (
-								<div className="space-y-3 p-3 bg-destructive/10 rounded-md border border-destructive/20">
-									<p className="text-sm font-medium text-destructive">
-										The node's inputs have changed since this event was published:
-									</p>
-									{inputsDrift.added.length > 0 && (
-										<div className="text-sm">
-											<span className="font-medium text-green-600">Added: </span>
-											{inputsDrift.added.map(p => p.friendly_name || p.name).join(", ")}
+									{/* Board Version Selection */}
+									<div className="space-y-4">
+										<div className="space-y-2">
+											<Label htmlFor="board">Flow Version</Label>
+											<Select
+												value={formData.board_version?.join(".") ?? ""}
+												onValueChange={(value) => {
+													handleInputChange(
+														"board_version",
+														value === "" || value === "none"
+															? undefined
+															: value.split(".").map(Number),
+													);
+													handleInputChange("node_id", undefined);
+												}}
+											>
+												<SelectTrigger>
+													<SelectValue placeholder="Latest" />
+												</SelectTrigger>
+												<SelectContent>
+													{versions.data?.map((board) => (
+														<SelectItem
+															key={board.join(".")}
+															value={board.join(".")}
+														>
+															v{board.join(".")}
+														</SelectItem>
+													))}
+													<SelectItem key={""} value={"none"}>
+														Latest
+													</SelectItem>
+												</SelectContent>
+											</Select>
 										</div>
-									)}
-									{inputsDrift.removed.length > 0 && (
-										<div className="text-sm">
-											<span className="font-medium text-red-600">Removed: </span>
-											{inputsDrift.removed.map(i => i.friendly_name || i.name).join(", ")}
-										</div>
-									)}
-									{inputsDrift.changed.length > 0 && (
-										<div className="text-sm">
-											<span className="font-medium text-yellow-600">Changed: </span>
-											{inputsDrift.changed.map(c => `${c.name} (${c.field})`).join(", ")}
-										</div>
-									)}
-								</div>
-							)}
-
-							{(event.inputs ?? []).length > 0 && (
-								<div className="space-y-2">
-									<Label className="text-sm font-medium">Captured Inputs ({event.inputs?.length ?? 0})</Label>
-									<div className="grid gap-2">
-										{(event.inputs ?? []).map((input) => {
-											// Don't show description if it looks like an ID (all digits) or is too long
-											const showDescription = input.description &&
-												!/^\d+$/.test(input.description) &&
-												input.description.length < 100;
-											return (
-												<div key={input.id} className="flex items-start gap-3 p-3 bg-muted/50 rounded-md text-sm">
-													<div className="flex items-center gap-2 shrink-0">
-														<span className="font-medium">{input.friendly_name || input.name}</span>
-														<Badge variant="secondary" className="text-xs">{input.data_type}</Badge>
-														{input.value_type !== "Normal" && (
-															<Badge variant="outline" className="text-xs">{input.value_type}</Badge>
-														)}
-													</div>
-													{showDescription && (
-														<span className="text-muted-foreground text-xs">{input.description}</span>
-													)}
-												</div>
-											);
-										})}
 									</div>
-								</div>
-							)}
-						</CardContent>
-					</Card>
-				)}
 
-				{/* Variables - Full width due to potential size */}
-				<Card>
-					<CardHeader>
-						<div className="flex items-center justify-between">
-							<CardTitle className="flex flex-row items-center gap-2">
-								<CodeIcon className="h-5 w-5" />
-								<p>Variables</p>
-							</CardTitle>
-							{isEditing && (
-								<Dialog>
-									<DialogTrigger asChild>
-										<Button variant="outline" className="gap-2 ml-2">
-											<Plus className="h-4 w-4" />
-											Add Flow Variables
-										</Button>
-									</DialogTrigger>
-									<DialogContent className="max-w-lg">
-										<DialogHeader>
-											<DialogTitle>Add Flow Variables</DialogTitle>
-											<DialogDescription>
-												Select flow variables to override in this event
-												configuration
-											</DialogDescription>
-										</DialogHeader>
-										<div className="space-y-2 max-h-80 overflow-y-auto">
-											{board.data?.variables &&
-												Object.entries(board.data.variables)
-													.filter(([_, variable]) => variable.exposed)
-													.map(([key, variable]) => {
-														const isAlreadyAdded =
-															formData.variables.hasOwnProperty(key);
-														return (
-															<div
-																key={key}
-																className="flex items-center justify-between p-3 border rounded"
-															>
-																<div className="flex-1">
-																	<div className="flex flex-row items-center gap-2">
-																		<VariableTypeIndicator
-																			valueType={variable.data_type}
-																			type={variable.value_type}
-																		/>
-																		<div className="font-medium text-sm">
-																			{variable.name}
-																		</div>
-																	</div>
-																	{variable.default_value && (
-																		<div className="text-xs text-muted-foreground mt-1">
-																			Default:{" "}
-																			<span>
-																				{String(
-																					parseUint8ArrayToJson(
-																						variable.default_value,
-																					),
-																				)}
-																			</span>
-																		</div>
-																	)}
-																</div>
-																<Button
-																	variant={
-																		isAlreadyAdded ? "outline" : "default"
-																	}
-																	size="sm"
-																	onClick={() => {
-																		if (isAlreadyAdded) {
-																			const newVars = { ...formData.variables };
-																			delete newVars[key];
-																			handleInputChange("variables", newVars);
-																		} else {
-																			handleInputChange("variables", {
-																				...formData.variables,
-																				[key]: variable,
-																			});
-																		}
-																	}}
-																>
-																	{isAlreadyAdded ? "Remove" : "Add"}
-																</Button>
-															</div>
-														);
-													})}
-											{(!board.data?.variables ||
-												Object.keys(board.data.variables).length === 0) && (
-												<div className="text-center py-8 text-muted-foreground">
-													No board variables available
-												</div>
-											)}
+									{/* Node and Board Selection */}
+									{board.data && (
+										<div className="space-y-4">
+											<div className="space-y-2">
+												<Label htmlFor="node">Node</Label>
+												<Select
+													value={formData.node_id}
+													onValueChange={(value) =>
+														handleInputChange("node_id", value)
+													}
+												>
+													<SelectTrigger>
+														<SelectValue placeholder="Select a node" />
+													</SelectTrigger>
+													<SelectContent>
+														{Object.values(board.data.nodes)
+															.filter((node) => node.start)
+															.map((node) => (
+																<SelectItem key={node.id} value={node.id}>
+																	{node?.friendly_name || node?.name}
+																</SelectItem>
+															))}
+													</SelectContent>
+												</Select>
+											</div>
 										</div>
-									</DialogContent>
-								</Dialog>
+									)}
+								</CardContent>
 							)}
-						</div>
-					</CardHeader>
-					<CardContent>
-						{Object.keys(formData.variables).length > 0 ? (
-							<div className="space-y-2">
-								{Object.entries(formData.variables).map(([key, value]) => (
-									<VariableConfigCard
-										disabled={!isEditing}
-										key={key}
-										variable={value}
-										onUpdate={async (variable) => {
-											if (!isEditing) setIsEditing(true);
-											const newVars = {
-												...formData.variables,
-												[key]: {
-													...variable,
-													default_value: variable.default_value,
-												},
-											};
-											handleInputChange("variables", newVars);
-										}}
-									/>
-								))}
-							</div>
-						) : (
-							<p className="text-sm text-muted-foreground">
-								{isEditing
-									? "No variables configured. Click 'Add Flow Variables' to get started."
-									: "No variables configured"}
-							</p>
-						)}
-					</CardContent>
-				</Card>
+						</Card>
+					</div>
 
-				{/* Node Specific Configuration - Full width due to potential size */}
-				{board.data && (
+					{/* Version Information - Single row for metadata */}
 					<Card>
 						<CardHeader>
 							<CardTitle className="flex items-center gap-2">
-								<CogIcon className="h-5 w-5" />
-								Node Configuration
-							</CardTitle>
-						</CardHeader>
-						<CardContent className="space-y-4 flex flex-col items-start">
-							<EventTranslation
-								appId={appId}
-								eventType={formData.event_type}
-								eventConfig={eventMapping}
-								editing={isEditing}
-								config={parseUint8ArrayToJson(event.config ?? []) ?? {}}
-								board={board.data}
-								nodeId={formData.node_id}
-								onUpdate={(config) => {
-									console.dir(config);
-									if (!isEditing) setIsEditing(true);
-									handleInputChange("config", convertJsonToUint8Array(config));
-								}}
-							/>
-						</CardContent>
-					</Card>
-				)}
-
-				{/* Notes Section - Full width at bottom */}
-				{(event.notes || isEditing) && (
-					<Card>
-						<CardHeader>
-							<CardTitle className="flex items-center gap-2">
-								<StickyNote className="h-5 w-5" />
-								Notes
+								<GitBranchIcon className="h-5 w-5" />
+								Version Information
 							</CardTitle>
 						</CardHeader>
 						<CardContent>
-							{isEditing ? (
-								<Textarea
-									value={formData.notes?.NOTES ?? ""}
-									onChange={(e) =>
-										handleInputChange("notes", { NOTES: e.target.value })
-									}
-									placeholder="Add notes about this event..."
-									rows={4}
-								/>
+							<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+								<div>
+									<Label>Event Version</Label>
+									<p className="mt-1 text-sm text-muted-foreground">
+										{event.event_version.join(".")}
+									</p>
+								</div>
+								<div>
+									<Label>Created</Label>
+									<p className="mt-1 text-sm text-muted-foreground">
+										{new Date(
+											event.created_at.secs_since_epoch * 1000,
+										).toLocaleString()}
+									</p>
+								</div>
+								<div>
+									<Label>Last Updated</Label>
+									<p className="mt-1 text-sm text-muted-foreground">
+										{new Date(
+											event.updated_at.secs_since_epoch * 1000,
+										).toLocaleString()}
+									</p>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+
+					{/* Inputs - Show saved inputs and drift detection */}
+					{event.node_id && (
+						<Card>
+							<CardHeader>
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<FormInputIcon className="h-5 w-5" />
+										<CardTitle>Inputs</CardTitle>
+										{inputsDrift?.hasDrift && (
+											<Badge variant="destructive" className="ml-2">
+												<AlertTriangle className="h-3 w-3 mr-1" />
+												Drift Detected
+											</Badge>
+										)}
+									</div>
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={handleRefreshInputs}
+										disabled={isRefreshingInputs}
+										className="gap-2"
+									>
+										{isRefreshingInputs ? (
+											<Loader2 className="h-4 w-4 animate-spin" />
+										) : (
+											<RefreshCw className="h-4 w-4" />
+										)}
+										Refresh from Node
+									</Button>
+								</div>
+								<CardDescription>
+									Input pins captured at publish time. Changes to the node since
+									then are shown below.
+								</CardDescription>
+							</CardHeader>
+							<CardContent className="space-y-4">
+								{inputsDrift?.isEmpty && !inputsDrift?.hasDrift && (
+									<p className="text-sm text-muted-foreground">
+										No input pins were captured for this event. Click "Refresh
+										from Node" to sync.
+									</p>
+								)}
+
+								{inputsDrift?.hasDrift && (
+									<div className="space-y-3 p-3 bg-destructive/10 rounded-md border border-destructive/20">
+										<p className="text-sm font-medium text-destructive">
+											The node's inputs have changed since this event was
+											published:
+										</p>
+										{inputsDrift.added.length > 0 && (
+											<div className="text-sm">
+												<span className="font-medium text-green-600">
+													Added:{" "}
+												</span>
+												{inputsDrift.added
+													.map((p) => p.friendly_name || p.name)
+													.join(", ")}
+											</div>
+										)}
+										{inputsDrift.removed.length > 0 && (
+											<div className="text-sm">
+												<span className="font-medium text-red-600">
+													Removed:{" "}
+												</span>
+												{inputsDrift.removed
+													.map((i) => i.friendly_name || i.name)
+													.join(", ")}
+											</div>
+										)}
+										{inputsDrift.changed.length > 0 && (
+											<div className="text-sm">
+												<span className="font-medium text-yellow-600">
+													Changed:{" "}
+												</span>
+												{inputsDrift.changed
+													.map((c) => `${c.name} (${c.field})`)
+													.join(", ")}
+											</div>
+										)}
+									</div>
+								)}
+
+								{(event.inputs ?? []).length > 0 && (
+									<div className="space-y-2">
+										<Label className="text-sm font-medium">
+											Captured Inputs ({event.inputs?.length ?? 0})
+										</Label>
+										<div className="grid gap-2">
+											{(event.inputs ?? []).map((input) => {
+												// Don't show description if it looks like an ID (all digits) or is too long
+												const showDescription =
+													input.description &&
+													!/^\d+$/.test(input.description) &&
+													input.description.length < 100;
+												return (
+													<div
+														key={input.id}
+														className="flex items-start gap-3 p-3 bg-muted/50 rounded-md text-sm"
+													>
+														<div className="flex items-center gap-2 shrink-0">
+															<span className="font-medium">
+																{input.friendly_name || input.name}
+															</span>
+															<Badge variant="secondary" className="text-xs">
+																{input.data_type}
+															</Badge>
+															{input.value_type !== "Normal" && (
+																<Badge variant="outline" className="text-xs">
+																	{input.value_type}
+																</Badge>
+															)}
+														</div>
+														{showDescription && (
+															<span className="text-muted-foreground text-xs">
+																{input.description}
+															</span>
+														)}
+													</div>
+												);
+											})}
+										</div>
+									</div>
+								)}
+							</CardContent>
+						</Card>
+					)}
+
+					{/* Variables - Full width due to potential size */}
+					<Card>
+						<CardHeader>
+							<div className="flex items-center justify-between">
+								<CardTitle className="flex flex-row items-center gap-2">
+									<CodeIcon className="h-5 w-5" />
+									<p>Variables</p>
+								</CardTitle>
+								{isEditing && (
+									<Dialog>
+										<DialogTrigger asChild>
+											<Button variant="outline" className="gap-2 ml-2">
+												<Plus className="h-4 w-4" />
+												Add Flow Variables
+											</Button>
+										</DialogTrigger>
+										<DialogContent className="max-w-lg">
+											<DialogHeader>
+												<DialogTitle>Add Flow Variables</DialogTitle>
+												<DialogDescription>
+													Select flow variables to override in this event
+													configuration
+												</DialogDescription>
+											</DialogHeader>
+											<div className="space-y-2 max-h-80 overflow-y-auto">
+												{board.data?.variables &&
+													Object.entries(board.data.variables)
+														.filter(([_, variable]) => variable.exposed)
+														.map(([key, variable]) => {
+															const isAlreadyAdded =
+																formData.variables.hasOwnProperty(key);
+															return (
+																<div
+																	key={key}
+																	className="flex items-center justify-between p-3 border rounded"
+																>
+																	<div className="flex-1">
+																		<div className="flex flex-row items-center gap-2">
+																			<VariableTypeIndicator
+																				valueType={variable.data_type}
+																				type={variable.value_type}
+																			/>
+																			<div className="font-medium text-sm">
+																				{variable.name}
+																			</div>
+																		</div>
+																		{variable.default_value && (
+																			<div className="text-xs text-muted-foreground mt-1">
+																				Default:{" "}
+																				<span>
+																					{String(
+																						parseUint8ArrayToJson(
+																							variable.default_value,
+																						),
+																					)}
+																				</span>
+																			</div>
+																		)}
+																	</div>
+																	<Button
+																		variant={
+																			isAlreadyAdded ? "outline" : "default"
+																		}
+																		size="sm"
+																		onClick={() => {
+																			if (isAlreadyAdded) {
+																				const newVars = {
+																					...formData.variables,
+																				};
+																				delete newVars[key];
+																				handleInputChange("variables", newVars);
+																			} else {
+																				handleInputChange("variables", {
+																					...formData.variables,
+																					[key]: variable,
+																				});
+																			}
+																		}}
+																	>
+																		{isAlreadyAdded ? "Remove" : "Add"}
+																	</Button>
+																</div>
+															);
+														})}
+												{(!board.data?.variables ||
+													Object.keys(board.data.variables).length === 0) && (
+													<div className="text-center py-8 text-muted-foreground">
+														No board variables available
+													</div>
+												)}
+											</div>
+										</DialogContent>
+									</Dialog>
+								)}
+							</div>
+						</CardHeader>
+						<CardContent>
+							{Object.keys(formData.variables).length > 0 ? (
+								<div className="space-y-2">
+									{Object.entries(formData.variables).map(([key, value]) => (
+										<VariableConfigCard
+											disabled={!isEditing}
+											key={key}
+											variable={value}
+											onUpdate={async (variable) => {
+												if (!isEditing) setIsEditing(true);
+												const newVars = {
+													...formData.variables,
+													[key]: {
+														...variable,
+														default_value: variable.default_value,
+													},
+												};
+												handleInputChange("variables", newVars);
+											}}
+										/>
+									))}
+								</div>
 							) : (
-								<p className="text-sm text-muted-foreground whitespace-pre-wrap">
-									{event.notes?.NOTES ?? "No notes added"}
+								<p className="text-sm text-muted-foreground">
+									{isEditing
+										? "No variables configured. Click 'Add Flow Variables' to get started."
+										: "No variables configured"}
 								</p>
 							)}
 						</CardContent>
 					</Card>
-				)}
-			</div>
+
+					{/* Node Specific Configuration - Full width due to potential size */}
+					{board.data && (
+						<Card>
+							<CardHeader>
+								<CardTitle className="flex items-center gap-2">
+									<CogIcon className="h-5 w-5" />
+									Node Configuration
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-4 flex flex-col items-start">
+								<EventTranslation
+									appId={appId}
+									eventType={formData.event_type}
+									eventConfig={eventMapping}
+									editing={isEditing}
+									config={parseUint8ArrayToJson(event.config ?? []) ?? {}}
+									board={board.data}
+									nodeId={formData.node_id}
+									onUpdate={(config) => {
+										console.dir(config);
+										if (!isEditing) setIsEditing(true);
+										handleInputChange(
+											"config",
+											convertJsonToUint8Array(config),
+										);
+									}}
+								/>
+							</CardContent>
+						</Card>
+					)}
+
+					{/* Notes Section - Full width at bottom */}
+					{(event.notes || isEditing) && (
+						<Card>
+							<CardHeader>
+								<CardTitle className="flex items-center gap-2">
+									<StickyNote className="h-5 w-5" />
+									Notes
+								</CardTitle>
+							</CardHeader>
+							<CardContent>
+								{isEditing ? (
+									<Textarea
+										value={formData.notes?.NOTES ?? ""}
+										onChange={(e) =>
+											handleInputChange("notes", { NOTES: e.target.value })
+										}
+										placeholder="Add notes about this event..."
+										rows={4}
+									/>
+								) : (
+									<p className="text-sm text-muted-foreground whitespace-pre-wrap">
+										{event.notes?.NOTES ?? "No notes added"}
+									</p>
+								)}
+							</CardContent>
+						</Card>
+					)}
+				</div>
 			</div>
 
 			{/* PAT Selector Dialog */}
@@ -2015,7 +2139,10 @@ function EventsTable({
 }: Readonly<IEventsTableProps>) {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
-	const uiEventTypeSet = useMemo(() => new Set(uiEventTypes ?? []), [uiEventTypes]);
+	const uiEventTypeSet = useMemo(
+		() => new Set(uiEventTypes ?? []),
+		[uiEventTypes],
+	);
 	const normalizePath = useCallback((path: unknown): string => {
 		const raw = String(path ?? "").trim();
 		if (!raw) return "/";
@@ -2721,7 +2848,8 @@ function EventsTable({
 										);
 										const sinkActive = sinkStatuses.get(event.id);
 										const isPageTargetEvent = !!event.default_page_id;
-										const isUiEvent = uiEventTypeSet.has(event.event_type) || isPageTargetEvent;
+										const isUiEvent =
+											uiEventTypeSet.has(event.event_type) || isPageTargetEvent;
 										const routePath = routeByEventId.get(event.id);
 
 										return (

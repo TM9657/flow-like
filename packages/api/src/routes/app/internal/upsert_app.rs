@@ -113,9 +113,9 @@ pub async fn upsert_app(
             sub,
             app_id
         );
-        return Err(ApiError::internal_error(
-            anyhow!("Meta is required for new apps"),
-        ));
+        return Err(ApiError::internal_error(anyhow!(
+            "Meta is required for new apps"
+        )));
     };
 
     if tier.max_non_visible_projects == 0 {

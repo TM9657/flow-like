@@ -263,10 +263,16 @@ async fn submit_solution(
     };
 
     new_solution.insert(&state.db).await?;
-    alerting::send_alert_email(&state, "New 24-Hour Solution Request", format!(
-        "A new 24-hour solution request has been submitted by {} ({}).",
-        submission.company, submission.email
-    )).await.ok();
+    alerting::send_alert_email(
+        &state,
+        "New 24-Hour Solution Request",
+        format!(
+            "A new 24-hour solution request has been submitted by {} ({}).",
+            submission.company, submission.email
+        ),
+    )
+    .await
+    .ok();
 
     tracing::info!(
         submission_id = %submission_id,

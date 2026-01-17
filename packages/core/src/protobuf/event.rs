@@ -142,7 +142,11 @@ impl FromProto<flow_like_types::proto::Event> for Event {
                 .unwrap_or(SystemTime::UNIX_EPOCH),
             event_type: proto.event_type,
             default_page_id: proto.default_page_id,
-            inputs: proto.inputs.into_iter().map(EventInput::from_proto).collect(),
+            inputs: proto
+                .inputs
+                .into_iter()
+                .map(EventInput::from_proto)
+                .collect(),
         }
     }
 }

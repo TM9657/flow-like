@@ -42,6 +42,7 @@
 //! ```
 
 pub mod abi;
+pub mod client;
 pub mod engine;
 pub mod error;
 pub mod host_functions;
@@ -52,21 +53,21 @@ pub mod memory;
 pub mod module;
 pub mod node;
 pub mod registry;
-pub mod client;
 
 pub use abi::{WasmAbi, WASM_ABI_VERSION};
+pub use client::RegistryClient;
 pub use engine::{WasmConfig, WasmEngine};
 pub use error::{WasmError, WasmResult};
 pub use instance::WasmInstance;
 pub use limits::{WasmCapabilities, WasmLimits, WasmSecurityConfig};
+pub use manifest::{
+    MemoryTier, OAuthScopeRequirement, PackageManifest, PackagePermissions, TimeoutTier,
+};
 pub use memory::WasmMemory;
-pub use manifest::{MemoryTier, PackageManifest, PackagePermissions, TimeoutTier, OAuthScopeRequirement};
 pub use module::WasmModule;
 pub use node::WasmNodeLogic;
 pub use registry::{
-    CachedPackage, DownloadRequest, DownloadResponse, PackageSource, PackageStatus,
-    PackageSummary, PackageVersion, PublishRequest, PublishResponse, RegistryConfig,
-    RegistryEntry, RegistryIndex, SearchFilters, SearchResults, SortField,
+    CachedPackage, DownloadRequest, DownloadResponse, PackageSource, PackageStatus, PackageSummary,
+    PackageVersion, PublishRequest, PublishResponse, RegistryConfig, RegistryEntry, RegistryIndex,
+    SearchFilters, SearchResults, SortField,
 };
-pub use client::RegistryClient;
-

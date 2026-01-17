@@ -174,7 +174,9 @@ export default function PageBuilderPage() {
 				setPage(pageWithBoard);
 				pageRef.current = pageWithBoard;
 				// Store initial state for diff comparison
-				lastSavedComponentsRef.current = JSON.stringify(loadedPage.components ?? []);
+				lastSavedComponentsRef.current = JSON.stringify(
+					loadedPage.components ?? [],
+				);
 			} catch {
 				const newPage: IPage = {
 					id: pageId,
@@ -228,7 +230,11 @@ export default function PageBuilderPage() {
 	useEffect(() => {
 		if (!boardId) return;
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+			if (
+				(e.metaKey || e.ctrlKey) &&
+				e.shiftKey &&
+				e.key.toLowerCase() === "f"
+			) {
 				e.preventDefault();
 				router.push(`/board?id=${boardId}`);
 			}
@@ -238,7 +244,10 @@ export default function PageBuilderPage() {
 	}, [boardId, router]);
 
 	const performSave = useCallback(
-		async (components: SurfaceComponent[], widgetRefs?: Record<string, import("@tm9657/flow-like-ui").IWidgetRef>) => {
+		async (
+			components: SurfaceComponent[],
+			widgetRefs?: Record<string, import("@tm9657/flow-like-ui").IWidgetRef>,
+		) => {
 			const currentPage = pageRef.current;
 			if (!currentPage || !appId) return;
 
@@ -274,7 +283,10 @@ export default function PageBuilderPage() {
 
 	// Handle component changes from WidgetBuilder - triggers auto-save
 	const handleComponentsChange = useCallback(
-		(components: SurfaceComponent[], widgetRefs?: Record<string, import("@tm9657/flow-like-ui").IWidgetRef>) => {
+		(
+			components: SurfaceComponent[],
+			widgetRefs?: Record<string, import("@tm9657/flow-like-ui").IWidgetRef>,
+		) => {
 			// Check if there are actual changes using ref (avoid state dependency)
 			const componentsJson = JSON.stringify(components);
 			if (componentsJson === lastSavedComponentsRef.current) {
@@ -298,7 +310,10 @@ export default function PageBuilderPage() {
 
 	// Manual save (immediate, from toolbar)
 	const handleSave = useCallback(
-		async (components: SurfaceComponent[], widgetRefs?: Record<string, import("@tm9657/flow-like-ui").IWidgetRef>) => {
+		async (
+			components: SurfaceComponent[],
+			widgetRefs?: Record<string, import("@tm9657/flow-like-ui").IWidgetRef>,
+		) => {
 			// Clear any pending auto-save
 			if (autoSaveTimeoutRef.current) {
 				clearTimeout(autoSaveTimeoutRef.current);
@@ -498,14 +513,14 @@ export default function PageBuilderPage() {
 							backgroundColor: page.canvasSettings?.backgroundColor,
 							backgroundImage: page.canvasSettings?.backgroundImage,
 							padding: page.canvasSettings?.padding,
-									customCss: page.canvasSettings?.customCss,
+							customCss: page.canvasSettings?.customCss,
 						}}
 						onCanvasSettingsChange={(settings) => {
 							updatePageProperty("canvasSettings", {
 								backgroundColor: settings.backgroundColor,
 								backgroundImage: settings.backgroundImage,
 								padding: settings.padding,
-										customCss: settings.customCss,
+								customCss: settings.customCss,
 							});
 						}}
 					/>
@@ -709,7 +724,8 @@ function PageSettingsPanel({
 
 				{workflowEvents.length === 0 && (
 					<p className="text-sm text-muted-foreground">
-						No workflow events available. Create Simple Event nodes in your flow to use here.
+						No workflow events available. Create Simple Event nodes in your flow
+						to use here.
 					</p>
 				)}
 			</TabsContent>
@@ -755,7 +771,10 @@ function PageSettingsPanel({
 						<Input
 							value={page.canvasSettings?.backgroundColor || ""}
 							onChange={(e) =>
-								updateCanvasSettings("backgroundColor", e.target.value || undefined)
+								updateCanvasSettings(
+									"backgroundColor",
+									e.target.value || undefined,
+								)
 							}
 							placeholder="#ffffff or bg-background"
 							className="flex-1"
@@ -767,7 +786,10 @@ function PageSettingsPanel({
 					<Input
 						value={page.canvasSettings?.backgroundImage || ""}
 						onChange={(e) =>
-							updateCanvasSettings("backgroundImage", e.target.value || undefined)
+							updateCanvasSettings(
+								"backgroundImage",
+								e.target.value || undefined,
+							)
 						}
 						placeholder="URL or storage:// path"
 					/>

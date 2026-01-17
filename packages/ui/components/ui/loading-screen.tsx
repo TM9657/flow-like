@@ -101,7 +101,9 @@ export function LoadingScreen({
 			id: i,
 			x: seededRandom(i * 31 + 5) * 100,
 			y: seededRandom(i * 37 + 6) * 100,
-			icon: backgroundIcons[Math.floor(seededRandom(i * 41 + 7) * backgroundIcons.length)],
+			icon: backgroundIcons[
+				Math.floor(seededRandom(i * 41 + 7) * backgroundIcons.length)
+			],
 			animationDelay: seededRandom(i * 43 + 8) * 5,
 			animationDuration: 8 + seededRandom(i * 47 + 9) * 4,
 		}));
@@ -150,26 +152,27 @@ export function LoadingScreen({
 			</div>
 
 			{/* Background icon constellation */}
-			{isMounted && backgroundElements.map((element) => (
-				<div
-					key={element.id}
-					className="absolute animate-float-background"
-					style={{
-						left: `${element.x}%`,
-						top: `${element.y}%`,
-						animationDelay: `${element.animationDelay}s`,
-						animationDuration: `${element.animationDuration}s`,
-					}}
-				>
-					<element.icon.Icon
-						className={cn(
-							element.icon.size,
-							element.icon.color,
-							"animate-spin-very-slow",
-						)}
-					/>
-				</div>
-			))}
+			{isMounted &&
+				backgroundElements.map((element) => (
+					<div
+						key={element.id}
+						className="absolute animate-float-background"
+						style={{
+							left: `${element.x}%`,
+							top: `${element.y}%`,
+							animationDelay: `${element.animationDelay}s`,
+							animationDuration: `${element.animationDuration}s`,
+						}}
+					>
+						<element.icon.Icon
+							className={cn(
+								element.icon.size,
+								element.icon.color,
+								"animate-spin-very-slow",
+							)}
+						/>
+					</div>
+				))}
 
 			{/* Floating colorful icons */}
 			{floatingIcons.map(({ Icon, delay, color, size }, i) => (

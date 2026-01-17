@@ -16,4 +16,3 @@ pub use serde_arrow;
 // Re-export data lake formats
 #[cfg(feature = "delta")]
 pub use deltalake;
-

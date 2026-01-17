@@ -3,10 +3,9 @@
 use crate::{
     manifest::PackageManifest,
     registry::{
-        CacheMetadata, CachedPackage, DownloadRequest, DownloadResponse, InstalledPackage,
-        LocalRegistryState, PackageSource, PackageSummary, PackageVersion, PublishRequest,
-        PublishResponse, RegistryConfig, RegistryEntry, RegistryIndex, SearchFilters,
-        SearchResults,
+        CachedPackage, DownloadRequest, DownloadResponse, InstalledPackage, LocalRegistryState,
+        PackageSource, PackageSummary, PackageVersion, PublishRequest, PublishResponse,
+        RegistryConfig, RegistryEntry, RegistryIndex, SearchFilters, SearchResults,
     },
 };
 use anyhow::{anyhow, Result};
@@ -209,35 +208,35 @@ impl RegistryClient {
     ) -> Result<CachedPackage> {
         let state = self.state.read().await;
         if let Some(installed) = state.installed.get(package_id) {
-            if version.is_none() || version == Some(&installed.version) {
-                if installed.wasm_path.exists() {
-                    let wasm_data = tokio::fs::read(&installed.wasm_path).await?;
-                    return Ok(CachedPackage {
-                        entry: RegistryEntry {
-                            id: installed.id.clone(),
-                            manifest: installed.manifest.clone(),
-                            versions: vec![PackageVersion {
-                                version: installed.version.clone(),
-                                wasm_hash: String::new(),
-                                wasm_size: wasm_data.len() as u64,
-                                download_url: None,
-                                published_at: installed.installed_at,
-                                min_flow_like_version: None,
-                                release_notes: None,
-                                yanked: false,
-                            }],
-                            status: crate::registry::PackageStatus::Active,
-                            download_count: 0,
-                            created_at: installed.installed_at,
-                            updated_at: installed.installed_at,
-                            source: installed.source.clone(),
-                            verified: false,
-                        },
-                        wasm_data,
-                        cached_at: installed.installed_at,
-                        expires_at: None,
-                    });
-                }
+            if (version.is_none() || version == Some(&installed.version))
+                && installed.wasm_path.exists()
+            {
+                let wasm_data = tokio::fs::read(&installed.wasm_path).await?;
+                return Ok(CachedPackage {
+                    entry: RegistryEntry {
+                        id: installed.id.clone(),
+                        manifest: installed.manifest.clone(),
+                        versions: vec![PackageVersion {
+                            version: installed.version.clone(),
+                            wasm_hash: String::new(),
+                            wasm_size: wasm_data.len() as u64,
+                            download_url: None,
+                            published_at: installed.installed_at,
+                            min_flow_like_version: None,
+                            release_notes: None,
+                            yanked: false,
+                        }],
+                        status: crate::registry::PackageStatus::Active,
+                        download_count: 0,
+                        created_at: installed.installed_at,
+                        updated_at: installed.installed_at,
+                        source: installed.source.clone(),
+                        verified: false,
+                    },
+                    wasm_data,
+                    cached_at: installed.installed_at,
+                    expires_at: None,
+                });
             }
         }
         drop(state);
@@ -261,7 +260,10 @@ impl RegistryClient {
             // Download from CDN/signed URL
             let wasm_response = self.http_client.get(download_url).send().await?;
             if !wasm_response.status().is_success() {
-                return Err(anyhow!("Failed to download WASM from CDN: {}", wasm_response.status()));
+                return Err(anyhow!(
+                    "Failed to download WASM from CDN: {}",
+                    wasm_response.status()
+                ));
             }
             wasm_response.bytes().await?.to_vec()
         } else if !download.wasm_base64.is_empty() {

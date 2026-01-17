@@ -5,7 +5,9 @@ use crate::{
         event::Event,
     },
     state::FlowLikeState,
-    utils::compression::{compress_to_file, compress_to_file_json, from_compressed, from_compressed_json},
+    utils::compression::{
+        compress_to_file, compress_to_file_json, from_compressed, from_compressed_json,
+    },
 };
 use flow_like_storage::Path;
 use flow_like_types::{FromProto, ToProto, create_id, proto, sync::Mutex};
@@ -859,12 +861,14 @@ impl App {
                 let filename = entry.location.filename().unwrap_or_default();
                 if let Some(version_str) = filename.strip_suffix(".widget") {
                     let parts: Vec<&str> = version_str.split('-').collect();
-                    if parts.len() == 3 {
-                        if let (std::result::Result::Ok(major), std::result::Result::Ok(minor), std::result::Result::Ok(patch)) =
-                            (parts[0].parse(), parts[1].parse(), parts[2].parse())
-                        {
-                            versions.push((major, minor, patch));
-                        }
+                    if parts.len() == 3
+                        && let (
+                            std::result::Result::Ok(major),
+                            std::result::Result::Ok(minor),
+                            std::result::Result::Ok(patch),
+                        ) = (parts[0].parse(), parts[1].parse(), parts[2].parse())
+                    {
+                        versions.push((major, minor, patch));
                     }
                 }
             }
@@ -982,7 +986,10 @@ impl App {
     }
 
     /// Save/create a page
-    pub async fn save_page(&mut self, page: &crate::a2ui::widget::Page) -> flow_like_types::Result<()> {
+    pub async fn save_page(
+        &mut self,
+        page: &crate::a2ui::widget::Page,
+    ) -> flow_like_types::Result<()> {
         let state = self
             .app_state
             .clone()
@@ -1069,12 +1076,14 @@ impl App {
                 let filename = entry.location.filename().unwrap_or_default();
                 if let Some(version_str) = filename.strip_suffix(".page") {
                     let parts: Vec<&str> = version_str.split('-').collect();
-                    if parts.len() == 3 {
-                        if let (std::result::Result::Ok(major), std::result::Result::Ok(minor), std::result::Result::Ok(patch)) =
-                            (parts[0].parse(), parts[1].parse(), parts[2].parse())
-                        {
-                            versions.push((major, minor, patch));
-                        }
+                    if parts.len() == 3
+                        && let (
+                            std::result::Result::Ok(major),
+                            std::result::Result::Ok(minor),
+                            std::result::Result::Ok(patch),
+                        ) = (parts[0].parse(), parts[1].parse(), parts[2].parse())
+                    {
+                        versions.push((major, minor, patch));
                     }
                 }
             }

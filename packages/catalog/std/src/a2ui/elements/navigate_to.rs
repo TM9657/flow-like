@@ -62,7 +62,8 @@ impl NodeLogic for NavigateTo {
         context.deactivate_exec_pin("exec_out").await?;
 
         let route: String = context.evaluate_pin("route").await?;
-        let query_params: Option<HashMap<String, String>> = context.evaluate_pin("query_params").await.ok();
+        let query_params: Option<HashMap<String, String>> =
+            context.evaluate_pin("query_params").await.ok();
         let replace: bool = context.evaluate_pin("replace").await.unwrap_or(false);
 
         // Build route with query params if provided

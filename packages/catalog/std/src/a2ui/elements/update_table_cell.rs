@@ -6,7 +6,7 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
+use flow_like_types::{Value, async_trait, json::json};
 
 /// Updates a specific cell value in a table element.
 #[crate::register_node]

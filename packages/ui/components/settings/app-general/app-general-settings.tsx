@@ -1,29 +1,5 @@
 "use client";
 
-import type { IApp, IMetadata } from "../../../types";
-import { IAppCategory, IAppStatus, IAppVisibility } from "../../../types";
-import { Badge } from "../../ui/badge";
-import { Button } from "../../ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "../../ui/card";
-import { Input } from "../../ui/input";
-import { Label } from "../../ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "../../ui/select";
-import { Textarea } from "../../ui/textarea";
-import { TextEditor } from "../../ui/text-editor";
-import { VerificationDialog } from "../../verification-dialog";
-import { Dialog, DialogContent } from "../../ui/dialog";
 import {
 	BombIcon,
 	CalendarIcon,
@@ -39,7 +15,31 @@ import {
 	XIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { IApp, IMetadata } from "../../../types";
+import { IAppCategory, IAppStatus, IAppVisibility } from "../../../types";
+import { Badge } from "../../ui/badge";
+import { Button } from "../../ui/button";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "../../ui/card";
+import { Dialog, DialogContent } from "../../ui/dialog";
+import { Input } from "../../ui/input";
+import { Label } from "../../ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "../../ui/select";
+import { TextEditor } from "../../ui/text-editor";
+import { Textarea } from "../../ui/textarea";
+import { VerificationDialog } from "../../verification-dialog";
 
 export interface AppGeneralSettingsProps {
 	app: IApp;
@@ -142,11 +142,7 @@ export function AppGeneralSettings({
 									</span>
 								</div>
 								<div className="flex gap-2">
-									<Button
-										variant="outline"
-										onClick={onReset}
-										className="gap-2"
-									>
+									<Button variant="outline" onClick={onReset} className="gap-2">
 										<RotateCcwIcon className="w-4 h-4" />
 										Reset
 									</Button>

@@ -117,10 +117,14 @@ impl NodeLogic for NotifyUserNode {
         }
 
         // Send notification via InterCom stream
-        context.stream_response("flow_notification", notification).await?;
+        context
+            .stream_response("flow_notification", notification)
+            .await?;
         context.log_message("Notification sent", LogLevel::Info);
 
-        context.set_pin_value("success", flow_like_types::json::json!(true)).await?;
+        context
+            .set_pin_value("success", flow_like_types::json::json!(true))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

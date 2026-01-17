@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id_from_pin;
+use flow_like::a2ui::components::IframeProps;
 use flow_like::flow::{
     execution::{LogLevel, context::ExecutionContext},
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::IframeProps;
 use flow_like_types::{Value, async_trait};
-use super::element_utils::extract_element_id_from_pin;
 
 #[crate::register_node]
 #[derive(Default)]
@@ -56,13 +56,24 @@ impl NodeLogic for GetIframeSrc {
 
         let Some(elements_map) = elements else {
             context.log_message("No elements in payload", LogLevel::Warn);
-            context.get_pin_by_name("src").await?.set_value(Value::Null).await;
+            context
+                .get_pin_by_name("src")
+                .await?
+                .set_value(Value::Null)
+                .await;
             return Ok(());
         };
 
         let Some(element) = elements_map.get(&element_id) else {
-            context.log_message(&format!("Element not found: {}", element_id), LogLevel::Warn);
-            context.get_pin_by_name("src").await?.set_value(Value::Null).await;
+            context.log_message(
+                &format!("Element not found: {}", element_id),
+                LogLevel::Warn,
+            );
+            context
+                .get_pin_by_name("src")
+                .await?
+                .set_value(Value::Null)
+                .await;
             return Ok(());
         };
 
@@ -73,7 +84,11 @@ impl NodeLogic for GetIframeSrc {
             .and_then(|s| s.as_str())
             .unwrap_or_default();
 
-        context.get_pin_by_name("src").await?.set_value(Value::String(src.to_string())).await;
+        context
+            .get_pin_by_name("src")
+            .await?
+            .set_value(Value::String(src.to_string()))
+            .await;
         Ok(())
     }
 }

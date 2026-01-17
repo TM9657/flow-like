@@ -1,6 +1,6 @@
 use flow_like_types::{
     Value,
-    json::{Deserialize, Serialize, to_vec, from_slice},
+    json::{Deserialize, Serialize, from_slice, to_vec},
     proto,
     sync::RwLock,
 };
@@ -36,13 +36,16 @@ impl SurfaceComponent {
     pub fn get_component_type_name(&self) -> String {
         if let Some(obj) = self.component.as_object() {
             // Component should be stored as { "type": "componentType", ...props }
-            if let Some(type_val) = obj.get("type") {
-                if let Some(type_str) = type_val.as_str() {
-                    return type_str.to_string();
-                }
+            if let Some(type_val) = obj.get("type")
+                && let Some(type_str) = type_val.as_str()
+            {
+                return type_str.to_string();
             }
             // Fallback: assume older format { "type_name": { ...props } }
-            obj.keys().next().cloned().unwrap_or_else(|| "unknown".to_string())
+            obj.keys()
+                .next()
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string())
         } else {
             "unknown".to_string()
         }
@@ -342,7 +345,11 @@ impl A2UIServerMessage {
         }
     }
 
-    pub fn set_page_state(page_id: impl Into<String>, key: impl Into<String>, value: Value) -> Self {
+    pub fn set_page_state(
+        page_id: impl Into<String>,
+        key: impl Into<String>,
+        value: Value,
+    ) -> Self {
         Self::SetPageState {
             page_id: page_id.into(),
             key: key.into(),
@@ -578,7 +585,11 @@ mod tests {
         let data_model = DataModel::new();
         let msg = A2UIServerMessage::begin_rendering(&surface, &data_model);
         match msg {
-            A2UIServerMessage::BeginRendering { surface_id, root_component_id, .. } => {
+            A2UIServerMessage::BeginRendering {
+                surface_id,
+                root_component_id,
+                ..
+            } => {
                 assert_eq!(surface_id, "s1");
                 assert_eq!(root_component_id, "r1");
             }
@@ -591,7 +602,11 @@ mod tests {
         let components = vec![SurfaceComponent::new("c1", Value::Null)];
         let msg = A2UIServerMessage::surface_update("s1", components);
         match msg {
-            A2UIServerMessage::SurfaceUpdate { surface_id, components, parent_id } => {
+            A2UIServerMessage::SurfaceUpdate {
+                surface_id,
+                components,
+                parent_id,
+            } => {
                 assert_eq!(surface_id, "s1");
                 assert_eq!(components.len(), 1);
                 assert!(parent_id.is_none());
@@ -604,7 +619,9 @@ mod tests {
     fn test_a2ui_server_message_data_update() {
         let msg = A2UIServerMessage::data_update("s1", None, Value::Bool(true));
         match msg {
-            A2UIServerMessage::DataModelUpdate { surface_id, path, .. } => {
+            A2UIServerMessage::DataModelUpdate {
+                surface_id, path, ..
+            } => {
                 assert_eq!(surface_id, "s1");
                 assert!(path.is_none());
             }
@@ -614,12 +631,7 @@ mod tests {
 
     #[test]
     fn test_a2ui_client_message_user_action() {
-        let msg = A2UIClientMessage::user_action(
-            "click",
-            "surface-1",
-            "button-1",
-            HashMap::new(),
-        );
+        let msg = A2UIClientMessage::user_action("click", "surface-1", "button-1", HashMap::new());
         match msg {
             A2UIClientMessage::UserAction {
                 name,
@@ -674,9 +686,7 @@ mod tests {
     #[test]
     fn test_surface_builder_with_component() {
         let component = SurfaceComponent::new("c1", Value::String("test".to_string()));
-        let (surface, _) = SurfaceBuilder::new("s1", "c1")
-            .component(component)
-            .build();
+        let (surface, _) = SurfaceBuilder::new("s1", "c1").component(component).build();
         assert_eq!(surface.components.len(), 1);
         assert!(surface.components.contains_key("c1"));
     }
@@ -745,8 +755,12 @@ mod tests {
         let manager = SurfaceManager::new();
         let surface = Surface::new("s1", "root");
 
-        manager.create_surface(surface, Some(DataModel::new())).await;
-        manager.update_data("s1", "test/value", Value::Number(42.into())).await;
+        manager
+            .create_surface(surface, Some(DataModel::new()))
+            .await;
+        manager
+            .update_data("s1", "test/value", Value::Number(42.into()))
+            .await;
 
         let data_model = manager.get_data_model("s1").await;
         assert!(data_model.is_some());
@@ -758,7 +772,15 @@ mod tests {
         let msg = A2UIServerMessage::open_dialog("/new", Some("Test".to_string()), None, None);
         let json = serde_json::to_string(&msg).unwrap();
         // Verify the type field is "openDialog" (camelCase)
-        assert!(json.contains(r#""type":"openDialog""#), "Expected 'openDialog' but got: {}", json);
-        assert!(json.contains(r#""route":"/new""#), "Expected route '/new' but got: {}", json);
+        assert!(
+            json.contains(r#""type":"openDialog""#),
+            "Expected 'openDialog' but got: {}",
+            json
+        );
+        assert!(
+            json.contains(r#""route":"/new""#),
+            "Expected route '/new' but got: {}",
+            json
+        );
     }
 }

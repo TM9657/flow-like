@@ -1,15 +1,15 @@
+use flow_like::a2ui::components::ButtonProps;
 use flow_like::flow::{
     board::Board,
-    execution::{LogLevel, context::ExecutionContext},
+    execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::ButtonProps;
 use flow_like_types::{Value, async_trait};
 use std::sync::Arc;
 
-use super::element_utils::{find_element, extract_element_id_from_pin};
+use super::element_utils::{extract_element_id_from_pin, find_element};
 
 /// Gets the label text of a button element.
 #[crate::register_node]
@@ -42,7 +42,12 @@ impl NodeLogic for GetButtonLabel {
         .set_schema::<ButtonProps>()
         .set_options(PinOptions::new().set_enforce_schema(false).build());
 
-        node.add_output_pin("label", "Label", "The button's label text", VariableType::String);
+        node.add_output_pin(
+            "label",
+            "Label",
+            "The button's label text",
+            VariableType::String,
+        );
 
         node
     }
@@ -67,7 +72,11 @@ impl NodeLogic for GetButtonLabel {
             .unwrap_or("")
             .to_string();
 
-        context.get_pin_by_name("label").await?.set_value(Value::String(label)).await;
+        context
+            .get_pin_by_name("label")
+            .await?
+            .set_value(Value::String(label))
+            .await;
 
         Ok(())
     }

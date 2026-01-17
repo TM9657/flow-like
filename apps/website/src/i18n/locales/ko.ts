@@ -211,13 +211,17 @@ export const ko = {
 	// Newsletter
 	"newsletter.tagline": "업데이트 받기",
 	"newsletter.headline": "자동화 인사이트 받기",
-	"newsletter.description": "뉴스레터에 가입하여 Flow-Like의 최신 업데이트, 자동화 모범 사례, 업계 인사이트를 받아보세요. 스팸 없이 — 가치 있는 콘텐츠만.",
+	"newsletter.description":
+		"뉴스레터에 가입하여 Flow-Like의 최신 업데이트, 자동화 모범 사례, 업계 인사이트를 받아보세요. 스팸 없이 — 가치 있는 콘텐츠만.",
 	"newsletter.email.label": "이메일 주소",
 	"newsletter.email.placeholder": "이메일 입력",
 	"newsletter.button": "구독하기",
-	"newsletter.optin": "이메일 업데이트 수신에 동의하고 개인정보처리방침에 동의합니다",
-	"newsletter.privacy": "Brevo를 마케팅 플랫폼으로 사용합니다. 이 폼을 제출하면 Brevo의 개인정보처리방침에 따라 데이터가 처리되는 것에 동의하는 것입니다.",
-	"newsletter.success": "구독해 주셔서 감사합니다! 확인을 위해 받은편함을 확인해 주세요.",
+	"newsletter.optin":
+		"이메일 업데이트 수신에 동의하고 개인정보처리방침에 동의합니다",
+	"newsletter.privacy":
+		"Brevo를 마케팅 플랫폼으로 사용합니다. 이 폼을 제출하면 Brevo의 개인정보처리방침에 따라 데이터가 처리되는 것에 동의하는 것입니다.",
+	"newsletter.success":
+		"구독해 주셔서 감사합니다! 확인을 위해 받은편함을 확인해 주세요.",
 	"newsletter.error": "문제가 발생했습니다. 나중에 다시 시도해 주세요.",
 
 	// Footer & Navigation

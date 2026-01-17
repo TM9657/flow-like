@@ -166,9 +166,13 @@ impl NodeLogic for RegisterAthenaNode {
 
         let session: DataFusionSession = context.evaluate_pin("session").await?;
         let region: String = context.evaluate_pin("region").await?;
-        let credential_mode: String = context.evaluate_pin("credential_mode").await.unwrap_or_else(|_| "explicit".to_string());
+        let credential_mode: String = context
+            .evaluate_pin("credential_mode")
+            .await
+            .unwrap_or_else(|_| "explicit".to_string());
         let access_key_id: Option<String> = context.evaluate_pin("access_key_id").await.ok();
-        let secret_access_key: Option<String> = context.evaluate_pin("secret_access_key").await.ok();
+        let secret_access_key: Option<String> =
+            context.evaluate_pin("secret_access_key").await.ok();
         let session_token: Option<String> = context.evaluate_pin("session_token").await.ok();
         let catalog: String = context.evaluate_pin("catalog").await?;
         let athena_database: String = context.evaluate_pin("athena_database").await?;
@@ -196,17 +200,28 @@ impl NodeLogic for RegisterAthenaNode {
                 )
             }
             _ => {
-                let key = access_key_id.ok_or_else(|| flow_like_types::anyhow!("access_key_id is required when credential_mode is 'explicit'"))?;
-                let secret = secret_access_key.ok_or_else(|| flow_like_types::anyhow!("secret_access_key is required when credential_mode is 'explicit'"))?;
+                let key = access_key_id.ok_or_else(|| {
+                    flow_like_types::anyhow!(
+                        "access_key_id is required when credential_mode is 'explicit'"
+                    )
+                })?;
+                let secret = secret_access_key.ok_or_else(|| {
+                    flow_like_types::anyhow!(
+                        "secret_access_key is required when credential_mode is 'explicit'"
+                    )
+                })?;
 
                 let mut options = format!(
                     "'region' '{}',\n                   'access_key_id' '{}',\n                   'secret_access_key' '{}',\n                   'output_location' '{}'",
                     region, key, secret, output_location
                 );
-                if let Some(token) = &session_token {
-                    if !token.is_empty() {
-                        options.push_str(&format!(",\n                   'session_token' '{}'", token));
-                    }
+                if let Some(token) = &session_token
+                    && !token.is_empty()
+                {
+                    options.push_str(&format!(
+                        ",\n                   'session_token' '{}'",
+                        token
+                    ));
                 }
                 format!(
                     r#"CREATE EXTERNAL TABLE {}
@@ -250,20 +265,14 @@ impl NodeLogic for RegisterAthenaNode {
 
         match credential_mode.as_str() {
             "environment" => {
-                if has_access_key {
-                    if let Some(pin) = node.get_pin_by_name("access_key_id") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_access_key && let Some(pin) = node.get_pin_by_name("access_key_id") {
+                    node.pins.remove(&pin.id.clone());
                 }
-                if has_secret_key {
-                    if let Some(pin) = node.get_pin_by_name("secret_access_key") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_secret_key && let Some(pin) = node.get_pin_by_name("secret_access_key") {
+                    node.pins.remove(&pin.id.clone());
                 }
-                if has_session_token {
-                    if let Some(pin) = node.get_pin_by_name("session_token") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_session_token && let Some(pin) = node.get_pin_by_name("session_token") {
+                    node.pins.remove(&pin.id.clone());
                 }
             }
             _ => {
@@ -341,13 +350,8 @@ impl NodeLogic for MountAthenaQueryNode {
             VariableType::String,
         );
 
-        node.add_input_pin(
-            "region",
-            "Region",
-            "AWS region",
-            VariableType::String,
-        )
-        .set_default_value(Some(json!("us-east-1")));
+        node.add_input_pin("region", "Region", "AWS region", VariableType::String)
+            .set_default_value(Some(json!("us-east-1")));
 
         node.add_input_pin(
             "credential_mode",
@@ -426,9 +430,11 @@ impl NodeLogic for MountAthenaQueryNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use flow_like_storage::datafusion::datasource::listing::{ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl};
-        use flow_like_storage::datafusion::datasource::file_format::parquet::ParquetFormat;
         use flow_like_storage::datafusion::datasource::file_format::csv::CsvFormat;
+        use flow_like_storage::datafusion::datasource::file_format::parquet::ParquetFormat;
+        use flow_like_storage::datafusion::datasource::listing::{
+            ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
+        };
         use flow_like_storage::object_store::aws::AmazonS3Builder;
         use flow_like_types::reqwest::Url;
         use std::sync::Arc;
@@ -438,18 +444,27 @@ impl NodeLogic for MountAthenaQueryNode {
         let session: DataFusionSession = context.evaluate_pin("session").await?;
         let s3_path: String = context.evaluate_pin("s3_path").await?;
         let region: String = context.evaluate_pin("region").await?;
-        let credential_mode: String = context.evaluate_pin("credential_mode").await.unwrap_or_else(|_| "explicit".to_string());
+        let credential_mode: String = context
+            .evaluate_pin("credential_mode")
+            .await
+            .unwrap_or_else(|_| "explicit".to_string());
         let access_key_id: Option<String> = context.evaluate_pin("access_key_id").await.ok();
-        let secret_access_key: Option<String> = context.evaluate_pin("secret_access_key").await.ok();
+        let secret_access_key: Option<String> =
+            context.evaluate_pin("secret_access_key").await.ok();
         let session_token: Option<String> = context.evaluate_pin("session_token").await.ok();
         let table_name: String = context.evaluate_pin("table_name").await?;
-        let format: String = context.evaluate_pin("format").await.unwrap_or_else(|_| "parquet".to_string());
+        let format: String = context
+            .evaluate_pin("format")
+            .await
+            .unwrap_or_else(|_| "parquet".to_string());
 
         let cached_session = session.load(context).await?;
 
         // Parse S3 URL to extract bucket
         let s3_url = Url::parse(&s3_path)?;
-        let bucket = s3_url.host_str().ok_or_else(|| flow_like_types::anyhow!("Invalid S3 URL"))?;
+        let bucket = s3_url
+            .host_str()
+            .ok_or_else(|| flow_like_types::anyhow!("Invalid S3 URL"))?;
 
         // Create S3 store based on credential mode
         let s3_store = match credential_mode.as_str() {
@@ -461,8 +476,16 @@ impl NodeLogic for MountAthenaQueryNode {
                     .build()?
             }
             _ => {
-                let key = access_key_id.ok_or_else(|| flow_like_types::anyhow!("access_key_id is required when credential_mode is 'explicit'"))?;
-                let secret = secret_access_key.ok_or_else(|| flow_like_types::anyhow!("secret_access_key is required when credential_mode is 'explicit'"))?;
+                let key = access_key_id.ok_or_else(|| {
+                    flow_like_types::anyhow!(
+                        "access_key_id is required when credential_mode is 'explicit'"
+                    )
+                })?;
+                let secret = secret_access_key.ok_or_else(|| {
+                    flow_like_types::anyhow!(
+                        "secret_access_key is required when credential_mode is 'explicit'"
+                    )
+                })?;
 
                 let mut builder = AmazonS3Builder::new()
                     .with_bucket_name(bucket)
@@ -470,10 +493,10 @@ impl NodeLogic for MountAthenaQueryNode {
                     .with_access_key_id(&key)
                     .with_secret_access_key(&secret);
 
-                if let Some(token) = &session_token {
-                    if !token.is_empty() {
-                        builder = builder.with_token(token);
-                    }
+                if let Some(token) = &session_token
+                    && !token.is_empty()
+                {
+                    builder = builder.with_token(token);
                 }
                 builder.build()?
             }
@@ -481,10 +504,10 @@ impl NodeLogic for MountAthenaQueryNode {
 
         // Register the object store with the session
         let store_url = format!("s3://{}", bucket);
-        cached_session.ctx.runtime_env().register_object_store(
-            &Url::parse(&store_url)?,
-            Arc::new(s3_store),
-        );
+        cached_session
+            .ctx
+            .runtime_env()
+            .register_object_store(&Url::parse(&store_url)?, Arc::new(s3_store));
 
         // Create listing table
         let table_path = ListingTableUrl::parse(&s3_path)?;
@@ -492,13 +515,11 @@ impl NodeLogic for MountAthenaQueryNode {
         let listing_options = match format.to_lowercase().as_str() {
             "csv" => {
                 let csv_format = CsvFormat::default();
-                ListingOptions::new(Arc::new(csv_format))
-                    .with_file_extension(".csv")
+                ListingOptions::new(Arc::new(csv_format)).with_file_extension(".csv")
             }
             _ => {
                 let parquet_format = ParquetFormat::default();
-                ListingOptions::new(Arc::new(parquet_format))
-                    .with_file_extension(".parquet")
+                ListingOptions::new(Arc::new(parquet_format)).with_file_extension(".parquet")
             }
         };
 
@@ -508,7 +529,9 @@ impl NodeLogic for MountAthenaQueryNode {
             .await?;
 
         let table = ListingTable::try_new(config)?;
-        cached_session.ctx.register_table(&table_name, Arc::new(table))?;
+        cached_session
+            .ctx
+            .register_table(&table_name, Arc::new(table))?;
 
         context.set_pin_value("session_out", json!(session)).await?;
         context.activate_exec_pin("exec_out").await?;
@@ -524,20 +547,14 @@ impl NodeLogic for MountAthenaQueryNode {
 
         match credential_mode.as_str() {
             "environment" => {
-                if has_access_key {
-                    if let Some(pin) = node.get_pin_by_name("access_key_id") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_access_key && let Some(pin) = node.get_pin_by_name("access_key_id") {
+                    node.pins.remove(&pin.id.clone());
                 }
-                if has_secret_key {
-                    if let Some(pin) = node.get_pin_by_name("secret_access_key") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_secret_key && let Some(pin) = node.get_pin_by_name("secret_access_key") {
+                    node.pins.remove(&pin.id.clone());
                 }
-                if has_session_token {
-                    if let Some(pin) = node.get_pin_by_name("session_token") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_session_token && let Some(pin) = node.get_pin_by_name("session_token") {
+                    node.pins.remove(&pin.id.clone());
                 }
             }
             _ => {

@@ -1,15 +1,20 @@
 "use client";
 
-import type { RegistryEntry } from "../../../lib/schema/wasm";
-import type { IProfile } from "../../../lib/schema/profile/profile";
-import { useBackend } from "../../../state/backend-state";
-import { useInvoke } from "../../../hooks/use-invoke";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PackageDetailView } from "../../store/package-detail-view";
 import { useCallback } from "react";
+import { useInvoke } from "../../../hooks/use-invoke";
+import type { IProfile } from "../../../lib/schema/profile/profile";
+import type { RegistryEntry } from "../../../lib/schema/wasm";
+import { useBackend } from "../../../state/backend-state";
+import { PackageDetailView } from "../../store/package-detail-view";
 
 // biome-ignore lint/suspicious/noExplicitAny: Required for generic fetcher signature compatibility
-type GenericFetcher = <T>(profile: IProfile, path: string, options?: RequestInit, auth?: any) => Promise<T>;
+type GenericFetcher = <T>(
+	profile: IProfile,
+	path: string,
+	options?: RequestInit,
+	auth?: any,
+) => Promise<T>;
 
 export interface StorePackageDetailProps {
 	packageId: string;

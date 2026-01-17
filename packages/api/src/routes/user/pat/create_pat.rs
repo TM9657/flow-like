@@ -46,7 +46,8 @@ pub async fn create_pat(
     let naive_datetime = valid_until.map(|dt| dt.naive_utc());
 
     let mut secret_bytes = [0u8; 32];
-    OsRng.try_fill_bytes(&mut secret_bytes)
+    OsRng
+        .try_fill_bytes(&mut secret_bytes)
         .map_err(|e| ApiError::internal(format!("Failed to generate random bytes: {}", e)))?;
     let secret_b64 = URL_SAFE_NO_PAD.encode(secret_bytes);
 

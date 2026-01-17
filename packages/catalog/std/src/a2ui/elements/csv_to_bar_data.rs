@@ -1,11 +1,13 @@
+use super::chart_data_utils::{
+    clean_field_name, extract_from_csv_table, parse_column_ref, parse_csv_text,
+};
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, json::Map, Value};
-use super::chart_data_utils::{extract_from_csv_table, parse_csv_text, parse_column_ref, clean_field_name};
+use flow_like_types::{Value, async_trait, json::Map, json::json};
 
 /// Converts CSV data or CSVTable (from DataFusion) to Nivo Bar chart format.
 ///
@@ -80,9 +82,24 @@ impl NodeLogic for CsvToBarData {
         )
         .set_default_value(Some(json!(",")));
 
-        node.add_output_pin("data", "Data", "Bar chart data array", VariableType::Generic);
-        node.add_output_pin("keys", "Keys", "Value keys for the chart (series names)", VariableType::Generic);
-        node.add_output_pin("index_by", "Index By", "Category field name", VariableType::String);
+        node.add_output_pin(
+            "data",
+            "Data",
+            "Bar chart data array",
+            VariableType::Generic,
+        );
+        node.add_output_pin(
+            "keys",
+            "Keys",
+            "Value keys for the chart (series names)",
+            VariableType::Generic,
+        );
+        node.add_output_pin(
+            "index_by",
+            "Index By",
+            "Category field name",
+            VariableType::String,
+        );
 
         node
     }
@@ -92,7 +109,8 @@ impl NodeLogic for CsvToBarData {
         let value_columns: String = context.evaluate_pin("value_columns").await?;
         let delimiter: String = context.evaluate_pin("delimiter").await?;
 
-        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await {
+        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await
+        {
             if !table_value.is_null() {
                 extract_from_csv_table(&table_value)?
             } else {
@@ -112,29 +130,56 @@ impl NodeLogic for CsvToBarData {
         }
 
         let cat_idx = parse_column_ref(&category_col, &headers);
-        let index_field = clean_field_name(headers.get(cat_idx).map(|s| s.as_str()).unwrap_or("category"));
+        let index_field = clean_field_name(
+            headers
+                .get(cat_idx)
+                .map(|s| s.as_str())
+                .unwrap_or("category"),
+        );
 
         let value_indices: Vec<usize> = if value_columns.is_empty() {
             (0..headers.len()).filter(|&i| i != cat_idx).collect()
         } else {
-            value_columns.split(',').map(|s| parse_column_ref(s.trim(), &headers)).filter(|&i| i != cat_idx && i < headers.len()).collect()
+            value_columns
+                .split(',')
+                .map(|s| parse_column_ref(s.trim(), &headers))
+                .filter(|&i| i != cat_idx && i < headers.len())
+                .collect()
         };
 
-        let keys: Vec<String> = value_indices.iter().map(|&i| clean_field_name(headers.get(i).map(|s| s.as_str()).unwrap_or(&format!("value{}", i)))).collect();
+        let keys: Vec<String> = value_indices
+            .iter()
+            .map(|&i| {
+                clean_field_name(
+                    headers
+                        .get(i)
+                        .map(|s| s.as_str())
+                        .unwrap_or(&format!("value{}", i)),
+                )
+            })
+            .collect();
 
-        let data: Vec<Value> = rows.iter().map(|row| {
-            let mut obj = Map::new();
-            obj.insert(index_field.clone(), json!(row.get(cat_idx).cloned().unwrap_or_default()));
-            for (i, &col_idx) in value_indices.iter().enumerate() {
-                let val: f64 = row.get(col_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                obj.insert(keys[i].clone(), json!(val));
-            }
-            Value::Object(obj)
-        }).collect();
+        let data: Vec<Value> = rows
+            .iter()
+            .map(|row| {
+                let mut obj = Map::new();
+                obj.insert(
+                    index_field.clone(),
+                    json!(row.get(cat_idx).cloned().unwrap_or_default()),
+                );
+                for (i, &col_idx) in value_indices.iter().enumerate() {
+                    let val: f64 = row.get(col_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                    obj.insert(keys[i].clone(), json!(val));
+                }
+                Value::Object(obj)
+            })
+            .collect();
 
         context.set_pin_value("data", json!(data)).await?;
         context.set_pin_value("keys", json!(keys)).await?;
-        context.set_pin_value("index_by", json!(index_field)).await?;
+        context
+            .set_pin_value("index_by", json!(index_field))
+            .await?;
 
         Ok(())
     }

@@ -71,8 +71,7 @@ export function A2UIScene3D({
 		0, 0, 0,
 	];
 	const ambientLight = useResolved<number>(component.ambientLight) ?? 0.5;
-	const directionalLight =
-		useResolved<number>(component.directionalLight) ?? 1;
+	const directionalLight = useResolved<number>(component.directionalLight) ?? 1;
 	const showGrid = useResolved<boolean>(component.showGrid) ?? false;
 	const showAxes = useResolved<boolean>(component.showAxes) ?? false;
 
@@ -213,7 +212,10 @@ function SceneContent({
 				shadow-mapSize-width={1024}
 				shadow-mapSize-height={1024}
 			/>
-			<directionalLight position={[-5, 3, -5]} intensity={directionalLight * 0.3} />
+			<directionalLight
+				position={[-5, 3, -5]}
+				intensity={directionalLight * 0.3}
+			/>
 
 			{showGrid && <gridHelper args={[10, 10, "#444", "#222"]} />}
 			{showAxes && <axesHelper args={[5]} />}

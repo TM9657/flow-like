@@ -240,6 +240,8 @@ pub async fn get_execution_elements(
     let board = flow_like_state.get_board(&board_id, None)?;
     let board = board.lock().await;
 
-    let elements = board.get_execution_elements(&page_id, wildcard, None).await?;
+    let elements = board
+        .get_execution_elements(&page_id, wildcard, None)
+        .await?;
     Ok(elements)
 }

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import type { WidgetRef } from "../components/a2ui/types";
 import { useBackend } from "../state/backend-state";
 import type { IWidget, Version } from "../state/backend-state/widget-state";
-import type { WidgetRef } from "../components/a2ui/types";
 
 export interface ResolvedWidget {
 	widget: IWidget;

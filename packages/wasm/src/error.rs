@@ -63,7 +63,9 @@ pub enum WasmError {
     },
 
     /// ABI version mismatch
-    #[error("ABI version mismatch: module has {module_version}, runtime requires {runtime_version}")]
+    #[error(
+        "ABI version mismatch: module has {module_version}, runtime requires {runtime_version}"
+    )]
     AbiMismatch {
         module_version: u32,
         runtime_version: u32,

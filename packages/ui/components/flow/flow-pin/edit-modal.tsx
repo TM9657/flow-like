@@ -4,12 +4,7 @@ import { useInternalNode } from "@xyflow/react";
 import { isEqual } from "lodash-es";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useInvalidateInvoke, useInvoke } from "../../../hooks";
-import {
-	type INode,
-	updateNodeCommand,
-	upsertLayerCommand,
-} from "../../../lib";
-import type { ILayer } from "../../../lib/schema/flow/board";
+import { updateNodeCommand, upsertLayerCommand } from "../../../lib";
 import { useBackend } from "../../../state/backend-state";
 import useFlowControlState from "../../../state/flow-control-state";
 import {

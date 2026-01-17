@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useContext, createContext, type ReactNode } from "react";
+import { type ReactNode, createContext, useCallback, useContext } from "react";
 import { useBackend } from "../../state/backend-state";
 import type {
 	ActionBinding,
@@ -93,9 +93,7 @@ export function WidgetActionProvider({
 		async (actionId: string, context: Record<string, unknown> = {}) => {
 			const binding = getBinding(actionId);
 			if (!binding) {
-				console.warn(
-					`[WidgetAction] No binding found for action: ${actionId}`,
-				);
+				console.warn(`[WidgetAction] No binding found for action: ${actionId}`);
 				return;
 			}
 
@@ -118,7 +116,11 @@ export function WidgetActionProvider({
 				for (const field of action.contextFields) {
 					const mapping = inputMappings?.[field.name];
 					if (mapping) {
-						payload[field.name] = resolveBoundValue(mapping, context, field.name);
+						payload[field.name] = resolveBoundValue(
+							mapping,
+							context,
+							field.name,
+						);
 					} else {
 						payload[field.name] = context[field.name];
 					}

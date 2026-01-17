@@ -2,11 +2,7 @@ use crate::{
     functions::TauriFunctionError,
     state::{TauriFlowLikeState, TauriSettingsState},
 };
-use flow_like::{
-    a2ui::widget::Page,
-    app::App,
-    bit::Metadata,
-};
+use flow_like::{a2ui::widget::Page, app::App, bit::Metadata};
 use serde::Serialize;
 use std::collections::HashMap;
 use tauri::AppHandle;
@@ -180,10 +176,14 @@ pub async fn update_page(
     let app = App::load(app_id, flow_like_state.clone()).await?;
 
     if flow_like_state.page_registry.contains_key(&page.id) {
-        flow_like_state.page_registry.insert(page.id.clone(), page.clone());
+        flow_like_state
+            .page_registry
+            .insert(page.id.clone(), page.clone());
     }
 
-    let board_id = page.board_id.clone()
+    let board_id = page
+        .board_id
+        .clone()
         .ok_or_else(|| TauriFunctionError::new("Page must have a board_id"))?;
 
     let board = app.open_board(board_id, None, None).await?;
@@ -248,10 +248,7 @@ pub async fn get_open_pages(
 }
 
 #[tauri::command(async)]
-pub async fn close_page(
-    handler: AppHandle,
-    page_id: String,
-) -> Result<(), TauriFunctionError> {
+pub async fn close_page(handler: AppHandle, page_id: String) -> Result<(), TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
     flow_like_state.page_registry.remove(&page_id);
     Ok(())
@@ -283,5 +280,3 @@ pub async fn push_page_meta(
     app.push_page_meta(&page_id, language, metadata).await?;
     Ok(())
 }
-
-

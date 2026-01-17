@@ -4,7 +4,16 @@
  * used to validate and sanitize AI-generated components.
  */
 
-export type PropType = "string" | "number" | "boolean" | "boundValue" | "children" | "options" | "json" | "actions" | "any";
+export type PropType =
+	| "string"
+	| "number"
+	| "boolean"
+	| "boundValue"
+	| "children"
+	| "options"
+	| "json"
+	| "actions"
+	| "any";
 
 export interface PropSchema {
 	type: PropType;
@@ -21,8 +30,14 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 	row: {
 		type: { type: "string", required: true },
 		gap: { type: "boundValue" },
-		align: { type: "boundValue", enum: ["start", "center", "end", "stretch", "baseline"] },
-		justify: { type: "boundValue", enum: ["start", "center", "end", "between", "around", "evenly"] },
+		align: {
+			type: "boundValue",
+			enum: ["start", "center", "end", "stretch", "baseline"],
+		},
+		justify: {
+			type: "boundValue",
+			enum: ["start", "center", "end", "between", "around", "evenly"],
+		},
 		wrap: { type: "boundValue" },
 		reverse: { type: "boundValue" },
 		children: { type: "children", required: true },
@@ -31,7 +46,10 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 		type: { type: "string", required: true },
 		gap: { type: "boundValue" },
 		align: { type: "boundValue", enum: ["start", "center", "end", "stretch"] },
-		justify: { type: "boundValue", enum: ["start", "center", "end", "between", "around", "evenly"] },
+		justify: {
+			type: "boundValue",
+			enum: ["start", "center", "end", "between", "around", "evenly"],
+		},
 		wrap: { type: "boundValue" },
 		reverse: { type: "boundValue" },
 		children: { type: "children", required: true },
@@ -39,8 +57,14 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 	stack: {
 		type: { type: "string", required: true },
 		align: { type: "boundValue" },
-		width: { type: "boundValue", description: "Width of stack container (required for proper display)" },
-		height: { type: "boundValue", description: "Height of stack container (required for proper display)" },
+		width: {
+			type: "boundValue",
+			description: "Width of stack container (required for proper display)",
+		},
+		height: {
+			type: "boundValue",
+			description: "Height of stack container (required for proper display)",
+		},
 		children: { type: "children", required: true },
 	},
 	grid: {
@@ -73,7 +97,19 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 	},
 	box: {
 		type: { type: "string", required: true },
-		as: { type: "boundValue", enum: ["div", "section", "article", "main", "aside", "header", "footer", "nav"] },
+		as: {
+			type: "boundValue",
+			enum: [
+				"div",
+				"section",
+				"article",
+				"main",
+				"aside",
+				"header",
+				"footer",
+				"nav",
+			],
+		},
 		children: { type: "children", required: false },
 	},
 	center: {
@@ -91,9 +127,29 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 	text: {
 		type: { type: "string", required: true },
 		content: { type: "boundValue", required: true },
-		variant: { type: "boundValue", enum: ["h1", "h2", "h3", "h4", "h5", "h6", "body", "caption", "code", "label"] },
-		size: { type: "boundValue", enum: ["xs", "sm", "md", "lg", "xl", "2xl", "3xl"] },
-		weight: { type: "boundValue", enum: ["normal", "medium", "semibold", "bold"] },
+		variant: {
+			type: "boundValue",
+			enum: [
+				"h1",
+				"h2",
+				"h3",
+				"h4",
+				"h5",
+				"h6",
+				"body",
+				"caption",
+				"code",
+				"label",
+			],
+		},
+		size: {
+			type: "boundValue",
+			enum: ["xs", "sm", "md", "lg", "xl", "2xl", "3xl"],
+		},
+		weight: {
+			type: "boundValue",
+			enum: ["normal", "medium", "semibold", "bold"],
+		},
 		color: { type: "boundValue" },
 		align: { type: "boundValue", enum: ["left", "center", "right"] },
 		truncate: { type: "boundValue" },
@@ -102,7 +158,10 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 		type: { type: "string", required: true },
 		src: { type: "boundValue", required: true },
 		alt: { type: "boundValue" },
-		fit: { type: "boundValue", enum: ["cover", "contain", "fill", "none", "scale-down"] },
+		fit: {
+			type: "boundValue",
+			enum: ["cover", "contain", "fill", "none", "scale-down"],
+		},
 		loading: { type: "boundValue", enum: ["lazy", "eager"] },
 	},
 	video: {
@@ -134,7 +193,10 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 	badge: {
 		type: { type: "string", required: true },
 		content: { type: "boundValue", required: true },
-		variant: { type: "boundValue", enum: ["default", "secondary", "outline", "destructive"] },
+		variant: {
+			type: "boundValue",
+			enum: ["default", "secondary", "outline", "destructive"],
+		},
 	},
 	avatar: {
 		type: { type: "string", required: true },
@@ -250,7 +312,10 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 	button: {
 		type: { type: "string", required: true },
 		label: { type: "boundValue", required: true },
-		variant: { type: "boundValue", enum: ["default", "secondary", "outline", "ghost", "destructive", "link"] },
+		variant: {
+			type: "boundValue",
+			enum: ["default", "secondary", "outline", "ghost", "destructive", "link"],
+		},
 		size: { type: "boundValue", enum: ["sm", "md", "lg", "icon"] },
 		disabled: { type: "boundValue" },
 		loading: { type: "boundValue" },
@@ -267,7 +332,10 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 		helperText: { type: "boundValue" },
 		error: { type: "boundValue" },
 		disabled: { type: "boundValue" },
-		inputType: { type: "boundValue", enum: ["text", "email", "password", "number", "tel", "url", "search"] },
+		inputType: {
+			type: "boundValue",
+			enum: ["text", "email", "password", "number", "tel", "url", "search"],
+		},
 		multiline: { type: "boundValue" },
 		rows: { type: "boundValue" },
 		maxLength: { type: "boundValue" },

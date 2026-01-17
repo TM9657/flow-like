@@ -1,6 +1,7 @@
 export const enBi = {
 	// Meta
-	"bi.meta.title": "Modern BI Stack: Custom Dashboard Builder with AI | Flow-Like",
+	"bi.meta.title":
+		"Modern BI Stack: Custom Dashboard Builder with AI | Flow-Like",
 	"bi.meta.description":
 		"Build custom BI dashboards visually or with AI in minutes. No per-user pricing, self-hosted option, unlimited customization. Replace Tableau, Power BI with Flow-Like.",
 	"bi.meta.keywords":
@@ -145,7 +146,8 @@ export const enBi = {
 	"bi.cta.description":
 		"Download Flow-Like and build your first dashboard in minutes. No credit card. No vendor lock-in. Just better BI.",
 	"bi.cta.button": "Download Free",
-	"bi.cta.note": "Free forever for individuals. Team & Enterprise plans available.",
+	"bi.cta.note":
+		"Free forever for individuals. Team & Enterprise plans available.",
 
 	// FAQ
 	"bi.faq.tagline": "Questions",

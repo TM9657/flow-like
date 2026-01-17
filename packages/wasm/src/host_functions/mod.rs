@@ -2,21 +2,21 @@
 //!
 //! These functions are imported by WASM modules to interact with the Flow-Like runtime.
 
+pub mod auth;
+pub mod cache;
+pub mod http;
 pub mod linker;
 pub mod logging;
 pub mod metadata;
 pub mod pins;
 pub mod storage;
-pub mod variables;
-pub mod cache;
-pub mod auth;
-pub mod http;
 pub mod streaming;
+pub mod variables;
 
 use crate::limits::WasmCapabilities;
+use parking_lot::RwLock;
 use serde_json::Value;
 use std::collections::HashMap;
-use parking_lot::RwLock;
 
 pub use linker::register_host_functions;
 
@@ -141,7 +141,11 @@ impl HostState {
 
     /// Add a log entry
     pub fn log(&self, level: u8, message: String, data: Option<Value>) {
-        self.logs.write().push(LogEntry { level, message, data });
+        self.logs.write().push(LogEntry {
+            level,
+            message,
+            data,
+        });
     }
 
     /// Get all log entries
@@ -174,7 +178,9 @@ impl HostState {
 
     /// Add stream event
     pub fn add_stream_event(&self, event_type: String, data: Value) {
-        self.stream_events.write().push(StreamEvent { event_type, data });
+        self.stream_events
+            .write()
+            .push(StreamEvent { event_type, data });
     }
 
     /// Get and clear stream events

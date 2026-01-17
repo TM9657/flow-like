@@ -9,8 +9,8 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type { A2UIComponent, SurfaceComponent } from "../a2ui/types";
 import type { IWidgetRef } from "../../state/backend-state/page-state";
+import type { A2UIComponent, SurfaceComponent } from "../a2ui/types";
 
 export interface BuilderSelection {
 	componentIds: string[];
@@ -163,7 +163,10 @@ export interface BuilderProviderProps {
 	children: ReactNode;
 	initialComponents?: SurfaceComponent[];
 	initialWidgetRefs?: Record<string, IWidgetRef>;
-	onChange?: (components: SurfaceComponent[], widgetRefs: Record<string, IWidgetRef>) => void;
+	onChange?: (
+		components: SurfaceComponent[],
+		widgetRefs: Record<string, IWidgetRef>,
+	) => void;
 	initialCanvasSettings?: Partial<CanvasSettings>;
 	onCanvasSettingsChange?: (settings: CanvasSettings) => void;
 	actionContext?: ActionContext;
@@ -184,7 +187,9 @@ export function BuilderProvider({
 	});
 
 	// Clipboard state - load from localStorage on mount
-	const [clipboard, setClipboardState] = useState<BuilderClipboard | null>(null);
+	const [clipboard, setClipboardState] = useState<BuilderClipboard | null>(
+		null,
+	);
 
 	// Load clipboard from localStorage on mount
 	useEffect(() => {
@@ -263,7 +268,9 @@ export function BuilderProvider({
 	const [gridSize, setGridSize] = useState(8);
 
 	// Hidden components state (for builder preview only, not persisted)
-	const [hiddenComponents, setHiddenComponents] = useState<Set<string>>(new Set());
+	const [hiddenComponents, setHiddenComponents] = useState<Set<string>>(
+		new Set(),
+	);
 
 	// Dev mode state
 	const [devMode, setDevMode] = useState(false);
@@ -298,17 +305,20 @@ export function BuilderProvider({
 		[hiddenComponents],
 	);
 
-	const setComponentHidden = useCallback((componentId: string, hidden: boolean) => {
-		setHiddenComponents((prev) => {
-			const next = new Set(prev);
-			if (hidden) {
-				next.add(componentId);
-			} else {
-				next.delete(componentId);
-			}
-			return next;
-		});
-	}, []);
+	const setComponentHidden = useCallback(
+		(componentId: string, hidden: boolean) => {
+			setHiddenComponents((prev) => {
+				const next = new Set(prev);
+				if (hidden) {
+					next.add(componentId);
+				} else {
+					next.delete(componentId);
+				}
+				return next;
+			});
+		},
+		[],
+	);
 
 	// History methods (defined early since other methods depend on pushHistory)
 	const pushHistory = useCallback(() => {
@@ -329,44 +339,49 @@ export function BuilderProvider({
 		return JSON.stringify(data, null, 2);
 	}, [componentsMap, widgetRefsMap, canvasSettings]);
 
-	const setRawJson = useCallback((json: string): boolean => {
-		try {
-			const data = JSON.parse(json);
-			if (!data.components || !Array.isArray(data.components)) {
-				console.error("Invalid JSON: missing or invalid components array");
-				return false;
-			}
-
-			// Validate components have required fields
-			for (const comp of data.components) {
-				if (!comp.id || !comp.component) {
-					console.error("Invalid component: missing id or component", comp);
+	const setRawJson = useCallback(
+		(json: string): boolean => {
+			try {
+				const data = JSON.parse(json);
+				if (!data.components || !Array.isArray(data.components)) {
+					console.error("Invalid JSON: missing or invalid components array");
 					return false;
 				}
+
+				// Validate components have required fields
+				for (const comp of data.components) {
+					if (!comp.id || !comp.component) {
+						console.error("Invalid component: missing id or component", comp);
+						return false;
+					}
+				}
+
+				// Update components
+				setComponentsMap(
+					new Map(data.components.map((c: SurfaceComponent) => [c.id, c])),
+				);
+
+				// Update widget refs if present
+				if (data.widgetRefs && typeof data.widgetRefs === "object") {
+					setWidgetRefsMap(new Map(Object.entries(data.widgetRefs)));
+				}
+
+				// Update canvas settings if present - use setCanvasSettings to trigger onCanvasSettingsChange
+				if (data.canvasSettings && typeof data.canvasSettings === "object") {
+					const newSettings = { ...canvasSettings, ...data.canvasSettings };
+					setCanvasSettingsState(newSettings);
+					onCanvasSettingsChange?.(newSettings);
+				}
+
+				pushHistory();
+				return true;
+			} catch (e) {
+				console.error("Failed to parse JSON:", e);
+				return false;
 			}
-
-			// Update components
-			setComponentsMap(new Map(data.components.map((c: SurfaceComponent) => [c.id, c])));
-
-			// Update widget refs if present
-			if (data.widgetRefs && typeof data.widgetRefs === "object") {
-				setWidgetRefsMap(new Map(Object.entries(data.widgetRefs)));
-			}
-
-			// Update canvas settings if present - use setCanvasSettings to trigger onCanvasSettingsChange
-			if (data.canvasSettings && typeof data.canvasSettings === "object") {
-				const newSettings = { ...canvasSettings, ...data.canvasSettings };
-				setCanvasSettingsState(newSettings);
-				onCanvasSettingsChange?.(newSettings);
-			}
-
-			pushHistory();
-			return true;
-		} catch (e) {
-			console.error("Failed to parse JSON:", e);
-			return false;
-		}
-	}, [pushHistory, canvasSettings, onCanvasSettingsChange]);
+		},
+		[pushHistory, canvasSettings, onCanvasSettingsChange],
+	);
 
 	const setCanvasSettings = useCallback(
 		(settings: Partial<CanvasSettings>) => {
@@ -425,7 +440,10 @@ export function BuilderProvider({
 			if ("child" in props && typeof props.child === "string") {
 				childIds.push(props.child);
 			}
-			if ("entryPointChild" in props && typeof props.entryPointChild === "string") {
+			if (
+				"entryPointChild" in props &&
+				typeof props.entryPointChild === "string"
+			) {
 				childIds.push(props.entryPointChild);
 			}
 			if ("contentChild" in props && typeof props.contentChild === "string") {
@@ -475,7 +493,11 @@ export function BuilderProvider({
 		}
 
 		if (allComponents.length > 0) {
-			setClipboard({ components: allComponents, cut: false, rootIds: Array.from(rootIds) });
+			setClipboard({
+				components: allComponents,
+				cut: false,
+				rootIds: Array.from(rootIds),
+			});
 		}
 	}, [selection.componentIds, collectComponentWithDescendants]);
 
@@ -494,7 +516,11 @@ export function BuilderProvider({
 		}
 
 		if (allComponents.length > 0) {
-			setClipboard({ components: allComponents, cut: true, rootIds: Array.from(rootIds) });
+			setClipboard({
+				components: allComponents,
+				cut: true,
+				rootIds: Array.from(rootIds),
+			});
 		}
 	}, [selection.componentIds, collectComponentWithDescendants]);
 
@@ -506,7 +532,10 @@ export function BuilderProvider({
 			const parent = componentsMap.get(parentId);
 			if (!parent?.component) return;
 
-			const parentProps = parent.component as unknown as Record<string, unknown>;
+			const parentProps = parent.component as unknown as Record<
+				string,
+				unknown
+			>;
 			if (!("children" in parentProps)) return;
 
 			const timestamp = Date.now();
@@ -518,37 +547,45 @@ export function BuilderProvider({
 			}
 
 			// Deep clone components with new IDs and updated references
-			const newComponents: SurfaceComponent[] = clipboard.components.map((comp) => {
-				const newId = idMapping.get(comp.id) ?? comp.id;
-				const clonedComponent = JSON.parse(JSON.stringify(comp.component));
+			const newComponents: SurfaceComponent[] = clipboard.components.map(
+				(comp) => {
+					const newId = idMapping.get(comp.id) ?? comp.id;
+					const clonedComponent = JSON.parse(JSON.stringify(comp.component));
 
-				// Update child references in the cloned component
-				const updateRefs = (obj: Record<string, unknown>) => {
-					for (const key in obj) {
-						const value = obj[key];
-						if (typeof value === "string" && idMapping.has(value)) {
-							obj[key] = idMapping.get(value);
-						} else if (Array.isArray(value)) {
-							obj[key] = value.map((v) =>
-								typeof v === "string" && idMapping.has(v) ? idMapping.get(v) : v
-							);
-						} else if (value && typeof value === "object") {
-							updateRefs(value as Record<string, unknown>);
+					// Update child references in the cloned component
+					const updateRefs = (obj: Record<string, unknown>) => {
+						for (const key in obj) {
+							const value = obj[key];
+							if (typeof value === "string" && idMapping.has(value)) {
+								obj[key] = idMapping.get(value);
+							} else if (Array.isArray(value)) {
+								obj[key] = value.map((v) =>
+									typeof v === "string" && idMapping.has(v)
+										? idMapping.get(v)
+										: v,
+								);
+							} else if (value && typeof value === "object") {
+								updateRefs(value as Record<string, unknown>);
+							}
 						}
-					}
-				};
-				updateRefs(clonedComponent as Record<string, unknown>);
+					};
+					updateRefs(clonedComponent as Record<string, unknown>);
 
-				return {
-					...comp,
-					id: newId,
-					component: clonedComponent,
-					style: comp.style ? JSON.parse(JSON.stringify(comp.style)) : undefined,
-				};
-			});
+					return {
+						...comp,
+						id: newId,
+						component: clonedComponent,
+						style: comp.style
+							? JSON.parse(JSON.stringify(comp.style))
+							: undefined,
+					};
+				},
+			);
 
 			// Get the new IDs for root components
-			const newRootIds = (clipboard.rootIds ?? []).map((id) => idMapping.get(id) ?? id);
+			const newRootIds = (clipboard.rootIds ?? []).map(
+				(id) => idMapping.get(id) ?? id,
+			);
 
 			setComponentsMap((prev) => {
 				const next = new Map(prev);
@@ -561,9 +598,14 @@ export function BuilderProvider({
 				// Add root components to parent's children
 				const parentComp = next.get(parentId);
 				if (parentComp?.component) {
-					const parentCompProps = parentComp.component as unknown as Record<string, unknown>;
+					const parentCompProps = parentComp.component as unknown as Record<
+						string,
+						unknown
+					>;
 					if ("children" in parentCompProps && parentCompProps.children) {
-						const children = parentCompProps.children as { explicitList?: string[] };
+						const children = parentCompProps.children as {
+							explicitList?: string[];
+						};
 						if (children.explicitList) {
 							next.set(parentId, {
 								...parentComp,
@@ -584,7 +626,10 @@ export function BuilderProvider({
 						// Find and update the original parent
 						for (const [id, comp] of next) {
 							if (!comp.component) continue;
-							const props = comp.component as unknown as Record<string, unknown>;
+							const props = comp.component as unknown as Record<
+								string,
+								unknown
+							>;
 							if ("children" in props && props.children) {
 								const children = props.children as { explicitList?: string[] };
 								if (children.explicitList?.includes(originalId)) {
@@ -593,7 +638,9 @@ export function BuilderProvider({
 										component: {
 											...comp.component,
 											children: {
-												explicitList: children.explicitList.filter((cid) => cid !== originalId),
+												explicitList: children.explicitList.filter(
+													(cid) => cid !== originalId,
+												),
 											},
 										} as A2UIComponent,
 									});
@@ -713,7 +760,10 @@ export function BuilderProvider({
 					// Update parent references to the old ID
 					for (const [parentKey, parentComp] of next) {
 						if (!parentComp.component) continue;
-						const props = parentComp.component as unknown as Record<string, unknown>;
+						const props = parentComp.component as unknown as Record<
+							string,
+							unknown
+						>;
 						let updated = false;
 						const updatedProps = { ...props };
 
@@ -752,7 +802,8 @@ export function BuilderProvider({
 						if (updated) {
 							next.set(parentKey, {
 								...parentComp,
-								component: updatedProps as unknown as typeof parentComp.component,
+								component:
+									updatedProps as unknown as typeof parentComp.component,
 							});
 						}
 					}
@@ -788,7 +839,10 @@ export function BuilderProvider({
 					const component = next.get(componentId);
 					if (!component?.component) return descendants;
 
-					const props = component.component as unknown as Record<string, unknown>;
+					const props = component.component as unknown as Record<
+						string,
+						unknown
+					>;
 					const childIds: string[] = [];
 
 					// Collect children from various child properties
@@ -801,10 +855,16 @@ export function BuilderProvider({
 					if ("child" in props && typeof props.child === "string") {
 						childIds.push(props.child);
 					}
-					if ("entryPointChild" in props && typeof props.entryPointChild === "string") {
+					if (
+						"entryPointChild" in props &&
+						typeof props.entryPointChild === "string"
+					) {
 						childIds.push(props.entryPointChild);
 					}
-					if ("contentChild" in props && typeof props.contentChild === "string") {
+					if (
+						"contentChild" in props &&
+						typeof props.contentChild === "string"
+					) {
 						childIds.push(props.contentChild);
 					}
 
@@ -854,16 +914,13 @@ export function BuilderProvider({
 	);
 
 	// Widget ref methods
-	const addWidgetRef = useCallback(
-		(instanceId: string, widget: IWidgetRef) => {
-			setWidgetRefsMap((prev) => {
-				const next = new Map(prev);
-				next.set(instanceId, widget);
-				return next;
-			});
-		},
-		[],
-	);
+	const addWidgetRef = useCallback((instanceId: string, widget: IWidgetRef) => {
+		setWidgetRefsMap((prev) => {
+			const next = new Map(prev);
+			next.set(instanceId, widget);
+			return next;
+		});
+	}, []);
 
 	const getWidgetRef = useCallback(
 		(instanceId: string) => widgetRefsMap.get(instanceId),

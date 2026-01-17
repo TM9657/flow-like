@@ -2,7 +2,7 @@
 //!
 //! Handles compiled modules and their metadata.
 
-use crate::abi::{WasmNodeDefinition, exports};
+use crate::abi::{exports, WasmNodeDefinition};
 use crate::engine::WasmEngine;
 use crate::error::{WasmError, WasmResult};
 use crate::instance::WasmInstance;
@@ -34,9 +34,8 @@ impl WasmModule {
     /// Compile a module from bytes
     pub async fn from_bytes(engine: &WasmEngine, bytes: &[u8], hash: String) -> WasmResult<Self> {
         // Compile the module
-        let module = Module::new(engine.engine(), bytes).map_err(|e| {
-            WasmError::compilation(format!("Failed to compile WASM module: {}", e))
-        })?;
+        let module = Module::new(engine.engine(), bytes)
+            .map_err(|e| WasmError::compilation(format!("Failed to compile WASM module: {}", e)))?;
 
         // Check for required exports
         Self::validate_exports(&module)?;

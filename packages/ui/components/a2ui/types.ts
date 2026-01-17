@@ -83,7 +83,16 @@ export interface Style {
 	transition?: string;
 	animation?: string;
 	// Display
-	display?: "block" | "inline" | "inline-block" | "flex" | "inline-flex" | "grid" | "inline-grid" | "none" | "contents";
+	display?:
+		| "block"
+		| "inline"
+		| "inline-block"
+		| "flex"
+		| "inline-flex"
+		| "grid"
+		| "inline-grid"
+		| "none"
+		| "contents";
 	// Outline (for focus states)
 	outline?: string;
 	outlineOffset?: string;
@@ -993,7 +1002,16 @@ export interface BarChartStyle {
 }
 
 export interface LineChartStyle {
-	curve?: "linear" | "monotoneX" | "natural" | "step" | "stepBefore" | "stepAfter" | "basis" | "cardinal" | "catmullRom";
+	curve?:
+		| "linear"
+		| "monotoneX"
+		| "natural"
+		| "step"
+		| "stepBefore"
+		| "stepAfter"
+		| "basis"
+		| "cardinal"
+		| "catmullRom";
 	lineWidth?: number;
 	enableArea?: boolean;
 	areaOpacity?: number;
@@ -1042,7 +1060,9 @@ export interface HeatmapChartStyle {
 }
 
 export interface ScatterChartStyle {
-	nodeSize?: number | { key: string; values: [number, number]; sizes: [number, number] };
+	nodeSize?:
+		| number
+		| { key: string; values: [number, number]; sizes: [number, number] };
 	enableGridX?: boolean;
 	enableGridY?: boolean;
 	useMesh?: boolean;

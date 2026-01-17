@@ -25,9 +25,7 @@ pub async fn review_package(
         .as_ref()
         .ok_or_else(|| ApiError::bad_request("WASM registry not configured"))?;
 
-    let result = registry
-        .submit_review(&package_id, &sub, review)
-        .await?;
+    let result = registry.submit_review(&package_id, &sub, review).await?;
 
     Ok(Json(result))
 }

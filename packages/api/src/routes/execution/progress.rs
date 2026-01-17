@@ -107,7 +107,7 @@ pub async fn report_progress(
         .get_run_for_app(&claims.run_id, &claims.app_id)
         .await
         .map_err(|e| ApiError::internal_error(anyhow!("Failed to get run: {}", e)))?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     // Don't accept updates for terminal states
     if run.status.is_terminal() {
@@ -188,9 +188,10 @@ pub async fn push_events(
     let store = get_state_store(&state).await?;
 
     // Get current max sequence for this run
-    let max_seq = store.get_max_sequence(&claims.run_id).await.map_err(|e| {
-        ApiError::internal_error(anyhow!("Failed to get max sequence: {}", e))
-    })?;
+    let max_seq = store
+        .get_max_sequence(&claims.run_id)
+        .await
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to get max sequence: {}", e)))?;
 
     let expires_at = chrono::Utc::now().timestamp_millis() + 24 * 60 * 60 * 1000; // 24 hours
     let mut next_seq = max_seq.saturating_add(1);
@@ -285,7 +286,7 @@ pub async fn poll_status(
             .get_run_for_app(&claims.run_id, &claims.app_id)
             .await
             .map_err(|e| ApiError::internal_error(anyhow!("Failed to get run: {}", e)))?
-            .ok_or_else(|| ApiError::NOT_FOUND)?;
+            .ok_or(ApiError::NOT_FOUND)?;
 
         // Get undelivered events
         let events = store
@@ -353,7 +354,7 @@ pub async fn get_run_status(
         .get_run(&run_id)
         .await
         .map_err(|e| ApiError::internal_error(anyhow!("Failed to get run: {}", e)))?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     crate::ensure_permission!(
         user,

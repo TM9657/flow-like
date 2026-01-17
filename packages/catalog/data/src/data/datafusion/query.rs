@@ -126,7 +126,6 @@ pub fn batches_to_rows(
     batches: &[flow_like_storage::datafusion::arrow::record_batch::RecordBatch],
 ) -> flow_like_types::Result<Vec<QueryRow>> {
     use flow_like_storage::datafusion::arrow::array::*;
-    use flow_like_storage::datafusion::arrow::datatypes::DataType;
 
     if batches.is_empty() {
         return Ok(vec![]);
@@ -156,7 +155,6 @@ pub fn batches_to_rows(
 pub fn batches_to_csv_table(
     batches: &[flow_like_storage::datafusion::arrow::record_batch::RecordBatch],
 ) -> flow_like_types::Result<CSVTable> {
-    use flow_like_storage::datafusion::arrow::datatypes::DataType;
     use flow_like_types::Value as JsonValue;
 
     if batches.is_empty() {
@@ -279,11 +277,7 @@ fn array_value_to_json(
             let arr = array
                 .as_any()
                 .downcast_ref::<TimestampMicrosecondArray>()
-                .or_else(|| {
-                    array
-                        .as_any()
-                        .downcast_ref::<TimestampMicrosecondArray>()
-                });
+                .or_else(|| array.as_any().downcast_ref::<TimestampMicrosecondArray>());
             if let Some(arr) = arr {
                 let micros = arr.value(idx);
                 let secs = micros / 1_000_000;
@@ -421,7 +415,10 @@ mod tests {
 
         assert_eq!(array_value_to_json(&u8_arr, 0).unwrap(), json!(255));
         assert_eq!(array_value_to_json(&u16_arr, 0).unwrap(), json!(65535));
-        assert_eq!(array_value_to_json(&u32_arr, 0).unwrap(), json!(4294967295u64));
+        assert_eq!(
+            array_value_to_json(&u32_arr, 0).unwrap(),
+            json!(4294967295u64)
+        );
         assert_eq!(
             array_value_to_json(&u64_arr, 0).unwrap(),
             json!(18446744073709551615u64)

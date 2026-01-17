@@ -70,15 +70,23 @@ export function A2UIFileInput({
 	}, [component.value, multiple, setByPath]);
 
 	useEffect(() => {
-		const handleClearFileInput = (event: CustomEvent<{ surfaceId: string; componentId: string }>) => {
-			if (event.detail.surfaceId === surfaceId && event.detail.componentId === componentId) {
+		const handleClearFileInput = (
+			event: CustomEvent<{ surfaceId: string; componentId: string }>,
+		) => {
+			if (
+				event.detail.surfaceId === surfaceId &&
+				event.detail.componentId === componentId
+			) {
 				clearFiles();
 			}
 		};
 
 		window.addEventListener("a2ui:clearFileInput" as any, handleClearFileInput);
 		return () => {
-			window.removeEventListener("a2ui:clearFileInput" as any, handleClearFileInput);
+			window.removeEventListener(
+				"a2ui:clearFileInput" as any,
+				handleClearFileInput,
+			);
 		};
 	}, [surfaceId, componentId, clearFiles]);
 
@@ -99,7 +107,7 @@ export function A2UIFileInput({
 				uploading: true,
 			};
 
-			setLocalFiles(prev => {
+			setLocalFiles((prev) => {
 				const updated = multiple
 					? [...prev, fileData].slice(0, maxFiles)
 					: [fileData];
@@ -118,8 +126,10 @@ export function A2UIFileInput({
 				};
 				uploadedFiles.push(uploadedFile);
 
-				setLocalFiles(prev =>
-					prev.map(f => f.name === file.name && f.uploading ? uploadedFile : f)
+				setLocalFiles((prev) =>
+					prev.map((f) =>
+						f.name === file.name && f.uploading ? uploadedFile : f,
+					),
 				);
 			} catch (err) {
 				const errorFile: FileData = {
@@ -130,15 +140,17 @@ export function A2UIFileInput({
 					uploadError: "Upload failed",
 				};
 
-				setLocalFiles(prev =>
-					prev.map(f => f.name === file.name && f.uploading ? errorFile : f)
+				setLocalFiles((prev) =>
+					prev.map((f) =>
+						f.name === file.name && f.uploading ? errorFile : f,
+					),
 				);
 			}
 		}
 
 		setIsUploading(false);
 
-		const successfulUploads = uploadedFiles.filter(f => f.backendUrl);
+		const successfulUploads = uploadedFiles.filter((f) => f.backendUrl);
 		if (successfulUploads.length > 0) {
 			const newValue = multiple
 				? [...files, ...successfulUploads].slice(0, maxFiles)
@@ -251,11 +263,18 @@ export function A2UIFileInput({
 							)}
 							<div className="flex-1 min-w-0">
 								<p className="text-sm font-medium truncate">{file.name}</p>
-								<p className={cn(
-									"text-xs",
-									file.uploadError ? "text-destructive" : "text-muted-foreground"
-								)}>
-									{file.uploadError || (file.uploading ? "Uploading..." : formatFileSize(file.size))}
+								<p
+									className={cn(
+										"text-xs",
+										file.uploadError
+											? "text-destructive"
+											: "text-muted-foreground",
+									)}
+								>
+									{file.uploadError ||
+										(file.uploading
+											? "Uploading..."
+											: formatFileSize(file.size))}
 								</p>
 							</div>
 							<Button

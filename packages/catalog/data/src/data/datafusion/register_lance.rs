@@ -30,7 +30,12 @@ impl NodeLogic for RegisterLanceTableNode {
         );
         node.add_icon("/flow/icons/database.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin(
             "session",

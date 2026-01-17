@@ -862,7 +862,9 @@ export function NavUser({
 		0, // staleTime: 0 to always refetch on mount
 	);
 	// Show total unread count (includes invites + local workflow notifications)
-	const notificationCount = (notifications.data?.unread_count ?? 0) + (notifications.data?.invites_count ?? 0);
+	const notificationCount =
+		(notifications.data?.unread_count ?? 0) +
+		(notifications.data?.invites_count ?? 0);
 
 	return (
 		<SidebarMenu>

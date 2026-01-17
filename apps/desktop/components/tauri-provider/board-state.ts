@@ -1048,11 +1048,14 @@ export class BoardState implements IBoardState {
 		wildcard = false,
 	): Promise<Record<string, unknown>> {
 		// Try local execution first
-		const localElements = await invoke<Record<string, unknown>>("get_execution_elements", {
-			boardId,
-			pageId,
-			wildcard,
-		});
+		const localElements = await invoke<Record<string, unknown>>(
+			"get_execution_elements",
+			{
+				boardId,
+				pageId,
+				wildcard,
+			},
+		);
 
 		// For offline apps or if we have local elements, return them
 		const isOffline = await this.backend.isOffline(appId);
@@ -1096,7 +1099,12 @@ export class BoardState implements IBoardState {
 		runContext?: IRunContext,
 		actionContext?: UIActionContext,
 	): Promise<UnifiedCopilotResponse> {
-		console.log("[copilot_chat] Calling with scope:", scope, "runContext:", runContext);
+		console.log(
+			"[copilot_chat] Calling with scope:",
+			scope,
+			"runContext:",
+			runContext,
+		);
 
 		const channel = new Channel<string>();
 		if (onToken) {

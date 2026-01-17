@@ -6,9 +6,9 @@ use axum::{
     Extension, Json,
     extract::{Path, Query, State},
 };
+use flow_like_types::Value;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use flow_like_types::Value;
 
 #[derive(Debug, Deserialize)]
 pub struct GetExecutionElementsQuery {
@@ -26,7 +26,10 @@ pub struct GetExecutionElementsResponse {
 ///
 /// This returns only the elements that are referenced by nodes in the board,
 /// along with their children. Use `wildcard: true` to get all elements.
-#[tracing::instrument(name = "GET /apps/{app_id}/board/{board_id}/elements", skip(state, user))]
+#[tracing::instrument(
+    name = "GET /apps/{app_id}/board/{board_id}/elements",
+    skip(state, user)
+)]
 pub async fn get_execution_elements(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
@@ -40,7 +43,9 @@ pub async fn get_execution_elements(
         .master_board(&sub, &app_id, &board_id, &state, None)
         .await?;
 
-    let elements = board.get_execution_elements(&query.page_id, query.wildcard, None).await?;
+    let elements = board
+        .get_execution_elements(&query.page_id, query.wildcard, None)
+        .await?;
 
     Ok(Json(GetExecutionElementsResponse { elements }))
 }

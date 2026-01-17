@@ -33,18 +33,16 @@ pub async fn get_page(
         match parts.as_slice() {
             [maj, min, pat] => Some((*maj, *min, *pat)),
             _ => {
-                return Err(ApiError::internal_error(
-                    anyhow!("version must be in MAJOR_MINOR_PATCH format"),
-                ));
+                return Err(ApiError::internal_error(anyhow!(
+                    "version must be in MAJOR_MINOR_PATCH format"
+                )));
             }
         }
     } else {
         None
     };
 
-    let app = state
-        .master_app(&user.sub()?, &app_id, &state)
-        .await?;
+    let app = state.master_app(&user.sub()?, &app_id, &state).await?;
 
     let page = app.open_page(page_id, version_opt).await?;
 

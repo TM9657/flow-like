@@ -15,7 +15,11 @@ export interface IAppRouteState {
 	/** Get the default route (path = "/") */
 	getDefaultRoute(appId: string): Promise<IRouteMapping | null>;
 	/** Set a route mapping (path -> eventId) */
-	setRoute(appId: string, path: string, eventId: string): Promise<IRouteMapping>;
+	setRoute(
+		appId: string,
+		path: string,
+		eventId: string,
+	): Promise<IRouteMapping>;
 	/** Set all route mappings in bulk */
 	setRoutes(
 		appId: string,

@@ -4,13 +4,13 @@ import { useCallback, useMemo } from "react";
 import { ActionProvider } from "./ActionHandler";
 import { type ComponentProps, getComponentRenderer } from "./ComponentRegistry";
 import { DataProvider } from "./DataContext";
+import { type IWidgetRef, WidgetRefsProvider } from "./WidgetRefsContext";
 import type {
 	A2UIClientMessage,
 	A2UIServerMessage,
 	Surface,
 	SurfaceComponent,
 } from "./types";
-import { WidgetRefsProvider, type IWidgetRef } from "./WidgetRefsContext";
 
 export interface A2UIRendererProps {
 	surface: Surface;
@@ -21,7 +21,12 @@ export interface A2UIRendererProps {
 	appId?: string;
 	boardId?: string;
 	isPreviewMode?: boolean;
-	openDialog?: (route: string, title?: string, queryParams?: Record<string, string>, dialogId?: string) => void;
+	openDialog?: (
+		route: string,
+		title?: string,
+		queryParams?: Record<string, string>,
+		dialogId?: string,
+	) => void;
 	closeDialog?: (dialogId?: string) => void;
 }
 
@@ -92,7 +97,17 @@ export function A2UIRenderer({
 	return (
 		<DataProvider initialData={[]}>
 			<WidgetRefsProvider widgetRefs={widgetRefs}>
-				<ActionProvider onAction={handleAction} onA2UIMessage={onA2UIMessage} surfaceId={surface.id} appId={appId} boardId={boardId} components={components} isPreviewMode={isPreviewMode} openDialog={openDialog} closeDialog={closeDialog}>
+				<ActionProvider
+					onAction={handleAction}
+					onA2UIMessage={onA2UIMessage}
+					surfaceId={surface.id}
+					appId={appId}
+					boardId={boardId}
+					components={components}
+					isPreviewMode={isPreviewMode}
+					openDialog={openDialog}
+					closeDialog={closeDialog}
+				>
 					<div className={className}>
 						{renderComponent(surface.rootComponentId)}
 					</div>

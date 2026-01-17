@@ -53,11 +53,6 @@ import {
 	TabsTrigger,
 } from "../../../components/ui/tabs";
 import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "../../../components/ui/tooltip";
-import {
 	type IGenericCommand,
 	removeVariableCommand,
 	upsertVariableCommand,
@@ -451,175 +446,175 @@ export function Variable({
 						/>
 					</div>
 
-				<div className="grid w-full max-w-sm items-center gap-1.5">
-					<Label htmlFor="category">Category</Label>
-					<Input
-						id="category"
-						value={localVariable.category ?? ""}
-						onChange={(e) => {
-							const v = e.target.value;
-							setLocalVariable((old) => ({
-								...old,
-								category: v.trim() === "" ? undefined : v,
-							}));
-						}}
-						placeholder="e.g. Main/Bools"
-					/>
-					<small className="text-[0.8rem] text-muted-foreground">
-						Use “/” to create nested folders. Leave empty for top-level.
-					</small>
-				</div>
-
-				<div className="grid w-full max-w-sm items-center gap-1.5">
-					<Label htmlFor="var_type">Variable Type</Label>
-					<div className="flex flex-row gap-2">
-						<Select
-							value={localVariable.data_type}
-							onValueChange={(value) =>
+					<div className="grid w-full max-w-sm items-center gap-1.5">
+						<Label htmlFor="category">Category</Label>
+						<Input
+							id="category"
+							value={localVariable.category ?? ""}
+							onChange={(e) => {
+								const v = e.target.value;
 								setLocalVariable((old) => ({
 									...old,
-									data_type: value as IVariableType,
-									default_value: convertJsonToUint8Array(
-										defaultValueFromType(
-											old.value_type,
-											value as IVariableType,
+									category: v.trim() === "" ? undefined : v,
+								}));
+							}}
+							placeholder="e.g. Main/Bools"
+						/>
+						<small className="text-[0.8rem] text-muted-foreground">
+							Use “/” to create nested folders. Leave empty for top-level.
+						</small>
+					</div>
+
+					<div className="grid w-full max-w-sm items-center gap-1.5">
+						<Label htmlFor="var_type">Variable Type</Label>
+						<div className="flex flex-row gap-2">
+							<Select
+								value={localVariable.data_type}
+								onValueChange={(value) =>
+									setLocalVariable((old) => ({
+										...old,
+										data_type: value as IVariableType,
+										default_value: convertJsonToUint8Array(
+											defaultValueFromType(
+												old.value_type,
+												value as IVariableType,
+											),
 										),
-									),
-								}))
-							}
-						>
-							<SelectTrigger id="var_type" className="flex-1">
-								<SelectValue placeholder="Data Type" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectGroup>
-									<SelectLabel>Data Type</SelectLabel>
-									<SelectItem value="Boolean">
-										{selectPreviewElement(IVariableType.Boolean)}
-									</SelectItem>
-									<SelectItem value="Date">
-										{selectPreviewElement(IVariableType.Date)}
-									</SelectItem>
-									<SelectItem value="Float">
-										{selectPreviewElement(IVariableType.Float)}
-									</SelectItem>
-									<SelectItem value="Integer">
-										{selectPreviewElement(IVariableType.Integer)}
-									</SelectItem>
-									<SelectItem value="Generic">
-										{selectPreviewElement(IVariableType.Generic)}
-									</SelectItem>
-									<SelectItem value="PathBuf">
-										{selectPreviewElement(IVariableType.PathBuf)}
-									</SelectItem>
-									<SelectItem value="String">
-										{selectPreviewElement(IVariableType.String)}
-									</SelectItem>
-									<SelectItem value="Struct">
-										{selectPreviewElement(IVariableType.Struct)}
-									</SelectItem>
-									<SelectItem value="Byte">
-										{selectPreviewElement(IVariableType.Byte)}
-									</SelectItem>
-								</SelectGroup>
-							</SelectContent>
-						</Select>
-						<Select
-							value={localVariable.value_type}
-							onValueChange={(value) =>
-								setLocalVariable((old) => ({
-									...old,
-									value_type: value as IValueType,
-									default_value: convertJsonToUint8Array(
-										defaultValueFromType(value as IValueType, old.data_type),
-									),
-								}))
-							}
-						>
-							<SelectTrigger className="w-28">
-								<SelectValue placeholder="Value Type" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectGroup>
-									<SelectLabel>Value Type</SelectLabel>
-									<SelectItem value="Normal">
-										{valueTypePreviewElement(IValueType.Normal)}
-									</SelectItem>
-									<SelectItem value="Array">
-										{valueTypePreviewElement(IValueType.Array)}
-									</SelectItem>
-									<SelectItem value="HashSet">
-										{valueTypePreviewElement(IValueType.HashSet)}
-									</SelectItem>
-									<SelectItem value="HashMap">
-										{valueTypePreviewElement(IValueType.HashMap)}
-									</SelectItem>
-								</SelectGroup>
-							</SelectContent>
-						</Select>
+									}))
+								}
+							>
+								<SelectTrigger id="var_type" className="flex-1">
+									<SelectValue placeholder="Data Type" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectGroup>
+										<SelectLabel>Data Type</SelectLabel>
+										<SelectItem value="Boolean">
+											{selectPreviewElement(IVariableType.Boolean)}
+										</SelectItem>
+										<SelectItem value="Date">
+											{selectPreviewElement(IVariableType.Date)}
+										</SelectItem>
+										<SelectItem value="Float">
+											{selectPreviewElement(IVariableType.Float)}
+										</SelectItem>
+										<SelectItem value="Integer">
+											{selectPreviewElement(IVariableType.Integer)}
+										</SelectItem>
+										<SelectItem value="Generic">
+											{selectPreviewElement(IVariableType.Generic)}
+										</SelectItem>
+										<SelectItem value="PathBuf">
+											{selectPreviewElement(IVariableType.PathBuf)}
+										</SelectItem>
+										<SelectItem value="String">
+											{selectPreviewElement(IVariableType.String)}
+										</SelectItem>
+										<SelectItem value="Struct">
+											{selectPreviewElement(IVariableType.Struct)}
+										</SelectItem>
+										<SelectItem value="Byte">
+											{selectPreviewElement(IVariableType.Byte)}
+										</SelectItem>
+									</SelectGroup>
+								</SelectContent>
+							</Select>
+							<Select
+								value={localVariable.value_type}
+								onValueChange={(value) =>
+									setLocalVariable((old) => ({
+										...old,
+										value_type: value as IValueType,
+										default_value: convertJsonToUint8Array(
+											defaultValueFromType(value as IValueType, old.data_type),
+										),
+									}))
+								}
+							>
+								<SelectTrigger className="w-28">
+									<SelectValue placeholder="Value Type" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectGroup>
+										<SelectLabel>Value Type</SelectLabel>
+										<SelectItem value="Normal">
+											{valueTypePreviewElement(IValueType.Normal)}
+										</SelectItem>
+										<SelectItem value="Array">
+											{valueTypePreviewElement(IValueType.Array)}
+										</SelectItem>
+										<SelectItem value="HashSet">
+											{valueTypePreviewElement(IValueType.HashSet)}
+										</SelectItem>
+										<SelectItem value="HashMap">
+											{valueTypePreviewElement(IValueType.HashMap)}
+										</SelectItem>
+									</SelectGroup>
+								</SelectContent>
+							</Select>
+						</div>
 					</div>
-				</div>
 
-				<div className="flex flex-col gap-1">
-					<div className="flex items-center space-x-2">
-						<Switch
-							checked={localVariable.exposed}
-							onCheckedChange={(checked) =>
-								setLocalVariable((old) => ({ ...old, exposed: checked }))
-							}
-							id="exposed"
-						/>
-						<Label htmlFor="exposed">Is Exposed?</Label>
+					<div className="flex flex-col gap-1">
+						<div className="flex items-center space-x-2">
+							<Switch
+								checked={localVariable.exposed}
+								onCheckedChange={(checked) =>
+									setLocalVariable((old) => ({ ...old, exposed: checked }))
+								}
+								id="exposed"
+							/>
+							<Label htmlFor="exposed">Is Exposed?</Label>
+						</div>
+						<small className="text-[0.8rem] text-muted-foreground">
+							If you expose a variable it will be visible in the configuration
+							tab of your App.
+						</small>
 					</div>
-					<small className="text-[0.8rem] text-muted-foreground">
-						If you expose a variable it will be visible in the configuration tab
-						of your App.
-					</small>
-				</div>
 
-				<div className="flex flex-col gap-1">
-					<div className="flex items-center space-x-2">
-						<Switch
-							checked={localVariable.secret}
-							onCheckedChange={(checked) =>
-								setLocalVariable((old) => ({ ...old, secret: checked }))
-							}
-							id="secret"
-						/>
-						<Label htmlFor="secret">Is Secret?</Label>
+					<div className="flex flex-col gap-1">
+						<div className="flex items-center space-x-2">
+							<Switch
+								checked={localVariable.secret}
+								onCheckedChange={(checked) =>
+									setLocalVariable((old) => ({ ...old, secret: checked }))
+								}
+								id="secret"
+							/>
+							<Label htmlFor="secret">Is Secret?</Label>
+						</div>
+						<small className="text-[0.8rem] text-muted-foreground">
+							A secret variable will be covered for input (e.g passwords)
+						</small>
 					</div>
-					<small className="text-[0.8rem] text-muted-foreground">
-						A secret variable will be covered for input (e.g passwords)
-					</small>
-				</div>
 
-				{localVariable.data_type === IVariableType.Struct && (
-					<StructSchemaEditor
-						variable={localVariable}
-						refs={refs}
-						onSchemaChange={(schema) =>
-							setLocalVariable((old) => ({ ...old, schema }))
-						}
-					/>
-				)}
-
-				<Separator />
-
-				<div className="flex flex-col">
-					{!localVariable.exposed && (
-						<VariablesMenuEdit
-							key={`${localVariable.value_type} - ${localVariable.data_type}-${localVariable.secret}`}
+					{localVariable.data_type === IVariableType.Struct && (
+						<StructSchemaEditor
 							variable={localVariable}
 							refs={refs}
-							updateVariable={async (variable) =>
-								setLocalVariable((old) => ({
-									...old,
-									default_value: variable.default_value,
-								}))
+							onSchemaChange={(schema) =>
+								setLocalVariable((old) => ({ ...old, schema }))
 							}
 						/>
 					)}
-				</div>
+
+					<Separator />
+
+					<div className="flex flex-col">
+						{!localVariable.exposed && (
+							<VariablesMenuEdit
+								key={`${localVariable.value_type} - ${localVariable.data_type}-${localVariable.secret}`}
+								variable={localVariable}
+								refs={refs}
+								updateVariable={async (variable) =>
+									setLocalVariable((old) => ({
+										...old,
+										default_value: variable.default_value,
+									}))
+								}
+							/>
+						)}
+					</div>
 				</div>
 
 				<Button
@@ -785,7 +780,15 @@ const FolderNode: React.FC<{
 	refs?: Record<string, string>;
 	onVariableChange: (v: IVariable) => void;
 	onVariableDeleted: (v: IVariable) => void;
-}> = ({ node, depth, isOpen, toggle, refs, onVariableChange, onVariableDeleted }) => {
+}> = ({
+	node,
+	depth,
+	isOpen,
+	toggle,
+	refs,
+	onVariableChange,
+	onVariableDeleted,
+}) => {
 	const { setNodeRef, isOver } = useDroppable({ id: node.path });
 	const childKeys = useMemo(
 		() => Object.keys(node.children).sort((a, b) => a.localeCompare(b)),
@@ -1052,9 +1055,7 @@ function generateSchemaFromExample(example: unknown): object {
 	}
 
 	if (typeof example === "number") {
-		return Number.isInteger(example)
-			? { type: "integer" }
-			: { type: "number" };
+		return Number.isInteger(example) ? { type: "integer" } : { type: "number" };
 	}
 
 	if (typeof example === "string") {

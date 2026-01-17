@@ -1,11 +1,13 @@
+use super::chart_data_utils::{
+    clean_field_name, extract_from_csv_table, parse_column_ref, parse_csv_text,
+};
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
-use super::chart_data_utils::{extract_from_csv_table, parse_csv_text, parse_column_ref, clean_field_name};
+use flow_like_types::{Value, async_trait, json::json};
 
 /// Converts CSV data or CSVTable (from DataFusion) to Nivo Line chart format.
 ///
@@ -77,7 +79,12 @@ impl NodeLogic for CsvToLineData {
         )
         .set_default_value(Some(json!(",")));
 
-        node.add_output_pin("data", "Data", "Line chart data array with series", VariableType::Generic);
+        node.add_output_pin(
+            "data",
+            "Data",
+            "Line chart data array with series",
+            VariableType::Generic,
+        );
 
         node
     }
@@ -87,7 +94,8 @@ impl NodeLogic for CsvToLineData {
         let y_columns: String = context.evaluate_pin("y_columns").await?;
         let delimiter: String = context.evaluate_pin("delimiter").await?;
 
-        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await {
+        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await
+        {
             if !table_value.is_null() {
                 extract_from_csv_table(&table_value)?
             } else {
@@ -109,18 +117,33 @@ impl NodeLogic for CsvToLineData {
         let y_indices: Vec<usize> = if y_columns.is_empty() {
             (0..headers.len()).filter(|&i| i != x_idx).collect()
         } else {
-            y_columns.split(',').map(|s| parse_column_ref(s.trim(), &headers)).filter(|&i| i != x_idx && i < headers.len()).collect()
+            y_columns
+                .split(',')
+                .map(|s| parse_column_ref(s.trim(), &headers))
+                .filter(|&i| i != x_idx && i < headers.len())
+                .collect()
         };
 
-        let series: Vec<Value> = y_indices.iter().map(|&y_idx| {
-            let series_name = clean_field_name(headers.get(y_idx).map(|s| s.as_str()).unwrap_or(&format!("Series{}", y_idx)));
-            let points: Vec<Value> = rows.iter().map(|row| {
-                let x = row.get(x_idx).cloned().unwrap_or_default();
-                let y: f64 = row.get(y_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                json!({ "x": x, "y": y })
-            }).collect();
-            json!({ "id": series_name, "data": points })
-        }).collect();
+        let series: Vec<Value> = y_indices
+            .iter()
+            .map(|&y_idx| {
+                let series_name = clean_field_name(
+                    headers
+                        .get(y_idx)
+                        .map(|s| s.as_str())
+                        .unwrap_or(&format!("Series{}", y_idx)),
+                );
+                let points: Vec<Value> = rows
+                    .iter()
+                    .map(|row| {
+                        let x = row.get(x_idx).cloned().unwrap_or_default();
+                        let y: f64 = row.get(y_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                        json!({ "x": x, "y": y })
+                    })
+                    .collect();
+                json!({ "id": series_name, "data": points })
+            })
+            .collect();
 
         context.set_pin_value("data", json!(series)).await?;
 

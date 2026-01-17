@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id;
+use flow_like::a2ui::components::NivoChartProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::NivoChartProps;
 use flow_like_types::{Value, async_trait, json::json};
-use super::element_utils::extract_element_id;
 
 /// Configures Line chart styling options.
 ///
@@ -169,7 +169,9 @@ impl NodeLogic for SetLineChartStyle {
             "enableGridY": enable_grid_y
         });
 
-        context.upsert_element(&element_id, json!({ "lineStyle": style })).await?;
+        context
+            .upsert_element(&element_id, json!({ "lineStyle": style }))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

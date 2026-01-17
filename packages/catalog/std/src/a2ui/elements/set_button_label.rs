@@ -1,3 +1,4 @@
+use flow_like::a2ui::components::ButtonProps;
 use flow_like::flow::{
     board::Board,
     execution::{LogLevel, context::ExecutionContext},
@@ -5,7 +6,6 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::ButtonProps;
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
@@ -44,12 +44,7 @@ impl NodeLogic for SetButtonLabel {
         .set_schema::<ButtonProps>()
         .set_options(PinOptions::new().set_enforce_schema(false).build());
 
-        node.add_input_pin(
-            "label",
-            "Label",
-            "The new label text",
-            VariableType::String,
-        );
+        node.add_input_pin("label", "Label", "The new label text", VariableType::String);
 
         node.add_output_pin("exec_out", "▶", "Execution output", VariableType::Execution);
 
@@ -60,16 +55,27 @@ impl NodeLogic for SetButtonLabel {
         context.activate_exec_pin("exec_out").await?;
 
         let element_value: Value = context.evaluate_pin("element_ref").await?;
-        let element_id = extract_element_id(&element_value)
-            .ok_or_else(|| flow_like_types::anyhow!("Invalid element reference - expected string ID or element object"))?;
+        let element_id = extract_element_id(&element_value).ok_or_else(|| {
+            flow_like_types::anyhow!(
+                "Invalid element reference - expected string ID or element object"
+            )
+        })?;
         let label: String = context.evaluate_pin("label").await?;
 
-        context.upsert_element(&element_id, json!({
-            "type": "setText",
-            "text": label
-        })).await?;
+        context
+            .upsert_element(
+                &element_id,
+                json!({
+                    "type": "setText",
+                    "text": label
+                }),
+            )
+            .await?;
 
-        context.log_message(&format!("Set button label: {} = {}", element_id, label), LogLevel::Debug);
+        context.log_message(
+            &format!("Set button label: {} = {}", element_id, label),
+            LogLevel::Debug,
+        );
 
         Ok(())
     }

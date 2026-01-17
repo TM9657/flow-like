@@ -99,7 +99,9 @@ export const StatusPill = memo(function StatusPill({
 			</motion.div>
 			<span>{phaseInfo.label}</span>
 			{elapsed > 0 && (
-				<span className="text-muted-foreground/60 tabular-nums">{elapsed}s</span>
+				<span className="text-muted-foreground/60 tabular-nums">
+					{elapsed}s
+				</span>
 			)}
 		</motion.div>
 	);

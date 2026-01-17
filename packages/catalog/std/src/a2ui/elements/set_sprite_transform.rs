@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id;
+use flow_like::a2ui::components::SpriteProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::SpriteProps;
 use flow_like_types::{Value, async_trait, json::json};
-use super::element_utils::extract_element_id;
 
 #[crate::register_node]
 #[derive(Default)]
@@ -40,9 +40,24 @@ impl NodeLogic for SetSpriteTransform {
         .set_schema::<SpriteProps>()
         .set_options(PinOptions::new().set_enforce_schema(false).build());
 
-        node.add_input_pin("rotation", "Rotation", "Rotation in degrees", VariableType::Float);
-        node.add_input_pin("scale", "Scale", "Scale factor (1.0 = normal)", VariableType::Float);
-        node.add_input_pin("opacity", "Opacity", "Opacity (0.0 to 1.0)", VariableType::Float);
+        node.add_input_pin(
+            "rotation",
+            "Rotation",
+            "Rotation in degrees",
+            VariableType::Float,
+        );
+        node.add_input_pin(
+            "scale",
+            "Scale",
+            "Scale factor (1.0 = normal)",
+            VariableType::Float,
+        );
+        node.add_input_pin(
+            "opacity",
+            "Opacity",
+            "Opacity (0.0 to 1.0)",
+            VariableType::Float,
+        );
 
         node.add_output_pin("exec_out", "▶", "Execution output", VariableType::Execution);
         node.set_long_running(true);

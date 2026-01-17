@@ -1,5 +1,10 @@
 import { createId } from "@paralleldrive/cuid2";
-import { MessageCircleDashedIcon, PlayCircleIcon, VariableIcon, ZapIcon } from "lucide-react";
+import {
+	MessageCircleDashedIcon,
+	PlayCircleIcon,
+	VariableIcon,
+	ZapIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMiniSearch } from "react-minisearch";
 import {
@@ -74,7 +79,10 @@ export function FlowContextMenu({
 
 			const pins = Object.values(baseNode.pins).map((pin) => {
 				if (pin.name === "var_ref") {
-					return { ...pin, default_value: convertJsonToUint8Array(variable.id) };
+					return {
+						...pin,
+						default_value: convertJsonToUint8Array(variable.id),
+					};
 				}
 				if (pin.name === "value_in" || pin.name === "value_ref") {
 					return {
@@ -188,34 +196,44 @@ export function FlowContextMenu({
 
 		if (board && variableGetNode && variableSetNode) {
 			Object.values(board.variables).forEach((variable) => {
-				const getPins = Object.values(variableGetNode?.pins ?? {}).map((pin) => {
-					if (pin.name === "var_ref") {
-						return { ...pin, default_value: convertJsonToUint8Array(variable.id) };
-					}
-					if (pin.name === "value_ref") {
-						return {
-							...pin,
-							data_type: variable.data_type,
-							value_type: variable.value_type,
-							schema: variable.schema ?? null,
-						};
-					}
-					return pin;
-				});
-				const setPins = Object.values(variableSetNode?.pins ?? {}).map((pin) => {
-					if (pin.name === "var_ref") {
-						return { ...pin, default_value: convertJsonToUint8Array(variable.id) };
-					}
-					if (pin.name === "value_in" || pin.name === "value_ref") {
-						return {
-							...pin,
-							data_type: variable.data_type,
-							value_type: variable.value_type,
-							schema: variable.schema ?? null,
-						};
-					}
-					return pin;
-				});
+				const getPins = Object.values(variableGetNode?.pins ?? {}).map(
+					(pin) => {
+						if (pin.name === "var_ref") {
+							return {
+								...pin,
+								default_value: convertJsonToUint8Array(variable.id),
+							};
+						}
+						if (pin.name === "value_ref") {
+							return {
+								...pin,
+								data_type: variable.data_type,
+								value_type: variable.value_type,
+								schema: variable.schema ?? null,
+							};
+						}
+						return pin;
+					},
+				);
+				const setPins = Object.values(variableSetNode?.pins ?? {}).map(
+					(pin) => {
+						if (pin.name === "var_ref") {
+							return {
+								...pin,
+								default_value: convertJsonToUint8Array(variable.id),
+							};
+						}
+						if (pin.name === "value_in" || pin.name === "value_ref") {
+							return {
+								...pin,
+								data_type: variable.data_type,
+								value_type: variable.value_type,
+								schema: variable.schema ?? null,
+							};
+						}
+						return pin;
+					},
+				);
 				const newGetPins = Object.fromEntries(
 					getPins.map((pin) => [pin.id, pin]),
 				);
@@ -498,46 +516,48 @@ export function FlowContextMenu({
 							Placeholder
 						</ContextMenuItem>
 						{/* TODO: create the get node if input, set node if output! */}
-						{droppedPin && onCreateVariable && droppedPin.data_type !== "Execution" && (
-							<ContextMenuItem
-								className="flex flex-row gap-1 items-center"
-								onSelect={(event) => {
-									if (menuBlockedRef.current) {
-										event.preventDefault();
-										return;
-									}
-									const resolvedSchema = resolveRefValue(droppedPin.schema);
-									const variable: IVariable = {
-										id: createId(),
-										name: droppedPin.friendly_name || droppedPin.name,
-										data_type: droppedPin.data_type,
-										value_type: droppedPin.value_type,
-										exposed: false,
-										secret: false,
-										editable: true,
-										schema: resolvedSchema ?? null,
-										default_value: droppedPin.default_value ?? null,
-									};
-									onCreateVariable(variable);
+						{droppedPin &&
+							onCreateVariable &&
+							droppedPin.data_type !== "Execution" && (
+								<ContextMenuItem
+									className="flex flex-row gap-1 items-center"
+									onSelect={(event) => {
+										if (menuBlockedRef.current) {
+											event.preventDefault();
+											return;
+										}
+										const resolvedSchema = resolveRefValue(droppedPin.schema);
+										const variable: IVariable = {
+											id: createId(),
+											name: droppedPin.friendly_name || droppedPin.name,
+											data_type: droppedPin.data_type,
+											value_type: droppedPin.value_type,
+											exposed: false,
+											secret: false,
+											editable: true,
+											schema: resolvedSchema ?? null,
+											default_value: droppedPin.default_value ?? null,
+										};
+										onCreateVariable(variable);
 
-									const variableNodeName =
-										droppedPin.pin_type === "Output"
-											? "variable_set"
-											: "variable_get";
-									const variableNode = buildVariableNode(
-										variableNodeName,
-										variable,
-									);
-									if (variableNode) {
-										onNodePlace(variableNode);
-									}
-									onClose();
-								}}
-							>
-								<VariableIcon className="w-4 h-4" />
-								Create Variable from Pin
-							</ContextMenuItem>
-						)}
+										const variableNodeName =
+											droppedPin.pin_type === "Output"
+												? "variable_set"
+												: "variable_get";
+										const variableNode = buildVariableNode(
+											variableNodeName,
+											variable,
+										);
+										if (variableNode) {
+											onNodePlace(variableNode);
+										}
+										onClose();
+									}}
+								>
+									<VariableIcon className="w-4 h-4" />
+									Create Variable from Pin
+								</ContextMenuItem>
+							)}
 						<Separator className="my-1" />
 						<Input
 							ref={inputRef}

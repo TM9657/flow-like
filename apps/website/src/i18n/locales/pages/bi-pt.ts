@@ -1,6 +1,7 @@
 export const ptBi = {
 	// Meta
-	"bi.meta.title": "Stack BI Moderna: Construtor de Dashboards com IA | Flow-Like",
+	"bi.meta.title":
+		"Stack BI Moderna: Construtor de Dashboards com IA | Flow-Like",
 	"bi.meta.description":
 		"Crie dashboards BI visualmente ou com IA em minutos. Sem preço por usuário, auto-hospedagem, personalização ilimitada. Alternativa ao Tableau e Power BI.",
 	"bi.meta.keywords":
@@ -145,7 +146,8 @@ export const ptBi = {
 	"bi.cta.description":
 		"Baixe Flow-Like e construa seu primeiro dashboard em minutos. Sem cartão de crédito. Sem vendor lock-in. Apenas BI melhor.",
 	"bi.cta.button": "Baixar Grátis",
-	"bi.cta.note": "Grátis para sempre para indivíduos. Planos Team & Enterprise disponíveis.",
+	"bi.cta.note":
+		"Grátis para sempre para indivíduos. Planos Team & Enterprise disponíveis.",
 
 	// FAQ
 	"bi.faq.tagline": "Perguntas",

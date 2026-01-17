@@ -1,11 +1,11 @@
+use super::element_utils::extract_element_id;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{Value, async_trait, json::json, json::Map};
-use super::element_utils::extract_element_id;
+use flow_like_types::{Value, async_trait, json::Map, json::json};
 
 #[crate::register_node]
 #[derive(Default)]
@@ -102,12 +102,16 @@ impl NodeLogic for SetElementAction {
             ));
         }
 
-        let element_id = extract_element_id(&element_value)
-            .ok_or_else(|| flow_like_types::anyhow!(
+        let element_id = extract_element_id(&element_value).ok_or_else(|| {
+            flow_like_types::anyhow!(
                 "Invalid element reference - expected string ID or element object with __element_id"
-            ))?;
+            )
+        })?;
 
-        let action_type: String = context.evaluate_pin("action_type").await.unwrap_or_default();
+        let action_type: String = context
+            .evaluate_pin("action_type")
+            .await
+            .unwrap_or_default();
 
         let action = if action_type == "clear" {
             None
@@ -117,7 +121,10 @@ impl NodeLogic for SetElementAction {
             match action_type.as_str() {
                 "navigate_page" => {
                     let route: String = context.evaluate_pin("route").await.unwrap_or_default();
-                    let query_params: String = context.evaluate_pin("query_params").await.unwrap_or_default();
+                    let query_params: String = context
+                        .evaluate_pin("query_params")
+                        .await
+                        .unwrap_or_default();
 
                     if !route.is_empty() {
                         action_context.insert("route".to_string(), json!(route));

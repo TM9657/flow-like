@@ -57,8 +57,11 @@ impl NodeLogic for RemoveElement {
 
         let surface_id: String = context.evaluate_pin("surface_id").await?;
         let element_value: Value = context.evaluate_pin("element_id").await?;
-        let element_id = extract_element_id(&element_value)
-            .ok_or_else(|| flow_like_types::anyhow!("Invalid element reference - expected string ID or element object"))?;
+        let element_id = extract_element_id(&element_value).ok_or_else(|| {
+            flow_like_types::anyhow!(
+                "Invalid element reference - expected string ID or element object"
+            )
+        })?;
 
         context.remove_element(&surface_id, &element_id).await?;
         context.activate_exec_pin("exec_out").await?;

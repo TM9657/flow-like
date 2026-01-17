@@ -1,6 +1,10 @@
 import type { IProfile, IProfileApp } from "../../lib";
 import type { ISettingsProfile } from "../../types";
-import type { INotification, INotificationsOverview, IUserLookup } from "./types";
+import type {
+	INotification,
+	INotificationsOverview,
+	IUserLookup,
+} from "./types";
 
 export interface IUserUpdate {
 	name?: string;

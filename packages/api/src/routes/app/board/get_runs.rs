@@ -53,16 +53,16 @@ pub async fn get_runs(
         db_query = db_query.filter(execution_run::Column::NodeId.eq(node_id));
     }
 
-    if let Some(from) = query.from {
-        if let Some(dt) = to_datetime(from) {
-            db_query = db_query.filter(execution_run::Column::CreatedAt.gte(dt));
-        }
+    if let Some(from) = query.from
+        && let Some(dt) = to_datetime(from)
+    {
+        db_query = db_query.filter(execution_run::Column::CreatedAt.gte(dt));
     }
 
-    if let Some(to) = query.to {
-        if let Some(dt) = to_datetime(to) {
-            db_query = db_query.filter(execution_run::Column::CreatedAt.lte(dt));
-        }
+    if let Some(to) = query.to
+        && let Some(dt) = to_datetime(to)
+    {
+        db_query = db_query.filter(execution_run::Column::CreatedAt.lte(dt));
     }
 
     if let Some(status) = query.status {

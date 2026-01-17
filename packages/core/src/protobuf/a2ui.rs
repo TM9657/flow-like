@@ -1,10 +1,10 @@
 use std::time::SystemTime;
 
-use flow_like_types::{json, proto, Timestamp};
+use flow_like_types::{Timestamp, json, proto};
 
 use crate::a2ui::widget::{
-    ActionBinding, CanvasSettings, CustomizationOption, CustomizationType, ExposedProp, ExposedPropType,
-    Page, PageContent, PageLayoutType, PageMeta, ValidationRule, Widget,
+    ActionBinding, CanvasSettings, CustomizationOption, CustomizationType, ExposedProp,
+    ExposedPropType, Page, PageContent, PageLayoutType, PageMeta, ValidationRule, Widget,
     WidgetAction, WidgetActionContextField, WidgetInstance, WidgetRef,
 };
 
@@ -28,7 +28,11 @@ impl From<Widget> for proto::Widget {
                     value: json::to_vec(&d.value).unwrap_or_default(),
                 })
                 .collect(),
-            customization_options: value.customization_options.into_iter().map(Into::into).collect(),
+            customization_options: value
+                .customization_options
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             exposed_props: value.exposed_props.into_iter().map(Into::into).collect(),
             catalog_id: value.catalog_id,
             thumbnail: value.thumbnail,
@@ -61,7 +65,11 @@ impl From<proto::Widget> for Widget {
                     value: json::from_slice(&d.value).unwrap_or_default(),
                 })
                 .collect(),
-            customization_options: proto.customization_options.into_iter().map(Into::into).collect(),
+            customization_options: proto
+                .customization_options
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             exposed_props: proto.exposed_props.into_iter().map(Into::into).collect(),
             catalog_id: proto.catalog_id,
             thumbnail: proto.thumbnail,
@@ -171,7 +179,9 @@ impl From<proto::ValidationRule> for ValidationRule {
 impl From<ExposedProp> for proto::ExposedProp {
     fn from(value: ExposedProp) -> Self {
         let (prop_type, enum_choices) = match value.prop_type {
-            ExposedPropType::Enum { choices } => (proto::ExposedPropType::ExposedPropEnum as i32, choices),
+            ExposedPropType::Enum { choices } => {
+                (proto::ExposedPropType::ExposedPropEnum as i32, choices)
+            }
             other => (proto::ExposedPropType::from(other) as i32, Vec::new()),
         };
         proto::ExposedProp {
@@ -193,7 +203,9 @@ impl From<proto::ExposedProp> for ExposedProp {
         let prop_type = match proto::ExposedPropType::try_from(proto.prop_type)
             .unwrap_or(proto::ExposedPropType::ExposedPropString)
         {
-            proto::ExposedPropType::ExposedPropEnum => ExposedPropType::Enum { choices: proto.enum_choices },
+            proto::ExposedPropType::ExposedPropEnum => ExposedPropType::Enum {
+                choices: proto.enum_choices,
+            },
             other => ExposedPropType::from(other),
         };
         ExposedProp {
@@ -236,7 +248,9 @@ impl From<proto::ExposedPropType> for ExposedPropType {
             proto::ExposedPropType::ExposedPropColor => ExposedPropType::Color,
             proto::ExposedPropType::ExposedPropImageUrl => ExposedPropType::ImageUrl,
             proto::ExposedPropType::ExposedPropIcon => ExposedPropType::Icon,
-            proto::ExposedPropType::ExposedPropEnum => ExposedPropType::Enum { choices: Vec::new() },
+            proto::ExposedPropType::ExposedPropEnum => ExposedPropType::Enum {
+                choices: Vec::new(),
+            },
             proto::ExposedPropType::ExposedPropJson => ExposedPropType::Json,
             proto::ExposedPropType::ExposedPropTailwindClass => ExposedPropType::TailwindClass,
             proto::ExposedPropType::ExposedPropStyleObject => ExposedPropType::StyleObject,
@@ -361,8 +375,12 @@ impl From<proto::PageContent> for PageContent {
     fn from(proto: proto::PageContent) -> Self {
         match proto.content_type {
             Some(proto::page_content::ContentType::Widget(w)) => PageContent::Widget(w.into()),
-            Some(proto::page_content::ContentType::Component(c)) => PageContent::Component(c.into()),
-            Some(proto::page_content::ContentType::ComponentId(id)) => PageContent::ComponentRef(id),
+            Some(proto::page_content::ContentType::Component(c)) => {
+                PageContent::Component(c.into())
+            }
+            Some(proto::page_content::ContentType::ComponentId(id)) => {
+                PageContent::ComponentRef(id)
+            }
             None => PageContent::ComponentRef(String::new()),
         }
     }
@@ -425,7 +443,11 @@ impl From<WidgetInstance> for proto::WidgetInstance {
             customization_values: value.customization_values,
             exposed_prop_values: value.exposed_prop_values,
             style_override: value.style_override.map(Into::into),
-            action_bindings: value.action_bindings.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            action_bindings: value
+                .action_bindings
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
             widget_ref: value.widget_ref.map(Into::into),
         }
     }
@@ -440,7 +462,11 @@ impl From<proto::WidgetInstance> for WidgetInstance {
             customization_values: proto.customization_values,
             exposed_prop_values: proto.exposed_prop_values,
             style_override: proto.style_override.map(Into::into),
-            action_bindings: proto.action_bindings.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            action_bindings: proto
+                .action_bindings
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
             widget_ref: proto.widget_ref.map(Into::into),
         }
     }
@@ -503,21 +529,43 @@ impl From<proto::WidgetActionContextField> for WidgetActionContextField {
 impl From<ActionBinding> for proto::ActionBinding {
     fn from(value: ActionBinding) -> Self {
         match value {
-            ActionBinding::WorkflowEvent { event_id, context_mapping } => proto::ActionBinding {
-                binding_type: Some(proto::action_binding::BindingType::WorkflowEventId(event_id)),
-                context_mapping: context_mapping.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            ActionBinding::WorkflowEvent {
+                event_id,
+                context_mapping,
+            } => proto::ActionBinding {
+                binding_type: Some(proto::action_binding::BindingType::WorkflowEventId(
+                    event_id,
+                )),
+                context_mapping: context_mapping
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect(),
             },
-            ActionBinding::PageNavigation { page_id, context_mapping } => proto::ActionBinding {
+            ActionBinding::PageNavigation {
+                page_id,
+                context_mapping,
+            } => proto::ActionBinding {
                 binding_type: Some(proto::action_binding::BindingType::PageId(page_id)),
-                context_mapping: context_mapping.into_iter().map(|(k, v)| (k, v.into())).collect(),
+                context_mapping: context_mapping
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect(),
             },
             ActionBinding::ExternalUrl { url, .. } => proto::ActionBinding {
                 binding_type: Some(proto::action_binding::BindingType::ExternalUrl(url)),
                 context_mapping: std::collections::HashMap::new(),
             },
-            ActionBinding::CustomAction { action_name, context_mapping } => proto::ActionBinding {
-                binding_type: Some(proto::action_binding::BindingType::CustomAction(action_name)),
-                context_mapping: context_mapping.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            ActionBinding::CustomAction {
+                action_name,
+                context_mapping,
+            } => proto::ActionBinding {
+                binding_type: Some(proto::action_binding::BindingType::CustomAction(
+                    action_name,
+                )),
+                context_mapping: context_mapping
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect(),
             },
         }
     }
@@ -533,20 +581,29 @@ impl From<proto::ActionBinding> for ActionBinding {
 
         match proto.binding_type {
             Some(proto::action_binding::BindingType::WorkflowEventId(event_id)) => {
-                ActionBinding::WorkflowEvent { event_id, context_mapping }
+                ActionBinding::WorkflowEvent {
+                    event_id,
+                    context_mapping,
+                }
             }
             Some(proto::action_binding::BindingType::PageId(page_id)) => {
-                ActionBinding::PageNavigation { page_id, context_mapping }
+                ActionBinding::PageNavigation {
+                    page_id,
+                    context_mapping,
+                }
             }
             Some(proto::action_binding::BindingType::ExternalUrl(url)) => {
                 ActionBinding::ExternalUrl { url, new_tab: true }
             }
             Some(proto::action_binding::BindingType::CustomAction(action_name)) => {
-                ActionBinding::CustomAction { action_name, context_mapping }
+                ActionBinding::CustomAction {
+                    action_name,
+                    context_mapping,
+                }
             }
             None => ActionBinding::CustomAction {
                 action_name: String::new(),
-                context_mapping
+                context_mapping,
             },
         }
     }

@@ -4,11 +4,7 @@ export interface IApiState {
 	/**
 	 * Generic fetch function for API calls
 	 */
-	fetch<T>(
-		profile: IProfile,
-		path: string,
-		options?: RequestInit,
-	): Promise<T>;
+	fetch<T>(profile: IProfile, path: string, options?: RequestInit): Promise<T>;
 
 	/**
 	 * GET request

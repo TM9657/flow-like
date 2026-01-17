@@ -10,7 +10,8 @@ export const svCommon = {
 	"header.cancel": "Avbryt",
 	// Footer CTA
 	"footer.cta.title": "Redo att automatisera?",
-	"footer.cta.description": "Ladda ner Flow-Like och skapa ditt första arbetsflöde på minuter.",
+	"footer.cta.description":
+		"Ladda ner Flow-Like och skapa ditt första arbetsflöde på minuter.",
 	"footer.cta.button": "Börja Gratis",
 
 	// Footer Sections

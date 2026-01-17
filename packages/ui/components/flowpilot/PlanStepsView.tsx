@@ -118,21 +118,28 @@ export const PlanStepsView = memo(function PlanStepsView({
 	const toggleExpanded = useCallback((open: boolean) => setExpanded(open), []);
 
 	// Memoize computed values
-	const { completedCount, progress, currentStep, historySteps, inProgressSteps } =
-		useMemo(() => {
-			const completed = steps.filter((s) => s.status === "Completed").length;
-			const inProgress = steps.filter((s) => s.status === "InProgress");
-			const current =
-				steps.findLast((s) => s.status === "InProgress") ||
-				steps[steps.length - 1];
-			return {
-				completedCount: completed,
-				progress: steps.length > 0 ? (completed / steps.length) * 100 : 0,
-				currentStep: current,
-				historySteps: steps.filter((s) => s.id !== current?.id && s.status === "Completed"),
-				inProgressSteps: inProgress,
-			};
-		}, [steps]);
+	const {
+		completedCount,
+		progress,
+		currentStep,
+		historySteps,
+		inProgressSteps,
+	} = useMemo(() => {
+		const completed = steps.filter((s) => s.status === "Completed").length;
+		const inProgress = steps.filter((s) => s.status === "InProgress");
+		const current =
+			steps.findLast((s) => s.status === "InProgress") ||
+			steps[steps.length - 1];
+		return {
+			completedCount: completed,
+			progress: steps.length > 0 ? (completed / steps.length) * 100 : 0,
+			currentStep: current,
+			historySteps: steps.filter(
+				(s) => s.id !== current?.id && s.status === "Completed",
+			),
+			inProgressSteps: inProgress,
+		};
+	}, [steps]);
 
 	if (steps.length === 0) return null;
 
@@ -166,7 +173,8 @@ export const PlanStepsView = memo(function PlanStepsView({
 									</span>
 								)}
 							</div>
-							{currentStep.tool_name === "think" || currentStep.tool_name === "analyze" ? (
+							{currentStep.tool_name === "think" ||
+							currentStep.tool_name === "analyze" ? (
 								<p className="text-[10px] text-muted-foreground mt-1 whitespace-pre-wrap line-clamp-3">
 									{currentStep.description}
 								</p>
@@ -185,7 +193,8 @@ export const PlanStepsView = memo(function PlanStepsView({
 								<div className="flex items-center gap-2">
 									<CheckCircle2Icon className="h-3 w-3 text-green-500" />
 									<span className="text-[10px] text-muted-foreground">
-										{completedCount} step{completedCount !== 1 ? "s" : ""} completed
+										{completedCount} step{completedCount !== 1 ? "s" : ""}{" "}
+										completed
 									</span>
 								</div>
 								<ChevronDown
@@ -195,7 +204,10 @@ export const PlanStepsView = memo(function PlanStepsView({
 							<CollapsibleContent>
 								<div className="pt-1 space-y-1">
 									{historySteps.map((step) => (
-										<div key={step.id} className="flex items-start gap-2 text-[10px]">
+										<div
+											key={step.id}
+											className="flex items-start gap-2 text-[10px]"
+										>
 											{getStatusIcon(step.status)}
 											<span className="text-muted-foreground leading-tight truncate">
 												{step.description}

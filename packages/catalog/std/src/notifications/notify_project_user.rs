@@ -101,7 +101,9 @@ impl NodeLogic for NotifyProjectUserNode {
                 "User ID is required for Notify Project User node",
                 LogLevel::Error,
             );
-            context.set_pin_value("success", flow_like_types::json::json!(false)).await?;
+            context
+                .set_pin_value("success", flow_like_types::json::json!(false))
+                .await?;
             context.activate_exec_pin("exec_out").await?;
             return Ok(());
         }
@@ -135,13 +137,17 @@ impl NodeLogic for NotifyProjectUserNode {
         );
 
         // stream_response logs errors internally but always returns Ok
-        context.stream_response("flow_notification", notification).await?;
+        context
+            .stream_response("flow_notification", notification)
+            .await?;
         context.log_message(
             &format!("Notification sent (target user: {})", user_sub),
             LogLevel::Info,
         );
 
-        context.set_pin_value("success", flow_like_types::json::json!(true)).await?;
+        context
+            .set_pin_value("success", flow_like_types::json::json!(true))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

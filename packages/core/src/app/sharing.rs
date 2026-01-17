@@ -151,7 +151,7 @@ async fn obj_exists_with_size(
 ) -> flow_like_types::Result<Option<bool>> {
     match store.head(path).await {
         Ok(obj) => {
-            let size = obj.size as u64;
+            let size = obj.size;
             Ok(Some(size == expect_size))
         }
         Err(_) => Ok(None),
@@ -216,7 +216,7 @@ async fn collect_store_files(
     let mut out = Vec::new();
     let mut stream = store.list(Some(root)).boxed();
     while let Some(item) = stream.try_next().await? {
-        out.push((item.location, item.size as u64));
+        out.push((item.location, item.size));
     }
     Ok(out)
 }
@@ -250,9 +250,7 @@ fn encrypt_bytes(password: &str, plain: &[u8]) -> flow_like_types::Result<Vec<u8
 
     let cipher = XChaCha20Poly1305::new_from_slice(&key).map_err(|e| anyhow!(e))?;
     let nonce = XNonce::from(nonce);
-    let ciphertext = cipher
-        .encrypt(&nonce, plain)
-        .map_err(|e| anyhow!(e))?;
+    let ciphertext = cipher.encrypt(&nonce, plain).map_err(|e| anyhow!(e))?;
 
     key.zeroize();
     let mut out = Vec::with_capacity(ENC_MAGIC.len() + SALT_LEN + XNONCE_LEN + ciphertext.len());

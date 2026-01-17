@@ -1,3 +1,4 @@
+use flow_like::a2ui::A2UIElement;
 use flow_like::flow::{
     board::Board,
     execution::{LogLevel, context::ExecutionContext},
@@ -5,7 +6,6 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::A2UIElement;
 use flow_like_types::{Value, async_trait};
 use std::sync::Arc;
 
@@ -77,9 +77,21 @@ impl NodeLogic for QueryParent {
 
         let Some(elements_map) = elements else {
             context.log_message("No elements in payload", LogLevel::Warn);
-            context.get_pin_by_name("parent").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("parent_id").await?.set_value(Value::String(String::new())).await;
-            context.get_pin_by_name("has_parent").await?.set_value(Value::Bool(false)).await;
+            context
+                .get_pin_by_name("parent")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("parent_id")
+                .await?
+                .set_value(Value::String(String::new()))
+                .await;
+            context
+                .get_pin_by_name("has_parent")
+                .await?
+                .set_value(Value::Bool(false))
+                .await;
             return Ok(());
         };
 
@@ -112,17 +124,41 @@ impl NodeLogic for QueryParent {
                 &format!("Found parent '{}' for element '{}'", pid, element_id),
                 LogLevel::Debug,
             );
-            context.get_pin_by_name("parent").await?.set_value(parent).await;
-            context.get_pin_by_name("parent_id").await?.set_value(Value::String(pid)).await;
-            context.get_pin_by_name("has_parent").await?.set_value(Value::Bool(true)).await;
+            context
+                .get_pin_by_name("parent")
+                .await?
+                .set_value(parent)
+                .await;
+            context
+                .get_pin_by_name("parent_id")
+                .await?
+                .set_value(Value::String(pid))
+                .await;
+            context
+                .get_pin_by_name("has_parent")
+                .await?
+                .set_value(Value::Bool(true))
+                .await;
         } else {
             context.log_message(
                 &format!("No parent found for element '{}'", element_id),
                 LogLevel::Debug,
             );
-            context.get_pin_by_name("parent").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("parent_id").await?.set_value(Value::String(String::new())).await;
-            context.get_pin_by_name("has_parent").await?.set_value(Value::Bool(false)).await;
+            context
+                .get_pin_by_name("parent")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("parent_id")
+                .await?
+                .set_value(Value::String(String::new()))
+                .await;
+            context
+                .get_pin_by_name("has_parent")
+                .await?
+                .set_value(Value::Bool(false))
+                .await;
         }
 
         Ok(())
@@ -137,13 +173,10 @@ impl NodeLogic for QueryParent {
             None => return,
         };
 
-        let element_id = element_ref
-            .default_value
-            .as_ref()
-            .and_then(|v| {
-                let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
-                parsed.as_str().map(String::from)
-            });
+        let element_id = element_ref.default_value.as_ref().and_then(|v| {
+            let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
+            parsed.as_str().map(String::from)
+        });
 
         if let Some(id) = element_id {
             node.friendly_name = format!("Parent of {}", id);

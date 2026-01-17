@@ -88,13 +88,10 @@ impl NodeLogic for SetGlobalState {
             None => return,
         };
 
-        let key = key_pin
-            .default_value
-            .as_ref()
-            .and_then(|v| {
-                let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
-                parsed.as_str().map(String::from)
-            });
+        let key = key_pin.default_value.as_ref().and_then(|v| {
+            let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
+            parsed.as_str().map(String::from)
+        });
 
         if let Some(k) = key {
             node.friendly_name = format!("Set Global '{}'", k);

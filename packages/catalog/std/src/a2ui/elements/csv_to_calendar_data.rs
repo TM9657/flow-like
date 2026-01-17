@@ -1,11 +1,11 @@
+use super::chart_data_utils::{extract_from_csv_table, parse_column_ref, parse_csv_text};
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
-use super::chart_data_utils::{extract_from_csv_table, parse_csv_text, parse_column_ref};
+use flow_like_types::{Value, async_trait, json::json};
 
 /// Converts CSV data or CSVTable (from DataFusion) to Nivo Calendar chart format.
 ///
@@ -77,9 +77,24 @@ impl NodeLogic for CsvToCalendarData {
         )
         .set_default_value(Some(json!(",")));
 
-        node.add_output_pin("data", "Data", "Calendar chart data array", VariableType::Generic);
-        node.add_output_pin("from_date", "From Date", "Earliest date in the data (YYYY-MM-DD)", VariableType::String);
-        node.add_output_pin("to_date", "To Date", "Latest date in the data (YYYY-MM-DD)", VariableType::String);
+        node.add_output_pin(
+            "data",
+            "Data",
+            "Calendar chart data array",
+            VariableType::Generic,
+        );
+        node.add_output_pin(
+            "from_date",
+            "From Date",
+            "Earliest date in the data (YYYY-MM-DD)",
+            VariableType::String,
+        );
+        node.add_output_pin(
+            "to_date",
+            "To Date",
+            "Latest date in the data (YYYY-MM-DD)",
+            VariableType::String,
+        );
 
         node
     }
@@ -89,7 +104,8 @@ impl NodeLogic for CsvToCalendarData {
         let value_col: String = context.evaluate_pin("value_column").await?;
         let delimiter: String = context.evaluate_pin("delimiter").await?;
 
-        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await {
+        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await
+        {
             if !table_value.is_null() {
                 extract_from_csv_table(&table_value)?
             } else {
@@ -114,29 +130,42 @@ impl NodeLogic for CsvToCalendarData {
         let mut min_date: Option<String> = None;
         let mut max_date: Option<String> = None;
 
-        let data: Vec<Value> = rows.iter().filter_map(|row| {
-            let day = row.get(date_idx)?.clone();
-            let value: f64 = row.get(value_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+        let data: Vec<Value> = rows
+            .iter()
+            .filter_map(|row| {
+                let day = row.get(date_idx)?.clone();
+                let value: f64 = row
+                    .get(value_idx)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0);
 
-            // Validate date format (basic check) - support YYYY-MM-DD or ISO datetime
-            let day_str = if day.len() >= 10 && day.chars().nth(4) == Some('-') && day.chars().nth(7) == Some('-') {
-                day[..10].to_string()
-            } else {
-                return None;
-            };
+                // Validate date format (basic check) - support YYYY-MM-DD or ISO datetime
+                let day_str = if day.len() >= 10
+                    && day.chars().nth(4) == Some('-')
+                    && day.chars().nth(7) == Some('-')
+                {
+                    day[..10].to_string()
+                } else {
+                    return None;
+                };
 
-            if min_date.is_none() || day_str < *min_date.as_ref().unwrap() {
-                min_date = Some(day_str.clone());
-            }
-            if max_date.is_none() || day_str > *max_date.as_ref().unwrap() {
-                max_date = Some(day_str.clone());
-            }
-            Some(json!({ "day": day_str, "value": value }))
-        }).collect();
+                if min_date.is_none() || day_str < *min_date.as_ref().unwrap() {
+                    min_date = Some(day_str.clone());
+                }
+                if max_date.is_none() || day_str > *max_date.as_ref().unwrap() {
+                    max_date = Some(day_str.clone());
+                }
+                Some(json!({ "day": day_str, "value": value }))
+            })
+            .collect();
 
         context.set_pin_value("data", json!(data)).await?;
-        context.set_pin_value("from_date", json!(min_date.unwrap_or_default())).await?;
-        context.set_pin_value("to_date", json!(max_date.unwrap_or_default())).await?;
+        context
+            .set_pin_value("from_date", json!(min_date.unwrap_or_default()))
+            .await?;
+        context
+            .set_pin_value("to_date", json!(max_date.unwrap_or_default()))
+            .await?;
 
         Ok(())
     }

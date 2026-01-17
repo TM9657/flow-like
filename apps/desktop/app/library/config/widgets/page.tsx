@@ -540,7 +540,7 @@ function WidgetPreview({
 					<CardContent className="flex-1 overflow-auto p-4 bg-muted/30 rounded-b-lg">
 						{previewSurface ? (
 							<DataProvider initialData={widget.data?.dataModel || []}>
-							<A2UIRenderer surface={previewSurface} isPreviewMode={true} />
+								<A2UIRenderer surface={previewSurface} isPreviewMode={true} />
 							</DataProvider>
 						) : (
 							<div className="flex flex-col items-center justify-center h-full text-muted-foreground">

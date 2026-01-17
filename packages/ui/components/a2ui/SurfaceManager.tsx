@@ -122,7 +122,10 @@ export function useSurfaceManager() {
 					switch (updateType) {
 						case "setText": {
 							const text = updateValue.text as string;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -136,7 +139,10 @@ export function useSurfaceManager() {
 						}
 						case "setValue": {
 							const value = updateValue.value as string;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -148,7 +154,9 @@ export function useSurfaceManager() {
 							break;
 						}
 						case "setStyle": {
-							const newStyle = updateValue.style as Partial<SurfaceComponent["style"]>;
+							const newStyle = updateValue.style as Partial<
+								SurfaceComponent["style"]
+							>;
 							updatedComponent = {
 								...component,
 								style: {
@@ -160,7 +168,10 @@ export function useSurfaceManager() {
 						}
 						case "setVisibility": {
 							const visible = updateValue.visible as boolean;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -176,7 +187,10 @@ export function useSurfaceManager() {
 						}
 						case "setDisabled": {
 							const disabled = updateValue.disabled as boolean;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -188,7 +202,10 @@ export function useSurfaceManager() {
 						}
 						case "setLoading": {
 							const loading = updateValue.loading as boolean;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -199,8 +216,14 @@ export function useSurfaceManager() {
 							break;
 						}
 						case "setAction": {
-							const action = updateValue.action as { name: string; context: Record<string, unknown> } | null;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const action = updateValue.action as {
+								name: string;
+								context: Record<string, unknown>;
+							} | null;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -212,7 +235,10 @@ export function useSurfaceManager() {
 						}
 						case "setPlaceholder": {
 							const placeholder = updateValue.placeholder as string;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -224,7 +250,10 @@ export function useSurfaceManager() {
 						}
 						case "setChecked": {
 							const checked = updateValue.checked as boolean;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -237,7 +266,10 @@ export function useSurfaceManager() {
 						}
 						case "setChartData": {
 							const data = updateValue.data;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -249,7 +281,10 @@ export function useSurfaceManager() {
 						}
 						case "setChartLayout": {
 							const layout = updateValue.layout;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -261,7 +296,10 @@ export function useSurfaceManager() {
 						}
 						case "setProgress": {
 							const value = updateValue.value as number;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -274,7 +312,10 @@ export function useSurfaceManager() {
 						case "setImageSrc": {
 							const src = updateValue.src as string;
 							const alt = updateValue.alt as string | undefined;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -284,47 +325,60 @@ export function useSurfaceManager() {
 								} as unknown as SurfaceComponent["component"],
 							};
 							break;
-						}							case "setSpeakerName": {
-								const name = updateValue.name as string;
-								const componentData = component.component as unknown as Record<string, unknown>;
-								updatedComponent = {
-									...component,
-									component: {
-										...componentData,
-										speakerName: name,
-									} as unknown as SurfaceComponent["component"],
-								};
-								break;
-							}
-							case "setSpeakerPortrait": {
-								const portraitId = updateValue.portraitId as string;
-								const componentData = component.component as unknown as Record<string, unknown>;
-								updatedComponent = {
-									...component,
-									component: {
-										...componentData,
-										speakerPortraitId: portraitId,
-									} as unknown as SurfaceComponent["component"],
-								};
-								break;
-							}
-							case "setTypewriter": {
-								const enabled = updateValue.enabled as boolean;
-								const speed = updateValue.speed as number | undefined;
-								const componentData = component.component as unknown as Record<string, unknown>;
-								updatedComponent = {
-									...component,
-									component: {
-										...componentData,
-										typewriter: enabled,
-										...(speed !== undefined && { typewriterSpeed: speed }),
-									} as unknown as SurfaceComponent["component"],
-								};
-								break;
-							}
+						}
+						case "setSpeakerName": {
+							const name = updateValue.name as string;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
+							updatedComponent = {
+								...component,
+								component: {
+									...componentData,
+									speakerName: name,
+								} as unknown as SurfaceComponent["component"],
+							};
+							break;
+						}
+						case "setSpeakerPortrait": {
+							const portraitId = updateValue.portraitId as string;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
+							updatedComponent = {
+								...component,
+								component: {
+									...componentData,
+									speakerPortraitId: portraitId,
+								} as unknown as SurfaceComponent["component"],
+							};
+							break;
+						}
+						case "setTypewriter": {
+							const enabled = updateValue.enabled as boolean;
+							const speed = updateValue.speed as number | undefined;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
+							updatedComponent = {
+								...component,
+								component: {
+									...componentData,
+									typewriter: enabled,
+									...(speed !== undefined && { typewriterSpeed: speed }),
+								} as unknown as SurfaceComponent["component"],
+							};
+							break;
+						}
 						case "setTableData": {
 							const data = updateValue.data as unknown[];
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -336,7 +390,10 @@ export function useSurfaceManager() {
 						}
 						case "setTableColumns": {
 							const columns = updateValue.columns as unknown[];
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -348,8 +405,13 @@ export function useSurfaceManager() {
 						}
 						case "addTableRow": {
 							const row = updateValue.row as Record<string, unknown>;
-							const componentData = component.component as unknown as Record<string, unknown>;
-							const dataValue = componentData.data as { literalOptions?: unknown[] } | undefined;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
+							const dataValue = componentData.data as
+								| { literalOptions?: unknown[] }
+								| undefined;
 							const existingData = dataValue?.literalOptions || [];
 							updatedComponent = {
 								...component,
@@ -362,8 +424,13 @@ export function useSurfaceManager() {
 						}
 						case "removeTableRow": {
 							const index = updateValue.index as number;
-							const componentData = component.component as unknown as Record<string, unknown>;
-							const dataValue = componentData.data as { literalOptions?: unknown[] } | undefined;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
+							const dataValue = componentData.data as
+								| { literalOptions?: unknown[] }
+								| undefined;
 							const existingData = [...(dataValue?.literalOptions || [])];
 							if (index >= 0 && index < existingData.length) {
 								existingData.splice(index, 1);
@@ -381,11 +448,21 @@ export function useSurfaceManager() {
 							const rowIndex = updateValue.rowIndex as number;
 							const column = updateValue.column as string;
 							const cellValue = updateValue.value;
-							const componentData = component.component as unknown as Record<string, unknown>;
-							const dataValue = componentData.data as { literalOptions?: unknown[] } | undefined;
-							const existingData = [...(dataValue?.literalOptions || [])] as Record<string, unknown>[];
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
+							const dataValue = componentData.data as
+								| { literalOptions?: unknown[] }
+								| undefined;
+							const existingData = [
+								...(dataValue?.literalOptions || []),
+							] as Record<string, unknown>[];
 							if (rowIndex >= 0 && rowIndex < existingData.length) {
-								existingData[rowIndex] = { ...existingData[rowIndex], [column]: cellValue };
+								existingData[rowIndex] = {
+									...existingData[rowIndex],
+									[column]: cellValue,
+								};
 							}
 							updatedComponent = {
 								...component,
@@ -395,10 +472,16 @@ export function useSurfaceManager() {
 								} as unknown as SurfaceComponent["component"],
 							};
 							break;
-						}						case "pushChild": {
+						}
+						case "pushChild": {
 							const childId = updateValue.childId as string;
-							const componentData = component.component as unknown as Record<string, unknown>;
-							const childrenData = componentData.children as { explicitList?: string[] } | undefined;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
+							const childrenData = componentData.children as
+								| { explicitList?: string[] }
+								| undefined;
 							const existingChildren = childrenData?.explicitList || [];
 							updatedComponent = {
 								...component,
@@ -412,10 +495,18 @@ export function useSurfaceManager() {
 						case "insertChildAt": {
 							const childId = updateValue.childId as string;
 							const index = updateValue.index as number;
-							const componentData = component.component as unknown as Record<string, unknown>;
-							const childrenData = componentData.children as { explicitList?: string[] } | undefined;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
+							const childrenData = componentData.children as
+								| { explicitList?: string[] }
+								| undefined;
 							const existingChildren = [...(childrenData?.explicitList || [])];
-							const insertIndex = Math.max(0, Math.min(index, existingChildren.length));
+							const insertIndex = Math.max(
+								0,
+								Math.min(index, existingChildren.length),
+							);
 							existingChildren.splice(insertIndex, 0, childId);
 							updatedComponent = {
 								...component,
@@ -428,8 +519,13 @@ export function useSurfaceManager() {
 						}
 						case "removeChildAt": {
 							const index = updateValue.index as number;
-							const componentData = component.component as unknown as Record<string, unknown>;
-							const childrenData = componentData.children as { explicitList?: string[] } | undefined;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
+							const childrenData = componentData.children as
+								| { explicitList?: string[] }
+								| undefined;
 							const existingChildren = [...(childrenData?.explicitList || [])];
 							if (index >= 0 && index < existingChildren.length) {
 								existingChildren.splice(index, 1);
@@ -444,7 +540,10 @@ export function useSurfaceManager() {
 							break;
 						}
 						case "clearChildren": {
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -456,7 +555,10 @@ export function useSurfaceManager() {
 						}
 						case "setProps": {
 							const props = updateValue.props as Record<string, unknown>;
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -468,7 +570,10 @@ export function useSurfaceManager() {
 						}
 						default: {
 							// Generic update - merge value into component
-							const componentData = component.component as unknown as Record<string, unknown>;
+							const componentData = component.component as unknown as Record<
+								string,
+								unknown
+							>;
 							updatedComponent = {
 								...component,
 								component: {
@@ -503,12 +608,21 @@ export function useSurfaceManager() {
 					// Update parent's children array inside component.children.explicitList
 					const parent = surface.components[parentId];
 					if (parent) {
-						const parentComp = parent.component as unknown as Record<string, unknown>;
-						const childrenData = parentComp.children as { explicitList?: string[] } | undefined;
+						const parentComp = parent.component as unknown as Record<
+							string,
+							unknown
+						>;
+						const childrenData = parentComp.children as
+							| { explicitList?: string[] }
+							| undefined;
 						const existingChildren = childrenData?.explicitList || [];
 						const newChildren = [...existingChildren];
 
-						if (index !== undefined && index >= 0 && index <= newChildren.length) {
+						if (
+							index !== undefined &&
+							index >= 0 &&
+							index <= newChildren.length
+						) {
 							newChildren.splice(index, 0, component.id);
 						} else {
 							newChildren.push(component.id);
@@ -539,15 +653,22 @@ export function useSurfaceManager() {
 
 					// Remove from any parent's children.explicitList array
 					for (const [compId, comp] of Object.entries(updatedComponents)) {
-						const compData = comp.component as unknown as Record<string, unknown>;
-						const childrenData = compData.children as { explicitList?: string[] } | undefined;
+						const compData = comp.component as unknown as Record<
+							string,
+							unknown
+						>;
+						const childrenData = compData.children as
+							| { explicitList?: string[] }
+							| undefined;
 						if (childrenData?.explicitList?.includes(elementId)) {
 							updatedComponents[compId] = {
 								...comp,
 								component: {
 									...compData,
 									children: {
-										explicitList: childrenData.explicitList.filter((id: string) => id !== elementId),
+										explicitList: childrenData.explicitList.filter(
+											(id: string) => id !== elementId,
+										),
 									},
 								} as SurfaceComponent["component"],
 							};
@@ -700,8 +821,12 @@ export function SurfaceManager({
 	renderSurface,
 	enableOptimisticUpdates = true,
 }: SurfaceManagerProps) {
-	const { surfaces, handleServerMessage, applyOptimisticUpdate, hasPendingUpdate } =
-		useSurfaceManager();
+	const {
+		surfaces,
+		handleServerMessage,
+		applyOptimisticUpdate,
+		hasPendingUpdate,
+	} = useSurfaceManager();
 
 	const handleClientMessage = useCallback(
 		(message: A2UIClientMessage) => {
@@ -732,7 +857,14 @@ export function SurfaceManager({
 		});
 
 		return elements;
-	}, [surfaces, handleClientMessage, handleServerMessage, className, appId, renderSurface]);
+	}, [
+		surfaces,
+		handleClientMessage,
+		handleServerMessage,
+		className,
+		appId,
+		renderSurface,
+	]);
 
 	return <>{surfaceElements}</>;
 }

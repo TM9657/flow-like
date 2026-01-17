@@ -2,12 +2,12 @@ import type { IDate } from "../types";
 
 export function formatRelativeTime(
 	dateInput: IDate | string,
-	style: Intl.RelativeTimeFormatStyle = "long"
+	style: Intl.RelativeTimeFormatStyle = "long",
 ) {
 	// 1. Normalize the input to milliseconds
 	let targetTimeMs: number;
 
-	if (typeof dateInput === 'string') {
+	if (typeof dateInput === "string") {
 		targetTimeMs = new Date(dateInput).getTime();
 	} else {
 		// Handle IDate

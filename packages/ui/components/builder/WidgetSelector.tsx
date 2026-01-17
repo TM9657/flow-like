@@ -8,7 +8,6 @@ import {
 	List,
 	Loader2,
 	Search,
-	X,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useInvoke } from "../../hooks";
@@ -60,11 +59,12 @@ export function WidgetSelector({
 		null,
 	);
 
-	const { data: widgets, isLoading, isError, refetch } = useInvoke(
-		backend.userState.getUserWidgets,
-		backend.userState,
-		[],
-	);
+	const {
+		data: widgets,
+		isLoading,
+		isError,
+		refetch,
+	} = useInvoke(backend.userState.getUserWidgets, backend.userState, []);
 
 	const groupedWidgets = useMemo<GroupedWidgets[]>(() => {
 		if (!widgets) return [];
@@ -144,12 +144,7 @@ export function WidgetSelector({
 
 	if (isLoading) {
 		return (
-			<div
-				className={cn(
-					"flex items-center justify-center p-4",
-					className,
-				)}
-			>
+			<div className={cn("flex items-center justify-center p-4", className)}>
 				<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
 				<span className="ml-2 text-sm text-muted-foreground">
 					Loading widgets...
@@ -234,30 +229,28 @@ export function WidgetSelector({
 											? "No widgets match your search"
 											: "No widgets in this project"}
 									</div>
+								) : viewMode === "list" ? (
+									filteredCurrentWidgets.map((widget) => (
+										<WidgetListItem
+											key={widget.widgetId}
+											widget={widget}
+											onSelect={handleSelectWidget}
+											onPreview={setPreviewWidget}
+											onDragStart={onDragStart}
+										/>
+									))
 								) : (
-									viewMode === "list" ? (
-										filteredCurrentWidgets.map((widget) => (
-											<WidgetListItem
+									<div className="grid grid-cols-2 gap-2">
+										{filteredCurrentWidgets.map((widget) => (
+											<WidgetGridItem
 												key={widget.widgetId}
 												widget={widget}
 												onSelect={handleSelectWidget}
 												onPreview={setPreviewWidget}
 												onDragStart={onDragStart}
 											/>
-										))
-									) : (
-										<div className="grid grid-cols-2 gap-2">
-											{filteredCurrentWidgets.map((widget) => (
-												<WidgetGridItem
-													key={widget.widgetId}
-													widget={widget}
-													onSelect={handleSelectWidget}
-													onPreview={setPreviewWidget}
-													onDragStart={onDragStart}
-												/>
-											))}
-										</div>
-									)
+										))}
+									</div>
 								)}
 							</div>
 						</ScrollArea>
@@ -386,7 +379,10 @@ export function WidgetSelector({
 			)}
 
 			{/* Preview Dialog */}
-			<Dialog open={!!previewWidget} onOpenChange={() => setPreviewWidget(null)}>
+			<Dialog
+				open={!!previewWidget}
+				onOpenChange={() => setPreviewWidget(null)}
+			>
 				<DialogContent className="max-w-lg">
 					<DialogHeader>
 						<DialogTitle>{previewWidget?.metadata.name}</DialogTitle>
@@ -403,7 +399,8 @@ export function WidgetSelector({
 								</div>
 							)}
 							<p className="text-sm text-muted-foreground">
-								{previewWidget.metadata.description || "No description available"}
+								{previewWidget.metadata.description ||
+									"No description available"}
 							</p>
 							{previewWidget.metadata.tags.length > 0 && (
 								<div className="flex flex-wrap gap-1">

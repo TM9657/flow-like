@@ -149,9 +149,7 @@ pub async fn invoke_event(
                 &payload_bytes,
             )
             .await
-            .map_err(|e| {
-                ApiError::internal_error(anyhow!("Failed to store payload: {}", e))
-            })?;
+            .map_err(|e| ApiError::internal_error(anyhow!("Failed to store payload: {}", e)))?;
             Some(stored.key)
         } else {
             None
@@ -215,9 +213,9 @@ pub async fn invoke_event(
 
     // Check JWT signing is configured for remote execution
     if !is_jwt_configured() {
-        return Err(ApiError::internal_error(
-            anyhow!("Execution JWT signing not configured (missing EXECUTION_KEY/EXECUTION_PUB env vars)")
-        ));
+        return Err(ApiError::internal_error(anyhow!(
+            "Execution JWT signing not configured (missing EXECUTION_KEY/EXECUTION_PUB env vars)"
+        )));
     }
 
     // Get scoped credentials based on user permissions

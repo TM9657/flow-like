@@ -1,3 +1,4 @@
+use flow_like::a2ui::A2UIElement;
 use flow_like::flow::{
     board::Board,
     execution::{LogLevel, context::ExecutionContext},
@@ -5,7 +6,6 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::A2UIElement;
 use flow_like_types::{Value, async_trait};
 use std::sync::Arc;
 
@@ -84,9 +84,21 @@ impl NodeLogic for QueryElementsById {
 
         let Some(elements_map) = elements else {
             context.log_message("No elements in payload", LogLevel::Warn);
-            context.get_pin_by_name("elements").await?.set_value(Value::Array(vec![])).await;
-            context.get_pin_by_name("element_ids").await?.set_value(Value::Array(vec![])).await;
-            context.get_pin_by_name("count").await?.set_value(Value::Number(0.into())).await;
+            context
+                .get_pin_by_name("elements")
+                .await?
+                .set_value(Value::Array(vec![]))
+                .await;
+            context
+                .get_pin_by_name("element_ids")
+                .await?
+                .set_value(Value::Array(vec![]))
+                .await;
+            context
+                .get_pin_by_name("count")
+                .await?
+                .set_value(Value::Number(0.into()))
+                .await;
             return Ok(());
         };
 
@@ -122,11 +134,23 @@ impl NodeLogic for QueryElementsById {
             LogLevel::Debug,
         );
 
-        context.get_pin_by_name("elements").await?.set_value(Value::Array(matching_elements)).await;
-        context.get_pin_by_name("element_ids").await?.set_value(Value::Array(
-            matching_ids.into_iter().map(Value::String).collect()
-        )).await;
-        context.get_pin_by_name("count").await?.set_value(Value::Number(count.into())).await;
+        context
+            .get_pin_by_name("elements")
+            .await?
+            .set_value(Value::Array(matching_elements))
+            .await;
+        context
+            .get_pin_by_name("element_ids")
+            .await?
+            .set_value(Value::Array(
+                matching_ids.into_iter().map(Value::String).collect(),
+            ))
+            .await;
+        context
+            .get_pin_by_name("count")
+            .await?
+            .set_value(Value::Number(count.into()))
+            .await;
 
         Ok(())
     }
@@ -140,13 +164,10 @@ impl NodeLogic for QueryElementsById {
             None => return,
         };
 
-        let pattern = pattern_pin
-            .default_value
-            .as_ref()
-            .and_then(|v| {
-                let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
-                parsed.as_str().map(String::from)
-            });
+        let pattern = pattern_pin.default_value.as_ref().and_then(|v| {
+            let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
+            parsed.as_str().map(String::from)
+        });
 
         if let Some(p) = pattern {
             node.friendly_name = format!("Query '{}'", p);

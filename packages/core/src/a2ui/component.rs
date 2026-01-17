@@ -29,14 +29,25 @@ pub struct PathBinding {
 pub enum BoundValue {
     #[serde(rename_all = "camelCase")]
     PathBinding(PathBinding),
-    LiteralString { #[serde(rename = "literalString")] value: String },
-    LiteralNumber { #[serde(rename = "literalNumber")] value: f64 },
-    LiteralBool { #[serde(rename = "literalBool")] value: bool },
+    LiteralString {
+        #[serde(rename = "literalString")]
+        value: String,
+    },
+    LiteralNumber {
+        #[serde(rename = "literalNumber")]
+        value: f64,
+    },
+    LiteralBool {
+        #[serde(rename = "literalBool")]
+        value: bool,
+    },
 }
 
 impl BoundValue {
     pub fn literal_string(value: impl Into<String>) -> Self {
-        Self::LiteralString { value: value.into() }
+        Self::LiteralString {
+            value: value.into(),
+        }
     }
 
     pub fn literal_number(value: f64) -> Self {
@@ -48,11 +59,17 @@ impl BoundValue {
     }
 
     pub fn path(value: impl Into<String>) -> Self {
-        Self::PathBinding(PathBinding { path: value.into(), default_value: None })
+        Self::PathBinding(PathBinding {
+            path: value.into(),
+            default_value: None,
+        })
     }
 
     pub fn path_with_default(path: impl Into<String>, default: PathDefault) -> Self {
-        Self::PathBinding(PathBinding { path: path.into(), default_value: Some(default) })
+        Self::PathBinding(PathBinding {
+            path: path.into(),
+            default_value: Some(default),
+        })
     }
 
     pub fn is_literal(&self) -> bool {
@@ -80,9 +97,9 @@ impl BoundValue {
     pub fn to_value(&self) -> Value {
         match self {
             Self::LiteralString { value } => Value::String(value.clone()),
-            Self::LiteralNumber { value } => {
-                Value::Number(serde_json::Number::from_f64(*value).unwrap_or(serde_json::Number::from(0)))
-            }
+            Self::LiteralNumber { value } => Value::Number(
+                serde_json::Number::from_f64(*value).unwrap_or(serde_json::Number::from(0)),
+            ),
             Self::LiteralBool { value } => Value::Bool(*value),
             Self::PathBinding(pb) => Value::String(pb.path.clone()),
         }
@@ -92,11 +109,18 @@ impl BoundValue {
 impl From<&proto::BoundValue> for BoundValue {
     fn from(proto: &proto::BoundValue) -> Self {
         match &proto.value {
-            Some(proto::bound_value::Value::LiteralString(s)) => Self::LiteralString { value: s.clone() },
+            Some(proto::bound_value::Value::LiteralString(s)) => {
+                Self::LiteralString { value: s.clone() }
+            }
             Some(proto::bound_value::Value::LiteralNumber(n)) => Self::LiteralNumber { value: *n },
             Some(proto::bound_value::Value::LiteralBool(b)) => Self::LiteralBool { value: *b },
-            Some(proto::bound_value::Value::Path(p)) => Self::PathBinding(PathBinding { path: p.clone(), default_value: None }),
-            None => Self::LiteralString { value: String::new() },
+            Some(proto::bound_value::Value::Path(p)) => Self::PathBinding(PathBinding {
+                path: p.clone(),
+                default_value: None,
+            }),
+            None => Self::LiteralString {
+                value: String::new(),
+            },
         }
     }
 }
@@ -107,8 +131,13 @@ impl From<proto::BoundValue> for BoundValue {
             Some(proto::bound_value::Value::LiteralString(s)) => Self::LiteralString { value: s },
             Some(proto::bound_value::Value::LiteralNumber(n)) => Self::LiteralNumber { value: n },
             Some(proto::bound_value::Value::LiteralBool(b)) => Self::LiteralBool { value: b },
-            Some(proto::bound_value::Value::Path(p)) => Self::PathBinding(PathBinding { path: p, default_value: None }),
-            None => Self::LiteralString { value: String::new() },
+            Some(proto::bound_value::Value::Path(p)) => Self::PathBinding(PathBinding {
+                path: p,
+                default_value: None,
+            }),
+            None => Self::LiteralString {
+                value: String::new(),
+            },
         }
     }
 }
@@ -117,8 +146,12 @@ impl From<BoundValue> for proto::BoundValue {
     fn from(value: BoundValue) -> Self {
         proto::BoundValue {
             value: Some(match value {
-                BoundValue::LiteralString { value } => proto::bound_value::Value::LiteralString(value),
-                BoundValue::LiteralNumber { value } => proto::bound_value::Value::LiteralNumber(value),
+                BoundValue::LiteralString { value } => {
+                    proto::bound_value::Value::LiteralString(value)
+                }
+                BoundValue::LiteralNumber { value } => {
+                    proto::bound_value::Value::LiteralNumber(value)
+                }
                 BoundValue::LiteralBool { value } => proto::bound_value::Value::LiteralBool(value),
                 BoundValue::PathBinding(pb) => proto::bound_value::Value::Path(pb.path),
             }),

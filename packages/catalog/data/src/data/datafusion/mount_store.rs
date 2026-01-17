@@ -40,7 +40,12 @@ impl NodeLogic for MountStoreParquetNode {
         );
         node.add_icon("/flow/icons/database.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin(
             "session",
@@ -151,7 +156,12 @@ impl NodeLogic for MountStoreCsvNode {
         );
         node.add_icon("/flow/icons/database.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin(
             "session",
@@ -284,7 +294,12 @@ impl NodeLogic for MountStoreJsonNode {
         );
         node.add_icon("/flow/icons/database.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin(
             "session",
@@ -419,13 +434,37 @@ mod tests {
         let node_logic = MountStoreParquetNode::new();
         let node = node_logic.get_node();
 
-        let input_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Input).collect();
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
 
-        assert!(input_pins.iter().any(|p| p.name == "exec_in" && p.data_type == VariableType::Execution));
-        assert!(input_pins.iter().any(|p| p.name == "session" && p.data_type == VariableType::Struct));
-        assert!(input_pins.iter().any(|p| p.name == "path" && p.data_type == VariableType::Struct));
-        assert!(input_pins.iter().any(|p| p.name == "table_name" && p.data_type == VariableType::String));
-        assert!(input_pins.iter().any(|p| p.name == "file_extension" && p.data_type == VariableType::String));
+        assert!(
+            input_pins
+                .iter()
+                .any(|p| p.name == "exec_in" && p.data_type == VariableType::Execution)
+        );
+        assert!(
+            input_pins
+                .iter()
+                .any(|p| p.name == "session" && p.data_type == VariableType::Struct)
+        );
+        assert!(
+            input_pins
+                .iter()
+                .any(|p| p.name == "path" && p.data_type == VariableType::Struct)
+        );
+        assert!(
+            input_pins
+                .iter()
+                .any(|p| p.name == "table_name" && p.data_type == VariableType::String)
+        );
+        assert!(
+            input_pins
+                .iter()
+                .any(|p| p.name == "file_extension" && p.data_type == VariableType::String)
+        );
     }
 
     #[test]
@@ -453,7 +492,11 @@ mod tests {
         let node_logic = MountStoreCsvNode::new();
         let node = node_logic.get_node();
 
-        let input_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Input).collect();
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
 
         let has_header_pin = input_pins.iter().find(|p| p.name == "has_header");
         assert!(has_header_pin.is_some());
@@ -478,8 +521,16 @@ mod tests {
         let node_logic = MountStoreJsonNode::new();
         let node = node_logic.get_node();
 
-        let input_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Input).collect();
-        let output_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Output).collect();
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
+        let output_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Output)
+            .collect();
 
         assert!(input_pins.iter().any(|p| p.name == "exec_in"));
         assert!(input_pins.iter().any(|p| p.name == "session"));

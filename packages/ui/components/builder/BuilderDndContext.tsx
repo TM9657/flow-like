@@ -1,22 +1,29 @@
 "use client";
 
 import {
+	type CollisionDetection,
 	DndContext,
 	type DragEndEvent,
 	type DragOverEvent,
 	type DragStartEvent,
 	MouseSensor,
 	TouchSensor,
-	useSensor,
-	useSensors,
 	pointerWithin,
 	rectIntersection,
-	type CollisionDetection,
+	useSensor,
+	useSensors,
 } from "@dnd-kit/core";
-import { type ReactNode, createContext, useCallback, useContext, useRef, useState } from "react";
-import type { A2UIComponent, Children, SurfaceComponent } from "../a2ui/types";
-import type { IWidget } from "../../state/backend-state/widget-state";
+import {
+	type ReactNode,
+	createContext,
+	useCallback,
+	useContext,
+	useRef,
+	useState,
+} from "react";
 import { useBackend } from "../../state/backend-state";
+import type { IWidget } from "../../state/backend-state/widget-state";
+import type { A2UIComponent, Children, SurfaceComponent } from "../a2ui/types";
 import { useBuilder } from "./BuilderContext";
 
 // Drag item types
@@ -89,8 +96,12 @@ const customCollisionDetection: CollisionDetection = (args) => {
 	// 1. Drop zones (between-element indicators) get highest priority
 	// 2. Then containers sorted by depth (smaller rect = more nested = higher priority)
 	const sorted = [...pointerCollisions].sort((a, b) => {
-		const aData = a.data?.droppableContainer?.data?.current as DropData | undefined;
-		const bData = b.data?.droppableContainer?.data?.current as DropData | undefined;
+		const aData = a.data?.droppableContainer?.data?.current as
+			| DropData
+			| undefined;
+		const bData = b.data?.droppableContainer?.data?.current as
+			| DropData
+			| undefined;
 
 		const aIsDropZone = aData?.type === "drop-zone";
 		const bIsDropZone = bData?.type === "drop-zone";
@@ -131,12 +142,8 @@ export function BuilderDndProvider({
 	const lastDropZoneRef = useRef<DropData | null>(null);
 
 	const backend = useBackend();
-	const {
-		components,
-		addComponent,
-		updateComponent,
-		addWidgetRef,
-	} = useBuilder();
+	const { components, addComponent, updateComponent, addWidgetRef } =
+		useBuilder();
 
 	const mouseSensor = useSensor(MouseSensor, {
 		activationConstraint: {
@@ -161,21 +168,18 @@ export function BuilderDndProvider({
 			lastDropZoneRef.current = null;
 			setIsDraggingGlobal(true);
 		},
-		[setIsDraggingGlobal]
+		[setIsDraggingGlobal],
 	);
 
-	const handleDragOver = useCallback(
-		(event: DragOverEvent) => {
-			const { over } = event;
-			const nextOverData = over?.data.current as DropData | null;
-			setOverId(over?.id as string | null);
-			setOverData(nextOverData);
-			if (nextOverData?.type === "drop-zone") {
-				lastDropZoneRef.current = nextOverData;
-			}
-		},
-		[]
-	);
+	const handleDragOver = useCallback((event: DragOverEvent) => {
+		const { over } = event;
+		const nextOverData = over?.data.current as DropData | null;
+		setOverId(over?.id as string | null);
+		setOverData(nextOverData);
+		if (nextOverData?.type === "drop-zone") {
+			lastDropZoneRef.current = nextOverData;
+		}
+	}, []);
 
 	// Move component from one parent to another
 	const moveComponent = useCallback(
@@ -280,7 +284,7 @@ export function BuilderDndProvider({
 				? "root"
 				: widgetComponentIds.has(widget.rootComponentId)
 					? widget.rootComponentId
-					: widget.components[0]?.id ?? widget.rootComponentId;
+					: (widget.components[0]?.id ?? widget.rootComponentId);
 
 			const instanceId = `widget-${widgetId}-${Date.now()}`;
 			const widgetInstanceComponentId = `widgetInstance-${instanceId}`;
@@ -338,7 +342,13 @@ export function BuilderDndProvider({
 				} as A2UIComponent,
 			});
 		},
-		[backend.widgetState, components, addComponent, updateComponent, addWidgetRef],
+		[
+			backend.widgetState,
+			components,
+			addComponent,
+			updateComponent,
+			addWidgetRef,
+		],
 	);
 
 	const handleDragEnd = useCallback(
@@ -359,7 +369,7 @@ export function BuilderDndProvider({
 			const dropData =
 				directDropData?.type === "drop-zone"
 					? directDropData
-					: lastDropZoneRef.current ?? directDropData;
+					: (lastDropZoneRef.current ?? directDropData);
 
 			lastDropZoneRef.current = null;
 
@@ -411,7 +421,14 @@ export function BuilderDndProvider({
 				);
 			}
 		},
-		[setIsDraggingGlobal, components, addComponent, updateComponent, moveComponent, insertWidgetInstance]
+		[
+			setIsDraggingGlobal,
+			components,
+			addComponent,
+			updateComponent,
+			moveComponent,
+			insertWidgetInstance,
+		],
 	);
 
 	const handleDragCancel = useCallback(() => {

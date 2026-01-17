@@ -294,12 +294,15 @@ export const en = {
 	// Newsletter
 	"newsletter.tagline": "Stay updated",
 	"newsletter.headline": "Get automation insights delivered",
-	"newsletter.description": "Sign up for our newsletter to receive the latest updates on Flow-Like, automation best practices, and industry insights. No spam — just valuable content.",
+	"newsletter.description":
+		"Sign up for our newsletter to receive the latest updates on Flow-Like, automation best practices, and industry insights. No spam — just valuable content.",
 	"newsletter.email.label": "Email address",
 	"newsletter.email.placeholder": "Enter your email",
 	"newsletter.button": "Subscribe",
-	"newsletter.optin": "I agree to receive email updates and accept the Privacy Policy",
-	"newsletter.privacy": "We use Brevo as our marketing platform. By submitting this form, you agree that your data will be processed in accordance with Brevo's Privacy Policy.",
+	"newsletter.optin":
+		"I agree to receive email updates and accept the Privacy Policy",
+	"newsletter.privacy":
+		"We use Brevo as our marketing platform. By submitting this form, you agree that your data will be processed in accordance with Brevo's Privacy Policy.",
 	"newsletter.success": "Thanks for subscribing! Check your inbox to confirm.",
 	"newsletter.error": "Something went wrong. Please try again later.",
 

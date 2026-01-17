@@ -1,6 +1,7 @@
 export const esBi = {
 	// Meta
-	"bi.meta.title": "Stack BI Moderno: Constructor de Dashboards con IA | Flow-Like",
+	"bi.meta.title":
+		"Stack BI Moderno: Constructor de Dashboards con IA | Flow-Like",
 	"bi.meta.description":
 		"Crea dashboards BI visual o con IA en minutos. Sin precios por usuario, auto-hospedado, personalización ilimitada. Alternativa a Tableau y Power BI.",
 	"bi.meta.keywords":
@@ -116,7 +117,8 @@ export const esBi = {
 	"bi.comparison.row5.spreadsheets": "Manual o limitado",
 
 	"bi.comparison.row6.feature": "Extensibilidad para desarrolladores",
-	"bi.comparison.row6.flowlike": "Acceso completo al código, nodos personalizados",
+	"bi.comparison.row6.flowlike":
+		"Acceso completo al código, nodos personalizados",
 	"bi.comparison.row6.traditional": "Acceso API, personalización limitada",
 	"bi.comparison.row6.spreadsheets": "Macros, scripts",
 
@@ -145,7 +147,8 @@ export const esBi = {
 	"bi.cta.description":
 		"Descarga Flow-Like y construye tu primer dashboard en minutos. Sin tarjeta de crédito. Sin dependencia de vendor. Solo mejor BI.",
 	"bi.cta.button": "Descargar Gratis",
-	"bi.cta.note": "Gratis para siempre para individuos. Planes Team & Enterprise disponibles.",
+	"bi.cta.note":
+		"Gratis para siempre para individuos. Planes Team & Enterprise disponibles.",
 
 	// FAQ
 	"bi.faq.tagline": "Preguntas",

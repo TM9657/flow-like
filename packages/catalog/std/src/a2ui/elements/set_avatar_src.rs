@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id;
+use flow_like::a2ui::components::AvatarProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::AvatarProps;
 use flow_like_types::{Value, async_trait, json::json};
-use super::element_utils::extract_element_id;
 
 /// Sets the source image of an avatar element.
 #[crate::register_node]
@@ -41,12 +41,7 @@ impl NodeLogic for SetAvatarSrc {
         .set_schema::<AvatarProps>()
         .set_options(PinOptions::new().set_enforce_schema(false).build());
 
-        node.add_input_pin(
-            "src",
-            "URL",
-            "Avatar image URL",
-            VariableType::String,
-        );
+        node.add_input_pin("src", "URL", "Avatar image URL", VariableType::String);
 
         node.add_input_pin(
             "fallback",

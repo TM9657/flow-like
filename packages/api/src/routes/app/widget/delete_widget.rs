@@ -8,10 +8,7 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
-#[tracing::instrument(
-    name = "DELETE /apps/{app_id}/widgets/{widget_id}",
-    skip(state, user)
-)]
+#[tracing::instrument(name = "DELETE /apps/{app_id}/widgets/{widget_id}", skip(state, user))]
 pub async fn delete_widget(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

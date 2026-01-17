@@ -236,13 +236,16 @@ impl WasmEngine {
     }
 
     /// Load a module from file
-    pub async fn load_module_from_file(&self, path: impl AsRef<Path>) -> WasmResult<Arc<WasmModule>> {
+    pub async fn load_module_from_file(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> WasmResult<Arc<WasmModule>> {
         let path = path.as_ref();
-        let bytes = tokio::fs::read(path).await.map_err(|_e| {
-            WasmError::ModuleNotFound {
+        let bytes = tokio::fs::read(path)
+            .await
+            .map_err(|_e| WasmError::ModuleNotFound {
                 path: path.display().to_string(),
-            }
-        })?;
+            })?;
 
         self.load_module(&bytes).await
     }
@@ -250,11 +253,12 @@ impl WasmEngine {
     /// Load a module from URL
     #[cfg(feature = "http")]
     pub async fn load_module_from_url(&self, url: &str) -> WasmResult<Arc<WasmModule>> {
-        let response: reqwest::Response = reqwest::get(url).await.map_err(|_e| {
-            WasmError::ModuleNotFound {
-                path: url.to_string(),
-            }
-        })?;
+        let response: reqwest::Response =
+            reqwest::get(url)
+                .await
+                .map_err(|_e| WasmError::ModuleNotFound {
+                    path: url.to_string(),
+                })?;
 
         if !response.status().is_success() {
             return Err(WasmError::ModuleNotFound {
@@ -262,21 +266,25 @@ impl WasmEngine {
             });
         }
 
-        let bytes = response.bytes().await.map_err(|e| {
-            WasmError::Internal(format!("Failed to read module bytes: {}", e))
-        })?;
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| WasmError::Internal(format!("Failed to read module bytes: {}", e)))?;
 
         self.load_module(&bytes).await
     }
 
     /// Preload modules from a directory
-    pub async fn preload_directory(&self, dir: impl AsRef<Path>) -> WasmResult<Vec<Arc<WasmModule>>> {
+    pub async fn preload_directory(
+        &self,
+        dir: impl AsRef<Path>,
+    ) -> WasmResult<Vec<Arc<WasmModule>>> {
         let dir = dir.as_ref();
         let mut modules = Vec::new();
 
-        let mut entries = tokio::fs::read_dir(dir).await.map_err(|e| {
-            WasmError::Io(e)
-        })?;
+        let mut entries = tokio::fs::read_dir(dir)
+            .await
+            .map_err(|e| WasmError::Io(e))?;
 
         while let Some(entry) = entries.next_entry().await.map_err(WasmError::Io)? {
             let path = entry.path();

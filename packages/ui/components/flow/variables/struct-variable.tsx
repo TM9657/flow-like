@@ -181,12 +181,9 @@ export function StructVariable({
 		[onChange, variable],
 	);
 
-	const handleFieldChange = useCallback(
-		(fieldName: string, value: unknown) => {
-			setFormValues((prev) => ({ ...prev, [fieldName]: value }));
-		},
-		[],
-	);
+	const handleFieldChange = useCallback((fieldName: string, value: unknown) => {
+		setFormValues((prev) => ({ ...prev, [fieldName]: value }));
+	}, []);
 
 	const renderSchemaField = useCallback(
 		(fieldName: string, prop: SchemaProperty, required: boolean) => {
@@ -214,7 +211,9 @@ export function StructVariable({
 							</SelectContent>
 						</Select>
 						{prop.description && (
-							<p className="text-xs text-muted-foreground">{prop.description}</p>
+							<p className="text-xs text-muted-foreground">
+								{prop.description}
+							</p>
 						)}
 					</div>
 				);
@@ -413,9 +412,7 @@ export function StructVariable({
 							)}
 						/>
 					</div>
-					{jsonError && (
-						<p className="text-xs text-destructive">{jsonError}</p>
-					)}
+					{jsonError && <p className="text-xs text-destructive">{jsonError}</p>}
 					{!hasSchema && (
 						<p className="text-xs text-muted-foreground">
 							No schema defined. Add a schema to enable form mode.

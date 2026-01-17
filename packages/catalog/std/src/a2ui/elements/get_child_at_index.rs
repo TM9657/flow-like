@@ -1,10 +1,10 @@
+use flow_like::a2ui::A2UIElement;
 use flow_like::flow::{
     execution::{LogLevel, context::ExecutionContext},
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::A2UIElement;
 use flow_like_types::{Value, async_trait};
 
 #[crate::register_node]
@@ -76,17 +76,44 @@ impl NodeLogic for GetChildAtIndex {
 
         let Some(elements_map) = elements else {
             context.log_message("No elements in payload", LogLevel::Warn);
-            context.get_pin_by_name("child").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("child_id").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("found").await?.set_value(Value::Bool(false)).await;
+            context
+                .get_pin_by_name("child")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("child_id")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("found")
+                .await?
+                .set_value(Value::Bool(false))
+                .await;
             return Ok(());
         };
 
         let Some(container) = elements_map.get(&container_id) else {
-            context.log_message(&format!("Container not found: {}", container_id), LogLevel::Warn);
-            context.get_pin_by_name("child").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("child_id").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("found").await?.set_value(Value::Bool(false)).await;
+            context.log_message(
+                &format!("Container not found: {}", container_id),
+                LogLevel::Warn,
+            );
+            context
+                .get_pin_by_name("child")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("child_id")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("found")
+                .await?
+                .set_value(Value::Bool(false))
+                .await;
             return Ok(());
         };
 
@@ -95,15 +122,38 @@ impl NodeLogic for GetChildAtIndex {
             .and_then(|c| c.get("children"))
             .and_then(|ch| ch.get("explicitList"))
             .and_then(|list| list.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
 
         let idx = index as usize;
         if idx >= child_ids.len() {
-            context.log_message(&format!("Index {} out of bounds (length: {})", index, child_ids.len()), LogLevel::Warn);
-            context.get_pin_by_name("child").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("child_id").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("found").await?.set_value(Value::Bool(false)).await;
+            context.log_message(
+                &format!(
+                    "Index {} out of bounds (length: {})",
+                    index,
+                    child_ids.len()
+                ),
+                LogLevel::Warn,
+            );
+            context
+                .get_pin_by_name("child")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("child_id")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("found")
+                .await?
+                .set_value(Value::Bool(false))
+                .await;
             return Ok(());
         }
 
@@ -114,13 +164,37 @@ impl NodeLogic for GetChildAtIndex {
             if let Some(obj) = child.as_object_mut() {
                 obj.insert("_id".to_string(), Value::String(child_id.clone()));
             }
-            context.get_pin_by_name("child").await?.set_value(child).await;
-            context.get_pin_by_name("child_id").await?.set_value(Value::String(child_id.clone())).await;
-            context.get_pin_by_name("found").await?.set_value(Value::Bool(true)).await;
+            context
+                .get_pin_by_name("child")
+                .await?
+                .set_value(child)
+                .await;
+            context
+                .get_pin_by_name("child_id")
+                .await?
+                .set_value(Value::String(child_id.clone()))
+                .await;
+            context
+                .get_pin_by_name("found")
+                .await?
+                .set_value(Value::Bool(true))
+                .await;
         } else {
-            context.get_pin_by_name("child").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("child_id").await?.set_value(Value::String(child_id.clone())).await;
-            context.get_pin_by_name("found").await?.set_value(Value::Bool(false)).await;
+            context
+                .get_pin_by_name("child")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("child_id")
+                .await?
+                .set_value(Value::String(child_id.clone()))
+                .await;
+            context
+                .get_pin_by_name("found")
+                .await?
+                .set_value(Value::Bool(false))
+                .await;
         }
 
         Ok(())

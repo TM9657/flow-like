@@ -3,7 +3,7 @@ use flow_like::flow::{
     node::{Node, NodeLogic},
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, json::Map, Value};
+use flow_like_types::{Value, async_trait, json::Map, json::json};
 
 /// Parses CSV text and outputs Nivo-compatible chart data.
 ///
@@ -122,7 +122,8 @@ impl NodeLogic for CsvToNivoData {
 
         // Determine index column
         let index_col_idx = parse_column_ref(&index_column, &headers);
-        let index_field = headers.get(index_col_idx)
+        let index_field = headers
+            .get(index_col_idx)
             .cloned()
             .unwrap_or_else(|| "category".to_string())
             .to_lowercase()
@@ -141,7 +142,12 @@ impl NodeLogic for CsvToNivoData {
 
         let value_keys: Vec<String> = value_col_indices
             .iter()
-            .map(|&i| headers.get(i).cloned().unwrap_or_else(|| format!("value{}", i)))
+            .map(|&i| {
+                headers
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("value{}", i))
+            })
             .map(|s| s.to_lowercase().replace(' ', "_"))
             .collect();
 
@@ -158,7 +164,10 @@ impl NodeLogic for CsvToNivoData {
                     .iter()
                     .map(|row| {
                         let mut obj = Map::new();
-                        obj.insert(index_field.clone(), json!(row.get(index_col_idx).cloned().unwrap_or_default()));
+                        obj.insert(
+                            index_field.clone(),
+                            json!(row.get(index_col_idx).cloned().unwrap_or_default()),
+                        );
                         for (i, &col_idx) in value_col_indices.iter().enumerate() {
                             let val = row.get(col_idx).cloned().unwrap_or_default();
                             let num_val: f64 = val.parse().unwrap_or(0.0);
@@ -179,7 +188,8 @@ impl NodeLogic for CsvToNivoData {
                             .iter()
                             .map(|row| {
                                 let x = row.get(index_col_idx).cloned().unwrap_or_default();
-                                let y_str = row.get(value_col_indices[i]).cloned().unwrap_or_default();
+                                let y_str =
+                                    row.get(value_col_indices[i]).cloned().unwrap_or_default();
                                 let y: f64 = y_str.parse().unwrap_or(0.0);
                                 json!({"x": x, "y": y})
                             })
@@ -198,7 +208,10 @@ impl NodeLogic for CsvToNivoData {
                     .iter()
                     .map(|row| {
                         let id = row.get(index_col_idx).cloned().unwrap_or_default();
-                        let val_str = row.get(*value_col_indices.first().unwrap_or(&1)).cloned().unwrap_or_default();
+                        let val_str = row
+                            .get(*value_col_indices.first().unwrap_or(&1))
+                            .cloned()
+                            .unwrap_or_default();
                         let val: f64 = val_str.parse().unwrap_or(0.0);
                         json!({
                             "id": id,
@@ -241,7 +254,10 @@ impl NodeLogic for CsvToNivoData {
                     .iter()
                     .map(|row| {
                         let mut obj = Map::new();
-                        obj.insert(index_field.clone(), json!(row.get(index_col_idx).cloned().unwrap_or_default()));
+                        obj.insert(
+                            index_field.clone(),
+                            json!(row.get(index_col_idx).cloned().unwrap_or_default()),
+                        );
                         for (i, &col_idx) in value_col_indices.iter().enumerate() {
                             let val = row.get(col_idx).cloned().unwrap_or_default();
                             let num_val: f64 = val.parse().unwrap_or(0.0);
@@ -256,7 +272,9 @@ impl NodeLogic for CsvToNivoData {
 
         context.set_pin_value("data", output).await?;
         context.set_pin_value("keys", json!(value_keys)).await?;
-        context.set_pin_value("index_by", json!(index_field)).await?;
+        context
+            .set_pin_value("index_by", json!(index_field))
+            .await?;
 
         Ok(())
     }

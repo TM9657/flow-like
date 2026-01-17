@@ -37,27 +37,72 @@ impl NodeLogic for RegisterDeltaTableNode {
         );
         node.add_icon("/flow/icons/database.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("session", "Session", "DataFusion session", VariableType::Struct)
-            .set_schema::<DataFusionSession>();
+        node.add_input_pin(
+            "session",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
 
-        node.add_input_pin("path", "Path", "FlowPath to the Delta table directory", VariableType::Struct)
-            .set_schema::<FlowPath>();
+        node.add_input_pin(
+            "path",
+            "Path",
+            "FlowPath to the Delta table directory",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>();
 
-        node.add_input_pin("table_name", "Table Name", "Name to register in DataFusion", VariableType::String);
+        node.add_input_pin(
+            "table_name",
+            "Table Name",
+            "Name to register in DataFusion",
+            VariableType::String,
+        );
 
-        node.add_input_pin("version", "Version", "Specific version to load (-1 for latest)", VariableType::Integer)
-            .set_default_value(Some(json!(-1)));
+        node.add_input_pin(
+            "version",
+            "Version",
+            "Specific version to load (-1 for latest)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(-1)));
 
-        node.add_output_pin("exec_out", "Done", "Table registered", VariableType::Execution);
+        node.add_output_pin(
+            "exec_out",
+            "Done",
+            "Table registered",
+            VariableType::Execution,
+        );
 
-        node.add_output_pin("session_out", "Session", "DataFusion session", VariableType::Struct)
-            .set_schema::<DataFusionSession>();
+        node.add_output_pin(
+            "session_out",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
 
-        node.add_output_pin("table_version", "Table Version", "Actual version loaded", VariableType::Integer);
+        node.add_output_pin(
+            "table_version",
+            "Table Version",
+            "Actual version loaded",
+            VariableType::Integer,
+        );
 
-        node.add_output_pin("num_files", "Num Files", "Number of data files in the table", VariableType::Integer);
+        node.add_output_pin(
+            "num_files",
+            "Num Files",
+            "Number of data files in the table",
+            VariableType::Integer,
+        );
 
         node.scores = Some(NodeScores {
             privacy: 8,
@@ -71,7 +116,7 @@ impl NodeLogic for RegisterDeltaTableNode {
         node
     }
 
-    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {
             use flow_like_storage::deltalake::DeltaTableBuilder;
@@ -90,23 +135,29 @@ impl NodeLogic for RegisterDeltaTableNode {
             let url_str = build_store_url(&path.store_ref, &path.path);
             let url = Url::parse(&url_str)?;
 
-            let mut builder = DeltaTableBuilder::from_uri(&url_str)
-                .with_storage_backend(object_store, url);
+            let mut builder =
+                DeltaTableBuilder::from_uri(&url_str).with_storage_backend(object_store, url);
 
             if version >= 0 {
                 builder = builder.with_version(version);
             }
 
-            let delta_table = builder.load().await
+            let delta_table = builder
+                .load()
+                .await
                 .map_err(|e| flow_like_types::anyhow!("Failed to open Delta table: {}", e))?;
 
             let actual_version = delta_table.version();
             let num_files = delta_table.get_files_count() as i64;
 
-            cached_session.ctx.register_table(&table_name, std::sync::Arc::new(delta_table))?;
+            cached_session
+                .ctx
+                .register_table(&table_name, std::sync::Arc::new(delta_table))?;
 
             context.set_pin_value("session_out", json!(session)).await?;
-            context.set_pin_value("table_version", json!(actual_version)).await?;
+            context
+                .set_pin_value("table_version", json!(actual_version))
+                .await?;
             context.set_pin_value("num_files", json!(num_files)).await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
@@ -143,31 +194,81 @@ impl NodeLogic for DeltaTimeTravelNode {
         );
         node.add_icon("/flow/icons/clock.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("session", "Session", "DataFusion session", VariableType::Struct)
-            .set_schema::<DataFusionSession>();
+        node.add_input_pin(
+            "session",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
 
-        node.add_input_pin("path", "Path", "FlowPath to the Delta table directory", VariableType::Struct)
-            .set_schema::<FlowPath>();
+        node.add_input_pin(
+            "path",
+            "Path",
+            "FlowPath to the Delta table directory",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>();
 
-        node.add_input_pin("table_name", "Table Name", "Name to register in DataFusion", VariableType::String);
+        node.add_input_pin(
+            "table_name",
+            "Table Name",
+            "Name to register in DataFusion",
+            VariableType::String,
+        );
 
-        node.add_input_pin("travel_mode", "Travel Mode", "Mode: 'version' or 'timestamp'", VariableType::String)
-            .set_default_value(Some(json!("version")));
+        node.add_input_pin(
+            "travel_mode",
+            "Travel Mode",
+            "Mode: 'version' or 'timestamp'",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("version")));
 
-        node.add_input_pin("version", "Version", "Version number (when mode is 'version')", VariableType::Integer)
-            .set_default_value(Some(json!(0)));
+        node.add_input_pin(
+            "version",
+            "Version",
+            "Version number (when mode is 'version')",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(0)));
 
-        node.add_input_pin("timestamp", "Timestamp", "ISO 8601 timestamp (when mode is 'timestamp')", VariableType::String)
-            .set_default_value(Some(json!("")));
+        node.add_input_pin(
+            "timestamp",
+            "Timestamp",
+            "ISO 8601 timestamp (when mode is 'timestamp')",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
 
-        node.add_output_pin("exec_out", "Done", "Table registered", VariableType::Execution);
+        node.add_output_pin(
+            "exec_out",
+            "Done",
+            "Table registered",
+            VariableType::Execution,
+        );
 
-        node.add_output_pin("session_out", "Session", "DataFusion session", VariableType::Struct)
-            .set_schema::<DataFusionSession>();
+        node.add_output_pin(
+            "session_out",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
 
-        node.add_output_pin("loaded_version", "Loaded Version", "Actual version loaded", VariableType::Integer);
+        node.add_output_pin(
+            "loaded_version",
+            "Loaded Version",
+            "Actual version loaded",
+            VariableType::Integer,
+        );
 
         node.scores = Some(NodeScores {
             privacy: 8,
@@ -181,7 +282,7 @@ impl NodeLogic for DeltaTimeTravelNode {
         node
     }
 
-    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {
             use flow_like_storage::deltalake::DeltaTableBuilder;
@@ -203,11 +304,9 @@ impl NodeLogic for DeltaTimeTravelNode {
             let url = Url::parse(&url_str)?;
 
             let builder = match travel_mode.to_lowercase().as_str() {
-                "version" => {
-                    DeltaTableBuilder::from_uri(&url_str)
-                        .with_storage_backend(object_store, url)
-                        .with_version(version)
-                }
+                "version" => DeltaTableBuilder::from_uri(&url_str)
+                    .with_storage_backend(object_store, url)
+                    .with_version(version),
                 "timestamp" => {
                     let dt = chrono::DateTime::parse_from_rfc3339(&timestamp)
                         .map_err(|e| flow_like_types::anyhow!("Invalid timestamp format: {}", e))?;
@@ -216,18 +315,27 @@ impl NodeLogic for DeltaTimeTravelNode {
                         .with_timestamp(dt.to_utc())
                 }
                 _ => {
-                    return Err(flow_like_types::anyhow!("Invalid travel mode: {}. Use 'version' or 'timestamp'", travel_mode));
+                    return Err(flow_like_types::anyhow!(
+                        "Invalid travel mode: {}. Use 'version' or 'timestamp'",
+                        travel_mode
+                    ));
                 }
             };
 
-            let delta_table = builder.load().await
+            let delta_table = builder
+                .load()
+                .await
                 .map_err(|e| flow_like_types::anyhow!("Failed to load Delta table: {}", e))?;
 
             let loaded_version = delta_table.version();
-            cached_session.ctx.register_table(&table_name, std::sync::Arc::new(delta_table))?;
+            cached_session
+                .ctx
+                .register_table(&table_name, std::sync::Arc::new(delta_table))?;
 
             context.set_pin_value("session_out", json!(session)).await?;
-            context.set_pin_value("loaded_version", json!(loaded_version)).await?;
+            context
+                .set_pin_value("loaded_version", json!(loaded_version))
+                .await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
@@ -263,25 +371,70 @@ impl NodeLogic for DeltaTableInfoNode {
         );
         node.add_icon("/flow/icons/info.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("path", "Path", "FlowPath to the Delta table directory", VariableType::Struct)
-            .set_schema::<FlowPath>();
+        node.add_input_pin(
+            "path",
+            "Path",
+            "FlowPath to the Delta table directory",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>();
 
-        node.add_input_pin("history_limit", "History Limit", "Max number of history entries to return", VariableType::Integer)
-            .set_default_value(Some(json!(10)));
+        node.add_input_pin(
+            "history_limit",
+            "History Limit",
+            "Max number of history entries to return",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(10)));
 
-        node.add_output_pin("exec_out", "Done", "Info retrieved", VariableType::Execution);
+        node.add_output_pin(
+            "exec_out",
+            "Done",
+            "Info retrieved",
+            VariableType::Execution,
+        );
 
-        node.add_output_pin("current_version", "Current Version", "Latest version number", VariableType::Integer);
+        node.add_output_pin(
+            "current_version",
+            "Current Version",
+            "Latest version number",
+            VariableType::Integer,
+        );
 
-        node.add_output_pin("num_files", "Num Files", "Number of data files", VariableType::Integer);
+        node.add_output_pin(
+            "num_files",
+            "Num Files",
+            "Number of data files",
+            VariableType::Integer,
+        );
 
-        node.add_output_pin("schema", "Schema", "Table schema as JSON", VariableType::Generic);
+        node.add_output_pin(
+            "schema",
+            "Schema",
+            "Table schema as JSON",
+            VariableType::Generic,
+        );
 
-        node.add_output_pin("history", "History", "Version history as JSON array", VariableType::Generic);
+        node.add_output_pin(
+            "history",
+            "History",
+            "Version history as JSON array",
+            VariableType::Generic,
+        );
 
-        node.add_output_pin("partitions", "Partitions", "Partition columns", VariableType::Generic);
+        node.add_output_pin(
+            "partitions",
+            "Partitions",
+            "Partition columns",
+            VariableType::Generic,
+        );
 
         node.scores = Some(NodeScores {
             privacy: 10,
@@ -295,7 +448,7 @@ impl NodeLogic for DeltaTableInfoNode {
         node
     }
 
-    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {
             use flow_like_storage::deltalake::DeltaTableBuilder;
@@ -320,36 +473,55 @@ impl NodeLogic for DeltaTableInfoNode {
             let current_version = delta_table.version();
             let num_files = delta_table.get_files_count() as i64;
 
-            let schema = delta_table.schema()
+            let schema = delta_table
+                .schema()
                 .map(|s| {
-                    let fields: Vec<_> = s.fields().map(|f| json!({
-                        "name": f.name(),
-                        "type": format!("{:?}", f.data_type()),
-                        "nullable": f.is_nullable(),
-                    })).collect();
+                    let fields: Vec<_> = s
+                        .fields()
+                        .map(|f| {
+                            json!({
+                                "name": f.name(),
+                                "type": format!("{:?}", f.data_type()),
+                                "nullable": f.is_nullable(),
+                            })
+                        })
+                        .collect();
                     json!({ "fields": fields })
                 })
                 .unwrap_or(json!(null));
 
-            let partitions: Vec<String> = delta_table.metadata()
+            let partitions: Vec<String> = delta_table
+                .metadata()
                 .map(|m| m.partition_columns().clone())
                 .unwrap_or_default();
 
-            let history = delta_table.history(Some(history_limit as usize)).await
-                .map(|h| h.iter().map(|entry| json!({
-                    "read_version": entry.read_version,
-                    "timestamp": entry.timestamp,
-                    "operation": entry.operation,
-                    "user_id": entry.user_id,
-                    "user_name": entry.user_name,
-                })).collect::<Vec<_>>())
+            let history = delta_table
+                .history(Some(history_limit as usize))
+                .await
+                .map(|h| {
+                    h.iter()
+                        .map(|entry| {
+                            json!({
+                                "read_version": entry.read_version,
+                                "timestamp": entry.timestamp,
+                                "operation": entry.operation,
+                                "user_id": entry.user_id,
+                                "user_name": entry.user_name,
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default();
 
-            context.set_pin_value("current_version", json!(current_version)).await?;
+            context
+                .set_pin_value("current_version", json!(current_version))
+                .await?;
             context.set_pin_value("num_files", json!(num_files)).await?;
             context.set_pin_value("schema", schema).await?;
             context.set_pin_value("history", json!(history)).await?;
-            context.set_pin_value("partitions", json!(partitions)).await?;
+            context
+                .set_pin_value("partitions", json!(partitions))
+                .await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
@@ -389,20 +561,50 @@ impl NodeLogic for RegisterHivePartitionedParquetNode {
         );
         node.add_icon("/flow/icons/database.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("session", "Session", "DataFusion session", VariableType::Struct)
-            .set_schema::<DataFusionSession>();
+        node.add_input_pin(
+            "session",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
 
-        node.add_input_pin("path", "Path", "FlowPath to root directory of partitioned Parquet files", VariableType::Struct)
-            .set_schema::<FlowPath>();
+        node.add_input_pin(
+            "path",
+            "Path",
+            "FlowPath to root directory of partitioned Parquet files",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>();
 
-        node.add_input_pin("table_name", "Table Name", "Name to register in DataFusion", VariableType::String);
+        node.add_input_pin(
+            "table_name",
+            "Table Name",
+            "Name to register in DataFusion",
+            VariableType::String,
+        );
 
-        node.add_output_pin("exec_out", "Done", "Table registered", VariableType::Execution);
+        node.add_output_pin(
+            "exec_out",
+            "Done",
+            "Table registered",
+            VariableType::Execution,
+        );
 
-        node.add_output_pin("session_out", "Session", "DataFusion session", VariableType::Struct)
-            .set_schema::<DataFusionSession>();
+        node.add_output_pin(
+            "session_out",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
 
         node.scores = Some(NodeScores {
             privacy: 9,
@@ -417,10 +619,10 @@ impl NodeLogic for RegisterHivePartitionedParquetNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use flow_like_storage::datafusion::datasource::listing::{
-            ListingTable, ListingTableConfig, ListingTableUrl, ListingOptions,
-        };
         use flow_like_storage::datafusion::datasource::file_format::parquet::ParquetFormat;
+        use flow_like_storage::datafusion::datasource::listing::{
+            ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
+        };
         use std::sync::Arc;
 
         context.deactivate_exec_pin("exec_out").await?;
@@ -451,7 +653,9 @@ impl NodeLogic for RegisterHivePartitionedParquetNode {
             .await?;
 
         let listing_table = ListingTable::try_new(config)?;
-        cached_session.ctx.register_table(&table_name, Arc::new(listing_table))?;
+        cached_session
+            .ctx
+            .register_table(&table_name, Arc::new(listing_table))?;
 
         context.set_pin_value("session_out", json!(session)).await?;
         context.activate_exec_pin("exec_out").await?;
@@ -481,23 +685,58 @@ impl NodeLogic for RegisterPartitionedJsonNode {
         );
         node.add_icon("/flow/icons/database.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("session", "Session", "DataFusion session", VariableType::Struct)
-            .set_schema::<DataFusionSession>();
+        node.add_input_pin(
+            "session",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
 
-        node.add_input_pin("path", "Path", "FlowPath to JSON files", VariableType::Struct)
-            .set_schema::<FlowPath>();
+        node.add_input_pin(
+            "path",
+            "Path",
+            "FlowPath to JSON files",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>();
 
-        node.add_input_pin("table_name", "Table Name", "Name to register", VariableType::String);
+        node.add_input_pin(
+            "table_name",
+            "Table Name",
+            "Name to register",
+            VariableType::String,
+        );
 
-        node.add_input_pin("file_extension", "File Extension", "File extension to match", VariableType::String)
-            .set_default_value(Some(json!(".json")));
+        node.add_input_pin(
+            "file_extension",
+            "File Extension",
+            "File extension to match",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!(".json")));
 
-        node.add_output_pin("exec_out", "Done", "Table registered", VariableType::Execution);
+        node.add_output_pin(
+            "exec_out",
+            "Done",
+            "Table registered",
+            VariableType::Execution,
+        );
 
-        node.add_output_pin("session_out", "Session", "DataFusion session", VariableType::Struct)
-            .set_schema::<DataFusionSession>();
+        node.add_output_pin(
+            "session_out",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
 
         node.scores = Some(NodeScores {
             privacy: 9,
@@ -512,10 +751,10 @@ impl NodeLogic for RegisterPartitionedJsonNode {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use flow_like_storage::datafusion::datasource::listing::{
-            ListingTable, ListingTableConfig, ListingTableUrl, ListingOptions,
-        };
         use flow_like_storage::datafusion::datasource::file_format::json::JsonFormat;
+        use flow_like_storage::datafusion::datasource::listing::{
+            ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
+        };
         use std::sync::Arc;
 
         context.deactivate_exec_pin("exec_out").await?;
@@ -523,7 +762,10 @@ impl NodeLogic for RegisterPartitionedJsonNode {
         let session: DataFusionSession = context.evaluate_pin("session").await?;
         let path: FlowPath = context.evaluate_pin("path").await?;
         let table_name: String = context.evaluate_pin("table_name").await?;
-        let file_extension: String = context.evaluate_pin("file_extension").await.unwrap_or_else(|_| ".json".to_string());
+        let file_extension: String = context
+            .evaluate_pin("file_extension")
+            .await
+            .unwrap_or_else(|_| ".json".to_string());
 
         let cached_session = session.load(context).await?;
         let store = path.to_store(context).await?;
@@ -546,7 +788,9 @@ impl NodeLogic for RegisterPartitionedJsonNode {
             .await?;
 
         let listing_table = ListingTable::try_new(config)?;
-        cached_session.ctx.register_table(&table_name, Arc::new(listing_table))?;
+        cached_session
+            .ctx
+            .register_table(&table_name, Arc::new(listing_table))?;
 
         context.set_pin_value("session_out", json!(session)).await?;
         context.activate_exec_pin("exec_out").await?;
@@ -580,30 +824,80 @@ impl NodeLogic for WriteDeltaTableNode {
         );
         node.add_icon("/flow/icons/save.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("session", "Session", "DataFusion session", VariableType::Struct)
-            .set_schema::<DataFusionSession>();
+        node.add_input_pin(
+            "session",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
 
-        node.add_input_pin("query", "Query", "SQL query to execute", VariableType::String);
+        node.add_input_pin(
+            "query",
+            "Query",
+            "SQL query to execute",
+            VariableType::String,
+        );
 
-        node.add_input_pin("path", "Path", "FlowPath for the Delta table directory", VariableType::Struct)
-            .set_schema::<FlowPath>();
+        node.add_input_pin(
+            "path",
+            "Path",
+            "FlowPath for the Delta table directory",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>();
 
-        node.add_input_pin("mode", "Mode", "Write mode: append, overwrite, error, ignore", VariableType::String)
-            .set_default_value(Some(json!("append")));
+        node.add_input_pin(
+            "mode",
+            "Mode",
+            "Write mode: append, overwrite, error, ignore",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("append")));
 
-        node.add_input_pin("partition_by", "Partition By", "Columns to partition by (comma-separated)", VariableType::String)
-            .set_default_value(Some(json!("")));
+        node.add_input_pin(
+            "partition_by",
+            "Partition By",
+            "Columns to partition by (comma-separated)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
 
-        node.add_output_pin("exec_out", "Done", "Write completed", VariableType::Execution);
+        node.add_output_pin(
+            "exec_out",
+            "Done",
+            "Write completed",
+            VariableType::Execution,
+        );
 
-        node.add_output_pin("session_out", "Session", "DataFusion session", VariableType::Struct)
-            .set_schema::<DataFusionSession>();
+        node.add_output_pin(
+            "session_out",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
 
-        node.add_output_pin("rows_written", "Rows Written", "Number of rows written", VariableType::Integer);
+        node.add_output_pin(
+            "rows_written",
+            "Rows Written",
+            "Number of rows written",
+            VariableType::Integer,
+        );
 
-        node.add_output_pin("new_version", "New Version", "Version number after write", VariableType::Integer);
+        node.add_output_pin(
+            "new_version",
+            "New Version",
+            "Version number after write",
+            VariableType::Integer,
+        );
 
         node.scores = Some(NodeScores {
             privacy: 7,
@@ -617,19 +911,25 @@ impl NodeLogic for WriteDeltaTableNode {
         node
     }
 
-    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {
-            use flow_like_storage::deltalake::{DeltaOps, DeltaTable, DeltaTableBuilder};
             use flow_like_storage::deltalake::protocol::SaveMode;
+            use flow_like_storage::deltalake::{DeltaOps, DeltaTable, DeltaTableBuilder};
 
             context.deactivate_exec_pin("exec_out").await?;
 
             let session: DataFusionSession = context.evaluate_pin("session").await?;
             let query: String = context.evaluate_pin("query").await?;
             let path: FlowPath = context.evaluate_pin("path").await?;
-            let mode: String = context.evaluate_pin("mode").await.unwrap_or_else(|_| "append".to_string());
-            let partition_by_str: String = context.evaluate_pin("partition_by").await.unwrap_or_default();
+            let mode: String = context
+                .evaluate_pin("mode")
+                .await
+                .unwrap_or_else(|_| "append".to_string());
+            let partition_by_str: String = context
+                .evaluate_pin("partition_by")
+                .await
+                .unwrap_or_default();
 
             let cached_session = session.load(context).await?;
 
@@ -676,7 +976,9 @@ impl NodeLogic for WriteDeltaTableNode {
                     let table = DeltaTableBuilder::from_uri(&url_str)
                         .with_storage_backend(object_store.clone(), url.clone())
                         .build()
-                        .map_err(|e| flow_like_types::anyhow!("Failed to create Delta table: {}", e))?;
+                        .map_err(|e| {
+                            flow_like_types::anyhow!("Failed to create Delta table: {}", e)
+                        })?;
                     DeltaOps::from(table)
                 }
             };
@@ -687,14 +989,19 @@ impl NodeLogic for WriteDeltaTableNode {
                 write_builder = write_builder.with_partition_columns(partition_cols);
             }
 
-            let table: DeltaTable = write_builder.await
+            let table: DeltaTable = write_builder
+                .await
                 .map_err(|e| flow_like_types::anyhow!("Failed to write to Delta table: {}", e))?;
 
             let new_version = table.version();
 
             context.set_pin_value("session_out", json!(session)).await?;
-            context.set_pin_value("rows_written", json!(total_rows)).await?;
-            context.set_pin_value("new_version", json!(new_version)).await?;
+            context
+                .set_pin_value("rows_written", json!(total_rows))
+                .await?;
+            context
+                .set_pin_value("new_version", json!(new_version))
+                .await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
@@ -729,7 +1036,10 @@ mod tests {
     #[test]
     fn test_build_store_url_deep_path() {
         let url = build_store_url("s3_bucket", "data/warehouse/tables/customers/_delta_log");
-        assert_eq!(url, "flowlike://s3_bucket/data/warehouse/tables/customers/_delta_log");
+        assert_eq!(
+            url,
+            "flowlike://s3_bucket/data/warehouse/tables/customers/_delta_log"
+        );
     }
 
     #[test]
@@ -747,13 +1057,37 @@ mod tests {
         let node_logic = RegisterDeltaTableNode::new();
         let node = node_logic.get_node();
 
-        let input_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Input).collect();
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
 
-        assert!(input_pins.iter().any(|p| p.name == "exec_in" && p.data_type == VariableType::Execution));
-        assert!(input_pins.iter().any(|p| p.name == "session" && p.data_type == VariableType::Struct));
-        assert!(input_pins.iter().any(|p| p.name == "path" && p.data_type == VariableType::Struct));
-        assert!(input_pins.iter().any(|p| p.name == "table_name" && p.data_type == VariableType::String));
-        assert!(input_pins.iter().any(|p| p.name == "version" && p.data_type == VariableType::Integer));
+        assert!(
+            input_pins
+                .iter()
+                .any(|p| p.name == "exec_in" && p.data_type == VariableType::Execution)
+        );
+        assert!(
+            input_pins
+                .iter()
+                .any(|p| p.name == "session" && p.data_type == VariableType::Struct)
+        );
+        assert!(
+            input_pins
+                .iter()
+                .any(|p| p.name == "path" && p.data_type == VariableType::Struct)
+        );
+        assert!(
+            input_pins
+                .iter()
+                .any(|p| p.name == "table_name" && p.data_type == VariableType::String)
+        );
+        assert!(
+            input_pins
+                .iter()
+                .any(|p| p.name == "version" && p.data_type == VariableType::Integer)
+        );
     }
 
     #[test]
@@ -761,7 +1095,11 @@ mod tests {
         let node_logic = RegisterDeltaTableNode::new();
         let node = node_logic.get_node();
 
-        let output_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Output).collect();
+        let output_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Output)
+            .collect();
 
         assert!(output_pins.iter().any(|p| p.name == "exec_out"));
         assert!(output_pins.iter().any(|p| p.name == "session_out"));
@@ -783,7 +1121,11 @@ mod tests {
         let node_logic = DeltaTimeTravelNode::new();
         let node = node_logic.get_node();
 
-        let input_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Input).collect();
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
 
         let travel_mode_pin = input_pins.iter().find(|p| p.name == "travel_mode");
         assert!(travel_mode_pin.is_some());
@@ -812,7 +1154,11 @@ mod tests {
         let node_logic = DeltaTableInfoNode::new();
         let node = node_logic.get_node();
 
-        let output_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Output).collect();
+        let output_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Output)
+            .collect();
 
         assert!(output_pins.iter().any(|p| p.name == "current_version"));
         assert!(output_pins.iter().any(|p| p.name == "num_files"));
@@ -854,7 +1200,11 @@ mod tests {
         let node_logic = WriteDeltaTableNode::new();
         let node = node_logic.get_node();
 
-        let input_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Input).collect();
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
 
         assert!(input_pins.iter().any(|p| p.name == "query"));
         assert!(input_pins.iter().any(|p| p.name == "path"));
@@ -867,7 +1217,11 @@ mod tests {
         let node_logic = WriteDeltaTableNode::new();
         let node = node_logic.get_node();
 
-        let output_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Output).collect();
+        let output_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Output)
+            .collect();
 
         assert!(output_pins.iter().any(|p| p.name == "rows_written"));
         assert!(output_pins.iter().any(|p| p.name == "new_version"));

@@ -43,15 +43,8 @@ export function Toolbar({
 	currentPageId,
 	onPageChange,
 }: ToolbarProps) {
-	const {
-		copy,
-		cut,
-		paste,
-		selection,
-		deleteComponents,
-		devMode,
-		setDevMode,
-	} = useBuilder();
+	const { copy, cut, paste, selection, deleteComponents, devMode, setDevMode } =
+		useBuilder();
 
 	const hasSelection = selection.componentIds.length > 0;
 	const hasPages = pages && pages.length > 0;

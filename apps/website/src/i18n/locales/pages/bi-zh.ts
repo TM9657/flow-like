@@ -28,8 +28,7 @@ export const zhBi = {
 	"bi.problem.item1.description":
 		"几乎能用的预建仪表板——但从不真正匹配您的实际工作流程。",
 	"bi.problem.item2.title": "按用户定价陷阱",
-	"bi.problem.item2.description":
-		"想与团队分享洞察？按用户付费。每个月。",
+	"bi.problem.item2.description": "想与团队分享洞察？按用户付费。每个月。",
 	"bi.problem.item3.title": "供应商锁定",
 	"bi.problem.item3.description":
 		"您的数据在他们的云中。您的仪表板用他们的格式。迁移？祝你好运。",
@@ -130,11 +129,9 @@ export const zhBi = {
 	"bi.usecases.case1.description":
 		"以匹配您品牌的格式呈现KPI、指标和洞察——不是通用模板。",
 	"bi.usecases.case2.title": "运营监控",
-	"bi.usecases.case2.description":
-		"实时查看生产、物流或服务运营，即时警报。",
+	"bi.usecases.case2.description": "实时查看生产、物流或服务运营，即时警报。",
 	"bi.usecases.case3.title": "面向客户的分析",
-	"bi.usecases.case3.description":
-		"在您的产品中嵌入仪表板。白标、定制、您的。",
+	"bi.usecases.case3.description": "在您的产品中嵌入仪表板。白标、定制、您的。",
 	"bi.usecases.case4.title": "数据产品",
 	"bi.usecases.case4.description":
 		"用美观、品牌化的仪表板将您的数据转化为可销售的洞察。",
@@ -165,6 +162,5 @@ export const zhBi = {
 	"bi.faq.a5":
 		"没有。Flow-Like在所有计划中都包含无限用户。与整个组织共享仪表板，无需担心许可证成本。",
 	"bi.faq.q6": "我可以自托管Flow-Like吗？",
-	"bi.faq.a6":
-		"当然可以。自托管始终可用。您的数据永远不必离开您的基础设施。",
+	"bi.faq.a6": "当然可以。自托管始终可用。您的数据永远不必离开您的基础设施。",
 };

@@ -1,15 +1,15 @@
+use flow_like::a2ui::components::ButtonProps;
 use flow_like::flow::{
     board::Board,
-    execution::{LogLevel, context::ExecutionContext},
+    execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::ButtonProps;
 use flow_like_types::{Value, async_trait};
 use std::sync::Arc;
 
-use super::element_utils::{find_element, extract_element_id_from_pin};
+use super::element_utils::{extract_element_id_from_pin, find_element};
 
 /// Gets the loading state of a button element.
 #[crate::register_node]
@@ -42,7 +42,12 @@ impl NodeLogic for GetButtonLoading {
         .set_schema::<ButtonProps>()
         .set_options(PinOptions::new().set_enforce_schema(false).build());
 
-        node.add_output_pin("loading", "Loading", "Whether the button is loading", VariableType::Boolean);
+        node.add_output_pin(
+            "loading",
+            "Loading",
+            "Whether the button is loading",
+            VariableType::Boolean,
+        );
 
         node
     }
@@ -62,7 +67,11 @@ impl NodeLogic for GetButtonLoading {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        context.get_pin_by_name("loading").await?.set_value(Value::Bool(loading)).await;
+        context
+            .get_pin_by_name("loading")
+            .await?
+            .set_value(Value::Bool(loading))
+            .await;
 
         Ok(())
     }

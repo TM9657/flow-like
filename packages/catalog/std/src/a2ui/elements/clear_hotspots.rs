@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id;
+use flow_like::a2ui::components::ImageHotspotProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::ImageHotspotProps;
 use flow_like_types::{Value, async_trait, json::json};
-use super::element_utils::extract_element_id;
 
 /// Clears all hotspots from an ImageHotspot element.
 #[crate::register_node]
@@ -55,7 +55,9 @@ impl NodeLogic for ClearHotspots {
         let element_id = extract_element_id(&element_value)
             .ok_or_else(|| flow_like_types::anyhow!("Invalid element reference"))?;
 
-        context.upsert_element(&element_id, json!({"hotspots": []})).await?;
+        context
+            .upsert_element(&element_id, json!({"hotspots": []}))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

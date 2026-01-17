@@ -1,16 +1,7 @@
-use axum::{
-    extract::State as AxumState,
-    extract::Request,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, extract::State as AxumState, middleware::Next, response::Response};
 use sea_orm::{ActiveModelTrait, Set};
 
-use crate::{
-    entity::error_report,
-    middleware::jwt::AppUser,
-    state::AppState,
-};
+use crate::{entity::error_report, middleware::jwt::AppUser, state::AppState};
 
 fn redact_connection_url(input: &str) -> String {
     // Redact userinfo in URLs like scheme://user:pass@host/...
@@ -104,15 +95,12 @@ pub async fn error_reporting_middleware(
     let path = req.uri().path().to_string();
 
     // If JWT middleware ran before us, AppUser will be available as an extension.
-    let user_id = req
-        .extensions()
-        .get::<AppUser>()
-        .and_then(|u| match u {
-            AppUser::OpenID(u) => Some(u.sub.clone()),
-            AppUser::PAT(u) => Some(u.sub.clone()),
-            AppUser::APIKey(_) => None,
-            AppUser::Unauthorized => None,
-        });
+    let user_id = req.extensions().get::<AppUser>().and_then(|u| match u {
+        AppUser::OpenID(u) => Some(u.sub.clone()),
+        AppUser::PAT(u) => Some(u.sub.clone()),
+        AppUser::APIKey(_) => None,
+        AppUser::Unauthorized => None,
+    });
 
     let mut response = next.run(req).await;
 

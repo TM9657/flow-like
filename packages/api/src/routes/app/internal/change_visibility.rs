@@ -51,7 +51,7 @@ pub async fn change_visibility(
         .filter(app::Column::Id.eq(&app_id))
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     if app.visibility == body.visibility {
         tracing::warn!(

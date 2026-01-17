@@ -64,7 +64,9 @@ impl NodeLogic for DataUpdate {
         let path: Option<String> = context.evaluate_pin::<String>("path").await.ok();
         let value: Value = context.evaluate_pin("value").await?;
 
-        context.stream_a2ui_data_update(&surface_id, path, value).await?;
+        context
+            .stream_a2ui_data_update(&surface_id, path, value)
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

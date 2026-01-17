@@ -1,4 +1,8 @@
-import type { DataEntry, SurfaceComponent, WidgetAction } from "../../components/a2ui/types";
+import type {
+	DataEntry,
+	SurfaceComponent,
+	WidgetAction,
+} from "../../components/a2ui/types";
 import type { IMetadata } from "../../lib";
 
 export type Version = [number, number, number];

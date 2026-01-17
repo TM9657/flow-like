@@ -5,7 +5,7 @@ import {
 	Card,
 	CardContent,
 	CardHeader,
-	CardTitle, formatRelativeTime,
+	CardTitle,
 	type IInvite,
 	type INotification,
 	Separator,
@@ -13,6 +13,7 @@ import {
 	TabsContent,
 	TabsList,
 	TabsTrigger,
+	formatRelativeTime,
 	useBackend,
 	useInfiniteInvoke,
 	useInvoke,
@@ -37,15 +38,27 @@ import { toast } from "sonner";
 
 export default function NotificationsPage() {
 	const backend = useBackend();
-	const [activeTab, setActiveTab] = useState<"all" | "invitations" | "notifications">("all");
+	const [activeTab, setActiveTab] = useState<
+		"all" | "invitations" | "notifications"
+	>("all");
 
 	const {
 		data: invitationPages,
 		fetchNextPage: fetchNextInvitations,
 		hasNextPage: hasMoreInvitations,
 		refetch: refetchInvitations,
-	} = useInfiniteInvoke(backend.teamState.getInvites, backend.teamState, [], 50, true, [], 0);
-	const invitations: IInvite[] = invitationPages ? invitationPages.pages.flat() : [];
+	} = useInfiniteInvoke(
+		backend.teamState.getInvites,
+		backend.teamState,
+		[],
+		50,
+		true,
+		[],
+		0,
+	);
+	const invitations: IInvite[] = invitationPages
+		? invitationPages.pages.flat()
+		: [];
 
 	const {
 		data: notificationPages,
@@ -61,7 +74,9 @@ export default function NotificationsPage() {
 		[],
 		0, // staleTime: 0 to always refetch on mount
 	);
-	const notifications: INotification[] = notificationPages ? notificationPages.pages.flat() : [];
+	const notifications: INotification[] = notificationPages
+		? notificationPages.pages.flat()
+		: [];
 
 	const handleInviteAction = useCallback(
 		async (id: string, action: "accept" | "decline") => {
@@ -110,7 +125,9 @@ export default function NotificationsPage() {
 		try {
 			const count = await backend.userState.markAllNotificationsRead();
 			await refetchNotifications();
-			toast.success(`Marked ${count} notification${count !== 1 ? "s" : ""} as read`);
+			toast.success(
+				`Marked ${count} notification${count !== 1 ? "s" : ""} as read`,
+			);
 		} catch (error) {
 			console.error("Failed to mark all as read:", error);
 			toast.error("Failed to mark all as read");
@@ -148,7 +165,9 @@ export default function NotificationsPage() {
 						)}
 					</div>
 					<div>
-						<h1 className="text-4xl font-bold text-foreground relative">Notifications</h1>
+						<h1 className="text-4xl font-bold text-foreground relative">
+							Notifications
+						</h1>
 						<p className="text-muted-foreground mt-1">
 							{totalCount > 0
 								? `${invitations.length} invitation${invitations.length !== 1 ? "s" : ""}, ${notifications.length} notification${notifications.length !== 1 ? "s" : ""}`
@@ -159,7 +178,11 @@ export default function NotificationsPage() {
 
 				<div className="flex items-center gap-3">
 					{unreadCount > 0 && (
-						<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}>
+						<motion.div
+							initial={{ opacity: 0, x: 20 }}
+							animate={{ opacity: 1, x: 0 }}
+							transition={{ delay: 0.3 }}
+						>
 							<Button variant="outline" size="sm" onClick={handleMarkAllAsRead}>
 								<CheckCheck className="w-4 h-4 mr-2" />
 								Mark all read
@@ -185,7 +208,11 @@ export default function NotificationsPage() {
 			<Separator className="bg-border" />
 
 			{/* Tabs */}
-			<Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="flex-1 flex flex-col min-h-0">
+			<Tabs
+				value={activeTab}
+				onValueChange={(v) => setActiveTab(v as typeof activeTab)}
+				className="flex-1 flex flex-col min-h-0"
+			>
 				<TabsList className="w-fit">
 					<TabsTrigger value="all" className="gap-2">
 						<Bell className="w-4 h-4" />
@@ -195,23 +222,35 @@ export default function NotificationsPage() {
 					<TabsTrigger value="invitations" className="gap-2">
 						<UserPlus className="w-4 h-4" />
 						Invitations
-						{invitations.length > 0 && <Badge variant="secondary">{invitations.length}</Badge>}
+						{invitations.length > 0 && (
+							<Badge variant="secondary">{invitations.length}</Badge>
+						)}
 					</TabsTrigger>
 					<TabsTrigger value="notifications" className="gap-2">
 						<Workflow className="w-4 h-4" />
 						Workflows
-						{notifications.length > 0 && <Badge variant="secondary">{notifications.length}</Badge>}
+						{notifications.length > 0 && (
+							<Badge variant="secondary">{notifications.length}</Badge>
+						)}
 					</TabsTrigger>
 				</TabsList>
 
-				<TabsContent value="all" className="flex-1 min-h-0 overflow-auto space-y-4 pr-2 py-2 mt-4">
+				<TabsContent
+					value="all"
+					className="flex-1 min-h-0 overflow-auto space-y-4 pr-2 py-2 mt-4"
+				>
 					<AnimatePresence mode="popLayout">
 						{totalCount === 0 ? (
 							<EmptyState />
 						) : (
 							<>
 								{invitations.map((invite, index) => (
-									<InvitationCard key={invite.id} invite={invite} index={index} onAction={handleInviteAction} />
+									<InvitationCard
+										key={invite.id}
+										invite={invite}
+										index={index}
+										onAction={handleInviteAction}
+									/>
 								))}
 								{notifications.map((notification, index) => (
 									<NotificationCard
@@ -235,22 +274,35 @@ export default function NotificationsPage() {
 					</AnimatePresence>
 				</TabsContent>
 
-				<TabsContent value="invitations" className="flex-1 min-h-0 overflow-auto space-y-4 pr-2 py-2 mt-4">
+				<TabsContent
+					value="invitations"
+					className="flex-1 min-h-0 overflow-auto space-y-4 pr-2 py-2 mt-4"
+				>
 					<AnimatePresence mode="popLayout">
 						{invitations.length === 0 ? (
 							<EmptyState message="No pending invitations" />
 						) : (
 							<>
 								{invitations.map((invite, index) => (
-									<InvitationCard key={invite.id} invite={invite} index={index} onAction={handleInviteAction} />
+									<InvitationCard
+										key={invite.id}
+										invite={invite}
+										index={index}
+										onAction={handleInviteAction}
+									/>
 								))}
-								{hasMoreInvitations && <LoadMoreButton onClick={() => fetchNextInvitations()} />}
+								{hasMoreInvitations && (
+									<LoadMoreButton onClick={() => fetchNextInvitations()} />
+								)}
 							</>
 						)}
 					</AnimatePresence>
 				</TabsContent>
 
-				<TabsContent value="notifications" className="flex-1 min-h-0 overflow-auto space-y-4 pr-2 py-2 mt-4">
+				<TabsContent
+					value="notifications"
+					className="flex-1 min-h-0 overflow-auto space-y-4 pr-2 py-2 mt-4"
+				>
 					<AnimatePresence mode="popLayout">
 						{notifications.length === 0 ? (
 							<EmptyState message="No workflow notifications" />
@@ -265,7 +317,9 @@ export default function NotificationsPage() {
 										onDelete={handleDeleteNotification}
 									/>
 								))}
-								{hasMoreNotifications && <LoadMoreButton onClick={() => fetchNextNotifications()} />}
+								{hasMoreNotifications && (
+									<LoadMoreButton onClick={() => fetchNextNotifications()} />
+								)}
 							</>
 						)}
 					</AnimatePresence>
@@ -275,7 +329,9 @@ export default function NotificationsPage() {
 	);
 }
 
-function EmptyState({ message = "No notifications at the moment" }: { message?: string }) {
+function EmptyState({
+	message = "No notifications at the moment",
+}: { message?: string }) {
 	return (
 		<motion.div
 			initial={{ opacity: 0, scale: 0.9 }}
@@ -292,7 +348,9 @@ function EmptyState({ message = "No notifications at the moment" }: { message?: 
 					>
 						<MailOpen className="w-16 h-16 text-muted-foreground mx-auto" />
 					</motion.div>
-					<h3 className="text-xl font-semibold text-foreground mb-2">All clear!</h3>
+					<h3 className="text-xl font-semibold text-foreground mb-2">
+						All clear!
+					</h3>
 					<p className="text-muted-foreground">{message}</p>
 				</CardContent>
 			</Card>
@@ -322,11 +380,23 @@ type InvitationCardProps = {
 	onAction: (id: string, action: "accept" | "decline") => void;
 };
 
-function InvitationCard({ invite, index, onAction }: Readonly<InvitationCardProps>) {
+function InvitationCard({
+	invite,
+	index,
+	onAction,
+}: Readonly<InvitationCardProps>) {
 	const backend = useBackend();
-	const userLookup = useInvoke(backend.userState.lookupUser, backend.userState, [invite.by_member_id]);
+	const userLookup = useInvoke(
+		backend.userState.lookupUser,
+		backend.userState,
+		[invite.by_member_id],
+	);
 
-	const evaluatedName = userLookup.data?.name ?? userLookup.data?.username ?? userLookup.data?.email ?? "Unknown User";
+	const evaluatedName =
+		userLookup.data?.name ??
+		userLookup.data?.username ??
+		userLookup.data?.email ??
+		"Unknown User";
 
 	return (
 		<motion.div
@@ -335,7 +405,11 @@ function InvitationCard({ invite, index, onAction }: Readonly<InvitationCardProp
 			initial={{ opacity: 0, y: 20, scale: 0.95 }}
 			animate={{ opacity: 1, y: 0, scale: 1 }}
 			exit={{ opacity: 0, x: -100, scale: 0.95 }}
-			transition={{ duration: 0.3, delay: index * 0.05, layout: { duration: 0.3 } }}
+			transition={{
+				duration: 0.3,
+				delay: index * 0.05,
+				layout: { duration: 0.3 },
+			}}
 			whileHover={{ y: -2 }}
 			className="group"
 		>
@@ -355,7 +429,9 @@ function InvitationCard({ invite, index, onAction }: Readonly<InvitationCardProp
 									{invite.name ?? "New Invitation"}
 								</CardTitle>
 								<div className="flex items-center gap-2 mt-2">
-									<span className="text-sm text-muted-foreground">Invited by</span>
+									<span className="text-sm text-muted-foreground">
+										Invited by
+									</span>
 									<Badge variant="secondary" className="font-medium">
 										{evaluatedName}
 									</Badge>
@@ -373,7 +449,9 @@ function InvitationCard({ invite, index, onAction }: Readonly<InvitationCardProp
 				</CardHeader>
 
 				<CardContent className="pt-0">
-					<p className="text-muted-foreground mb-6 leading-relaxed">{invite.message}</p>
+					<p className="text-muted-foreground mb-6 leading-relaxed">
+						{invite.message}
+					</p>
 
 					<div className="flex gap-3">
 						<motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -388,7 +466,11 @@ function InvitationCard({ invite, index, onAction }: Readonly<InvitationCardProp
 						</motion.div>
 
 						<motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-							<Button onClick={() => onAction(invite.id, "decline")} variant="destructive" size="sm">
+							<Button
+								onClick={() => onAction(invite.id, "decline")}
+								variant="destructive"
+								size="sm"
+							>
 								<X className="w-4 h-4 mr-2" />
 								Decline
 							</Button>
@@ -407,7 +489,12 @@ type NotificationCardProps = {
 	onDelete: (id: string) => void;
 };
 
-function NotificationCard({ notification, index, onMarkRead, onDelete }: Readonly<NotificationCardProps>) {
+function NotificationCard({
+	notification,
+	index,
+	onMarkRead,
+	onDelete,
+}: Readonly<NotificationCardProps>) {
 	return (
 		<motion.div
 			key={notification.id}
@@ -415,7 +502,11 @@ function NotificationCard({ notification, index, onMarkRead, onDelete }: Readonl
 			initial={{ opacity: 0, y: 20, scale: 0.95 }}
 			animate={{ opacity: 1, y: 0, scale: 1 }}
 			exit={{ opacity: 0, x: -100, scale: 0.95 }}
-			transition={{ duration: 0.3, delay: index * 0.05, layout: { duration: 0.3 } }}
+			transition={{
+				duration: 0.3,
+				delay: index * 0.05,
+				layout: { duration: 0.3 },
+			}}
 			whileHover={{ y: -2 }}
 			className="group"
 		>
@@ -431,33 +522,50 @@ function NotificationCard({ notification, index, onMarkRead, onDelete }: Readonl
 								whileHover={{ rotate: 15 }}
 								transition={{ duration: 0.2 }}
 								className={`mt-1 p-2 rounded-lg transition-colors ${
-									notification.read ? "bg-muted" : "bg-primary/10 group-hover:bg-primary/20"
+									notification.read
+										? "bg-muted"
+										: "bg-primary/10 group-hover:bg-primary/20"
 								}`}
 							>
 								{notification.icon ? (
 									<span className="text-lg">{notification.icon}</span>
 								) : (
-									<Workflow className={`w-5 h-5 ${notification.read ? "text-muted-foreground" : "text-primary"}`} />
+									<Workflow
+										className={`w-5 h-5 ${notification.read ? "text-muted-foreground" : "text-primary"}`}
+									/>
 								)}
 							</motion.div>
 							<div>
 								<CardTitle
 									className={`text-xl font-semibold transition-colors ${
-										notification.read ? "text-muted-foreground" : "text-foreground group-hover:text-primary"
+										notification.read
+											? "text-muted-foreground"
+											: "text-foreground group-hover:text-primary"
 									}`}
 								>
 									{notification.title}
 								</CardTitle>
 								<div className="flex items-center gap-2 mt-2">
-									<Badge variant={notification.notification_type === "WORKFLOW" ? "default" : "secondary"}>
-										{notification.notification_type === "WORKFLOW" ? "Workflow" : "System"}
+									<Badge
+										variant={
+											notification.notification_type === "WORKFLOW"
+												? "default"
+												: "secondary"
+										}
+									>
+										{notification.notification_type === "WORKFLOW"
+											? "Workflow"
+											: "System"}
 									</Badge>
 									<div className="flex items-center gap-1 text-xs text-muted-foreground">
 										<Clock className="w-3 h-3" />
 										{formatRelativeTime(notification.created_at)}
 									</div>
 									{!notification.read && (
-										<Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
+										<Badge
+											variant="outline"
+											className="text-xs bg-primary/10 text-primary border-primary/20"
+										>
 											New
 										</Badge>
 									)}
@@ -468,11 +576,18 @@ function NotificationCard({ notification, index, onMarkRead, onDelete }: Readonl
 				</CardHeader>
 
 				<CardContent className="pt-0">
-					{notification.description && <p className="text-muted-foreground mb-4 leading-relaxed">{notification.description}</p>}
+					{notification.description && (
+						<p className="text-muted-foreground mb-4 leading-relaxed">
+							{notification.description}
+						</p>
+					)}
 
 					<div className="flex gap-3">
 						{notification.link && (
-							<motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+							<motion.div
+								whileHover={{ scale: 1.05 }}
+								whileTap={{ scale: 0.95 }}
+							>
 								<Button
 									onClick={() => window.open(notification.link, "_blank")}
 									variant="outline"
@@ -486,8 +601,16 @@ function NotificationCard({ notification, index, onMarkRead, onDelete }: Readonl
 						)}
 
 						{!notification.read && (
-							<motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-								<Button onClick={() => onMarkRead(notification.id)} variant="secondary" size="sm" className="gap-2">
+							<motion.div
+								whileHover={{ scale: 1.05 }}
+								whileTap={{ scale: 0.95 }}
+							>
+								<Button
+									onClick={() => onMarkRead(notification.id)}
+									variant="secondary"
+									size="sm"
+									className="gap-2"
+								>
 									<Check className="w-4 h-4" />
 									Mark as read
 								</Button>
@@ -495,7 +618,12 @@ function NotificationCard({ notification, index, onMarkRead, onDelete }: Readonl
 						)}
 
 						<motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-							<Button onClick={() => onDelete(notification.id)} variant="destructive" size="sm" className="gap-2">
+							<Button
+								onClick={() => onDelete(notification.id)}
+								variant="destructive"
+								size="sm"
+								className="gap-2"
+							>
 								<Trash2 className="w-4 h-4" />
 								Delete
 							</Button>

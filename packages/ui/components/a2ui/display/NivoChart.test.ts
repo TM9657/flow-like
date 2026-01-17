@@ -6,13 +6,13 @@
  * 2. Data format validators work correctly
  * 3. Critical edge cases are handled (bullet ranges, chord matrix, hierarchical id fields)
  */
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-	NIVO_SAMPLE_DATA,
+	NIVO_CHART_DEFAULTS,
+	NIVO_CHART_TYPES,
 	NIVO_DATA_SPECS,
 	NIVO_PROPS_SPECS,
-	NIVO_CHART_TYPES,
-	NIVO_CHART_DEFAULTS,
+	NIVO_SAMPLE_DATA,
 	validateNivoData,
 } from "./nivo-data";
 
@@ -149,8 +149,11 @@ describe("NivoChart Calendar Data Validation", () => {
 
 describe("NivoChart Network/Sankey Data Validation", () => {
 	test("network: all link sources/targets exist in nodes", () => {
-		const data = NIVO_SAMPLE_DATA.network as { nodes: { id: string }[]; links: { source: string; target: string }[] };
-		const nodeIds = new Set(data.nodes.map(n => n.id));
+		const data = NIVO_SAMPLE_DATA.network as {
+			nodes: { id: string }[];
+			links: { source: string; target: string }[];
+		};
+		const nodeIds = new Set(data.nodes.map((n) => n.id));
 
 		for (const link of data.links) {
 			expect(nodeIds.has(link.source)).toBe(true);
@@ -159,8 +162,11 @@ describe("NivoChart Network/Sankey Data Validation", () => {
 	});
 
 	test("sankey: all link sources/targets exist in nodes", () => {
-		const data = NIVO_SAMPLE_DATA.sankey as { nodes: { id: string }[]; links: { source: string; target: string; value: number }[] };
-		const nodeIds = new Set(data.nodes.map(n => n.id));
+		const data = NIVO_SAMPLE_DATA.sankey as {
+			nodes: { id: string }[];
+			links: { source: string; target: string; value: number }[];
+		};
+		const nodeIds = new Set(data.nodes.map((n) => n.id));
 
 		for (const link of data.links) {
 			expect(nodeIds.has(link.source)).toBe(true);

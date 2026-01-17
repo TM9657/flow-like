@@ -99,7 +99,7 @@ pub async fn access(
     let user_model = User::find_by_id(&sub)
         .one(&state.db)
         .await?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let (encryption_key, key_id) = get_or_rotate_room_key(&state, &app_id, &board_id).await?;
 

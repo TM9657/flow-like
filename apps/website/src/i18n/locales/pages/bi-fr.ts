@@ -1,6 +1,7 @@
 export const frBi = {
 	// Meta
-	"bi.meta.title": "Stack BI Moderne: Constructeur de Tableaux de Bord avec IA | Flow-Like",
+	"bi.meta.title":
+		"Stack BI Moderne: Constructeur de Tableaux de Bord avec IA | Flow-Like",
 	"bi.meta.description":
 		"Créez des tableaux de bord BI visuellement ou avec l'IA en minutes. Sans tarification par utilisateur, auto-hébergé, personnalisation illimitée. Alternative à Tableau et Power BI.",
 	"bi.meta.keywords":
@@ -60,7 +61,8 @@ export const frBi = {
 	"bi.stack.tagline": "La Stack Complète",
 	"bi.stack.headline": "Tout ce qu'il faut pour le BI moderne",
 	"bi.stack.data.title": "Couche Données",
-	"bi.stack.data.item1": "Connectez n'importe quelle base de données, API ou fichier",
+	"bi.stack.data.item1":
+		"Connectez n'importe quelle base de données, API ou fichier",
 	"bi.stack.data.item2": "Transformations de données visuelles",
 	"bi.stack.data.item3": "Support streaming temps réel",
 	"bi.stack.data.item4": "Cache et optimisation intégrés",
@@ -145,7 +147,8 @@ export const frBi = {
 	"bi.cta.description":
 		"Téléchargez Flow-Like et construisez votre premier dashboard en minutes. Pas de carte de crédit. Pas de dépendance fournisseur. Juste du meilleur BI.",
 	"bi.cta.button": "Télécharger Gratuitement",
-	"bi.cta.note": "Gratuit pour toujours pour les particuliers. Plans Team & Enterprise disponibles.",
+	"bi.cta.note":
+		"Gratuit pour toujours pour les particuliers. Plans Team & Enterprise disponibles.",
 
 	// FAQ
 	"bi.faq.tagline": "Questions",

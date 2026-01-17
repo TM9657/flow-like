@@ -74,7 +74,12 @@ impl NodeLogic for CreateDataFusionSessionNode {
         );
         node.add_icon("/flow/icons/database.svg");
 
-        node.add_input_pin("exec_in", "Input", "Trigger execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin(
             "session_name",
@@ -220,13 +225,15 @@ impl NodeLogic for CreateDataFusionSessionNode {
 
             let cached = CachedDataFusionSession { ctx: Arc::new(ctx) };
             let cacheable: Arc<dyn Cacheable> = Arc::new(cached);
-            context.cache.write().await.insert(cache_key.clone(), cacheable);
+            context
+                .cache
+                .write()
+                .await
+                .insert(cache_key.clone(), cacheable);
         }
 
         let session = DataFusionSession { cache_key };
-        context
-            .set_pin_value("session", json!(session))
-            .await?;
+        context.set_pin_value("session", json!(session)).await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())
@@ -271,7 +278,11 @@ mod tests {
         let node_logic = CreateDataFusionSessionNode::new();
         let node = node_logic.get_node();
 
-        let input_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Input).collect();
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
 
         let exec_pin = input_pins.iter().find(|p| p.name == "exec_in");
         assert!(exec_pin.is_some());
@@ -290,8 +301,14 @@ mod tests {
         assert!(batch_size_pin.is_some());
         assert_eq!(batch_size_pin.unwrap().data_type, VariableType::Integer);
 
-        let boolean_pins = ["repartition_joins", "repartition_aggregations", "repartition_sorts",
-                          "coalesce_batches", "parquet_pruning", "collect_statistics"];
+        let boolean_pins = [
+            "repartition_joins",
+            "repartition_aggregations",
+            "repartition_sorts",
+            "coalesce_batches",
+            "parquet_pruning",
+            "collect_statistics",
+        ];
         for pin_name in boolean_pins {
             let pin = input_pins.iter().find(|p| p.name == pin_name);
             assert!(pin.is_some(), "Missing pin: {}", pin_name);
@@ -304,7 +321,11 @@ mod tests {
         let node_logic = CreateDataFusionSessionNode::new();
         let node = node_logic.get_node();
 
-        let output_pins: Vec<_> = node.pins.values().filter(|p| p.pin_type == PinType::Output).collect();
+        let output_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Output)
+            .collect();
 
         let exec_out = output_pins.iter().find(|p| p.name == "exec_out");
         assert!(exec_out.is_some());

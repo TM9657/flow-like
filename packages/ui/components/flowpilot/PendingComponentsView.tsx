@@ -1,12 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import {
-	ChevronDown,
-	LayoutGridIcon,
-	PlayIcon,
-	XIcon,
-} from "lucide-react";
+import { ChevronDown, LayoutGridIcon, PlayIcon, XIcon } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 
 import { Button } from "../ui/button";

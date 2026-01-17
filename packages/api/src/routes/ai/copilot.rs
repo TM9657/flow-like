@@ -1,7 +1,6 @@
 use crate::{error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{
-    Extension,
-    Json, Router,
+    Extension, Json, Router,
     extract::State,
     response::sse::{Event, KeepAlive, Sse},
     routing::post,
@@ -257,7 +256,10 @@ impl CatalogProvider for ServerCatalogProvider {
     }
 
     async fn get_all_nodes(&self) -> Vec<String> {
-        self.catalog.iter().map(|logic| logic.get_node().name).collect()
+        self.catalog
+            .iter()
+            .map(|logic| logic.get_node().name)
+            .collect()
     }
 }
 
@@ -298,9 +300,10 @@ async fn build_unified_copilot(
         })),
     };
 
-    let copilot = flow_like::copilot::UnifiedCopilot::new(flow_like_state, catalog_provider, profile, None)
-        .await
-        .map_err(|e| ApiError::internal(&format!("Failed to init copilot: {e}")))?;
+    let copilot =
+        flow_like::copilot::UnifiedCopilot::new(flow_like_state, catalog_provider, profile, None)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to init copilot: {e}")))?;
     Ok(copilot)
 }
 
@@ -353,11 +356,9 @@ pub async fn copilot_chat(
                 None::<fn(String)>,
             )
             .await
-            .map_err(|e| ApiError::internal(&format!("Copilot failed: {e}")))?;
+            .map_err(|e| ApiError::internal(format!("Copilot failed: {e}")))?;
 
-        return Ok(<axum::Json<_> as axum::response::IntoResponse>::into_response(
-            Json(response),
-        ));
+        return Ok(<axum::Json<_> as axum::response::IntoResponse>::into_response(Json(response)));
     }
 
     // Streaming: send tokens via SSE and finish with a `final` event containing JSON response.
@@ -367,9 +368,8 @@ pub async fn copilot_chat(
         let _ = tx_for_cb.send(chunk);
     });
 
-    let (done_tx, mut done_rx) = flow_like_types::tokio::sync::oneshot::channel::<
-        Result<UnifiedCopilotResponse, String>,
-    >();
+    let (done_tx, mut done_rx) =
+        flow_like_types::tokio::sync::oneshot::channel::<Result<UnifiedCopilotResponse, String>>();
 
     flow_like_types::tokio::spawn(async move {
         let result = copilot

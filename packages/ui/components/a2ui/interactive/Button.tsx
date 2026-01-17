@@ -46,7 +46,9 @@ function toPascalCase(str: string): string {
 }
 
 function LucideIcon({ name, className }: { name: string; className?: string }) {
-	const IconComp = (LucideIcons as Record<string, unknown>)[toPascalCase(name)] as React.ComponentType<{ className?: string }> | undefined;
+	const IconComp = (LucideIcons as Record<string, unknown>)[
+		toPascalCase(name)
+	] as React.ComponentType<{ className?: string }> | undefined;
 	if (!IconComp) return null;
 	return <IconComp className={className} />;
 }

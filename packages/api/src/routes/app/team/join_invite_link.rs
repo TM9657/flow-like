@@ -68,7 +68,7 @@ pub async fn join_invite_link(
         return Err(ApiError::FORBIDDEN);
     }
 
-    let app = app.ok_or_else(|| ApiError::NOT_FOUND)?;
+    let app = app.ok_or(ApiError::NOT_FOUND)?;
 
     if matches!(app.visibility, Visibility::Private | Visibility::Offline) {
         tracing::warn!(
@@ -79,7 +79,7 @@ pub async fn join_invite_link(
         return Err(ApiError::FORBIDDEN);
     }
 
-    let default_role_id = app.default_role_id.ok_or_else(|| ApiError::NOT_FOUND)?;
+    let default_role_id = app.default_role_id.ok_or(ApiError::NOT_FOUND)?;
 
     if matches!(app.visibility, Visibility::Offline | Visibility::Private) {
         tracing::warn!(

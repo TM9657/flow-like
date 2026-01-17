@@ -1,11 +1,11 @@
+use super::chart_data_utils::{extract_from_csv_table, parse_column_ref, parse_csv_text};
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
-use super::chart_data_utils::{extract_from_csv_table, parse_csv_text, parse_column_ref};
+use flow_like_types::{Value, async_trait, json::json};
 
 /// Converts CSV data or CSVTable (from DataFusion) to Nivo Heatmap chart format.
 ///
@@ -87,7 +87,8 @@ impl NodeLogic for CsvToHeatmapData {
         let value_cols: String = context.evaluate_pin("value_columns").await?;
         let delimiter: String = context.evaluate_pin("delimiter").await?;
 
-        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await {
+        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await
+        {
             if !table_value.is_null() {
                 extract_from_csv_table(&table_value)?
             } else {
@@ -109,20 +110,30 @@ impl NodeLogic for CsvToHeatmapData {
         let col_indices: Vec<usize> = if value_cols.is_empty() {
             (0..headers.len()).filter(|&i| i != row_idx).collect()
         } else {
-            value_cols.split(',').map(|s| parse_column_ref(s.trim(), &headers)).filter(|&i| i != row_idx && i < headers.len()).collect()
+            value_cols
+                .split(',')
+                .map(|s| parse_column_ref(s.trim(), &headers))
+                .filter(|&i| i != row_idx && i < headers.len())
+                .collect()
         };
 
-        let data: Vec<Value> = rows.iter().map(|row| {
-            let row_id = row.get(row_idx).cloned().unwrap_or_default();
+        let data: Vec<Value> = rows
+            .iter()
+            .map(|row| {
+                let row_id = row.get(row_idx).cloned().unwrap_or_default();
 
-            let cells: Vec<Value> = col_indices.iter().map(|&col_idx| {
-                let col_name = headers.get(col_idx).cloned().unwrap_or_default();
-                let val: f64 = row.get(col_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                json!({ "x": col_name, "y": val })
-            }).collect();
+                let cells: Vec<Value> = col_indices
+                    .iter()
+                    .map(|&col_idx| {
+                        let col_name = headers.get(col_idx).cloned().unwrap_or_default();
+                        let val: f64 = row.get(col_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                        json!({ "x": col_name, "y": val })
+                    })
+                    .collect();
 
-            json!({ "id": row_id, "data": cells })
-        }).collect();
+                json!({ "id": row_id, "data": cells })
+            })
+            .collect();
 
         context.set_pin_value("data", json!(data)).await?;
 

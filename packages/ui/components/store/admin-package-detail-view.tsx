@@ -1,6 +1,5 @@
 "use client";
 
-import type { AdminPackageDetailResponse, PackageAdminStatus, PackageReview, ReviewRequest } from "../../lib/schema/wasm";
 import { format, formatDistanceToNow } from "date-fns";
 import {
 	ArrowLeft,
@@ -13,6 +12,13 @@ import {
 	Shield,
 	XCircle,
 } from "lucide-react";
+import { useCallback, useState } from "react";
+import type {
+	AdminPackageDetailResponse,
+	PackageAdminStatus,
+	PackageReview,
+	ReviewRequest,
+} from "../../lib/schema/wasm";
 import {
 	Badge,
 	Button,
@@ -36,7 +42,6 @@ import {
 	TabsTrigger,
 	Textarea,
 } from "../ui";
-import { useCallback, useState } from "react";
 
 const statusBadgeVariant: Record<
 	PackageAdminStatus,
@@ -92,13 +97,17 @@ function ReviewItem({ review }: { review: PackageReview }) {
 						{review.codeQualityScore && (
 							<div className="text-sm">
 								<span className="text-muted-foreground">Code Quality:</span>{" "}
-								<span className="font-medium">{review.codeQualityScore}/10</span>
+								<span className="font-medium">
+									{review.codeQualityScore}/10
+								</span>
 							</div>
 						)}
 						{review.documentationScore && (
 							<div className="text-sm">
 								<span className="text-muted-foreground">Documentation:</span>{" "}
-								<span className="font-medium">{review.documentationScore}/10</span>
+								<span className="font-medium">
+									{review.documentationScore}/10
+								</span>
 							</div>
 						)}
 					</div>
@@ -127,7 +136,8 @@ export function AdminPackageDetailView({
 	isSubmittingReview,
 	isUpdatingPackage,
 }: AdminPackageDetailViewProps) {
-	const [reviewAction, setReviewAction] = useState<ReviewRequest["action"]>("comment");
+	const [reviewAction, setReviewAction] =
+		useState<ReviewRequest["action"]>("comment");
 	const [reviewComment, setReviewComment] = useState("");
 	const [securityScore, setSecurityScore] = useState<number[]>([5]);
 	const [codeQualityScore, setCodeQualityScore] = useState<number[]>([5]);
@@ -138,12 +148,21 @@ export function AdminPackageDetailView({
 			action: reviewAction,
 			comment: reviewComment || undefined,
 			securityScore: reviewAction === "approve" ? securityScore[0] : undefined,
-			codeQualityScore: reviewAction === "approve" ? codeQualityScore[0] : undefined,
-			documentationScore: reviewAction === "approve" ? documentationScore[0] : undefined,
+			codeQualityScore:
+				reviewAction === "approve" ? codeQualityScore[0] : undefined,
+			documentationScore:
+				reviewAction === "approve" ? documentationScore[0] : undefined,
 		};
 		onSubmitReview(review);
 		setReviewComment("");
-	}, [reviewAction, reviewComment, securityScore, codeQualityScore, documentationScore, onSubmitReview]);
+	}, [
+		reviewAction,
+		reviewComment,
+		securityScore,
+		codeQualityScore,
+		documentationScore,
+		onSubmitReview,
+	]);
 
 	const pkg = packageDetail?.package;
 	const reviews = packageDetail?.reviews ?? [];
@@ -185,7 +204,9 @@ export function AdminPackageDetailView({
 						<Badge variant={statusBadgeVariant[pkg.status]}>
 							{pkg.status.replace("_", " ")}
 						</Badge>
-						<span className="text-sm text-muted-foreground">v{pkg.version}</span>
+						<span className="text-sm text-muted-foreground">
+							v{pkg.version}
+						</span>
 						<span className="text-sm text-muted-foreground flex items-center gap-1">
 							<Download className="h-3 w-3" />
 							{pkg.downloadCount.toLocaleString()} downloads
@@ -195,7 +216,11 @@ export function AdminPackageDetailView({
 				<div className="flex gap-2">
 					{pkg.repository && (
 						<Button variant="outline" size="sm" asChild>
-							<a href={pkg.repository} target="_blank" rel="noopener noreferrer">
+							<a
+								href={pkg.repository}
+								target="_blank"
+								rel="noopener noreferrer"
+							>
 								<ExternalLink className="h-4 w-4 mr-2" />
 								Repository
 							</a>
@@ -210,8 +235,12 @@ export function AdminPackageDetailView({
 						<TabsList>
 							<TabsTrigger value="details">Details</TabsTrigger>
 							<TabsTrigger value="permissions">Permissions</TabsTrigger>
-							<TabsTrigger value="nodes">Nodes ({(pkg.nodes as unknown[]).length})</TabsTrigger>
-							<TabsTrigger value="reviews">Reviews ({reviews.length})</TabsTrigger>
+							<TabsTrigger value="nodes">
+								Nodes ({(pkg.nodes as unknown[]).length})
+							</TabsTrigger>
+							<TabsTrigger value="reviews">
+								Reviews ({reviews.length})
+							</TabsTrigger>
 						</TabsList>
 
 						<TabsContent value="details" className="space-y-4 mt-4">
@@ -294,7 +323,9 @@ export function AdminPackageDetailView({
 							<Card>
 								<CardHeader>
 									<CardTitle>Exported Nodes</CardTitle>
-									<CardDescription>Custom nodes provided by this package</CardDescription>
+									<CardDescription>
+										Custom nodes provided by this package
+									</CardDescription>
 								</CardHeader>
 								<CardContent>
 									<pre className="text-sm bg-muted p-4 rounded-lg overflow-auto max-h-96">
@@ -308,7 +339,9 @@ export function AdminPackageDetailView({
 							{reviews.length === 0 ? (
 								<p className="text-muted-foreground">No reviews yet</p>
 							) : (
-								reviews.map((review) => <ReviewItem key={review.id} review={review} />)
+								reviews.map((review) => (
+									<ReviewItem key={review.id} review={review} />
+								))
 							)}
 						</TabsContent>
 					</Tabs>
@@ -370,7 +403,9 @@ export function AdminPackageDetailView({
 								<Label>Action</Label>
 								<Select
 									value={reviewAction}
-									onValueChange={(v) => setReviewAction(v as ReviewRequest["action"])}
+									onValueChange={(v) =>
+										setReviewAction(v as ReviewRequest["action"])
+									}
 								>
 									<SelectTrigger>
 										<SelectValue />
@@ -378,7 +413,9 @@ export function AdminPackageDetailView({
 									<SelectContent>
 										<SelectItem value="approve">Approve</SelectItem>
 										<SelectItem value="reject">Reject</SelectItem>
-										<SelectItem value="request_changes">Request Changes</SelectItem>
+										<SelectItem value="request_changes">
+											Request Changes
+										</SelectItem>
 										<SelectItem value="comment">Comment</SelectItem>
 										<SelectItem value="flag">Flag for Review</SelectItem>
 									</SelectContent>
@@ -418,7 +455,9 @@ export function AdminPackageDetailView({
 										/>
 									</div>
 									<div className="space-y-2">
-										<Label>Documentation Score: {documentationScore[0]}/10</Label>
+										<Label>
+											Documentation Score: {documentationScore[0]}/10
+										</Label>
 										<Slider
 											value={documentationScore}
 											onValueChange={setDocumentationScore}

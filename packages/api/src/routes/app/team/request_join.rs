@@ -46,12 +46,9 @@ pub async fn request_join(
     let app = app::Entity::find_by_id(app_id.clone())
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
-    let default_role_id = app
-        .default_role_id
-        .clone()
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+    let default_role_id = app.default_role_id.clone().ok_or(ApiError::NOT_FOUND)?;
 
     if app.visibility == Visibility::Public && app.price <= 0 {
         let membership = membership::ActiveModel {

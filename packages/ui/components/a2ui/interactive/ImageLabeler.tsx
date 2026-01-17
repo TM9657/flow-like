@@ -1,21 +1,11 @@
 "use client";
 
-import {
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../../lib/utils";
 import type { ComponentProps } from "../ComponentRegistry";
 import { useData } from "../DataContext";
 import { resolveInlineStyle, resolveStyle } from "../StyleResolver";
-import type {
-	BoundValue,
-	ImageLabelerComponent,
-	LabelBox,
-} from "../types";
+import type { BoundValue, ImageLabelerComponent, LabelBox } from "../types";
 
 function useResolved<T>(boundValue: BoundValue | undefined): T | undefined {
 	const { resolve } = useData();
@@ -82,7 +72,9 @@ export function A2UIImageLabeler({
 	}, [labels]);
 
 	const getMousePos = useCallback(
-		(e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } | null => {
+		(
+			e: React.MouseEvent<HTMLCanvasElement>,
+		): { x: number; y: number } | null => {
 			const canvas = canvasRef.current;
 			if (!canvas) return null;
 			const rect = canvas.getBoundingClientRect();
@@ -224,7 +216,14 @@ export function A2UIImageLabeler({
 				});
 			}
 		}
-	}, [selectedBoxId, boxes, onAction, component.actions, surfaceId, componentId]);
+	}, [
+		selectedBoxId,
+		boxes,
+		onAction,
+		component.actions,
+		surfaceId,
+		componentId,
+	]);
 
 	const handleLabelChange = useCallback(
 		(label: string) => {
@@ -237,7 +236,9 @@ export function A2UIImageLabeler({
 			setBoxes(updatedBoxes);
 
 			if (onAction && component.actions?.length) {
-				const changeAction = component.actions.find((a) => a.name === "onChange");
+				const changeAction = component.actions.find(
+					(a) => a.name === "onChange",
+				);
 				if (changeAction) {
 					onAction({
 						type: "userAction",
@@ -280,7 +281,12 @@ export function A2UIImageLabeler({
 				ctx.font = "12px sans-serif";
 				const textMetrics = ctx.measureText(box.label);
 				const textHeight = 16;
-				ctx.fillRect(box.x, box.y - textHeight, textMetrics.width + 8, textHeight);
+				ctx.fillRect(
+					box.x,
+					box.y - textHeight,
+					textMetrics.width + 8,
+					textHeight,
+				);
 				ctx.fillStyle = "#fff";
 				ctx.fillText(box.label, box.x + 4, box.y - 4);
 			}

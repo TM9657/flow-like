@@ -49,16 +49,16 @@ pub async fn invite_user(
         .filter(meta::Column::Lang.eq("en"))
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     if app.default_role_id.is_none() {
         tracing::warn!(
             "App {} does not have a default role set, cannot invite user",
             app_id
         );
-        return Err(ApiError::internal_error(
-            anyhow!("App does not have a default role set"),
-        ));
+        return Err(ApiError::internal_error(anyhow!(
+            "App does not have a default role set"
+        )));
     }
 
     if matches!(app.visibility, Visibility::Private | Visibility::Offline) {

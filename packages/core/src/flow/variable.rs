@@ -233,7 +233,8 @@ pub fn infer_schema_from_json(raw: &str) -> flow_like_types::Result<String> {
         json::from_str(&string)?
     };
 
-    json::to_string_pretty(&inferred).map_err(|e| flow_like_types::anyhow!("Failed to serialize schema: {e}"))
+    json::to_string_pretty(&inferred)
+        .map_err(|e| flow_like_types::anyhow!("Failed to serialize schema: {e}"))
 }
 
 #[derive(PartialEq, Eq, Serialize, Deserialize, JsonSchema, Debug, Clone)]

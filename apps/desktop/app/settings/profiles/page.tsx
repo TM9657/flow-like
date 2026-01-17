@@ -2,8 +2,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import {
-	IThemes,
 	type ISettingsProfile,
+	IThemes,
 	useBackend,
 	useInvalidateInvoke,
 	useInvoke,

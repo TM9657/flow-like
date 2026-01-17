@@ -56,7 +56,9 @@ impl NodeLogic for UrlDecode {
 
         match urlencoding::decode(&input) {
             Ok(decoded) => {
-                context.set_pin_value("decoded", json::json!(decoded.to_string())).await?;
+                context
+                    .set_pin_value("decoded", json::json!(decoded.to_string()))
+                    .await?;
                 context.set_pin_value("success", json::json!(true)).await?;
             }
             Err(_) => {

@@ -10,7 +10,8 @@ export const nlCommon = {
 	"header.cancel": "Annuleren",
 	// Footer CTA
 	"footer.cta.title": "Klaar om te automatiseren?",
-	"footer.cta.description": "Download Flow-Like en maak je eerste workflow in minuten.",
+	"footer.cta.description":
+		"Download Flow-Like en maak je eerste workflow in minuten.",
 	"footer.cta.button": "Gratis Beginnen",
 
 	// Footer Sections

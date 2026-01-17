@@ -930,7 +930,11 @@ export function FlowBoard({
 	// Keyboard shortcut: Cmd/Ctrl+Shift+P to toggle pages panel
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "p") {
+			if (
+				(e.metaKey || e.ctrlKey) &&
+				e.shiftKey &&
+				e.key.toLowerCase() === "p"
+			) {
 				e.preventDefault();
 				setPagesOpen((v) => !v);
 			}

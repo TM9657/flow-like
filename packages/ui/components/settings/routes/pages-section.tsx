@@ -1,21 +1,11 @@
 "use client";
 
+import { FileText, LayoutGrid, Pencil, Trash2, Workflow } from "lucide-react";
 import type { IMetadata } from "../../../types";
 import { Button } from "../../ui/button";
 import { Card, CardContent } from "../../ui/card";
 import { EmptyState } from "../../ui/empty-state";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "../../ui/tooltip";
-import {
-	FileText,
-	LayoutGrid,
-	Pencil,
-	Trash2,
-	Workflow,
-} from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 
 export interface PageData {
 	appId: string;
@@ -64,7 +54,9 @@ export function PagesSection({
 						boardId={page.boardId}
 						meta={page.metadata}
 						onOpen={() => onOpenPage(page.pageId, page.boardId ?? undefined)}
-						onOpenBoard={page.boardId ? () => onOpenBoard(page.boardId!) : undefined}
+						onOpenBoard={
+							page.boardId ? () => onOpenBoard(page.boardId!) : undefined
+						}
 						onDelete={() => onDelete(page.pageId, page.boardId)}
 					/>
 				))}

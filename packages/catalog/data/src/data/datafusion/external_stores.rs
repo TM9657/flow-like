@@ -51,12 +51,7 @@ impl NodeLogic for S3StoreNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin(
-            "bucket",
-            "Bucket",
-            "S3 bucket name",
-            VariableType::String,
-        );
+        node.add_input_pin("bucket", "Bucket", "S3 bucket name", VariableType::String);
 
         node.add_input_pin(
             "region",
@@ -154,9 +149,13 @@ impl NodeLogic for S3StoreNode {
 
         let bucket: String = context.evaluate_pin("bucket").await?;
         let region: String = context.evaluate_pin("region").await.unwrap_or_default();
-        let credential_mode: String = context.evaluate_pin("credential_mode").await.unwrap_or_else(|_| "explicit".to_string());
+        let credential_mode: String = context
+            .evaluate_pin("credential_mode")
+            .await
+            .unwrap_or_else(|_| "explicit".to_string());
         let access_key_id: Option<String> = context.evaluate_pin("access_key_id").await.ok();
-        let secret_access_key: Option<String> = context.evaluate_pin("secret_access_key").await.ok();
+        let secret_access_key: Option<String> =
+            context.evaluate_pin("secret_access_key").await.ok();
         let session_token: Option<String> = context.evaluate_pin("session_token").await.ok();
         let endpoint: Option<String> = context.evaluate_pin("endpoint").await.ok();
         let path_style: bool = context.evaluate_pin("path_style").await.unwrap_or(false);
@@ -168,23 +167,31 @@ impl NodeLogic for S3StoreNode {
                 // - Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)
                 // - IAM role (when running in Lambda/EC2)
                 // - AWS credentials file (~/.aws/credentials with AWS_PROFILE)
-                let b = AmazonS3Builder::from_env().with_bucket_name(&bucket);
-                b
+
+                AmazonS3Builder::from_env().with_bucket_name(&bucket)
             }
             _ => {
                 // Explicit credentials mode (default)
-                let key = access_key_id.ok_or_else(|| flow_like_types::anyhow!("access_key_id is required when credential_mode is 'explicit'"))?;
-                let secret = secret_access_key.ok_or_else(|| flow_like_types::anyhow!("secret_access_key is required when credential_mode is 'explicit'"))?;
+                let key = access_key_id.ok_or_else(|| {
+                    flow_like_types::anyhow!(
+                        "access_key_id is required when credential_mode is 'explicit'"
+                    )
+                })?;
+                let secret = secret_access_key.ok_or_else(|| {
+                    flow_like_types::anyhow!(
+                        "secret_access_key is required when credential_mode is 'explicit'"
+                    )
+                })?;
 
                 let mut b = AmazonS3Builder::new()
                     .with_bucket_name(&bucket)
                     .with_access_key_id(&key)
                     .with_secret_access_key(&secret);
 
-                if let Some(token) = &session_token {
-                    if !token.is_empty() {
-                        b = b.with_token(token);
-                    }
+                if let Some(token) = &session_token
+                    && !token.is_empty()
+                {
+                    b = b.with_token(token);
                 }
                 b
             }
@@ -194,10 +201,12 @@ impl NodeLogic for S3StoreNode {
             builder = builder.with_region(&region);
         }
 
-        if let Some(ep) = endpoint {
-            if !ep.is_empty() {
-                builder = builder.with_endpoint(&ep).with_allow_http(ep.starts_with("http://"));
-            }
+        if let Some(ep) = endpoint
+            && !ep.is_empty()
+        {
+            builder = builder
+                .with_endpoint(&ep)
+                .with_allow_http(ep.starts_with("http://"));
         }
 
         if path_style {
@@ -217,7 +226,11 @@ impl NodeLogic for S3StoreNode {
         );
 
         let cacheable: Arc<dyn Cacheable> = Arc::new(store);
-        context.cache.write().await.insert(cache_key.clone(), cacheable);
+        context
+            .cache
+            .write()
+            .await
+            .insert(cache_key.clone(), cacheable);
 
         let path = FlowPath::new(prefix, cache_key, None);
         context.set_pin_value("path", json!(path)).await?;
@@ -236,20 +249,14 @@ impl NodeLogic for S3StoreNode {
         match credential_mode.as_str() {
             "environment" => {
                 // Remove explicit credential pins when in environment mode
-                if has_access_key {
-                    if let Some(pin) = node.get_pin_by_name("access_key_id") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_access_key && let Some(pin) = node.get_pin_by_name("access_key_id") {
+                    node.pins.remove(&pin.id.clone());
                 }
-                if has_secret_key {
-                    if let Some(pin) = node.get_pin_by_name("secret_access_key") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_secret_key && let Some(pin) = node.get_pin_by_name("secret_access_key") {
+                    node.pins.remove(&pin.id.clone());
                 }
-                if has_session_token {
-                    if let Some(pin) = node.get_pin_by_name("session_token") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_session_token && let Some(pin) = node.get_pin_by_name("session_token") {
+                    node.pins.remove(&pin.id.clone());
                 }
             }
             _ => {
@@ -387,28 +394,28 @@ impl NodeLogic for AzureBlobStoreNode {
             .with_account(&account)
             .with_container_name(&container);
 
-        if let Some(key) = access_key {
-            if !key.is_empty() {
-                builder = builder.with_access_key(&key);
-            }
+        if let Some(key) = access_key
+            && !key.is_empty()
+        {
+            builder = builder.with_access_key(&key);
         }
 
-        if let Some(sas) = sas_token {
-            if !sas.is_empty() {
-                // Parse SAS token query string into key-value pairs
-                let sas_str = sas.trim_start_matches('?');
-                let query_pairs: Vec<(String, String)> = sas_str
-                    .split('&')
-                    .filter_map(|pair| {
-                        let mut parts = pair.splitn(2, '=');
-                        match (parts.next(), parts.next()) {
-                            (Some(key), Some(value)) => Some((key.to_string(), value.to_string())),
-                            _ => None,
-                        }
-                    })
-                    .collect();
-                builder = builder.with_sas_authorization(query_pairs);
-            }
+        if let Some(sas) = sas_token
+            && !sas.is_empty()
+        {
+            // Parse SAS token query string into key-value pairs
+            let sas_str = sas.trim_start_matches('?');
+            let query_pairs: Vec<(String, String)> = sas_str
+                .split('&')
+                .filter_map(|pair| {
+                    let mut parts = pair.splitn(2, '=');
+                    match (parts.next(), parts.next()) {
+                        (Some(key), Some(value)) => Some((key.to_string(), value.to_string())),
+                        _ => None,
+                    }
+                })
+                .collect();
+            builder = builder.with_sas_authorization(query_pairs);
         }
 
         let store = builder.build()?;
@@ -417,11 +424,18 @@ impl NodeLogic for AzureBlobStoreNode {
         let cache_key = format!(
             "azure_store_{}_{}",
             container,
-            flow_like::utils::hash::hash_string_non_cryptographic(&format!("{}{}", account, prefix))
+            flow_like::utils::hash::hash_string_non_cryptographic(&format!(
+                "{}{}",
+                account, prefix
+            ))
         );
 
         let cacheable: Arc<dyn Cacheable> = Arc::new(store);
-        context.cache.write().await.insert(cache_key.clone(), cacheable);
+        context
+            .cache
+            .write()
+            .await
+            .insert(cache_key.clone(), cacheable);
 
         let path = FlowPath::new(prefix, cache_key, None);
         context.set_pin_value("path", json!(path)).await?;
@@ -460,12 +474,7 @@ impl NodeLogic for GcpStorageStoreNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin(
-            "bucket",
-            "Bucket",
-            "GCS bucket name",
-            VariableType::String,
-        );
+        node.add_input_pin("bucket", "Bucket", "GCS bucket name", VariableType::String);
 
         node.add_input_pin(
             "service_account_key",
@@ -529,7 +538,11 @@ impl NodeLogic for GcpStorageStoreNode {
         );
 
         let cacheable: Arc<dyn Cacheable> = Arc::new(store);
-        context.cache.write().await.insert(cache_key.clone(), cacheable);
+        context
+            .cache
+            .write()
+            .await
+            .insert(cache_key.clone(), cacheable);
 
         let path = FlowPath::new(prefix, cache_key, None);
         context.set_pin_value("path", json!(path)).await?;
@@ -656,9 +669,13 @@ impl NodeLogic for S3ExpressStoreNode {
 
         let bucket: String = context.evaluate_pin("bucket").await?;
         let region: String = context.evaluate_pin("region").await?;
-        let credential_mode: String = context.evaluate_pin("credential_mode").await.unwrap_or_else(|_| "explicit".to_string());
+        let credential_mode: String = context
+            .evaluate_pin("credential_mode")
+            .await
+            .unwrap_or_else(|_| "explicit".to_string());
         let access_key_id: Option<String> = context.evaluate_pin("access_key_id").await.ok();
-        let secret_access_key: Option<String> = context.evaluate_pin("secret_access_key").await.ok();
+        let secret_access_key: Option<String> =
+            context.evaluate_pin("secret_access_key").await.ok();
         let session_token: Option<String> = context.evaluate_pin("session_token").await.ok();
         let prefix: String = context.evaluate_pin("prefix").await.unwrap_or_default();
 
@@ -671,8 +688,16 @@ impl NodeLogic for S3ExpressStoreNode {
                     .with_s3_express(true)
             }
             _ => {
-                let key = access_key_id.ok_or_else(|| flow_like_types::anyhow!("access_key_id is required when credential_mode is 'explicit'"))?;
-                let secret = secret_access_key.ok_or_else(|| flow_like_types::anyhow!("secret_access_key is required when credential_mode is 'explicit'"))?;
+                let key = access_key_id.ok_or_else(|| {
+                    flow_like_types::anyhow!(
+                        "access_key_id is required when credential_mode is 'explicit'"
+                    )
+                })?;
+                let secret = secret_access_key.ok_or_else(|| {
+                    flow_like_types::anyhow!(
+                        "secret_access_key is required when credential_mode is 'explicit'"
+                    )
+                })?;
 
                 let mut b = AmazonS3Builder::new()
                     .with_bucket_name(&bucket)
@@ -681,10 +706,10 @@ impl NodeLogic for S3ExpressStoreNode {
                     .with_secret_access_key(&secret)
                     .with_s3_express(true);
 
-                if let Some(token) = &session_token {
-                    if !token.is_empty() {
-                        b = b.with_token(token);
-                    }
+                if let Some(token) = &session_token
+                    && !token.is_empty()
+                {
+                    b = b.with_token(token);
                 }
                 b
             }
@@ -703,7 +728,11 @@ impl NodeLogic for S3ExpressStoreNode {
         );
 
         let cacheable: Arc<dyn Cacheable> = Arc::new(store);
-        context.cache.write().await.insert(cache_key.clone(), cacheable);
+        context
+            .cache
+            .write()
+            .await
+            .insert(cache_key.clone(), cacheable);
 
         let path = FlowPath::new(prefix, cache_key, None);
         context.set_pin_value("path", json!(path)).await?;
@@ -721,20 +750,14 @@ impl NodeLogic for S3ExpressStoreNode {
 
         match credential_mode.as_str() {
             "environment" => {
-                if has_access_key {
-                    if let Some(pin) = node.get_pin_by_name("access_key_id") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_access_key && let Some(pin) = node.get_pin_by_name("access_key_id") {
+                    node.pins.remove(&pin.id.clone());
                 }
-                if has_secret_key {
-                    if let Some(pin) = node.get_pin_by_name("secret_access_key") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_secret_key && let Some(pin) = node.get_pin_by_name("secret_access_key") {
+                    node.pins.remove(&pin.id.clone());
                 }
-                if has_session_token {
-                    if let Some(pin) = node.get_pin_by_name("session_token") {
-                        node.pins.remove(&pin.id.clone());
-                    }
+                if has_session_token && let Some(pin) = node.get_pin_by_name("session_token") {
+                    node.pins.remove(&pin.id.clone());
                 }
             }
             _ => {

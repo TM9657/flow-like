@@ -1,8 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useMemo } from "react";
-import Link from "next/link";
+import type { UseQueryResult } from "@tanstack/react-query";
 import {
 	AlertTriangle,
 	Calendar,
@@ -19,22 +17,18 @@ import {
 	VariableIcon,
 	WorkflowIcon,
 } from "lucide-react";
-import type { UseQueryResult } from "@tanstack/react-query";
-import type { IApp } from "../../types";
-import type { IBoard } from "../../lib/schema/flow/board";
-import { cn, formatRelativeTime } from "../../lib";
-import { useBackend } from "../../state/backend-state";
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { useMemo } from "react";
 import { useInvoke } from "../../hooks/use-invoke";
-import { BubbleActions } from "../ui/bubble-actions";
+import { cn, formatRelativeTime } from "../../lib";
+import type { IBoard } from "../../lib/schema/flow/board";
+import { useBackend } from "../../state/backend-state";
+import type { IApp } from "../../types";
 import { Badge } from "../ui/badge";
+import { BubbleActions } from "../ui/bubble-actions";
 import { Button } from "../ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "../ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -53,11 +47,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Skeleton } from "../ui/skeleton";
 import { Textarea } from "../ui/textarea";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "../ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 export interface FlowLibraryBoardCreationState {
 	open: boolean;
@@ -67,7 +57,9 @@ export interface FlowLibraryBoardCreationState {
 
 interface FlowLibraryHeaderProps {
 	boardCreation: FlowLibraryBoardCreationState;
-	setBoardCreation: React.Dispatch<React.SetStateAction<FlowLibraryBoardCreationState>>;
+	setBoardCreation: React.Dispatch<
+		React.SetStateAction<FlowLibraryBoardCreationState>
+	>;
 	onCreateBoard: () => Promise<void>;
 }
 
@@ -75,7 +67,9 @@ interface FlowLibraryBoardsSectionProps {
 	boards: UseQueryResult<IBoard[]>;
 	app?: IApp;
 	boardCreation: FlowLibraryBoardCreationState;
-	setBoardCreation: React.Dispatch<React.SetStateAction<FlowLibraryBoardCreationState>>;
+	setBoardCreation: React.Dispatch<
+		React.SetStateAction<FlowLibraryBoardCreationState>
+	>;
 	onOpenBoard: (boardId: string) => Promise<void>;
 	onDeleteBoard: (boardId: string) => Promise<void>;
 }
@@ -103,11 +97,31 @@ interface ScoreConfig {
 }
 
 const SCORE_CONFIGS: ScoreConfig[] = [
-	{ key: "security", label: "Security", icon: <ShieldAlert className="h-3 w-3" /> },
-	{ key: "privacy", label: "Privacy", icon: <LockKeyhole className="h-3 w-3" /> },
-	{ key: "governance", label: "Governance", icon: <Shield className="h-3 w-3" /> },
-	{ key: "performance", label: "Performance", icon: <Cpu className="h-3 w-3" /> },
-	{ key: "reliability", label: "Reliability", icon: <AlertTriangle className="h-3 w-3" /> },
+	{
+		key: "security",
+		label: "Security",
+		icon: <ShieldAlert className="h-3 w-3" />,
+	},
+	{
+		key: "privacy",
+		label: "Privacy",
+		icon: <LockKeyhole className="h-3 w-3" />,
+	},
+	{
+		key: "governance",
+		label: "Governance",
+		icon: <Shield className="h-3 w-3" />,
+	},
+	{
+		key: "performance",
+		label: "Performance",
+		icon: <Cpu className="h-3 w-3" />,
+	},
+	{
+		key: "reliability",
+		label: "Reliability",
+		icon: <AlertTriangle className="h-3 w-3" />,
+	},
 	{ key: "cost", label: "Cost", icon: <DollarSign className="h-3 w-3" /> },
 ];
 
@@ -173,9 +187,7 @@ function FlowLibraryScoreBar({ scores }: { scores: AggregatedScores }) {
 						const score = scores[config.key];
 						return (
 							<div key={config.key} className="flex items-center gap-2">
-								<span className="text-muted-foreground">
-									{config.icon}
-								</span>
+								<span className="text-muted-foreground">{config.icon}</span>
 								<span className="text-xs w-20">{config.label}</span>
 								<div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
 									<div
@@ -289,9 +301,7 @@ export function FlowLibraryCreateDialog({
 				<DialogFooter className="gap-3">
 					<Button
 						variant="outline"
-						onClick={() =>
-							setBoardCreation({ ...boardCreation, open: false })
-						}
+						onClick={() => setBoardCreation({ ...boardCreation, open: false })}
 					>
 						Cancel
 					</Button>
@@ -378,7 +388,9 @@ export function FlowLibraryEmptyBoards({
 	setBoardCreation,
 	boardCreation,
 }: Readonly<{
-	setBoardCreation: React.Dispatch<React.SetStateAction<FlowLibraryBoardCreationState>>;
+	setBoardCreation: React.Dispatch<
+		React.SetStateAction<FlowLibraryBoardCreationState>
+	>;
 	boardCreation: FlowLibraryBoardCreationState;
 }>) {
 	return (
@@ -434,9 +446,7 @@ export function FlowLibraryBoardCard({
 			reliability: Math.min(
 				...nodesWithScores.map((node) => node.scores?.reliability ?? 10),
 			),
-			cost: Math.min(
-				...nodesWithScores.map((node) => node.scores?.cost ?? 10),
-			),
+			cost: Math.min(...nodesWithScores.map((node) => node.scores?.cost ?? 10)),
 		};
 	}, [board.nodes]);
 
@@ -488,7 +498,10 @@ export function FlowLibraryBoardCard({
 							</div>
 						</div>
 						{aggregatedScores && (
-							<div className="relative z-10" onClick={(event) => event.stopPropagation()}>
+							<div
+								className="relative z-10"
+								onClick={(event) => event.stopPropagation()}
+							>
 								<FlowLibraryScoreBar scores={aggregatedScores} />
 							</div>
 						)}

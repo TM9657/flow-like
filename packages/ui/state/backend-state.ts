@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import type { IProfile } from "../types";
 import type { IAIState } from "./backend-state/ai-state";
 import type { IApiState } from "./backend-state/api-state";
 import type { IAppState } from "./backend-state/app-state";
@@ -12,13 +13,15 @@ import type { IPageState } from "./backend-state/page-state";
 import type { IRegistryState } from "./backend-state/registry-state";
 import type { IRoleState } from "./backend-state/role-state";
 import type { IAppRouteState } from "./backend-state/route-state";
-import type { ISinkState, IEventRegistration } from "./backend-state/sink-state";
+import type {
+	IEventRegistration,
+	ISinkState,
+} from "./backend-state/sink-state";
 import type { IStorageState } from "./backend-state/storage-state";
 import type { ITeamState } from "./backend-state/team-state";
 import type { ITemplateState } from "./backend-state/template-state";
 import type { IUserState } from "./backend-state/user-state";
 import type { IWidgetState } from "./backend-state/widget-state";
-import type { IProfile } from "../types";
 
 export * from "./backend-state/api-state";
 export * from "./backend-state/empty-states/index";

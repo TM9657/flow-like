@@ -206,7 +206,9 @@ impl<'de> Deserialize<'de> for Spacing {
 
 impl Spacing {
     pub fn new(value: impl Into<String>) -> Self {
-        Self { value: value.into() }
+        Self {
+            value: value.into(),
+        }
     }
 }
 
@@ -234,7 +236,9 @@ impl<'de> Deserialize<'de> for Size {
 
 impl Size {
     pub fn new(value: impl Into<String>) -> Self {
-        Self { value: value.into() }
+        Self {
+            value: value.into(),
+        }
     }
 
     pub fn px(value: i32) -> Self {
@@ -573,7 +577,10 @@ impl Style {
             responsive: other.responsive.clone().or_else(|| self.responsive.clone()),
             flex: other.flex.clone().or_else(|| self.flex.clone()),
             align_self: other.align_self.clone().or_else(|| self.align_self.clone()),
-            grid_column: other.grid_column.clone().or_else(|| self.grid_column.clone()),
+            grid_column: other
+                .grid_column
+                .clone()
+                .or_else(|| self.grid_column.clone()),
             grid_row: other.grid_row.clone().or_else(|| self.grid_row.clone()),
         }
     }
@@ -660,7 +667,10 @@ impl From<BackgroundImage> for proto::BackgroundImage {
 impl From<proto::BackgroundImage> for BackgroundImage {
     fn from(proto: proto::BackgroundImage) -> Self {
         BackgroundImage {
-            url: proto.url.map(|u| (&u).into()).unwrap_or(super::BoundValue::literal_string("")),
+            url: proto
+                .url
+                .map(|u| (&u).into())
+                .unwrap_or(super::BoundValue::literal_string("")),
             size: proto.size,
             position: proto.position,
             repeat: proto.repeat,
@@ -829,7 +839,10 @@ impl From<proto::Style> for Style {
             z_index: proto.z_index,
             transform: proto.transform.map(Into::into),
             opacity: proto.opacity,
-            overflow: proto.overflow.and_then(|o| proto::Overflow::try_from(o).ok()).map(Into::into),
+            overflow: proto
+                .overflow
+                .and_then(|o| proto::Overflow::try_from(o).ok())
+                .map(Into::into),
             cursor: proto.cursor,
             responsive: proto.responsive.map(Into::into),
             flex: proto.flex,
@@ -1098,9 +1111,7 @@ mod tests {
 
     #[test]
     fn test_border_builder_methods() {
-        let border = Border::new()
-            .with_width("1px")
-            .with_radius("4px");
+        let border = Border::new().with_width("1px").with_radius("4px");
         assert_eq!(border.width.as_deref(), Some("1px"));
         assert_eq!(border.radius.as_deref(), Some("4px"));
     }

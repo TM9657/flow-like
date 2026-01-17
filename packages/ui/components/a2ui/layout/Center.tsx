@@ -14,7 +14,9 @@ export function A2UICenter({
 }: ComponentProps<CenterComponent>) {
 	const { resolve } = useData();
 
-	const inline = component.inline ? (resolve(component.inline) as boolean) : false;
+	const inline = component.inline
+		? (resolve(component.inline) as boolean)
+		: false;
 	const children = resolveChildren(component, resolve);
 
 	return (

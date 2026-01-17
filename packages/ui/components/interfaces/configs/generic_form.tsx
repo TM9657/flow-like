@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { Checkbox, Label, ScrollArea } from "../../ui";
 import { useInvoke } from "../../../hooks/use-invoke";
-import type { IRouteMapping } from "../../../state/backend-state/route-state";
 import { useBackend } from "../../../state/backend-state";
+import type { IRouteMapping } from "../../../state/backend-state/route-state";
+import { Checkbox, Label, ScrollArea } from "../../ui";
 import type { IConfigInterfaceProps } from "../interfaces";
 
 export function GenericFormConfig({
@@ -24,9 +24,7 @@ export function GenericFormConfig({
 
 	const routes = useMemo(() => {
 		const list = routesQuery.data ?? [];
-		return list
-			.slice()
-			.sort((a, b) => a.path.localeCompare(b.path));
+		return list.slice().sort((a, b) => a.path.localeCompare(b.path));
 	}, [routesQuery.data]);
 
 	const setValue = (key: string, value: any, deleteKeys: string[] = []) => {
@@ -103,8 +101,7 @@ export function GenericFormConfig({
 												</label>
 											);
 										})
-								)
-							}
+								)}
 							</div>
 						</ScrollArea>
 						<div className="border-t border-input p-2">

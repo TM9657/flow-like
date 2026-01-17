@@ -2,11 +2,11 @@
 //!
 //! Handles instantiated modules and their execution.
 
-use crate::abi::{WasmAbi, WasmExecutionInput, WasmExecutionResult, WasmNodeDefinition, exports};
+use crate::abi::{exports, WasmAbi, WasmExecutionInput, WasmExecutionResult, WasmNodeDefinition};
 use crate::engine::WasmEngine;
 use crate::error::{WasmError, WasmResult};
+use crate::host_functions::linker::{register_host_functions, StoreData};
 use crate::host_functions::HostState;
-use crate::host_functions::linker::{StoreData, register_host_functions};
 use crate::limits::WasmSecurityConfig;
 use crate::memory::{WasmAllocator, WasmMemory};
 use crate::module::WasmModule;
@@ -47,17 +47,14 @@ impl WasmInstance {
         register_host_functions(&mut linker)?;
 
         // Create store with host state
-        let mut store = Store::new(
-            engine.engine(),
-            StoreData::new(security.capabilities),
-        );
+        let mut store = Store::new(engine.engine(), StoreData::new(security.capabilities));
 
         // Configure store limits
         let fuel_limit = security.limits.fuel_limit;
         if engine.config().fuel_metering {
-            store.set_fuel(fuel_limit).map_err(|e| {
-                WasmError::Internal(format!("Failed to set fuel: {}", e))
-            })?;
+            store
+                .set_fuel(fuel_limit)
+                .map_err(|e| WasmError::Internal(format!("Failed to set fuel: {}", e)))?;
         }
 
         if engine.config().epoch_interruption {
@@ -75,11 +72,12 @@ impl WasmInstance {
             })?;
 
         // Get memory export
-        let memory = instance
-            .get_memory(&mut store, "memory")
-            .ok_or_else(|| WasmError::MissingExport {
-                export_name: "memory".to_string(),
-            })?;
+        let memory =
+            instance
+                .get_memory(&mut store, "memory")
+                .ok_or_else(|| WasmError::MissingExport {
+                    export_name: "memory".to_string(),
+                })?;
 
         // Get function exports
         // Try get_node (single-node) first, then get_nodes (multi-node package)
@@ -100,10 +98,8 @@ impl WasmInstance {
 
         let run_func = instance
             .get_typed_func::<(i32, i32), i64>(&mut store, exports::RUN)
-            .map_err(|_e| {
-                WasmError::MissingExport {
-                    export_name: exports::RUN.to_string(),
-                }
+            .map_err(|_e| WasmError::MissingExport {
+                export_name: exports::RUN.to_string(),
             })?;
 
         // Optional exports
@@ -143,9 +139,12 @@ impl WasmInstance {
     pub async fn call_get_node(&mut self) -> WasmResult<WasmNodeDefinition> {
         // Try get_node first (single-node)
         if let Some(ref get_node_func) = self.get_node_func {
-            let result = get_node_func.call_async(&mut self.store, ()).await.map_err(|e| {
-                WasmError::execution(exports::GET_NODE, format!("Call failed: {}", e))
-            })?;
+            let result = get_node_func
+                .call_async(&mut self.store, ())
+                .await
+                .map_err(|e| {
+                    WasmError::execution(exports::GET_NODE, format!("Call failed: {}", e))
+                })?;
 
             if WasmAbi::is_error(result) {
                 return Err(WasmError::execution(
@@ -156,22 +155,23 @@ impl WasmInstance {
 
             let (ptr, len) = WasmAbi::unpack_ptr_len(result);
             let json_bytes = WasmMemory::read_bytes(&self.memory, &self.store, ptr, len)?;
-            let json_str = String::from_utf8(json_bytes).map_err(|e| {
-                WasmError::invalid_node_definition(format!("Invalid UTF-8: {}", e))
-            })?;
+            let json_str = String::from_utf8(json_bytes)
+                .map_err(|e| WasmError::invalid_node_definition(format!("Invalid UTF-8: {}", e)))?;
 
-            let definition: WasmNodeDefinition = serde_json::from_str(&json_str).map_err(|e| {
-                WasmError::invalid_node_definition(format!("Invalid JSON: {}", e))
-            })?;
+            let definition: WasmNodeDefinition = serde_json::from_str(&json_str)
+                .map_err(|e| WasmError::invalid_node_definition(format!("Invalid JSON: {}", e)))?;
 
             return Ok(definition);
         }
 
         // Fall back to get_nodes (multi-node package) - return first node
         if let Some(ref get_nodes_func) = self.get_nodes_func {
-            let result = get_nodes_func.call_async(&mut self.store, ()).await.map_err(|e| {
-                WasmError::execution(exports::GET_NODES, format!("Call failed: {}", e))
-            })?;
+            let result = get_nodes_func
+                .call_async(&mut self.store, ())
+                .await
+                .map_err(|e| {
+                    WasmError::execution(exports::GET_NODES, format!("Call failed: {}", e))
+                })?;
 
             if WasmAbi::is_error(result) {
                 return Err(WasmError::execution(
@@ -182,13 +182,11 @@ impl WasmInstance {
 
             let (ptr, len) = WasmAbi::unpack_ptr_len(result);
             let json_bytes = WasmMemory::read_bytes(&self.memory, &self.store, ptr, len)?;
-            let json_str = String::from_utf8(json_bytes).map_err(|e| {
-                WasmError::invalid_node_definition(format!("Invalid UTF-8: {}", e))
-            })?;
+            let json_str = String::from_utf8(json_bytes)
+                .map_err(|e| WasmError::invalid_node_definition(format!("Invalid UTF-8: {}", e)))?;
 
-            let definitions: Vec<WasmNodeDefinition> = serde_json::from_str(&json_str).map_err(|e| {
-                WasmError::invalid_node_definition(format!("Invalid JSON: {}", e))
-            })?;
+            let definitions: Vec<WasmNodeDefinition> = serde_json::from_str(&json_str)
+                .map_err(|e| WasmError::invalid_node_definition(format!("Invalid JSON: {}", e)))?;
 
             return definitions.into_iter().next().ok_or_else(|| {
                 WasmError::invalid_node_definition("Empty node list in package".to_string())
@@ -209,9 +207,12 @@ impl WasmInstance {
         }
 
         if let Some(ref get_nodes_func) = self.get_nodes_func {
-            let result = get_nodes_func.call_async(&mut self.store, ()).await.map_err(|e| {
-                WasmError::execution(exports::GET_NODES, format!("Call failed: {}", e))
-            })?;
+            let result = get_nodes_func
+                .call_async(&mut self.store, ())
+                .await
+                .map_err(|e| {
+                    WasmError::execution(exports::GET_NODES, format!("Call failed: {}", e))
+                })?;
 
             if WasmAbi::is_error(result) {
                 return Err(WasmError::execution(
@@ -222,13 +223,11 @@ impl WasmInstance {
 
             let (ptr, len) = WasmAbi::unpack_ptr_len(result);
             let json_bytes = WasmMemory::read_bytes(&self.memory, &self.store, ptr, len)?;
-            let json_str = String::from_utf8(json_bytes).map_err(|e| {
-                WasmError::invalid_node_definition(format!("Invalid UTF-8: {}", e))
-            })?;
+            let json_str = String::from_utf8(json_bytes)
+                .map_err(|e| WasmError::invalid_node_definition(format!("Invalid UTF-8: {}", e)))?;
 
-            let definitions: Vec<WasmNodeDefinition> = serde_json::from_str(&json_str).map_err(|e| {
-                WasmError::invalid_node_definition(format!("Invalid JSON: {}", e))
-            })?;
+            let definitions: Vec<WasmNodeDefinition> = serde_json::from_str(&json_str)
+                .map_err(|e| WasmError::invalid_node_definition(format!("Invalid JSON: {}", e)))?;
 
             return Ok(definitions);
         }
@@ -244,7 +243,10 @@ impl WasmInstance {
     }
 
     /// Call the run export with execution input
-    pub async fn call_run(&mut self, input: &WasmExecutionInput) -> WasmResult<WasmExecutionResult> {
+    pub async fn call_run(
+        &mut self,
+        input: &WasmExecutionInput,
+    ) -> WasmResult<WasmExecutionResult> {
         // Serialize input to JSON
         let input_json = serde_json::to_vec(input).map_err(WasmError::Json)?;
         let input_len = input_json.len() as u32;
@@ -256,7 +258,8 @@ impl WasmInstance {
         WasmMemory::write_bytes(&self.memory, &mut self.store, input_ptr, &input_json)?;
 
         // Call run function
-        let result = self.run_func
+        let result = self
+            .run_func
             .call_async(&mut self.store, (input_ptr as i32, input_len as i32))
             .await
             .map_err(|e| {
@@ -301,15 +304,19 @@ impl WasmInstance {
     /// Allocate memory in WASM
     async fn allocate(&mut self, size: u32) -> WasmResult<u32> {
         if let Some(alloc_func) = &self.alloc_func {
-            let ptr = alloc_func.call_async(&mut self.store, size as i32).await.map_err(|e| {
-                WasmError::memory_access(format!("Allocation failed: {}", e))
-            })?;
+            let ptr = alloc_func
+                .call_async(&mut self.store, size as i32)
+                .await
+                .map_err(|e| WasmError::memory_access(format!("Allocation failed: {}", e)))?;
             Ok(ptr as u32)
         } else {
             // Use bump allocator
-            let allocator = self.store.data_mut().allocator.as_mut().ok_or_else(|| {
-                WasmError::Internal("Allocator not initialized".to_string())
-            })?;
+            let allocator = self
+                .store
+                .data_mut()
+                .allocator
+                .as_mut()
+                .ok_or_else(|| WasmError::Internal("Allocator not initialized".to_string()))?;
             allocator.bump_alloc(size, 8)
         }
     }
@@ -317,9 +324,10 @@ impl WasmInstance {
     /// Deallocate memory in WASM
     async fn deallocate(&mut self, ptr: u32, size: u32) -> WasmResult<()> {
         if let Some(dealloc_func) = &self.dealloc_func {
-            dealloc_func.call_async(&mut self.store, (ptr as i32, size as i32)).await.map_err(|e| {
-                WasmError::memory_access(format!("Deallocation failed: {}", e))
-            })?;
+            dealloc_func
+                .call_async(&mut self.store, (ptr as i32, size as i32))
+                .await
+                .map_err(|e| WasmError::memory_access(format!("Deallocation failed: {}", e)))?;
         }
         // If no dealloc, memory will be reclaimed when instance is dropped
         Ok(())
@@ -332,9 +340,9 @@ impl WasmInstance {
 
     /// Add more fuel to the store
     pub fn add_fuel(&mut self, fuel: u64) -> WasmResult<()> {
-        self.store.set_fuel(
-            self.store.get_fuel().unwrap_or(0) + fuel
-        ).map_err(|e| WasmError::Internal(format!("Failed to add fuel: {}", e)))
+        self.store
+            .set_fuel(self.store.get_fuel().unwrap_or(0) + fuel)
+            .map_err(|e| WasmError::Internal(format!("Failed to add fuel: {}", e)))
     }
 
     /// Get reference to host state

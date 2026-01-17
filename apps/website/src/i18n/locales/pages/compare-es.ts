@@ -107,7 +107,8 @@ export const esCompare = {
 		"Las apps Flow-Like pueden ser totalmente personalizadas y desplegadas públicamente.",
 
 	"compare.explain.desktop.title": "Aplicaciones de Escritorio",
-	"compare.explain.desktop.what": "Ejecuta tus automatizaciones como software de escritorio nativo.",
+	"compare.explain.desktop.what":
+		"Ejecuta tus automatizaciones como software de escritorio nativo.",
 	"compare.explain.desktop.flow":
 		"Flow-Like usa Tauri para compilar a apps de escritorio nativas para Windows, macOS y Linux.",
 

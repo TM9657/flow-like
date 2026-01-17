@@ -1,12 +1,12 @@
+use super::element_utils::{extract_element_id_from_pin, find_element};
+use flow_like::a2ui::components::TextProps;
 use flow_like::flow::{
     execution::{LogLevel, context::ExecutionContext},
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::TextProps;
 use flow_like_types::{Value, async_trait};
-use super::element_utils::{find_element, extract_element_id_from_pin};
 
 /// Gets the text content of an element.
 ///
@@ -91,7 +91,10 @@ impl NodeLogic for GetElementText {
             exists_pin.set_value(Value::Bool(true)).await;
 
             context.log_message(
-                &format!("Got text from element {} ({}): {}", element_id, found_id, text),
+                &format!(
+                    "Got text from element {} ({}): {}",
+                    element_id, found_id, text
+                ),
                 LogLevel::Debug,
             );
         } else {

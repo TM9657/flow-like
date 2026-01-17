@@ -76,7 +76,9 @@ impl UnifiedCopilot {
         match effective_scope {
             CopilotScope::Board => {
                 self.delegate_to_board(
-                    board.ok_or_else(|| flow_like_types::anyhow!("Board is required for Board scope"))?,
+                    board.ok_or_else(|| {
+                        flow_like_types::anyhow!("Board is required for Board scope")
+                    })?,
                     selected_node_ids,
                     user_prompt,
                     history,
@@ -325,39 +327,40 @@ impl UnifiedCopilot {
                 .await;
         }
 
-        if is_workflow_focused && !is_ui_focused {
-            if let Some(b) = board {
-                return self
-                    .delegate_to_board(
-                        b,
-                        selected_node_ids,
-                        user_prompt,
-                        history,
-                        model_id,
-                        token,
-                        context.and_then(|c| c.run_context),
-                        on_token,
-                    )
-                    .await;
-            }
+        if is_workflow_focused
+            && !is_ui_focused
+            && let Some(b) = board
+        {
+            return self
+                .delegate_to_board(
+                    b,
+                    selected_node_ids,
+                    user_prompt,
+                    history,
+                    model_id,
+                    token,
+                    context.and_then(|c| c.run_context),
+                    on_token,
+                )
+                .await;
         }
 
         // Default to board if available, otherwise frontend
-        if let Some(b) = board {
-            if self.catalog_provider.is_some() {
-                return self
-                    .delegate_to_board(
-                        b,
-                        selected_node_ids,
-                        user_prompt,
-                        history,
-                        model_id,
-                        token,
-                        context.and_then(|c| c.run_context),
-                        on_token,
-                    )
-                    .await;
-            }
+        if let Some(b) = board
+            && self.catalog_provider.is_some()
+        {
+            return self
+                .delegate_to_board(
+                    b,
+                    selected_node_ids,
+                    user_prompt,
+                    history,
+                    model_id,
+                    token,
+                    context.and_then(|c| c.run_context),
+                    on_token,
+                )
+                .await;
         }
 
         self.delegate_to_frontend(

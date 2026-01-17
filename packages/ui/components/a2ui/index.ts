@@ -7,7 +7,12 @@ export {
 	useDataValue,
 	useResolvedValue,
 } from "./DataContext";
-export { ActionProvider, useActions, useExecuteAction, useOnAction } from "./ActionHandler";
+export {
+	ActionProvider,
+	useActions,
+	useExecuteAction,
+	useOnAction,
+} from "./ActionHandler";
 export {
 	WidgetActionProvider,
 	useWidgetActions,

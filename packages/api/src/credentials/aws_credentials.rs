@@ -290,7 +290,12 @@ impl RuntimeCredentialsTrait for AwsRuntimeCredentials {
             secret.clone(),
             token.clone(),
         )));
-        config.register_build_project_database(Arc::new(make_s3_builder(bkt.clone(), key.clone(), secret.clone(), token.clone())));
+        config.register_build_project_database(Arc::new(make_s3_builder(
+            bkt.clone(),
+            key.clone(),
+            secret.clone(),
+            token.clone(),
+        )));
         config.register_build_user_database(Arc::new(make_s3_builder(bkt, key, secret, token)));
 
         let mut flow_like_state = FlowLikeState::new(config, http_client);

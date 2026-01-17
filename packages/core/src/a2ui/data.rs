@@ -88,7 +88,10 @@ impl DataModel {
         }
 
         let root_key = parts[0].to_string();
-        let root_value = self.data.entry(root_key).or_insert_with(|| Value::Object(Default::default()));
+        let root_value = self
+            .data
+            .entry(root_key)
+            .or_insert_with(|| Value::Object(Default::default()));
         Self::set_nested(root_value, &parts[1..], value);
     }
 
@@ -122,22 +125,20 @@ impl DataModel {
     pub fn resolve_bound_value(&self, bound: &BoundValue) -> Value {
         match bound {
             BoundValue::LiteralString { value } => Value::String(value.clone()),
-            BoundValue::LiteralNumber { value } => {
-                Value::Number(serde_json::Number::from_f64(*value).unwrap_or(serde_json::Number::from(0)))
-            }
+            BoundValue::LiteralNumber { value } => Value::Number(
+                serde_json::Number::from_f64(*value).unwrap_or(serde_json::Number::from(0)),
+            ),
             BoundValue::LiteralBool { value } => Value::Bool(*value),
-            BoundValue::PathBinding(pb) => {
-                self.get(&pb.path).cloned().unwrap_or_else(|| {
-                    match &pb.default_value {
-                        Some(super::PathDefault::String(s)) => Value::String(s.clone()),
-                        Some(super::PathDefault::Number(n)) => {
-                            Value::Number(serde_json::Number::from_f64(*n).unwrap_or(serde_json::Number::from(0)))
-                        }
-                        Some(super::PathDefault::Bool(b)) => Value::Bool(*b),
-                        None => Value::Null,
-                    }
-                })
-            }
+            BoundValue::PathBinding(pb) => self.get(&pb.path).cloned().unwrap_or_else(|| match &pb
+                .default_value
+            {
+                Some(super::PathDefault::String(s)) => Value::String(s.clone()),
+                Some(super::PathDefault::Number(n)) => Value::Number(
+                    serde_json::Number::from_f64(*n).unwrap_or(serde_json::Number::from(0)),
+                ),
+                Some(super::PathDefault::Bool(b)) => Value::Bool(*b),
+                None => Value::Null,
+            }),
         }
     }
 
@@ -313,14 +314,14 @@ mod tests {
 
     #[test]
     fn test_bound_value_serde() {
-        use super::super::{PathDefault, PathBinding};
+        use super::super::{PathBinding, PathDefault};
 
         let lit_str = BoundValue::literal_string("test");
         let lit_num = BoundValue::literal_number(42.0);
         let path_only = BoundValue::path("/data");
         let path_with_default = BoundValue::PathBinding(PathBinding {
             path: "/value".to_string(),
-            default_value: Some(PathDefault::String("preview".to_string()))
+            default_value: Some(PathDefault::String("preview".to_string())),
         });
 
         let lit_str_json = serde_json::to_string(&lit_str).unwrap();

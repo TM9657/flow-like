@@ -52,7 +52,9 @@ fn as_examples_path() -> PathBuf {
 }
 
 /// Helper to create a basic execution input
-fn create_execution_input(inputs: serde_json::Map<String, serde_json::Value>) -> WasmExecutionInput {
+fn create_execution_input(
+    inputs: serde_json::Map<String, serde_json::Value>,
+) -> WasmExecutionInput {
     WasmExecutionInput {
         inputs,
         node_id: "test_node_id".to_string(),
@@ -96,7 +98,9 @@ async fn test_load_rust_template() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
     let module = WasmModule::from_bytes(&engine, &bytes, "test_hash".to_string())
         .await
@@ -114,7 +118,9 @@ async fn test_rust_template_get_definition() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
     let module = Arc::new(
         WasmModule::from_bytes(&engine, &bytes, "test_hash".to_string())
@@ -126,7 +132,10 @@ async fn test_rust_template_get_definition() {
         .await
         .expect("Failed to create instance");
 
-    let definition = instance.call_get_node().await.expect("Failed to get node definition");
+    let definition = instance
+        .call_get_node()
+        .await
+        .expect("Failed to get node definition");
 
     // Verify definition fields
     assert_eq!(definition.name, "my_custom_node");
@@ -143,7 +152,10 @@ async fn test_rust_template_get_definition() {
     assert!(pin_names.contains(&"input_text"), "Missing input_text pin");
     assert!(pin_names.contains(&"multiplier"), "Missing multiplier pin");
     assert!(pin_names.contains(&"exec_out"), "Missing exec_out pin");
-    assert!(pin_names.contains(&"output_text"), "Missing output_text pin");
+    assert!(
+        pin_names.contains(&"output_text"),
+        "Missing output_text pin"
+    );
     assert!(pin_names.contains(&"char_count"), "Missing char_count pin");
 }
 
@@ -155,7 +167,9 @@ async fn test_rust_template_execute() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
     let module = Arc::new(
         WasmModule::from_bytes(&engine, &bytes, "test_hash".to_string())
@@ -173,14 +187,27 @@ async fn test_rust_template_execute() {
     inputs.insert("multiplier".to_string(), serde_json::json!(3));
 
     let exec_input = create_execution_input(inputs);
-    let result = instance.call_run(&exec_input).await.expect("Failed to execute node");
+    let result = instance
+        .call_run(&exec_input)
+        .await
+        .expect("Failed to execute node");
 
     // Verify no error
-    assert!(result.error.is_none(), "Execution returned error: {:?}", result.error);
+    assert!(
+        result.error.is_none(),
+        "Execution returned error: {:?}",
+        result.error
+    );
 
     // Verify outputs
-    assert!(result.outputs.contains_key("output_text"), "Missing output_text output");
-    assert!(result.outputs.contains_key("char_count"), "Missing char_count output");
+    assert!(
+        result.outputs.contains_key("output_text"),
+        "Missing output_text output"
+    );
+    assert!(
+        result.outputs.contains_key("char_count"),
+        "Missing char_count output"
+    );
 
     // Verify output values
     let output_text = result.outputs.get("output_text").unwrap().as_str().unwrap();
@@ -205,7 +232,9 @@ async fn test_rust_math_nodes_definitions() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
     let module = Arc::new(
         WasmModule::from_bytes(&engine, &bytes, "test_hash".to_string())
@@ -218,14 +247,23 @@ async fn test_rust_math_nodes_definitions() {
         .expect("Failed to create instance");
 
     // Verify this is a multi-node package
-    assert!(instance.is_package(), "math_nodes should be a multi-node package");
+    assert!(
+        instance.is_package(),
+        "math_nodes should be a multi-node package"
+    );
 
     // Get all node definitions
-    let definitions = instance.call_get_nodes().await.expect("Failed to get node definitions");
+    let definitions = instance
+        .call_get_nodes()
+        .await
+        .expect("Failed to get node definitions");
 
     // The math_nodes package should have multiple definitions
     println!("Got {} definitions", definitions.len());
-    assert!(!definitions.is_empty(), "Package should have at least one node");
+    assert!(
+        !definitions.is_empty(),
+        "Package should have at least one node"
+    );
 
     // Find the math_add node
     let add_node = definitions.iter().find(|d| d.name == "math_add");
@@ -240,7 +278,9 @@ async fn test_rust_math_add_execute() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
     let module = Arc::new(
         WasmModule::from_bytes(&engine, &bytes, "test_hash".to_string())
@@ -258,9 +298,16 @@ async fn test_rust_math_add_execute() {
     inputs.insert("b".to_string(), serde_json::json!(3.0));
 
     let exec_input = create_package_execution_input("math_add", inputs);
-    let result = instance.call_run(&exec_input).await.expect("Failed to execute math_add");
+    let result = instance
+        .call_run(&exec_input)
+        .await
+        .expect("Failed to execute math_add");
 
-    assert!(result.error.is_none(), "Execution returned error: {:?}", result.error);
+    assert!(
+        result.error.is_none(),
+        "Execution returned error: {:?}",
+        result.error
+    );
 
     let sum = result.outputs.get("result").unwrap().as_f64().unwrap();
     assert!((sum - 8.0).abs() < 0.001, "Expected 8.0, got {}", sum);
@@ -274,7 +321,9 @@ async fn test_rust_math_multiply_execute() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
     let module = Arc::new(
         WasmModule::from_bytes(&engine, &bytes, "test_hash".to_string())
@@ -292,12 +341,23 @@ async fn test_rust_math_multiply_execute() {
     inputs.insert("b".to_string(), serde_json::json!(7.0));
 
     let exec_input = create_package_execution_input("math_multiply", inputs);
-    let result = instance.call_run(&exec_input).await.expect("Failed to execute math_multiply");
+    let result = instance
+        .call_run(&exec_input)
+        .await
+        .expect("Failed to execute math_multiply");
 
-    assert!(result.error.is_none(), "Execution returned error: {:?}", result.error);
+    assert!(
+        result.error.is_none(),
+        "Execution returned error: {:?}",
+        result.error
+    );
 
     let product = result.outputs.get("result").unwrap().as_f64().unwrap();
-    assert!((product - 28.0).abs() < 0.001, "Expected 28.0, got {}", product);
+    assert!(
+        (product - 28.0).abs() < 0.001,
+        "Expected 28.0, got {}",
+        product
+    );
 }
 
 #[tokio::test]
@@ -308,7 +368,9 @@ async fn test_rust_math_divide_by_zero() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
     let module = Arc::new(
         WasmModule::from_bytes(&engine, &bytes, "test_hash".to_string())
@@ -326,9 +388,16 @@ async fn test_rust_math_divide_by_zero() {
     inputs.insert("b".to_string(), serde_json::json!(0.0));
 
     let exec_input = create_package_execution_input("math_divide", inputs);
-    let result = instance.call_run(&exec_input).await.expect("Failed to execute math_divide");
+    let result = instance
+        .call_run(&exec_input)
+        .await
+        .expect("Failed to execute math_divide");
 
-    assert!(result.error.is_none(), "Execution returned error: {:?}", result.error);
+    assert!(
+        result.error.is_none(),
+        "Execution returned error: {:?}",
+        result.error
+    );
 
     // Should indicate invalid division
     let is_valid = result.outputs.get("is_valid").unwrap().as_bool().unwrap();
@@ -347,14 +416,19 @@ async fn test_load_assemblyscript_template() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
     let module = WasmModule::from_bytes(&engine, &bytes, "test_hash".to_string())
         .await
         .expect("Failed to load module");
 
     // Verify module was loaded
-    assert!(module.has_alloc(), "AssemblyScript module should export alloc");
+    assert!(
+        module.has_alloc(),
+        "AssemblyScript module should export alloc"
+    );
 }
 
 #[tokio::test]
@@ -365,7 +439,9 @@ async fn test_assemblyscript_template_get_definition() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
     let module = Arc::new(
         WasmModule::from_bytes(&engine, &bytes, "test_hash".to_string())
@@ -377,7 +453,10 @@ async fn test_assemblyscript_template_get_definition() {
         .await
         .expect("Failed to create instance");
 
-    let definition = instance.call_get_node().await.expect("Failed to get node definition");
+    let definition = instance
+        .call_get_node()
+        .await
+        .expect("Failed to get node definition");
 
     // Verify definition fields
     assert_eq!(definition.name, "my_custom_node_as");
@@ -394,7 +473,10 @@ async fn test_assemblyscript_template_get_definition() {
     assert!(pin_names.contains(&"input_text"), "Missing input_text pin");
     assert!(pin_names.contains(&"multiplier"), "Missing multiplier pin");
     assert!(pin_names.contains(&"exec_out"), "Missing exec_out pin");
-    assert!(pin_names.contains(&"output_text"), "Missing output_text pin");
+    assert!(
+        pin_names.contains(&"output_text"),
+        "Missing output_text pin"
+    );
     assert!(pin_names.contains(&"char_count"), "Missing char_count pin");
 }
 
@@ -406,7 +488,9 @@ async fn test_assemblyscript_template_execute() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
     let module = Arc::new(
         WasmModule::from_bytes(&engine, &bytes, "test_hash".to_string())
@@ -424,14 +508,27 @@ async fn test_assemblyscript_template_execute() {
     inputs.insert("multiplier".to_string(), serde_json::json!(2));
 
     let exec_input = create_execution_input(inputs);
-    let result = instance.call_run(&exec_input).await.expect("Failed to execute node");
+    let result = instance
+        .call_run(&exec_input)
+        .await
+        .expect("Failed to execute node");
 
     // Verify no error
-    assert!(result.error.is_none(), "Execution returned error: {:?}", result.error);
+    assert!(
+        result.error.is_none(),
+        "Execution returned error: {:?}",
+        result.error
+    );
 
     // Verify outputs
-    assert!(result.outputs.contains_key("output_text"), "Missing output_text output");
-    assert!(result.outputs.contains_key("char_count"), "Missing char_count output");
+    assert!(
+        result.outputs.contains_key("output_text"),
+        "Missing output_text output"
+    );
+    assert!(
+        result.outputs.contains_key("char_count"),
+        "Missing char_count output"
+    );
 
     // Verify output values
     let output_text = result.outputs.get("output_text").unwrap().as_str().unwrap();
@@ -456,7 +553,9 @@ async fn test_assemblyscript_examples_math_add() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
 
     // The examples module exports individual node functions (get_add_definition, run_add, etc.)
@@ -469,7 +568,9 @@ async fn test_assemblyscript_examples_math_add() {
     // so loading it as a standard module will fail
     if result.is_err() {
         eprintln!("Note: AssemblyScript examples use individual exports pattern (get_add_definition, run_add, etc.)");
-        eprintln!("This is expected behavior - the examples demonstrate a different multi-node pattern");
+        eprintln!(
+            "This is expected behavior - the examples demonstrate a different multi-node pattern"
+        );
         return;
     }
 
@@ -490,7 +591,9 @@ async fn test_fuel_consumption() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
 
     // Create engine with fuel metering
     let mut config = WasmConfig::default();
@@ -529,7 +632,9 @@ async fn test_memory_limits() {
         return;
     }
 
-    let bytes = tokio::fs::read(&wasm_path).await.expect("Failed to read WASM file");
+    let bytes = tokio::fs::read(&wasm_path)
+        .await
+        .expect("Failed to read WASM file");
     let engine = WasmEngine::new(WasmConfig::default()).expect("Failed to create engine");
 
     let module = Arc::new(
@@ -568,20 +673,28 @@ async fn test_module_without_required_exports() {
 
     // A minimal valid WASM module without required exports
     // This is a valid WASM module with just a memory export
-    let minimal_wasm = wat::parse_str(r#"
+    let minimal_wasm = wat::parse_str(
+        r#"
         (module
             (memory (export "memory") 1)
         )
-    "#).expect("Failed to parse WAT");
+    "#,
+    )
+    .expect("Failed to parse WAT");
 
     let result = WasmModule::from_bytes(&engine, &minimal_wasm, "test_hash".to_string()).await;
 
-    assert!(result.is_err(), "Module without get_node should fail to load");
+    assert!(
+        result.is_err(),
+        "Module without get_node should fail to load"
+    );
 
     let err = result.unwrap_err();
     let err_str = err.to_string();
     assert!(
-        err_str.contains("get_node") || err_str.contains("get_nodes") || err_str.contains("MissingExport"),
+        err_str.contains("get_node")
+            || err_str.contains("get_nodes")
+            || err_str.contains("MissingExport"),
         "Error should mention missing export: {}",
         err_str
     );

@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id;
+use flow_like::a2ui::components::ImageHotspotProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::ImageHotspotProps;
 use flow_like_types::{Value, async_trait, json::json};
-use super::element_utils::extract_element_id;
 
 /// Adds a single hotspot to an ImageHotspot element.
 #[crate::register_node]
@@ -133,8 +133,14 @@ impl NodeLogic for AddHotspot {
         let y: f64 = context.evaluate_pin("y").await?;
         let size: f64 = context.evaluate_pin("size").await.unwrap_or(24.0);
         let label: String = context.evaluate_pin("label").await.unwrap_or_default();
-        let description: String = context.evaluate_pin("description").await.unwrap_or_default();
-        let color: String = context.evaluate_pin("color").await.unwrap_or_else(|_| "#3b82f6".to_string());
+        let description: String = context
+            .evaluate_pin("description")
+            .await
+            .unwrap_or_default();
+        let color: String = context
+            .evaluate_pin("color")
+            .await
+            .unwrap_or_else(|_| "#3b82f6".to_string());
         let action: String = context.evaluate_pin("action").await.unwrap_or_default();
 
         let mut hotspot_data = json!({

@@ -11,7 +11,8 @@ export const enCommon = {
 
 	// Footer CTA
 	"footer.cta.title": "Ready to automate?",
-	"footer.cta.description": "Download Flow-Like and build your first workflow in minutes.",
+	"footer.cta.description":
+		"Download Flow-Like and build your first workflow in minutes.",
 	"footer.cta.button": "Get Started Free",
 
 	// Footer Sections

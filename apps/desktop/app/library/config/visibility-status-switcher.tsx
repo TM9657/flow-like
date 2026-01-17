@@ -2,7 +2,7 @@
 
 import {
 	type IApp,
-	IAppVisibility,
+	type IAppVisibility,
 	useBackend,
 	useInvalidateInvoke,
 } from "@tm9657/flow-like-ui";

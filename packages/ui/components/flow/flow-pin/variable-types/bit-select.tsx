@@ -78,18 +78,9 @@ function BitRender({
 		!!bitId,
 	);
 
-	if (!bitId)
-		return <span className="truncate m-0">Select a bit</span>;
-	if (bit.isFetching)
-		return <span className="truncate m-0">Loading</span>;
-	if (bit.error)
-		return (
-			<span className="truncate m-0">Error loading bit</span>
-		);
+	if (!bitId) return <span className="truncate m-0">Select a bit</span>;
+	if (bit.isFetching) return <span className="truncate m-0">Loading</span>;
+	if (bit.error) return <span className="truncate m-0">Error loading bit</span>;
 
-	return (
-		<span className="truncate m-0">
-			{bit.data?.meta?.["en"]?.name}
-		</span>
-	);
+	return <span className="truncate m-0">{bit.data?.meta?.["en"]?.name}</span>;
 }

@@ -49,13 +49,21 @@ impl NodeLogic for ClearInput {
         context.activate_exec_pin("exec_out").await?;
 
         let element_value: Value = context.evaluate_pin("element_ref").await?;
-        let element_id = extract_element_id(&element_value)
-            .ok_or_else(|| flow_like_types::anyhow!("Invalid element reference - expected string ID or element object"))?;
+        let element_id = extract_element_id(&element_value).ok_or_else(|| {
+            flow_like_types::anyhow!(
+                "Invalid element reference - expected string ID or element object"
+            )
+        })?;
 
-        context.upsert_element(&element_id, json!({
-            "type": "setValue",
-            "value": ""
-        })).await?;
+        context
+            .upsert_element(
+                &element_id,
+                json!({
+                    "type": "setValue",
+                    "value": ""
+                }),
+            )
+            .await?;
 
         context.log_message(&format!("Cleared input: {}", element_id), LogLevel::Debug);
 

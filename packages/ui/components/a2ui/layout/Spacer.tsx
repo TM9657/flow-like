@@ -13,7 +13,11 @@ export function A2UISpacer({
 	const { resolve } = useData();
 
 	const size = component.size ? (resolve(component.size) as string) : undefined;
-	const flex = component.flex ? (resolve(component.flex) as number) : size ? undefined : 1;
+	const flex = component.flex
+		? (resolve(component.flex) as number)
+		: size
+			? undefined
+			: 1;
 
 	return (
 		<div

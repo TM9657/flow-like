@@ -54,7 +54,9 @@ export async function getLocalNotifications(
 		.toArray();
 
 	// Sort by createdAt descending (newest first)
-	all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+	all.sort(
+		(a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+	);
 
 	if (unreadOnly) {
 		all = all.filter((n) => !n.read);

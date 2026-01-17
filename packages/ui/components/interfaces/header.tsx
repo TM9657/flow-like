@@ -1,5 +1,5 @@
 "use client";
-import { ChevronDownIcon, InfoIcon, HomeIcon } from "lucide-react";
+import { ChevronDownIcon, HomeIcon, InfoIcon } from "lucide-react";
 import Link from "next/link";
 import {
 	type ReactNode,
@@ -9,6 +9,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
+import type { IRouteMapping } from "../../state/backend-state/route-state";
 import {
 	Button,
 	DropdownMenu,
@@ -23,7 +24,6 @@ import {
 	useMobileHeader,
 } from "../ui";
 import type { IToolBarActions } from "./interfaces";
-import type { IRouteMapping } from "../../state/backend-state/route-state";
 
 interface HeaderProps {
 	routes?: IRouteMapping[];
@@ -91,7 +91,9 @@ const HeaderInner = ({
 	const activeRoute = useMemo(() => {
 		if (!hasRoutes) return null;
 		return (
-			sortedRoutes.find((r) => normalizePath(r.path) === normalizedCurrentRoutePath) ??
+			sortedRoutes.find(
+				(r) => normalizePath(r.path) === normalizedCurrentRoutePath,
+			) ??
 			sortedRoutes.find((r) => r.path === "/") ??
 			sortedRoutes[0] ??
 			null
@@ -123,7 +125,8 @@ const HeaderInner = ({
 			return (
 				<div className="inline-flex items-center rounded-full bg-muted/50 p-0.5">
 					{sortedRoutes.map((r) => {
-						const isActive = normalizePath(r.path) === normalizedCurrentRoutePath;
+						const isActive =
+							normalizePath(r.path) === normalizedCurrentRoutePath;
 						const icon = getRouteIcon(r);
 						return (
 							<button
@@ -132,9 +135,10 @@ const HeaderInner = ({
 								onClick={() => onNavigateRoute(r.path)}
 								className={`
 									inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-all
-									${isActive
-										? "bg-background text-foreground shadow-sm"
-										: "text-muted-foreground hover:text-foreground"
+									${
+										isActive
+											? "bg-background text-foreground shadow-sm"
+											: "text-muted-foreground hover:text-foreground"
 									}
 								`}
 							>
@@ -151,7 +155,11 @@ const HeaderInner = ({
 		return (
 			<DropdownMenu>
 				<DropdownMenuTrigger asChild>
-					<Button variant="outline" size="sm" className="rounded-full px-4 gap-2 font-medium">
+					<Button
+						variant="outline"
+						size="sm"
+						className="rounded-full px-4 gap-2 font-medium"
+					>
 						{activeRoute && getRouteIcon(activeRoute)}
 						{activeRoute ? getRouteLabel(activeRoute) : "Navigate"}
 						<ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
@@ -159,7 +167,8 @@ const HeaderInner = ({
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="start" className="min-w-[160px]">
 					{sortedRoutes.map((r) => {
-						const isActive = normalizePath(r.path) === normalizedCurrentRoutePath;
+						const isActive =
+							normalizePath(r.path) === normalizedCurrentRoutePath;
 						const icon = getRouteIcon(r);
 						return (
 							<DropdownMenuItem
@@ -187,7 +196,10 @@ const HeaderInner = ({
 		const right: ReactNode[] = [];
 		if (appId && currentEvent) {
 			right.push(
-				<Link key="info" href={`/store?id=${appId}&eventId=${currentEvent?.id}`}>
+				<Link
+					key="info"
+					href={`/store?id=${appId}&eventId=${currentEvent?.id}`}
+				>
 					<Button
 						variant="ghost"
 						size="icon"
@@ -250,25 +262,22 @@ const HeaderInner = ({
 		<div className="hidden h-0 items-center justify-between p-4 bg-background backdrop-blur-xs md:flex md:h-fit">
 			<div className="flex items-center gap-1">
 				{/* Route navigation handled by toolbar elements from interfaces */}
-				{!hasRoutes &&
-					currentEvent &&
-					sortedEvents.length > 1 && (
-						<Select value={currentEvent.id} onValueChange={switchEvent}>
-							<SelectTrigger className="max-w-[200px] flex flex-row justify-between h-8 bg-muted/20 border-transparent">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								{sortedEvents
-									.filter((event) => usableEvents.has(event.event_type))
-									.map((event) => (
-										<SelectItem key={event.id} value={event.id}>
-											{event.name ?? event.event_type}
-										</SelectItem>
-									))}
-							</SelectContent>
-						</Select>
-					)
-				}
+				{!hasRoutes && currentEvent && sortedEvents.length > 1 && (
+					<Select value={currentEvent.id} onValueChange={switchEvent}>
+						<SelectTrigger className="max-w-[200px] flex flex-row justify-between h-8 bg-muted/20 border-transparent">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{sortedEvents
+								.filter((event) => usableEvents.has(event.event_type))
+								.map((event) => (
+									<SelectItem key={event.id} value={event.id}>
+										{event.name ?? event.event_type}
+									</SelectItem>
+								))}
+						</SelectContent>
+					</Select>
+				)}
 				<div className="flex items-center gap-1">
 					{toolbarElements.map((element, index) => (
 						<div key={index}>{element}</div>

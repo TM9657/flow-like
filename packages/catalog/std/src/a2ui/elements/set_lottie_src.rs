@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id;
+use flow_like::a2ui::components::LottieProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::LottieProps;
 use flow_like_types::{Value, async_trait, json::json};
-use super::element_utils::extract_element_id;
 
 /// Sets the source URL of a Lottie animation element.
 #[crate::register_node]
@@ -64,10 +64,15 @@ impl NodeLogic for SetLottieSrc {
 
         let src: String = context.evaluate_pin("src").await?;
 
-        context.upsert_element(&element_id, json!({
-            "type": "setLottieSrc",
-            "src": src
-        })).await?;
+        context
+            .upsert_element(
+                &element_id,
+                json!({
+                    "type": "setLottieSrc",
+                    "src": src
+                }),
+            )
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

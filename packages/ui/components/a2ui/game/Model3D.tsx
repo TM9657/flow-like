@@ -1,6 +1,12 @@
 "use client";
 
-import { ContactShadows, Environment, OrbitControls, PerspectiveCamera, useGLTF } from "@react-three/drei";
+import {
+	ContactShadows,
+	Environment,
+	OrbitControls,
+	PerspectiveCamera,
+	useGLTF,
+} from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -13,7 +19,17 @@ import { setModel3DView } from "./model3d-view-registry";
 
 type CameraAngle = "front" | "side" | "top" | "isometric";
 type LightingPreset = "neutral" | "warm" | "cool" | "studio" | "dramatic";
-type EnvironmentPreset = "studio" | "sunset" | "dawn" | "night" | "warehouse" | "forest" | "apartment" | "city" | "park" | "lobby";
+type EnvironmentPreset =
+	| "studio"
+	| "sunset"
+	| "dawn"
+	| "night"
+	| "warehouse"
+	| "forest"
+	| "apartment"
+	| "city"
+	| "park"
+	| "lobby";
 type EnvironmentSource = "local" | "preset" | "polyhaven" | "custom";
 type PolyhavenResolution = "1k" | "2k" | "4k" | "8k";
 
@@ -24,12 +40,57 @@ const CAMERA_ANGLES: Record<CameraAngle, [number, number, number]> = {
 	isometric: [1, 1, 1],
 };
 
-const LIGHTING_PRESETS: Record<LightingPreset, { ambient: number; main: number; fill: number; rim: number; mainColor: string; fillColor: string }> = {
-	neutral: { ambient: 0.5, main: 1.0, fill: 0.3, rim: 0.2, mainColor: "#ffffff", fillColor: "#ffffff" },
-	warm: { ambient: 0.4, main: 1.0, fill: 0.4, rim: 0.3, mainColor: "#fff5e6", fillColor: "#ffe4c4" },
-	cool: { ambient: 0.4, main: 1.0, fill: 0.4, rim: 0.3, mainColor: "#e6f3ff", fillColor: "#cce5ff" },
-	studio: { ambient: 0.6, main: 1.2, fill: 0.5, rim: 0.4, mainColor: "#ffffff", fillColor: "#f0f0ff" },
-	dramatic: { ambient: 0.2, main: 1.5, fill: 0.2, rim: 0.6, mainColor: "#fff8e7", fillColor: "#4a4a6a" },
+const LIGHTING_PRESETS: Record<
+	LightingPreset,
+	{
+		ambient: number;
+		main: number;
+		fill: number;
+		rim: number;
+		mainColor: string;
+		fillColor: string;
+	}
+> = {
+	neutral: {
+		ambient: 0.5,
+		main: 1.0,
+		fill: 0.3,
+		rim: 0.2,
+		mainColor: "#ffffff",
+		fillColor: "#ffffff",
+	},
+	warm: {
+		ambient: 0.4,
+		main: 1.0,
+		fill: 0.4,
+		rim: 0.3,
+		mainColor: "#fff5e6",
+		fillColor: "#ffe4c4",
+	},
+	cool: {
+		ambient: 0.4,
+		main: 1.0,
+		fill: 0.4,
+		rim: 0.3,
+		mainColor: "#e6f3ff",
+		fillColor: "#cce5ff",
+	},
+	studio: {
+		ambient: 0.6,
+		main: 1.2,
+		fill: 0.5,
+		rim: 0.4,
+		mainColor: "#ffffff",
+		fillColor: "#f0f0ff",
+	},
+	dramatic: {
+		ambient: 0.2,
+		main: 1.5,
+		fill: 0.2,
+		rim: 0.6,
+		mainColor: "#fff8e7",
+		fillColor: "#4a4a6a",
+	},
 };
 
 const POLYHAVEN_HDRI_IDS = [
@@ -50,7 +111,10 @@ const POLYHAVEN_HDRI_IDS = [
 	"potsdamer_platz",
 ] as const;
 
-function getPolyhavenHdriUrl(id: string, resolution: PolyhavenResolution): string {
+function getPolyhavenHdriUrl(
+	id: string,
+	resolution: PolyhavenResolution,
+): string {
 	return `https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/${resolution}/${id}_${resolution}.hdr`;
 }
 
@@ -125,10 +189,10 @@ function ViewTracker({
 	useFrame(() => {
 		const target = controlsRef.current?.target
 			? ([
-				controlsRef.current.target.x,
-				controlsRef.current.target.y,
-				controlsRef.current.target.z,
-			] as [number, number, number])
+					controlsRef.current.target.x,
+					controlsRef.current.target.y,
+					controlsRef.current.target.z,
+				] as [number, number, number])
 			: defaultTarget;
 		setModel3DView(componentId, {
 			cameraPosition: [camera.position.x, camera.position.y, camera.position.z],
@@ -142,9 +206,14 @@ function ViewTracker({
 // Inner component that uses R3F hooks - only render inside Canvas
 function Model3DInner({ component }: ComponentProps<Model3DComponent>) {
 	const src = useResolved<string>(component.src);
-	const position = useResolved<[number, number, number]>(component.position) ?? [0, 0, 0];
-	const rotation = useResolved<[number, number, number]>(component.rotation) ?? [0, 0, 0];
-	const scaleValue = useResolved<number | [number, number, number]>(component.scale) ?? 1;
+	const position = useResolved<[number, number, number]>(
+		component.position,
+	) ?? [0, 0, 0];
+	const rotation = useResolved<[number, number, number]>(
+		component.rotation,
+	) ?? [0, 0, 0];
+	const scaleValue =
+		useResolved<number | [number, number, number]>(component.scale) ?? 1;
 	const castShadow = useResolved<boolean>(component.castShadow) ?? true;
 	const receiveShadow = useResolved<boolean>(component.receiveShadow) ?? true;
 	const animationName = useResolved<string>(component.animation);
@@ -178,28 +247,42 @@ function Model3DInner({ component }: ComponentProps<Model3DComponent>) {
 }
 
 // Standalone canvas wrapper for when Model3D is used outside Scene3D
-function StandaloneModel3D({ component, componentId }: ComponentProps<Model3DComponent>) {
+function StandaloneModel3D({
+	component,
+	componentId,
+}: ComponentProps<Model3DComponent>) {
 	// Viewer options
 	const viewerHeight = useResolved<string>(component.viewerHeight) ?? "100%";
-	const backgroundColor = useResolved<string>(component.backgroundColor) ?? "transparent";
+	const backgroundColor =
+		useResolved<string>(component.backgroundColor) ?? "transparent";
 	const cameraDistance = useResolved<number>(component.cameraDistance) ?? 3;
 	const fov = useResolved<number>(component.fov) ?? 50;
-	const cameraAngle = useResolved<CameraAngle>(component.cameraAngle) ?? "front";
-	const cameraPositionOverride = useResolved<[number, number, number]>(component.cameraPosition);
-	const cameraTargetOverride = useResolved<[number, number, number]>(component.cameraTarget);
+	const cameraAngle =
+		useResolved<CameraAngle>(component.cameraAngle) ?? "front";
+	const cameraPositionOverride = useResolved<[number, number, number]>(
+		component.cameraPosition,
+	);
+	const cameraTargetOverride = useResolved<[number, number, number]>(
+		component.cameraTarget,
+	);
 
 	// Control options
 	const enableControls = useResolved<boolean>(component.enableControls) ?? true;
 	const enableZoom = useResolved<boolean>(component.enableZoom) ?? true;
 	const enablePan = useResolved<boolean>(component.enablePan) ?? false;
-	const autoRotateCamera = useResolved<boolean>(component.autoRotateCamera) ?? false;
-	const cameraRotateSpeed = useResolved<number>(component.cameraRotateSpeed) ?? 2;
+	const autoRotateCamera =
+		useResolved<boolean>(component.autoRotateCamera) ?? false;
+	const cameraRotateSpeed =
+		useResolved<number>(component.cameraRotateSpeed) ?? 2;
 	const controlsRef = useRef<any>(null);
 
 	// Lighting options
-	const lightingPreset = useResolved<LightingPreset>(component.lightingPreset) ?? "studio";
+	const lightingPreset =
+		useResolved<LightingPreset>(component.lightingPreset) ?? "studio";
 	const ambientLightOverride = useResolved<number>(component.ambientLight);
-	const directionalLightOverride = useResolved<number>(component.directionalLight);
+	const directionalLightOverride = useResolved<number>(
+		component.directionalLight,
+	);
 	const fillLightOverride = useResolved<number>(component.fillLight);
 	const rimLightOverride = useResolved<number>(component.rimLight);
 	const lightColor = useResolved<string>(component.lightColor);
@@ -209,13 +292,20 @@ function StandaloneModel3D({ component, componentId }: ComponentProps<Model3DCom
 	const groundColor = useResolved<string>(component.groundColor) ?? "#1a1a2e";
 	const groundSize = useResolved<number>(component.groundSize) ?? 200;
 	const groundOffsetY = useResolved<number>(component.groundOffsetY) ?? -0.5;
-	const groundFollowCamera = useResolved<boolean>(component.groundFollowCamera) ?? true;
-	const enableReflections = useResolved<boolean>(component.enableReflections) ?? true;
-	const environment = useResolved<EnvironmentPreset>(component.environment) ?? "studio";
-	const environmentSource = useResolved<EnvironmentSource>(component.environmentSource) ?? "local";
-	const useHdrBackground = useResolved<boolean>(component.useHdrBackground) ?? false;
-	const polyhavenHdri = useResolved<string>(component.polyhavenHdri) ?? "studio_small_03";
-	const polyhavenResolution = useResolved<PolyhavenResolution>(component.polyhavenResolution) ?? "1k";
+	const groundFollowCamera =
+		useResolved<boolean>(component.groundFollowCamera) ?? true;
+	const enableReflections =
+		useResolved<boolean>(component.enableReflections) ?? true;
+	const environment =
+		useResolved<EnvironmentPreset>(component.environment) ?? "studio";
+	const environmentSource =
+		useResolved<EnvironmentSource>(component.environmentSource) ?? "local";
+	const useHdrBackground =
+		useResolved<boolean>(component.useHdrBackground) ?? false;
+	const polyhavenHdri =
+		useResolved<string>(component.polyhavenHdri) ?? "studio_small_03";
+	const polyhavenResolution =
+		useResolved<PolyhavenResolution>(component.polyhavenResolution) ?? "1k";
 	const hdriPath = useResolved<string>(component.hdriUrl);
 	const { url: resolvedHdriUrl } = useAssetUrl(hdriPath);
 
@@ -230,7 +320,8 @@ function StandaloneModel3D({ component, componentId }: ComponentProps<Model3DCom
 		] as [number, number, number];
 	}, [cameraAngle, cameraDistance]);
 	const cameraPosition = cameraPositionOverride ?? computedCameraPosition;
-	const cameraTarget = cameraTargetOverride ?? ([0, 0, 0] as [number, number, number]);
+	const cameraTarget =
+		cameraTargetOverride ?? ([0, 0, 0] as [number, number, number]);
 
 	// Get lighting values from preset, with overrides
 	const lighting = LIGHTING_PRESETS[lightingPreset] || LIGHTING_PRESETS.studio;
@@ -240,18 +331,21 @@ function StandaloneModel3D({ component, componentId }: ComponentProps<Model3DCom
 	const rimIntensity = rimLightOverride ?? lighting.rim;
 	const mainLightColor = lightColor ?? lighting.mainColor;
 	const fillLightColor = lightColor ?? lighting.fillColor;
-	const polyhavenId = POLYHAVEN_HDRI_IDS.includes(polyhavenHdri as typeof POLYHAVEN_HDRI_IDS[number])
+	const polyhavenId = POLYHAVEN_HDRI_IDS.includes(
+		polyhavenHdri as (typeof POLYHAVEN_HDRI_IDS)[number],
+	)
 		? polyhavenHdri
 		: "studio_small_03";
 	const polyhavenUrl = getPolyhavenHdriUrl(polyhavenId, polyhavenResolution);
 	const localHdriPath = `/hdri/${polyhavenId}_1k.hdr`;
-	const hdriUrl = environmentSource === "polyhaven"
-		? polyhavenUrl
-		: environmentSource === "custom"
-			? (resolvedHdriUrl ?? hdriPath)
-			: environmentSource === "local"
-				? localHdriPath
-				: undefined;
+	const hdriUrl =
+		environmentSource === "polyhaven"
+			? polyhavenUrl
+			: environmentSource === "custom"
+				? (resolvedHdriUrl ?? hdriPath)
+				: environmentSource === "local"
+					? localHdriPath
+					: undefined;
 
 	const heightStyle =
 		viewerHeight && viewerHeight !== "auto" && viewerHeight !== "parent"
@@ -263,7 +357,8 @@ function StandaloneModel3D({ component, componentId }: ComponentProps<Model3DCom
 			className="w-full h-full rounded-lg overflow-hidden"
 			style={{
 				height: heightStyle,
-				backgroundColor: backgroundColor === "transparent" ? undefined : backgroundColor,
+				backgroundColor:
+					backgroundColor === "transparent" ? undefined : backgroundColor,
 			}}
 		>
 			<Canvas
@@ -271,9 +366,19 @@ function StandaloneModel3D({ component, componentId }: ComponentProps<Model3DCom
 				gl={{ antialias: true, alpha: backgroundColor === "transparent" }}
 			>
 				<Scene3DProvider>
-					<Suspense fallback={<R3FPlaceholder position={[0, 0, 0]} color="#666" />}>
-						<PerspectiveCamera makeDefault position={cameraPosition} fov={fov} />
-						<ViewTracker componentId={componentId} controlsRef={controlsRef} defaultTarget={cameraTarget} />
+					<Suspense
+						fallback={<R3FPlaceholder position={[0, 0, 0]} color="#666" />}
+					>
+						<PerspectiveCamera
+							makeDefault
+							position={cameraPosition}
+							fov={fov}
+						/>
+						<ViewTracker
+							componentId={componentId}
+							controlsRef={controlsRef}
+							defaultTarget={cameraTarget}
+						/>
 						{/* Lighting setup */}
 						<ambientLight intensity={ambientIntensity} color={mainLightColor} />
 						<directionalLight
@@ -353,12 +458,17 @@ function StandaloneModel3D({ component, componentId }: ComponentProps<Model3DCom
 	);
 }
 
-export function A2UIModel3D({ component, componentId }: ComponentProps<Model3DComponent>) {
+export function A2UIModel3D({
+	component,
+	componentId,
+}: ComponentProps<Model3DComponent>) {
 	const isInsideScene3D = useIsInsideScene3D();
 
 	// If not inside Scene3D's Canvas context, create a standalone canvas
 	if (!isInsideScene3D) {
-		return <StandaloneModel3D component={component} componentId={componentId} />;
+		return (
+			<StandaloneModel3D component={component} componentId={componentId} />
+		);
 	}
 
 	// Inside Canvas - render R3F component directly
@@ -471,7 +581,12 @@ function GLTFModelLoader(props: GLTFModelLoaderProps) {
 	}
 
 	return (
-		<group ref={groupRef} position={props.position} rotation={props.rotation} scale={props.scale}>
+		<group
+			ref={groupRef}
+			position={props.position}
+			rotation={props.rotation}
+			scale={props.scale}
+		>
 			<primitive object={clonedScene} />
 		</group>
 	);

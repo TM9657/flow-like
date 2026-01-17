@@ -1,11 +1,11 @@
+use super::chart_data_utils::{extract_from_csv_table, parse_column_ref, parse_csv_text};
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
-use super::chart_data_utils::{extract_from_csv_table, parse_csv_text, parse_column_ref};
+use flow_like_types::{Value, async_trait, json::json};
 
 /// Converts CSV data or CSVTable (from DataFusion) to Nivo Treemap/Sunburst hierarchical format.
 ///
@@ -96,7 +96,12 @@ impl NodeLogic for CsvToTreeData {
         )
         .set_default_value(Some(json!(",")));
 
-        node.add_output_pin("data", "Data", "Hierarchical tree data object", VariableType::Generic);
+        node.add_output_pin(
+            "data",
+            "Data",
+            "Hierarchical tree data object",
+            VariableType::Generic,
+        );
 
         node
     }
@@ -108,7 +113,8 @@ impl NodeLogic for CsvToTreeData {
         let root_name: String = context.evaluate_pin("root_name").await?;
         let delimiter: String = context.evaluate_pin("delimiter").await?;
 
-        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await {
+        let (headers, rows) = if let Ok(table_value) = context.evaluate_pin::<Value>("table").await
+        {
             if !table_value.is_null() {
                 extract_from_csv_table(&table_value)?
             } else {
@@ -121,7 +127,9 @@ impl NodeLogic for CsvToTreeData {
         };
 
         if headers.is_empty() || rows.is_empty() {
-            context.set_pin_value("data", json!({ "name": root_name, "children": [] })).await?;
+            context
+                .set_pin_value("data", json!({ "name": root_name, "children": [] }))
+                .await?;
             return Ok(());
         }
 
@@ -132,7 +140,10 @@ impl NodeLogic for CsvToTreeData {
 
         for row in &rows {
             let path = row.get(path_idx).cloned().unwrap_or_default();
-            let value: f64 = row.get(value_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            let value: f64 = row
+                .get(value_idx)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.0);
 
             let parts: Vec<&str> = path.split(&path_sep).filter(|s| !s.is_empty()).collect();
             root.insert(&parts, value);
@@ -152,7 +163,11 @@ struct TreeNode {
 
 impl TreeNode {
     fn new(name: &str) -> Self {
-        Self { name: name.to_string(), value: None, children: Vec::new() }
+        Self {
+            name: name.to_string(),
+            value: None,
+            children: Vec::new(),
+        }
     }
 
     fn insert(&mut self, path: &[&str], value: f64) {

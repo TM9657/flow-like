@@ -347,7 +347,9 @@ export function EventForm({
 	const handleSelectPage = useCallback(
 		(pageId: string) => {
 			setPathError(null);
-			const page = (pages.data ?? []).find((p: PageListItem) => p.pageId === pageId);
+			const page = (pages.data ?? []).find(
+				(p: PageListItem) => p.pageId === pageId,
+			);
 			handleInputChange("default_page_id", pageId);
 			handleInputChange("event_type", "page");
 			handleInputChange("node_id", "");
@@ -455,8 +457,8 @@ export function EventForm({
 							<p className="text-sm text-destructive">{pathError}</p>
 						) : (
 							<p className="text-xs text-muted-foreground">
-								Default is <span className="font-mono">/</span>. Each path
-								can only be used once.
+								Default is <span className="font-mono">/</span>. Each path can
+								only be used once.
 							</p>
 						)}
 					</div>
@@ -623,8 +625,8 @@ export function EventForm({
 								<p className="text-sm text-destructive">{pathError}</p>
 							) : (
 								<p className="text-xs text-muted-foreground">
-									Default is <span className="font-mono">/</span>. Each path
-									can only be used once.
+									Default is <span className="font-mono">/</span>. Each path can
+									only be used once.
 								</p>
 							)}
 						</div>

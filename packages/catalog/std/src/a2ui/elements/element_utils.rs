@@ -1,5 +1,5 @@
-use flow_like_types::json::Map;
 use flow_like_types::Value;
+use flow_like_types::json::Map;
 
 /// Finds an element in the elements map by ID.
 ///
@@ -12,7 +12,7 @@ pub fn find_element<'a>(
 ) -> Option<(&'a String, &'a Value)> {
     // First try exact match
     if let Some(val) = elements.get(element_id) {
-        return Some((&elements.keys().find(|k| *k == element_id).unwrap(), val));
+        return Some((elements.keys().find(|k| *k == element_id).unwrap(), val));
     }
 
     // If no exact match and element_id doesn't contain "/", try suffix matching
@@ -54,9 +54,7 @@ pub fn extract_element_id(value: &Value) -> Option<String> {
 
 /// Get a property from a component's data
 pub fn get_component_property<'a>(component: &'a Value, property: &str) -> Option<&'a Value> {
-    component
-        .get("component")
-        .and_then(|c| c.get(property))
+    component.get("component").and_then(|c| c.get(property))
 }
 
 /// Get text content from a component (tries multiple common properties)
@@ -85,18 +83,17 @@ pub fn get_value_content(component: &Value) -> Option<&Value> {
 pub fn extract_element_id_from_pin(value: Value) -> Option<String> {
     match value {
         Value::String(s) if !s.is_empty() => Some(s),
-        Value::Object(ref obj) => {
-            obj.get("__element_id")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .or_else(|| {
-                    obj.get("id")
-                        .and_then(|v| v.as_str())
-                        .filter(|s| !s.is_empty())
-                        .map(|s| s.to_string())
-                })
-        }
+        Value::Object(ref obj) => obj
+            .get("__element_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                obj.get("id")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+            }),
         _ => None,
     }
 }

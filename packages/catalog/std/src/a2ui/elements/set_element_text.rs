@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id;
+use flow_like::a2ui::components::TextProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::TextProps;
 use flow_like_types::{Value, async_trait, json::json};
-use super::element_utils::extract_element_id;
 
 /// Sets the text content of a text-based element.
 ///
@@ -43,12 +43,7 @@ impl NodeLogic for SetElementText {
         .set_schema::<TextProps>()
         .set_options(PinOptions::new().set_enforce_schema(false).build());
 
-        node.add_input_pin(
-            "text",
-            "Text",
-            "The new text content",
-            VariableType::String,
-        );
+        node.add_input_pin("text", "Text", "The new text content", VariableType::String);
 
         node.add_output_pin("exec_out", "▶", "Execution output", VariableType::Execution);
 
@@ -64,7 +59,10 @@ impl NodeLogic for SetElementText {
 
         // Debug: Log what value we received
         context.log_message(
-            &format!("[SetElementText] Received element_ref value: {:?}", element_value),
+            &format!(
+                "[SetElementText] Received element_ref value: {:?}",
+                element_value
+            ),
             flow_like::flow::execution::LogLevel::Debug,
         );
 

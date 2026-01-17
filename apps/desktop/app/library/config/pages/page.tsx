@@ -16,8 +16,8 @@ import {
 	useInvoke,
 } from "@tm9657/flow-like-ui";
 import type { IOAuthProvider, IStoredOAuthToken } from "@tm9657/flow-like-ui";
-import type { PageListItem } from "@tm9657/flow-like-ui/state/backend-state/page-state";
 import EventsPage from "@tm9657/flow-like-ui/components/settings/events/events-page";
+import type { PageListItem } from "@tm9657/flow-like-ui/state/backend-state/page-state";
 import {
 	FileText,
 	LayoutGrid,
@@ -66,7 +66,6 @@ export default function Page() {
 		},
 		[id, backend.pageState, pages],
 	);
-
 
 	const openPageEditor = useCallback(
 		(pageId: string, boardId?: string) => {
@@ -168,8 +167,14 @@ function PagesSection({
 					<PageCard
 						key={pageInfo.pageId}
 						pageInfo={pageInfo}
-						onOpen={() => onOpenPage(pageInfo.pageId, pageInfo.boardId ?? undefined)}
-						onOpenBoard={pageInfo.boardId ? () => onOpenBoard(pageInfo.boardId!) : undefined}
+						onOpen={() =>
+							onOpenPage(pageInfo.pageId, pageInfo.boardId ?? undefined)
+						}
+						onOpenBoard={
+							pageInfo.boardId
+								? () => onOpenBoard(pageInfo.boardId!)
+								: undefined
+						}
 						onDelete={() => onDelete(pageInfo.pageId, pageInfo.boardId ?? null)}
 					/>
 				))}

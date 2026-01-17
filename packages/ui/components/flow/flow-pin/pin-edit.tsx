@@ -167,7 +167,8 @@ function WithMenuInner({
 }>) {
 	const { editPin } = useFlowControlState();
 	const isConnected = pin.connected_to && pin.connected_to.length > 0;
-	const hasNoDefaultValue = typeof defaultValue === "undefined" || defaultValue === null;
+	const hasNoDefaultValue =
+		typeof defaultValue === "undefined" || defaultValue === null;
 
 	return (
 		<>

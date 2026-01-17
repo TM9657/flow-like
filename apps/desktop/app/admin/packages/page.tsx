@@ -10,6 +10,7 @@ import {
 	useQueryClient,
 } from "@tm9657/flow-like-ui";
 import {
+	AdminPackageDetail,
 	Badge,
 	Button,
 	Card,
@@ -30,7 +31,6 @@ import {
 	TableHead,
 	TableHeader,
 	TableRow,
-	AdminPackageDetail,
 } from "@tm9657/flow-like-ui/components";
 import { useDebounce } from "@uidotdev/usehooks";
 import { formatDistanceToNow } from "date-fns";

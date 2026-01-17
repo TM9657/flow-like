@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBackend } from "../../../state/backend-state";
 import { useActionContext } from "../ActionHandler";
 
@@ -28,10 +28,7 @@ function isLocalFilePath(path: string): boolean {
 	// Detect absolute local file paths
 	// Unix: /Users/..., /home/..., /tmp/..., etc.
 	// Windows: C:\..., D:\..., etc.
-	return (
-		path.startsWith("/") ||
-		/^[A-Za-z]:[/\\]/.test(path)
-	);
+	return path.startsWith("/") || /^[A-Za-z]:[/\\]/.test(path);
 }
 
 function isStoragePath(path: string): boolean {
@@ -126,7 +123,10 @@ export function useAssetUrl(assetPath: string | undefined): {
 					setError(null);
 				} else if (result?.error) {
 					// Fall back to raw path on error
-					console.warn("[useAssetUrl] Storage error, falling back to raw path:", result.error);
+					console.warn(
+						"[useAssetUrl] Storage error, falling back to raw path:",
+						result.error,
+					);
 					setUrl(cleanPath);
 					setError(null);
 				} else {
@@ -138,7 +138,10 @@ export function useAssetUrl(assetPath: string | undefined): {
 			})
 			.catch((err) => {
 				if (abortControllerRef.current?.signal.aborted) return;
-				console.warn("[useAssetUrl] Failed to resolve asset URL, falling back to raw path:", err);
+				console.warn(
+					"[useAssetUrl] Failed to resolve asset URL, falling back to raw path:",
+					err,
+				);
 				// Fall back to the raw path - let the loader handle the actual fetch
 				setUrl(cleanPath);
 				setError(null);
@@ -224,7 +227,7 @@ export function useAssetUrls(assetPaths: string[]): {
 			.then((results) => {
 				for (const result of results) {
 					const originalPath = assetPaths.find(
-						(p) => p.replace(/^storage:\/\//, "") === result.prefix
+						(p) => p.replace(/^storage:\/\//, "") === result.prefix,
 					);
 					if (!originalPath) continue;
 

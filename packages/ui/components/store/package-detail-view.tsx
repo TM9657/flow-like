@@ -1,6 +1,5 @@
 "use client";
 
-import type { RegistryEntry } from "../../lib/schema/wasm";
 import { formatDistanceToNow } from "date-fns";
 import {
 	ArrowLeft,
@@ -16,6 +15,7 @@ import {
 	Tag,
 	User,
 } from "lucide-react";
+import type { RegistryEntry } from "../../lib/schema/wasm";
 import {
 	Badge,
 	Button,
@@ -205,7 +205,10 @@ export function PackageDetailView({
 										</Button>
 									</>
 								) : (
-									<Button onClick={() => onInstall(undefined)} disabled={isInstalling}>
+									<Button
+										onClick={() => onInstall(undefined)}
+										disabled={isInstalling}
+									>
 										{isInstalling ? (
 											<RefreshCw className="mr-2 h-4 w-4 animate-spin" />
 										) : (
@@ -237,7 +240,9 @@ export function PackageDetailView({
 							{/* Info Card */}
 							<Card className="md:col-span-2">
 								<CardHeader>
-									<CardTitle className="text-base">Package Information</CardTitle>
+									<CardTitle className="text-base">
+										Package Information
+									</CardTitle>
 								</CardHeader>
 								<CardContent className="space-y-4">
 									{manifest.keywords.length > 0 && (
@@ -258,7 +263,10 @@ export function PackageDetailView({
 											<h4 className="text-sm font-medium mb-2">Authors</h4>
 											<div className="flex flex-wrap gap-2">
 												{manifest.authors.map((author, idx) => (
-													<div key={idx} className="flex items-center gap-1 text-sm">
+													<div
+														key={idx}
+														className="flex items-center gap-1 text-sm"
+													>
 														<User className="h-4 w-4 text-muted-foreground" />
 														{author.url ? (
 															<a
@@ -337,14 +345,18 @@ export function PackageDetailView({
 										<p className="text-2xl font-bold">
 											{pkg.downloadCount.toLocaleString()}
 										</p>
-										<p className="text-sm text-muted-foreground">Total Downloads</p>
+										<p className="text-sm text-muted-foreground">
+											Total Downloads
+										</p>
 									</div>
 									<div>
 										<p className="text-2xl font-bold">{pkg.versions.length}</p>
 										<p className="text-sm text-muted-foreground">Versions</p>
 									</div>
 									<div>
-										<p className="text-2xl font-bold">{manifest.nodes.length}</p>
+										<p className="text-2xl font-bold">
+											{manifest.nodes.length}
+										</p>
 										<p className="text-sm text-muted-foreground">Nodes</p>
 									</div>
 									<div>
@@ -450,11 +462,17 @@ export function PackageDetailView({
 										<div className="mt-4">
 											<p className="text-sm font-medium mb-2">Allowed Hosts</p>
 											<div className="flex flex-wrap gap-1">
-												{manifest.permissions.network.allowedHosts.map((host) => (
-													<Badge key={host} variant="outline" className="font-mono text-xs">
-														{host}
-													</Badge>
-												))}
+												{manifest.permissions.network.allowedHosts.map(
+													(host) => (
+														<Badge
+															key={host}
+															variant="outline"
+															className="font-mono text-xs"
+														>
+															{host}
+														</Badge>
+													),
+												)}
 											</div>
 										</div>
 									)}
@@ -466,12 +484,18 @@ export function PackageDetailView({
 											<div key={idx} className="p-3 rounded-lg bg-muted mt-2">
 												<div className="flex items-center gap-2">
 													<Badge>{oauth.provider}</Badge>
-													{oauth.required && <Badge variant="destructive">Required</Badge>}
+													{oauth.required && (
+														<Badge variant="destructive">Required</Badge>
+													)}
 												</div>
 												<p className="text-sm mt-1">{oauth.reason}</p>
 												<div className="flex flex-wrap gap-1 mt-2">
 													{oauth.scopes.map((scope) => (
-														<Badge key={scope} variant="outline" className="font-mono text-xs">
+														<Badge
+															key={scope}
+															variant="outline"
+															className="font-mono text-xs"
+														>
 															{scope}
 														</Badge>
 													))}
@@ -491,11 +515,17 @@ export function PackageDetailView({
 							</CardHeader>
 							<CardContent>
 								{pkg.versions.length === 0 ? (
-									<p className="text-sm text-muted-foreground">No versions available</p>
+									<p className="text-sm text-muted-foreground">
+										No versions available
+									</p>
 								) : (
 									<div className="divide-y">
 										{pkg.versions.map((v, idx) => (
-											<VersionRow key={v.version} version={v} isLatest={idx === 0} />
+											<VersionRow
+												key={v.version}
+												version={v}
+												isLatest={idx === 0}
+											/>
 										))}
 									</div>
 								)}

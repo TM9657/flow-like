@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id;
+use flow_like::a2ui::components::NivoChartProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::NivoChartProps;
 use flow_like_types::{Value, async_trait, json::json};
-use super::element_utils::extract_element_id;
 
 /// Configures Pie/Donut chart styling options.
 ///
@@ -148,7 +148,8 @@ impl NodeLogic for SetPieChartStyle {
         let enable_arc_labels: bool = context.evaluate_pin("enable_arc_labels").await?;
         let enable_arc_link_labels: bool = context.evaluate_pin("enable_arc_link_labels").await?;
         let arc_labels_skip_angle: i64 = context.evaluate_pin("arc_labels_skip_angle").await?;
-        let active_outer_radius_offset: i64 = context.evaluate_pin("active_outer_radius_offset").await?;
+        let active_outer_radius_offset: i64 =
+            context.evaluate_pin("active_outer_radius_offset").await?;
 
         let style = json!({
             "innerRadius": inner_radius,
@@ -164,7 +165,9 @@ impl NodeLogic for SetPieChartStyle {
             "activeOuterRadiusOffset": active_outer_radius_offset
         });
 
-        context.upsert_element(&element_id, json!({ "pieStyle": style })).await?;
+        context
+            .upsert_element(&element_id, json!({ "pieStyle": style }))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

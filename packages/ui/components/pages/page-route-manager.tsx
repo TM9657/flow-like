@@ -20,7 +20,7 @@ export interface PageRouteManagerProps {
  */
 export function PageRouteManager(_props: PageRouteManagerProps) {
 	return (
-<div className="p-4 text-muted-foreground">
+		<div className="p-4 text-muted-foreground">
 			<p>Route management has been moved to the Events page.</p>
 		</div>
 	);

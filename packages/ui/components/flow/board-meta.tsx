@@ -24,8 +24,6 @@ import {
 	Badge,
 	Button,
 	Card,
-	CardContent,
-	CardDescription,
 	CardHeader,
 	CardTitle,
 	Dialog,
@@ -417,7 +415,9 @@ function PagesTab({
 					size="sm"
 					onClick={() => setCreateDialog(true)}
 					disabled={!appId}
-					title={!appId ? "Cannot create pages: app context is missing" : undefined}
+					title={
+						!appId ? "Cannot create pages: app context is missing" : undefined
+					}
 				>
 					<PlusIcon className="h-4 w-4 mr-1" />
 					Add Page

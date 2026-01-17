@@ -140,9 +140,15 @@ function PackageDetailWrapper() {
 			packageId={packageId}
 			onBack={handleBack}
 			onInstallSuccess={() => toast.success("Package installed successfully")}
-			onUninstallSuccess={() => toast.success("Package uninstalled successfully")}
-			onInstallError={(error) => toast.error(`Failed to install package: ${error.message}`)}
-			onUninstallError={(error) => toast.error(`Failed to uninstall package: ${error.message}`)}
+			onUninstallSuccess={() =>
+				toast.success("Package uninstalled successfully")
+			}
+			onInstallError={(error) =>
+				toast.error(`Failed to install package: ${error.message}`)
+			}
+			onUninstallError={(error) =>
+				toast.error(`Failed to uninstall package: ${error.message}`)
+			}
 			fetcher={fetcher}
 			auth={auth}
 		/>

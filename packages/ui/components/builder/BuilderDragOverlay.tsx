@@ -1,10 +1,14 @@
 "use client";
 
 import { DragOverlay } from "@dnd-kit/core";
-import { memo } from "react";
 import { motion } from "framer-motion";
+import { memo } from "react";
 import { cn } from "../../lib/utils";
-import { useBuilderDnd, COMPONENT_MOVE_TYPE, type DragData } from "./BuilderDndContext";
+import {
+	COMPONENT_MOVE_TYPE,
+	type DragData,
+	useBuilderDnd,
+} from "./BuilderDndContext";
 
 // Component type to icon mapping
 const COMPONENT_ICONS: Record<string, string> = {

@@ -1,3 +1,4 @@
+use flow_like::a2ui::components::CheckboxProps;
 use flow_like::flow::{
     board::Board,
     execution::{LogLevel, context::ExecutionContext},
@@ -5,7 +6,6 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::CheckboxProps;
 use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
@@ -60,16 +60,27 @@ impl NodeLogic for SetCheckboxChecked {
         context.activate_exec_pin("exec_out").await?;
 
         let element_value: Value = context.evaluate_pin("element_ref").await?;
-        let element_id = extract_element_id(&element_value)
-            .ok_or_else(|| flow_like_types::anyhow!("Invalid element reference - expected string ID or element object"))?;
+        let element_id = extract_element_id(&element_value).ok_or_else(|| {
+            flow_like_types::anyhow!(
+                "Invalid element reference - expected string ID or element object"
+            )
+        })?;
         let checked: bool = context.evaluate_pin("checked").await?;
 
-        context.upsert_element(&element_id, json!({
-            "type": "setChecked",
-            "checked": checked
-        })).await?;
+        context
+            .upsert_element(
+                &element_id,
+                json!({
+                    "type": "setChecked",
+                    "checked": checked
+                }),
+            )
+            .await?;
 
-        context.log_message(&format!("Set checkbox checked: {} = {}", element_id, checked), LogLevel::Debug);
+        context.log_message(
+            &format!("Set checkbox checked: {} = {}", element_id, checked),
+            LogLevel::Debug,
+        );
 
         Ok(())
     }

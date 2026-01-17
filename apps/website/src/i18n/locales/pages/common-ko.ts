@@ -10,7 +10,8 @@ export const koCommon = {
 	"header.cancel": "취소",
 	// Footer CTA
 	"footer.cta.title": "자동화할 준비가 되셨나요?",
-	"footer.cta.description": "Flow-Like를 다운로드하고 몇 분 만에 첫 번째 워크플로우를 만드세요.",
+	"footer.cta.description":
+		"Flow-Like를 다운로드하고 몇 분 만에 첫 번째 워크플로우를 만드세요.",
 	"footer.cta.button": "무료로 시작",
 
 	// Footer Sections

@@ -68,9 +68,20 @@ impl NodeLogic for OpenDialog {
         context.deactivate_exec_pin("exec_out").await?;
 
         let route: String = context.evaluate_pin("route").await?;
-        let title: Option<String> = context.evaluate_pin("title").await.ok().filter(|s: &String| !s.is_empty());
-        let query_params_str: String = context.evaluate_pin("query_params").await.unwrap_or_default();
-        let dialog_id: Option<String> = context.evaluate_pin("dialog_id").await.ok().filter(|s: &String| !s.is_empty());
+        let title: Option<String> = context
+            .evaluate_pin("title")
+            .await
+            .ok()
+            .filter(|s: &String| !s.is_empty());
+        let query_params_str: String = context
+            .evaluate_pin("query_params")
+            .await
+            .unwrap_or_default();
+        let dialog_id: Option<String> = context
+            .evaluate_pin("dialog_id")
+            .await
+            .ok()
+            .filter(|s: &String| !s.is_empty());
 
         if route.is_empty() {
             return Err(flow_like_types::anyhow!("Route cannot be empty"));
@@ -91,7 +102,9 @@ impl NodeLogic for OpenDialog {
             }
         };
 
-        context.open_dialog(&route, title, query_params, dialog_id).await?;
+        context
+            .open_dialog(&route, title, query_params, dialog_id)
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

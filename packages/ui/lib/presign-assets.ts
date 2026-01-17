@@ -1,5 +1,5 @@
-import type { IStorageState } from "../state/backend-state/storage-state";
 import type { BoundValue, SurfaceComponent } from "../components/a2ui/types";
+import type { IStorageState } from "../state/backend-state/storage-state";
 
 // Component types that have asset URLs
 const ASSET_COMPONENT_TYPES = new Set([
@@ -23,11 +23,11 @@ const ASSET_COMPONENT_TYPES = new Set([
 
 // Properties that contain asset URLs
 const ASSET_PROPERTIES = new Set([
-	"src",           // image, video, filePreview, sprite, model3d, lottie, iframe
-	"poster",        // video poster image
-	"fallback",      // avatar fallback image
-	"image",         // characterPortrait
-	"mapImage",      // miniMap
+	"src", // image, video, filePreview, sprite, model3d, lottie, iframe
+	"poster", // video poster image
+	"fallback", // avatar fallback image
+	"image", // characterPortrait
+	"mapImage", // miniMap
 	"environmentMap", // scene3d HDR/environment
 ]);
 
@@ -41,15 +41,21 @@ function isStoragePrefix(value: string): boolean {
 	return true;
 }
 
-function extractStringFromBoundValue(value: BoundValue | string | undefined): string | undefined {
+function extractStringFromBoundValue(
+	value: BoundValue | string | undefined,
+): string | undefined {
 	if (!value) return undefined;
 	// Handle plain strings (not wrapped in BoundValue)
 	if (typeof value === "string") return value;
-	if (typeof value === "object" && "literalString" in value) return value.literalString;
+	if (typeof value === "object" && "literalString" in value)
+		return value.literalString;
 	return undefined;
 }
 
-function updateBoundValueString(value: BoundValue | string, newString: string): BoundValue | string {
+function updateBoundValueString(
+	value: BoundValue | string,
+	newString: string,
+): BoundValue | string {
 	// If it was a plain string, return a plain string
 	if (typeof value === "string") return newString;
 	if (typeof value === "object" && "literalString" in value) {
@@ -68,7 +74,9 @@ export interface AssetPrefixInfo {
 /**
  * Extracts all storage prefixes from page components that need presigning
  */
-export function extractAssetPrefixes(components: SurfaceComponent[]): AssetPrefixInfo[] {
+export function extractAssetPrefixes(
+	components: SurfaceComponent[],
+): AssetPrefixInfo[] {
 	const assets: AssetPrefixInfo[] = [];
 
 	for (const component of components) {
@@ -119,10 +127,16 @@ export async function presignPageAssets(
 	// Get unique prefixes
 	const uniquePrefixes = [...new Set(assets.map((a) => a.prefix))];
 
-	console.log("[presignPageAssets] Requesting presigned URLs for:", uniquePrefixes);
+	console.log(
+		"[presignPageAssets] Requesting presigned URLs for:",
+		uniquePrefixes,
+	);
 
 	// Presign all prefixes in a single call
-	const signedUrls = await storageState.downloadStorageItems(appId, uniquePrefixes);
+	const signedUrls = await storageState.downloadStorageItems(
+		appId,
+		uniquePrefixes,
+	);
 
 	console.log("[presignPageAssets] Received signed URLs:", signedUrls);
 
@@ -141,16 +155,23 @@ export async function presignPageAssets(
 
 		const updatedComponent = { ...component };
 		if (updatedComponent.component) {
-			const comp = { ...updatedComponent.component } as unknown as Record<string, unknown>;
+			const comp = { ...updatedComponent.component } as unknown as Record<
+				string,
+				unknown
+			>;
 
 			for (const asset of relevantAssets) {
 				const signedUrl = urlMap.get(asset.prefix);
 				if (signedUrl) {
-					comp[asset.property] = updateBoundValueString(asset.boundValue, signedUrl);
+					comp[asset.property] = updateBoundValueString(
+						asset.boundValue,
+						signedUrl,
+					);
 				}
 			}
 
-			updatedComponent.component = comp as unknown as typeof component.component;
+			updatedComponent.component =
+				comp as unknown as typeof component.component;
 		}
 
 		return updatedComponent;
@@ -166,7 +187,16 @@ export function isAssetFile(path: string): boolean {
 	const ext = path.split(".").pop()?.toLowerCase();
 	if (!ext) return false;
 
-	const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp", "svg", "ico", "bmp"];
+	const imageExtensions = [
+		"jpg",
+		"jpeg",
+		"png",
+		"gif",
+		"webp",
+		"svg",
+		"ico",
+		"bmp",
+	];
 	const modelExtensions = ["glb", "gltf", "obj", "fbx"];
 	const videoExtensions = ["mp4", "webm", "ogg", "mov"];
 
@@ -224,7 +254,11 @@ export async function presignCanvasSettings(
 		return settings;
 	}
 
-	const presignedUrl = await presignSinglePath(appId, settings.backgroundImage, storageState);
+	const presignedUrl = await presignSinglePath(
+		appId,
+		settings.backgroundImage,
+		storageState,
+	);
 
 	return {
 		...settings,

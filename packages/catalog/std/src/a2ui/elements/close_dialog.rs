@@ -45,7 +45,11 @@ impl NodeLogic for CloseDialog {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
-        let dialog_id: Option<String> = context.evaluate_pin("dialog_id").await.ok().filter(|s: &String| !s.is_empty());
+        let dialog_id: Option<String> = context
+            .evaluate_pin("dialog_id")
+            .await
+            .ok()
+            .filter(|s: &String| !s.is_empty());
 
         context.close_dialog(dialog_id).await?;
         context.activate_exec_pin("exec_out").await?;

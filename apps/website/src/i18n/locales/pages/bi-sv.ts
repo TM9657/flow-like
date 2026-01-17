@@ -145,7 +145,8 @@ export const svBi = {
 	"bi.cta.description":
 		"Ladda ner Flow-Like och bygg din första dashboard på minuter. Inget kreditkort. Ingen vendor lock-in. Bara bättre BI.",
 	"bi.cta.button": "Ladda Ner Gratis",
-	"bi.cta.note": "Gratis för alltid för individer. Team & Enterprise-planer tillgängliga.",
+	"bi.cta.note":
+		"Gratis för alltid för individer. Team & Enterprise-planer tillgängliga.",
 
 	// FAQ
 	"bi.faq.tagline": "Frågor",

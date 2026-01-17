@@ -107,7 +107,8 @@ export const deCompare = {
 		"Flow-Like-Apps können vollständig gebrandet und öffentlich deployed werden. Bauen Sie Kundenportale, SaaS-Produkte oder öffentliche Tools mit derselben Plattform.",
 
 	"compare.explain.desktop.title": "Desktop-Anwendungen",
-	"compare.explain.desktop.what": "Führen Sie Ihre Automatisierungen als native Desktop-Software aus.",
+	"compare.explain.desktop.what":
+		"Führen Sie Ihre Automatisierungen als native Desktop-Software aus.",
 	"compare.explain.desktop.flow":
 		"Flow-Like nutzt Tauri zur Kompilierung nativer Desktop-Apps für Windows, macOS und Linux. Ihre Nutzer erhalten eine schnelle, native Erfahrung mit voller Offline-Fähigkeit.",
 

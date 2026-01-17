@@ -106,7 +106,9 @@ impl NodeLogic for PushToContainer {
         });
 
         // Use upsert_element to send command to frontend (special command element)
-        context.upsert_element(&format!("_cmd/{}", container_id), command).await?;
+        context
+            .upsert_element(&format!("_cmd/{}", container_id), command)
+            .await?;
 
         context
             .get_pin_by_name("success")

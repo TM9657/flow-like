@@ -69,7 +69,9 @@ export function A2UIBoundingBoxOverlay({
 
 	// Create color map for labels
 	const labelColorMap = useMemo(() => {
-		const uniqueLabels = [...new Set(boxes.map((b) => b.label).filter(Boolean))];
+		const uniqueLabels = [
+			...new Set(boxes.map((b) => b.label).filter(Boolean)),
+		];
 		const map: Record<string, string> = {};
 		uniqueLabels.forEach((label, i) => {
 			if (label) map[label] = DEFAULT_COLORS[i % DEFAULT_COLORS.length];
@@ -184,7 +186,10 @@ export function A2UIBoundingBoxOverlay({
 			{/* Bounding box overlays */}
 			{imageLoaded &&
 				boxes.map((box, index) => {
-					const color = box.color ?? labelColorMap[box.label ?? ""] ?? DEFAULT_COLORS[index % DEFAULT_COLORS.length];
+					const color =
+						box.color ??
+						labelColorMap[box.label ?? ""] ??
+						DEFAULT_COLORS[index % DEFAULT_COLORS.length];
 					const isHovered = hoveredBoxId === (box.id ?? `box_${index}`);
 					const boxId = box.id ?? `box_${index}`;
 

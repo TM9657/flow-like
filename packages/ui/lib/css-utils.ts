@@ -1,4 +1,9 @@
-import postcss, { type AtRule, type Declaration, type Root, type Rule } from "postcss";
+import postcss, {
+	type AtRule,
+	type Declaration,
+	type Root,
+	type Rule,
+} from "postcss";
 
 /**
  * Sanitizes and scopes CSS using PostCSS for proper parsing.
@@ -54,10 +59,14 @@ function sanitizeDeclaration(decl: Declaration): void {
 		const urlMatch = decl.value.match(/url\s*\(\s*(['"]?)([^'")\s]+)\1\s*\)/gi);
 		if (urlMatch) {
 			for (const match of urlMatch) {
-				const urlContent = match.replace(/url\s*\(\s*['"]?/i, "").replace(/['"]?\s*\)$/i, "");
+				const urlContent = match
+					.replace(/url\s*\(\s*['"]?/i, "")
+					.replace(/['"]?\s*\)$/i, "");
 				// Block javascript:, vbscript:, and dangerous data: URLs
-				if (/^(javascript|vbscript):/i.test(urlContent) ||
-					/^data:text\/html/i.test(urlContent)) {
+				if (
+					/^(javascript|vbscript):/i.test(urlContent) ||
+					/^data:text\/html/i.test(urlContent)
+				) {
 					decl.remove();
 					return;
 				}
@@ -94,7 +103,11 @@ function scopeSelector(selector: string, scope: string): string {
 	return `${scope} ${trimmed}`;
 }
 
-function processRule(rule: Rule, scope: string, insideKeyframes: boolean): void {
+function processRule(
+	rule: Rule,
+	scope: string,
+	insideKeyframes: boolean,
+): void {
 	// Sanitize all declarations
 	rule.walkDecls((decl) => sanitizeDeclaration(decl));
 
@@ -169,10 +182,18 @@ export function safeScopedCss(css: string, scopeSelector: string): string {
 	} catch (error) {
 		// If CSS can't be parsed, reject it entirely
 		// Extract useful error info for debugging
-		const cssError = error as { line?: number; column?: number; reason?: string };
-		const location = cssError.line ? ` at line ${cssError.line}:${cssError.column || 0}` : "";
+		const cssError = error as {
+			line?: number;
+			column?: number;
+			reason?: string;
+		};
+		const location = cssError.line
+			? ` at line ${cssError.line}:${cssError.column || 0}`
+			: "";
 		const reason = cssError.reason || "Parse error";
-		console.warn(`[safeScopedCss] Invalid CSS${location}: ${reason}. First 200 chars: ${trimmedCss.slice(0, 200)}`);
+		console.warn(
+			`[safeScopedCss] Invalid CSS${location}: ${reason}. First 200 chars: ${trimmedCss.slice(0, 200)}`,
+		);
 		return "";
 	}
 

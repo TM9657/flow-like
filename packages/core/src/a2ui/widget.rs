@@ -43,7 +43,11 @@ pub struct Widget {
 }
 
 impl Widget {
-    pub fn new(id: impl Into<String>, name: impl Into<String>, root_component_id: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        root_component_id: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             name: name.into(),
@@ -123,7 +127,11 @@ pub struct CustomizationOption {
 }
 
 impl CustomizationOption {
-    pub fn new(id: impl Into<String>, label: impl Into<String>, customization_type: CustomizationType) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        customization_type: CustomizationType,
+    ) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
@@ -306,7 +314,11 @@ pub struct WidgetActionContextField {
 }
 
 impl WidgetActionContextField {
-    pub fn new(name: impl Into<String>, label: impl Into<String>, field_type: ExposedPropType) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        label: impl Into<String>,
+        field_type: ExposedPropType,
+    ) -> Self {
         Self {
             name: name.into(),
             label: label.into(),
@@ -547,12 +559,20 @@ impl WidgetInstance {
         self
     }
 
-    pub fn with_action_binding(mut self, action_id: impl Into<String>, binding: ActionBinding) -> Self {
+    pub fn with_action_binding(
+        mut self,
+        action_id: impl Into<String>,
+        binding: ActionBinding,
+    ) -> Self {
         self.action_bindings.insert(action_id.into(), binding);
         self
     }
 
-    pub fn with_exposed_prop_value<T: Serialize>(mut self, prop_id: impl Into<String>, value: T) -> Self {
+    pub fn with_exposed_prop_value<T: Serialize>(
+        mut self,
+        prop_id: impl Into<String>,
+        value: T,
+    ) -> Self {
         if let Ok(bytes) = flow_like_types::json::to_vec(&value) {
             self.exposed_prop_values.insert(prop_id.into(), bytes);
         }

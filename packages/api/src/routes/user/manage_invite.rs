@@ -52,10 +52,10 @@ pub async fn accept_invite(
         .find_also_related(app::Entity)
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
-    let app = app.ok_or_else(|| ApiError::NOT_FOUND)?;
-    let default_role = app.default_role_id.ok_or_else(|| ApiError::NOT_FOUND)?;
+    let app = app.ok_or(ApiError::NOT_FOUND)?;
+    let default_role = app.default_role_id.ok_or(ApiError::NOT_FOUND)?;
 
     if matches!(app.visibility, Visibility::Offline | Visibility::Private) {
         tracing::warn!(

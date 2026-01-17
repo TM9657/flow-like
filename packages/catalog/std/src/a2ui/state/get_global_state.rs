@@ -70,13 +70,32 @@ impl NodeLogic for GetGlobalState {
         let value = global_state.and_then(|s| s.get(&key));
 
         if let Some(v) = value {
-            context.get_pin_by_name("value").await?.set_value(v.clone()).await;
-            context.get_pin_by_name("exists").await?.set_value(Value::Bool(true)).await;
+            context
+                .get_pin_by_name("value")
+                .await?
+                .set_value(v.clone())
+                .await;
+            context
+                .get_pin_by_name("exists")
+                .await?
+                .set_value(Value::Bool(true))
+                .await;
             context.log_message(&format!("Got global state: {}", key), LogLevel::Debug);
         } else {
-            context.get_pin_by_name("value").await?.set_value(Value::Null).await;
-            context.get_pin_by_name("exists").await?.set_value(Value::Bool(false)).await;
-            context.log_message(&format!("Global state key not found: {}", key), LogLevel::Debug);
+            context
+                .get_pin_by_name("value")
+                .await?
+                .set_value(Value::Null)
+                .await;
+            context
+                .get_pin_by_name("exists")
+                .await?
+                .set_value(Value::Bool(false))
+                .await;
+            context.log_message(
+                &format!("Global state key not found: {}", key),
+                LogLevel::Debug,
+            );
         }
 
         Ok(())
@@ -91,13 +110,10 @@ impl NodeLogic for GetGlobalState {
             None => return,
         };
 
-        let key = key_pin
-            .default_value
-            .as_ref()
-            .and_then(|v| {
-                let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
-                parsed.as_str().map(String::from)
-            });
+        let key = key_pin.default_value.as_ref().and_then(|v| {
+            let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
+            parsed.as_str().map(String::from)
+        });
 
         if let Some(k) = key {
             node.friendly_name = format!("Get Global '{}'", k);

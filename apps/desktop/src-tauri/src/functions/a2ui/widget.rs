@@ -52,10 +52,16 @@ pub async fn create_widget(
     name: String,
     description: Option<String>,
 ) -> Result<Widget, TauriFunctionError> {
-    println!("[DEBUG] create_widget called: app_id={}, widget_id={}, name={}", app_id, widget_id, name);
+    println!(
+        "[DEBUG] create_widget called: app_id={}, widget_id={}, name={}",
+        app_id, widget_id, name
+    );
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
     let mut app = App::load(app_id.clone(), flow_like_state).await?;
-    println!("[DEBUG] App loaded, current widget_ids: {:?}", app.widget_ids);
+    println!(
+        "[DEBUG] App loaded, current widget_ids: {:?}",
+        app.widget_ids
+    );
 
     let mut widget = Widget::new(&widget_id, &name, format!("{}-root", widget_id));
     if let Some(desc) = description {
@@ -78,7 +84,9 @@ pub async fn update_widget(
 
     // Update registry if present
     if flow_like_state.widget_registry.contains_key(&widget.id) {
-        flow_like_state.widget_registry.insert(widget.id.clone(), widget.clone());
+        flow_like_state
+            .widget_registry
+            .insert(widget.id.clone(), widget.clone());
     }
 
     app.save_widget(&widget).await?;
@@ -160,10 +168,7 @@ pub async fn get_open_widgets(
 }
 
 #[tauri::command(async)]
-pub async fn close_widget(
-    handler: AppHandle,
-    widget_id: String,
-) -> Result<(), TauriFunctionError> {
+pub async fn close_widget(handler: AppHandle, widget_id: String) -> Result<(), TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
     flow_like_state.widget_registry.remove(&widget_id);
     Ok(())

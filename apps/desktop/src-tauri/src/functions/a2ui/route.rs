@@ -74,13 +74,13 @@ pub async fn set_app_route(
         .await
         .map_err(|e| TauriFunctionError::new(&format!("Failed to load app: {}", e)))?;
 
-    if let Some(existing_event_id) = app.route_mappings.get(&path) {
-        if existing_event_id != &event_id {
-            return Err(TauriFunctionError::new(&format!(
-                "Route path already in use: {}",
-                path
-            )));
-        }
+    if let Some(existing_event_id) = app.route_mappings.get(&path)
+        && existing_event_id != &event_id
+    {
+        return Err(TauriFunctionError::new(&format!(
+            "Route path already in use: {}",
+            path
+        )));
     }
 
     app.route_mappings.insert(path.clone(), event_id.clone());

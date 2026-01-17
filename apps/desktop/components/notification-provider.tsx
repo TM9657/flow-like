@@ -1,14 +1,14 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { useBackend } from "@tm9657/flow-like-ui";
 import type { IIntercomEvent, INotificationEvent } from "@tm9657/flow-like-ui";
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
-import { addLocalNotification } from "../lib/notifications-db";
 import { fetcher } from "../lib/api";
+import { addLocalNotification } from "../lib/notifications-db";
 
 type NotificationPermission = "granted" | "denied" | "default";
 type NotificationApi = {
@@ -34,7 +34,9 @@ interface NotificationProviderProps {
 	appId?: string;
 }
 
-export default function NotificationProvider({ appId }: NotificationProviderProps = {}) {
+export default function NotificationProvider({
+	appId,
+}: NotificationProviderProps = {}) {
 	const auth = useAuth();
 	const backend = useBackend();
 	const queryClient = useQueryClient();
@@ -58,7 +60,10 @@ export default function NotificationProvider({ appId }: NotificationProviderProp
 				}
 			} catch (e) {
 				// Notification plugin not available (e.g., in dev mode or unsupported platform)
-				console.log("[NotificationProvider] Desktop notifications not available:", e);
+				console.log(
+					"[NotificationProvider] Desktop notifications not available:",
+					e,
+				);
 			}
 		};
 
@@ -93,11 +98,16 @@ export default function NotificationProvider({ appId }: NotificationProviderProp
 						await queryClient.refetchQueries({
 							predicate: (query) => {
 								const key = query.queryKey[0];
-								return key === "getNotifications" || key === "listNotifications";
-							}
+								return (
+									key === "getNotifications" || key === "listNotifications"
+								);
+							},
 						});
 					} catch (e) {
-						console.error("[NotificationProvider] Failed to store local notification:", e);
+						console.error(
+							"[NotificationProvider] Failed to store local notification:",
+							e,
+						);
 					}
 
 					// Persist notification via backend API (requires event_id)
@@ -136,7 +146,11 @@ export default function NotificationProvider({ appId }: NotificationProviderProp
 					}
 
 					// Show desktop notification if enabled
-					if (notificationApi.current && permissionGranted.current && notification.show_desktop) {
+					if (
+						notificationApi.current &&
+						permissionGranted.current &&
+						notification.show_desktop
+					) {
 						notificationApi.current.sendNotification({
 							title: notification.title,
 							body: notification.description ?? undefined,

@@ -1,12 +1,12 @@
+use super::element_utils::extract_element_id;
+use flow_like::a2ui::components::ImageLabelerProps;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::ImageLabelerProps;
 use flow_like_types::{Value, async_trait, json::json};
-use super::element_utils::extract_element_id;
 
 /// Adds a single bounding box to an ImageLabeler element.
 ///
@@ -65,19 +65,9 @@ impl NodeLogic for AddLabelerBox {
             VariableType::Float,
         );
 
-        node.add_input_pin(
-            "width",
-            "Width",
-            "Box width",
-            VariableType::Float,
-        );
+        node.add_input_pin("width", "Width", "Box width", VariableType::Float);
 
-        node.add_input_pin(
-            "height",
-            "Height",
-            "Box height",
-            VariableType::Float,
-        );
+        node.add_input_pin("height", "Height", "Box height", VariableType::Float);
 
         node.add_input_pin(
             "label",

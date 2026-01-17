@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback } from "react";
-import { getComponentRenderer, type ComponentProps } from "../ComponentRegistry";
-import type { ActionBinding, Style } from "../types";
+import {
+	type ComponentProps,
+	getComponentRenderer,
+} from "../ComponentRegistry";
 import { useWidgetRefs } from "../WidgetRefsContext";
+import type { ActionBinding, Style } from "../types";
 
 export interface WidgetInstanceComponentProps {
 	widgetId: string;
@@ -37,7 +40,9 @@ export function A2UIWidgetInstance({
 		(childId: string, currentWidgetDef: typeof widgetDef): React.ReactNode => {
 			if (!currentWidgetDef) return null;
 
-			const childComponent = currentWidgetDef.components.find((c) => c.id === childId);
+			const childComponent = currentWidgetDef.components.find(
+				(c) => c.id === childId,
+			);
 			if (!childComponent?.component) {
 				console.warn(
 					`Widget "${currentWidgetDef.name}" component "${childId}" not found. Available components:`,
@@ -48,7 +53,9 @@ export function A2UIWidgetInstance({
 
 			const Renderer = getComponentRenderer(childComponent.component.type);
 			if (!Renderer) {
-				console.warn(`Unknown component type: ${childComponent.component.type}`);
+				console.warn(
+					`Unknown component type: ${childComponent.component.type}`,
+				);
 				return null;
 			}
 
@@ -60,7 +67,9 @@ export function A2UIWidgetInstance({
 					surfaceId={surfaceId}
 					style={childComponent.style ?? childComponent.component.style}
 					onAction={onAction}
-					renderChild={(nestedChildId) => renderWidgetChild(nestedChildId, currentWidgetDef)}
+					renderChild={(nestedChildId) =>
+						renderWidgetChild(nestedChildId, currentWidgetDef)
+					}
 				/>
 			);
 		},
@@ -93,4 +102,3 @@ export function A2UIWidgetInstance({
 		</div>
 	);
 }
-

@@ -56,31 +56,80 @@ const SINK_TYPE_CONFIG: Record<
 	string,
 	{ label: string; icon: typeof Zap; color: string }
 > = {
-	discord: { label: "Discord", icon: MessageSquare, color: "bg-indigo-500/10 text-indigo-500" },
+	discord: {
+		label: "Discord",
+		icon: MessageSquare,
+		color: "bg-indigo-500/10 text-indigo-500",
+	},
 	email: { label: "Email", icon: Mail, color: "bg-red-500/10 text-red-500" },
-	slack: { label: "Slack", icon: MessageSquare, color: "bg-purple-500/10 text-purple-500" },
-	telegram: { label: "Telegram", icon: MessageSquare, color: "bg-blue-500/10 text-blue-500" },
-	web_watcher: { label: "Web Watcher", icon: Globe, color: "bg-cyan-500/10 text-cyan-500" },
+	slack: {
+		label: "Slack",
+		icon: MessageSquare,
+		color: "bg-purple-500/10 text-purple-500",
+	},
+	telegram: {
+		label: "Telegram",
+		icon: MessageSquare,
+		color: "bg-blue-500/10 text-blue-500",
+	},
+	web_watcher: {
+		label: "Web Watcher",
+		icon: Globe,
+		color: "bg-cyan-500/10 text-cyan-500",
+	},
 	rss: { label: "RSS", icon: Rss, color: "bg-orange-500/10 text-orange-500" },
-	deeplink: { label: "Deeplink", icon: Link2, color: "bg-violet-500/10 text-violet-500" },
+	deeplink: {
+		label: "Deeplink",
+		icon: Link2,
+		color: "bg-violet-500/10 text-violet-500",
+	},
 	http: { label: "HTTP", icon: Globe, color: "bg-green-500/10 text-green-500" },
-	webhook: { label: "Webhook", icon: Webhook, color: "bg-emerald-500/10 text-emerald-500" },
+	webhook: {
+		label: "Webhook",
+		icon: Webhook,
+		color: "bg-emerald-500/10 text-emerald-500",
+	},
 	mqtt: { label: "MQTT", icon: Radio, color: "bg-teal-500/10 text-teal-500" },
 	mcp: { label: "MCP", icon: Terminal, color: "bg-gray-500/10 text-gray-500" },
 	file: { label: "File", icon: Zap, color: "bg-yellow-500/10 text-yellow-500" },
-	github: { label: "GitHub", icon: Zap, color: "bg-slate-500/10 text-slate-500" },
+	github: {
+		label: "GitHub",
+		icon: Zap,
+		color: "bg-slate-500/10 text-slate-500",
+	},
 	nfc: { label: "NFC", icon: Radio, color: "bg-pink-500/10 text-pink-500" },
-	geolocation: { label: "Geolocation", icon: Globe, color: "bg-lime-500/10 text-lime-500" },
-	notion: { label: "Notion", icon: Zap, color: "bg-stone-500/10 text-stone-500" },
-	shortcut: { label: "Shortcut", icon: Zap, color: "bg-amber-500/10 text-amber-500" },
+	geolocation: {
+		label: "Geolocation",
+		icon: Globe,
+		color: "bg-lime-500/10 text-lime-500",
+	},
+	notion: {
+		label: "Notion",
+		icon: Zap,
+		color: "bg-stone-500/10 text-stone-500",
+	},
+	shortcut: {
+		label: "Shortcut",
+		icon: Zap,
+		color: "bg-amber-500/10 text-amber-500",
+	},
 	cron: { label: "Cron Job", icon: Timer, color: "bg-sky-500/10 text-sky-500" },
 };
 
 function getSinkTypeConfig(type: string) {
-	return SINK_TYPE_CONFIG[type] ?? { label: type, icon: Zap, color: "bg-gray-500/10 text-gray-500" };
+	return (
+		SINK_TYPE_CONFIG[type] ?? {
+			label: type,
+			icon: Zap,
+			color: "bg-gray-500/10 text-gray-500",
+		}
+	);
 }
 
-function getConfigSummary(config: Record<string, unknown>, type: string): string {
+function getConfigSummary(
+	config: Record<string, unknown>,
+	type: string,
+): string {
 	switch (type) {
 		case "http":
 			return `${(config.method as string) ?? "GET"} ${(config.path as string) ?? "/"}`;
@@ -130,7 +179,10 @@ export default function Page() {
 			const sinksWithEvents: SinkWithEvent[] = await Promise.all(
 				data.map(async (sink) => {
 					try {
-						const event = await backend.eventState.getEvent(sink.app_id, sink.event_id);
+						const event = await backend.eventState.getEvent(
+							sink.app_id,
+							sink.event_id,
+						);
 						return { ...sink, event };
 					} catch {
 						return sink;
@@ -221,15 +273,18 @@ export default function Page() {
 
 				<AlertDialog
 					open={deleteDialog.open}
-					onOpenChange={(open) => !open && setDeleteDialog({ open: false, sink: null })}
+					onOpenChange={(open) =>
+						!open && setDeleteDialog({ open: false, sink: null })
+					}
 				>
 					<AlertDialogContent>
 						<AlertDialogHeader>
 							<AlertDialogTitle>Disable Sink</AlertDialogTitle>
 							<AlertDialogDescription>
-								This will disable the &quot;{deleteDialog.sink?.name}&quot; sink.
-								The event configuration will remain, but it won&apos;t be triggered
-								automatically anymore. You can re-enable it by saving the event again.
+								This will disable the &quot;{deleteDialog.sink?.name}&quot;
+								sink. The event configuration will remain, but it won&apos;t be
+								triggered automatically anymore. You can re-enable it by saving
+								the event again.
 							</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter>
@@ -279,7 +334,8 @@ function SinksTable({
 			<CardHeader>
 				<CardTitle className="text-lg">Registered Sinks</CardTitle>
 				<CardDescription>
-					{sinks.length} active {sinks.length === 1 ? "sink" : "sinks"} across all apps
+					{sinks.length} active {sinks.length === 1 ? "sink" : "sinks"} across
+					all apps
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
@@ -288,7 +344,9 @@ function SinksTable({
 						<TableRow>
 							<TableHead>Event</TableHead>
 							<TableHead>Type</TableHead>
-							<TableHead className="hidden md:table-cell">Configuration</TableHead>
+							<TableHead className="hidden md:table-cell">
+								Configuration
+							</TableHead>
 							<TableHead className="hidden lg:table-cell">App</TableHead>
 							<TableHead className="hidden xl:table-cell">Created</TableHead>
 							<TableHead className="text-right">Actions</TableHead>

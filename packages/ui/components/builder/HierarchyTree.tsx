@@ -29,17 +29,11 @@ import { Input } from "../ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import { useBuilder } from "./BuilderContext";
 import {
-	COMPONENT_DND_TYPE,
 	COMPONENT_MOVE_TYPE,
-	type ComponentDragData,
 	type ComponentMoveData,
 	type DropData,
 } from "./BuilderDndContext";
-import {
-	CONTAINER_TYPES,
-	ROOT_ID,
-	createDefaultComponent,
-} from "./WidgetBuilder";
+import { CONTAINER_TYPES, ROOT_ID } from "./WidgetBuilder";
 
 interface TreeNodeData {
 	id: string;
@@ -274,7 +268,10 @@ export function HierarchyTree({
 				if ("child" in props && typeof props.child === "string") {
 					childIds.add(props.child);
 				}
-				if ("entryPointChild" in props && typeof props.entryPointChild === "string") {
+				if (
+					"entryPointChild" in props &&
+					typeof props.entryPointChild === "string"
+				) {
 					childIds.add(props.entryPointChild);
 				}
 				if ("contentChild" in props && typeof props.contentChild === "string") {
@@ -633,12 +630,19 @@ function TreeNode({
 
 					{/* Component type/icon */}
 					<span className="truncate flex-1">
-						{node.type === "widgetInstance" ? (() => {
-							const comp = components.get(node.id);
-							const instanceId = comp ? (comp.component as unknown as { instanceId?: string }).instanceId : undefined;
-							const widgetDef = instanceId ? getWidgetRef(instanceId) : undefined;
-							return widgetDef?.name ?? "Widget";
-						})() : node.type}
+						{node.type === "widgetInstance"
+							? (() => {
+									const comp = components.get(node.id);
+									const instanceId = comp
+										? (comp.component as unknown as { instanceId?: string })
+												.instanceId
+										: undefined;
+									const widgetDef = instanceId
+										? getWidgetRef(instanceId)
+										: undefined;
+									return widgetDef?.name ?? "Widget";
+								})()
+							: node.type}
 					</span>
 
 					{/* Container indicator */}
@@ -651,7 +655,7 @@ function TreeNode({
 						type="button"
 						className={cn(
 							"p-0.5 hover:bg-muted-foreground/10 rounded transition-opacity",
-							node.hidden ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+							node.hidden ? "opacity-100" : "opacity-0 group-hover:opacity-100",
 						)}
 						onClick={(e) => {
 							e.stopPropagation();

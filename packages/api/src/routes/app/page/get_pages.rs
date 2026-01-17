@@ -1,10 +1,6 @@
 use crate::{
-    ensure_permission,
-    entity::page,
-    error::ApiError,
-    middleware::jwt::AppUser,
-    permission::role_permission::RolePermissions,
-    state::AppState,
+    ensure_permission, entity::page, error::ApiError, middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions, state::AppState,
 };
 use axum::{
     Extension, Json,
@@ -38,8 +34,7 @@ pub async fn get_pages(
 ) -> Result<Json<Vec<PageInfo>>, ApiError> {
     ensure_permission!(user, &app_id, &state, RolePermissions::ReadBoards);
 
-    let mut query_builder = page::Entity::find()
-        .filter(page::Column::AppId.eq(&app_id));
+    let mut query_builder = page::Entity::find().filter(page::Column::AppId.eq(&app_id));
 
     if let Some(ref board_id) = query.board_id {
         query_builder = query_builder.filter(page::Column::BoardId.eq(board_id));

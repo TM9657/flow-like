@@ -1,12 +1,12 @@
+use super::element_utils::{extract_element_id_from_pin, find_element};
+use flow_like::a2ui::components::TextFieldProps;
 use flow_like::flow::{
     execution::{LogLevel, context::ExecutionContext},
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::TextFieldProps;
 use flow_like_types::{Value, async_trait};
-use super::element_utils::{find_element, extract_element_id_from_pin};
 
 /// Gets the value of an input element.
 ///
@@ -60,8 +60,11 @@ impl NodeLogic for GetElementValue {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let element_value: Value = context.evaluate_pin("element_ref").await?;
-        let element_id = extract_element_id_from_pin(element_value)
-            .ok_or_else(|| flow_like_types::anyhow!("Invalid element reference - expected string ID or element object"))?;
+        let element_id = extract_element_id_from_pin(element_value).ok_or_else(|| {
+            flow_like_types::anyhow!(
+                "Invalid element reference - expected string ID or element object"
+            )
+        })?;
 
         let elements = context.get_frontend_elements().await?;
         let element = elements.as_ref().and_then(|e| find_element(e, &element_id));
@@ -107,7 +110,10 @@ impl NodeLogic for GetElementValue {
             exists_pin.set_value(Value::Bool(true)).await;
 
             context.log_message(
-                &format!("Got value from element {} ({}): {:?}", element_id, found_id, value),
+                &format!(
+                    "Got value from element {} ({}): {:?}",
+                    element_id, found_id, value
+                ),
                 LogLevel::Debug,
             );
         } else {

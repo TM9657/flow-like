@@ -2,20 +2,20 @@
 
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
+	ClipboardPaste,
 	Copy,
 	GripVertical,
 	Scissors,
 	Sparkles,
 	Trash2,
-	ClipboardPaste,
 } from "lucide-react";
 import {
 	type ReactNode,
-	useCallback,
-	useMemo,
 	memo,
-	useRef,
+	useCallback,
 	useEffect,
+	useMemo,
+	useRef,
 	useState,
 } from "react";
 import { cn } from "../../lib/utils";
@@ -25,6 +25,7 @@ import {
 	getComponentRenderer,
 } from "../a2ui/ComponentRegistry";
 import { DataProvider } from "../a2ui/DataContext";
+import { WidgetRefsProvider } from "../a2ui/WidgetRefsContext";
 import type {
 	A2UIClientMessage,
 	A2UIComponent,
@@ -32,18 +33,13 @@ import type {
 	Surface,
 	SurfaceComponent,
 } from "../a2ui/types";
-import { WidgetRefsProvider } from "../a2ui/WidgetRefsContext";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "../ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useBuilder } from "./BuilderContext";
 import {
-	useBuilderDnd,
 	COMPONENT_MOVE_TYPE,
 	type ComponentMoveData,
 	type DropData,
+	useBuilderDnd,
 } from "./BuilderDndContext";
 import { CONTAINER_TYPES, ROOT_ID } from "./WidgetBuilder";
 
@@ -142,10 +138,13 @@ function ContainerDropZone({
 			if (!container) return;
 
 			// Get only direct children that are builder components
-			const allChildElements = container.querySelectorAll('[data-builder-component]');
+			const allChildElements = container.querySelectorAll(
+				"[data-builder-component]",
+			);
 			// Filter to only direct children
 			const childElements = Array.from(allChildElements).filter(
-				(el) => el.parentElement?.closest('[data-builder-component]') === container
+				(el) =>
+					el.parentElement?.closest("[data-builder-component]") === container,
 			);
 
 			if (childElements.length === 0) {
@@ -157,23 +156,27 @@ function ContainerDropZone({
 			const containerRect = container.getBoundingClientRect();
 			const mousePos = orientation === "horizontal" ? e.clientX : e.clientY;
 			let bestIndex = childIds.length;
-			let bestPosition = orientation === "horizontal"
-				? containerRect.width
-				: containerRect.height;
+			let bestPosition =
+				orientation === "horizontal"
+					? containerRect.width
+					: containerRect.height;
 
 			// Check each child to find the best insertion point
 			childElements.forEach((child, i) => {
 				const rect = child.getBoundingClientRect();
 				const childStart = orientation === "horizontal" ? rect.left : rect.top;
-				const childEnd = orientation === "horizontal" ? rect.right : rect.bottom;
+				const childEnd =
+					orientation === "horizontal" ? rect.right : rect.bottom;
 				const childMid = (childStart + childEnd) / 2;
-				const containerStart = orientation === "horizontal"
-					? containerRect.left
-					: containerRect.top;
+				const containerStart =
+					orientation === "horizontal" ? containerRect.left : containerRect.top;
 
 				if (mousePos < childMid) {
 					// Insert before this child
-					if (i < bestIndex || (i === bestIndex && childStart - containerStart < bestPosition)) {
+					if (
+						i < bestIndex ||
+						(i === bestIndex && childStart - containerStart < bestPosition)
+					) {
 						bestIndex = i;
 						bestPosition = childStart - containerStart;
 					}
@@ -208,10 +211,7 @@ function ContainerDropZone({
 	if (!isDragging) return null;
 
 	return (
-		<div
-			ref={setNodeRef}
-			className="absolute inset-0 z-30 pointer-events-auto"
-		>
+		<div ref={setNodeRef} className="absolute inset-0 z-30 pointer-events-auto">
 			{/* Visual drop indicator line */}
 			{isOver && (
 				<div
@@ -222,10 +222,12 @@ function ContainerDropZone({
 							: "h-1 left-1 right-1",
 					)}
 					style={{
-						[orientation === "horizontal" ? "left" : "top"]: `${indicatorPosition}px`,
-						transform: orientation === "horizontal"
-							? "translateX(-50%)"
-							: "translateY(-50%)",
+						[orientation === "horizontal" ? "left" : "top"]:
+							`${indicatorPosition}px`,
+						transform:
+							orientation === "horizontal"
+								? "translateX(-50%)"
+								: "translateY(-50%)",
 					}}
 				/>
 			)}
@@ -266,10 +268,12 @@ const EmptyDropZone = memo(function EmptyDropZone({
 					: "border-muted-foreground/20 bg-muted/30",
 			)}
 		>
-			<span className={cn(
-				"text-xs select-none transition-colors",
-				isOver ? "text-primary font-medium" : "text-muted-foreground/50"
-			)}>
+			<span
+				className={cn(
+					"text-xs select-none transition-colors",
+					isOver ? "text-primary font-medium" : "text-muted-foreground/50",
+				)}
+			>
 				{isOver ? "Release to drop" : "Drop here"}
 			</span>
 		</div>
@@ -466,7 +470,10 @@ function SelectionOverlay({
 					"absolute inset-0 pointer-events-none rounded transition-all duration-150 z-40",
 					isDraggingThis && "opacity-30",
 					isSelected && !isRoot && "border-2 border-dotted border-foreground",
-					!isSelected && isHovered && !isRoot && "border border-dotted border-foreground/40",
+					!isSelected &&
+						isHovered &&
+						!isRoot &&
+						"border border-dotted border-foreground/40",
 				)}
 			/>
 
@@ -640,7 +647,10 @@ function BuilderComponent({
 	// Copy/Cut/Paste handlers
 	const handleCopy = useCallback(() => copy(), [copy]);
 	const handleCut = useCallback(() => cut(), [cut]);
-	const handlePaste = useCallback(() => paste(componentId), [paste, componentId]);
+	const handlePaste = useCallback(
+		() => paste(componentId),
+		[paste, componentId],
+	);
 
 	// Get renderer
 	const Renderer = component ? getComponentRenderer(component.type) : null;
@@ -766,7 +776,10 @@ function BuilderComponent({
 				// Flex items should grow/shrink properly
 				"flex-1",
 				isThisDragging && "opacity-30",
-				isContainer && isOverContainer && isDragging && "bg-primary/5 ring-2 ring-primary/30 ring-inset",
+				isContainer &&
+					isOverContainer &&
+					isDragging &&
+					"bg-primary/5 ring-2 ring-primary/30 ring-inset",
 			)}
 			data-builder-component={componentId}
 			data-component-type={component.type}

@@ -55,18 +55,10 @@ import type {
 } from "./types";
 
 import type {
-	BoardCommand,
-	ChatMessage,
-	PlanStep,
-	Suggestion,
-} from "../../lib/schema/flow/copilot";
-import type {
-	A2UIPlanStep,
-} from "../../lib/schema/a2ui/copilot";
-import type {
 	CopilotScope,
 	UnifiedChatMessage,
 } from "../../lib/schema/copilot";
+import type { BoardCommand, Suggestion } from "../../lib/schema/flow/copilot";
 import type { SurfaceComponent } from "../a2ui/types";
 
 export function FlowPilot({
@@ -110,7 +102,9 @@ export function FlowPilot({
 	const [currentToolCall, setCurrentToolCall] = useState<string | null>(null);
 
 	// UI-specific state
-	const [pendingComponents, setPendingComponents] = useState<SurfaceComponent[]>([]);
+	const [pendingComponents, setPendingComponents] = useState<
+		SurfaceComponent[]
+	>([]);
 
 	// Refs
 	const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -353,348 +347,364 @@ export function FlowPilot({
 	}, []);
 
 	// Main submit handler
-	const handleSubmit = useCallback(async (withScreenshot?: boolean) => {
-		if (!input.trim() && attachedImages.length === 0) return;
+	const handleSubmit = useCallback(
+		async (withScreenshot?: boolean) => {
+			if (!input.trim() && attachedImages.length === 0) return;
 
-		let currentImages = [...attachedImages];
-		const currentInput = input;
-		const currentContextNodes = [...selectedNodeIds];
+			let currentImages = [...attachedImages];
+			const currentInput = input;
+			const currentContextNodes = [...selectedNodeIds];
 
-		// Capture screenshot if requested and captureScreenshot is provided
-		if (withScreenshot && captureScreenshot) {
-			try {
-				const screenshotDataUrl = await captureScreenshot();
-				if (screenshotDataUrl) {
-					// Parse the data URL
-					const match = screenshotDataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
-					if (match) {
-						currentImages = [
-							{
-								data: match[2],
-								mediaType: match[1],
-								preview: screenshotDataUrl,
-							},
-							...currentImages,
-						];
+			// Capture screenshot if requested and captureScreenshot is provided
+			if (withScreenshot && captureScreenshot) {
+				try {
+					const screenshotDataUrl = await captureScreenshot();
+					if (screenshotDataUrl) {
+						// Parse the data URL
+						const match = screenshotDataUrl.match(
+							/^data:(image\/\w+);base64,(.+)$/,
+						);
+						if (match) {
+							currentImages = [
+								{
+									data: match[2],
+									mediaType: match[1],
+									preview: screenshotDataUrl,
+								},
+								...currentImages,
+							];
+						}
 					}
+				} catch (error) {
+					console.error("Failed to capture screenshot:", error);
 				}
-			} catch (error) {
-				console.error("Failed to capture screenshot:", error);
 			}
-		}
 
-		// Reset state first
-		setInput("");
-		setAttachedImages([]);
-		setLoading(true);
-		setLoadingPhase("initializing");
-		setLoadingStartTime(Date.now());
-		setTokenCount(0);
-		setPlanSteps([]);
-		setUserScrolledUp(false);
+			// Reset state first
+			setInput("");
+			setAttachedImages([]);
+			setLoading(true);
+			setLoadingPhase("initializing");
+			setLoadingStartTime(Date.now());
+			setTokenCount(0);
+			setPlanSteps([]);
+			setUserScrolledUp(false);
 
-		// In "both" mode, reset all pending states
-		if (agentMode === "both") {
-			setSuggestions([]);
-			setPendingCommands([]);
-			setPendingComponents([]);
-		} else if (agentMode === "board") {
-			setSuggestions([]);
-			setPendingCommands([]);
-		} else {
-			setPendingComponents([]);
-		}
+			// In "both" mode, reset all pending states
+			if (agentMode === "both") {
+				setSuggestions([]);
+				setPendingCommands([]);
+				setPendingComponents([]);
+			} else if (agentMode === "board") {
+				setSuggestions([]);
+				setPendingCommands([]);
+			} else {
+				setPendingComponents([]);
+			}
 
-		// Add user message and empty assistant message together
-		setMessages((prev) => [
-			...prev,
-			{
-				role: "user",
-				content: currentInput,
-				images: currentImages.length > 0 ? currentImages : undefined,
-				contextNodeIds:
-					currentContextNodes.length > 0 ? currentContextNodes : undefined,
-			},
-			{ role: "assistant", content: "" },
-		]);
+			// Add user message and empty assistant message together
+			setMessages((prev) => [
+				...prev,
+				{
+					role: "user",
+					content: currentInput,
+					images: currentImages.length > 0 ? currentImages : undefined,
+					contextNodeIds:
+						currentContextNodes.length > 0 ? currentContextNodes : undefined,
+				},
+				{ role: "assistant", content: "" },
+			]);
 
-		try {
-			let currentMessageContent = "";
-			let lastUpdateTime = 0;
-			const UPDATE_INTERVAL = 100;
+			try {
+				let currentMessageContent = "";
+				let lastUpdateTime = 0;
+				const UPDATE_INTERVAL = 100;
 
-			setTimeout(() => setLoadingPhase("analyzing"), 300);
+				setTimeout(() => setLoadingPhase("analyzing"), 300);
 
-			const flushMessageContent = () => {
-				setMessages((prev) => {
-					const newMessages = [...prev];
-					const lastMessage = newMessages[newMessages.length - 1];
-					if (lastMessage && lastMessage.role === "assistant") {
-						lastMessage.content = currentMessageContent;
+				const flushMessageContent = () => {
+					setMessages((prev) => {
+						const newMessages = [...prev];
+						const lastMessage = newMessages[newMessages.length - 1];
+						if (lastMessage && lastMessage.role === "assistant") {
+							lastMessage.content = currentMessageContent;
+						}
+						return newMessages;
+					});
+				};
+
+				const onToken = (token: string) => {
+					setTokenCount((prev) => prev + 1);
+
+					// Parse plan step events
+					const planStepMatch = token.match(
+						/<plan_step>([\s\S]*?)<\/plan_step>/,
+					);
+					if (planStepMatch) {
+						try {
+							const eventData = JSON.parse(planStepMatch[1]);
+							if (eventData.PlanStep) {
+								const step = eventData.PlanStep;
+								// Update loading phase based on tool
+								if (
+									step.tool_name === "think" ||
+									step.tool_name === "analyze"
+								) {
+									setLoadingPhase("reasoning");
+								} else if (
+									step.tool_name?.includes("search") ||
+									step.tool_name?.includes("catalog") ||
+									step.tool_name?.includes("schema") ||
+									step.tool_name?.includes("style")
+								) {
+									setLoadingPhase("searching");
+								} else if (
+									step.tool_name === "emit_commands" ||
+									step.tool_name === "emit_surface" ||
+									step.tool_name === "modify_component"
+								) {
+									setLoadingPhase("generating");
+								}
+
+								setPlanSteps((prev) => {
+									const existingIndex = prev.findIndex((s) => s.id === step.id);
+									if (existingIndex >= 0) {
+										const updated = [...prev];
+										updated[existingIndex] = step;
+										return updated;
+									}
+									return [...prev, step];
+								});
+							}
+						} catch {
+							// Invalid JSON
+						}
+						return;
 					}
-					return newMessages;
-				});
-			};
 
-			const onToken = (token: string) => {
-				setTokenCount((prev) => prev + 1);
-
-				// Parse plan step events
-				const planStepMatch = token.match(/<plan_step>([\s\S]*?)<\/plan_step>/);
-				if (planStepMatch) {
-					try {
-						const eventData = JSON.parse(planStepMatch[1]);
-						if (eventData.PlanStep) {
-							const step = eventData.PlanStep;
-							// Update loading phase based on tool
-							if (step.tool_name === "think" || step.tool_name === "analyze") {
-								setLoadingPhase("reasoning");
-							} else if (
-								step.tool_name?.includes("search") ||
-								step.tool_name?.includes("catalog") ||
-								step.tool_name?.includes("schema") ||
-								step.tool_name?.includes("style")
+					// Handle tool calls (board mode)
+					if (token.includes("tool_call:")) {
+						const match = token.match(/tool_call:(\w+)/);
+						if (match) {
+							const toolName = match[1];
+							setCurrentToolCall(toolName);
+							if (
+								toolName.includes("search") ||
+								toolName.includes("catalog") ||
+								toolName.includes("filter")
 							) {
 								setLoadingPhase("searching");
+							} else if (toolName === "think") {
+								setLoadingPhase("reasoning");
 							} else if (
-								step.tool_name === "emit_commands" ||
-								step.tool_name === "emit_surface" ||
-								step.tool_name === "modify_component"
+								toolName === "emit_commands" ||
+								toolName === "emit_surface"
 							) {
 								setLoadingPhase("generating");
 							}
-
-							setPlanSteps((prev) => {
-								const existingIndex = prev.findIndex((s) => s.id === step.id);
-								if (existingIndex >= 0) {
-									const updated = [...prev];
-									updated[existingIndex] = step;
-									return updated;
-								}
-								return [...prev, step];
-							});
 						}
-					} catch {
-						// Invalid JSON
+						return;
 					}
-					return;
-				}
-
-				// Handle tool calls (board mode)
-				if (token.includes("tool_call:")) {
-					const match = token.match(/tool_call:(\w+)/);
-					if (match) {
-						const toolName = match[1];
-						setCurrentToolCall(toolName);
-						if (
-							toolName.includes("search") ||
-							toolName.includes("catalog") ||
-							toolName.includes("filter")
-						) {
-							setLoadingPhase("searching");
-						} else if (toolName === "think") {
-							setLoadingPhase("reasoning");
-						} else if (
-							toolName === "emit_commands" ||
-							toolName === "emit_surface"
-						) {
-							setLoadingPhase("generating");
-						}
+					if (token.includes("tool_result:")) {
+						setCurrentToolCall(null);
+						return;
 					}
-					return;
-				}
-				if (token.includes("tool_result:")) {
-					setCurrentToolCall(null);
-					return;
-				}
 
-				// Skip command blocks
-				if (token.includes("<commands>") && token.includes("</commands>")) {
-					return;
-				}
+					// Skip command blocks
+					if (token.includes("<commands>") && token.includes("</commands>")) {
+						return;
+					}
 
-				if (currentMessageContent.length === 0 && token.trim()) {
-					setLoadingPhase("generating");
-				}
+					if (currentMessageContent.length === 0 && token.trim()) {
+						setLoadingPhase("generating");
+					}
 
-				currentMessageContent += token;
+					currentMessageContent += token;
 
-				// Throttle UI updates
-				const now = Date.now();
-				if (now - lastUpdateTime >= UPDATE_INTERVAL) {
-					lastUpdateTime = now;
-					flushMessageContent();
-				}
-			};
-
-			// Determine the scope for the unified copilot
-			const scope: CopilotScope = agentMode === "board" ? "Board"
-				: agentMode === "ui" ? "Frontend"
-				: "Both";
-
-			// Check if we have the required context
-			if (scope === "Board" && !board) {
-				setMessages((prev) => [
-					...prev,
-					{
-						role: "assistant",
-						content: "No board is currently loaded. Please load a board first.",
-					},
-				]);
-				setLoading(false);
-				setLoadingPhase("idle");
-				return;
-			}
-
-			// Build the prompt with context
-			let userMsg = currentInput;
-			if (runContext) {
-				const runInfo = {
-					run_id: runContext.run_id,
-					app_id: runContext.app_id,
-					board_id: runContext.board_id,
-					event_id: runContext.event_id,
+					// Throttle UI updates
+					const now = Date.now();
+					if (now - lastUpdateTime >= UPDATE_INTERVAL) {
+						lastUpdateTime = now;
+						flushMessageContent();
+					}
 				};
-				userMsg = `[RUN CONTEXT - User is asking about a flow execution run. Use the query_logs tool to fetch relevant logs.]
+
+				// Determine the scope for the unified copilot
+				const scope: CopilotScope =
+					agentMode === "board"
+						? "Board"
+						: agentMode === "ui"
+							? "Frontend"
+							: "Both";
+
+				// Check if we have the required context
+				if (scope === "Board" && !board) {
+					setMessages((prev) => [
+						...prev,
+						{
+							role: "assistant",
+							content:
+								"No board is currently loaded. Please load a board first.",
+						},
+					]);
+					setLoading(false);
+					setLoadingPhase("idle");
+					return;
+				}
+
+				// Build the prompt with context
+				let userMsg = currentInput;
+				if (runContext) {
+					const runInfo = {
+						run_id: runContext.run_id,
+						app_id: runContext.app_id,
+						board_id: runContext.board_id,
+						event_id: runContext.event_id,
+					};
+					userMsg = `[RUN CONTEXT - User is asking about a flow execution run. Use the query_logs tool to fetch relevant logs.]
 \`\`\`json
 ${JSON.stringify(runInfo, null, 2)}
 \`\`\`
 
 ${currentInput}`;
-			}
+				}
 
-			if (scope === "Both") {
-				userMsg = `[UNIFIED MODE - You can generate both workflow nodes AND UI components. If the user wants a UI, you can create A2UI components. If they want workflow automation, create nodes. You can also connect UI actions to workflows via action invokes.]
+				if (scope === "Both") {
+					userMsg = `[UNIFIED MODE - You can generate both workflow nodes AND UI components. If the user wants a UI, you can create A2UI components. If they want workflow automation, create nodes. You can also connect UI actions to workflows via action invokes.]
 
 ${userMsg}`;
-			}
+				}
 
-			// Build unified chat history
-			const chatHistory: UnifiedChatMessage[] = messages.map((m) => ({
-				role: m.role === "user" ? "User" : "Assistant",
-				content: m.content,
-				images: m.images?.map((img) => ({
-					data: img.data,
-					media_type: img.mediaType,
-				})),
-			}));
-
-			if (currentImages.length > 0) {
-				chatHistory.push({
-					role: "User",
-					content: userMsg,
-					images: currentImages.map((img) => ({
+				// Build unified chat history
+				const chatHistory: UnifiedChatMessage[] = messages.map((m) => ({
+					role: m.role === "user" ? "User" : "Assistant",
+					content: m.content,
+					images: m.images?.map((img) => ({
 						data: img.data,
 						media_type: img.mediaType,
 					})),
+				}));
+
+				if (currentImages.length > 0) {
+					chatHistory.push({
+						role: "User",
+						content: userMsg,
+						images: currentImages.map((img) => ({
+							data: img.data,
+							media_type: img.mediaType,
+						})),
+					});
+				}
+
+				const backendRunContext = runContext
+					? {
+							run_id: runContext.run_id,
+							app_id: runContext.app_id,
+							board_id: runContext.board_id,
+						}
+					: undefined;
+
+				// Call the unified copilot
+				const response = await backendContext.boardState.copilot_chat(
+					scope,
+					board ?? null,
+					selectedNodeIds,
+					currentComponents,
+					selectedComponentIds,
+					userMsg,
+					chatHistory,
+					onToken,
+					selectedModelId,
+					undefined,
+					backendRunContext,
+					undefined, // actionContext - can be added later
+				);
+
+				flushMessageContent();
+
+				setMessages((prev) => {
+					const newMessages = [...prev];
+					const lastMessage = newMessages[newMessages.length - 1];
+					if (lastMessage && lastMessage.role === "assistant") {
+						lastMessage.planSteps = planSteps.filter(
+							(s) => s.status === "Completed",
+						);
+						if (!lastMessage.content.trim()) {
+							lastMessage.content = response.message;
+						}
+					}
+					return newMessages;
 				});
-			}
 
-			const backendRunContext = runContext
-				? {
-						run_id: runContext.run_id,
-						app_id: runContext.app_id,
-						board_id: runContext.board_id,
-					}
-				: undefined;
+				// Handle board commands
+				if (response.commands.length > 0) {
+					setPendingCommands(response.commands);
+				}
 
-			// Call the unified copilot
-			const response = await backendContext.boardState.copilot_chat(
-				scope,
-				board ?? null,
-				selectedNodeIds,
-				currentComponents,
-				selectedComponentIds,
-				userMsg,
-				chatHistory,
-				onToken,
-				selectedModelId,
-				undefined,
-				backendRunContext,
-				undefined, // actionContext - can be added later
-			);
-
-			flushMessageContent();
-
-			setMessages((prev) => {
-				const newMessages = [...prev];
-				const lastMessage = newMessages[newMessages.length - 1];
-				if (lastMessage && lastMessage.role === "assistant") {
-					lastMessage.planSteps = planSteps.filter(
-						(s) => s.status === "Completed",
+				// Handle suggestions
+				if (response.suggestions?.length > 0) {
+					setSuggestions(
+						response.suggestions.map((s) => ({
+							node_type: s.label,
+							reason: s.prompt,
+							connection_description: "",
+							connections: [],
+						})),
 					);
-					if (!lastMessage.content.trim()) {
-						lastMessage.content = response.message;
-					}
 				}
-				return newMessages;
-			});
 
-			// Handle board commands
-			if (response.commands.length > 0) {
-				setPendingCommands(response.commands);
-			}
-
-			// Handle suggestions
-			if (response.suggestions?.length > 0) {
-				setSuggestions(response.suggestions.map(s => ({
-					node_type: s.label,
-					reason: s.prompt,
-					connection_description: "",
-					connections: [],
-				})));
-			}
-
-			// Handle generated components
-			if (response.components.length > 0) {
-				setPendingComponents(response.components);
-				onComponentsGenerated?.(response.components);
-			}
-
-			setLoadingPhase("finalizing");
-		} catch (error) {
-			console.error("FlowPilot error:", error);
-			setMessages((prev) => {
-				const newMessages = [...prev];
-				const lastMessage = newMessages[newMessages.length - 1];
-				if (lastMessage?.role === "assistant") {
-					let errorMessage =
-						error instanceof Error ? error.message : "Unknown error";
-
-					if (
-						errorMessage.includes("401 Unauthorized") ||
-						errorMessage.includes("status code 401")
-					) {
-						errorMessage =
-							"Authentication failed. Please check if you are signed in and your session is active.";
-					}
-
-					lastMessage.content = `Error: ${errorMessage}`;
+				// Handle generated components
+				if (response.components.length > 0) {
+					setPendingComponents(response.components);
+					onComponentsGenerated?.(response.components);
 				}
-				return newMessages;
-			});
-		} finally {
-			setLoading(false);
-			setLoadingPhase("idle");
-			setLoadingStartTime(null);
-			setCurrentToolCall(null);
-		}
-	}, [
-		input,
-		attachedImages,
-		agentMode,
-		messages,
-		board,
-		selectedNodeIds,
-		selectedModelId,
-		runContext,
-		currentComponents,
-		selectedComponentIds,
-		onComponentsGenerated,
-		backendContext.boardState,
-		planSteps,
-		captureScreenshot,
-	]);
+
+				setLoadingPhase("finalizing");
+			} catch (error) {
+				console.error("FlowPilot error:", error);
+				setMessages((prev) => {
+					const newMessages = [...prev];
+					const lastMessage = newMessages[newMessages.length - 1];
+					if (lastMessage?.role === "assistant") {
+						let errorMessage =
+							error instanceof Error ? error.message : "Unknown error";
+
+						if (
+							errorMessage.includes("401 Unauthorized") ||
+							errorMessage.includes("status code 401")
+						) {
+							errorMessage =
+								"Authentication failed. Please check if you are signed in and your session is active.";
+						}
+
+						lastMessage.content = `Error: ${errorMessage}`;
+					}
+					return newMessages;
+				});
+			} finally {
+				setLoading(false);
+				setLoadingPhase("idle");
+				setLoadingStartTime(null);
+				setCurrentToolCall(null);
+			}
+		},
+		[
+			input,
+			attachedImages,
+			agentMode,
+			messages,
+			board,
+			selectedNodeIds,
+			selectedModelId,
+			runContext,
+			currentComponents,
+			selectedComponentIds,
+			onComponentsGenerated,
+			backendContext.boardState,
+			planSteps,
+			captureScreenshot,
+		],
+	);
 
 	// Keep ref updated for keydown handler
 	useEffect(() => {
@@ -732,20 +742,27 @@ ${userMsg}`;
 	const placeholderText = useMemo(() => {
 		if (agentMode === "both") {
 			if (runContext) return "Ask about logs or describe what to build...";
-			const hasSelection = selectedNodeIds.length > 0 || selectedComponentIds.length > 0;
+			const hasSelection =
+				selectedNodeIds.length > 0 || selectedComponentIds.length > 0;
 			if (hasSelection) return "Describe changes to selected items...";
 			return "Describe a workflow, UI, or both together...";
 		}
 		if (agentMode === "board") {
 			if (runContext) return "Ask about the logs...";
-			if (selectedNodeIds.length > 0) return "Describe changes to selected nodes...";
+			if (selectedNodeIds.length > 0)
+				return "Describe changes to selected nodes...";
 			return "Ask anything about your flow...";
 		}
 		if (selectedComponentIds.length > 0) {
 			return "Describe changes to selected components...";
 		}
 		return "Describe the UI you want to create...";
-	}, [agentMode, runContext, selectedNodeIds.length, selectedComponentIds.length]);
+	}, [
+		agentMode,
+		runContext,
+		selectedNodeIds.length,
+		selectedComponentIds.length,
+	]);
 
 	// Get context indicator based on mode
 	const contextIndicator = useMemo(() => {
@@ -801,7 +818,14 @@ ${userMsg}`;
 			);
 		}
 		return null;
-	}, [agentMode, selectedNodeIds, selectedComponentIds, board, onSelectNodes, onFocusNode]);
+	}, [
+		agentMode,
+		selectedNodeIds,
+		selectedComponentIds,
+		board,
+		onSelectNodes,
+		onFocusNode,
+	]);
 
 	return (
 		<motion.div
@@ -898,25 +922,27 @@ ${userMsg}`;
 			)}
 
 			{/* Pending commands (board mode or both mode) */}
-			{(agentMode === "board" || agentMode === "both") && pendingCommands.length > 0 && (
-				<div className="px-3 pb-2">
-					<PendingCommandsView
-						commands={pendingCommands}
-						onExecute={handleExecuteCommands}
-						onExecuteSingle={handleExecuteSingle}
-						onDismiss={handleDismissCommands}
-					/>
-				</div>
-			)}
+			{(agentMode === "board" || agentMode === "both") &&
+				pendingCommands.length > 0 && (
+					<div className="px-3 pb-2">
+						<PendingCommandsView
+							commands={pendingCommands}
+							onExecute={handleExecuteCommands}
+							onExecuteSingle={handleExecuteSingle}
+							onDismiss={handleDismissCommands}
+						/>
+					</div>
+				)}
 
 			{/* Pending components (UI mode or both mode) */}
-			{(agentMode === "ui" || agentMode === "both") && pendingComponents.length > 0 && (
-				<PendingComponentsView
-					components={pendingComponents}
-					onApply={handleApplyComponents}
-					onDismiss={handleDismissComponents}
-				/>
-			)}
+			{(agentMode === "ui" || agentMode === "both") &&
+				pendingComponents.length > 0 && (
+					<PendingComponentsView
+						components={pendingComponents}
+						onApply={handleApplyComponents}
+						onDismiss={handleDismissComponents}
+					/>
+				)}
 
 			{/* Input area */}
 			<div className="shrink-0 p-2.5 border-t border-border/30 bg-background/80 backdrop-blur-sm">
@@ -979,7 +1005,7 @@ ${userMsg}`;
 						placeholder={placeholderText}
 						className={cn(
 							"flex-1 min-h-10 max-h-[120px] text-sm py-2.5 px-3 rounded-lg bg-background/80 border border-border/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary/50 resize-none",
-							captureScreenshot ? "pr-18" : "pr-12"
+							captureScreenshot ? "pr-18" : "pr-12",
 						)}
 						disabled={loading}
 						rows={1}
@@ -992,7 +1018,9 @@ ${userMsg}`;
 									<Button
 										size="icon"
 										onClick={() => handleSubmit(false)}
-										disabled={loading || (!input.trim() && attachedImages.length === 0)}
+										disabled={
+											loading || (!input.trim() && attachedImages.length === 0)
+										}
 										className="h-8 w-8 rounded-l-lg rounded-r-none shadow-md bg-linear-to-br from-primary to-purple-600 hover:shadow-lg hover:shadow-primary/20 transition-all duration-200 disabled:opacity-50"
 									>
 										{loading ? (
@@ -1010,7 +1038,9 @@ ${userMsg}`;
 								<DropdownMenuTrigger asChild>
 									<Button
 										size="icon"
-										disabled={loading || (!input.trim() && attachedImages.length === 0)}
+										disabled={
+											loading || (!input.trim() && attachedImages.length === 0)
+										}
 										className="h-8 w-6 rounded-l-none rounded-r-lg shadow-md bg-linear-to-br from-purple-600 to-pink-600 hover:shadow-lg hover:shadow-primary/20 transition-all duration-200 disabled:opacity-50 border-l border-white/20"
 									>
 										<ChevronDownIcon className="w-3 h-3" />
@@ -1039,7 +1069,9 @@ ${userMsg}`;
 						<Button
 							size="icon"
 							onClick={() => handleSubmit(false)}
-							disabled={loading || (!input.trim() && attachedImages.length === 0)}
+							disabled={
+								loading || (!input.trim() && attachedImages.length === 0)
+							}
 							className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg shadow-md bg-linear-to-br from-primary to-purple-600 hover:shadow-lg hover:shadow-primary/20 transition-all duration-200 disabled:opacity-50"
 						>
 							{loading ? (
@@ -1122,7 +1154,11 @@ const Header = memo(function Header({
 					<div>
 						<h3 className="text-sm font-bold">{title}</h3>
 						{loading ? (
-							<StatusPill phase={loadingPhase} elapsed={elapsedSeconds} compact />
+							<StatusPill
+								phase={loadingPhase}
+								elapsed={elapsedSeconds}
+								compact
+							/>
 						) : (
 							<div className="flex items-center gap-1 text-xs text-muted-foreground">
 								<span className="relative flex h-1.5 w-1.5">
@@ -1227,7 +1263,11 @@ const EmptyState = memo(function EmptyState({
 		if (agentMode === "both") {
 			return selectedCount > 0
 				? ["Explain this", "Create UI for it", "Add workflow step"]
-				: ["Create a dashboard with API", "Build form + workflow", "Design UI with data flow"];
+				: [
+						"Create a dashboard with API",
+						"Build form + workflow",
+						"Design UI with data flow",
+					];
 		}
 		if (agentMode === "board") {
 			return selectedCount > 0
@@ -1241,7 +1281,8 @@ const EmptyState = memo(function EmptyState({
 
 	const description = useMemo(() => {
 		if (selectedCount > 0) {
-			if (agentMode === "both") return "Describe what to do with the selected items";
+			if (agentMode === "both")
+				return "Describe what to do with the selected items";
 			return `Describe what to do with the selected ${agentMode === "board" ? "nodes" : "components"}`;
 		}
 		if (agentMode === "both") return "Build workflows, UIs, or both together";
@@ -1320,11 +1361,14 @@ const MessageBubble = memo(function MessageBubble({
 		if (currentStep) {
 			const hasContent = message.content && message.content.trim().length > 0;
 			return (
-				<div className={`space-y-1.5 ${hasContent ? "mt-3 pt-2 border-t border-border/30" : ""}`}>
+				<div
+					className={`space-y-1.5 ${hasContent ? "mt-3 pt-2 border-t border-border/30" : ""}`}
+				>
 					<div className="flex items-center gap-2">
 						<Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
 						<span className="text-xs font-medium text-foreground">
-							{currentStep.tool_name === "think" || currentStep.tool_name === "analyze"
+							{currentStep.tool_name === "think" ||
+							currentStep.tool_name === "analyze"
 								? "Thinking"
 								: currentStep.tool_name === "emit_surface"
 									? "Generating UI"
@@ -1334,7 +1378,8 @@ const MessageBubble = memo(function MessageBubble({
 											? "Looking up schema"
 											: currentStep.tool_name === "get_style_examples"
 												? "Fetching styles"
-												: currentStep.tool_name?.replace(/_/g, " ") || "Processing"}
+												: currentStep.tool_name?.replace(/_/g, " ") ||
+													"Processing"}
 						</span>
 					</div>
 					{currentStep.description && (
@@ -1349,13 +1394,17 @@ const MessageBubble = memo(function MessageBubble({
 		// Fallback to phase-based loading
 		const hasContent = message.content && message.content.trim().length > 0;
 		return (
-			<div className={`flex items-center gap-2 ${hasContent ? "mt-3 pt-2 border-t border-border/30" : ""}`}>
+			<div
+				className={`flex items-center gap-2 ${hasContent ? "mt-3 pt-2 border-t border-border/30" : ""}`}
+			>
 				<Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
 				<span className="text-xs text-muted-foreground">
 					{currentToolCall
 						? `Using ${currentToolCall.replace(/_/g, " ")}...`
 						: loadingPhase && loadingPhase !== "idle"
-							? loadingPhase.charAt(0).toUpperCase() + loadingPhase.slice(1) + "..."
+							? loadingPhase.charAt(0).toUpperCase() +
+								loadingPhase.slice(1) +
+								"..."
 							: "Processing..."}
 				</span>
 			</div>

@@ -10,7 +10,8 @@ export const jaCommon = {
 	"header.cancel": "キャンセル",
 	// Footer CTA
 	"footer.cta.title": "自動化の準備はできましたか？",
-	"footer.cta.description": "Flow-Likeをダウンロードして、数分で最初のワークフローを作成しましょう。",
+	"footer.cta.description":
+		"Flow-Likeをダウンロードして、数分で最初のワークフローを作成しましょう。",
 	"footer.cta.button": "無料で始める",
 
 	// Footer Sections

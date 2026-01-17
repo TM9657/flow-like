@@ -3,8 +3,8 @@
 use crate::error::ApiError;
 use crate::middleware::jwt::AppUser;
 use crate::state::AppState;
-use axum::{Extension, Json};
 use axum::extract::State;
+use axum::{Extension, Json};
 use flow_like_wasm::registry::{PublishRequest, PublishResponse};
 
 /// POST /registry/publish
@@ -15,9 +15,9 @@ pub async fn publish(
     Json(request): Json<PublishRequest>,
 ) -> Result<Json<PublishResponse>, ApiError> {
     // Require authentication for publishing
-    let sub = user.sub().map_err(|_| {
-        ApiError::unauthorized("Authentication required for publishing")
-    })?;
+    let sub = user
+        .sub()
+        .map_err(|_| ApiError::unauthorized("Authentication required for publishing"))?;
 
     if sub.is_empty() {
         return Err(ApiError::unauthorized(
@@ -45,9 +45,7 @@ pub async fn publish(
         .map_err(|e| ApiError::bad_request(format!("Invalid WASM base64: {}", e)))?;
 
     // Validate WASM magic bytes
-    if wasm_data.len() < 8
-        || &wasm_data[0..4] != b"\0asm"
-    {
+    if wasm_data.len() < 8 || &wasm_data[0..4] != b"\0asm" {
         return Err(ApiError::bad_request("Invalid WASM binary"));
     }
 

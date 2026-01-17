@@ -1,15 +1,15 @@
+use flow_like::a2ui::components::CheckboxProps;
 use flow_like::flow::{
     board::Board,
-    execution::{LogLevel, context::ExecutionContext},
+    execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::CheckboxProps;
 use flow_like_types::{Value, async_trait};
 use std::sync::Arc;
 
-use super::element_utils::{find_element, extract_element_id_from_pin};
+use super::element_utils::{extract_element_id_from_pin, find_element};
 
 /// Gets the checked state of a checkbox or switch element.
 #[crate::register_node]
@@ -42,7 +42,12 @@ impl NodeLogic for GetCheckboxChecked {
         .set_schema::<CheckboxProps>()
         .set_options(PinOptions::new().set_enforce_schema(false).build());
 
-        node.add_output_pin("checked", "Checked", "Whether the checkbox is checked", VariableType::Boolean);
+        node.add_output_pin(
+            "checked",
+            "Checked",
+            "Whether the checkbox is checked",
+            VariableType::Boolean,
+        );
 
         node
     }
@@ -62,7 +67,11 @@ impl NodeLogic for GetCheckboxChecked {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        context.get_pin_by_name("checked").await?.set_value(Value::Bool(checked)).await;
+        context
+            .get_pin_by_name("checked")
+            .await?
+            .set_value(Value::Bool(checked))
+            .await;
 
         Ok(())
     }

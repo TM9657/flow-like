@@ -11,7 +11,8 @@ export const deCommon = {
 
 	// Footer CTA
 	"footer.cta.title": "Bereit zu automatisieren?",
-	"footer.cta.description": "Laden Sie Flow-Like herunter und erstellen Sie Ihren ersten Workflow in Minuten.",
+	"footer.cta.description":
+		"Laden Sie Flow-Like herunter und erstellen Sie Ihren ersten Workflow in Minuten.",
 	"footer.cta.button": "Kostenlos starten",
 
 	// Footer Sections

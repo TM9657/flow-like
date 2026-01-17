@@ -12,7 +12,7 @@
  * When outside Canvas, it renders a DOM placeholder to avoid crashes.
  * When inside Canvas (Scene3D), it renders R3F components.
  */
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 // ============================================================================
 // TYPE VALIDATION TESTS
@@ -351,7 +351,12 @@ describe("Model3D Placeholder Component", () => {
 		// - <mesh> for geometry
 		// - <boxGeometry> for shape
 		// - <meshStandardMaterial> for appearance
-		const allowedElements = ["group", "mesh", "boxGeometry", "meshStandardMaterial"];
+		const allowedElements = [
+			"group",
+			"mesh",
+			"boxGeometry",
+			"meshStandardMaterial",
+		];
 		expect(allowedElements.length).toBe(4);
 	});
 });
@@ -484,15 +489,15 @@ describe("Model3D Camera Angle Presets", () => {
 	});
 
 	test("isometric angle uses all axes", () => {
-		expect(CAMERA_ANGLES.isometric.every(v => v === 1)).toBe(true);
+		expect(CAMERA_ANGLES.isometric.every((v) => v === 1)).toBe(true);
 	});
 
 	test("camera distance scales angle vector", () => {
 		const distance = 5;
 		const angle = CAMERA_ANGLES.front;
-		const magnitude = Math.sqrt(angle[0]**2 + angle[1]**2 + angle[2]**2);
-		const normalized = angle.map(v => v / magnitude);
-		const position = normalized.map(v => v * distance);
+		const magnitude = Math.sqrt(angle[0] ** 2 + angle[1] ** 2 + angle[2] ** 2);
+		const normalized = angle.map((v) => v / magnitude);
+		const position = normalized.map((v) => v * distance);
 		expect(position[2]).toBe(distance);
 	});
 });
@@ -503,11 +508,41 @@ describe("Model3D Camera Angle Presets", () => {
 
 describe("Model3D Lighting Presets", () => {
 	const LIGHTING_PRESETS = {
-		neutral: { ambient: 0.5, main: 1.0, fill: 0.3, rim: 0.2, mainColor: "#ffffff" },
-		warm: { ambient: 0.4, main: 1.0, fill: 0.4, rim: 0.3, mainColor: "#fff5e6" },
-		cool: { ambient: 0.4, main: 1.0, fill: 0.4, rim: 0.3, mainColor: "#e6f3ff" },
-		studio: { ambient: 0.6, main: 1.2, fill: 0.5, rim: 0.4, mainColor: "#ffffff" },
-		dramatic: { ambient: 0.2, main: 1.5, fill: 0.2, rim: 0.6, mainColor: "#fff8e7" },
+		neutral: {
+			ambient: 0.5,
+			main: 1.0,
+			fill: 0.3,
+			rim: 0.2,
+			mainColor: "#ffffff",
+		},
+		warm: {
+			ambient: 0.4,
+			main: 1.0,
+			fill: 0.4,
+			rim: 0.3,
+			mainColor: "#fff5e6",
+		},
+		cool: {
+			ambient: 0.4,
+			main: 1.0,
+			fill: 0.4,
+			rim: 0.3,
+			mainColor: "#e6f3ff",
+		},
+		studio: {
+			ambient: 0.6,
+			main: 1.2,
+			fill: 0.5,
+			rim: 0.4,
+			mainColor: "#ffffff",
+		},
+		dramatic: {
+			ambient: 0.2,
+			main: 1.5,
+			fill: 0.2,
+			rim: 0.6,
+			mainColor: "#fff8e7",
+		},
 	};
 
 	test("studio preset has strongest overall lighting", () => {
@@ -547,8 +582,16 @@ describe("Model3D Lighting Presets", () => {
 
 describe("Model3D Environment Presets", () => {
 	const VALID_ENVIRONMENTS = [
-		"studio", "sunset", "dawn", "night", "warehouse",
-		"forest", "apartment", "city", "park", "lobby"
+		"studio",
+		"sunset",
+		"dawn",
+		"night",
+		"warehouse",
+		"forest",
+		"apartment",
+		"city",
+		"park",
+		"lobby",
 	];
 
 	test("default environment is studio", () => {

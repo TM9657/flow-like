@@ -238,7 +238,10 @@ fn build_provider_url(hosted_provider: &HostedProvider) -> Result<(String, Strin
 
     let api_key = std::env::var(api_key_key).unwrap_or_default();
     if api_key.is_empty() {
-        return Err(ApiError::internal(format!("{} not configured", api_key_key)));
+        return Err(ApiError::internal(format!(
+            "{} not configured",
+            api_key_key
+        )));
     }
 
     let url = format!(

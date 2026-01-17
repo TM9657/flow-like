@@ -46,8 +46,8 @@ import { ScrollArea } from "../ui/scroll-area";
 import { useBuilder } from "./BuilderContext";
 import {
 	COMPONENT_DND_TYPE,
-	WIDGET_DND_TYPE,
 	type ComponentDragData,
+	WIDGET_DND_TYPE,
 	type WidgetDragData,
 } from "./BuilderDndContext";
 import { getDefaultProps } from "./componentDefaults";

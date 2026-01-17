@@ -3,7 +3,11 @@
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { cn } from "../../lib";
-import { NIVO_SAMPLE_DATA, NIVO_CHART_DEFAULTS } from "../a2ui/display/nivo-data";
+import {
+	NIVO_CHART_DEFAULTS,
+	NIVO_SAMPLE_DATA,
+} from "../a2ui/display/nivo-data";
+import { getModel3DView } from "../a2ui/game/model3d-view-registry";
 import type {
 	BoundValue,
 	ChartAxis,
@@ -24,6 +28,7 @@ import {
 } from "../ui/collapsible";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { MonacoCodeEditor } from "../ui/monaco-code-editor";
 import { ScrollArea } from "../ui/scroll-area";
 import {
 	Select,
@@ -32,16 +37,14 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "../ui/select";
+import { Slider } from "../ui/slider";
 import { Switch } from "../ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Textarea } from "../ui/textarea";
-import { MonacoCodeEditor } from "../ui/monaco-code-editor";
-import { Slider } from "../ui/slider";
 import { AssetPicker } from "./AssetPicker";
 import { useBuilder } from "./BuilderContext";
 import { getDefaultProps } from "./componentDefaults";
 import { getComponentSchema } from "./componentSchema";
-import { getModel3DView } from "../a2ui/game/model3d-view-registry";
 
 // Component types that have asset properties
 const ASSET_COMPONENT_TYPES = new Set(["image", "sprite", "model3d", "video"]);
@@ -308,13 +311,35 @@ function PropertyEditor({ component, onUpdate }: PropertyEditorProps) {
 const MODEL3D_ENUMS = {
 	cameraAngle: ["front", "side", "top", "isometric"],
 	lightingPreset: ["neutral", "warm", "cool", "studio", "dramatic"],
-	environment: ["studio", "sunset", "dawn", "night", "warehouse", "forest", "apartment", "city", "park", "lobby"],
+	environment: [
+		"studio",
+		"sunset",
+		"dawn",
+		"night",
+		"warehouse",
+		"forest",
+		"apartment",
+		"city",
+		"park",
+		"lobby",
+	],
 	environmentSource: ["local", "preset", "polyhaven", "custom"],
 	polyhavenHdri: [
-		"studio_small_03", "studio_small_09", "brown_photostudio_02", "empty_warehouse_01",
-		"industrial_sunset_02", "sunset_in_the_chalk_quarry", "rooftop_night", "abandoned_factory_canteen_01",
-		"forest_slope", "green_point_park", "lebombo", "spruit_sunrise",
-		"syferfontein_18d_clear_puresky", "venice_sunset", "potsdamer_platz",
+		"studio_small_03",
+		"studio_small_09",
+		"brown_photostudio_02",
+		"empty_warehouse_01",
+		"industrial_sunset_02",
+		"sunset_in_the_chalk_quarry",
+		"rooftop_night",
+		"abandoned_factory_canteen_01",
+		"forest_slope",
+		"green_point_park",
+		"lebombo",
+		"spruit_sunrise",
+		"syferfontein_18d_clear_puresky",
+		"venice_sunset",
+		"potsdamer_platz",
 	],
 	polyhavenResolution: ["1k", "2k", "4k", "8k"],
 } as const;
@@ -326,13 +351,23 @@ interface Model3DEditorProps {
 	updateProp: (key: string, value: unknown) => void;
 }
 
-function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditorProps) {
+function Model3DEditor({
+	component,
+	props,
+	onUpdate,
+	updateProp,
+}: Model3DEditorProps) {
 	const getBoundValue = (key: string): BoundValue | undefined => {
 		const value = props[key];
-		return typeof value === "object" && value !== null ? (value as BoundValue) : undefined;
+		return typeof value === "object" && value !== null
+			? (value as BoundValue)
+			: undefined;
 	};
 
-	const parseVector3 = (value: BoundValue | undefined, fallback: [number, number, number]) => {
+	const parseVector3 = (
+		value: BoundValue | undefined,
+		fallback: [number, number, number],
+	) => {
 		if (!value) return fallback;
 		if ("literalJson" in value) {
 			try {
@@ -351,7 +386,9 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 		literalJson: JSON.stringify(vec),
 	});
 
-	const isBoundPath = (value: BoundValue | undefined): value is BoundValue & { path: string } =>
+	const isBoundPath = (
+		value: BoundValue | undefined,
+	): value is BoundValue & { path: string } =>
 		Boolean(value && "path" in value);
 
 	const toDeg = (rad: number) => (rad * 180) / Math.PI;
@@ -381,27 +418,48 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 
 		const vec = parseVector3(value, fallback);
 		const display = useDegrees
-			? ([toDeg(vec[0]), toDeg(vec[1]), toDeg(vec[2])] as [number, number, number])
+			? ([toDeg(vec[0]), toDeg(vec[1]), toDeg(vec[2])] as [
+					number,
+					number,
+					number,
+				])
 			: vec;
 
 		const updateAxis = (index: number, newValue: number) => {
 			const next = [...display] as [number, number, number];
 			next[index] = newValue;
 			const stored = useDegrees
-				? ([toRad(next[0]), toRad(next[1]), toRad(next[2])] as [number, number, number])
+				? ([toRad(next[0]), toRad(next[1]), toRad(next[2])] as [
+						number,
+						number,
+						number,
+					])
 				: next;
 			updateProp(key, vectorToBound(stored));
 		};
 
-		const axisColors = ["text-red-400", "text-green-400", "text-blue-400"] as const;
+		const axisColors = [
+			"text-red-400",
+			"text-green-400",
+			"text-blue-400",
+		] as const;
 
 		return (
 			<div className="space-y-1.5">
-				<Label className="text-xs text-muted-foreground">{displayLabel ?? key}</Label>
+				<Label className="text-xs text-muted-foreground">
+					{displayLabel ?? key}
+				</Label>
 				<div className="space-y-1">
 					{(["X", "Y", "Z"] as const).map((axis, index) => (
 						<div key={axis} className="flex items-center gap-1.5">
-							<span className={cn("w-3.5 text-[10px] font-medium", axisColors[index])}>{axis}</span>
+							<span
+								className={cn(
+									"w-3.5 text-[10px] font-medium",
+									axisColors[index],
+								)}
+							>
+								{axis}
+							</span>
 							<Slider
 								value={[display[index]]}
 								min={min}
@@ -443,23 +501,32 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 				/>
 			);
 		}
-		const current = value && "literalNumber" in value ? value.literalNumber : fallback;
+		const current =
+			value && "literalNumber" in value ? value.literalNumber : fallback;
 		return (
 			<div className="space-y-1.5">
-				<Label className="text-xs text-muted-foreground">{displayLabel ?? key}</Label>
+				<Label className="text-xs text-muted-foreground">
+					{displayLabel ?? key}
+				</Label>
 				<div className="flex items-center gap-1.5">
 					<Slider
 						value={[current]}
 						min={min}
 						max={max}
 						step={step}
-						onValueChange={(v) => updateProp(key, { literalNumber: v[0] ?? fallback })}
+						onValueChange={(v) =>
+							updateProp(key, { literalNumber: v[0] ?? fallback })
+						}
 						className="flex-1"
 					/>
 					<Input
 						type="number"
 						value={current.toFixed(step < 1 ? 2 : 0)}
-						onChange={(e) => updateProp(key, { literalNumber: e.target.valueAsNumber || fallback })}
+						onChange={(e) =>
+							updateProp(key, {
+								literalNumber: e.target.valueAsNumber || fallback,
+							})
+						}
 						className="w-16 h-6 text-[11px] text-center px-1"
 					/>
 				</div>
@@ -474,7 +541,8 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 	) => {
 		const value = getBoundValue(key);
 		const isPath = value && "path" in value;
-		const current = value && "literalBool" in value ? value.literalBool : defaultValue;
+		const current =
+			value && "literalBool" in value ? value.literalBool : defaultValue;
 
 		if (isPath) {
 			return (
@@ -493,7 +561,9 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 				<Label className="text-xs text-muted-foreground">{displayLabel}</Label>
 				<Switch
 					checked={current}
-					onCheckedChange={(checked) => updateProp(key, { literalBool: checked })}
+					onCheckedChange={(checked) =>
+						updateProp(key, { literalBool: checked })
+					}
 					className="scale-75"
 				/>
 			</div>
@@ -508,7 +578,8 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 	) => {
 		const value = getBoundValue(key);
 		const isPath = value && "path" in value;
-		const current = value && "literalString" in value ? value.literalString : defaultValue;
+		const current =
+			value && "literalString" in value ? value.literalString : defaultValue;
 
 		if (isPath) {
 			return (
@@ -550,7 +621,8 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 	const view = getModel3DView(component.id);
 
 	const scaleValue = getBoundValue("scale");
-	const scaleMode = scaleValue && "literalJson" in scaleValue ? "xyz" : "uniform";
+	const scaleMode =
+		scaleValue && "literalJson" in scaleValue ? "xyz" : "uniform";
 
 	const section = (
 		title: string,
@@ -572,12 +644,76 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 
 	// Icons for sections
 	const icons = {
-		transform: <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v18M3 12h18M7.5 7.5l9 9M16.5 7.5l-9 9"/></svg>,
-		camera: <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M2 12h3M19 12h3M12 2v3M12 19v3"/></svg>,
-		lighting: <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>,
-		environment: <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
-		ground: <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 20h20M6 16l6-8 6 8"/></svg>,
-		viewer: <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>,
+		transform: (
+			<svg
+				className="w-3.5 h-3.5"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+			>
+				<path d="M12 3v18M3 12h18M7.5 7.5l9 9M16.5 7.5l-9 9" />
+			</svg>
+		),
+		camera: (
+			<svg
+				className="w-3.5 h-3.5"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+			>
+				<circle cx="12" cy="12" r="3" />
+				<path d="M2 12h3M19 12h3M12 2v3M12 19v3" />
+			</svg>
+		),
+		lighting: (
+			<svg
+				className="w-3.5 h-3.5"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+			>
+				<circle cx="12" cy="12" r="5" />
+				<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+			</svg>
+		),
+		environment: (
+			<svg
+				className="w-3.5 h-3.5"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+			>
+				<circle cx="12" cy="12" r="10" />
+				<path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+			</svg>
+		),
+		ground: (
+			<svg
+				className="w-3.5 h-3.5"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+			>
+				<path d="M2 20h20M6 16l6-8 6 8" />
+			</svg>
+		),
+		viewer: (
+			<svg
+				className="w-3.5 h-3.5"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+			>
+				<rect x="2" y="3" width="20" height="14" rx="2" />
+				<path d="M8 21h8M12 17v4" />
+			</svg>
+		),
 	};
 
 	return (
@@ -595,8 +731,26 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 				"Transform",
 				icons.transform,
 				<>
-					{renderVectorField("position", getBoundValue("position"), [0, 0, 0], -10, 10, 0.1, false, "Position")}
-					{renderVectorField("rotation", getBoundValue("rotation"), [0, 0, 0], -180, 180, 1, true, "Rotation (°)")}
+					{renderVectorField(
+						"position",
+						getBoundValue("position"),
+						[0, 0, 0],
+						-10,
+						10,
+						0.1,
+						false,
+						"Position",
+					)}
+					{renderVectorField(
+						"rotation",
+						getBoundValue("rotation"),
+						[0, 0, 0],
+						-180,
+						180,
+						1,
+						true,
+						"Rotation (°)",
+					)}
 					<div className="space-y-1.5">
 						<div className="flex items-center justify-between">
 							<Label className="text-xs text-muted-foreground">Scale</Label>
@@ -607,8 +761,13 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 										const current = parseVector3(scaleValue, [1, 1, 1])[0];
 										updateProp("scale", { literalNumber: current });
 									} else {
-										const current = scaleValue && "literalNumber" in scaleValue ? scaleValue.literalNumber : 1;
-										updateProp("scale", { literalJson: JSON.stringify([current, current, current]) });
+										const current =
+											scaleValue && "literalNumber" in scaleValue
+												? scaleValue.literalNumber
+												: 1;
+										updateProp("scale", {
+											literalJson: JSON.stringify([current, current, current]),
+										});
 									}
 								}}
 							>
@@ -616,14 +775,25 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="uniform" className="text-xs">Uniform</SelectItem>
-									<SelectItem value="xyz" className="text-xs">XYZ</SelectItem>
+									<SelectItem value="uniform" className="text-xs">
+										Uniform
+									</SelectItem>
+									<SelectItem value="xyz" className="text-xs">
+										XYZ
+									</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
 						{scaleMode === "uniform"
 							? renderNumberField("scale", scaleValue, 1, 0.01, 10, 0.01)
-							: renderVectorField("scale", scaleValue, [1, 1, 1], 0.01, 10, 0.01)}
+							: renderVectorField(
+									"scale",
+									scaleValue,
+									[1, 1, 1],
+									0.01,
+									10,
+									0.01,
+								)}
 					</div>
 					<div className="border-t pt-2 space-y-1">
 						{renderToggle("castShadow", true, "Cast Shadow")}
@@ -631,7 +801,15 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 					</div>
 					<div className="border-t pt-2 space-y-1.5">
 						{renderToggle("autoRotate", false, "Auto Rotate Model")}
-						{renderNumberField("rotateSpeed", getBoundValue("rotateSpeed"), 1, 0, 10, 0.1, "Rotation Speed")}
+						{renderNumberField(
+							"rotateSpeed",
+							getBoundValue("rotateSpeed"),
+							1,
+							0,
+							10,
+							0.1,
+							"Rotation Speed",
+						)}
 					</div>
 				</>,
 			)}
@@ -641,12 +819,35 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 				icons.camera,
 				<>
 					<div className="grid grid-cols-2 gap-2">
-						{renderSelect("cameraAngle", "front", "Angle Preset", MODEL3D_ENUMS.cameraAngle)}
-						{renderNumberField("cameraDistance", getBoundValue("cameraDistance"), 3, 0.1, 50, 0.1, "Distance")}
+						{renderSelect(
+							"cameraAngle",
+							"front",
+							"Angle Preset",
+							MODEL3D_ENUMS.cameraAngle,
+						)}
+						{renderNumberField(
+							"cameraDistance",
+							getBoundValue("cameraDistance"),
+							3,
+							0.1,
+							50,
+							0.1,
+							"Distance",
+						)}
 					</div>
-					{renderNumberField("fov", getBoundValue("fov"), 50, 10, 120, 1, "Field of View")}
+					{renderNumberField(
+						"fov",
+						getBoundValue("fov"),
+						50,
+						10,
+						120,
+						1,
+						"Field of View",
+					)}
 					<div className="flex items-center justify-between py-1.5 border-y">
-						<span className="text-xs text-muted-foreground">Capture current view</span>
+						<span className="text-xs text-muted-foreground">
+							Capture current view
+						</span>
 						<Button
 							size="sm"
 							variant="secondary"
@@ -654,18 +855,48 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 							disabled={!view}
 							onClick={() => {
 								if (!view) return;
-								updateProp("cameraPosition", { literalJson: JSON.stringify(view.cameraPosition) });
-								updateProp("cameraTarget", { literalJson: JSON.stringify(view.cameraTarget) });
+								updateProp("cameraPosition", {
+									literalJson: JSON.stringify(view.cameraPosition),
+								});
+								updateProp("cameraTarget", {
+									literalJson: JSON.stringify(view.cameraTarget),
+								});
 							}}
 						>
 							Use View
 						</Button>
 					</div>
-					{renderVectorField("cameraPosition", cameraPosition, [0, 0, 3], -50, 50, 0.1, false, "Camera Position")}
-					{renderVectorField("cameraTarget", cameraTarget, [0, 0, 0], -50, 50, 0.1, false, "Camera Target")}
+					{renderVectorField(
+						"cameraPosition",
+						cameraPosition,
+						[0, 0, 3],
+						-50,
+						50,
+						0.1,
+						false,
+						"Camera Position",
+					)}
+					{renderVectorField(
+						"cameraTarget",
+						cameraTarget,
+						[0, 0, 0],
+						-50,
+						50,
+						0.1,
+						false,
+						"Camera Target",
+					)}
 					<div className="border-t pt-2 space-y-1.5">
 						{renderToggle("autoRotateCamera", false, "Auto Orbit")}
-						{renderNumberField("cameraRotateSpeed", getBoundValue("cameraRotateSpeed"), 2, 0, 10, 0.1, "Orbit Speed")}
+						{renderNumberField(
+							"cameraRotateSpeed",
+							getBoundValue("cameraRotateSpeed"),
+							2,
+							0,
+							10,
+							0.1,
+							"Orbit Speed",
+						)}
 					</div>
 					<div className="border-t pt-2 space-y-1">
 						{renderToggle("enableControls", true, "Enable Controls")}
@@ -680,12 +911,49 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 				"Lighting",
 				icons.lighting,
 				<>
-					{renderSelect("lightingPreset", "studio", "Preset", MODEL3D_ENUMS.lightingPreset)}
+					{renderSelect(
+						"lightingPreset",
+						"studio",
+						"Preset",
+						MODEL3D_ENUMS.lightingPreset,
+					)}
 					<div className="grid grid-cols-2 gap-x-3 gap-y-2">
-						{renderNumberField("ambientLight", getBoundValue("ambientLight"), 0.6, 0, 2, 0.05, "Ambient")}
-						{renderNumberField("directionalLight", getBoundValue("directionalLight"), 1.2, 0, 3, 0.05, "Key Light")}
-						{renderNumberField("fillLight", getBoundValue("fillLight"), 0.5, 0, 3, 0.05, "Fill")}
-						{renderNumberField("rimLight", getBoundValue("rimLight"), 0.4, 0, 3, 0.05, "Rim")}
+						{renderNumberField(
+							"ambientLight",
+							getBoundValue("ambientLight"),
+							0.6,
+							0,
+							2,
+							0.05,
+							"Ambient",
+						)}
+						{renderNumberField(
+							"directionalLight",
+							getBoundValue("directionalLight"),
+							1.2,
+							0,
+							3,
+							0.05,
+							"Key Light",
+						)}
+						{renderNumberField(
+							"fillLight",
+							getBoundValue("fillLight"),
+							0.5,
+							0,
+							3,
+							0.05,
+							"Fill",
+						)}
+						{renderNumberField(
+							"rimLight",
+							getBoundValue("rimLight"),
+							0.4,
+							0,
+							3,
+							0.05,
+							"Rim",
+						)}
 					</div>
 					<BoundValueEditor
 						name="lightColor"
@@ -702,14 +970,27 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 				"Environment",
 				icons.environment,
 				<>
-					{renderSelect("environmentSource", "local", "Source", MODEL3D_ENUMS.environmentSource)}
+					{renderSelect(
+						"environmentSource",
+						"local",
+						"Source",
+						MODEL3D_ENUMS.environmentSource,
+					)}
 					{renderToggle("enableReflections", true, "Reflections")}
 					{renderToggle("useHdrBackground", false, "Show as Background")}
 					{(() => {
 						const source = getBoundValue("environmentSource");
-						const sourceValue = source && "literalString" in source ? source.literalString : "local";
+						const sourceValue =
+							source && "literalString" in source
+								? source.literalString
+								: "local";
 						if (sourceValue === "preset") {
-							return renderSelect("environment", "studio", "Environment", MODEL3D_ENUMS.environment);
+							return renderSelect(
+								"environment",
+								"studio",
+								"Environment",
+								MODEL3D_ENUMS.environment,
+							);
 						}
 						if (sourceValue === "custom") {
 							return (
@@ -724,8 +1005,19 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 						}
 						return (
 							<>
-								{renderSelect("polyhavenHdri", "studio_small_03", "HDRI", MODEL3D_ENUMS.polyhavenHdri)}
-								{sourceValue === "polyhaven" && renderSelect("polyhavenResolution", "1k", "Resolution", MODEL3D_ENUMS.polyhavenResolution)}
+								{renderSelect(
+									"polyhavenHdri",
+									"studio_small_03",
+									"HDRI",
+									MODEL3D_ENUMS.polyhavenHdri,
+								)}
+								{sourceValue === "polyhaven" &&
+									renderSelect(
+										"polyhavenResolution",
+										"1k",
+										"Resolution",
+										MODEL3D_ENUMS.polyhavenResolution,
+									)}
 							</>
 						);
 					})()}
@@ -745,8 +1037,24 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 						onChange={(v) => updateProp("groundColor", v)}
 						componentType="model3d"
 					/>
-					{renderNumberField("groundSize", getBoundValue("groundSize"), 200, 10, 1000, 1, "Size")}
-					{renderNumberField("groundOffsetY", getBoundValue("groundOffsetY"), -0.5, -10, 10, 0.01, "Vertical Offset")}
+					{renderNumberField(
+						"groundSize",
+						getBoundValue("groundSize"),
+						200,
+						10,
+						1000,
+						1,
+						"Size",
+					)}
+					{renderNumberField(
+						"groundOffsetY",
+						getBoundValue("groundOffsetY"),
+						-0.5,
+						-10,
+						10,
+						0.01,
+						"Vertical Offset",
+					)}
 					{renderToggle("groundFollowCamera", true, "Follow Camera")}
 				</>,
 				false,
@@ -766,7 +1074,11 @@ function Model3DEditor({ component, props, onUpdate, updateProp }: Model3DEditor
 					<BoundValueEditor
 						name="backgroundColor"
 						label="Background"
-						value={getBoundValue("backgroundColor") ?? { literalString: "transparent" }}
+						value={
+							getBoundValue("backgroundColor") ?? {
+								literalString: "transparent",
+							}
+						}
 						onChange={(v) => updateProp("backgroundColor", v)}
 						componentType="model3d"
 					/>
@@ -1230,55 +1542,63 @@ function NivoChartEditor({
 	}, [props.data]);
 
 	// Handle chart type change - apply new defaults in a single update
-	const handleChartTypeChange = useCallback((newType: string) => {
-		const updates: Record<string, unknown> = {
-			chartType: { literalString: newType },
-		};
+	const handleChartTypeChange = useCallback(
+		(newType: string) => {
+			const updates: Record<string, unknown> = {
+				chartType: { literalString: newType },
+			};
 
-		// Apply default data for the new chart type
-		const defaultData = NIVO_SAMPLE_DATA[newType];
-		if (defaultData) {
-			updates.data = { literalJson: JSON.stringify(defaultData, null, 2) };
-		}
-
-		// Apply default keys and indexBy
-		const defaults = NIVO_CHART_DEFAULTS[newType];
-		if (defaults) {
-			if (defaults.indexBy) {
-				updates.indexBy = { literalString: defaults.indexBy };
+			// Apply default data for the new chart type
+			const defaultData = NIVO_SAMPLE_DATA[newType];
+			if (defaultData) {
+				updates.data = { literalJson: JSON.stringify(defaultData, null, 2) };
 			}
-			if (defaults.keys) {
-				updates.keys = { literalJson: JSON.stringify(defaults.keys) };
-			}
-		} else {
-			// Clear keys/indexBy for charts that don't use them
-			updates.indexBy = { literalString: "" };
-			updates.keys = { literalJson: "[]" };
-		}
 
-		// Apply all updates at once
-		onUpdate({
-			component: {
-				...component.component,
-				...updates,
-			} as SurfaceComponent["component"],
-		});
-	}, [component.component, onUpdate]);
+			// Apply default keys and indexBy
+			const defaults = NIVO_CHART_DEFAULTS[newType];
+			if (defaults) {
+				if (defaults.indexBy) {
+					updates.indexBy = { literalString: defaults.indexBy };
+				}
+				if (defaults.keys) {
+					updates.keys = { literalJson: JSON.stringify(defaults.keys) };
+				}
+			} else {
+				// Clear keys/indexBy for charts that don't use them
+				updates.indexBy = { literalString: "" };
+				updates.keys = { literalJson: "[]" };
+			}
+
+			// Apply all updates at once
+			onUpdate({
+				component: {
+					...component.component,
+					...updates,
+				} as SurfaceComponent["component"],
+			});
+		},
+		[component.component, onUpdate],
+	);
 
 	// Parse CSV to JSON data
 	const parseCsvToData = useCallback((csv: string, type: string) => {
 		setCsvError(null);
 		try {
-			const lines = csv.trim().split("\n").filter(l => l.trim());
+			const lines = csv
+				.trim()
+				.split("\n")
+				.filter((l) => l.trim());
 			if (lines.length === 0) return [];
 
-			const headers = lines[0].split(",").map(h => h.trim());
+			const headers = lines[0].split(",").map((h) => h.trim());
 
 			if (type === "bar" || type === "radar") {
 				// For bar/radar: first column is index, rest are data keys
-				return lines.slice(1).map(line => {
-					const values = line.split(",").map(v => v.trim());
-					const row: Record<string, string | number> = { [headers[0]]: values[0] };
+				return lines.slice(1).map((line) => {
+					const values = line.split(",").map((v) => v.trim());
+					const row: Record<string, string | number> = {
+						[headers[0]]: values[0],
+					};
 					for (let i = 1; i < headers.length; i++) {
 						row[headers[i]] = Number(values[i]) || 0;
 					}
@@ -1286,12 +1606,15 @@ function NivoChartEditor({
 				});
 			} else if (type === "line" || type === "scatter") {
 				// For line/scatter: create series from columns
-				const series: { id: string; data: { x: string | number; y: number }[] }[] = [];
+				const series: {
+					id: string;
+					data: { x: string | number; y: number }[];
+				}[] = [];
 				for (let i = 1; i < headers.length; i++) {
 					series.push({
 						id: headers[i],
-						data: lines.slice(1).map(line => {
-							const values = line.split(",").map(v => v.trim());
+						data: lines.slice(1).map((line) => {
+							const values = line.split(",").map((v) => v.trim());
 							return { x: values[0], y: Number(values[i]) || 0 };
 						}),
 					});
@@ -1299,21 +1622,21 @@ function NivoChartEditor({
 				return series;
 			} else if (type === "pie" || type === "funnel" || type === "waffle") {
 				// For pie/funnel/waffle: label,value format
-				return lines.slice(1).map(line => {
-					const [label, value] = line.split(",").map(v => v.trim());
+				return lines.slice(1).map((line) => {
+					const [label, value] = line.split(",").map((v) => v.trim());
 					return { id: label, value: Number(value) || 0, label };
 				});
 			} else if (type === "calendar") {
 				// For calendar: date,value format
-				return lines.slice(1).map(line => {
-					const [day, value] = line.split(",").map(v => v.trim());
+				return lines.slice(1).map((line) => {
+					const [day, value] = line.split(",").map((v) => v.trim());
 					return { day, value: Number(value) || 0 };
 				});
 			}
 
 			// Default: try to parse as generic data
-			return lines.slice(1).map(line => {
-				const values = line.split(",").map(v => v.trim());
+			return lines.slice(1).map((line) => {
+				const values = line.split(",").map((v) => v.trim());
 				const row: Record<string, string | number> = {};
 				headers.forEach((h, i) => {
 					const val = values[i];
@@ -1336,8 +1659,12 @@ function NivoChartEditor({
 			// Auto-detect keys for bar/radar charts
 			if ((chartType === "bar" || chartType === "radar") && data[0]) {
 				const firstRow = data[0] as Record<string, unknown>;
-				const keys = Object.keys(firstRow).filter(k => typeof firstRow[k] === "number");
-				const indexBy = Object.keys(firstRow).find(k => typeof firstRow[k] === "string");
+				const keys = Object.keys(firstRow).filter(
+					(k) => typeof firstRow[k] === "number",
+				);
+				const indexBy = Object.keys(firstRow).find(
+					(k) => typeof firstRow[k] === "string",
+				);
 				if (keys.length > 0) {
 					updateProp("keys", { literalJson: JSON.stringify(keys) });
 				}
@@ -1349,7 +1676,9 @@ function NivoChartEditor({
 	}, [csvInput, chartType, parseCsvToData, updateProp]);
 
 	// Check if chart type needs keys/indexBy
-	const needsKeysAndIndex = ["bar", "radar", "stream", "marimekko"].includes(chartType);
+	const needsKeysAndIndex = ["bar", "radar", "stream", "marimekko"].includes(
+		chartType,
+	);
 
 	return (
 		<div className="space-y-4">
@@ -1410,7 +1739,11 @@ function NivoChartEditor({
 					{dataMode === "json" ? (
 						<div className="space-y-2">
 							<Textarea
-								value={typeof currentData === "object" ? JSON.stringify(currentData, null, 2) : "[]"}
+								value={
+									typeof currentData === "object"
+										? JSON.stringify(currentData, null, 2)
+										: "[]"
+								}
 								onChange={(e) => {
 									try {
 										JSON.parse(e.target.value);
@@ -1430,7 +1763,9 @@ function NivoChartEditor({
 								onClick={() => {
 									const defaultData = NIVO_SAMPLE_DATA[chartType];
 									if (defaultData) {
-										updateProp("data", { literalJson: JSON.stringify(defaultData, null, 2) });
+										updateProp("data", {
+											literalJson: JSON.stringify(defaultData, null, 2),
+										});
 									}
 								}}
 							>
@@ -1446,16 +1781,14 @@ function NivoChartEditor({
 									chartType === "bar" || chartType === "radar"
 										? "category,series1,series2\nA,10,20\nB,15,25"
 										: chartType === "pie" || chartType === "funnel"
-										? "label,value\nCategory A,35\nCategory B,25"
-										: chartType === "line"
-										? "x,series1,series2\nJan,10,15\nFeb,20,18"
-										: "header1,header2\nvalue1,value2"
+											? "label,value\nCategory A,35\nCategory B,25"
+											: chartType === "line"
+												? "x,series1,series2\nJan,10,15\nFeb,20,18"
+												: "header1,header2\nvalue1,value2"
 								}
 								className="h-32 text-xs font-mono resize-none"
 							/>
-							{csvError && (
-								<p className="text-xs text-red-500">{csvError}</p>
-							)}
+							{csvError && <p className="text-xs text-red-500">{csvError}</p>}
 							<Button
 								variant="outline"
 								size="sm"
@@ -1481,17 +1814,22 @@ function NivoChartEditor({
 							<Label className="text-xs">Index By (Category Field)</Label>
 							<Input
 								value={
-									props.indexBy && "literalString" in (props.indexBy as BoundValue)
+									props.indexBy &&
+									"literalString" in (props.indexBy as BoundValue)
 										? (props.indexBy as { literalString: string }).literalString
 										: ""
 								}
-								onChange={(e) => updateProp("indexBy", { literalString: e.target.value })}
+								onChange={(e) =>
+									updateProp("indexBy", { literalString: e.target.value })
+								}
 								placeholder="e.g. country, category"
 								className="h-7 text-xs"
 							/>
 						</div>
 						<div className="space-y-1">
-							<Label className="text-xs">Keys (Data Series - comma separated)</Label>
+							<Label className="text-xs">
+								Keys (Data Series - comma separated)
+							</Label>
 							<Input
 								value={(() => {
 									const k = props.keys as BoundValue | undefined;
@@ -1506,7 +1844,10 @@ function NivoChartEditor({
 									return "";
 								})()}
 								onChange={(e) => {
-									const keys = e.target.value.split(",").map(k => k.trim()).filter(Boolean);
+									const keys = e.target.value
+										.split(",")
+										.map((k) => k.trim())
+										.filter(Boolean);
 									updateProp("keys", { literalJson: JSON.stringify(keys) });
 								}}
 								placeholder="e.g. sales, revenue, profit"
@@ -1561,22 +1902,29 @@ function NivoChartEditor({
 						<Label className="text-xs">Show Legend</Label>
 						<Switch
 							checked={
-								props.showLegend && "literalBool" in (props.showLegend as BoundValue)
+								props.showLegend &&
+								"literalBool" in (props.showLegend as BoundValue)
 									? (props.showLegend as { literalBool: boolean }).literalBool
 									: true
 							}
-							onCheckedChange={(v) => updateProp("showLegend", { literalBool: v })}
+							onCheckedChange={(v) =>
+								updateProp("showLegend", { literalBool: v })
+							}
 						/>
 					</div>
 					<div className="space-y-1">
 						<Label className="text-xs">Legend Position</Label>
 						<Select
 							value={
-								props.legendPosition && "literalString" in (props.legendPosition as BoundValue)
-									? (props.legendPosition as { literalString: string }).literalString
+								props.legendPosition &&
+								"literalString" in (props.legendPosition as BoundValue)
+									? (props.legendPosition as { literalString: string })
+											.literalString
 									: "bottom"
 							}
-							onValueChange={(v) => updateProp("legendPosition", { literalString: v })}
+							onValueChange={(v) =>
+								updateProp("legendPosition", { literalString: v })
+							}
 						>
 							<SelectTrigger className="h-7 text-xs">
 								<SelectValue />
@@ -1607,7 +1955,12 @@ function NivoChartEditor({
 									const s = props.barStyle as { layout?: string } | undefined;
 									return s?.layout || "vertical";
 								})()}
-								onValueChange={(v) => updateProp("barStyle", { ...(props.barStyle as object || {}), layout: v })}
+								onValueChange={(v) =>
+									updateProp("barStyle", {
+										...((props.barStyle as object) || {}),
+										layout: v,
+									})
+								}
 							>
 								<SelectTrigger className="h-7 text-xs">
 									<SelectValue />
@@ -1622,10 +1975,17 @@ function NivoChartEditor({
 							<Label className="text-xs">Group Mode</Label>
 							<Select
 								value={(() => {
-									const s = props.barStyle as { groupMode?: string } | undefined;
+									const s = props.barStyle as
+										| { groupMode?: string }
+										| undefined;
 									return s?.groupMode || "grouped";
 								})()}
-								onValueChange={(v) => updateProp("barStyle", { ...(props.barStyle as object || {}), groupMode: v })}
+								onValueChange={(v) =>
+									updateProp("barStyle", {
+										...((props.barStyle as object) || {}),
+										groupMode: v,
+									})
+								}
 							>
 								<SelectTrigger className="h-7 text-xs">
 									<SelectValue />
@@ -1641,10 +2001,17 @@ function NivoChartEditor({
 							<Input
 								type="number"
 								value={(() => {
-									const s = props.barStyle as { borderRadius?: number } | undefined;
+									const s = props.barStyle as
+										| { borderRadius?: number }
+										| undefined;
 									return s?.borderRadius ?? 0;
 								})()}
-								onChange={(e) => updateProp("barStyle", { ...(props.barStyle as object || {}), borderRadius: Number(e.target.value) })}
+								onChange={(e) =>
+									updateProp("barStyle", {
+										...((props.barStyle as object) || {}),
+										borderRadius: Number(e.target.value),
+									})
+								}
 								className="h-7 text-xs"
 							/>
 						</div>
@@ -1660,17 +2027,26 @@ function NivoChartEditor({
 					</CollapsibleTrigger>
 					<CollapsibleContent className="space-y-2 pt-2">
 						<div className="space-y-1">
-							<Label className="text-xs">Inner Radius (0 = pie, &gt;0 = donut)</Label>
+							<Label className="text-xs">
+								Inner Radius (0 = pie, &gt;0 = donut)
+							</Label>
 							<Input
 								type="number"
 								step="0.1"
 								min="0"
 								max="0.9"
 								value={(() => {
-									const s = props.pieStyle as { innerRadius?: number } | undefined;
+									const s = props.pieStyle as
+										| { innerRadius?: number }
+										| undefined;
 									return s?.innerRadius ?? 0;
 								})()}
-								onChange={(e) => updateProp("pieStyle", { ...(props.pieStyle as object || {}), innerRadius: Number(e.target.value) })}
+								onChange={(e) =>
+									updateProp("pieStyle", {
+										...((props.pieStyle as object) || {}),
+										innerRadius: Number(e.target.value),
+									})
+								}
 								className="h-7 text-xs"
 							/>
 						</div>
@@ -1684,7 +2060,12 @@ function NivoChartEditor({
 									const s = props.pieStyle as { padAngle?: number } | undefined;
 									return s?.padAngle ?? 0;
 								})()}
-								onChange={(e) => updateProp("pieStyle", { ...(props.pieStyle as object || {}), padAngle: Number(e.target.value) })}
+								onChange={(e) =>
+									updateProp("pieStyle", {
+										...((props.pieStyle as object) || {}),
+										padAngle: Number(e.target.value),
+									})
+								}
 								className="h-7 text-xs"
 							/>
 						</div>
@@ -1694,10 +2075,17 @@ function NivoChartEditor({
 								type="number"
 								min="0"
 								value={(() => {
-									const s = props.pieStyle as { cornerRadius?: number } | undefined;
+									const s = props.pieStyle as
+										| { cornerRadius?: number }
+										| undefined;
 									return s?.cornerRadius ?? 0;
 								})()}
-								onChange={(e) => updateProp("pieStyle", { ...(props.pieStyle as object || {}), cornerRadius: Number(e.target.value) })}
+								onChange={(e) =>
+									updateProp("pieStyle", {
+										...((props.pieStyle as object) || {}),
+										cornerRadius: Number(e.target.value),
+									})
+								}
 								className="h-7 text-xs"
 							/>
 						</div>
@@ -1719,7 +2107,12 @@ function NivoChartEditor({
 									const s = props.lineStyle as { curve?: string } | undefined;
 									return s?.curve || "linear";
 								})()}
-								onValueChange={(v) => updateProp("lineStyle", { ...(props.lineStyle as object || {}), curve: v })}
+								onValueChange={(v) =>
+									updateProp("lineStyle", {
+										...((props.lineStyle as object) || {}),
+										curve: v,
+									})
+								}
 							>
 								<SelectTrigger className="h-7 text-xs">
 									<SelectValue />
@@ -1740,20 +2133,34 @@ function NivoChartEditor({
 							<Label className="text-xs">Enable Area</Label>
 							<Switch
 								checked={(() => {
-									const s = props.lineStyle as { enableArea?: boolean } | undefined;
+									const s = props.lineStyle as
+										| { enableArea?: boolean }
+										| undefined;
 									return s?.enableArea ?? false;
 								})()}
-								onCheckedChange={(v) => updateProp("lineStyle", { ...(props.lineStyle as object || {}), enableArea: v })}
+								onCheckedChange={(v) =>
+									updateProp("lineStyle", {
+										...((props.lineStyle as object) || {}),
+										enableArea: v,
+									})
+								}
 							/>
 						</div>
 						<div className="flex items-center justify-between">
 							<Label className="text-xs">Show Points</Label>
 							<Switch
 								checked={(() => {
-									const s = props.lineStyle as { enablePoints?: boolean } | undefined;
+									const s = props.lineStyle as
+										| { enablePoints?: boolean }
+										| undefined;
 									return s?.enablePoints ?? true;
 								})()}
-								onCheckedChange={(v) => updateProp("lineStyle", { ...(props.lineStyle as object || {}), enablePoints: v })}
+								onCheckedChange={(v) =>
+									updateProp("lineStyle", {
+										...((props.lineStyle as object) || {}),
+										enablePoints: v,
+									})
+								}
 							/>
 						</div>
 						<div className="space-y-1">
@@ -1763,10 +2170,17 @@ function NivoChartEditor({
 								min="1"
 								max="10"
 								value={(() => {
-									const s = props.lineStyle as { lineWidth?: number } | undefined;
+									const s = props.lineStyle as
+										| { lineWidth?: number }
+										| undefined;
 									return s?.lineWidth ?? 2;
 								})()}
-								onChange={(e) => updateProp("lineStyle", { ...(props.lineStyle as object || {}), lineWidth: Number(e.target.value) })}
+								onChange={(e) =>
+									updateProp("lineStyle", {
+										...((props.lineStyle as object) || {}),
+										lineWidth: Number(e.target.value),
+									})
+								}
 								className="h-7 text-xs"
 							/>
 						</div>
@@ -1912,7 +2326,9 @@ function TableEditor({
 	// Remove a column
 	const removeColumn = useCallback(
 		(index: number) => {
-			const newColumns = columns.filter((_: TableColumn, i: number) => i !== index);
+			const newColumns = columns.filter(
+				(_: TableColumn, i: number) => i !== index,
+			);
 			updateProp("columns", { literalJson: JSON.stringify(newColumns) });
 		},
 		[columns, updateProp],
@@ -2001,9 +2417,7 @@ function TableEditor({
 						placeholder="Name,Age,Email&#10;John,25,john@example.com&#10;Jane,30,jane@example.com"
 						className="text-xs font-mono min-h-[100px]"
 					/>
-					{csvError && (
-						<p className="text-xs text-destructive">{csvError}</p>
-					)}
+					{csvError && <p className="text-xs text-destructive">{csvError}</p>}
 					<Button
 						size="sm"
 						className="w-full"
@@ -2108,7 +2522,9 @@ function TableEditor({
 							{data.map((row: Record<string, string>, rowIdx: number) => (
 								<div key={rowIdx} className="rounded border p-2 space-y-1">
 									<div className="flex items-center justify-between mb-1">
-										<span className="text-xs font-medium">Row {rowIdx + 1}</span>
+										<span className="text-xs font-medium">
+											Row {rowIdx + 1}
+										</span>
 										<Button
 											variant="ghost"
 											size="icon"
@@ -2179,22 +2595,28 @@ function TableEditor({
 						<Label className="text-xs">Bordered</Label>
 						<Switch
 							checked={
-								props.bordered && "literalBool" in (props.bordered as BoundValue)
+								props.bordered &&
+								"literalBool" in (props.bordered as BoundValue)
 									? (props.bordered as { literalBool: boolean }).literalBool
 									: false
 							}
-							onCheckedChange={(v) => updateProp("bordered", { literalBool: v })}
+							onCheckedChange={(v) =>
+								updateProp("bordered", { literalBool: v })
+							}
 						/>
 					</div>
 					<div className="flex items-center justify-between">
 						<Label className="text-xs">Hoverable</Label>
 						<Switch
 							checked={
-								props.hoverable && "literalBool" in (props.hoverable as BoundValue)
+								props.hoverable &&
+								"literalBool" in (props.hoverable as BoundValue)
 									? (props.hoverable as { literalBool: boolean }).literalBool
 									: true
 							}
-							onCheckedChange={(v) => updateProp("hoverable", { literalBool: v })}
+							onCheckedChange={(v) =>
+								updateProp("hoverable", { literalBool: v })
+							}
 						/>
 					</div>
 					<div className="flex items-center justify-between">
@@ -2226,11 +2648,14 @@ function TableEditor({
 						<Label className="text-xs">Sortable</Label>
 						<Switch
 							checked={
-								props.sortable && "literalBool" in (props.sortable as BoundValue)
+								props.sortable &&
+								"literalBool" in (props.sortable as BoundValue)
 									? (props.sortable as { literalBool: boolean }).literalBool
 									: true
 							}
-							onCheckedChange={(v) => updateProp("sortable", { literalBool: v })}
+							onCheckedChange={(v) =>
+								updateProp("sortable", { literalBool: v })
+							}
 						/>
 					</div>
 					<div className="flex items-center justify-between">
@@ -2263,8 +2688,8 @@ function TableEditor({
 					</div>
 					{Boolean(
 						props.paginated &&
-						"literalBool" in (props.paginated as BoundValue) &&
-						(props.paginated as { literalBool: boolean }).literalBool
+							"literalBool" in (props.paginated as BoundValue) &&
+							(props.paginated as { literalBool: boolean }).literalBool,
 					) && (
 						<div className="space-y-1">
 							<Label className="text-xs">Page Size</Label>
@@ -2302,7 +2727,14 @@ interface PropertyFieldProps {
 	enumOptions?: string[];
 }
 
-function PropertyField({ name, value, onChange, isAssetProperty, componentType, enumOptions }: PropertyFieldProps) {
+function PropertyField({
+	name,
+	value,
+	onChange,
+	isAssetProperty,
+	componentType,
+	enumOptions,
+}: PropertyFieldProps) {
 	const { actionContext } = useBuilder();
 	const appId = actionContext?.appId;
 
@@ -2550,18 +2982,31 @@ interface BoundValueEditorProps {
 	label?: string;
 }
 
-function BoundValueEditor({ name, value, onChange, isAssetProperty, appId, assetAccept = "all", componentType, enumOptions, label }: BoundValueEditorProps) {
+function BoundValueEditor({
+	name,
+	value,
+	onChange,
+	isAssetProperty,
+	appId,
+	assetAccept = "all",
+	componentType,
+	enumOptions,
+	label,
+}: BoundValueEditorProps) {
 	const [mode, setMode] = useState<"literal" | "binding">(
 		"path" in value ? "binding" : "literal",
 	);
 
 	// Track the original literal value for use as default when binding
-	const [cachedLiteralValue, setCachedLiteralValue] = useState<string | number | boolean | undefined>(() => {
+	const [cachedLiteralValue, setCachedLiteralValue] = useState<
+		string | number | boolean | undefined
+	>(() => {
 		if ("literalString" in value) return value.literalString;
 		if ("literalNumber" in value) return value.literalNumber;
 		if ("literalBool" in value) return value.literalBool;
 		if ("literalJson" in value) return value.literalJson as string;
-		if ("path" in value && value.defaultValue !== undefined) return value.defaultValue;
+		if ("path" in value && value.defaultValue !== undefined)
+			return value.defaultValue;
 		return undefined;
 	});
 
@@ -2591,45 +3036,64 @@ function BoundValueEditor({ name, value, onChange, isAssetProperty, appId, asset
 	}, [value]);
 
 	// Update cached literal value when in literal mode
-	const handleLiteralChange = useCallback((newValue: string | number | boolean) => {
-		setCachedLiteralValue(newValue);
-		if (originalType === "number") {
-			const num = typeof newValue === "number" ? newValue : Number(newValue);
-			onChange({ literalNumber: Number.isNaN(num) ? 0 : num });
-		} else if (originalType === "boolean") {
-			onChange({ literalBool: Boolean(newValue) });
-		} else if (originalType === "json") {
-			onChange({ literalJson: String(newValue) });
-		} else {
-			onChange({ literalString: String(newValue) });
-		}
-	}, [onChange, originalType]);
+	const handleLiteralChange = useCallback(
+		(newValue: string | number | boolean) => {
+			setCachedLiteralValue(newValue);
+			if (originalType === "number") {
+				const num = typeof newValue === "number" ? newValue : Number(newValue);
+				onChange({ literalNumber: Number.isNaN(num) ? 0 : num });
+			} else if (originalType === "boolean") {
+				onChange({ literalBool: Boolean(newValue) });
+			} else if (originalType === "json") {
+				onChange({ literalJson: String(newValue) });
+			} else {
+				onChange({ literalString: String(newValue) });
+			}
+		},
+		[onChange, originalType],
+	);
 
 	// Handle path change while preserving default value
-	const handlePathChange = useCallback((path: string) => {
-		onChange({ path, defaultValue: cachedLiteralValue });
-	}, [onChange, cachedLiteralValue]);
+	const handlePathChange = useCallback(
+		(path: string) => {
+			onChange({ path, defaultValue: cachedLiteralValue });
+		},
+		[onChange, cachedLiteralValue],
+	);
 
 	// Handle mode switch
-	const handleModeChange = useCallback((newMode: "literal" | "binding") => {
-		setMode(newMode);
-		if (newMode === "binding") {
-			// Switching to binding - create path with current literal as default
-			onChange({ path: "", defaultValue: cachedLiteralValue });
-		} else {
-			// Switching to literal - restore cached value or use default
-			const restoreValue = "path" in value ? value.defaultValue : cachedLiteralValue;
-			if (originalType === "number") {
-				onChange({ literalNumber: typeof restoreValue === "number" ? restoreValue : 0 });
-			} else if (originalType === "boolean") {
-				onChange({ literalBool: typeof restoreValue === "boolean" ? restoreValue : false });
-			} else if (originalType === "json") {
-				onChange({ literalJson: typeof restoreValue === "string" ? restoreValue : "[]" });
+	const handleModeChange = useCallback(
+		(newMode: "literal" | "binding") => {
+			setMode(newMode);
+			if (newMode === "binding") {
+				// Switching to binding - create path with current literal as default
+				onChange({ path: "", defaultValue: cachedLiteralValue });
 			} else {
-				onChange({ literalString: typeof restoreValue === "string" ? restoreValue : "" });
+				// Switching to literal - restore cached value or use default
+				const restoreValue =
+					"path" in value ? value.defaultValue : cachedLiteralValue;
+				if (originalType === "number") {
+					onChange({
+						literalNumber: typeof restoreValue === "number" ? restoreValue : 0,
+					});
+				} else if (originalType === "boolean") {
+					onChange({
+						literalBool:
+							typeof restoreValue === "boolean" ? restoreValue : false,
+					});
+				} else if (originalType === "json") {
+					onChange({
+						literalJson: typeof restoreValue === "string" ? restoreValue : "[]",
+					});
+				} else {
+					onChange({
+						literalString: typeof restoreValue === "string" ? restoreValue : "",
+					});
+				}
 			}
-		}
-	}, [value, cachedLiteralValue, onChange, originalType]);
+		},
+		[value, cachedLiteralValue, onChange, originalType],
+	);
 
 	// For options type, render special editor
 	if (originalType === "options" && mode === "literal") {
@@ -2693,7 +3157,7 @@ function BoundValueEditor({ name, value, onChange, isAssetProperty, appId, asset
 					</SelectContent>
 				</Select>
 			</div>
-				{mode === "literal" && originalType === "boolean" ? (
+			{mode === "literal" && originalType === "boolean" ? (
 				<Select
 					value={String(currentValue)}
 					onValueChange={(v) => handleLiteralChange(v === "true")}
@@ -2706,30 +3170,33 @@ function BoundValueEditor({ name, value, onChange, isAssetProperty, appId, asset
 						<SelectItem value="false">False</SelectItem>
 					</SelectContent>
 				</Select>
-				) : mode === "literal" && originalType === "json" ? (
-					<Textarea
-						value={String(currentValue)}
-						onChange={(e) => handleLiteralChange(e.target.value)}
-						placeholder='[0, 0, 0]'
-						className="min-h-20 text-xs"
-					/>
-				) : mode === "literal" && enumOptions && enumOptions.length > 0 ? (
-					<Select
-						value={String(currentValue)}
-						onValueChange={(v) => handleLiteralChange(v)}
-					>
-						<SelectTrigger className="h-8 text-sm">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{enumOptions.map((option) => (
-								<SelectItem key={option} value={option}>
-									{option}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				) : mode === "literal" && isAssetProperty && appId && originalType === "string" ? (
+			) : mode === "literal" && originalType === "json" ? (
+				<Textarea
+					value={String(currentValue)}
+					onChange={(e) => handleLiteralChange(e.target.value)}
+					placeholder="[0, 0, 0]"
+					className="min-h-20 text-xs"
+				/>
+			) : mode === "literal" && enumOptions && enumOptions.length > 0 ? (
+				<Select
+					value={String(currentValue)}
+					onValueChange={(v) => handleLiteralChange(v)}
+				>
+					<SelectTrigger className="h-8 text-sm">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						{enumOptions.map((option) => (
+							<SelectItem key={option} value={option}>
+								{option}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			) : mode === "literal" &&
+				isAssetProperty &&
+				appId &&
+				originalType === "string" ? (
 				<AssetPicker
 					appId={appId}
 					value={String(currentValue)}
@@ -2737,7 +3204,9 @@ function BoundValueEditor({ name, value, onChange, isAssetProperty, appId, asset
 					accept={assetAccept}
 					placeholder={`Select ${name}...`}
 				/>
-			) : mode === "literal" && name === "chartType" && componentType === "nivoChart" ? (
+			) : mode === "literal" &&
+				name === "chartType" &&
+				componentType === "nivoChart" ? (
 				<Select
 					value={String(currentValue)}
 					onValueChange={(v) => handleLiteralChange(v)}
@@ -2753,7 +3222,9 @@ function BoundValueEditor({ name, value, onChange, isAssetProperty, appId, asset
 						))}
 					</SelectContent>
 				</Select>
-			) : mode === "literal" && name === "chartType" && componentType === "plotlyChart" ? (
+			) : mode === "literal" &&
+				name === "chartType" &&
+				componentType === "plotlyChart" ? (
 				<Select
 					value={String(currentValue)}
 					onValueChange={(v) => handleLiteralChange(v)}
@@ -2779,10 +3250,10 @@ function BoundValueEditor({ name, value, onChange, isAssetProperty, appId, asset
 						mode === "binding"
 							? handlePathChange(e.target.value)
 							: handleLiteralChange(
-								originalType === "number"
-									? e.target.valueAsNumber
-									: e.target.value,
-							)
+									originalType === "number"
+										? e.target.valueAsNumber
+										: e.target.value,
+								)
 					}
 					placeholder={mode === "binding" ? "/path/to/data" : "Enter value..."}
 					className="h-8 text-sm"
@@ -3494,7 +3965,8 @@ function CanvasSettingsEditor() {
 			<div className="space-y-2">
 				<Label className="text-xs">Custom CSS</Label>
 				<p className="text-xs text-muted-foreground">
-					CSS is automatically scoped to the canvas. Use class selectors like .my-class
+					CSS is automatically scoped to the canvas. Use class selectors like
+					.my-class
 				</p>
 				<MonacoCodeEditor
 					value={canvasSettings.customCss || ""}
@@ -3583,7 +4055,9 @@ function ActionsEditor({ component, onUpdate }: ActionsEditorProps) {
 					<p className="text-xs text-muted-foreground">
 						Relative path to navigate to (e.g., /contact, /products/123)
 					</p>
-					<Label className="text-xs text-muted-foreground mt-2">Query Params (JSON)</Label>
+					<Label className="text-xs text-muted-foreground mt-2">
+						Query Params (JSON)
+					</Label>
 					<Input
 						className="h-8 text-sm font-mono"
 						placeholder='{"id": "123"}'
@@ -3615,9 +4089,7 @@ function ActionsEditor({ component, onUpdate }: ActionsEditorProps) {
 							})
 						}
 					/>
-					<p className="text-xs text-muted-foreground">
-						Opens in a new tab
-					</p>
+					<p className="text-xs text-muted-foreground">Opens in a new tab</p>
 				</div>
 			)}
 

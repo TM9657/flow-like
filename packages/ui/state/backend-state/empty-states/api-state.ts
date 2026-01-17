@@ -131,9 +131,7 @@ export class EmptyApiState implements IApiState {
 
 				for (const line of lines) {
 					if (!line.trim()) continue;
-					const dataLine = line
-						.split("\n")
-						.find((l) => l.startsWith("data:"));
+					const dataLine = line.split("\n").find((l) => l.startsWith("data:"));
 					if (dataLine) {
 						const data = dataLine.slice(5).trim();
 						try {

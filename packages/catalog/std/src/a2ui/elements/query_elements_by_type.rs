@@ -1,3 +1,4 @@
+use flow_like::a2ui::A2UIElement;
 use flow_like::flow::{
     board::Board,
     execution::{LogLevel, context::ExecutionContext},
@@ -5,8 +6,7 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::A2UIElement;
-use flow_like_types::{Value, async_trait, json::Map};
+use flow_like_types::{Value, async_trait};
 use std::sync::Arc;
 
 use super::schema_utils::set_component_schema_by_type;
@@ -98,7 +98,9 @@ impl NodeLogic for QueryElementsByType {
         );
 
         let elements_pin = context.get_pin_by_name("elements").await?;
-        elements_pin.set_value(Value::Array(matching_elements)).await;
+        elements_pin
+            .set_value(Value::Array(matching_elements))
+            .await;
 
         let count_pin = context.get_pin_by_name("count").await?;
         count_pin.set_value(Value::Number(count.into())).await;
@@ -115,13 +117,10 @@ impl NodeLogic for QueryElementsByType {
             None => return,
         };
 
-        let type_value = type_pin
-            .default_value
-            .as_ref()
-            .and_then(|v| {
-                let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
-                parsed.as_str().map(String::from)
-            });
+        let type_value = type_pin.default_value.as_ref().and_then(|v| {
+            let parsed: Value = flow_like_types::json::from_slice(v).ok()?;
+            parsed.as_str().map(String::from)
+        });
 
         if let Some(t) = &type_value {
             node.friendly_name = format!("Query {}s", t);

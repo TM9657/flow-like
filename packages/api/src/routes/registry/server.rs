@@ -3,10 +3,12 @@
 //! Stores WASM binaries in CDN/content bucket and metadata in PostgreSQL.
 //! Custom nodes are public after admin approval.
 
-use crate::entity::{user, wasm_package, wasm_package_author, wasm_package_review, wasm_package_version};
+use crate::entity::{
+    user, wasm_package, wasm_package_author, wasm_package_review, wasm_package_version,
+};
 use flow_like_storage::files::store::FlowLikeStore;
-use flow_like_storage::object_store::path::Path;
 use flow_like_storage::object_store::PutPayload;
+use flow_like_storage::object_store::path::Path;
 use flow_like_types::create_id;
 use flow_like_wasm::manifest::PackageManifest;
 use flow_like_wasm::registry::{
@@ -146,7 +148,11 @@ impl ServerRegistry {
     }
 
     /// Get a signed URL or CDN URL for downloading a WASM file
-    async fn get_download_url(&self, package_id: &str, version: &str) -> flow_like_types::Result<String> {
+    async fn get_download_url(
+        &self,
+        package_id: &str,
+        version: &str,
+    ) -> flow_like_types::Result<String> {
         let path = Self::wasm_path(package_id, version);
 
         // If CDN is configured, return direct CDN URL (public access)
@@ -257,7 +263,10 @@ impl ServerRegistry {
     }
 
     /// Get a package entry by ID (admin - returns any status)
-    pub async fn get_package_admin(&self, id: &str) -> flow_like_types::Result<Option<PackageDetails>> {
+    pub async fn get_package_admin(
+        &self,
+        id: &str,
+    ) -> flow_like_types::Result<Option<PackageDetails>> {
         let Some(pkg) = wasm_package::Entity::find_by_id(id).one(&self.db).await? else {
             return Ok(None);
         };
@@ -282,12 +291,17 @@ impl ServerRegistry {
             permissions: pkg.permissions,
             created_at: chrono::DateTime::from_naive_utc_and_offset(pkg.created_at, chrono::Utc),
             updated_at: chrono::DateTime::from_naive_utc_and_offset(pkg.updated_at, chrono::Utc),
-            published_at: pkg.published_at.map(|dt| chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc)),
+            published_at: pkg
+                .published_at
+                .map(|dt| chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc)),
         }))
     }
 
     /// Get authors for a package with user information
-    async fn get_package_authors(&self, package_id: &str) -> flow_like_types::Result<Vec<AuthorInfo>> {
+    async fn get_package_authors(
+        &self,
+        package_id: &str,
+    ) -> flow_like_types::Result<Vec<AuthorInfo>> {
         let author_records = wasm_package_author::Entity::find()
             .filter(wasm_package_author::Column::PackageId.eq(package_id))
             .all(&self.db)
@@ -312,7 +326,10 @@ impl ServerRegistry {
     }
 
     /// Build a RegistryEntry from a package model
-    async fn build_registry_entry(&self, pkg: wasm_package::Model) -> flow_like_types::Result<RegistryEntry> {
+    async fn build_registry_entry(
+        &self,
+        pkg: wasm_package::Model,
+    ) -> flow_like_types::Result<RegistryEntry> {
         use crate::entity::sea_orm_active_enums::WasmPackageStatus;
 
         let versions = wasm_package_version::Entity::find()
@@ -326,7 +343,7 @@ impl ServerRegistry {
         let authors: Vec<flow_like_wasm::manifest::PackageAuthor> = author_infos
             .into_iter()
             .map(|a| flow_like_wasm::manifest::PackageAuthor {
-                name: a.name.or(a.username).unwrap_or_else(|| a.user_id),
+                name: a.name.or(a.username).unwrap_or(a.user_id),
                 email: None,
                 url: None,
             })
@@ -358,7 +375,10 @@ impl ServerRegistry {
                 wasm_hash: v.wasm_hash,
                 wasm_size: v.wasm_size as u64,
                 download_url: None,
-                published_at: chrono::DateTime::from_naive_utc_and_offset(v.published_at, chrono::Utc),
+                published_at: chrono::DateTime::from_naive_utc_and_offset(
+                    v.published_at,
+                    chrono::Utc,
+                ),
                 min_flow_like_version: v.min_flow_like_version,
                 release_notes: v.release_notes,
                 yanked: v.yanked,
@@ -495,7 +515,10 @@ impl ServerRegistry {
         version: Option<&str>,
     ) -> flow_like_types::Result<(String, PackageManifest, String)> {
         let Some(entry) = self.get_package(package_id).await? else {
-            return Err(flow_like_types::anyhow!("Package not found: {}", package_id));
+            return Err(flow_like_types::anyhow!(
+                "Package not found: {}",
+                package_id
+            ));
         };
 
         let ver = if let Some(v) = version {
@@ -522,7 +545,10 @@ impl ServerRegistry {
         version: Option<&str>,
     ) -> flow_like_types::Result<(Vec<u8>, PackageManifest, String)> {
         let Some(entry) = self.get_package(package_id).await? else {
-            return Err(flow_like_types::anyhow!("Package not found: {}", package_id));
+            return Err(flow_like_types::anyhow!(
+                "Package not found: {}",
+                package_id
+            ));
         };
 
         let ver = if let Some(v) = version {
@@ -646,7 +672,9 @@ impl ServerRegistry {
             let review_model = wasm_package_review::ActiveModel {
                 id: Set(create_id()),
                 package_id: Set(manifest.id.clone()),
-                reviewer_id: Set(submitter_id.clone().unwrap_or_else(|| "anonymous".to_string())),
+                reviewer_id: Set(submitter_id
+                    .clone()
+                    .unwrap_or_else(|| "anonymous".to_string())),
                 action: Set(WasmReviewAction::Submitted),
                 comment: Set(None),
                 internal_note: Set(None),
@@ -679,7 +707,9 @@ impl ServerRegistry {
             success: true,
             package_id: manifest.id,
             version: manifest.version,
-            message: Some("Package submitted for review. An admin will review it shortly.".to_string()),
+            message: Some(
+                "Package submitted for review. An admin will review it shortly.".to_string(),
+            ),
         })
     }
 
@@ -699,7 +729,10 @@ impl ServerRegistry {
     }
 
     /// Get all versions for a package
-    pub async fn get_versions(&self, package_id: &str) -> flow_like_types::Result<Vec<PackageVersion>> {
+    pub async fn get_versions(
+        &self,
+        package_id: &str,
+    ) -> flow_like_types::Result<Vec<PackageVersion>> {
         let versions = wasm_package_version::Entity::find()
             .filter(wasm_package_version::Column::PackageId.eq(package_id))
             .order_by_desc(wasm_package_version::Column::PublishedAt)
@@ -713,7 +746,10 @@ impl ServerRegistry {
                 wasm_hash: v.wasm_hash,
                 wasm_size: v.wasm_size as u64,
                 download_url: None,
-                published_at: chrono::DateTime::from_naive_utc_and_offset(v.published_at, chrono::Utc),
+                published_at: chrono::DateTime::from_naive_utc_and_offset(
+                    v.published_at,
+                    chrono::Utc,
+                ),
                 min_flow_like_version: v.min_flow_like_version,
                 release_notes: v.release_notes,
                 yanked: v.yanked,
@@ -764,9 +800,17 @@ impl ServerRegistry {
                 wasm_size: pkg.wasm_size as u64,
                 nodes: pkg.nodes,
                 permissions: pkg.permissions,
-                created_at: chrono::DateTime::from_naive_utc_and_offset(pkg.created_at, chrono::Utc),
-                updated_at: chrono::DateTime::from_naive_utc_and_offset(pkg.updated_at, chrono::Utc),
-                published_at: pkg.published_at.map(|dt| chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc)),
+                created_at: chrono::DateTime::from_naive_utc_and_offset(
+                    pkg.created_at,
+                    chrono::Utc,
+                ),
+                updated_at: chrono::DateTime::from_naive_utc_and_offset(
+                    pkg.updated_at,
+                    chrono::Utc,
+                ),
+                published_at: pkg
+                    .published_at
+                    .map(|dt| chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc)),
             });
         }
 
@@ -785,8 +829,14 @@ impl ServerRegistry {
         let now = chrono::Utc::now().naive_utc();
 
         // Verify package exists
-        let Some(_pkg) = wasm_package::Entity::find_by_id(package_id).one(&self.db).await? else {
-            return Err(flow_like_types::anyhow!("Package not found: {}", package_id));
+        let Some(_pkg) = wasm_package::Entity::find_by_id(package_id)
+            .one(&self.db)
+            .await?
+        else {
+            return Err(flow_like_types::anyhow!(
+                "Package not found: {}",
+                package_id
+            ));
         };
 
         let action = match review.action.as_str() {
@@ -795,7 +845,12 @@ impl ServerRegistry {
             "request_changes" => WasmReviewAction::RequestedChanges,
             "comment" => WasmReviewAction::Commented,
             "flag" => WasmReviewAction::Flagged,
-            _ => return Err(flow_like_types::anyhow!("Invalid review action: {}", review.action)),
+            _ => {
+                return Err(flow_like_types::anyhow!(
+                    "Invalid review action: {}",
+                    review.action
+                ));
+            }
         };
 
         // Update package status based on action
@@ -808,7 +863,7 @@ impl ServerRegistry {
         if let Some(status) = new_status {
             let mut update_model = wasm_package::ActiveModel {
                 id: Set(package_id.to_string()),
-                status: Set(status.clone()),
+                status: Set(status),
                 updated_at: Set(now),
                 ..Default::default()
             };
@@ -826,7 +881,7 @@ impl ServerRegistry {
             id: Set(review_id.clone()),
             package_id: Set(package_id.to_string()),
             reviewer_id: Set(reviewer_id.to_string()),
-            action: Set(action.clone()),
+            action: Set(action),
             comment: Set(review.comment.clone()),
             internal_note: Set(review.internal_note),
             security_score: Set(review.security_score),
@@ -850,7 +905,10 @@ impl ServerRegistry {
     }
 
     /// Get reviews for a package
-    pub async fn get_reviews(&self, package_id: &str) -> flow_like_types::Result<Vec<PackageReview>> {
+    pub async fn get_reviews(
+        &self,
+        package_id: &str,
+    ) -> flow_like_types::Result<Vec<PackageReview>> {
         let reviews = wasm_package_review::Entity::find()
             .filter(wasm_package_review::Column::PackageId.eq(package_id))
             .order_by_desc(wasm_package_review::Column::CreatedAt)
@@ -864,7 +922,9 @@ impl ServerRegistry {
                     crate::entity::sea_orm_active_enums::WasmReviewAction::Submitted => "submitted",
                     crate::entity::sea_orm_active_enums::WasmReviewAction::Approved => "approve",
                     crate::entity::sea_orm_active_enums::WasmReviewAction::Rejected => "reject",
-                    crate::entity::sea_orm_active_enums::WasmReviewAction::RequestedChanges => "request_changes",
+                    crate::entity::sea_orm_active_enums::WasmReviewAction::RequestedChanges => {
+                        "request_changes"
+                    }
                     crate::entity::sea_orm_active_enums::WasmReviewAction::Commented => "comment",
                     crate::entity::sea_orm_active_enums::WasmReviewAction::Flagged => "flag",
                 };
@@ -877,20 +937,28 @@ impl ServerRegistry {
                     security_score: r.security_score,
                     code_quality_score: r.code_quality_score,
                     documentation_score: r.documentation_score,
-                    created_at: chrono::DateTime::from_naive_utc_and_offset(r.created_at, chrono::Utc),
+                    created_at: chrono::DateTime::from_naive_utc_and_offset(
+                        r.created_at,
+                        chrono::Utc,
+                    ),
                 }
             })
             .collect())
     }
 
     /// Update package status directly (admin)
-    pub async fn update_status(&self, package_id: &str, status: &str, verified: Option<bool>) -> flow_like_types::Result<()> {
+    pub async fn update_status(
+        &self,
+        package_id: &str,
+        status: &str,
+        verified: Option<bool>,
+    ) -> flow_like_types::Result<()> {
         let now = chrono::Utc::now().naive_utc();
         let new_status = status_to_enum(status);
 
         let mut update_model = wasm_package::ActiveModel {
             id: Set(package_id.to_string()),
-            status: Set(new_status.clone()),
+            status: Set(new_status),
             updated_at: Set(now),
             ..Default::default()
         };
@@ -940,8 +1008,14 @@ impl ServerRegistry {
         let now = chrono::Utc::now().naive_utc();
 
         // Verify package exists
-        let Some(_pkg) = wasm_package::Entity::find_by_id(package_id).one(&self.db).await? else {
-            return Err(flow_like_types::anyhow!("Package not found: {}", package_id));
+        let Some(_pkg) = wasm_package::Entity::find_by_id(package_id)
+            .one(&self.db)
+            .await?
+        else {
+            return Err(flow_like_types::anyhow!(
+                "Package not found: {}",
+                package_id
+            ));
         };
 
         // Verify user exists
@@ -957,7 +1031,9 @@ impl ServerRegistry {
             .await?;
 
         if existing.is_some() {
-            return Err(flow_like_types::anyhow!("User is already an author of this package"));
+            return Err(flow_like_types::anyhow!(
+                "User is already an author of this package"
+            ));
         }
 
         let author_model = wasm_package_author::ActiveModel {
@@ -979,7 +1055,11 @@ impl ServerRegistry {
     }
 
     /// Remove an author from a package
-    pub async fn remove_author(&self, package_id: &str, user_id: &str) -> flow_like_types::Result<()> {
+    pub async fn remove_author(
+        &self,
+        package_id: &str,
+        user_id: &str,
+    ) -> flow_like_types::Result<()> {
         let result = wasm_package_author::Entity::delete_many()
             .filter(wasm_package_author::Column::PackageId.eq(package_id))
             .filter(wasm_package_author::Column::UserId.eq(user_id))
@@ -987,14 +1067,19 @@ impl ServerRegistry {
             .await?;
 
         if result.rows_affected == 0 {
-            return Err(flow_like_types::anyhow!("Author not found for this package"));
+            return Err(flow_like_types::anyhow!(
+                "Author not found for this package"
+            ));
         }
 
         Ok(())
     }
 
     /// Get packages authored by a user
-    pub async fn get_user_packages(&self, user_id: &str) -> flow_like_types::Result<Vec<PackageSummary>> {
+    pub async fn get_user_packages(
+        &self,
+        user_id: &str,
+    ) -> flow_like_types::Result<Vec<PackageSummary>> {
         let author_records = wasm_package_author::Entity::find()
             .filter(wasm_package_author::Column::UserId.eq(user_id))
             .all(&self.db)
@@ -1020,8 +1105,12 @@ impl ServerRegistry {
                 latest_version: pkg.version,
                 download_count: pkg.download_count as u64,
                 status: match pkg.status {
-                    crate::entity::sea_orm_active_enums::WasmPackageStatus::Active => PackageStatus::Active,
-                    crate::entity::sea_orm_active_enums::WasmPackageStatus::Deprecated => PackageStatus::Deprecated,
+                    crate::entity::sea_orm_active_enums::WasmPackageStatus::Active => {
+                        PackageStatus::Active
+                    }
+                    crate::entity::sea_orm_active_enums::WasmPackageStatus::Deprecated => {
+                        PackageStatus::Deprecated
+                    }
                     _ => PackageStatus::Disabled,
                 },
                 keywords: pkg.keywords,

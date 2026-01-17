@@ -10,7 +10,8 @@ export const ptCommon = {
 	"header.cancel": "Cancelar",
 	// Footer CTA
 	"footer.cta.title": "Pronto para automatizar?",
-	"footer.cta.description": "Baixe o Flow-Like e crie seu primeiro workflow em minutos.",
+	"footer.cta.description":
+		"Baixe o Flow-Like e crie seu primeiro workflow em minutos.",
 	"footer.cta.button": "Começar Grátis",
 
 	// Footer Sections

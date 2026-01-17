@@ -119,7 +119,8 @@ export function DataProvider({
 	const resolve = useCallback(
 		(boundValue: BoundValue, fallback?: unknown): unknown => {
 			// Handle raw primitives passed directly (not wrapped in BoundValue)
-			if (boundValue === null || boundValue === undefined) return fallback ?? boundValue;
+			if (boundValue === null || boundValue === undefined)
+				return fallback ?? boundValue;
 			if (typeof boundValue !== "object") return boundValue;
 
 			if ("literalString" in boundValue) return boundValue.literalString;
@@ -182,7 +183,10 @@ export function useDataValue<T = unknown>(path: string): T {
 	return get(path) as T;
 }
 
-export function useResolvedValue<T = unknown>(boundValue: BoundValue, defaultValue?: T): T {
+export function useResolvedValue<T = unknown>(
+	boundValue: BoundValue,
+	defaultValue?: T,
+): T {
 	const { resolve } = useData();
 	return resolve(boundValue, defaultValue) as T;
 }

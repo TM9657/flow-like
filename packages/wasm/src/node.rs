@@ -15,7 +15,7 @@ use flow_like::flow::execution::{LogLevel, Run};
 use flow_like::flow::node::{Node, NodeLogic, NodeScores};
 use flow_like::flow::pin::{Pin, PinType, ValueType};
 use flow_like::flow::variable::VariableType;
-use flow_like_types::{Value, sync::Mutex, tokio::sync::RwLock};
+use flow_like_types::{sync::Mutex, tokio::sync::RwLock, Value};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -27,7 +27,11 @@ pub struct WasmNodeLogic {
 }
 
 impl WasmNodeLogic {
-    pub fn new(module: Arc<WasmModule>, engine: Arc<WasmEngine>, security: WasmSecurityConfig) -> Self {
+    pub fn new(
+        module: Arc<WasmModule>,
+        engine: Arc<WasmEngine>,
+        security: WasmSecurityConfig,
+    ) -> Self {
         Self {
             module,
             engine,
@@ -44,7 +48,10 @@ impl WasmNodeLogic {
             }
         }
 
-        let def: WasmNodeDefinition = self.module.get_node_definition(&self.engine, &self.security).await?;
+        let def: WasmNodeDefinition = self
+            .module
+            .get_node_definition(&self.engine, &self.security)
+            .await?;
 
         {
             let mut cache = self.cached_definition.write().await;
@@ -61,7 +68,9 @@ impl WasmNodeLogic {
             _ => PinType::Input,
         };
 
-        let value_type = wasm_pin.value_type.as_deref()
+        let value_type = wasm_pin
+            .value_type
+            .as_deref()
             .map(|vt| match vt.to_lowercase().as_str() {
                 "array" => ValueType::Array,
                 "hashmap" => ValueType::HashMap,
@@ -70,7 +79,9 @@ impl WasmNodeLogic {
             })
             .unwrap_or(ValueType::Normal);
 
-        let default_value = wasm_pin.default_value.as_ref()
+        let default_value = wasm_pin
+            .default_value
+            .as_ref()
             .and_then(|v| flow_like_types::json::to_vec(v).ok());
 
         Pin {
@@ -166,17 +177,21 @@ impl NodeLogic for WasmNodeLogic {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        let mut instance = WasmInstance::new(&self.engine, self.module.clone(), self.security.clone())
-            .await
-            .map_err(|e| flow_like_types::anyhow!("Failed to create WASM instance: {}", e))?;
+        let mut instance =
+            WasmInstance::new(&self.engine, self.module.clone(), self.security.clone())
+                .await
+                .map_err(|e| flow_like_types::anyhow!("Failed to create WASM instance: {}", e))?;
 
-        let definition = self.get_definition().await
+        let definition = self
+            .get_definition()
+            .await
             .map_err(|e| flow_like_types::anyhow!("Failed to get node definition: {}", e))?;
 
         // Collect input values
         let mut inputs = serde_json::Map::new();
         for pin in &definition.pins {
-            if pin.pin_type.to_lowercase() == "input" && pin.data_type.to_lowercase() != "execution" {
+            if pin.pin_type.to_lowercase() == "input" && pin.data_type.to_lowercase() != "execution"
+            {
                 if let Ok(pin_ref) = context.get_pin_by_name(&pin.name).await {
                     if let Some(val) = pin_ref.get_raw_value().await {
                         inputs.insert(pin.name.clone(), val);
@@ -187,13 +202,14 @@ impl NodeLogic for WasmNodeLogic {
 
         // Set up host state
         let host_state = instance.host_state_mut();
-        let inputs_for_state: std::collections::HashMap<String, Value> = inputs.iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+        let inputs_for_state: std::collections::HashMap<String, Value> =
+            inputs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         host_state.set_inputs(inputs_for_state);
 
         // Build run_id
-        let run_id: String = context.run.upgrade()
+        let run_id: String = context
+            .run
+            .upgrade()
             .and_then(|r: Arc<Mutex<Run>>| r.try_lock().ok().map(|run| run.id.clone()))
             .unwrap_or_default();
 
@@ -207,7 +223,7 @@ impl NodeLogic for WasmNodeLogic {
             board_id: String::new(),
             user_id: String::new(),
             stream_state: context.stream_state,
-            log_level: context.log_level.clone() as u8,
+            log_level: context.log_level as u8,
         };
 
         // Execute
@@ -219,11 +235,13 @@ impl NodeLogic for WasmNodeLogic {
             board_id: String::new(),
             user_id: String::new(),
             stream_state: context.stream_state,
-            log_level: context.log_level.clone() as u8,
+            log_level: context.log_level as u8,
             node_name: definition.name.clone(),
         };
 
-        let result = instance.call_run(&exec_input).await
+        let result = instance
+            .call_run(&exec_input)
+            .await
             .map_err(|e| flow_like_types::anyhow!("WASM execution failed: {}", e))?;
 
         // Process outputs
@@ -251,7 +269,9 @@ impl NodeLogic for WasmNodeLogic {
         for event in instance.host_state().take_stream_events() {
             if event.event_type == "text" {
                 if let Some(text) = event.data.as_str() {
-                    context.stream_response("wasm_text", text.to_string()).await?;
+                    context
+                        .stream_response("wasm_text", text.to_string())
+                        .await?;
                 }
             }
         }

@@ -30,15 +30,15 @@ interface ElementOption {
 	pagePath?: string;
 }
 
-function flattenElements(
-	components: SurfaceComponent[],
-): ElementOption[] {
+function flattenElements(components: SurfaceComponent[]): ElementOption[] {
 	const elements: ElementOption[] = [];
 
 	for (const component of components) {
 		const componentObj = component.component;
 		if (typeof componentObj === "object" && componentObj !== null) {
-			const type = (componentObj as unknown as Record<string, unknown>).type as string || "unknown";
+			const type =
+				((componentObj as unknown as Record<string, unknown>).type as string) ||
+				"unknown";
 			elements.push({
 				id: component.id,
 				type,
@@ -74,7 +74,10 @@ export function ElementSelect({
 					const event = eventsMap.get(route.eventId);
 					if (event?.default_page_id) {
 						try {
-							const page = await backend.pageState.getPage(appId, event.default_page_id);
+							const page = await backend.pageState.getPage(
+								appId,
+								event.default_page_id,
+							);
 							if (page?.components) {
 								const pageElements = flattenElements(page.components);
 								for (const el of pageElements) {

@@ -1,15 +1,15 @@
+use flow_like::a2ui::components::SelectProps;
 use flow_like::flow::{
     board::Board,
-    execution::{LogLevel, context::ExecutionContext},
+    execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like::a2ui::components::SelectProps;
 use flow_like_types::{Value, async_trait};
 use std::sync::Arc;
 
-use super::element_utils::{find_element, extract_element_id_from_pin};
+use super::element_utils::{extract_element_id_from_pin, find_element};
 
 /// Gets the selected value of a select element.
 #[crate::register_node]
@@ -42,8 +42,18 @@ impl NodeLogic for GetSelectValue {
         .set_schema::<SelectProps>()
         .set_options(PinOptions::new().set_enforce_schema(false).build());
 
-        node.add_output_pin("value", "Value", "The currently selected value", VariableType::String);
-        node.add_output_pin("has_selection", "Has Selection", "Whether a value is selected", VariableType::Boolean);
+        node.add_output_pin(
+            "value",
+            "Value",
+            "The currently selected value",
+            VariableType::String,
+        );
+        node.add_output_pin(
+            "has_selection",
+            "Has Selection",
+            "Whether a value is selected",
+            VariableType::Boolean,
+        );
 
         node
     }
@@ -64,11 +74,27 @@ impl NodeLogic for GetSelectValue {
             .map(String::from);
 
         if let Some(v) = value {
-            context.get_pin_by_name("value").await?.set_value(Value::String(v)).await;
-            context.get_pin_by_name("has_selection").await?.set_value(Value::Bool(true)).await;
+            context
+                .get_pin_by_name("value")
+                .await?
+                .set_value(Value::String(v))
+                .await;
+            context
+                .get_pin_by_name("has_selection")
+                .await?
+                .set_value(Value::Bool(true))
+                .await;
         } else {
-            context.get_pin_by_name("value").await?.set_value(Value::String(String::new())).await;
-            context.get_pin_by_name("has_selection").await?.set_value(Value::Bool(false)).await;
+            context
+                .get_pin_by_name("value")
+                .await?
+                .set_value(Value::String(String::new()))
+                .await;
+            context
+                .get_pin_by_name("has_selection")
+                .await?
+                .set_value(Value::Bool(false))
+                .await;
         }
 
         Ok(())

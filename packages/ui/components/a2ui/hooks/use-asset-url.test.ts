@@ -8,7 +8,7 @@
  * 4. Cache behavior works correctly
  * 5. Error states are handled gracefully
  */
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 // ============================================================================
 // URL VALIDATION LOGIC
@@ -109,13 +109,15 @@ describe("useAssetUrl Local File Path Detection", () => {
 describe("useAssetUrl Local Path to Asset URL Conversion", () => {
 	test("converts Unix paths to asset:// URLs", () => {
 		expect(convertLocalPathToAssetUrl("/Users/felix/file.glb")).toBe(
-			"asset://localhost/Users/felix/file.glb"
+			"asset://localhost/Users/felix/file.glb",
 		);
 	});
 
 	test("preserves full path in conversion", () => {
-		const path = "/Users/felix/Library/Application Support/flow-like/upload/model.glb";
-		const expected = "asset://localhost/Users/felix/Library/Application Support/flow-like/upload/model.glb";
+		const path =
+			"/Users/felix/Library/Application Support/flow-like/upload/model.glb";
+		const expected =
+			"asset://localhost/Users/felix/Library/Application Support/flow-like/upload/model.glb";
 		expect(convertLocalPathToAssetUrl(path)).toBe(expected);
 	});
 });

@@ -10,9 +10,9 @@ use crate::{
     state::FlowLikeState,
     utils::compression::{compress_to_file, from_compressed},
 };
-use flow_like_types::proto;
 use commands::GenericCommand;
 use flow_like_storage::object_store::{ObjectStore, path::Path};
+use flow_like_types::proto;
 use flow_like_types::{FromProto, ToProto, create_id, sync::Mutex};
 use futures::StreamExt;
 use highway::{HighwayHash, HighwayHasher};
@@ -398,10 +398,7 @@ impl Board {
             .board_dir
             .child("versions")
             .child(self.id.clone())
-            .child(format!(
-                "{}_{}_{}.board",
-                version.0, version.1, version.2
-            ));
+            .child(format!("{}_{}_{}.board", version.0, version.1, version.2));
 
         let board = self.to_proto();
         compress_to_file(store.clone(), board_version_path, &board).await?;
@@ -562,7 +559,8 @@ impl Board {
     }
 
     fn versioned_page_path(&self, version: (u32, u32, u32), page_id: &str) -> Path {
-        self.versioned_pages_dir(version).child(format!("{}.page", page_id))
+        self.versioned_pages_dir(version)
+            .child(format!("{}.page", page_id))
     }
 
     fn template_pages_dir(&self, template_id: &str) -> Path {
@@ -570,7 +568,8 @@ impl Board {
     }
 
     fn template_page_path(&self, template_id: &str, page_id: &str) -> Path {
-        self.template_pages_dir(template_id).child(format!("{}.page", page_id))
+        self.template_pages_dir(template_id)
+            .child(format!("{}.page", page_id))
     }
 
     fn versioned_template_pages_dir(&self, template_id: &str, version: (u32, u32, u32)) -> Path {
@@ -581,11 +580,20 @@ impl Board {
             .child(format!("{}_{}_{}", version.0, version.1, version.2))
     }
 
-    fn versioned_template_page_path(&self, template_id: &str, version: (u32, u32, u32), page_id: &str) -> Path {
-        self.versioned_template_pages_dir(template_id, version).child(format!("{}.page", page_id))
+    fn versioned_template_page_path(
+        &self,
+        template_id: &str,
+        version: (u32, u32, u32),
+        page_id: &str,
+    ) -> Path {
+        self.versioned_template_pages_dir(template_id, version)
+            .child(format!("{}.page", page_id))
     }
 
-    async fn get_store(&self, store: Option<Arc<dyn ObjectStore>>) -> flow_like_types::Result<Arc<dyn ObjectStore>> {
+    async fn get_store(
+        &self,
+        store: Option<Arc<dyn ObjectStore>>,
+    ) -> flow_like_types::Result<Arc<dyn ObjectStore>> {
         match store {
             Some(s) => Ok(s),
             None => self
@@ -691,18 +699,19 @@ impl Board {
         required_ids
     }
 
-    fn extract_element_refs_from_node(node: &Node, required_ids: &mut std::collections::HashSet<String>) {
+    fn extract_element_refs_from_node(
+        node: &Node,
+        required_ids: &mut std::collections::HashSet<String>,
+    ) {
         for pin in node.pins.values() {
-            if pin.name == "element_ref" {
-                if let Some(default_value) = &pin.default_value {
-                    if let Ok(value) = flow_like_types::json::from_slice::<flow_like_types::Value>(default_value) {
-                        if let Some(id) = value.as_str() {
-                            if !id.is_empty() {
-                                required_ids.insert(id.to_string());
-                            }
-                        }
-                    }
-                }
+            if pin.name == "element_ref"
+                && let Some(default_value) = &pin.default_value
+                && let Ok(value) =
+                    flow_like_types::json::from_slice::<flow_like_types::Value>(default_value)
+                && let Some(id) = value.as_str()
+                && !id.is_empty()
+            {
+                required_ids.insert(id.to_string());
             }
         }
     }
@@ -733,7 +742,11 @@ impl Board {
                 .iter()
                 .filter_map(|id| {
                     if id.starts_with(&format!("{}/", page_id)) {
-                        Some(id.strip_prefix(&format!("{}/", page_id)).unwrap().to_string())
+                        Some(
+                            id.strip_prefix(&format!("{}/", page_id))
+                                .unwrap()
+                                .to_string(),
+                        )
                     } else if !id.contains('/') {
                         Some(id.clone())
                     } else {
@@ -816,7 +829,10 @@ impl Board {
     ) -> flow_like_types::Result<(u32, u32, u32)> {
         let store = self.get_store(store).await?;
 
-        let version = old_template.as_ref().map(|t| t.version).unwrap_or((0, 0, 0));
+        let version = old_template
+            .as_ref()
+            .map(|t| t.version)
+            .unwrap_or((0, 0, 0));
 
         let mut new_version = (0, 0, 0);
 

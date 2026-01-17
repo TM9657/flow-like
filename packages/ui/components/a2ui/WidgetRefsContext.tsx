@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext, useCallback, useMemo, type ReactNode } from "react";
+import {
+	type ReactNode,
+	createContext,
+	useCallback,
+	useContext,
+	useMemo,
+} from "react";
 import type { IWidgetRef } from "../../state/backend-state/page-state";
 
 export type { IWidgetRef };
@@ -21,7 +27,10 @@ export interface WidgetRefsProviderProps {
 	children: ReactNode;
 }
 
-export function WidgetRefsProvider({ widgetRefs, children }: WidgetRefsProviderProps) {
+export function WidgetRefsProvider({
+	widgetRefs,
+	children,
+}: WidgetRefsProviderProps) {
 	const getWidgetRef = useCallback(
 		(instanceId: string): IWidgetRef | undefined => {
 			if (!widgetRefs) return undefined;

@@ -138,7 +138,9 @@ impl NodeLogic for ListTablesNode {
         };
 
         context.set_pin_value("tables", json!(tables)).await?;
-        context.set_pin_value("table_names", json!(table_names)).await?;
+        context
+            .set_pin_value("table_names", json!(table_names))
+            .await?;
         context.set_pin_value("summary", json!(summary)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
@@ -369,7 +371,9 @@ impl NodeLogic for ExecuteSqlNode {
             .set_pin_value("result", json!(markdown_result))
             .await?;
         context.set_pin_value("table", json!(csv_table)).await?;
-        context.set_pin_value("row_count", json!(row_count as i64)).await?;
+        context
+            .set_pin_value("row_count", json!(row_count as i64))
+            .await?;
 
         context.activate_exec_pin("exec_out").await?;
         Ok(())

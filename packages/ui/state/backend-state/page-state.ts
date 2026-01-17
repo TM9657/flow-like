@@ -1,5 +1,4 @@
 import type { SurfaceComponent } from "../../components/a2ui/types";
-import type { IMetadata } from "../../lib";
 import type { Version } from "./widget-state";
 
 export type PageLayoutType =

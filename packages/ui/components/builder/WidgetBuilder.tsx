@@ -8,10 +8,20 @@ import {
 	SparklesIcon,
 	XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { cn, isTauri } from "../../lib";
+import {
+	useCallback,
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { cn } from "../../lib";
 import { safeScopedCss } from "../../lib/css-utils";
-import { presignCanvasSettings, presignPageAssets } from "../../lib/presign-assets";
+import {
+	presignCanvasSettings,
+	presignPageAssets,
+} from "../../lib/presign-assets";
 import { useBackend } from "../../state/backend-state";
 import type { IWidgetRef } from "../../state/backend-state/page-state";
 import type { IWidget } from "../../state/backend-state/widget-state";
@@ -33,18 +43,27 @@ import {
 import { Sheet, SheetContent } from "../ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { BuilderProvider, useBuilder } from "./BuilderContext";
+import {
+	BuilderDndProvider,
+	type WidgetDragData,
+	useBuilderDnd,
+} from "./BuilderDndContext";
+import { BuilderDragOverlay } from "./BuilderDragOverlay";
 import { BuilderRenderer } from "./BuilderRenderer";
 import { ComponentPalette } from "./ComponentPalette";
-import { BuilderDragOverlay } from "./BuilderDragOverlay";
 import { DevModePanel } from "./DevModePanel";
 import { HierarchyTree } from "./HierarchyTree";
 import { Inspector } from "./Inspector";
 import { ResponsivePreview } from "./ResponsivePreview";
 import { Toolbar } from "./Toolbar";
 import { A2UICopilot } from "./a2ui-copilot";
-import { createDefaultComponent, getDefaultStyle } from "./componentDefaults";
-import { BuilderDndProvider, useBuilderDnd, type WidgetDragData } from "./BuilderDndContext";
-export { createDefaultComponent, getDefaultStyle, getDefaultProps, normalizeComponent, normalizeComponents } from "./componentDefaults";
+export {
+	createDefaultComponent,
+	getDefaultStyle,
+	getDefaultProps,
+	normalizeComponent,
+	normalizeComponents,
+} from "./componentDefaults";
 
 // Re-export DnD types from BuilderDndContext
 export {
@@ -101,10 +120,16 @@ export interface WidgetBuilderProps {
 	initialWidgetRefs?: Record<string, IWidgetRef>;
 	widgetId?: string;
 	surfaceId?: string;
-	onSave?: (components: SurfaceComponent[], widgetRefs?: Record<string, IWidgetRef>) => void;
+	onSave?: (
+		components: SurfaceComponent[],
+		widgetRefs?: Record<string, IWidgetRef>,
+	) => void;
 	onExport?: (components: SurfaceComponent[]) => void;
 	onPreview?: () => void;
-	onChange?: (components: SurfaceComponent[], widgetRefs?: Record<string, IWidgetRef>) => void;
+	onChange?: (
+		components: SurfaceComponent[],
+		widgetRefs?: Record<string, IWidgetRef>,
+	) => void;
 	/** Initial canvas settings (background, padding, etc.) */
 	initialCanvasSettings?: {
 		backgroundColor?: string;
@@ -201,7 +226,10 @@ interface WidgetBuilderContentProps {
 	setCopilotOpen: (open: boolean) => void;
 	pendingComponents: SurfaceComponent[];
 	setPendingComponents: (components: SurfaceComponent[]) => void;
-	onSave?: (components: SurfaceComponent[], widgetRefs?: Record<string, IWidgetRef>) => void;
+	onSave?: (
+		components: SurfaceComponent[],
+		widgetRefs?: Record<string, IWidgetRef>,
+	) => void;
 	onExport?: (components: SurfaceComponent[]) => void;
 	currentPageId?: string;
 	onPageChange?: (pageId: string) => void;
@@ -396,7 +424,10 @@ function WidgetBuilderContent({
 				)}
 
 				{/* Main content */}
-				<ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0 min-w-0 overflow-hidden">
+				<ResizablePanelGroup
+					direction="horizontal"
+					className="flex-1 min-h-0 min-w-0 overflow-hidden"
+				>
 					{/* Left panel - hidden in preview mode */}
 					{mode === "edit" && (
 						<>
@@ -569,7 +600,8 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 		string,
 		SurfaceComponent
 	> | null>(null);
-	const [presignedCanvasSettings, setPresignedCanvasSettings] = useState(canvasSettings);
+	const [presignedCanvasSettings, setPresignedCanvasSettings] =
+		useState(canvasSettings);
 
 	// Presign assets in components for preview rendering
 	useEffect(() => {
@@ -581,14 +613,14 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 			}
 
 			const componentsArray = Array.from(components.entries()).map(
-				([id, comp]) => ({ ...comp, id })
+				([id, comp]) => ({ ...comp, id }),
 			);
 
 			try {
 				const presigned = await presignPageAssets(
 					appId,
 					componentsArray,
-					backend.storageState
+					backend.storageState,
 				);
 				const presignedMap = new Map<string, SurfaceComponent>();
 				for (const comp of presigned) {
@@ -617,7 +649,7 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 				const presigned = await presignCanvasSettings(
 					appId,
 					canvasSettings,
-					backend.storageState
+					backend.storageState,
 				);
 				setPresignedCanvasSettings(presigned);
 			} catch (err) {
@@ -631,11 +663,14 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 
 	// Build the surface for rendering - use presigned components if available
 	// Memoize to prevent unnecessary re-renders when drag state changes
-	const surface: Surface = useMemo(() => ({
-		id: surfaceId,
-		rootComponentId: ROOT_ID,
-		components: Object.fromEntries(presignedComponents ?? components),
-	}), [surfaceId, presignedComponents, components]);
+	const surface: Surface = useMemo(
+		() => ({
+			id: surfaceId,
+			rootComponentId: ROOT_ID,
+			components: Object.fromEntries(presignedComponents ?? components),
+		}),
+		[surfaceId, presignedComponents, components],
+	);
 
 	const handleMessage = useCallback((message: A2UIClientMessage) => {
 		console.log("Canvas action:", message);
@@ -675,7 +710,7 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 				? "root"
 				: componentIds.has(widget.rootComponentId)
 					? widget.rootComponentId
-					: widget.components[0]?.id ?? widget.rootComponentId;
+					: (widget.components[0]?.id ?? widget.rootComponentId);
 
 			// Create a unique instance ID
 			const instanceId = `widget-${widgetId}-${Date.now()}`;
@@ -738,7 +773,13 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 				} as A2UIComponent,
 			});
 		},
-		[backend.widgetState, components, addComponent, updateComponent, addWidgetRef],
+		[
+			backend.widgetState,
+			components,
+			addComponent,
+			updateComponent,
+			addWidgetRef,
+		],
 	);
 
 	// Root-level drop target using @dnd-kit
@@ -750,8 +791,12 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 			index: (() => {
 				const root = components.get(ROOT_ID);
 				if (!root) return 0;
-				const childrenData = (root.component as unknown as Record<string, unknown>).children as Children | undefined;
-				return childrenData && "explicitList" in childrenData ? childrenData.explicitList.length : 0;
+				const childrenData = (
+					root.component as unknown as Record<string, unknown>
+				).children as Children | undefined;
+				return childrenData && "explicitList" in childrenData
+					? childrenData.explicitList.length
+					: 0;
 			})(),
 		},
 	});
@@ -783,7 +828,7 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 					dangerouslySetInnerHTML={{
 						__html: safeScopedCss(
 							presignedCanvasSettings.customCss,
-							`[data-canvas-id="${canvasId}"]`
+							`[data-canvas-id="${canvasId}"]`,
 						),
 					}}
 				/>
@@ -867,7 +912,8 @@ interface BuilderPreviewProps {
 
 function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 	const backend = useBackend();
-	const { components, canvasSettings, actionContext, widgetRefs } = useBuilder();
+	const { components, canvasSettings, actionContext, widgetRefs } =
+		useBuilder();
 	const previewCanvasId = useId();
 	const [previewComponents, setPreviewComponents] = useState<Map<
 		string,
@@ -877,7 +923,8 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 		string,
 		SurfaceComponent
 	> | null>(null);
-	const [presignedCanvasSettings, setPresignedCanvasSettings] = useState(canvasSettings);
+	const [presignedCanvasSettings, setPresignedCanvasSettings] =
+		useState(canvasSettings);
 	const loadEventExecutedRef = useRef<string | null>(null);
 	// Keep a ref to components to avoid stale closure in handleA2UIMessage
 	const componentsRef = useRef(components);
@@ -893,14 +940,14 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 			}
 
 			const componentsArray = Array.from(
-				(previewComponents ?? components).entries()
+				(previewComponents ?? components).entries(),
 			).map(([id, comp]) => ({ ...comp, id }));
 
 			try {
 				const presigned = await presignPageAssets(
 					appId,
 					componentsArray,
-					backend.storageState
+					backend.storageState,
 				);
 				const presignedMap = new Map<string, SurfaceComponent>();
 				for (const comp of presigned) {
@@ -914,7 +961,12 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 		};
 
 		presignAssets();
-	}, [components, previewComponents, actionContext?.appId, backend.storageState]);
+	}, [
+		components,
+		previewComponents,
+		actionContext?.appId,
+		backend.storageState,
+	]);
 
 	// Presign canvas background image
 	useEffect(() => {
@@ -929,11 +981,14 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 				const presigned = await presignCanvasSettings(
 					appId,
 					canvasSettings,
-					backend.storageState
+					backend.storageState,
 				);
 				setPresignedCanvasSettings(presigned);
 			} catch (err) {
-				console.warn("[BuilderPreview] Failed to presign canvas settings:", err);
+				console.warn(
+					"[BuilderPreview] Failed to presign canvas settings:",
+					err,
+				);
 				setPresignedCanvasSettings(canvasSettings);
 			}
 		};
@@ -942,13 +997,17 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 	}, [canvasSettings, actionContext?.appId, backend.storageState]);
 
 	// Use presigned components if available, otherwise fall back to preview or builder components
-	const activeComponents = presignedComponents ?? previewComponents ?? components;
+	const activeComponents =
+		presignedComponents ?? previewComponents ?? components;
 
-	const surface: Surface = useMemo(() => ({
-		id: surfaceId,
-		rootComponentId: ROOT_ID,
-		components: Object.fromEntries(activeComponents),
-	}), [surfaceId, activeComponents]);
+	const surface: Surface = useMemo(
+		() => ({
+			id: surfaceId,
+			rootComponentId: ROOT_ID,
+			components: Object.fromEntries(activeComponents),
+		}),
+		[surfaceId, activeComponents],
+	);
 
 	const handleMessage = useCallback((message: A2UIClientMessage) => {
 		console.log("Preview action:", message);
@@ -1323,7 +1382,7 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 					dangerouslySetInnerHTML={{
 						__html: safeScopedCss(
 							presignedCanvasSettings.customCss,
-							`[data-canvas-id="${previewCanvasId}"]`
+							`[data-canvas-id="${previewCanvasId}"]`,
 						),
 					}}
 				/>

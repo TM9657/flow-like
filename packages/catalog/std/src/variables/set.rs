@@ -151,7 +151,9 @@ impl NodeLogic for SetVariable {
             let mut dependencies = mut_value.depends_on.clone();
             dependencies.retain(|deps| {
                 board.get_pin_by_id(deps).is_some_and(|pin| {
-                    if pin.data_type != mut_value.data_type || pin.value_type != mut_value.value_type {
+                    if pin.data_type != mut_value.data_type
+                        || pin.value_type != mut_value.value_type
+                    {
                         return false;
                     }
                     // If both have schemas, they must match
@@ -182,7 +184,9 @@ impl NodeLogic for SetVariable {
 
             connected.retain(|conn| {
                 board.get_pin_by_id(conn).is_some_and(|pin| {
-                    if pin.data_type != mut_new_value.data_type || pin.value_type != mut_new_value.value_type {
+                    if pin.data_type != mut_new_value.data_type
+                        || pin.value_type != mut_new_value.value_type
+                    {
                         return false;
                     }
                     // If both have schemas, they must match

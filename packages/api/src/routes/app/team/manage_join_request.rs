@@ -36,7 +36,7 @@ pub async fn accept_join_request(
         .filter(join_queue::Column::Id.eq(request_id.clone()))
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let already_member = membership::Entity::find()
         .filter(membership::Column::AppId.eq(app_id.clone()))
@@ -56,7 +56,7 @@ pub async fn accept_join_request(
     let app = app::Entity::find_by_id(app_id.clone())
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     if matches!(app.visibility, Visibility::Private | Visibility::Offline) {
         tracing::warn!(
@@ -88,10 +88,7 @@ pub async fn accept_join_request(
         }
     }
 
-    let default_role_id = app
-        .default_role_id
-        .clone()
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+    let default_role_id = app.default_role_id.clone().ok_or(ApiError::NOT_FOUND)?;
 
     let membership = membership::ActiveModel {
         id: Set(create_id()),
@@ -137,7 +134,7 @@ pub async fn reject_join_request(
         .filter(join_queue::Column::Id.eq(request_id.clone()))
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NOT_FOUND)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let request: join_queue::ActiveModel = request.into();
     request.delete(&txn).await?;
