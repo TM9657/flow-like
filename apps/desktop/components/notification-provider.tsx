@@ -1,12 +1,14 @@
 "use client";
 
 import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
+import { useBackend } from "@tm9657/flow-like-ui";
 import type { IIntercomEvent, INotificationEvent } from "@tm9657/flow-like-ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 import { addLocalNotification } from "../lib/notifications-db";
+import { fetcher } from "../lib/api";
 
 type NotificationPermission = "granted" | "denied" | "default";
 type NotificationApi = {
@@ -34,6 +36,7 @@ interface NotificationProviderProps {
 
 export default function NotificationProvider({ appId }: NotificationProviderProps = {}) {
 	const auth = useAuth();
+	const backend = useBackend();
 	const queryClient = useQueryClient();
 	// Use a constant for offline/unauthenticated users
 	const userId = auth.user?.profile?.sub ?? "offline-user";
@@ -81,6 +84,8 @@ export default function NotificationProvider({ appId }: NotificationProviderProp
 							icon: notification.icon,
 							link: notification.link,
 							notificationType: "WORKFLOW",
+							sourceRunId: notification.source_run_id,
+							sourceNodeId: notification.source_node_id,
 						});
 
 						// Refetch notification queries so UI updates immediately
@@ -93,6 +98,41 @@ export default function NotificationProvider({ appId }: NotificationProviderProp
 						});
 					} catch (e) {
 						console.error("[NotificationProvider] Failed to store local notification:", e);
+					}
+
+					// Persist notification via backend API (requires event_id)
+					if (
+						appId &&
+						backend?.profile &&
+						auth.user &&
+						notification.event_id &&
+						notification.event_id.trim().length > 0
+					) {
+						try {
+							await fetcher<{ id: string; success: boolean }>(
+								backend.profile,
+								`apps/${appId}/notifications/create`,
+								{
+									method: "POST",
+									body: JSON.stringify({
+										event_id: notification.event_id,
+										target_user_sub: notification.target_user_sub,
+										title: notification.title,
+										description: notification.description,
+										icon: notification.icon,
+										link: notification.link,
+										run_id: notification.source_run_id,
+										node_id: notification.source_node_id,
+									}),
+								},
+								auth,
+							);
+						} catch (e) {
+							console.warn(
+								"[NotificationProvider] Failed to persist remote notification:",
+								e,
+							);
+						}
 					}
 
 					// Show desktop notification if enabled

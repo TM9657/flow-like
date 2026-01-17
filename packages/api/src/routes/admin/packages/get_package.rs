@@ -32,7 +32,7 @@ pub async fn get_package(
     let package = registry
         .get_package_admin(&package_id)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let reviews = registry.get_reviews(&package_id).await?;
 

@@ -66,7 +66,7 @@ pub async fn update_solution(
             "paid" => SolutionStatus::Paid,
             "cancelled" => SolutionStatus::Cancelled,
             "refunded" => SolutionStatus::Refunded,
-            _ => return Err(ApiError::BadRequest("Invalid status".to_string())),
+            _ => return Err(ApiError::bad_request("Invalid status".to_string())),
         };
         active.status = Set(new_status.clone());
         new_status_value = Some(new_status.clone());

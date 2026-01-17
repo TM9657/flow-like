@@ -59,6 +59,55 @@ export function FlowContextMenu({
 	const [isPlaceholderOpen, setIsPlaceholderOpen] = useState(false);
 	const [placeholderName, setPlaceholderName] = useState("Placeholder");
 
+	const resolveRefValue = useCallback(
+		(value: string | null | undefined) => {
+			if (!value) return null;
+			return refs?.[value] ?? value;
+		},
+		[refs],
+	);
+
+	const buildVariableNode = useCallback(
+		(nodeName: "variable_get" | "variable_set", variable: IVariable) => {
+			const baseNode = nodes.find((node) => node.name === nodeName);
+			if (!baseNode) return undefined;
+
+			const pins = Object.values(baseNode.pins).map((pin) => {
+				if (pin.name === "var_ref") {
+					return { ...pin, default_value: convertJsonToUint8Array(variable.id) };
+				}
+				if (pin.name === "value_in" || pin.name === "value_ref") {
+					return {
+						...pin,
+						data_type: variable.data_type,
+						value_type: variable.value_type,
+						schema: variable.schema ?? null,
+					};
+				}
+				return pin;
+			});
+			const newPins = Object.fromEntries(pins.map((pin) => [pin.id, pin]));
+
+			const friendlyName =
+				nodeName === "variable_get"
+					? `Get ${variable.name}`
+					: `Set ${variable.name}`;
+
+			return {
+				...baseNode,
+				friendly_name: friendlyName,
+				pin_in_names: Object.values(newPins)
+					.filter((pin) => pin.pin_type === "Input")
+					.map((pin) => pin.friendly_name),
+				pin_out_names: Object.values(newPins)
+					.filter((pin) => pin.pin_type === "Output")
+					.map((pin) => pin.friendly_name),
+				pins: newPins,
+			};
+		},
+		[nodes],
+	);
+
 	useEffect(() => {
 		if (isPlaceholderOpen) {
 			requestAnimationFrame(() => placeholderInputRef.current?.focus());
@@ -139,16 +188,34 @@ export function FlowContextMenu({
 
 		if (board && variableGetNode && variableSetNode) {
 			Object.values(board.variables).forEach((variable) => {
-				const getPins = Object.values(variableGetNode?.pins ?? {}).map((pin) =>
-					pin.name === "var_ref"
-						? { ...pin, default_value: convertJsonToUint8Array(variable.id) }
-						: pin,
-				);
-				const setPins = Object.values(variableSetNode?.pins ?? {}).map((pin) =>
-					pin.name === "var_ref"
-						? { ...pin, default_value: convertJsonToUint8Array(variable.id) }
-						: pin,
-				);
+				const getPins = Object.values(variableGetNode?.pins ?? {}).map((pin) => {
+					if (pin.name === "var_ref") {
+						return { ...pin, default_value: convertJsonToUint8Array(variable.id) };
+					}
+					if (pin.name === "value_ref") {
+						return {
+							...pin,
+							data_type: variable.data_type,
+							value_type: variable.value_type,
+							schema: variable.schema ?? null,
+						};
+					}
+					return pin;
+				});
+				const setPins = Object.values(variableSetNode?.pins ?? {}).map((pin) => {
+					if (pin.name === "var_ref") {
+						return { ...pin, default_value: convertJsonToUint8Array(variable.id) };
+					}
+					if (pin.name === "value_in" || pin.name === "value_ref") {
+						return {
+							...pin,
+							data_type: variable.data_type,
+							value_type: variable.value_type,
+							schema: variable.schema ?? null,
+						};
+					}
+					return pin;
+				});
 				const newGetPins = Object.fromEntries(
 					getPins.map((pin) => [pin.id, pin]),
 				);
@@ -276,22 +343,42 @@ export function FlowContextMenu({
 			if (board && variableGetNode && variableSetNode) {
 				Object.values(board.variables).forEach((variable) => {
 					const getPins = Object.values(variableGetNode?.pins ?? {}).map(
-						(pin) =>
-							pin.name === "var_ref"
-								? {
-										...pin,
-										default_value: convertJsonToUint8Array(variable.id),
-									}
-								: pin,
+						(pin) => {
+							if (pin.name === "var_ref") {
+								return {
+									...pin,
+									default_value: convertJsonToUint8Array(variable.id),
+								};
+							}
+							if (pin.name === "value_ref") {
+								return {
+									...pin,
+									data_type: variable.data_type,
+									value_type: variable.value_type,
+									schema: variable.schema ?? null,
+								};
+							}
+							return pin;
+						},
 					);
 					const setPins = Object.values(variableSetNode?.pins ?? {}).map(
-						(pin) =>
-							pin.name === "var_ref"
-								? {
-										...pin,
-										default_value: convertJsonToUint8Array(variable.id),
-									}
-								: pin,
+						(pin) => {
+							if (pin.name === "var_ref") {
+								return {
+									...pin,
+									default_value: convertJsonToUint8Array(variable.id),
+								};
+							}
+							if (pin.name === "value_in" || pin.name === "value_ref") {
+								return {
+									...pin,
+									data_type: variable.data_type,
+									value_type: variable.value_type,
+									schema: variable.schema ?? null,
+								};
+							}
+							return pin;
+						},
 					);
 					const newGetPins = Object.fromEntries(
 						getPins.map((pin) => [pin.id, pin]),
@@ -419,6 +506,7 @@ export function FlowContextMenu({
 										event.preventDefault();
 										return;
 									}
+									const resolvedSchema = resolveRefValue(droppedPin.schema);
 									const variable: IVariable = {
 										id: createId(),
 										name: droppedPin.friendly_name || droppedPin.name,
@@ -427,10 +515,22 @@ export function FlowContextMenu({
 										exposed: false,
 										secret: false,
 										editable: true,
-										schema: droppedPin.schema ?? null,
+										schema: resolvedSchema ?? null,
 										default_value: droppedPin.default_value ?? null,
 									};
 									onCreateVariable(variable);
+
+									const variableNodeName =
+										droppedPin.pin_type === "Output"
+											? "variable_set"
+											: "variable_get";
+									const variableNode = buildVariableNode(
+										variableNodeName,
+										variable,
+									);
+									if (variableNode) {
+										onNodePlace(variableNode);
+									}
 									onClose();
 								}}
 							>

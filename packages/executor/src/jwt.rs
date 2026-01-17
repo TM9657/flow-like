@@ -26,9 +26,7 @@ struct Jwk {
     crv: String,
     x: String,
     y: String,
-    #[allow(dead_code)]
     alg: String,
-    #[allow(dead_code)]
     kid: String,
 }
 

@@ -84,6 +84,9 @@ export function useMobileHeader(
 	const ctx = useContext(MobileHeaderContext);
 	if (!ctx)
 		throw new Error("useMobileHeader must be used within MobileHeaderProvider");
+	const register = ctx.register;
+	const updateInCtx = ctx.update;
+	const unregister = ctx.unregister;
 	const idRef = useRef<string | null>(null);
 
 	const ensureId = useCallback(() => {
@@ -94,32 +97,32 @@ export function useMobileHeader(
 	useEffect(() => {
 		if (!controls) return;
 		const id = ensureId();
-		ctx.register(id, controls);
-		return () => ctx.unregister(id);
+		register(id, controls);
+		return () => unregister(id);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, deps);
 
 	const set = useCallback(
 		(next: MobileHeaderControls) => {
 			const id = ensureId();
-			ctx.register(id, next);
-			return () => ctx.unregister(id);
+			register(id, next);
+			return () => unregister(id);
 		},
-		[ctx, ensureId],
+		[ensureId, register, unregister],
 	);
 
 	const update = useCallback(
 		(next: MobileHeaderControls) => {
 			const id = ensureId();
-			ctx.update(id, next);
+			updateInCtx(id, next);
 		},
-		[ctx, ensureId],
+		[ensureId, updateInCtx],
 	);
 
 	const clear = useCallback(() => {
 		if (!idRef.current) return;
-		ctx.unregister(idRef.current);
-	}, [ctx]);
+		unregister(idRef.current);
+	}, [unregister]);
 
 	return { set, update, clear } as const;
 }
@@ -158,7 +161,7 @@ export const MobileHeader: React.FC = () => {
 	return (
 		<div
 			ref={ref}
-			className="md:hidden sticky top-0 z-40 px-2 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+			className="md:hidden sticky top-0 z-40 px-2 bg-card/95 backdrop-blur supports-backdrop-filter:bg-background/60"
 		>
 			<div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-card/80 shadow-2xl">
 				<div className="flex items-center gap-2 min-w-0">

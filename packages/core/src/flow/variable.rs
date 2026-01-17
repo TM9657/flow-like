@@ -203,6 +203,8 @@ fn looks_like_schema(value: &Value) -> bool {
 
 /// Infer a JSON Schema from example JSON or validate an existing schema.
 /// Returns the schema as a JSON string.
+/// Only infers from objects/arrays - primitive values (numbers, strings, bools) are rejected
+/// to avoid accidentally treating hash references as example data.
 pub fn infer_schema_from_json(raw: &str) -> flow_like_types::Result<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -219,6 +221,13 @@ pub fn infer_schema_from_json(raw: &str) -> flow_like_types::Result<String> {
     let inferred = if is_schema {
         user_json
     } else {
+        // Only infer schema from objects or arrays - primitive values (numbers, strings, bools, null)
+        // should not be used for inference as they might be hash references or other non-example data
+        if !user_json.is_object() && !user_json.is_array() {
+            return Err(flow_like_types::anyhow!(
+                "Schema must be a JSON Schema object or example JSON object/array, not a primitive value"
+            ));
+        }
         let schema = schemars::schema_for_value!(&user_json);
         let string = json::to_string_pretty(&schema)?;
         json::from_str(&string)?

@@ -27,3 +27,7 @@ export * from "@xyflow/react";
 export { useTheme } from "next-themes";
 export { useMiniSearch } from "react-minisearch";
 export { isEqual } from "lodash-es";
+
+// Resolve star-export name collisions (TypeScript TS2308)
+export type { ChatRole, PlanStep } from "./lib/schema/flow/copilot";
+export type { CanvasSettings } from "./state/backend-state/page-state";

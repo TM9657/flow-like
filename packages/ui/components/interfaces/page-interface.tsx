@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { safeScopedCss } from "../../lib/css-utils";
+import type { IEvent } from "../../lib/schema/flow/event";
 import { presignCanvasSettings, presignPageAssets, presignSinglePath } from "../../lib/presign-assets";
 import { useBackend } from "../../state/backend-state";
 import type { IPage } from "../../state/backend-state/page-state";
-import type { IAppRoute } from "../../state/backend-state/route-state";
+import type { IRouteMapping } from "../../state/backend-state/route-state";
 import { A2UIRenderer, DataProvider, RouteDialogProvider, useRouteDialog } from "../a2ui";
 import type { A2UIServerMessage, Surface, SurfaceComponent } from "../a2ui/types";
 import type { IUseInterfaceProps } from "./interfaces";
@@ -357,7 +358,8 @@ function PageInterfaceInner({
 	const { openDialog, closeDialog } = useRouteDialog();
 	const pageContainerId = useId();
 	const [page, setPage] = useState<IPage | null>(providedPage || null);
-	const [appRoute, setAppRoute] = useState<IAppRoute | null>(null);
+	const [routeMapping, setRouteMapping] = useState<IRouteMapping | null>(null);
+	const [routeEvent, setRouteEvent] = useState<IEvent | null>(null);
 	const [isLoading, setIsLoading] = useState(!providedPage);
 	const [isLoadEventRunning, setIsLoadEventRunning] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -429,31 +431,38 @@ function PageInterfaceInner({
 			setIsLoading(true);
 			setError(null);
 			try {
-				let routeConfig: IAppRoute | null = null;
+				// Get route mapping (path -> eventId)
+				let mapping: IRouteMapping | null = null;
 
 				if (pageRoute) {
-					routeConfig = await backend.routeState.getRouteByPath(
-						appId,
-						pageRoute,
-					);
+					mapping = await backend.routeState.getRouteByPath(appId, pageRoute);
 				} else {
-					routeConfig = await backend.routeState.getDefaultRoute(appId);
+					mapping = await backend.routeState.getDefaultRoute(appId);
 				}
 
-				if (!routeConfig) {
-					setAppRoute(null);
+				if (!mapping) {
+					setRouteMapping(null);
+					setRouteEvent(null);
 					setPage(null);
 					setIsLoading(false);
 					return;
 				}
 
-				setAppRoute(routeConfig);
+				setRouteMapping(mapping);
 
-				if (routeConfig.targetType === "page" && routeConfig.pageId) {
+				// Get the event to determine what to display
+				const eventData = await backend.eventState.getEvent(
+					appId,
+					mapping.eventId,
+				);
+				setRouteEvent(eventData);
+
+				// If event has default_page_id, it's a page-target event
+				if (eventData.default_page_id) {
 					const pageResult = await backend.pageState.getPage(
 						appId,
-						routeConfig.pageId,
-						routeConfig.boardId || undefined,
+						eventData.default_page_id,
+						eventData.board_id || undefined,
 					);
 					if (pageResult) {
 						console.log("[PageInterface] Loaded page:", {
@@ -502,9 +511,10 @@ function PageInterfaceInner({
 
 						setPage(pageResult);
 					} else {
-						setError(`Page not found: ${routeConfig.pageId}`);
+						setError(`Page not found: ${eventData.default_page_id}`);
 					}
-				} else if (routeConfig.targetType === "event") {
+				} else {
+					// Board-target event - no page to display
 					setPage(null);
 				}
 			} catch (e) {
@@ -516,7 +526,7 @@ function PageInterfaceInner({
 		};
 
 		loadPageFromRoute();
-	}, [appId, pageRoute, providedPage, backend.routeState, backend.pageState]);
+	}, [appId, pageRoute, providedPage, backend.routeState, backend.pageState, backend.eventState, backend.storageState]);
 
 	const initialSurface = useMemo(() => {
 		if (!page) return null;
@@ -652,7 +662,7 @@ function PageInterfaceInner({
 	) => {
 		if (!eventNodeId || !page) return;
 
-		const boardId = page.boardId || appRoute?.boardId;
+		const boardId = page.boardId || routeEvent?.board_id;
 		if (!boardId) {
 			console.warn(`[PageInterface] No boardId for ${eventName} event`);
 			return;
@@ -699,14 +709,14 @@ function PageInterfaceInner({
 		} catch (e) {
 			console.error(`[PageInterface] Failed to execute ${eventName} event:`, e);
 		}
-	}, [appId, page, appRoute, pageRoute, backend.boardState, handleA2UIMessage, getElementsFromSurface]);
+	}, [appId, page, routeEvent, pageRoute, backend.boardState, handleA2UIMessage, getElementsFromSurface]);
 
 	// Execute onLoad event if configured (from page settings)
 	useEffect(() => {
 		const executeOnLoadEvent = async () => {
 			if (!page?.onLoadEventId) return;
 
-			const boardId = page.boardId || appRoute?.boardId;
+			const boardId = page.boardId || routeEvent?.board_id;
 			if (!boardId) return;
 
 			// Prevent duplicate execution for the same page + event combination
@@ -723,7 +733,7 @@ function PageInterfaceInner({
 		};
 
 		executeOnLoadEvent();
-	}, [appId, page, appRoute, executePageEvent]);
+	}, [appId, page, routeEvent, executePageEvent]);
 
 	// Execute onUnload event when page unmounts or user navigates away
 	useEffect(() => {
@@ -774,7 +784,7 @@ function PageInterfaceInner({
 		);
 	}
 
-	if (!appRoute && !providedPage) {
+	if (!routeMapping && !providedPage) {
 		return (
 			<div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
 				<p>No route configured for this path</p>
@@ -789,10 +799,10 @@ function PageInterfaceInner({
 		);
 	}
 
-	if (appRoute?.targetType === "event") {
+	if (routeEvent && !routeEvent.default_page_id) {
 		return (
 			<div className="flex items-center justify-center h-full text-muted-foreground">
-				<p>Event route: {appRoute.eventId}</p>
+				<p>Event does not have a page target</p>
 			</div>
 		);
 	}
@@ -829,7 +839,7 @@ function PageInterfaceInner({
 						widgetRefs={page?.widgetRefs}
 						className="h-full w-full flex-1 overflow-hidden"
 						appId={appId}
-						boardId={appRoute?.boardId}
+						boardId={routeEvent?.board_id}
 						onA2UIMessage={handleA2UIMessage}
 						isPreviewMode={true}
 						openDialog={openDialog}

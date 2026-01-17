@@ -37,7 +37,7 @@ pub async fn invite_user(
             user.sub()?,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let txn = state.db.begin().await?;
@@ -49,14 +49,14 @@ pub async fn invite_user(
         .filter(meta::Column::Lang.eq("en"))
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or_else(|| ApiError::NOT_FOUND)?;
 
     if app.default_role_id.is_none() {
         tracing::warn!(
             "App {} does not have a default role set, cannot invite user",
             app_id
         );
-        return Err(ApiError::InternalError(
+        return Err(ApiError::internal_error(
             anyhow!("App does not have a default role set"),
         ));
     }
@@ -67,7 +67,7 @@ pub async fn invite_user(
             user.sub()?,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let member = membership::Entity::find()
@@ -75,7 +75,7 @@ pub async fn invite_user(
         .filter(membership::Column::UserId.eq(user.sub()?))
         .one(&txn)
         .await?
-        .ok_or(ApiError::Forbidden)?;
+        .ok_or(ApiError::FORBIDDEN)?;
 
     let user_already_member = membership::Entity::find()
         .filter(membership::Column::AppId.eq(app_id.clone()))
@@ -90,7 +90,7 @@ pub async fn invite_user(
             params.sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     if max_prototype > 0
@@ -110,7 +110,7 @@ pub async fn invite_user(
                 user.sub()?,
                 app_id
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
     }
 
@@ -127,7 +127,7 @@ pub async fn invite_user(
             params.sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let invitation = invitation::ActiveModel {

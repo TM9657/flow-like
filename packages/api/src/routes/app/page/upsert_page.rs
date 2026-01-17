@@ -32,7 +32,7 @@ pub async fn upsert_page(
     ensure_permission!(user, &app_id, &state, RolePermissions::WriteBoards);
 
     if page_id.is_empty() || app_id.is_empty() {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let mut app = state

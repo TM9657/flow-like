@@ -19,11 +19,9 @@ struct DispatchPayload {
     event_id: Option<String>,
     event_json: Option<String>,
     payload: Option<serde_json::Value>,
-    #[allow(dead_code)]
     user_id: String,
     credentials: String,
     jwt: String,
-    #[allow(dead_code)]
     callback_url: String,
     token: Option<String>,
     oauth_tokens: Option<std::collections::HashMap<String, flow_like_executor::OAuthTokenInput>>,

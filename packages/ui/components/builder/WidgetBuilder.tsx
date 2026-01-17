@@ -1,5 +1,4 @@
-"use client";
-
+import { useDroppable } from "@dnd-kit/core";
 import html2canvas from "html2canvas-pro";
 import {
 	ChevronRight,
@@ -9,10 +8,7 @@ import {
 	SparklesIcon,
 	XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { DndProvider, useDrop } from "react-dnd";
-import { HTML5Backend } from "react-dnd-html5-backend";
-import { TouchBackend } from "react-dnd-touch-backend";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { cn, isTauri } from "../../lib";
 import { safeScopedCss } from "../../lib/css-utils";
 import { presignCanvasSettings, presignPageAssets } from "../../lib/presign-assets";
@@ -39,7 +35,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { BuilderProvider, useBuilder } from "./BuilderContext";
 import { BuilderRenderer } from "./BuilderRenderer";
 import { ComponentPalette } from "./ComponentPalette";
-import { CustomDragLayer } from "./CustomDragLayer";
+import { BuilderDragOverlay } from "./BuilderDragOverlay";
 import { DevModePanel } from "./DevModePanel";
 import { HierarchyTree } from "./HierarchyTree";
 import { Inspector } from "./Inspector";
@@ -47,12 +43,18 @@ import { ResponsivePreview } from "./ResponsivePreview";
 import { Toolbar } from "./Toolbar";
 import { A2UICopilot } from "./a2ui-copilot";
 import { createDefaultComponent, getDefaultStyle } from "./componentDefaults";
+import { BuilderDndProvider, useBuilderDnd, type WidgetDragData } from "./BuilderDndContext";
 export { createDefaultComponent, getDefaultStyle, getDefaultProps, normalizeComponent, normalizeComponents } from "./componentDefaults";
 
-// DnD item types
-export const COMPONENT_DND_TYPE = "a2ui-component";
-export const COMPONENT_MOVE_TYPE = "a2ui-component-move";
-export const WIDGET_DND_TYPE = "a2ui-widget";
+// Re-export DnD types from BuilderDndContext
+export {
+	COMPONENT_DND_TYPE,
+	COMPONENT_MOVE_TYPE,
+	WIDGET_DND_TYPE,
+	type ComponentDragData as ComponentDragItem,
+	type ComponentMoveData as ComponentMoveItem,
+	type WidgetDragData as WidgetDragItem,
+} from "./BuilderDndContext";
 
 // Container types that can accept children
 export const CONTAINER_TYPES = new Set([
@@ -75,27 +77,6 @@ export const CONTAINER_TYPES = new Set([
 	"aspectRatio",
 ]);
 
-export interface ComponentDragItem {
-	type: typeof COMPONENT_DND_TYPE;
-	componentType: string;
-}
-
-export interface ComponentMoveItem {
-	type: typeof COMPONENT_MOVE_TYPE;
-	componentId: string;
-	currentParentId: string | null;
-}
-
-export interface WidgetDragItem {
-	type: typeof WIDGET_DND_TYPE;
-	appId: string;
-	widgetId: string;
-	/** The widget's components to copy - fetched on drop if not provided */
-	components?: SurfaceComponent[];
-	/** The widget's root component ID */
-	rootComponentId?: string;
-}
-
 // Root component ID constant
 export const ROOT_ID = "root";
 
@@ -109,7 +90,6 @@ function createRootComponent(): SurfaceComponent {
 		component: {
 			type: "column",
 			gap: "8px",
-			wrap: true,
 			children: { explicitList: [] },
 		} as unknown as A2UIComponent,
 	};
@@ -130,12 +110,14 @@ export interface WidgetBuilderProps {
 		backgroundColor?: string;
 		backgroundImage?: string;
 		padding?: string;
+		customCss?: string;
 	};
 	/** Called when canvas settings change */
 	onCanvasSettingsChange?: (settings: {
 		backgroundColor: string;
 		backgroundImage?: string;
 		padding: string;
+		customCss?: string;
 	}) => void;
 	/** Context for action editor (pages, events, etc.) */
 	actionContext?: {
@@ -149,15 +131,6 @@ export interface WidgetBuilderProps {
 	currentPageId?: string;
 	/** Called when user switches to a different page */
 	onPageChange?: (pageId: string) => void;
-}
-
-function getDndBackend() {
-	const useTauri = isTauri();
-	const backend = useTauri ? TouchBackend : HTML5Backend;
-	const options = useTauri
-		? { enableMouseEvents: true, delayTouchStart: 120, ignoreContextMenu: true }
-		: undefined;
-	return { backend, options };
 }
 
 export function WidgetBuilder({
@@ -188,37 +161,32 @@ export function WidgetBuilder({
 			? initialComponents
 			: [createRootComponent(), ...initialComponents];
 
-	const { backend, options } = getDndBackend();
-
 	return (
-		<DndProvider backend={backend as never} options={options as never}>
-			<CustomDragLayer />
-			<BuilderProvider
-				initialComponents={componentsWithRoot}
-				initialWidgetRefs={initialWidgetRefs}
-				onChange={onChange}
-				initialCanvasSettings={initialCanvasSettings}
-				onCanvasSettingsChange={onCanvasSettingsChange}
-				actionContext={actionContext}
-			>
-				<WidgetBuilderContent
-					className={className}
-					surfaceId={surfaceId}
-					mode={mode}
-					setMode={setMode}
-					leftTab={leftTab}
-					setLeftTab={setLeftTab}
-					copilotOpen={copilotOpen}
-					setCopilotOpen={setCopilotOpen}
-					pendingComponents={pendingComponents}
-					setPendingComponents={setPendingComponents}
-					onSave={onSave}
-					onExport={onExport}
-					currentPageId={currentPageId}
-					onPageChange={onPageChange}
-				/>
-			</BuilderProvider>
-		</DndProvider>
+		<BuilderProvider
+			initialComponents={componentsWithRoot}
+			initialWidgetRefs={initialWidgetRefs}
+			onChange={onChange}
+			initialCanvasSettings={initialCanvasSettings}
+			onCanvasSettingsChange={onCanvasSettingsChange}
+			actionContext={actionContext}
+		>
+			<WidgetBuilderWithDnd
+				className={className}
+				surfaceId={surfaceId}
+				mode={mode}
+				setMode={setMode}
+				leftTab={leftTab}
+				setLeftTab={setLeftTab}
+				copilotOpen={copilotOpen}
+				setCopilotOpen={setCopilotOpen}
+				pendingComponents={pendingComponents}
+				setPendingComponents={setPendingComponents}
+				onSave={onSave}
+				onExport={onExport}
+				currentPageId={currentPageId}
+				onPageChange={onPageChange}
+			/>
+		</BuilderProvider>
 	);
 }
 
@@ -237,6 +205,18 @@ interface WidgetBuilderContentProps {
 	onExport?: (components: SurfaceComponent[]) => void;
 	currentPageId?: string;
 	onPageChange?: (pageId: string) => void;
+}
+
+// Wrapper that provides DnD context - must be inside BuilderProvider to access setIsDraggingGlobal
+function WidgetBuilderWithDnd(props: WidgetBuilderContentProps) {
+	const { setIsDraggingGlobal } = useBuilder();
+
+	return (
+		<BuilderDndProvider setIsDraggingGlobal={setIsDraggingGlobal}>
+			<BuilderDragOverlay />
+			<WidgetBuilderContent {...props} />
+		</BuilderDndProvider>
+	);
 }
 
 function WidgetBuilderContent({
@@ -261,10 +241,11 @@ function WidgetBuilderContent({
 		addComponent,
 		updateComponent,
 		getComponent,
-		isDraggingGlobal,
 		widgetRefs,
 		actionContext,
 	} = useBuilder();
+	const { activeId } = useBuilderDnd();
+	const isDragging = activeId !== null;
 
 	// Ref for capturing screenshots of the canvas
 	const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -374,27 +355,11 @@ function WidgetBuilderContent({
 
 	return (
 		<>
-			{isDraggingGlobal && (
-				<style>{`
-					.widget-builder-dragging,
-					.widget-builder-dragging * {
-						user-select: none !important;
-						-webkit-user-select: none !important;
-						-moz-user-select: none !important;
-						-ms-user-select: none !important;
-						pointer-events: none !important;
-					}
-					.widget-builder-dragging [data-builder-component],
-					.widget-builder-dragging [data-drop-zone] {
-						pointer-events: auto !important;
-					}
-				`}</style>
-			)}
 			<div
 				className={cn(
 					"flex flex-col h-full bg-muted/20 overflow-hidden",
 					className,
-					isDraggingGlobal && "widget-builder-dragging",
+					isDragging && "select-none",
 				)}
 			>
 				{/* Toolbar */}
@@ -592,12 +557,12 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 		addComponent,
 		updateComponent,
 		canvasSettings,
-		isDraggingGlobal,
-		setIsDraggingGlobal,
 		addWidgetRef,
 		widgetRefs,
 		actionContext,
 	} = useBuilder();
+	const { activeId } = useBuilderDnd();
+	const isDragging = activeId !== null;
 	const canvasRef = useRef<HTMLDivElement>(null);
 	const canvasId = useId();
 	const [presignedComponents, setPresignedComponents] = useState<Map<
@@ -665,11 +630,12 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 	}, [canvasSettings, actionContext?.appId, backend.storageState]);
 
 	// Build the surface for rendering - use presigned components if available
-	const surface: Surface = {
+	// Memoize to prevent unnecessary re-renders when drag state changes
+	const surface: Surface = useMemo(() => ({
 		id: surfaceId,
 		rootComponentId: ROOT_ID,
 		components: Object.fromEntries(presignedComponents ?? components),
-	};
+	}), [surfaceId, presignedComponents, components]);
 
 	const handleMessage = useCallback((message: A2UIClientMessage) => {
 		console.log("Canvas action:", message);
@@ -678,7 +644,7 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 	// Helper to insert a widget instance - copies widget components into page
 	const insertWidgetInstance = useCallback(
 		async (
-			widgetItem: WidgetDragItem,
+			widgetItem: WidgetDragData,
 			parentId: string,
 			insertIndex?: number,
 		) => {
@@ -775,66 +741,20 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 		[backend.widgetState, components, addComponent, updateComponent, addWidgetRef],
 	);
 
-	// Drop handler for root-level drops
-	const [{ isOver }, drop] = useDrop<
-		ComponentDragItem | WidgetDragItem,
-		void,
-		{ isOver: boolean }
-	>(
-		() => ({
-			accept: [COMPONENT_DND_TYPE, WIDGET_DND_TYPE],
-			drop: (item, monitor) => {
-				if (monitor.didDrop()) return;
-
+	// Root-level drop target using @dnd-kit
+	const { setNodeRef: setDropRef, isOver } = useDroppable({
+		id: "canvas-root-drop",
+		data: {
+			type: "drop-zone",
+			parentId: ROOT_ID,
+			index: (() => {
 				const root = components.get(ROOT_ID);
-				if (!root) return;
-
-				// Handle widget drop - copy widget components and create instance
-				if ("widgetId" in item) {
-					// Fire and forget - async operation
-					insertWidgetInstance(item as WidgetDragItem, ROOT_ID).then(() => {
-						setIsDraggingGlobal(false);
-					});
-					return;
-				}
-
-				// Handle component drop
-				const childrenData = (
-					root.component as unknown as Record<string, unknown>
-				).children as Children | undefined;
-				const rootChildren =
-					childrenData && "explicitList" in childrenData
-						? childrenData.explicitList
-						: [];
-				const newId = `${item.componentType}-${Date.now()}`;
-				const defaultStyle = getDefaultStyle(item.componentType);
-				const newComponent: SurfaceComponent = {
-					id: newId,
-					component: createDefaultComponent(item.componentType),
-					...(defaultStyle && { style: defaultStyle }),
-				};
-
-				addComponent(newComponent);
-				updateComponent(ROOT_ID, {
-					component: {
-						...root.component,
-						children: { explicitList: [...rootChildren, newId] },
-					} as A2UIComponent,
-				});
-				setIsDraggingGlobal(false);
-			},
-			collect: (monitor) => ({
-				isOver: monitor.isOver({ shallow: true }),
-			}),
-		}),
-		[
-			components,
-			addComponent,
-			updateComponent,
-			setIsDraggingGlobal,
-			insertWidgetInstance,
-		],
-	);
+				if (!root) return 0;
+				const childrenData = (root.component as unknown as Record<string, unknown>).children as Children | undefined;
+				return childrenData && "explicitList" in childrenData ? childrenData.explicitList.length : 0;
+			})(),
+		},
+	});
 
 	const handleCanvasClick = useCallback(
 		(e: React.MouseEvent) => {
@@ -853,9 +773,9 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 		<div
 			className={cn(
 				"h-full flex flex-col bg-muted/30 overflow-hidden",
-				isDraggingGlobal && "select-none",
+				isDragging && "select-none",
 			)}
-			style={{ userSelect: isDraggingGlobal ? "none" : undefined }}
+			style={{ userSelect: isDragging ? "none" : undefined }}
 		>
 			{/* Custom CSS injection (scoped and sanitized) */}
 			{presignedCanvasSettings.customCss && (
@@ -886,7 +806,7 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 			{/* Canvas area with interactive BuilderRenderer */}
 			<div
 				ref={(node) => {
-					drop(node);
+					setDropRef(node);
 					if (canvasRef)
 						(
 							canvasRef as React.MutableRefObject<HTMLDivElement | null>
@@ -898,13 +818,13 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 				className={cn(
 					"flex-1 overflow-auto p-4 min-w-0 min-h-0",
 					isOver && "bg-primary/5",
-					isDraggingGlobal && "select-none",
+					isDragging && "select-none",
 				)}
-				style={{ userSelect: isDraggingGlobal ? "none" : undefined }}
+				style={{ userSelect: isDragging ? "none" : undefined }}
 			>
 				<div
 					data-canvas-id={canvasId}
-					className="min-h-full rounded-lg border shadow-sm relative overflow-hidden"
+					className="h-full min-h-full rounded-lg border shadow-sm relative"
 					style={{
 						backgroundColor: presignedCanvasSettings.backgroundColor,
 						backgroundImage: presignedCanvasSettings.backgroundImage
@@ -915,7 +835,7 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 					data-canvas-background="true"
 				>
 					{/* Interactive BuilderRenderer - wraps each component */}
-					<BuilderRenderer surface={surface} className="w-full" />
+					<BuilderRenderer surface={surface} className="w-full h-full" />
 
 					{/* Empty state */}
 					{components.size <= 1 && (
@@ -1024,11 +944,11 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 	// Use presigned components if available, otherwise fall back to preview or builder components
 	const activeComponents = presignedComponents ?? previewComponents ?? components;
 
-	const surface: Surface = {
+	const surface: Surface = useMemo(() => ({
 		id: surfaceId,
 		rootComponentId: ROOT_ID,
 		components: Object.fromEntries(activeComponents),
-	};
+	}), [surfaceId, activeComponents]);
 
 	const handleMessage = useCallback((message: A2UIClientMessage) => {
 		console.log("Preview action:", message);

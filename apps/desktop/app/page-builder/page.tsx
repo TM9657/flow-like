@@ -498,12 +498,14 @@ export default function PageBuilderPage() {
 							backgroundColor: page.canvasSettings?.backgroundColor,
 							backgroundImage: page.canvasSettings?.backgroundImage,
 							padding: page.canvasSettings?.padding,
+									customCss: page.canvasSettings?.customCss,
 						}}
 						onCanvasSettingsChange={(settings) => {
 							updatePageProperty("canvasSettings", {
 								backgroundColor: settings.backgroundColor,
 								backgroundImage: settings.backgroundImage,
 								padding: settings.padding,
+										customCss: settings.customCss,
 							});
 						}}
 					/>

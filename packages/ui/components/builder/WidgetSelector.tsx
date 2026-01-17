@@ -1,5 +1,6 @@
 "use client";
 
+import { useDraggable } from "@dnd-kit/core";
 import {
 	ChevronRight,
 	Grid3X3,
@@ -10,7 +11,6 @@ import {
 	X,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { useDrag } from "react-dnd";
 import { useInvoke } from "../../hooks";
 import { cn } from "../../lib";
 import { useBackend } from "../../state/backend-state";
@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { WIDGET_DND_TYPE, type WidgetDragItem } from "./WidgetBuilder";
+import { WIDGET_DND_TYPE, type WidgetDragData } from "./BuilderDndContext";
 
 export interface WidgetSelectorProps {
 	currentAppId?: string;
@@ -444,35 +444,22 @@ function WidgetListItem({
 	onPreview,
 	onDragStart,
 }: WidgetItemProps) {
-	const [{ isDragging }, dragRef] = useDrag<
-		WidgetDragItem,
-		unknown,
-		{ isDragging: boolean }
-	>(
-		() => ({
+	const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+		id: `selector-list-${widget.appId}-${widget.widgetId}`,
+		data: {
 			type: WIDGET_DND_TYPE,
-			item: () => {
-				onDragStart?.(widget.appId, widget.widgetId);
-				return {
-					type: WIDGET_DND_TYPE,
-					appId: widget.appId,
-					widgetId: widget.widgetId,
-				};
-			},
-			collect: (monitor) => ({
-				isDragging: monitor.isDragging(),
-			}),
-		}),
-		[widget, onDragStart],
-	);
+			appId: widget.appId,
+			widgetId: widget.widgetId,
+		} satisfies WidgetDragData,
+	});
 
 	return (
 		<div
-			ref={(node) => {
-				dragRef(node);
-			}}
+			ref={setNodeRef}
+			{...listeners}
+			{...attributes}
 			className={cn(
-				"flex items-center gap-2 px-3 py-2 text-sm rounded cursor-grab hover:bg-muted active:cursor-grabbing select-none group",
+				"flex items-center gap-2 px-3 py-2 text-sm rounded cursor-grab hover:bg-muted active:cursor-grabbing select-none group touch-none",
 				isDragging && "opacity-50",
 			)}
 			onDoubleClick={() => onSelect(widget)}
@@ -518,35 +505,22 @@ function WidgetGridItem({
 	onPreview,
 	onDragStart,
 }: WidgetItemProps) {
-	const [{ isDragging }, dragRef] = useDrag<
-		WidgetDragItem,
-		unknown,
-		{ isDragging: boolean }
-	>(
-		() => ({
+	const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+		id: `selector-grid-${widget.appId}-${widget.widgetId}`,
+		data: {
 			type: WIDGET_DND_TYPE,
-			item: () => {
-				onDragStart?.(widget.appId, widget.widgetId);
-				return {
-					type: WIDGET_DND_TYPE,
-					appId: widget.appId,
-					widgetId: widget.widgetId,
-				};
-			},
-			collect: (monitor) => ({
-				isDragging: monitor.isDragging(),
-			}),
-		}),
-		[widget, onDragStart],
-	);
+			appId: widget.appId,
+			widgetId: widget.widgetId,
+		} satisfies WidgetDragData,
+	});
 
 	return (
 		<div
-			ref={(node) => {
-				dragRef(node);
-			}}
+			ref={setNodeRef}
+			{...listeners}
+			{...attributes}
 			className={cn(
-				"flex flex-col rounded border cursor-grab hover:bg-muted active:cursor-grabbing select-none group overflow-hidden",
+				"flex flex-col rounded border cursor-grab hover:bg-muted active:cursor-grabbing select-none group overflow-hidden touch-none",
 				isDragging && "opacity-50",
 			)}
 			onDoubleClick={() => onSelect(widget)}

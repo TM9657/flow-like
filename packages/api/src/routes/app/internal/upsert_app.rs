@@ -60,7 +60,7 @@ pub async fn upsert_app(
                 sub.sub()?,
                 app_id
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
 
         {
@@ -104,7 +104,7 @@ pub async fn upsert_app(
             sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let Some(metadata) = app_body.meta else {
@@ -113,14 +113,14 @@ pub async fn upsert_app(
             sub,
             app_id
         );
-        return Err(ApiError::InternalError(
+        return Err(ApiError::internal_error(
             anyhow!("Meta is required for new apps"),
         ));
     };
 
     if tier.max_non_visible_projects == 0 {
         tracing::warn!("Configuration doesn't allow for the creation of non-visible projects",);
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     if tier.max_non_visible_projects > 0 {
@@ -145,7 +145,7 @@ pub async fn upsert_app(
                 tier.max_non_visible_projects,
                 count
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
     }
 

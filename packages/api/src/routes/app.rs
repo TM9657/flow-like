@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::{collections::HashMap, time::SystemTime};
 
 use crate::{entity::app, state::AppState};
 use axum::{
@@ -62,7 +62,7 @@ macro_rules! ensure_permission {
         if !sub.has_permission($perm) {
             let user_id = sub.sub()?;
             $state.invalidate_permission(&user_id, $app_id);
-            return Err($crate::error::ApiError::Forbidden);
+            return Err($crate::error::ApiError::FORBIDDEN);
         }
         sub
     }};
@@ -82,7 +82,7 @@ macro_rules! ensure_permissions {
         let sub = $user.app_permission($app_id, $state).await?;
         for perm in $perms.iter() {
             if !sub.has_permission(perm) {
-                return Err($crate::error::ApiError::Forbidden);
+                return Err($crate::error::ApiError::FORBIDDEN);
             }
         }
         sub
@@ -296,6 +296,7 @@ impl From<app::Model> for flow_like::app::App {
             app_state: None,
             widget_ids: vec![],
             page_ids: vec![],
+            route_mappings: HashMap::new(),
         }
     }
 }

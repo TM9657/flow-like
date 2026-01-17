@@ -32,6 +32,7 @@ export {
 } from "./flow/board";
 export type {
 	IEvent,
+	IEventInput,
 	ICanaryEvent,
 	IReleaseNotes,
 } from "./flow/event";

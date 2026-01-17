@@ -52,5 +52,9 @@ pub async fn build_index(
     db.index(&payload.column, Some(&payload.index_type.to_string()))
         .await?;
 
+    if payload.optimize {
+        db.optimize(true).await?;
+    }
+
     Ok(Json(()))
 }

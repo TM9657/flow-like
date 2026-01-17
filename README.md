@@ -487,6 +487,17 @@ We'd love your help making Flow-Like the best open-source workflow automation pl
 - **Build Integrations** — Create custom workflow nodes and share them
 - **Design Themes** — Contribute custom themes and UI improvements
 
+### AI-assisted coding
+
+We sometimes use AI tools (e.g. GitHub Copilot / LLMs) to accelerate development. AI can be used for coding, but **always requires special care and manual review** — never merge AI-generated changes blindly.
+
+Good fits:
+- Frontend/UI baselines and scaffolding
+- Node generation / boilerplate
+
+Extra caution required:
+- Backend functions (auth, permissions, data validation, persistence, networking, crypto) are highly security relevant and must be reviewed especially thoroughly.
+
 <br>
 
 ## 🏗️ Built With Amazing Open Source

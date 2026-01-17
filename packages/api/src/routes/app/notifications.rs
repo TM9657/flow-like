@@ -16,6 +16,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateNotificationParams {
+    /// Event ID that triggered this execution.
+    /// Used to resolve the board and verify that notifications are allowed for it.
+    pub event_id: String,
     /// Target user's sub. If not provided, notifies the executing user.
     pub target_user_sub: Option<String>,
     pub title: String,
@@ -37,10 +40,11 @@ pub struct CreateNotificationResponse {
 /// POST /apps/{app_id}/notifications/create
 ///
 /// Create a notification from a workflow execution.
-/// - Caller must have ExecuteBoards permission in the project
+/// - Caller must have ExecuteEvents permission in the project
+/// - event_id is required and is used to resolve the board
+/// - The resolved board must contain a Notify User node, otherwise the request is denied
 /// - If target_user_sub is provided, that user must be a member of the project
 /// - If target_user_sub is not provided, notifies the executing user (from JWT sub)
-/// TODO: We should send the nodeid where the notification is coming from. Otherwise we can just fire this off to annoy users
 #[tracing::instrument(name = "POST /apps/{app_id}/notifications/create", skip(state, user))]
 pub async fn create_notification(
     State(state): State<AppState>,
@@ -49,8 +53,71 @@ pub async fn create_notification(
     Json(params): Json<CreateNotificationParams>,
 ) -> Result<Json<CreateNotificationResponse>, ApiError> {
     // Verify caller has execution permission in the project
-    let caller = ensure_permission!(user, &app_id, &state, RolePermissions::ExecuteBoards);
+    let caller = ensure_permission!(user, &app_id, &state, RolePermissions::ExecuteEvents);
     let caller_sub = caller.sub()?;
+
+    if params.event_id.trim().is_empty() {
+        return Err(ApiError::bad_request("event_id is required".to_string()));
+    }
+
+    // Resolve event -> board, then verify that the board actually contains a notification node.
+    // This prevents arbitrary clients from spamming notifications for boards that don't opt-in.
+    let app = state.master_app(&caller_sub, &app_id, &state).await?;
+    let event = app.get_event(&params.event_id, None).await.map_err(|e| {
+        tracing::warn!(error = %e, event_id = %params.event_id, "Failed to resolve event for notification");
+        ApiError::FORBIDDEN
+    })?;
+
+    let board = state
+        .master_board(
+            &caller_sub,
+            &app_id,
+            &event.board_id,
+            &state,
+            event.board_version,
+        )
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, board_id = %event.board_id, "Failed to resolve board for notification");
+            ApiError::FORBIDDEN
+        })?;
+
+    let allowed_notification_nodes = ["notify_user", "notify_project_user"];
+
+    let board_has_notification_node = board
+        .nodes
+        .values()
+        .any(|node| allowed_notification_nodes.contains(&node.name.as_str()));
+
+    if !board_has_notification_node {
+        tracing::warn!(
+            caller = %caller_sub,
+            app_id = %app_id,
+            event_id = %params.event_id,
+            board_id = %event.board_id,
+            "Denied notification create: board has no notification node"
+        );
+        return Err(ApiError::FORBIDDEN);
+    }
+
+    if let Some(ref source_node_id) = params.node_id {
+        let node = board.nodes.get(source_node_id);
+        let allowed = node
+            .map(|n| allowed_notification_nodes.contains(&n.name.as_str()))
+            .unwrap_or(false);
+
+        if !allowed {
+            tracing::warn!(
+                caller = %caller_sub,
+                app_id = %app_id,
+                event_id = %params.event_id,
+                board_id = %event.board_id,
+                source_node_id = %source_node_id,
+                "Denied notification create: source node is not a notification node"
+            );
+            return Err(ApiError::FORBIDDEN);
+        }
+    }
 
     // Determine target user
     let target_sub = params.target_user_sub.unwrap_or_else(|| caller_sub.clone());
@@ -70,7 +137,7 @@ pub async fn create_notification(
                 app_id = %app_id,
                 "Attempted to notify user who is not a member of the project"
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
     }
 

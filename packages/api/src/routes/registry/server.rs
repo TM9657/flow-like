@@ -550,7 +550,7 @@ impl ServerRegistry {
         manifest: PackageManifest,
         wasm_data: Vec<u8>,
         submitter_id: Option<String>,
-        submitter_email: Option<String>,
+        _submitter_email: Option<String>,
     ) -> flow_like_types::Result<PublishResponse> {
         use crate::entity::sea_orm_active_enums::{WasmPackageStatus, WasmReviewAction};
 
@@ -730,8 +730,6 @@ impl ServerRegistry {
         offset: usize,
         limit: usize,
     ) -> flow_like_types::Result<(Vec<PackageDetails>, usize)> {
-        use crate::entity::sea_orm_active_enums::WasmPackageStatus;
-
         let mut query = wasm_package::Entity::find();
 
         if let Some(status) = status_filter {

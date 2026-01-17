@@ -32,7 +32,7 @@ pub async fn remove_media(
     let existing_meta = mode
         .find_existing_meta(language, &txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or_else(|| ApiError::NOT_FOUND)?;
 
     let mut model: meta::ActiveModel = existing_meta.clone().into();
     model.updated_at = Set(chrono::Utc::now().naive_utc());
@@ -66,7 +66,7 @@ pub async fn remove_media(
         .child(item_name.clone());
     if let Err(e) = master_store.as_generic().delete(&path).await {
         tracing::error!("Failed to delete media file at {}: {:?}", path, e);
-        return Err(ApiError::InternalError(
+        return Err(ApiError::internal_error(
             anyhow!("Failed to delete media file, reference ID: {}", create_id()),
         ));
     }

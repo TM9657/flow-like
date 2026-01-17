@@ -78,7 +78,7 @@ pub async fn user_lookup(
         return Ok(Json(response));
     }
 
-    Err(ApiError::NotFound)
+    Err(ApiError::NOT_FOUND)
 }
 
 #[tracing::instrument(name = "GET /user/search/{query}", skip(state, user))]
@@ -127,7 +127,7 @@ pub async fn user_search(
         .await?;
 
     if fuzzy_matches.is_empty() {
-        return Err(ApiError::NotFound);
+        return Err(ApiError::NOT_FOUND);
     }
 
     let mut responses: Vec<UserLookupResponse> = Vec::with_capacity(fuzzy_matches.len());

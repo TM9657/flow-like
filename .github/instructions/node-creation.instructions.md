@@ -22,7 +22,7 @@ If you need more abstract memory, like a thread-handle or database connections y
 
 ## Documentation
 - Add a nice node and pin description, so the user understands what the node does.
-- Add scores to the node rating: privacy, security, performance, governance, reliability, cost. 0 - 10 (low - high)
+- Add scores to the node rating: privacy, security, performance, governance, reliability, cost. 0 - 10 (bad - good)
 
 ## Tipps and Tricks
 - Log out warnings, errors etc.

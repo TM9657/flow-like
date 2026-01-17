@@ -27,7 +27,7 @@ pub async fn get_roles(
         .await?
         .ok_or_else(|| {
             tracing::warn!("App {} not found", app_id);
-            ApiError::NotFound
+            ApiError::NOT_FOUND
         })?;
 
     let roles = role::Entity::find()

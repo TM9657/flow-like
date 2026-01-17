@@ -178,18 +178,14 @@ impl Settings {
 
         ensure_app_dirs().ok();
 
-        // Preserve existing locations on non-iOS, use sandbox-safe on iOS.
-        #[allow(unused_mut)]
         let mut bit_dir = dirs_next::data_dir()
             .unwrap_or_default()
             .join("flow-like")
             .join("bits");
-        #[allow(unused_mut)]
         let mut project_dir = dirs_next::data_dir()
             .unwrap_or_default()
             .join("flow-like")
             .join("projects");
-        #[allow(unused_mut)]
         let mut user_dir = dirs_next::cache_dir().unwrap_or_default().join("flow-like");
 
         if cfg!(target_os = "ios") {
@@ -277,7 +273,6 @@ impl Drop for Settings {
 }
 
 impl Settings {
-    #[allow(unused_variables)]
     fn normalize_platform_paths(&mut self) {
         #[cfg(target_os = "ios")]
         {

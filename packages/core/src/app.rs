@@ -12,7 +12,7 @@ use flow_like_types::{FromProto, ToProto, create_id, proto, sync::Mutex};
 use futures::{StreamExt, TryStreamExt};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{sync::Arc, time::SystemTime, vec};
+use std::{collections::HashMap, sync::Arc, time::SystemTime, vec};
 pub mod sharing;
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
@@ -146,6 +146,11 @@ pub struct App {
     #[serde(default)]
     pub page_ids: Vec<String>,
 
+    /// Route mappings: path -> event_id (e.g., "/" -> "event123")
+    /// The event determines what to display (page-target or board-target)
+    #[serde(default)]
+    pub route_mappings: HashMap<String, String>,
+
     #[serde(skip)]
     pub app_state: Option<Arc<FlowLikeState>>,
 }
@@ -179,6 +184,7 @@ impl Clone for App {
             frontend: self.frontend.clone(),
             widget_ids: self.widget_ids.clone(),
             page_ids: self.page_ids.clone(),
+            route_mappings: self.route_mappings.clone(),
         }
     }
 }
@@ -223,6 +229,7 @@ impl App {
             frontend: None,
             widget_ids: vec![],
             page_ids: vec![],
+            route_mappings: HashMap::new(),
             app_state: Some(app_state.clone()),
         };
 
@@ -477,15 +484,15 @@ impl App {
         let enforce_id = enforce_id.unwrap_or(false);
         let mut event = event;
 
-        event.upsert(self, version_type, enforce_id).await?;
+        let saved_event = event.upsert(self, version_type, enforce_id).await?;
 
-        if !self.events.contains(&event.id) {
-            self.events.push(event.id.clone());
+        if !self.events.contains(&saved_event.id) {
+            self.events.push(saved_event.id.clone());
         }
 
         self.updated_at = SystemTime::now();
         self.save().await?;
-        Ok(event)
+        Ok(saved_event)
     }
 
     pub async fn validate_event(
@@ -1231,6 +1238,7 @@ mod tests {
             frontend: None,
             widget_ids: vec![],
             page_ids: vec![],
+            route_mappings: std::collections::HashMap::new(),
         };
 
         let mut buf = Vec::new();

@@ -1,5 +1,5 @@
 use crate::{
-    backend_jwt::{self, BackendJwtError, TokenType, get_jwks, get_kid, issuer, make_time_claims},
+    backend_jwt::{self, TokenType, get_jwks, issuer, make_time_claims},
     ensure_permission,
     entity::{board_sync, prelude::*},
     error::ApiError,
@@ -76,7 +76,7 @@ pub async fn jwks(
 
     // Get JWKS from unified backend module
     let jwks = get_jwks()
-        .map_err(|e| ApiError::InternalError(anyhow!("Realtime not configured: {}", e)))?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Realtime not configured: {}", e)))?;
 
     Ok(Json(jwks))
 }
@@ -99,7 +99,7 @@ pub async fn access(
     let user_model = User::find_by_id(&sub)
         .one(&state.db)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or_else(|| ApiError::NOT_FOUND)?;
 
     let (encryption_key, key_id) = get_or_rotate_room_key(&state, &app_id, &board_id).await?;
 
@@ -121,7 +121,7 @@ pub async fn access(
     };
 
     let jwt = backend_jwt::sign(&claims)
-        .map_err(|e| ApiError::InternalError(anyhow!("Realtime not configured: {}", e)))?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Realtime not configured: {}", e)))?;
 
     Ok(Json(RealtimeParams {
         jwt,

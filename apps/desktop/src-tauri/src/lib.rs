@@ -99,7 +99,7 @@ pub fn run() {
         } else {
             tracing::error!(target: "panic", message = %info, "Application panic (no location)");
         }
-        #[allow(unused_must_use)]
+
         {
             let _ = sentry::capture_message(&format!("panic: {info}"), sentry::Level::Fatal);
         }
@@ -627,9 +627,10 @@ pub fn run() {
             functions::a2ui::route::get_app_routes,
             functions::a2ui::route::get_app_route_by_path,
             functions::a2ui::route::get_default_app_route,
-            functions::a2ui::route::create_app_route,
-            functions::a2ui::route::update_app_route,
-            functions::a2ui::route::delete_app_route,
+            functions::a2ui::route::set_app_route,
+            functions::a2ui::route::set_app_routes,
+            functions::a2ui::route::delete_app_route_by_path,
+            functions::a2ui::route::delete_app_route_by_event,
             functions::event_sink_commands::add_event_sink,
             functions::event_sink_commands::remove_event_sink,
             functions::event_sink_commands::get_event_sink,

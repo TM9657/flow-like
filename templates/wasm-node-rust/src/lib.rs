@@ -65,7 +65,6 @@ fn handle_run(mut ctx: Context) -> ExecutionResult {
 // ============================================================================
 
 /// Example: Using variables
-#[allow(dead_code)]
 fn variables_example(_ctx: &Context) {
     // Get a variable from the execution context
     if let Some(value) = var::get_variable("my_var") {
@@ -77,7 +76,6 @@ fn variables_example(_ctx: &Context) {
 }
 
 /// Example: Streaming output
-#[allow(dead_code)]
 fn streaming_example(ctx: &Context) {
     // Stream text (only sends if streaming is enabled)
     ctx.stream_text("Starting process...\n");
@@ -95,7 +93,6 @@ fn streaming_example(ctx: &Context) {
 }
 
 /// Example: Error handling
-#[allow(dead_code)]
 fn error_handling_example(ctx: Context) -> ExecutionResult {
     // Try to get a required input
     let _required_value = match ctx.require_input_as::<String>("required_field") {
@@ -110,7 +107,6 @@ fn error_handling_example(ctx: Context) -> ExecutionResult {
 }
 
 /// Example: Long-running operation with pending state
-#[allow(dead_code)]
 fn long_running_example(mut ctx: Context) -> ExecutionResult {
     // Mark as pending - the host will check back later
     ctx.set_pending(true);
@@ -120,7 +116,6 @@ fn long_running_example(mut ctx: Context) -> ExecutionResult {
 }
 
 /// Example: Multiple exec outputs (branching)
-#[allow(dead_code)]
 fn branching_example(mut ctx: Context) -> ExecutionResult {
     let condition = ctx.get_bool("condition").unwrap_or(false);
 

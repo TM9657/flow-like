@@ -24,7 +24,7 @@ pub async fn delete_route(
         .filter(app_route::Column::AppId.eq(&app_id))
         .one(&state.db)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     route.delete(&state.db).await?;
 

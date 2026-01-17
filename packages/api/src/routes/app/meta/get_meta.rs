@@ -28,7 +28,7 @@ pub async fn get_meta(
     let existing_meta = mode
         .find_existing_meta(&language, &txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or_else(|| ApiError::NOT_FOUND)?;
 
     let mut metadata = Metadata::from(existing_meta.clone());
 

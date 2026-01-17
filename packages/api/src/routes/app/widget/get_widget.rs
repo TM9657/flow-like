@@ -33,7 +33,7 @@ pub async fn get_widget(
         match parts.as_slice() {
             [maj, min, pat] => Some((*maj, *min, *pat)),
             _ => {
-                return Err(ApiError::InternalError(
+                return Err(ApiError::internal_error(
                     anyhow!("version must be in MAJOR_MINOR_PATCH format"),
                 ));
             }

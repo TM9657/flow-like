@@ -65,13 +65,16 @@ export function ElementSelect({
 			setLoading(true);
 			try {
 				const routes = await backend.routeState.getRoutes(appId);
+				const events = await backend.eventState.getEvents(appId);
+				const eventsMap = new Map(events.map((e) => [e.id, e]));
 				const allElements: ElementOption[] = [];
 				const seenIds = new Set<string>();
 
 				for (const route of routes) {
-					if (route.targetType === "page" && route.pageId) {
+					const event = eventsMap.get(route.eventId);
+					if (event?.default_page_id) {
 						try {
-							const page = await backend.pageState.getPage(appId, route.pageId);
+							const page = await backend.pageState.getPage(appId, event.default_page_id);
 							if (page?.components) {
 								const pageElements = flattenElements(page.components);
 								for (const el of pageElements) {

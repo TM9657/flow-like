@@ -20,6 +20,7 @@ import {
 	type IProfile,
 	type IRegistryState,
 	type IRoleState,
+	type ISinkState,
 	type IStorageState,
 	type ITeamState,
 	type ITemplateState,
@@ -51,6 +52,7 @@ import { PageState } from "./tauri-provider/page-state";
 import { RegistryState } from "./tauri-provider/registry-state";
 import { RoleState } from "./tauri-provider/role-state";
 import { RouteState } from "./tauri-provider/route-state";
+import { SinkState } from "./tauri-provider/sink-state";
 import { StorageState } from "./tauri-provider/storage-state";
 import { TeamState } from "./tauri-provider/team-state";
 import { TemplateState } from "./tauri-provider/template-state";
@@ -83,6 +85,7 @@ export class TauriBackend implements IBackendState {
 	widgetState: IWidgetState;
 	pageState: IPageState;
 	registryState: IRegistryState;
+	sinkState: ISinkState;
 
 	private _apiState: TauriApiState;
 
@@ -110,6 +113,7 @@ export class TauriBackend implements IBackendState {
 		this.widgetState = new WidgetState(this);
 		this.pageState = new PageState(this);
 		this.registryState = new RegistryState(this);
+		this.sinkState = new SinkState();
 	}
 
 	capabilities(): ICapabilities {

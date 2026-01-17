@@ -8,8 +8,7 @@ use flow_like::flow_like_model_provider::provider::{ModelProviderConfiguration, 
 use flow_like::flow_like_storage::Path;
 use flow_like::flow_like_storage::files::store::FlowLikeStore;
 use flow_like::hub::{Environment, Hub};
-use flow_like::state::{FlowLikeConfig, FlowLikeState, FlowNodeRegistryInner};
-use flow_like::utils::http::HTTPClient;
+use flow_like::state::{FlowLikeState, FlowNodeRegistryInner};
 use flow_like_types::bail;
 use flow_like_types::{Result, Value};
 use hyper_util::{
@@ -118,10 +117,6 @@ impl State {
                 proxy: None,
             })
         }
-
-        let config = FlowLikeConfig::new();
-        let (http_client, _) = HTTPClient::new();
-        let flow_like_state = FlowLikeState::new(config, http_client);
 
         let registry = FlowNodeRegistryInner::prepare(&catalog);
 

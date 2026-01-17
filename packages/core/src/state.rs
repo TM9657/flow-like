@@ -671,10 +671,28 @@ impl Default for ToastEvent {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NotificationEvent {
     pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
     pub show_desktop: bool,
+
+    /// Event ID that triggered this workflow execution.
+    /// If present, UIs can persist the notification via the backend API.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_id: Option<String>,
+
+    /// Target user sub (for project-user notifications)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_user_sub: Option<String>,
+
+    /// Optional tracking info
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_run_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_node_id: Option<String>,
 }
 
 impl NotificationEvent {
@@ -685,6 +703,10 @@ impl NotificationEvent {
             icon: None,
             link: None,
             show_desktop: true,
+            event_id: None,
+            target_user_sub: None,
+            source_run_id: None,
+            source_node_id: None,
         }
     }
 
@@ -703,6 +725,34 @@ impl NotificationEvent {
         self
     }
 
+    pub fn with_event_id(mut self, event_id: &str) -> Self {
+        if !event_id.trim().is_empty() {
+            self.event_id = Some(event_id.to_string());
+        }
+        self
+    }
+
+    pub fn with_target_user_sub(mut self, target_user_sub: &str) -> Self {
+        if !target_user_sub.trim().is_empty() {
+            self.target_user_sub = Some(target_user_sub.to_string());
+        }
+        self
+    }
+
+    pub fn with_source_run_id(mut self, run_id: &str) -> Self {
+        if !run_id.trim().is_empty() {
+            self.source_run_id = Some(run_id.to_string());
+        }
+        self
+    }
+
+    pub fn with_source_node_id(mut self, node_id: &str) -> Self {
+        if !node_id.trim().is_empty() {
+            self.source_node_id = Some(node_id.to_string());
+        }
+        self
+    }
+
     pub fn with_desktop(mut self, show_desktop: bool) -> Self {
         self.show_desktop = show_desktop;
         self
@@ -717,6 +767,10 @@ impl Default for NotificationEvent {
             icon: None,
             link: None,
             show_desktop: true,
+            event_id: None,
+            target_user_sub: None,
+            source_run_id: None,
+            source_node_id: None,
         }
     }
 }

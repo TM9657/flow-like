@@ -81,4 +81,8 @@ message App {
   // A2UI Integration - IDs only, actual data stored separately
   repeated string widget_ids = 23;
   repeated string page_ids = 24;
+
+  // Route mappings: path -> event_id (e.g., "/" -> "event123")
+  // The event determines what to display (page-target or board-target)
+  map<string, string> route_mappings = 25;
 }

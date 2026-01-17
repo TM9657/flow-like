@@ -99,4 +99,9 @@ export interface INotificationEvent {
 	icon?: string;
 	link?: string;
 	show_desktop: boolean;
+	// Optional metadata for persisting workflow notifications via API
+	event_id?: string;
+	target_user_sub?: string;
+	source_run_id?: string;
+	source_node_id?: string;
 }

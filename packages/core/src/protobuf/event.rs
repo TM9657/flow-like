@@ -3,7 +3,7 @@ use std::time::SystemTime;
 use flow_like_types::{FromProto, Timestamp, ToProto};
 
 use crate::flow::{
-    event::{CanaryEvent, Event, ReleaseNotes},
+    event::{CanaryEvent, Event, EventInput, ReleaseNotes},
     variable::Variable,
 };
 
@@ -46,6 +46,39 @@ impl ToProto<flow_like_types::proto::Event> for Event {
             updated_at: Some(Timestamp::from(self.updated_at)),
             event_type: self.event_type.clone(),
             default_page_id: self.default_page_id.clone(),
+            inputs: self.inputs.iter().map(|i| i.to_proto()).collect(),
+        }
+    }
+}
+
+impl ToProto<flow_like_types::proto::EventInput> for EventInput {
+    fn to_proto(&self) -> flow_like_types::proto::EventInput {
+        flow_like_types::proto::EventInput {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            friendly_name: self.friendly_name.clone(),
+            description: self.description.clone(),
+            data_type: self.data_type.clone(),
+            value_type: self.value_type.clone(),
+            schema: self.schema.clone(),
+            default_value: self.default_value.clone(),
+            index: self.index as u32,
+        }
+    }
+}
+
+impl FromProto<flow_like_types::proto::EventInput> for EventInput {
+    fn from_proto(proto: flow_like_types::proto::EventInput) -> Self {
+        EventInput {
+            id: proto.id,
+            name: proto.name,
+            friendly_name: proto.friendly_name,
+            description: proto.description,
+            data_type: proto.data_type,
+            value_type: proto.value_type,
+            schema: proto.schema,
+            default_value: proto.default_value,
+            index: proto.index as u16,
         }
     }
 }
@@ -109,6 +142,7 @@ impl FromProto<flow_like_types::proto::Event> for Event {
                 .unwrap_or(SystemTime::UNIX_EPOCH),
             event_type: proto.event_type,
             default_page_id: proto.default_page_id,
+            inputs: proto.inputs.into_iter().map(EventInput::from_proto).collect(),
         }
     }
 }

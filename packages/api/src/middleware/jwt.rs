@@ -262,7 +262,7 @@ impl AppUser {
         if has_permission {
             Ok(global_permission)
         } else {
-            Err(ApiError::Forbidden)
+            Err(ApiError::FORBIDDEN)
         }
     }
 

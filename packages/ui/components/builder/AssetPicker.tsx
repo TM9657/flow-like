@@ -24,7 +24,7 @@ export interface AssetPickerProps {
 
 const ASSET_EXTENSIONS: Record<string, string[]> = {
 	image: ["jpg", "jpeg", "png", "gif", "webp", "svg", "ico", "bmp"],
-	model: ["glb", "gltf", "obj", "fbx"],
+	model: ["glb", "gltf", "obj", "fbx", "usdz", "usd", "3ds", "dae"],
 	video: ["mp4", "webm", "ogg", "mov"],
 };
 

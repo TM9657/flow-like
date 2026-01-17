@@ -8,7 +8,6 @@ use axum::{
     Extension, Json,
     extract::{Path, Query, State},
 };
-use flow_like_types::create_id;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter,
     QueryOrder, QuerySelect,
@@ -95,7 +94,7 @@ pub async fn mark_notification_read(
         .filter(notification::Column::UserId.eq(sub))
         .one(&state.db)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or_else(|| ApiError::NOT_FOUND)?;
 
     let mut active: notification::ActiveModel = notification.into();
     active.read = Set(true);
@@ -117,7 +116,7 @@ pub async fn delete_notification(
         .filter(notification::Column::UserId.eq(sub))
         .one(&state.db)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or_else(|| ApiError::NOT_FOUND)?;
 
     let active: notification::ActiveModel = notification.into();
     active.delete(&state.db).await?;

@@ -242,6 +242,15 @@ impl ExecutionContext {
             oauth_tokens,
         }
     }
+    pub fn run_id(&self) -> &str {
+        &self.run_id
+    }
+
+    pub async fn event_id(&self) -> Option<String> {
+        let run = self.run.upgrade()?;
+        let run = run.lock().await;
+        run.event_id.clone()
+    }
 
     /// Create ExecutionContext using cached RunMeta to avoid locking Run
     pub async fn with_meta(

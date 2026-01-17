@@ -12,7 +12,8 @@ import { A2UIRenderer } from "./A2UIRenderer";
 import type { Surface, A2UIServerMessage, SurfaceComponent } from "./types";
 import { useBackend } from "../../state/backend-state";
 import type { IPage } from "../../state/backend-state/page-state";
-import type { IAppRoute } from "../../state/backend-state/route-state";
+import type { IRouteMapping } from "../../state/backend-state/route-state";
+import type { IEvent } from "../../lib/schema/flow/event";
 
 interface DialogState {
 	id: string;
@@ -124,7 +125,8 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 	const [error, setError] = useState<string | null>(null);
 	const [surface, setSurface] = useState<Surface | null>(null);
 	const [page, setPage] = useState<IPage | null>(null);
-	const [routeConfig, setRouteConfig] = useState<IAppRoute | null>(null);
+	const [routeMapping, setRouteMapping] = useState<IRouteMapping | null>(null);
+	const [routeEvent, setRouteEvent] = useState<IEvent | null>(null);
 	const loadEventExecutedRef = useRef<string | null>(null);
 
 	// Load the route content when dialog opens
@@ -139,25 +141,38 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 			setIsLoading(true);
 			setError(null);
 			try {
-				// Get route config
-				const config: IAppRoute | null = await backend.routeState.getRouteByPath(
+				// Get route mapping
+				const mapping: IRouteMapping | null = await backend.routeState.getRouteByPath(
 					appId,
 					dialog.route
 				);
 
-				if (!config) {
+				if (!mapping) {
 					setError(`Route not found: ${dialog.route}`);
 					setIsLoading(false);
 					return;
 				}
 
-				setRouteConfig(config);
+				setRouteMapping(mapping);
 
-				if (config.targetType === "page" && config.pageId) {
+				// Get the event for this route
+				const events = await backend.eventState.getEvents(appId);
+				const event = events.find((e) => e.id === mapping.eventId);
+
+				if (!event) {
+					setError(`Event not found for route: ${dialog.route}`);
+					setIsLoading(false);
+					return;
+				}
+
+				setRouteEvent(event);
+
+				// Check if event has a page target
+				if (event.default_page_id) {
 					const pageResult = await backend.pageState.getPage(
 						appId,
-						config.pageId,
-						config.boardId || undefined
+						event.default_page_id,
+						undefined
 					);
 
 					if (pageResult) {
@@ -166,10 +181,10 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 						const builtSurface = buildSurfaceFromPage(pageResult, pageResult.id);
 						setSurface(builtSurface);
 					} else {
-						setError(`Page not found: ${config.pageId}`);
+						setError(`Page not found: ${event.default_page_id}`);
 					}
 				} else {
-					setError("Route does not target a page");
+					setError("Route event does not have a page target");
 				}
 			} catch (e) {
 				console.error("Failed to load dialog content:", e);
@@ -180,7 +195,7 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 		};
 
 		loadContent();
-	}, [appId, dialog.route, backend.routeState, backend.pageState]);
+	}, [appId, dialog.route, backend.routeState, backend.pageState, backend.eventState]);
 
 	const handleServerMessage = useCallback((message: A2UIServerMessage) => {
 		console.log("[RouteDialog] Server message:", message);
@@ -257,7 +272,7 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 		const executeOnLoadEvent = async () => {
 			if (!page?.onLoadEventId || !appId) return;
 
-			const boardId = page.boardId || routeConfig?.boardId;
+			const boardId = page.boardId || routeEvent?.board_id;
 			if (!boardId) {
 				console.warn("[RouteDialog] No boardId available for onLoad event");
 				return;
@@ -308,7 +323,7 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 		if (!isLoading && page) {
 			executeOnLoadEvent();
 		}
-	}, [appId, page, routeConfig, dialog, isLoading, backend.boardState, handleServerMessage, getElementsFromSurface]);
+	}, [appId, page, routeEvent, dialog, isLoading, backend.boardState, handleServerMessage, getElementsFromSurface]);
 
 	const showLoading = isLoading || isLoadEventRunning;
 
@@ -336,7 +351,7 @@ function RouteDialogRenderer({ dialog, appId, onOpenChange, openDialog, closeDia
 							surface={surface}
 							widgetRefs={page?.widgetRefs}
 							appId={appId}
-							boardId={page?.boardId || routeConfig?.boardId}
+							boardId={page?.boardId || routeEvent?.board_id}
 							onA2UIMessage={handleServerMessage}
 							isPreviewMode={true}
 							openDialog={openDialog}

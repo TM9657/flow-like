@@ -96,22 +96,22 @@ const navigationItems = [
 		description: "Business logic and workflow definitions",
 	},
 	{
-		href: "/library/config/widgets",
-		label: "Widgets",
-		icon: LayoutGridIcon,
-		description: "Reusable UI components and widgets",
-	},
-	{
 		href: "/library/config/pages",
-		label: "Events & UI",
+		label: "Events",
 		icon: SparklesIcon,
-		description: "Pages, routes, and event handling",
+		description: "Events, pages, and path-based navigation",
 	},
 	{
 		href: "/library/config/templates",
 		label: "Templates",
 		icon: CopyIcon,
 		description: "Reusable Flow templates",
+	},
+	{
+		href: "/library/config/widgets",
+		label: "Widgets",
+		icon: LayoutGridIcon,
+		description: "Reusable UI components and widgets",
 	},
 	{
 		href: "/library/config/storage",

@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    routing::{delete, get, patch, post, put},
+    routing::{get, post, put},
 };
 use bit::{delete_bit, push_meta, upsert_bit};
 

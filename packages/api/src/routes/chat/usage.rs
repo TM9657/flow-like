@@ -22,7 +22,7 @@ pub async fn get_llm_usage(
     let user = user::Entity::find_by_id(user.sub()?)
         .one(&state.db)
         .await?
-        .ok_or_else(|| ApiError::Forbidden)?;
+        .ok_or_else(|| ApiError::FORBIDDEN)?;
 
     Ok(Json(Usage {
         llm_price: user.total_llm_price,

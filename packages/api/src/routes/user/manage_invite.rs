@@ -52,10 +52,10 @@ pub async fn accept_invite(
         .find_also_related(app::Entity)
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or_else(|| ApiError::NOT_FOUND)?;
 
-    let app = app.ok_or_else(|| ApiError::NotFound)?;
-    let default_role = app.default_role_id.ok_or_else(|| ApiError::NotFound)?;
+    let app = app.ok_or_else(|| ApiError::NOT_FOUND)?;
+    let default_role = app.default_role_id.ok_or_else(|| ApiError::NOT_FOUND)?;
 
     if matches!(app.visibility, Visibility::Offline | Visibility::Private) {
         tracing::warn!(
@@ -63,7 +63,7 @@ pub async fn accept_invite(
             sub,
             app.id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     if max_prototype > 0 && app.visibility == Visibility::Prototype {
@@ -78,7 +78,7 @@ pub async fn accept_invite(
                 sub,
                 app.id
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
     }
 

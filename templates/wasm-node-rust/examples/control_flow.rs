@@ -41,7 +41,6 @@ fn run_if_branch(mut ctx: Context) -> ExecutionResult {
 // ============================================================================
 
 /// Compare two values
-#[allow(dead_code)]
 fn compare_node_definition() -> NodeDefinition {
     let mut def = NodeDefinition::new(
         "compare",
@@ -73,7 +72,6 @@ fn compare_node_definition() -> NodeDefinition {
 }
 
 /// Gate - only passes execution if condition is true
-#[allow(dead_code)]
 fn gate_example(mut ctx: Context) -> ExecutionResult {
     let is_open = ctx.get_bool("is_open").unwrap_or(false);
 
@@ -86,7 +84,6 @@ fn gate_example(mut ctx: Context) -> ExecutionResult {
 }
 
 /// Sequence - activates multiple outputs in order
-#[allow(dead_code)]
 fn sequence_example(mut ctx: Context) -> ExecutionResult {
     // Activate outputs in sequence
     // The runtime will execute them in order
@@ -98,7 +95,6 @@ fn sequence_example(mut ctx: Context) -> ExecutionResult {
 }
 
 /// For Each with index
-#[allow(dead_code)]
 fn for_each_example(mut ctx: Context) -> ExecutionResult {
     // This demonstrates streaming results for iteration
     let items: Vec<String> = ctx.get_input_as("items").unwrap_or_default();

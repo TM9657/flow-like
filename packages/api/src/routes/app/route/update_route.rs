@@ -47,7 +47,7 @@ pub async fn update_route(
         .filter(app_route::Column::AppId.eq(&app_id))
         .one(&txn)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     // If setting this route as default, unset any existing default
     if let Some(true) = req.is_default {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
 	ChevronDown,
 	ChevronRight,
@@ -15,7 +16,6 @@ import {
 	Unlock,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useDrag, useDrop } from "react-dnd";
 import { cn } from "../../lib";
 import type { A2UIComponent, SurfaceComponent } from "../a2ui/types";
 import {
@@ -31,9 +31,12 @@ import { useBuilder } from "./BuilderContext";
 import {
 	COMPONENT_DND_TYPE,
 	COMPONENT_MOVE_TYPE,
+	type ComponentDragData,
+	type ComponentMoveData,
+	type DropData,
+} from "./BuilderDndContext";
+import {
 	CONTAINER_TYPES,
-	type ComponentDragItem,
-	type ComponentMoveItem,
 	ROOT_ID,
 	createDefaultComponent,
 } from "./WidgetBuilder";
@@ -539,140 +542,35 @@ function TreeNode({
 		[components],
 	);
 
-	// Drag source for moving this node
-	const [{ isDragging }, drag, dragPreview] = useDrag<
-		ComponentMoveItem,
-		void,
-		{ isDragging: boolean }
-	>(
-		() => ({
+	// Draggable for moving this node
+	const {
+		attributes: dragAttributes,
+		listeners: dragListeners,
+		setNodeRef: setDragRef,
+		isDragging,
+	} = useDraggable({
+		id: `tree-move-${node.id}`,
+		disabled: isRoot || node.locked,
+		data: {
 			type: COMPONENT_MOVE_TYPE,
-			item: {
-				type: COMPONENT_MOVE_TYPE,
-				componentId: node.id,
-				currentParentId: findParentId(node.id),
-			},
-			canDrag: () => !isRoot && !node.locked,
-			collect: (monitor) => ({
-				isDragging: monitor.isDragging(),
-			}),
-		}),
-		[node.id, isRoot, node.locked, findParentId],
-	);
+			componentId: node.id,
+			currentParentId: findParentId(node.id),
+		} satisfies ComponentMoveData,
+	});
 
-	// Drop target for receiving components
-	const [{ isOver, canDrop }, drop] = useDrop<
-		ComponentDragItem | ComponentMoveItem,
-		void,
-		{ isOver: boolean; canDrop: boolean }
-	>(
-		() => ({
-			accept: [COMPONENT_DND_TYPE, COMPONENT_MOVE_TYPE],
-			canDrop: (item, monitor) => {
-				// For "inside" drops, target must be a container
-				// For "before/after" drops, any node works (we insert relative to its parent)
-				if ("componentId" in item) {
-					if (item.componentId === node.id) return false;
-					if (isDescendant(node.id, item.componentId)) return false;
-				}
-				return true;
-			},
-			hover: (item, monitor) => {
-				if (!monitor.isOver({ shallow: true })) {
-					setDropPosition(null);
-					return;
-				}
+	// Droppable for receiving components
+	const { setNodeRef: setDropRef, isOver } = useDroppable({
+		id: `tree-drop-${node.id}`,
+		disabled: !isContainer,
+		data: {
+			type: "container",
+			parentId: node.id,
+			isContainer: true,
+		} satisfies DropData,
+	});
 
-				const hoverBoundingRect = monitor.getClientOffset();
-				const clientOffset = monitor.getClientOffset();
-				if (!clientOffset || !hoverBoundingRect) {
-					setDropPosition(null);
-					return;
-				}
-
-				// Get element bounds
-				const element = document.getElementById(`tree-node-${node.id}`);
-				if (!element) {
-					setDropPosition(isContainer ? "inside" : null);
-					return;
-				}
-
-				const rect = element.getBoundingClientRect();
-				const hoverMiddleY = (rect.bottom - rect.top) / 2;
-				const hoverClientY = clientOffset.y - rect.top;
-
-				// Determine drop position based on mouse Y
-				const threshold = 6; // pixels from edge for before/after
-				if (hoverClientY < threshold) {
-					setDropPosition("before");
-				} else if (hoverClientY > rect.height - threshold) {
-					setDropPosition("after");
-				} else if (isContainer) {
-					setDropPosition("inside");
-				} else {
-					// Non-container in middle - default to after
-					setDropPosition("after");
-				}
-			},
-			drop: (item, monitor) => {
-				if (monitor.didDrop()) return;
-
-				const parentId = findParentId(node.id);
-
-				if ("componentType" in item) {
-					// New component from palette
-					const newId = `${item.componentType}-${Date.now()}`;
-					const newComponent: SurfaceComponent = {
-						id: newId,
-						component: createDefaultComponent(item.componentType),
-					};
-
-					if (dropPosition === "inside" && isContainer) {
-						onAddComponent(newComponent, node.id);
-					} else if (
-						parentId &&
-						(dropPosition === "before" || dropPosition === "after")
-					) {
-						onAddComponent(newComponent, parentId);
-						// Note: onAddComponent appends - we'd need position support there too
-						// For now, just add to parent
-					} else if (isContainer) {
-						onAddComponent(newComponent, node.id);
-					}
-				} else {
-					// Moving existing component
-					if (dropPosition === "inside" && isContainer) {
-						onMoveComponent(item.componentId, item.currentParentId, node.id);
-					} else if (
-						parentId &&
-						(dropPosition === "before" || dropPosition === "after")
-					) {
-						onMoveComponent(item.componentId, item.currentParentId, parentId, {
-							type: dropPosition,
-							targetId: node.id,
-						});
-					} else if (isContainer) {
-						onMoveComponent(item.componentId, item.currentParentId, node.id);
-					}
-				}
-
-				setDropPosition(null);
-			},
-			collect: (monitor) => ({
-				isOver: monitor.isOver({ shallow: true }),
-				canDrop: monitor.canDrop(),
-			}),
-		}),
-		[
-			node.id,
-			isContainer,
-			isDescendant,
-			onMoveComponent,
-			onAddComponent,
-			dropPosition,
-			findParentId,
-		],
-	);
+	// For drop, we accept if isContainer and not dropping on self or descendant
+	const canDrop = isContainer;
 
 	// Reset drop position when not hovering
 	const handleMouseLeave = useCallback(() => {
@@ -685,8 +583,7 @@ function TreeNode({
 				<div
 					id={`tree-node-${node.id}`}
 					ref={(el) => {
-						dragPreview(el);
-						drop(el);
+						setDropRef(el);
 					}}
 					onMouseLeave={handleMouseLeave}
 					className={cn(
@@ -694,10 +591,7 @@ function TreeNode({
 						isSelected && "bg-primary/10 text-primary",
 						node.hidden && "opacity-50",
 						isDragging && "opacity-40",
-						isOver &&
-							canDrop &&
-							dropPosition === "inside" &&
-							"bg-primary/20 ring-1 ring-primary",
+						isOver && canDrop && "bg-primary/20 ring-1 ring-primary",
 					)}
 					style={{ paddingLeft: `${depth * 16 + 8}px` }}
 					onClick={(e) => {
@@ -705,28 +599,13 @@ function TreeNode({
 						onSelect(node.id, e);
 					}}
 				>
-					{/* Drop indicator - before */}
-					{isOver && canDrop && dropPosition === "before" && (
-						<div
-							className="absolute left-0 right-0 top-0 h-0.5 bg-primary rounded-full"
-							style={{ marginLeft: `${depth * 16 + 8}px` }}
-						/>
-					)}
-
-					{/* Drop indicator - after */}
-					{isOver && canDrop && dropPosition === "after" && (
-						<div
-							className="absolute left-0 right-0 bottom-0 h-0.5 bg-primary rounded-full"
-							style={{ marginLeft: `${depth * 16 + 8}px` }}
-						/>
-					)}
 					{/* Drag handle */}
 					{!isRoot && !node.locked && (
 						<div
-							ref={(el) => {
-								drag(el);
-							}}
-							className="cursor-grab hover:bg-muted-foreground/10 rounded p-0.5"
+							ref={setDragRef}
+							{...dragListeners}
+							{...dragAttributes}
+							className="cursor-grab hover:bg-muted-foreground/10 rounded p-0.5 touch-none"
 							onClick={(e) => e.stopPropagation()}
 						>
 							<GripVertical className="h-3 w-3 text-muted-foreground" />

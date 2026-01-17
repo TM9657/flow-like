@@ -127,6 +127,27 @@ export function StructVariable({
 		return {};
 	});
 
+	// Re-initialize form values and mode when schema changes
+	useEffect(() => {
+		const parsed = parseUint8ArrayToJson(variable.default_value);
+		if (hasSchema) {
+			setUseJsonMode(false);
+			const defaults = getDefaultFromSchema(schema!);
+			if (typeof parsed === "object" && parsed !== null) {
+				setFormValues({ ...defaults, ...parsed });
+			} else {
+				setFormValues(defaults);
+			}
+		} else {
+			setUseJsonMode(true);
+			if (typeof parsed === "object" && parsed !== null) {
+				setFormValues(parsed as Record<string, unknown>);
+			} else {
+				setFormValues({});
+			}
+		}
+	}, [variable.schema, refs]);
+
 	// Sync JSON value when switching modes
 	useEffect(() => {
 		if (useJsonMode) {

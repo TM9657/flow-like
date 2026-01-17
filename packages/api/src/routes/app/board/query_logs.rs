@@ -48,7 +48,7 @@ pub async fn query_logs(
     // Convert to SharedCredentials and build the logs database connection
     let shared_credentials = credentials.into_shared_credentials();
     let logs_db_builder = shared_credentials.to_logs_db_builder().map_err(|e| {
-        ApiError::InternalError(anyhow!("Failed to create logs db builder: {}", e))
+        ApiError::internal_error(anyhow!("Failed to create logs db builder: {}", e))
     })?;
 
     let base_path = StoragePath::from("runs")
@@ -60,12 +60,12 @@ pub async fn query_logs(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, path = %base_path, "Failed to open log database");
-            ApiError::InternalError(anyhow!("Failed to open log database: {}", e))
+            ApiError::internal_error(anyhow!("Failed to open log database: {}", e))
         })?;
 
     let table = db.open_table(&params.run_id).execute().await.map_err(|e| {
         tracing::error!(error = %e, run_id = %params.run_id, "Failed to open run table");
-        ApiError::InternalError(anyhow!("Failed to open run table: {}", e))
+        ApiError::internal_error(anyhow!("Failed to open run table: {}", e))
     })?;
 
     let mut q = table.query();
@@ -81,13 +81,13 @@ pub async fn query_logs(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to execute query");
-            ApiError::InternalError(anyhow!("Failed to execute query: {}", e))
+            ApiError::internal_error(anyhow!("Failed to execute query: {}", e))
         })?
         .try_collect()
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to collect query results");
-            ApiError::InternalError(anyhow!("Failed to collect query results: {}", e))
+            ApiError::internal_error(anyhow!("Failed to collect query results: {}", e))
         })?;
 
     use flow_like::flow::execution::log::StoredLogMessage;

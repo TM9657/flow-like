@@ -39,6 +39,11 @@ export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 }: PinEditProps) {
 	const [cachedDefaultValue, setCachedDefaultValue] = useState(defaultValue);
 
+	// Sync cached value when prop changes (e.g., after board refetch)
+	useEffect(() => {
+		setCachedDefaultValue(defaultValue);
+	}, [defaultValue]);
+
 	useEffect(() => {
 		changeDefaultValue(cachedDefaultValue);
 	}, [cachedDefaultValue, changeDefaultValue]);
@@ -161,21 +166,26 @@ function WithMenuInner({
 	defaultValue: number[] | undefined | null;
 }>) {
 	const { editPin } = useFlowControlState();
+	const isConnected = pin.connected_to && pin.connected_to.length > 0;
+	const hasNoDefaultValue = typeof defaultValue === "undefined" || defaultValue === null;
+
 	return (
 		<>
 			<VariableDescription pin={pin} />
-			<Button
-				size={"icon"}
-				variant={"ghost"}
-				className="w-fit h-fit text-foreground"
-				onClick={() => {
-					editPin(nodeId, pin);
-				}}
-			>
-				<VariableIcon
-					className={`size-[0.45rem] ${(typeof defaultValue === "undefined" || defaultValue === null) && "text-primary"}`}
-				/>
-			</Button>
+			{!isConnected && (
+				<Button
+					size={"icon"}
+					variant={"ghost"}
+					className="w-fit h-fit text-foreground"
+					onClick={() => {
+						editPin(nodeId, pin);
+					}}
+				>
+					<VariableIcon
+						className={`size-[0.45rem] ${hasNoDefaultValue && "text-primary"}`}
+					/>
+				</Button>
+			)}
 		</>
 	);
 }

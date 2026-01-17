@@ -18,19 +18,23 @@ export {
 	type ResponsivePreviewProps,
 } from "./ResponsivePreview";
 export { Toolbar, type ToolbarProps } from "./Toolbar";
-export { CustomDragLayer } from "./CustomDragLayer";
 export {
-	WidgetBuilder,
-	type WidgetBuilderProps,
+	BuilderDndProvider,
 	COMPONENT_DND_TYPE,
 	COMPONENT_MOVE_TYPE,
 	WIDGET_DND_TYPE,
+	type ComponentDragData,
+	type ComponentMoveData,
+	type WidgetDragData,
+	type DropData,
+} from "./BuilderDndContext";
+export { BuilderDragOverlay } from "./BuilderDragOverlay";
+export {
+	WidgetBuilder,
+	type WidgetBuilderProps,
 	CONTAINER_TYPES,
 	ROOT_ID,
 	createDefaultComponent,
-	type ComponentDragItem,
-	type ComponentMoveItem,
-	type WidgetDragItem,
 } from "./WidgetBuilder";
 export {
 	WidgetSelector,

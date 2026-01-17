@@ -696,7 +696,6 @@ fn read_logs_policy(
 mod tests {
     use super::*;
     use crate::credentials::RuntimeCredentialsTrait;
-    use flow_like::credentials::SharedCredentialsTrait;
     use flow_like_storage::Path;
     use flow_like_storage::object_store::ObjectStore;
     use flow_like_types::json::{from_str, to_string};

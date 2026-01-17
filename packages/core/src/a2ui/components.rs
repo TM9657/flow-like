@@ -851,6 +851,34 @@ pub struct Scene3dProps {
     pub camera_position: Option<BoundValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background_color: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub control_mode: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fixed_view: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_rotate_speed: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_controls: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_zoom: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_pan: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fov: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub near: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub far: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ambient_light: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub directional_light: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_grid: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_axes: Option<BoundValue>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -863,6 +891,16 @@ pub struct Model3dProps {
     pub rotation: Option<BoundValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scale: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cast_shadow: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receive_shadow: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub animation: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_rotate: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rotate_speed: Option<BoundValue>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

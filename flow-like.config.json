@@ -59,6 +59,9 @@
 		"from_email": "no-reply@flow-like.com",
 		"from_name": "Flow-Like"
 	},
+	"alerting": {
+		"mail": "info@great-co.de"
+	},
 	"tiers": {
 		"FREE": {
 			"max_non_visible_projects": 10,

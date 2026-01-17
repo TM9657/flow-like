@@ -107,7 +107,15 @@ impl NodeLogic for NotifyProjectUserNode {
         }
 
         // Build notification (no desktop since this is for another user)
-        let mut notification = NotificationEvent::new(&title).with_desktop(false);
+        let mut notification = NotificationEvent::new(&title)
+            .with_desktop(false)
+            .with_target_user_sub(&user_sub)
+            .with_source_run_id(context.run_id())
+            .with_source_node_id(&context.id);
+
+        if let Some(event_id) = context.event_id().await {
+            notification = notification.with_event_id(&event_id);
+        }
 
         if !description.is_empty() {
             notification = notification.with_description(&description);

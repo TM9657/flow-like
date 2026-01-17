@@ -27,8 +27,10 @@ export const DndKit = [
 				const options = isTauri()
 					? {
 							enableMouseEvents: true,
-							delayTouchStart: 120,
+							delayTouchStart: 0,
+							delayMouseStart: 0,
 							ignoreContextMenu: true,
+							touchSlop: 5,
 						}
 					: undefined;
 				return (

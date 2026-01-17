@@ -20,7 +20,7 @@ pub async fn get_app(
     let app = app::Entity::find_by_id(&app_id)
         .one(&state.db)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let mut app: App = app.into();
     app.bits = scoped_app.bits.clone();

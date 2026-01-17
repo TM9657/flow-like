@@ -12,11 +12,13 @@ import type { IPageState } from "./backend-state/page-state";
 import type { IRegistryState } from "./backend-state/registry-state";
 import type { IRoleState } from "./backend-state/role-state";
 import type { IAppRouteState } from "./backend-state/route-state";
+import type { ISinkState, IEventRegistration } from "./backend-state/sink-state";
 import type { IStorageState } from "./backend-state/storage-state";
 import type { ITeamState } from "./backend-state/team-state";
 import type { ITemplateState } from "./backend-state/template-state";
 import type { IUserState } from "./backend-state/user-state";
 import type { IWidgetState } from "./backend-state/widget-state";
+import type { IProfile } from "../types";
 
 export * from "./backend-state/api-state";
 export * from "./backend-state/empty-states/index";
@@ -34,12 +36,16 @@ export type {
 	IPageState,
 	IRegistryState,
 	IRoleState,
+	ISinkState,
+	IEventRegistration,
 	IStorageState,
 	ITeamState,
 	ITemplateState,
 	IUserState,
 	IWidgetState,
 };
+
+export type { SinkType } from "./backend-state/sink-state";
 
 export type {
 	IPage,
@@ -52,12 +58,7 @@ export type {
 	WidgetInstance,
 } from "./backend-state/page-state";
 
-export type {
-	IAppRoute,
-	CreateAppRoute,
-	UpdateAppRoute,
-	RouteTargetType,
-} from "./backend-state/route-state";
+export type { IRouteMapping } from "./backend-state/route-state";
 
 export type {
 	CustomizationOption,
@@ -111,6 +112,11 @@ export interface IBackendState {
 	pageState: IPageState;
 	routeState: IAppRouteState;
 	registryState: IRegistryState;
+	/** Sink state for managing active event sinks (desktop only) */
+	sinkState?: ISinkState;
+
+	/** Optional runtime profile (desktop/mobile providers populate this). */
+	profile?: IProfile;
 
 	capabilities(): ICapabilities;
 	isOffline(appId: string): Promise<boolean>;

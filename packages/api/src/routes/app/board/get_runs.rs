@@ -81,7 +81,7 @@ pub async fn get_runs(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to query runs");
-            ApiError::InternalError(anyhow!("Failed to query runs: {}", e))
+            ApiError::internal_error(anyhow!("Failed to query runs: {}", e))
         })?;
 
     let log_metas: Vec<LogMeta> = runs
@@ -90,13 +90,13 @@ pub async fn get_runs(
             // Convert to microseconds to match local LanceDB format
             let start = run
                 .started_at
-                .map(|dt| dt.and_utc().timestamp_micros() as u64)
+                .map(|dt: chrono::NaiveDateTime| dt.and_utc().timestamp_micros() as u64)
                 .unwrap_or_else(|| run.created_at.and_utc().timestamp_micros() as u64);
             // For incomplete runs, use start time so duration shows as 0
             // rather than time since Unix epoch
             let end = run
                 .completed_at
-                .map(|dt| dt.and_utc().timestamp_micros() as u64)
+                .map(|dt: chrono::NaiveDateTime| dt.and_utc().timestamp_micros() as u64)
                 .unwrap_or(start);
 
             LogMeta {

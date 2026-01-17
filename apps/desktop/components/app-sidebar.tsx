@@ -84,6 +84,7 @@ import {
 	Sun,
 	UsersRoundIcon,
 	WorkflowIcon,
+	ZapIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
@@ -973,6 +974,12 @@ export function NavUser({
 										<DropdownMenuItem className="gap-2 p-2">
 											<KeyIcon className="size-4" />
 											Token
+										</DropdownMenuItem>
+									</a>
+									<a href="/settings/sinks">
+										<DropdownMenuItem className="gap-2 p-2">
+											<ZapIcon className="size-4" />
+											Active Sinks
 										</DropdownMenuItem>
 									</a>
 								</DropdownMenuGroup>

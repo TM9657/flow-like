@@ -94,7 +94,7 @@ pub async fn list_solutions(
             "paid" => crate::entity::sea_orm_active_enums::SolutionStatus::Paid,
             "cancelled" => crate::entity::sea_orm_active_enums::SolutionStatus::Cancelled,
             "refunded" => crate::entity::sea_orm_active_enums::SolutionStatus::Refunded,
-            _ => return Err(ApiError::BadRequest("Invalid status filter".to_string())),
+            _ => return Err(ApiError::bad_request("Invalid status filter".to_string())),
         };
         select = select.filter(solution_request::Column::Status.eq(status));
     }

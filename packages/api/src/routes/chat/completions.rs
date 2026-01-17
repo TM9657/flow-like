@@ -117,7 +117,7 @@ async fn fetch_provider(
 
     let hosted_provider = HostedProvider::from_provider_name(&provider.provider_name).ok_or_else(
         || {
-            ApiError::BadRequest(format!(
+            ApiError::bad_request(format!(
                 "Unsupported provider: {}. Supported: Hosted, hosted:openrouter, hosted:openai, hosted:anthropic, hosted:bedrock, hosted:azure, hosted:vertex",
                 provider.provider_name
             ))
@@ -144,7 +144,7 @@ async fn enforce_tier(
             user_tier,
             tier
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
     Ok(())
 }

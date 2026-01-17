@@ -97,7 +97,14 @@ impl NodeLogic for NotifyUserNode {
         let show_desktop = context.evaluate_pin::<bool>("show_desktop").await?;
 
         // Build notification event
-        let mut notification = NotificationEvent::new(&title).with_desktop(show_desktop);
+        let mut notification = NotificationEvent::new(&title)
+            .with_desktop(show_desktop)
+            .with_source_run_id(context.run_id())
+            .with_source_node_id(&context.id);
+
+        if let Some(event_id) = context.event_id().await {
+            notification = notification.with_event_id(&event_id);
+        }
 
         if !description.is_empty() {
             notification = notification.with_description(&description);

@@ -10,7 +10,6 @@ pub use client::LlamaCppClient;
 
 pub struct LlamaCppModel {
     client: Arc<Box<dyn ProviderClient>>,
-    #[allow(dead_code)]
     provider: ModelProvider,
     default_model: Option<String>,
     port: u16,

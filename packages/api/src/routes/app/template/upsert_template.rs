@@ -31,7 +31,7 @@ async fn create_template(
     template_data: &TemplateUpsert,
 ) -> Result<(String, (u32, u32, u32)), ApiError> {
     if !permission.has_permission(RolePermissions::ReadBoards) {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
     let template_id = create_id();
     let sub = user.sub()?;
@@ -96,7 +96,7 @@ pub async fn upsert_template(
     let permission = ensure_permission!(user, &app_id, &state, RolePermissions::WriteTemplates);
 
     if template_id.is_empty() || app_id.is_empty() {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let template = template::Entity::find()
@@ -125,7 +125,7 @@ pub async fn upsert_template(
     let version_type = template_data.version_type.unwrap_or(VersionType::Patch);
 
     if !permission.has_permission(RolePermissions::ReadBoards) {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     // Let´s create a new template version

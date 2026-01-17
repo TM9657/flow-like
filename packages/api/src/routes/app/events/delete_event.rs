@@ -27,7 +27,7 @@ pub async fn delete_event(
         .await?;
     app.delete_event(&event_id).await.map_err(|e| {
         tracing::error!("Failed to delete event: {}", e);
-        ApiError::InternalError(anyhow!(e))
+        ApiError::internal_error(anyhow!(e))
     })?;
 
     Ok(Json(()))

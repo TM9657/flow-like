@@ -1,7 +1,7 @@
 use crate::state::AppState;
 use axum::{
     Router,
-    routing::{delete, get, post},
+    routing::{get, post},
 };
 use billing::get_billing_session;
 use info::user_info;

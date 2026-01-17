@@ -33,7 +33,7 @@ pub async fn upsert_widget(
     ensure_permission!(user, &app_id, &state, RolePermissions::WriteWidgets);
 
     if widget_id.is_empty() || app_id.is_empty() {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let mut app = state

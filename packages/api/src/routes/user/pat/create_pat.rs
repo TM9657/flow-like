@@ -1,7 +1,6 @@
 use crate::{entity::pat, error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
 use flow_like_types::{
-    anyhow,
     base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD},
     create_id,
     rand::{TryRngCore, rngs::OsRng},

@@ -60,7 +60,11 @@ impl NodeLogic for GetVariable {
         let value = variable.get_value();
         let value_cloned = value.lock().await.clone();
 
-        context.log_message(&format!("Got Value: {}", value_cloned), LogLevel::Debug);
+        if variable.secret {
+            context.log_message("Accessed secret variable value", LogLevel::Debug);
+        } else {
+            context.log_message(&format!("Accessed variable value: {:?}", value_cloned), LogLevel::Debug);
+        }
 
         value_pin.set_value(value_cloned).await;
         Ok(())

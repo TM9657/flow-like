@@ -50,7 +50,7 @@ pub async fn upsert_event_feedback(
 
     if let Some(existing) = existing_feedback {
         if existing.user_id.as_ref() != Some(&sub) {
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
 
         // Update existing feedback

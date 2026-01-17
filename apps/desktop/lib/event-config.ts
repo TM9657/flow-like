@@ -5,6 +5,8 @@ import {
 	CronJobConfig,
 	DeeplinkConfig,
 	DiscordConfig,
+	GenericEventFormInterface,
+	GenericFormConfig,
 	type IEventMapping,
 	SimpleChatConfig,
 	UserMailConfig,
@@ -65,12 +67,14 @@ export const EVENT_CONFIG: IEventMapping = {
 	},
 	events_generic: {
 		configInterfaces: {
+			generic_form: GenericFormConfig,
 			api: ApiConfig,
 			deeplink: DeeplinkConfig,
 		},
-		defaultEventType: "api",
-		eventTypes: ["api", "deeplink"],
+		defaultEventType: "generic_form",
+		eventTypes: ["generic_form", "api", "deeplink"],
 		configs: {
+			generic_form: {},
 			api: {
 				method: "GET",
 				path: `/${createId()}`,
@@ -80,17 +84,23 @@ export const EVENT_CONFIG: IEventMapping = {
 				route: createId(),
 			},
 		},
-		useInterfaces: {},
+		useInterfaces: {
+			generic_form: GenericEventFormInterface,
+		},
 		withSink: ["api", "deeplink"],
 	},
 	events_simple: {
 		configInterfaces: {
+			quick_action: GenericFormConfig,
 			api: WebhookConfig,
 			cron: CronJobConfig,
 			deeplink: DeeplinkConfig,
 		},
 		defaultEventType: "quick_action",
 		eventTypes: ["quick_action", "api", "cron", "deeplink"],
+		useInterfaces: {
+			quick_action: GenericEventFormInterface,
+		},
 		withSink: ["cron", "api", "deeplink"],
 		configs: {
 			cron: {
@@ -100,6 +110,5 @@ export const EVENT_CONFIG: IEventMapping = {
 				route: createId(),
 			},
 		},
-		useInterfaces: {},
 	},
 };

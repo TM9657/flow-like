@@ -677,14 +677,126 @@ export interface Scene3DComponent extends ComponentBase {
 	cameraType?: BoundValue; // "perspective" | "orthographic"
 	cameraPosition?: BoundValue;
 	backgroundColor?: BoundValue;
+	/** Camera control mode: "orbit" (rotate around), "fly" (free movement), "fixed" (static view), "auto-rotate" */
+	controlMode?: BoundValue;
+	/** For fixed mode: "front" | "back" | "left" | "right" | "top" | "bottom" | "isometric" */
+	fixedView?: BoundValue;
+	/** Auto-rotation speed (degrees per second, default: 30) */
+	autoRotateSpeed?: BoundValue;
+	/** Enable/disable user controls (default: true for orbit/fly, false for fixed) */
+	enableControls?: BoundValue;
+	/** Enable zoom controls (default: true) */
+	enableZoom?: BoundValue;
+	/** Enable pan controls (default: true for orbit) */
+	enablePan?: BoundValue;
+	/** Camera field of view in degrees (default: 75) */
+	fov?: BoundValue;
+	/** Camera near clipping plane (default: 0.1) */
+	near?: BoundValue;
+	/** Camera far clipping plane (default: 1000) */
+	far?: BoundValue;
+	/** Target point to look at [x, y, z] (default: [0, 0, 0]) */
+	target?: BoundValue;
+	/** Ambient light intensity (default: 0.5) */
+	ambientLight?: BoundValue;
+	/** Directional light intensity (default: 1) */
+	directionalLight?: BoundValue;
+	/** Show grid helper (default: false) */
+	showGrid?: BoundValue;
+	/** Show axes helper (default: false) */
+	showAxes?: BoundValue;
 }
 
 export interface Model3DComponent extends ComponentBase {
 	type: "model3d";
+	/** URL or path to the 3D model file (GLB, GLTF supported) */
 	src: BoundValue;
+	/** Position in 3D space [x, y, z] */
 	position?: BoundValue;
+	/** Rotation in radians [x, y, z] or Euler angles */
 	rotation?: BoundValue;
+	/** Uniform scale (number) or per-axis scale [x, y, z] */
 	scale?: BoundValue;
+	/** Whether to cast shadows (default: true) */
+	castShadow?: BoundValue;
+	/** Whether to receive shadows (default: true) */
+	receiveShadow?: BoundValue;
+	/** Animation name to play (if model has animations) */
+	animation?: BoundValue;
+	/** Whether the model should auto-rotate independently (default: false) */
+	autoRotate?: BoundValue;
+	/** Auto-rotation speed for this specific model */
+	rotateSpeed?: BoundValue;
+
+	// ============ STANDALONE VIEWER OPTIONS ============
+	// These apply when Model3D is used outside of a Scene3D
+
+	/** Viewer height (default: "256px") */
+	viewerHeight?: BoundValue;
+	/** Background color (default: "transparent") */
+	backgroundColor?: BoundValue;
+	/** Camera distance from model (default: 3) */
+	cameraDistance?: BoundValue;
+	/** Camera field of view in degrees (default: 50) */
+	fov?: BoundValue;
+	/** Camera angle preset: "front" | "side" | "top" | "isometric" (default: "front") */
+	cameraAngle?: BoundValue;
+	/** Explicit camera position [x, y, z] (overrides angle/distance) */
+	cameraPosition?: BoundValue;
+	/** Camera target [x, y, z] (default: [0,0,0]) */
+	cameraTarget?: BoundValue;
+
+	// Control options
+	/** Enable orbit controls (default: true) */
+	enableControls?: BoundValue;
+	/** Enable zoom (default: true) */
+	enableZoom?: BoundValue;
+	/** Enable panning (default: false) */
+	enablePan?: BoundValue;
+	/** Enable auto-rotate on the camera/scene (default: false) */
+	autoRotateCamera?: BoundValue;
+	/** Camera auto-rotation speed (default: 2) */
+	cameraRotateSpeed?: BoundValue;
+
+	// Lighting options
+	/** Ambient light intensity (default: 0.6) */
+	ambientLight?: BoundValue;
+	/** Main directional light intensity (default: 1.0) */
+	directionalLight?: BoundValue;
+	/** Fill light intensity - secondary light from opposite side (default: 0.4) */
+	fillLight?: BoundValue;
+	/** Rim/back light intensity - for edge highlights (default: 0.3) */
+	rimLight?: BoundValue;
+	/** Light color (default: "#ffffff") */
+	lightColor?: BoundValue;
+	/** Warm/cool lighting preset: "neutral" | "warm" | "cool" | "studio" | "dramatic" (default: "studio") */
+	lightingPreset?: BoundValue;
+
+	// Environment options
+	/** Show ground plane/shadow catcher (default: false) */
+	showGround?: BoundValue;
+	/** Ground color (default: "#1a1a2e") */
+	groundColor?: BoundValue;
+	/** Enable environment reflections (default: true) */
+	enableReflections?: BoundValue;
+	/** Environment preset: "studio" | "sunset" | "dawn" | "night" | "warehouse" | "forest" | "apartment" | "city" | "park" | "lobby" (default: "studio") */
+	environment?: BoundValue;
+	/** Environment source: "local" | "preset" | "polyhaven" | "custom" (default: "local") */
+	environmentSource?: BoundValue;
+	/** Use HDRI as background (default: false) */
+	useHdrBackground?: BoundValue;
+	/** Poly Haven HDRI id (when environmentSource = "polyhaven") */
+	polyhavenHdri?: BoundValue;
+	/** Poly Haven resolution: "1k" | "2k" | "4k" | "8k" (default: "1k") */
+	polyhavenResolution?: BoundValue;
+	/** Custom HDRI URL or storage path (when environmentSource = "custom") */
+	hdriUrl?: BoundValue;
+	/** Ground plane size (default: 200) */
+	groundSize?: BoundValue;
+	/** Ground offset Y (default: -0.5) */
+	groundOffsetY?: BoundValue;
+	/** Keep ground centered under camera (default: true) */
+	groundFollowCamera?: BoundValue;
 }
 
 export interface DialogueComponent extends ComponentBase {
@@ -944,6 +1056,11 @@ export interface FunnelChartStyle {
 	shapeBlending?: number;
 	enableLabel?: boolean;
 	labelColor?: string;
+	borderWidth?: number;
+	borderOpacity?: number;
+	beforeSeparatorLength?: number;
+	afterSeparatorLength?: number;
+	currentPartSizeExtension?: number;
 }
 
 export interface TreemapChartStyle {

@@ -162,7 +162,7 @@ export { A2UIPopover } from "./container/Popover";
 export { A2UICanvas2D } from "./game/Canvas2D";
 export { A2UISprite } from "./game/Sprite";
 export { A2UIShape } from "./game/Shape";
-export { A2UIScene3D } from "./game/Scene3D";
+export { A2UIScene3D, type ControlMode, type FixedView } from "./game/Scene3D";
 export { A2UIModel3D } from "./game/Model3D";
 export { A2UIDialogue } from "./game/Dialogue";
 export { A2UICharacterPortrait } from "./game/CharacterPortrait";

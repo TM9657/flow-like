@@ -71,7 +71,6 @@ impl NodeLogic for RegisterDeltaTableNode {
         node
     }
 
-    #[allow(unused_variables)]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {
@@ -182,7 +181,6 @@ impl NodeLogic for DeltaTimeTravelNode {
         node
     }
 
-    #[allow(unused_variables)]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {
@@ -297,7 +295,6 @@ impl NodeLogic for DeltaTableInfoNode {
         node
     }
 
-    #[allow(unused_variables)]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {
@@ -620,7 +617,6 @@ impl NodeLogic for WriteDeltaTableNode {
         node
     }
 
-    #[allow(unused_variables)]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {

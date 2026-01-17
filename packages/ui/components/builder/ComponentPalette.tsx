@@ -1,5 +1,6 @@
 "use client";
 
+import { useDraggable } from "@dnd-kit/core";
 import {
 	AlignCenter,
 	Calendar,
@@ -30,9 +31,7 @@ import {
 	Upload,
 	Video,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useDrag } from "react-dnd";
-import { getEmptyImage } from "react-dnd-html5-backend";
+import { useCallback, useMemo, useState } from "react";
 import { useInvoke } from "../../hooks";
 import { cn } from "../../lib";
 import { useBackend } from "../../state/backend-state";
@@ -47,10 +46,10 @@ import { ScrollArea } from "../ui/scroll-area";
 import { useBuilder } from "./BuilderContext";
 import {
 	COMPONENT_DND_TYPE,
-	type ComponentDragItem,
 	WIDGET_DND_TYPE,
-	type WidgetDragItem,
-} from "./WidgetBuilder";
+	type ComponentDragData,
+	type WidgetDragData,
+} from "./BuilderDndContext";
 import { getDefaultProps } from "./componentDefaults";
 
 interface ComponentDefinition {
@@ -736,48 +735,26 @@ function ComponentItem({
 	onDoubleClick,
 }: ComponentItemProps) {
 	const Icon = definition.icon;
-	const { setIsDraggingGlobal } = useBuilder();
 
-	const [{ isDragging }, dragRef, preview] = useDrag<
-		ComponentDragItem,
-		unknown,
-		{ isDragging: boolean }
-	>(
-		() => ({
+	const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+		id: `palette-${definition.type}`,
+		data: {
 			type: COMPONENT_DND_TYPE,
-			item: () => {
-				setIsDraggingGlobal(true);
-				onUse(definition.type);
-				return { type: COMPONENT_DND_TYPE, componentType: definition.type };
-			},
-			collect: (monitor) => ({
-				isDragging: monitor.isDragging(),
-			}),
-			end: () => {
-				setIsDraggingGlobal(false);
-			},
-		}),
-		[definition.type, onUse, setIsDraggingGlobal],
-	);
-
-	// Hide the default browser drag preview
-	useEffect(() => {
-		preview(getEmptyImage(), { captureDraggingState: true });
-	}, [preview]);
+			componentType: definition.type,
+		} satisfies ComponentDragData,
+	});
 
 	return (
 		<div
-			ref={(node) => {
-				dragRef(node);
-			}}
+			ref={setNodeRef}
+			{...listeners}
+			{...attributes}
 			onDoubleClick={() => onDoubleClick(definition.type)}
 			className={cn(
-				"flex items-center gap-2 px-3 py-2 text-sm rounded cursor-grab hover:bg-muted active:cursor-grabbing select-none",
+				"flex items-center gap-2 px-3 py-2 text-sm rounded cursor-grab hover:bg-muted active:cursor-grabbing select-none touch-none",
 				isDragging && "opacity-50",
 			)}
-			style={{ userSelect: "none", WebkitUserSelect: "none" }}
 			title={definition.description}
-			onDragStart={(e) => e.preventDefault()}
 		>
 			<Icon className="h-4 w-4 text-muted-foreground shrink-0" />
 			<span className="truncate">{definition.label}</span>
@@ -791,52 +768,25 @@ interface WidgetItemProps {
 }
 
 function WidgetItem({ widget, onDragStart }: WidgetItemProps) {
-	const { setIsDraggingGlobal } = useBuilder();
-
-	const [{ isDragging }, dragRef, preview] = useDrag<
-		WidgetDragItem,
-		unknown,
-		{ isDragging: boolean }
-	>(
-		() => ({
+	const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+		id: `widget-${widget.appId}-${widget.widgetId}`,
+		data: {
 			type: WIDGET_DND_TYPE,
-			item: () => {
-				setIsDraggingGlobal(true);
-				onDragStart?.(widget.appId, widget.widgetId);
-				return {
-					type: WIDGET_DND_TYPE,
-					appId: widget.appId,
-					widgetId: widget.widgetId,
-					// components will be fetched on drop
-				};
-			},
-			collect: (monitor) => ({
-				isDragging: monitor.isDragging(),
-			}),
-			end: () => {
-				setIsDraggingGlobal(false);
-			},
-		}),
-		[widget, onDragStart, setIsDraggingGlobal],
-	);
-
-	// Hide the default browser drag preview
-	useEffect(() => {
-		preview(getEmptyImage(), { captureDraggingState: true });
-	}, [preview]);
+			appId: widget.appId,
+			widgetId: widget.widgetId,
+		} satisfies WidgetDragData,
+	});
 
 	return (
 		<div
-			ref={(node) => {
-				dragRef(node);
-			}}
+			ref={setNodeRef}
+			{...listeners}
+			{...attributes}
 			className={cn(
-				"flex items-center gap-2 px-3 py-2 text-sm rounded cursor-grab hover:bg-muted active:cursor-grabbing select-none",
+				"flex items-center gap-2 px-3 py-2 text-sm rounded cursor-grab hover:bg-muted active:cursor-grabbing select-none touch-none",
 				isDragging && "opacity-50",
 			)}
-			style={{ userSelect: "none", WebkitUserSelect: "none" }}
 			title={widget.metadata.description}
-			onDragStart={(e) => e.preventDefault()}
 		>
 			{widget.metadata.thumbnail ? (
 				<img

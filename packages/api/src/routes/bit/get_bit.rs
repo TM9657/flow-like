@@ -50,7 +50,7 @@ pub async fn get_bit(
 
     let bit = match bit.into_iter().next() {
         Some((bit, _)) => bit,
-        None => return Err(ApiError::NotFound),
+        None => return Err(ApiError::NOT_FOUND),
     };
 
     let mut bit: Bit = bit.into();
